@@ -48,6 +48,7 @@ PYTHONPATH=src python -m onec_ordinary_forms.cli --help
 
 Platform/container notes live in [docs/containers.md](docs/containers.md).
 Research and transfer notes live in [docs/research-map.md](docs/research-map.md).
+Module boundaries are summarized in [docs/architecture.md](docs/architecture.md).
 The legacy `dump --elem-json` input is documented in [docs/elem-json.md](docs/elem-json.md).
 
 ## CLI

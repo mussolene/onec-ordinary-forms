@@ -11,11 +11,11 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 import base64
 import json
-import tempfile
 
 from onec_ordinary_forms.corpus import build_corpus_report, write_report
 from onec_ordinary_forms.formbin import pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
+from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
 SCHEMA_VERSION = "0.1"
@@ -641,6 +641,19 @@ def dump_xml(args: argparse.Namespace) -> None:
     module_path = Path(args.module) if args.module else None
     elem_path = Path(args.elem_json)
     out_path = Path(args.out)
+    metadata_path = Path(args.metadata_json) if args.metadata_json else None
+
+    dump_xml_from_paths(form_path, bin_path, module_path, elem_path, metadata_path, out_path)
+
+
+def dump_xml_from_paths(
+    form_path: Path,
+    bin_path: Path,
+    module_path: Path | None,
+    elem_path: Path,
+    metadata_path: Path | None,
+    out_path: Path,
+) -> None:
     asset_root = out_path.with_suffix("")
 
     form_bytes = form_path.read_bytes()
@@ -648,7 +661,7 @@ def dump_xml(args: argparse.Namespace) -> None:
     module_bytes = module_path.read_bytes() if module_path and module_path.exists() else b""
     form_text = read_text_lossless(form_path)
     elem = json.loads(elem_path.read_text(encoding="utf-8"))
-    metadata = json.loads(Path(args.metadata_json).read_text(encoding="utf-8")) if args.metadata_json else None
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path else None
     object_types = metadata_object_type_map(metadata)
     element_index = build_element_index(elem)
     quoted_strings = extract_quoted_strings(form_text)
@@ -790,25 +803,12 @@ def extract_elem_json(args: argparse.Namespace) -> None:
 
 
 def dump_bin(args: argparse.Namespace) -> None:
-    bin_path = Path(args.bin)
-    out_path = Path(args.out)
-    with tempfile.TemporaryDirectory(prefix="onec-ordinary-form-") as temp_dir:
-        work_dir = Path(temp_dir)
-        unpack_form_bin(bin_path, work_dir)
-        form_path = work_dir / "Form.xml"
-        elem_path = work_dir / "elem.json"
-        write_elem_json_from_bracket(form_path, elem_path)
-        module_path = work_dir / "Module.bsl"
-        dump_xml(
-            argparse.Namespace(
-                form=str(form_path),
-                bin=str(bin_path),
-                module=str(module_path) if module_path.exists() else None,
-                elem_json=str(elem_path),
-                metadata_json=args.metadata_json,
-                out=str(out_path),
-            )
-        )
+    dump_form_bin_to_xml(
+        Path(args.bin),
+        Path(args.out),
+        model_xml_writer=dump_xml_from_paths,
+        metadata_json=Path(args.metadata_json) if args.metadata_json else None,
+    )
 
 
 def main() -> None:

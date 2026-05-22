@@ -8,6 +8,7 @@ from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_fo
 from onec_ordinary_forms.cli import replace_root_title
 from onec_ordinary_forms.formbin import pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
+from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
 class CliSmokeTest(unittest.TestCase):
@@ -152,6 +153,40 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn("<Attributes>", xml)
             self.assertIn('name="InputValue"', xml)
             self.assertEqual((root / "Form" / "Module.bsl").read_bytes(), module)
+
+    def test_form_bin_pipeline_keeps_cli_out_of_section_details(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            bracket = b'{{"MainCaption",1,1,{"ru","Main"}}}'
+            module = b"Procedure Run()\nEndProcedure\n"
+            source.write_bytes(
+                b"HEAD\r\n"
+                b"00000003 00000003 7fffffff \r\none"
+                b"\r\n00000003 00000003 7fffffff \r\ntwo"
+                b"\r\n00000005 00000005 7fffffff \r\nthree"
+                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
+                + module
+                + f"\r\n{len(bracket):08x} {len(bracket):08x} 7fffffff \r\n".encode("ascii")
+                + bracket
+            )
+            calls = []
+            observed = {}
+
+            def writer(form_path, bin_path, module_path, elem_path, metadata_path, out_path):
+                calls.append((form_path, bin_path, module_path, elem_path, metadata_path, out_path))
+                observed["module"] = module_path.read_bytes()
+                observed["elem_exists"] = elem_path.exists()
+                out_path.write_text("ok", encoding="utf-8")
+
+            out = root / "Form.xml"
+            dump_form_bin_to_xml(source, out, model_xml_writer=writer)
+
+            self.assertEqual(out.read_text(encoding="utf-8"), "ok")
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][1], source)
+            self.assertEqual(observed["module"], module)
+            self.assertTrue(observed["elem_exists"])
 
 
 if __name__ == "__main__":
