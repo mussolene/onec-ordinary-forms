@@ -797,6 +797,7 @@ def add_info_table_slots(parent: ET.Element, item_data: dict | None) -> None:
     info = raw[2]
     parent.set("itemCount", str(len(info)))
     parent.set("payloadCount", str(max(len(info) - 1, 0)))
+    add_info_record(parent, info)
     slots = ET.SubElement(parent, "Slots")
     for index, value in enumerate(info[1:], start=1):
         slot = ET.SubElement(slots, "Slot")
@@ -808,6 +809,52 @@ def add_info_table_slots(parent: ET.Element, item_data: dict | None) -> None:
                 slot.set("first", clean_token(value[0]))
         else:
             slot.set("value", clean_token(value))
+
+
+def add_info_record(parent: ET.Element, info: list[object]) -> None:
+    if len(info) <= 1 or not isinstance(info[1], list):
+        return
+    record = info[1]
+    record_node = ET.SubElement(parent, "Record")
+    record_node.set("slot", "1")
+    record_node.set("fieldCount", str(len(record)))
+    caption = _first_ru_text_record(record)
+    if caption is not None:
+        caption_node = add_multilang_text(record_node, "Caption", caption[1])
+        caption_node.set("field", str(caption[0]))
+    fields = ET.SubElement(record_node, "Fields")
+    for index, value in enumerate(record, start=1):
+        field = ET.SubElement(fields, "Field")
+        field.set("index", str(index))
+        field.set("kind", "list" if isinstance(value, list) else scalar_kind(value))
+        if isinstance(value, list):
+            field.set("count", str(len(value)))
+            if value and not isinstance(value[0], list):
+                field.set("first", clean_token(value[0]))
+        else:
+            field.set("value", clean_token(value))
+
+
+def _first_ru_text_record(record: list[object]) -> tuple[int, str] | None:
+    for index, value in enumerate(record, start=1):
+        text = multilang_text_value(value)
+        if text:
+            return index, text
+    return None
+
+
+def multilang_text_value(value: object) -> str:
+    if (
+        isinstance(value, list)
+        and len(value) >= 3
+        and str(value[0]) == "1"
+        and str(value[1]) == "1"
+        and isinstance(value[2], list)
+        and len(value[2]) >= 2
+        and clean_token(value[2][0]) == "ru"
+    ):
+        return clean_token(value[2][1])
+    return ""
 
 
 def add_form_bin_container(root: ET.Element, bin_bytes: bytes, form_bytes: bytes) -> None:
@@ -1063,6 +1110,7 @@ def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root:
             metadata[1] = quoted_atom(name)
     apply_metadata_to_raw(element, raw)
     apply_info_slots_to_raw(element, raw)
+    apply_info_record_to_raw(element, raw)
     title = get_multilang_text(element, "Title")
     if title:
         replace_first_ru_text(raw, title)
@@ -1106,6 +1154,41 @@ def apply_info_slots_to_raw(element: ET.Element, raw: list[object]) -> None:
         if index <= 0 or index >= len(info) or isinstance(info[index], list):
             continue
         info[index] = slot.get("value", info[index])
+
+
+def apply_info_record_to_raw(element: ET.Element, raw: list[object]) -> None:
+    info_record = element.find("./OrdinaryControl/Info/Record")
+    if info_record is None or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    try:
+        slot_index = int(info_record.get("slot", "1"))
+    except ValueError:
+        return
+    if slot_index <= 0 or slot_index >= len(info) or not isinstance(info[slot_index], list):
+        return
+    record = info[slot_index]
+    caption = get_multilang_text(info_record, "Caption")
+    caption_node = info_record.find("Caption")
+    if caption and caption_node is not None:
+        try:
+            field_index = int(caption_node.get("field", "0")) - 1
+        except ValueError:
+            field_index = -1
+        if 0 <= field_index < len(record):
+            replace_first_ru_text(record[field_index], caption)
+    fields = info_record.find("Fields")
+    if fields is None:
+        return
+    for field in fields.findall("Field"):
+        if "value" not in field.attrib:
+            continue
+        try:
+            index = int(field.get("index", "0")) - 1
+        except ValueError:
+            continue
+        if 0 <= index < len(record) and not isinstance(record[index], list):
+            record[index] = field.get("value", record[index])
 
 
 def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[object]) -> None:

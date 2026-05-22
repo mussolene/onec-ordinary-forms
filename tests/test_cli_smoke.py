@@ -428,9 +428,30 @@ class CliSmokeTest(unittest.TestCase):
             if metadata is None:
                 metadata = ET.SubElement(ordinary, "Metadata")
             metadata.set("flag1", "7")
+            info_record = image.find("./OrdinaryControl/Info/Record")
+            if info_record is None:
+                info = image.find("./OrdinaryControl/Info")
+                if info is None:
+                    info = ET.SubElement(ordinary, "Info")
+                info_record = ET.SubElement(info, "Record", {"slot": "1"})
+                caption_node = ET.SubElement(info_record, "Caption", {"field": "3"})
+                ET.SubElement(caption_node, "Item", {"lang": "ru"})
+                ET.SubElement(info_record, "Fields")
+            caption = info_record.find("./Caption/Item")
+            self.assertIsNotNone(caption)
+            caption.text = "Info caption"
+            scalar_field = info_record.find("./Fields/Field[@index='2']")
+            if scalar_field is None:
+                fields = info_record.find("Fields")
+                self.assertIsNotNone(fields)
+                scalar_field = ET.SubElement(fields, "Field", {"index": "2"})
+            scalar_field.set("value", "21")
             title = image.find("./Title/Item")
             self.assertIsNotNone(title)
-            title.text = "Image title"
+            # In this synthetic image control, the semantic Title and
+            # OrdinaryControl/Info/Record/Caption point at the same ru text
+            # record, so keep both XML views coherent.
+            title.text = "Info caption"
             geometry = image.find("./Geometry")
             self.assertIsNotNone(geometry)
             geometry.set("left", "42")
@@ -448,7 +469,8 @@ class CliSmokeTest(unittest.TestCase):
 
             rebuilt_stream = logical_streams(parse_form_bin(rebuilt.read_bytes()))["Form.xml"].decode("utf-8")
             self.assertIn('"Image2"', rebuilt_stream)
-            self.assertIn('"Image title"', rebuilt_stream)
+            self.assertIn('"Info caption"', rebuilt_stream)
+            self.assertIn("{{19},21,{1,1", rebuilt_stream)
             self.assertIn("#base64:" + base64.b64encode(b"GIF89aChanged").decode("ascii"), rebuilt_stream)
             self.assertIn('{14,"Image2",0,7,0}', rebuilt_stream)
             self.assertIn("{8,42,2,3,4,1,{0,{2,-1,6,99},{2,-1,6,0}}", rebuilt_stream)
