@@ -196,7 +196,7 @@ def _extract_pages(root: object) -> list[str]:
                 if title and title not in pages:
                     pages.append(title)
     if pages:
-        return pages[:20]
+        return pages[:1]
     for atom in _all_atoms(root):
         text = _clean(atom)
         if text and _human_text(text):

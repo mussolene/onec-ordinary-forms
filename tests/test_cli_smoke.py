@@ -166,6 +166,19 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(elem["tree"][0]["type"], "InputField")
         self.assertIn("Main/InputValue", elem["data"])
 
+    def test_extract_elem_json_keeps_only_root_page_until_page_groups_are_decoded(self) -> None:
+        bracket = """
+        {
+          {1,1,{"ru","Document title"}},
+          {1,1,{"ru","Number:"}},
+          {"InputValue","InputField",0,{0,10,10,200,30,0,{0,{2,0,0,10},{2,-1,6,0}}}}
+        }
+        """
+
+        elem = extract_elem_json_from_bracket(bracket)
+
+        self.assertEqual(elem["data"]["-pages-"], ["Document title"])
+
     def test_extract_elem_json_ignores_trailing_module_text(self) -> None:
         bracket = """
         {
@@ -230,6 +243,7 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn("<OrdinaryForm", xml)
             self.assertIn("<Attributes>", xml)
             self.assertIn('name="InputValue"', xml)
+            self.assertIn('rawKey="Main/InputValue"', xml)
             self.assertEqual((root / "Form" / "Module.bsl").read_bytes(), module)
 
     def test_form_bin_pipeline_keeps_cli_out_of_section_details(self) -> None:

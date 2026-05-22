@@ -551,6 +551,7 @@ def add_semantic_item(
 ) -> None:
     node = ET.SubElement(parent, str(item.get("type") or "Item"))
     node.set("name", str(item.get("name", "")))
+    node.set("rawKey", raw_key)
     if item.get("type") is not None:
         node.set("type", str(item["type"]))
     if item.get("page") is not None:
@@ -624,6 +625,7 @@ def add_semantic_pages(
         page_path = str(page_name)
         page = ET.SubElement(pages, "Page")
         page.set("name", page_path)
+        page.set("rawKey", page_path)
         title = page_title(data.get(page_path))
         if title:
             add_multilang_text(page, "Title", title)
@@ -665,7 +667,7 @@ def dump_xml_from_paths(
     object_types = metadata_object_type_map(metadata)
     element_index = build_element_index(elem)
     quoted_strings = extract_quoted_strings(form_text)
-    human_texts = [value for value in quoted_strings if looks_human_text(value)]
+    root_title = str((elem.get("data", {}).get("-pages-") or [""])[0])
 
     root = ET.Element("OrdinaryForm")
     root.set("schemaVersion", SCHEMA_VERSION)
@@ -685,8 +687,8 @@ def dump_xml_from_paths(
         source.set("moduleSize", str(len(module_bytes)))
 
     properties = ET.SubElement(root, "Properties")
-    if human_texts:
-        add_multilang_text(properties, "Title", human_texts[0])
+    if root_title:
+        add_multilang_text(properties, "Title", root_title)
     set_text(properties, "BracketFormatVersion", quoted_strings[0] if quoted_strings else "")
     if module_path and module_bytes:
         module_out = asset_root / "Module.bsl"
