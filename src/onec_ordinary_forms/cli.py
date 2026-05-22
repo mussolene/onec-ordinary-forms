@@ -21,7 +21,6 @@ from onec_ordinary_forms.formbin import (
     unpack_form_bin,
 )
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
-from onec_ordinary_forms.liststream_xml import bracket_text_to_xml, bracket_xml_to_bytes
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
@@ -772,9 +771,6 @@ def add_form_bin_container(root: ET.Element, bin_bytes: bytes, form_bytes: bytes
     form_stream.set("sha256", sha256_bytes(form_bytes))
     form_stream.text = base64.b64encode(form_bytes).decode("ascii")
 
-    form_text, has_bom = decode_text_preserve_bom(form_bytes)
-    container.append(bracket_text_to_xml(form_text, has_bom=has_bom))
-
     files = ET.SubElement(container, "Files")
     for name in ("form", "module"):
         descriptor = descriptors.get(name)
@@ -916,9 +912,6 @@ def module_data_from_xml(root: ET.Element, asset_root: Path) -> bytes:
 
 
 def embedded_form_stream_from_xml(root: ET.Element) -> bytes:
-    bracket_stream = root.find("./FormBin/BracketStream")
-    if bracket_stream is not None:
-        return bracket_xml_to_bytes(bracket_stream)
     stream = root.find("./FormBin/LogicalStream[@file='Form.xml']")
     if stream is None or stream.get("encoding") != "base64" or not stream.text:
         raise ValueError("OrdinaryForm XML does not contain embedded Form.xml stream")
