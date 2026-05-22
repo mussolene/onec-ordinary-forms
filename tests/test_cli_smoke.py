@@ -1,11 +1,13 @@
 import unittest
+import base64
 import json
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
-from onec_ordinary_forms.cli import replace_root_title
+from onec_ordinary_forms.cli import apply_semantic_edits_to_form, replace_root_title
 from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
@@ -20,6 +22,25 @@ class CliSmokeTest(unittest.TestCase):
         source = '{"ru","Old"}\n{"ru","Other"}\n'
         result = replace_root_title(source, "New")
         self.assertEqual(result, '{"ru","New"}\n{"ru","Other"}\n')
+
+    def test_apply_semantic_edits_inserts_raw_xml_item(self) -> None:
+        source = (
+            "{27,{18,{{1,1,{\"ru\",\"Main\"}},2,4294967295},"
+            "{1,{1,{0},{0},{14,\"A\",4294967295,0,0,0},{0}},"
+            "{2,{0},{0},{14,\"B\",4294967295,0,0,0},{0}}}}}}"
+        )
+        raw_insert = "{3,{0},{0},{14,\"Inserted\",4294967295,0,0,0},{0}}"
+        root = ET.Element("OrdinaryForm")
+        structure = ET.SubElement(root, "FormStructure")
+        inserted = ET.SubElement(structure, "Item", {"name": "Inserted", "insert": "true", "after": "A"})
+        raw_node = ET.SubElement(inserted, "RawBracket", {"encoding": "base64"})
+        raw_node.text = base64.b64encode(raw_insert.encode("utf-8")).decode("ascii")
+
+        result = apply_semantic_edits_to_form(root, source.encode("utf-8")).decode("utf-8")
+
+        self.assertIn('{14,"A",4294967295,0,0,0},{0}},{3,{0}', result)
+        self.assertIn('{14,"Inserted",4294967295,0,0,0}', result)
+        self.assertIn('{"ru","Main"}},3,4294967295', result)
 
     def test_scan_corpus_uses_portable_paths(self) -> None:
         with TemporaryDirectory() as temp_dir:
