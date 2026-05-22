@@ -551,7 +551,7 @@ def anchor_to_raw(node: ET.Element) -> object:
     if "value" in node.attrib:
         return node.get("value", "")
     values: list[str] = []
-    for name in ("kind", "target", "edge", "offset"):
+    for name in ("kind", "targetId", "edge", "offset"):
         if name in node.attrib:
             values.append(node.get(name, ""))
     index = 1
@@ -583,10 +583,22 @@ def add_geometry(
 
     anchors = ET.SubElement(node, "Bindings")
     if isinstance(geometry_raw, list):
+        if geometry_raw:
+            node.set("recordType", clean_token(geometry_raw[0]))
+        node.set("fieldCount", str(len(geometry_raw)))
+        node.set("bindingCount", str(min(max(len(geometry_raw) - 6, 0), 6)))
+        node.set("dimensionBindingCount", str(min(max(len(geometry_raw) - 13, 0), 4)))
         for index, binding in enumerate(geometry_raw[6:12], start=1):
             add_binding(anchors, "Binding", index, binding, current_id, element_index)
         for index, binding in enumerate(geometry_raw[13:17], start=1):
             add_binding(anchors, "DimensionBinding", index, binding, current_id, element_index)
+        if len(geometry_raw) > 17:
+            flags = ET.SubElement(node, "Flags")
+            for index, value in enumerate(geometry_raw[17:], start=17):
+                flag = ET.SubElement(flags, "Flag")
+                flag.set("index", str(index))
+                flag.set("kind", scalar_kind(value))
+                flag.text = clean_token(value)
 
 
 def find_base64_payload(value: object) -> str:
@@ -753,6 +765,7 @@ def add_ordinary_control_metadata(parent: ET.Element, item_data: dict | None) ->
     if info_kind not in (None, ""):
         info = ET.SubElement(node, "Info")
         info.set("kind", str(info_kind))
+        add_info_table_slots(info, item_data)
     metadata_record_type = ordinary.get("metadataRecordType")
     if metadata_record_type not in (None, ""):
         metadata = ET.SubElement(node, "Metadata")
@@ -773,6 +786,28 @@ def add_ordinary_control_metadata(parent: ET.Element, item_data: dict | None) ->
         for state_name in state_names:
             state = ET.SubElement(states, "State")
             state.set("name", str(state_name))
+
+
+def add_info_table_slots(parent: ET.Element, item_data: dict | None) -> None:
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    parent.set("itemCount", str(len(info)))
+    parent.set("payloadCount", str(max(len(info) - 1, 0)))
+    slots = ET.SubElement(parent, "Slots")
+    for index, value in enumerate(info[1:], start=1):
+        slot = ET.SubElement(slots, "Slot")
+        slot.set("index", str(index))
+        slot.set("kind", "list" if isinstance(value, list) else scalar_kind(value))
+        if isinstance(value, list):
+            slot.set("count", str(len(value)))
+            if value and not isinstance(value[0], list):
+                slot.set("first", clean_token(value[0]))
+        else:
+            slot.set("value", clean_token(value))
 
 
 def add_form_bin_container(root: ET.Element, bin_bytes: bytes, form_bytes: bytes) -> None:
@@ -1026,6 +1061,8 @@ def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root:
         metadata = raw_metadata_record(raw)
         if metadata is not None and len(metadata) > 1:
             metadata[1] = quoted_atom(name)
+    apply_metadata_to_raw(element, raw)
+    apply_info_slots_to_raw(element, raw)
     title = get_multilang_text(element, "Title")
     if title:
         replace_first_ru_text(raw, title)
@@ -1036,9 +1073,65 @@ def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root:
             for index, name in enumerate(("left", "top", "right", "bottom"), start=1):
                 if name in geometry.attrib:
                     raw_geometry[index] = geometry.get(name, raw_geometry[index])
+            apply_geometry_bindings_to_raw(geometry, raw_geometry)
     picture = element.find("Picture")
     if picture is not None:
         apply_picture_to_raw(raw, picture, asset_root)
+
+
+def apply_metadata_to_raw(element: ET.Element, raw: list[object]) -> None:
+    metadata_xml = element.find("./OrdinaryControl/Metadata")
+    metadata = raw_metadata_record(raw)
+    if metadata_xml is None or metadata is None:
+        return
+    if "name" in metadata_xml.attrib and len(metadata) > 1:
+        metadata[1] = quoted_atom(metadata_xml.get("name", ""))
+    for index, attr in ((2, "ownerId"), (3, "flag1"), (4, "flag2"), (5, "flag3")):
+        if attr in metadata_xml.attrib and len(metadata) > index:
+            metadata[index] = metadata_xml.get(attr, metadata[index])
+
+
+def apply_info_slots_to_raw(element: ET.Element, raw: list[object]) -> None:
+    slots = element.find("./OrdinaryControl/Info/Slots")
+    if slots is None or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    for slot in slots.findall("Slot"):
+        if "value" not in slot.attrib:
+            continue
+        try:
+            index = int(slot.get("index", "0"))
+        except ValueError:
+            continue
+        if index <= 0 or index >= len(info) or isinstance(info[index], list):
+            continue
+        info[index] = slot.get("value", info[index])
+
+
+def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[object]) -> None:
+    bindings = geometry.find("Bindings")
+    if bindings is None:
+        return
+    for binding in bindings.findall("Binding"):
+        slot = binding.get("slot")
+        if not slot:
+            continue
+        try:
+            index = 5 + int(slot)
+        except ValueError:
+            continue
+        if 0 <= index < len(raw_geometry):
+            raw_geometry[index] = binding_to_raw(binding)
+    for binding in bindings.findall("DimensionBinding"):
+        slot = binding.get("slot")
+        if not slot:
+            continue
+        try:
+            index = 12 + int(slot)
+        except ValueError:
+            continue
+        if 0 <= index < len(raw_geometry):
+            raw_geometry[index] = binding_to_raw(binding)
 
 
 def apply_picture_to_raw(raw: list[object], picture: ET.Element, asset_root: Path | None) -> None:

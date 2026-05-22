@@ -355,7 +355,14 @@ class CliSmokeTest(unittest.TestCase):
                 '1,{{19},11,{1,1,{"ru","Image1"}},"#base64:'
                 + picture
                 + '"},'
-                "{8,1,2,3,4},"
+                "{8,1,2,3,4,1,"
+                "{0,{2,-1,6,0},{2,-1,6,0}},"
+                "{0,{2,1,0,22},{2,-1,6,0}},"
+                "{0,{2,-1,6,0},{2,-1,6,0}},"
+                "{0,{2,1,2,2},{2,-1,6,0}},"
+                "{0,{2,-1,6,0},{2,-1,6,0}},"
+                "{0,{2,-1,6,0},{2,-1,6,0}},"
+                "0,{0,1,1},0,{0,1,3},0,0},"
                 '{14,"Image1",0,0,0},'
                 "{0}"
                 "}}"
@@ -390,7 +397,14 @@ class CliSmokeTest(unittest.TestCase):
                 '1,{{19},11,{1,1,{"ru","Image1"}},"#base64:'
                 + picture
                 + '"},'
-                "{8,1,2,3,4},"
+                "{8,1,2,3,4,1,"
+                "{0,{2,-1,6,0},{2,-1,6,0}},"
+                "{0,{2,1,0,22},{2,-1,6,0}},"
+                "{0,{2,-1,6,0},{2,-1,6,0}},"
+                "{0,{2,1,2,2},{2,-1,6,0}},"
+                "{0,{2,-1,6,0},{2,-1,6,0}},"
+                "{0,{2,-1,6,0},{2,-1,6,0}},"
+                "0,{0,1,1},0,{0,1,3},0,0},"
                 '{14,"Image1",0,0,0},'
                 "{0}"
                 "}}"
@@ -407,12 +421,22 @@ class CliSmokeTest(unittest.TestCase):
             image = xml_root.find(".//Image[@name='Image1']")
             self.assertIsNotNone(image)
             image.set("name", "Image2")
+            ordinary = image.find("./OrdinaryControl")
+            if ordinary is None:
+                ordinary = ET.SubElement(image, "OrdinaryControl", {"objectId": "1"})
+            metadata = image.find("./OrdinaryControl/Metadata")
+            if metadata is None:
+                metadata = ET.SubElement(ordinary, "Metadata")
+            metadata.set("flag1", "7")
             title = image.find("./Title/Item")
             self.assertIsNotNone(title)
             title.text = "Image title"
             geometry = image.find("./Geometry")
             self.assertIsNotNone(geometry)
             geometry.set("left", "42")
+            first_binding_from = geometry.find("./Bindings/Binding[@slot='1']/From")
+            self.assertIsNotNone(first_binding_from)
+            first_binding_from.set("offset", "99")
             picture_path = out.with_suffix("") / "Items" / "Image1" / "Picture.gif"
             picture_path.write_bytes(b"GIF89aChanged")
             tree.write(out, encoding="utf-8", xml_declaration=True)
@@ -426,7 +450,8 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn('"Image2"', rebuilt_stream)
             self.assertIn('"Image title"', rebuilt_stream)
             self.assertIn("#base64:" + base64.b64encode(b"GIF89aChanged").decode("ascii"), rebuilt_stream)
-            self.assertIn("{8,42,2,3,4}", rebuilt_stream)
+            self.assertIn('{14,"Image2",0,7,0}', rebuilt_stream)
+            self.assertIn("{8,42,2,3,4,1,{0,{2,-1,6,99},{2,-1,6,0}}", rebuilt_stream)
 
     def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
         with TemporaryDirectory() as temp_dir:
