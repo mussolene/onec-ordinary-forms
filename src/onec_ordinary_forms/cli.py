@@ -13,6 +13,7 @@ import base64
 import json
 
 from onec_ordinary_forms.corpus import build_corpus_report, write_report
+from onec_ordinary_forms.formbin import pack_form_bin, unpack_form_bin
 
 
 SCHEMA_VERSION = "0.1"
@@ -774,6 +775,14 @@ def scan_corpus(args: argparse.Namespace) -> None:
     write_report(report, Path(args.out_json) if args.out_json else None)
 
 
+def unpack_bin(args: argparse.Namespace) -> None:
+    unpack_form_bin(Path(args.bin), Path(args.out_dir))
+
+
+def pack_bin(args: argparse.Namespace) -> None:
+    pack_form_bin(Path(args.parts_dir), Path(args.out_bin))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -782,7 +791,11 @@ def main() -> None:
     dump_parser.add_argument("--form", required=True)
     dump_parser.add_argument("--bin", required=True)
     dump_parser.add_argument("--module")
-    dump_parser.add_argument("--elem-json", required=True)
+    dump_parser.add_argument(
+        "--elem-json",
+        required=True,
+        help="Legacy semantic element index; see docs/elem-json.md",
+    )
     dump_parser.add_argument("--metadata-json")
     dump_parser.add_argument("--out", required=True)
     dump_parser.set_defaults(func=dump_xml)
@@ -804,6 +817,16 @@ def main() -> None:
     scan_parser.add_argument("--exported-root", help="Optional ibcmd-exported directory to classify")
     scan_parser.add_argument("--out-json", help="Write JSON report instead of stdout")
     scan_parser.set_defaults(func=scan_corpus)
+
+    unpack_bin_parser = subparsers.add_parser("unpack-bin")
+    unpack_bin_parser.add_argument("--bin", required=True, help="Ordinary form Form.bin")
+    unpack_bin_parser.add_argument("--out-dir", required=True, help="Directory for Form.xml, Module.bsl, and section manifest")
+    unpack_bin_parser.set_defaults(func=unpack_bin)
+
+    pack_bin_parser = subparsers.add_parser("pack-bin")
+    pack_bin_parser.add_argument("--parts-dir", required=True, help="Directory created by unpack-bin")
+    pack_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
+    pack_bin_parser.set_defaults(func=pack_bin)
 
     args = parser.parse_args()
     args.func(args)

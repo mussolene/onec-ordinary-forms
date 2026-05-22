@@ -48,12 +48,15 @@ PYTHONPATH=src python -m onec_ordinary_forms.cli --help
 
 Platform/container notes live in [docs/containers.md](docs/containers.md).
 Research and transfer notes live in [docs/research-map.md](docs/research-map.md).
+The legacy `dump --elem-json` input is documented in [docs/elem-json.md](docs/elem-json.md).
 
 ## CLI
 
 ```bash
 onec-ordinary-forms dump --help
 onec-ordinary-forms rebuild --help
+onec-ordinary-forms unpack-bin --help
+onec-ordinary-forms pack-bin --help
 onec-ordinary-forms scan-corpus --help
 ```
 
@@ -61,6 +64,32 @@ For direct source execution:
 
 ```bash
 PYTHONPATH=src python -m onec_ordinary_forms.cli dump --help
+```
+
+`dump --elem-json` currently consumes a legacy semantic index from the original
+prototype. See [docs/elem-json.md](docs/elem-json.md) and
+`examples/elem-json/minimal.json` for the safe committed shape. For current
+`ibcmd` exports that contain only `Form.bin`, start with `unpack-bin`.
+
+## Ordinary `Form.bin` Sections
+
+For platform XML exports that contain ordinary forms as
+`Forms/<Form>/Ext/Form.bin`, split the binary stream into editable section
+files:
+
+```bash
+PYTHONPATH=src python -m onec_ordinary_forms.cli unpack-bin \
+  --bin scan-output/exported/Object/Forms/Form/Ext/Form.bin \
+  --out-dir scan-output/form-parts
+```
+
+The output directory contains `Module.bsl`, `Form.xml`, service section files,
+and `Form.bin.parts.json` for exact reassembly:
+
+```bash
+PYTHONPATH=src python -m onec_ordinary_forms.cli pack-bin \
+  --parts-dir scan-output/form-parts \
+  --out-bin scan-output/rebuilt/Form.bin
 ```
 
 ## Corpus Scanning
