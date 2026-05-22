@@ -71,12 +71,14 @@ def _descriptor_name(payload: bytes) -> str:
 
 
 def _decode_text_payload(payload: bytes) -> str | None:
+    if payload.startswith(BOM):
+        return payload[3:].decode("utf-8", errors="replace")
     for encoding in ("utf-8-sig", "utf-8", "cp1251"):
         try:
             return payload.decode(encoding)
         except UnicodeDecodeError:
             continue
-    return None
+    return payload.decode("utf-8", errors="replace")
 
 
 def _looks_textual(payload: bytes) -> bool:

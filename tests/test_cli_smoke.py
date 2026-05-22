@@ -110,6 +110,35 @@ class CliSmokeTest(unittest.TestCase):
             self.assertEqual((parts / "Form.xml").read_bytes(), form_head + form_tail)
             self.assertEqual((parts / "Module.bsl").read_bytes(), module)
 
+    def test_form_bin_unpack_detects_bom_bracket_with_invalid_text_bytes(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            form = b'\xef\xbb\xbf{1,"\xff"}'
+            module = b'\xef\xbb\xbf// module\r\n'
+            source.write_bytes(
+                b"HEAD\r\n"
+                b"00000003 00000003 7fffffff \r\none"
+                b"\r\n00000020 00000020 7fffffff \r\n"
+                + b"\x00" * 16
+                + b"f\x00o\x00r\x00m\x00"
+                + b"\x00" * 8
+                + f"\r\n{len(form):08x} {len(form):08x} 7fffffff \r\n".encode("ascii")
+                + form
+                + b"\r\n00000024 00000024 7fffffff \r\n"
+                + b"\x00" * 16
+                + b"m\x00o\x00d\x00u\x00l\x00e\x00"
+                + b"\x00" * 8
+                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
+                + module
+            )
+
+            parts = root / "parts"
+            unpack_form_bin(source, parts)
+
+            self.assertEqual((parts / "Form.xml").read_bytes(), form)
+            self.assertEqual((parts / "Module.bsl").read_bytes(), module)
+
     def test_committed_elem_json_fixture_documents_legacy_shape(self) -> None:
         fixture = Path(__file__).parents[1] / "examples" / "elem-json" / "minimal.json"
         data = json.loads(fixture.read_text(encoding="utf-8"))
