@@ -1,4 +1,5 @@
 import unittest
+import base64
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -338,6 +339,41 @@ class CliSmokeTest(unittest.TestCase):
             rebuilt_streams = logical_streams(parse_form_bin(rebuilt.read_bytes()))
             self.assertEqual(rebuilt_streams["Form.xml"], bracket)
             self.assertEqual(rebuilt_streams["Module.bsl"], module)
+
+    def test_dump_bin_uses_managed_like_sidecars_for_module_and_pictures(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            picture = base64.b64encode(b"GIF89a").decode("ascii")
+            bracket = (
+                "{"
+                '{"MainCaption",1,1,{"ru","Main"}},'
+                '{"151ef23e-6bb2-4681-83d0-35bc2217230c",1,{'
+                '1,{{19},11,{1,1,{"ru","Image1"}},"#base64:'
+                + picture
+                + '"},'
+                "{8,1,2,3,4},"
+                '{14,"Image1",0,0,0},'
+                "{0}"
+                "}}"
+                "}"
+            ).encode("utf-8")
+            module = b"Procedure Run()\nEndProcedure\n"
+            source.write_bytes(build_form_bin_container(bracket, module))
+
+            out = root / "Forms" / "Form" / "Ext" / "Form.xml"
+            from onec_ordinary_forms.cli import dump_bin
+
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+
+            form_dir = out.with_suffix("")
+            xml = out.read_text(encoding="utf-8")
+            self.assertEqual((form_dir / "Module.bsl").read_bytes(), module)
+            self.assertEqual((form_dir / "Items" / "Image1" / "Picture.gif").read_bytes(), b"GIF89a")
+            self.assertIn('file="Module.bsl"', xml)
+            self.assertIn('file="Items/Image1/Picture.gif"', xml)
+            self.assertNotIn("Procedure Run", xml)
+            self.assertNotIn(picture, xml)
 
     def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
         with TemporaryDirectory() as temp_dir:
