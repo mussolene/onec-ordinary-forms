@@ -21,6 +21,8 @@ from onec_ordinary_forms.formbin import (
     unpack_form_bin,
 )
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
+from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
+from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
@@ -743,10 +745,28 @@ def add_ordinary_control_metadata(parent: ET.Element, item_data: dict | None) ->
     if not isinstance(ordinary, dict) or not ordinary.get("classId"):
         return
     node = ET.SubElement(parent, "OrdinaryControl")
-    for attr in ("classId", "objectId", "declaredChildCount", "actualChildCount", "stateCount", "positionRecordCount"):
+    for attr in ("classId", "objectId", "type", "declaredChildCount", "actualChildCount", "stateCount", "positionRecordCount"):
         value = ordinary.get(attr)
         if value is not None:
             node.set(attr, str(value))
+    info_kind = ordinary.get("infoKind")
+    if info_kind not in (None, ""):
+        info = ET.SubElement(node, "Info")
+        info.set("kind", str(info_kind))
+    metadata_record_type = ordinary.get("metadataRecordType")
+    if metadata_record_type not in (None, ""):
+        metadata = ET.SubElement(node, "Metadata")
+        metadata.set("recordType", str(metadata_record_type))
+        metadata.set("name", str(parent.get("name", "")))
+        for source, target in (
+            ("metadataOwnerId", "ownerId"),
+            ("metadataFlag1", "flag1"),
+            ("metadataFlag2", "flag2"),
+            ("metadataFlag3", "flag3"),
+        ):
+            value = ordinary.get(source)
+            if value not in (None, ""):
+                metadata.set(target, str(value))
     state_names = ordinary.get("stateNames")
     if isinstance(state_names, list) and state_names:
         states = ET.SubElement(node, "States")
@@ -943,7 +963,7 @@ def build_bin(args: argparse.Namespace) -> None:
     out_bin = Path(args.out_bin)
     asset_root = Path(args.asset_root) if args.asset_root else xml_path.with_suffix("")
     root = ET.parse(xml_path).getroot()
-    form_data = apply_semantic_edits_to_form(root, embedded_form_stream_from_xml(root))
+    form_data = apply_semantic_edits_to_form(root, embedded_form_stream_from_xml(root), asset_root)
     module_data = module_data_from_xml(root, asset_root)
     created, modified = container_times_from_xml(root)
     bin_data = build_form_bin_container(form_data, module_data, created=created, modified=modified)
@@ -951,14 +971,144 @@ def build_bin(args: argparse.Namespace) -> None:
     out_bin.write_bytes(bin_data)
 
 
-def apply_semantic_edits_to_form(root: ET.Element, base_form_data: bytes) -> bytes:
+def apply_semantic_edits_to_form(root: ET.Element, base_form_data: bytes, asset_root: Path | None = None) -> bytes:
     if root.find(".//RawBracket") is not None or root.find(".//*[@insert='true']") is not None:
         raise ValueError("RawBracket/insert XML edits are not supported; ordinary form elements require typed rebuild")
     form_text, has_bom = decode_text_preserve_bom(base_form_data)
+    document = parse_list_stream_document(form_text, allow_trailing=True)
+    apply_xml_to_list_stream_model(root, document.value, asset_root)
+    form_text = dumps(document.value) + document.trailing
+    return encode_text_preserve_bom(form_text, has_bom)
+
+
+def apply_xml_to_list_stream_model(root: ET.Element, list_stream_root: object, asset_root: Path | None = None) -> None:
     title = get_multilang_text(root.find("./Properties"), "Title")
     if title:
-        form_text = replace_root_title(form_text, title)
-    return encode_text_preserve_bom(form_text, has_bom)
+        replace_first_ru_text(list_stream_root, title)
+    controls = raw_controls_by_id(list_stream_root)
+    controls.update({control.object_id: control.raw for control in parse_ordinary_form_model(list_stream_root).flatten()})
+    for element in xml_control_elements(root):
+        ordinary = element.find("OrdinaryControl")
+        object_id = ordinary.get("objectId", "") if ordinary is not None else element.get("id", "")
+        raw = controls.get(object_id)
+        if raw is None:
+            continue
+        apply_xml_control_to_raw(element, raw, asset_root)
+
+
+def xml_control_elements(root: ET.Element) -> list[ET.Element]:
+    result: list[ET.Element] = []
+    for element in root.iter():
+        if element.find("OrdinaryControl") is not None or element.get("id"):
+            result.append(element)
+    return result
+
+
+def raw_controls_by_id(value: object) -> dict[str, list[object]]:
+    result: dict[str, list[object]] = {}
+    for node in walk_lists(value):
+        if len(node) >= 3 and raw_metadata_record(node) is not None and is_plausible_control_id(node[1]):
+            result[str(node[1])] = node
+    return result
+
+
+def is_plausible_control_id(value: object) -> bool:
+    try:
+        int(str(value))
+        return True
+    except ValueError:
+        return False
+
+
+def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root: Path | None = None) -> None:
+    name = element.get("name")
+    if name:
+        metadata = raw_metadata_record(raw)
+        if metadata is not None and len(metadata) > 1:
+            metadata[1] = quoted_atom(name)
+    title = get_multilang_text(element, "Title")
+    if title:
+        replace_first_ru_text(raw, title)
+    geometry = element.find("Geometry")
+    if geometry is not None:
+        raw_geometry = raw_geometry_record(raw)
+        if raw_geometry is not None:
+            for index, name in enumerate(("left", "top", "right", "bottom"), start=1):
+                if name in geometry.attrib:
+                    raw_geometry[index] = geometry.get(name, raw_geometry[index])
+    picture = element.find("Picture")
+    if picture is not None:
+        apply_picture_to_raw(raw, picture, asset_root)
+
+
+def apply_picture_to_raw(raw: list[object], picture: ET.Element, asset_root: Path | None) -> None:
+    file_name = picture.get("file")
+    if not file_name or asset_root is None:
+        return
+    image_path = asset_root / file_name
+    if not image_path.exists():
+        return
+    payload = "#base64:" + base64.b64encode(image_path.read_bytes()).decode("ascii")
+    replace_first_base64_payload(raw, payload)
+
+
+def replace_first_base64_payload(value: object, payload: str) -> bool:
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            if isinstance(child, str) and clean_token(child).startswith("#base64:"):
+                value[index] = quoted_atom(payload)
+                return True
+            if replace_first_base64_payload(child, payload):
+                return True
+    return False
+
+
+def raw_metadata_record(raw: list[object]) -> list[object] | None:
+    for child in walk_lists(raw):
+        if len(child) >= 2 and str(child[0]) == "14":
+            return child
+    return None
+
+
+def raw_geometry_record(raw: list[object]) -> list[object] | None:
+    if len(raw) > 3 and isinstance(raw[3], list) and len(raw[3]) >= 5:
+        return raw[3]
+    for child in walk_lists(raw):
+        if len(child) >= 5:
+            try:
+                int(str(child[1]))
+                int(str(child[2]))
+                int(str(child[3]))
+                int(str(child[4]))
+            except ValueError:
+                continue
+            return child
+    return None
+
+
+def replace_first_ru_text(value: object, text: str) -> bool:
+    if isinstance(value, list):
+        if len(value) >= 3 and str(value[0]) == "1" and str(value[1]) == "1" and isinstance(value[2], list):
+            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
+                value[2][1] = quoted_atom(text)
+                return True
+        for child in value:
+            if replace_first_ru_text(child, text):
+                return True
+    return False
+
+
+def walk_lists(value: object) -> list[list[object]]:
+    result: list[list[object]] = []
+    if isinstance(value, list):
+        result.append(value)
+        for item in value:
+            result.extend(walk_lists(item))
+    return result
+
+
+def quoted_atom(value: str) -> str:
+    return '"' + quote_form_string(value) + '"'
 
 
 def replace_root_title(form_text: str, title: str) -> str:

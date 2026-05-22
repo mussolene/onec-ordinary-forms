@@ -17,6 +17,12 @@ class OrdinaryControl:
     raw: list[object]
     declared_child_count: int = 0
     children: list["OrdinaryControl"] = field(default_factory=list)
+    info_kind: str = ""
+    metadata_record_type: str = ""
+    metadata_owner_id: str = ""
+    metadata_flag1: str = ""
+    metadata_flag2: str = ""
+    metadata_flag3: str = ""
     state_count: int = 0
     state_names: list[str] = field(default_factory=list)
     position_record_count: int = 0
@@ -54,6 +60,7 @@ def _parse_control(node: list[object]) -> OrdinaryControl:
     child_table = _child_table(node)
     children = [_parse_control(child) for child in child_table[1:] if _is_control_node(child)] if child_table else []
     info_table = _control_info_table(node)
+    metadata = _metadata_record(node)
     state_names = _state_names(info_table)
     return OrdinaryControl(
         class_id=str(node[0]),
@@ -64,6 +71,12 @@ def _parse_control(node: list[object]) -> OrdinaryControl:
         raw=node,
         declared_child_count=_declared_count(child_table),
         children=children,
+        info_kind=str(info_table[0]) if info_table else "",
+        metadata_record_type=str(metadata[0]) if metadata else "",
+        metadata_owner_id=str(metadata[2]) if metadata and len(metadata) > 2 else "",
+        metadata_flag1=str(metadata[3]) if metadata and len(metadata) > 3 else "",
+        metadata_flag2=str(metadata[4]) if metadata and len(metadata) > 4 else "",
+        metadata_flag3=str(metadata[5]) if metadata and len(metadata) > 5 else "",
         state_count=_state_count(_state_table(info_table)),
         state_names=state_names,
         position_record_count=_position_record_count(info_table),
@@ -183,10 +196,17 @@ def _state_count(value: list[object] | None) -> int:
 
 
 def _metadata_name(node: list[object]) -> str:
+    record = _metadata_record(node)
+    if record and len(record) >= 2:
+        return _clean(record[1])
+    return ""
+
+
+def _metadata_record(node: list[object]) -> list[object] | None:
     for child in _walk_lists(node):
         if len(child) >= 2 and str(child[0]) == "14":
-            return _clean(child[1])
-    return ""
+            return child
+    return None
 
 
 def _title(node: object) -> str:

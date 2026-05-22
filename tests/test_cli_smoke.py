@@ -39,6 +39,9 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(ordinary_control_type("6ff79819-710e-4145-97cd-1618da79e3e2"), "Button")
         self.assertEqual(ordinary_control_type("151ef23e-6bb2-4681-83d0-35bc2217230c"), "Image")
         self.assertEqual(ordinary_control_type("09ccdc77-ea1a-4a6d-ab1c-3435eada2433"), "Panel")
+        self.assertEqual(ordinary_control_type("381ed624-9217-4e63-85db-c4c3cb87daae"), "InputField")
+        self.assertEqual(ordinary_control_type("e69bf21d-97b2-4f37-86db-675aea9ec2cb"), "CommandBar")
+        self.assertEqual(ordinary_control_type("35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26"), "CheckBox")
 
     def test_ordinary_model_keeps_control_tables_together(self) -> None:
         form = [
@@ -374,6 +377,56 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn('file="Items/Image1/Picture.gif"', xml)
             self.assertNotIn("Procedure Run", xml)
             self.assertNotIn(picture, xml)
+
+    def test_build_bin_writes_control_xml_edits_into_list_stream(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            picture = base64.b64encode(b"GIF89a").decode("ascii")
+            bracket = (
+                "{"
+                '{"MainCaption",1,1,{"ru","Main"}},'
+                '{"151ef23e-6bb2-4681-83d0-35bc2217230c",1,{'
+                '1,{{19},11,{1,1,{"ru","Image1"}},"#base64:'
+                + picture
+                + '"},'
+                "{8,1,2,3,4},"
+                '{14,"Image1",0,0,0},'
+                "{0}"
+                "}}"
+                "}"
+            ).encode("utf-8")
+            source.write_bytes(build_form_bin_container(bracket, b"module"))
+
+            out = root / "Forms" / "Form" / "Ext" / "Form.xml"
+            from onec_ordinary_forms.cli import build_bin, dump_bin
+
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            tree = ET.parse(out)
+            xml_root = tree.getroot()
+            image = xml_root.find(".//Image[@name='Image1']")
+            self.assertIsNotNone(image)
+            image.set("name", "Image2")
+            title = image.find("./Title/Item")
+            self.assertIsNotNone(title)
+            title.text = "Image title"
+            geometry = image.find("./Geometry")
+            self.assertIsNotNone(geometry)
+            geometry.set("left", "42")
+            picture_path = out.with_suffix("") / "Items" / "Image1" / "Picture.gif"
+            picture_path.write_bytes(b"GIF89aChanged")
+            tree.write(out, encoding="utf-8", xml_declaration=True)
+
+            rebuilt = root / "rebuilt.bin"
+            build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
+
+            from onec_ordinary_forms.formbin import logical_streams, parse_form_bin
+
+            rebuilt_stream = logical_streams(parse_form_bin(rebuilt.read_bytes()))["Form.xml"].decode("utf-8")
+            self.assertIn('"Image2"', rebuilt_stream)
+            self.assertIn('"Image title"', rebuilt_stream)
+            self.assertIn("#base64:" + base64.b64encode(b"GIF89aChanged").decode("ascii"), rebuilt_stream)
+            self.assertIn("{8,42,2,3,4}", rebuilt_stream)
 
     def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
         with TemporaryDirectory() as temp_dir:

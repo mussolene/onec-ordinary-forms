@@ -86,6 +86,13 @@ def _items_from_model(model: object, default_page: str) -> list[dict[str, object
             "ordinary": {
                 "classId": getattr(control, "class_id"),
                 "objectId": getattr(control, "object_id"),
+                "type": getattr(control, "type"),
+                "infoKind": getattr(control, "info_kind"),
+                "metadataRecordType": getattr(control, "metadata_record_type"),
+                "metadataOwnerId": getattr(control, "metadata_owner_id"),
+                "metadataFlag1": getattr(control, "metadata_flag1"),
+                "metadataFlag2": getattr(control, "metadata_flag2"),
+                "metadataFlag3": getattr(control, "metadata_flag3"),
                 "declaredChildCount": str(getattr(control, "declared_child_count")),
                 "actualChildCount": str(getattr(control, "actual_child_count")),
                 "stateCount": str(getattr(control, "state_count")),
