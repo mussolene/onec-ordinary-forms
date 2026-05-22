@@ -7,6 +7,7 @@ import json
 import re
 
 from onec_ordinary_forms.liststream import ListStreamParseError, parse_list_stream
+from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
 
 
@@ -49,22 +50,60 @@ def extract_elem_json_from_bracket(text: str) -> dict[str, object]:
     root = parse_bracket_text(text, allow_trailing=True)
     pages = _extract_pages(root)
     props = _extract_props(root)
-    items = _extract_items(root, pages[0] if pages else "Main")
+    model = parse_ordinary_form_model(root)
+    items = _items_from_model(model, pages[0] if pages else "Main") if model.controls else _extract_items(root, pages[0] if pages else "Main")
     data: dict[str, object] = {"-pages-": pages}
     for page in pages:
         data[page] = _page_raw(page)
-    tree: list[dict[str, object]] = []
+    tree = [item for item in items if item.get("parent") is None]
     for item in items:
-        page = str(item["page"])
-        name = str(item["name"])
-        data[f"{page}/{name}"] = {"id": item["id"], "raw": item["raw"]}
-        tree.append({"name": name, "type": item["type"], "page": page, "child": []})
+        raw_key = str(item.get("rawKey") or f"{item['page']}/{item['name']}")
+        data[raw_key] = {
+            "id": item["id"],
+            "raw": item["raw"],
+            "ordinary": item.get("ordinary", {}),
+        }
     return {
         "props": props,
         "commands": [],
         "data": data,
         "tree": tree,
     }
+
+
+def _items_from_model(model: object, default_page: str) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+
+    def add(control: object, parent: dict[str, object] | None = None) -> dict[str, object]:
+        item = {
+            "id": str(getattr(control, "object_id")),
+            "name": getattr(control, "name"),
+            "type": getattr(control, "type"),
+            "page": default_page,
+            "rawKey": f"{default_page}/{getattr(control, 'name')}" if parent is None else f"{parent['rawKey']}/{getattr(control, 'name')}",
+            "raw": getattr(control, "raw"),
+            "child": [],
+            "ordinary": {
+                "classId": getattr(control, "class_id"),
+                "objectId": getattr(control, "object_id"),
+                "declaredChildCount": str(getattr(control, "declared_child_count")),
+                "actualChildCount": str(getattr(control, "actual_child_count")),
+                "stateCount": str(getattr(control, "state_count")),
+                "stateNames": list(getattr(control, "state_names")),
+                "positionRecordCount": str(getattr(control, "position_record_count")),
+            },
+        }
+        if parent is not None:
+            item["parent"] = parent.get("name")
+            parent.setdefault("child", []).append(item)
+        items.append(item)
+        for child in getattr(control, "children"):
+            add(child, item)
+        return item
+
+    for control in getattr(model, "controls"):
+        add(control)
+    return items
 
 
 def write_elem_json_from_bracket(form_path: Path, out_path: Path) -> None:

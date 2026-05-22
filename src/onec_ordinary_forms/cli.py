@@ -659,6 +659,7 @@ def add_semantic_item(
     item_data = data.get(raw_key)
     if isinstance(item_data, dict) and item_data.get("id") is not None:
         node.set("id", str(item_data["id"]))
+    add_ordinary_control_metadata(node, item_data)
     title = item_title(data.get(raw_key))
     if title:
         add_multilang_text(node, "Title", title)
@@ -707,7 +708,7 @@ def add_semantic_item(
     elif children:
         child_items = ET.SubElement(node, "ChildItems")
         for child in children:
-            child_key = f"{raw_key}/{child.get('name', '')}"
+            child_key = str(child.get("rawKey") or f"{raw_key}/{child.get('name', '')}")
             add_semantic_item(child_items, child, data, child_key, element_index, asset_root)
 
 
@@ -731,8 +732,27 @@ def add_semantic_pages(
         for item in elem.get("tree", []):
             if str(item.get("page", "")) != page_path:
                 continue
-            raw_key = f"{page_path}/{item.get('name', '')}"
+            raw_key = str(item.get("rawKey") or f"{page_path}/{item.get('name', '')}")
             add_semantic_item(items, item, data, raw_key, element_index, asset_root)
+
+
+def add_ordinary_control_metadata(parent: ET.Element, item_data: dict | None) -> None:
+    if not isinstance(item_data, dict):
+        return
+    ordinary = item_data.get("ordinary")
+    if not isinstance(ordinary, dict) or not ordinary.get("classId"):
+        return
+    node = ET.SubElement(parent, "OrdinaryControl")
+    for attr in ("classId", "objectId", "declaredChildCount", "actualChildCount", "stateCount", "positionRecordCount"):
+        value = ordinary.get(attr)
+        if value is not None:
+            node.set(attr, str(value))
+    state_names = ordinary.get("stateNames")
+    if isinstance(state_names, list) and state_names:
+        states = ET.SubElement(node, "States")
+        for state_name in state_names:
+            state = ET.SubElement(states, "State")
+            state.set("name", str(state_name))
 
 
 def add_form_bin_container(root: ET.Element, bin_bytes: bytes, form_bytes: bytes) -> None:

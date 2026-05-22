@@ -10,6 +10,7 @@ from onec_ordinary_forms.cli import apply_semantic_edits_to_form, replace_root_t
 from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
+from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
@@ -37,6 +38,100 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(ordinary_control_type("6ff79819-710e-4145-97cd-1618da79e3e2"), "Button")
         self.assertEqual(ordinary_control_type("151ef23e-6bb2-4681-83d0-35bc2217230c"), "Image")
         self.assertEqual(ordinary_control_type("09ccdc77-ea1a-4a6d-ab1c-3435eada2433"), "Panel")
+
+    def test_ordinary_model_keeps_control_tables_together(self) -> None:
+        form = [
+            "27",
+            [
+                "18",
+                [["1", "1", ['"ru"', '"Main"']], "2", "4294967295"],
+                [
+                    "09ccdc77-ea1a-4a6d-ab1c-3435eada2433",
+                    "10",
+                    [
+                        "1",
+                        [
+                            [
+                                "19",
+                                "1",
+                                ["4", "4", ["0"], "4"],
+                                ["4", "4", ["0"], "4"],
+                                ["8", "3", "0", "1", "100"],
+                                "0",
+                                ["4", "4", ["0"], "4"],
+                                ["4", "4", ["0"], "4"],
+                                ["4", "4", ["0"], "4"],
+                                ["4", "3", ["-7"], "3"],
+                                ["4", "3", ["-21"], "3"],
+                                ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+                                ["1", "0"],
+                                "0",
+                                "0",
+                                "100",
+                                "2",
+                                "1",
+                                "1",
+                                "2",
+                                ["4", "4", ["0"], "4"],
+                            ],
+                            "26",
+                            "0",
+                            "0",
+                            "0",
+                            "0",
+                            "0",
+                            "0",
+                            ["10", "1"],
+                            "1",
+                            "1",
+                            ["1", "1", ["6", ["1", "1", ['"ru"', '"State"']], ["10"], "-1", "1", "1", '"State"', "1"]],
+                            "1",
+                            "1",
+                            "0",
+                            "4",
+                            ["2", "6", "1", "1", "1", "0", "0", "0", "0"],
+                            "0",
+                            "4294967295",
+                            "5",
+                            "64",
+                            "0",
+                            ["4", "4", ["0"], "4"],
+                            "0",
+                            "0",
+                            "57",
+                            "0",
+                            "0",
+                        ],
+                        ["0"],
+                    ],
+                    ["8", "1", "2", "3", "4"],
+                    ["14", '"Panel"', "4294967295", "0", "0", "0"],
+                    [
+                        "1",
+                        [
+                            "0fc7e20d-f241-460c-bdf4-5ad88e5474a5",
+                            "11",
+                            ["3", [["19"], "11", ["1", "1", ['"ru"', '"Hello"']]], ["0"]],
+                            ["8", "5", "6", "7", "8"],
+                            ["14", '"Greeting"', "4294967295", "0", "0", "0"],
+                            ["0"],
+                        ],
+                    ],
+                ],
+            ],
+        ]
+
+        model = parse_ordinary_form_model(form)
+
+        self.assertEqual(len(model.controls), 1)
+        panel = model.controls[0]
+        self.assertEqual(panel.type, "Panel")
+        self.assertEqual(panel.declared_child_count, 1)
+        self.assertEqual(panel.actual_child_count, 1)
+        self.assertEqual(panel.state_count, 1)
+        self.assertEqual(panel.position_record_count, 1)
+        self.assertEqual(panel.children[0].type, "Label")
+        self.assertEqual(panel.children[0].title, "Hello")
 
     def test_scan_corpus_uses_portable_paths(self) -> None:
         with TemporaryDirectory() as temp_dir:
