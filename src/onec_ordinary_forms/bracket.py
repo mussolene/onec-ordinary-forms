@@ -304,6 +304,9 @@ def _looks_like_geometry(value: object) -> bool:
 
 
 def _element_name(node: list[object], fallback_index: int) -> str:
+    metadata_name = _metadata_name(node)
+    if metadata_name:
+        return metadata_name
     for atom in _all_atoms(node):
         text = _clean(atom)
         if IDENT_RE.fullmatch(text) and text not in KNOWN_ITEM_TYPES and text not in {"ru", "Pattern"}:
@@ -313,10 +316,25 @@ def _element_name(node: list[object], fallback_index: int) -> str:
 
 def _element_type(node: list[object]) -> str:
     atoms = {_clean(atom) for atom in _all_atoms(node)}
+    metadata_name = _metadata_name(node).lower()
+    if any(atom.startswith("#base64:") for atom in atoms) and (
+        "картин" in metadata_name or "image" in metadata_name or "picture" in metadata_name
+    ):
+        return "Image"
     for item_type in KNOWN_ITEM_TYPES:
         if item_type in atoms:
             return item_type
     return "Item"
+
+
+def _metadata_name(node: list[object]) -> str:
+    for child in _walk_lists(node):
+        if len(child) < 2 or str(child[0]) != "14":
+            continue
+        name = _clean(child[1])
+        if IDENT_RE.fullmatch(name):
+            return name
+    return ""
 
 
 def _normalize_item_raw(node: list[object], geometry_index: int) -> list[object]:

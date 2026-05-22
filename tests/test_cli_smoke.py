@@ -101,6 +101,24 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(elem["tree"][0]["type"], "InputField")
         self.assertIn("Main/InputValue", elem["data"])
 
+    def test_extract_elem_json_prefers_metadata_name_and_detects_images(self) -> None:
+        bracket = """
+        {
+          {1,1,{"ru","Main"}},
+          {
+            {"#base64:R0lGODlhAQABAIAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw=="},
+            {0,1,2,3,4,0,{0,{2,0,0,1},{2,-1,6,0}}},
+            {14,"КартинкаДлительнаяОперация",4294967295,0,0,0}
+          }
+        }
+        """
+
+        elem = extract_elem_json_from_bracket(bracket)
+
+        self.assertEqual(elem["tree"][0]["name"], "КартинкаДлительнаяОперация")
+        self.assertEqual(elem["tree"][0]["type"], "Image")
+        self.assertIn("Main/КартинкаДлительнаяОперация", elem["data"])
+
     def test_dump_bin_creates_object_xml(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -124,7 +142,7 @@ class CliSmokeTest(unittest.TestCase):
                 + bracket
             )
 
-            out = root / "OrdinaryForm.xml"
+            out = root / "Form.xml"
             from onec_ordinary_forms.cli import dump_bin
 
             dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
@@ -133,6 +151,7 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn("<OrdinaryForm", xml)
             self.assertIn("<Attributes>", xml)
             self.assertIn('name="InputValue"', xml)
+            self.assertEqual((root / "Form" / "Module.bsl").read_bytes(), module)
 
 
 if __name__ == "__main__":

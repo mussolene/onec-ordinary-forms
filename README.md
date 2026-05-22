@@ -100,8 +100,11 @@ To produce object-model XML directly from the ordinary form binary:
 ```bash
 PYTHONPATH=src python -m onec_ordinary_forms.cli dump-bin \
   --bin scan-output/exported/Object/Forms/Form/Ext/Form.bin \
-  --out scan-output/Form.OrdinaryForm.xml
+  --out scan-output/exported/Object/Forms/Form/Ext/Form.xml
 ```
+
+With that output path, sidecars follow the same layout as managed forms:
+`Form/Module.bsl` and `Form/Items/<ElementName>/Picture.gif`.
 
 To inspect or reuse the intermediate legacy index:
 
