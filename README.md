@@ -47,6 +47,7 @@ PYTHONPATH=src python -m onec_ordinary_forms.cli --help
 ```
 
 Platform/container notes live in [docs/containers.md](docs/containers.md).
+Research and transfer notes live in [docs/research-map.md](docs/research-map.md).
 
 ## CLI
 
