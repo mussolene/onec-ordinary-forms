@@ -7,6 +7,7 @@ import json
 import re
 
 from onec_ordinary_forms.liststream import ListStreamParseError, parse_list_stream
+from onec_ordinary_forms.ordinary_platform import ordinary_control_type
 
 
 IDENT_RE = re.compile(r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$")
@@ -234,6 +235,9 @@ def _element_name(node: list[object], fallback_index: int) -> str:
 
 
 def _element_type(node: list[object]) -> str:
+    platform_type = ordinary_control_type(node[0] if node else "")
+    if platform_type:
+        return platform_type
     atoms = {_clean(atom) for atom in _all_atoms(node)}
     metadata_name = _metadata_name(node).lower()
     if any(atom.startswith("#base64:") for atom in atoms) and (

@@ -20,8 +20,7 @@ from onec_ordinary_forms.formbin import (
     parse_form_bin,
     unpack_form_bin,
 )
-from onec_ordinary_forms.bracket import parse_bracket_text, write_elem_json_from_bracket
-from onec_ordinary_forms.liststream import dumps
+from onec_ordinary_forms.bracket import write_elem_json_from_bracket
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
@@ -933,119 +932,13 @@ def build_bin(args: argparse.Namespace) -> None:
 
 
 def apply_semantic_edits_to_form(root: ET.Element, base_form_data: bytes) -> bytes:
+    if root.find(".//RawBracket") is not None or root.find(".//*[@insert='true']") is not None:
+        raise ValueError("RawBracket/insert XML edits are not supported; ordinary form elements require typed rebuild")
     form_text, has_bom = decode_text_preserve_bom(base_form_data)
     title = get_multilang_text(root.find("./Properties"), "Title")
     if title:
         form_text = replace_root_title(form_text, title)
-    form_text = apply_raw_insertions(root, form_text)
     return encode_text_preserve_bom(form_text, has_bom)
-
-
-def apply_raw_insertions(root: ET.Element, form_text: str) -> str:
-    insert_nodes = [node for node in root.findall(".//*[@insert='true']") if node.find("./RawBracket") is not None]
-    if not insert_nodes:
-        return form_text
-    form_root = parse_bracket_text(form_text, allow_trailing=True)
-    for node in insert_nodes:
-        raw_node = node.find("./RawBracket")
-        assert raw_node is not None
-        raw_text = raw_bracket_text(raw_node)
-        raw_item = parse_bracket_text(raw_text, allow_trailing=False)
-        after_name = node.get("after")
-        parent_name = node.get("parent")
-        if after_name:
-            inserted = insert_raw_item_after(form_root, after_name, raw_item)
-        elif parent_name:
-            inserted = insert_raw_item_into_parent(form_root, parent_name, raw_item)
-        else:
-            raise ValueError(f"Inserted form item must specify after or parent: {node.get('name', node.tag)}")
-        if not inserted:
-            target = after_name if after_name else parent_name
-            raise ValueError(f"Form insertion target was not found: {target}")
-        increment_form_object_count(form_root)
-    return dumps(form_root)
-
-
-def raw_bracket_text(node: ET.Element) -> str:
-    text = "".join((node.text or "").split())
-    if node.get("encoding") == "base64":
-        return base64.b64decode(text).decode("utf-8-sig")
-    return node.text or ""
-
-
-def insert_raw_item_after(value: object, after_name: str, raw_item: object) -> bool:
-    if not isinstance(value, list):
-        return False
-    for index, child in enumerate(value):
-        if index > 0 and form_item_name(child) == after_name:
-            value.insert(index + 1, raw_item)
-            increment_count_header(value)
-            return True
-    for child in value:
-        if insert_raw_item_after(child, after_name, raw_item):
-            return True
-    return False
-
-
-def insert_raw_item_into_parent(value: object, parent_name: str, raw_item: object) -> bool:
-    parent = find_form_item(value, parent_name)
-    if not isinstance(parent, list):
-        return False
-    for child in parent:
-        if isinstance(child, list) and child and is_decimal_atom(child[0]):
-            child.append(raw_item)
-            increment_count_header(child)
-            return True
-    return False
-
-
-def find_form_item(value: object, name: str) -> list[object] | None:
-    if isinstance(value, list):
-        if form_item_name(value) == name:
-            return value
-        for child in value:
-            found = find_form_item(child, name)
-            if found is not None:
-                return found
-    return None
-
-
-def form_item_name(value: object) -> str:
-    if not isinstance(value, list):
-        return ""
-    for child in value:
-        if isinstance(child, list) and len(child) >= 2 and str(child[0]) == "14":
-            return unquote_form_atom(str(child[1]))
-    return ""
-
-
-def unquote_form_atom(value: str) -> str:
-    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
-        return value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
-    return value
-
-
-def increment_count_header(value: list[object]) -> None:
-    if value and is_decimal_atom(value[0]):
-        value[0] = str(int(str(value[0])) + 1)
-
-
-def increment_form_object_count(value: object) -> None:
-    if (
-        isinstance(value, list)
-        and len(value) > 1
-        and isinstance(value[1], list)
-        and len(value[1]) > 1
-        and isinstance(value[1][1], list)
-        and len(value[1][1]) > 1
-        and is_decimal_atom(value[1][1][1])
-    ):
-        value[1][1][1] = str(int(str(value[1][1][1])) + 1)
-
-
-def is_decimal_atom(value: object) -> bool:
-    text = str(value)
-    return bool(re.fullmatch(r"\d+", text))
 
 
 def replace_root_title(form_text: str, title: str) -> str:
