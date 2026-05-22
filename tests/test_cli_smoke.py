@@ -75,6 +75,41 @@ class CliSmokeTest(unittest.TestCase):
             self.assertEqual((parts / "Module.bsl").read_bytes(), b"module")
             self.assertEqual((parts / "Form.xml").read_bytes(), b"form")
 
+    def test_form_bin_unpack_assembles_descriptor_split_streams(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            form_head = b'\xef\xbb\xbf{1,'
+            form_tail = b'2}'
+            module = b'\xef\xbb\xbf// module\r\n'
+            source.write_bytes(
+                b"HEAD\r\n"
+                b"00000003 00000003 7fffffff \r\none"
+                b"\r\n00000020 00000020 7fffffff \r\n"
+                + b"\x00" * 16
+                + b"f\x00o\x00r\x00m\x00"
+                + b"\x00" * 8
+                + f"\r\n{len(form_head):08x} {len(form_head):08x} 7fffffff \r\n".encode("ascii")
+                + form_head
+                + b"\r\n00000024 00000024 7fffffff \r\n"
+                + b"\x00" * 16
+                + b"m\x00o\x00d\x00u\x00l\x00e\x00"
+                + b"\x00" * 8
+                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
+                + module
+                + f"\r\n{len(form_tail):08x} {len(form_tail):08x} 7fffffff \r\n".encode("ascii")
+                + form_tail
+            )
+
+            parts = root / "parts"
+            unpack_form_bin(source, parts)
+            rebuilt = root / "rebuilt.bin"
+            pack_form_bin(parts, rebuilt)
+
+            self.assertEqual(rebuilt.read_bytes(), source.read_bytes())
+            self.assertEqual((parts / "Form.xml").read_bytes(), form_head + form_tail)
+            self.assertEqual((parts / "Module.bsl").read_bytes(), module)
+
     def test_committed_elem_json_fixture_documents_legacy_shape(self) -> None:
         fixture = Path(__file__).parents[1] / "examples" / "elem-json" / "minimal.json"
         data = json.loads(fixture.read_text(encoding="utf-8"))
@@ -101,6 +136,20 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(elem["tree"][0]["name"], "InputValue")
         self.assertEqual(elem["tree"][0]["type"], "InputField")
         self.assertIn("Main/InputValue", elem["data"])
+
+    def test_extract_elem_json_ignores_trailing_module_text(self) -> None:
+        bracket = """
+        {
+          {1,1,{"ru","Main"}}
+        }
+        // trailing module text can be stored after the bracket payload
+        Procedure Run()
+        EndProcedure
+        """
+
+        elem = extract_elem_json_from_bracket(bracket)
+
+        self.assertEqual(elem["data"]["-pages-"], ["Main"])
 
     def test_extract_elem_json_prefers_metadata_name_and_detects_images(self) -> None:
         bracket = """

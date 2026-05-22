@@ -36,10 +36,11 @@ class BracketParseError(ValueError):
     pass
 
 
-def parse_bracket_text(text: str) -> object:
+def parse_bracket_text(text: str, *, allow_trailing: bool = False) -> object:
     parser = _Parser(_tokenize(text))
     result = parser.parse_value()
-    parser.expect_eof()
+    if not allow_trailing:
+        parser.expect_eof()
     return result
 
 
@@ -54,7 +55,7 @@ def read_bracket_text(path: Path) -> str:
 
 
 def extract_elem_json_from_bracket(text: str) -> dict[str, object]:
-    root = parse_bracket_text(text)
+    root = parse_bracket_text(text, allow_trailing=True)
     pages = _extract_pages(root)
     props = _extract_props(root)
     items = _extract_items(root, pages[0] if pages else "Main")

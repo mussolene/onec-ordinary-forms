@@ -11,6 +11,7 @@ import re
 
 MARKER_RE = re.compile(rb"(?:(?<=\n)|^)([0-9a-f]{8}) ([0-9a-f]{8}) ([0-9a-f]{8}) \r?\n")
 MANIFEST_NAME = "Form.bin.parts.json"
+BOM = b"\xef\xbb\xbf"
 
 
 @dataclass(frozen=True)
@@ -58,11 +59,104 @@ def parse_form_bin(data: bytes) -> FormBinParts:
 
 
 def _section_payload_file(index: int) -> str:
-    if index == 3:
-        return "Module.bsl"
-    if index == 4:
-        return "Form.xml"
     return f"section-{index}.bin"
+
+
+def _descriptor_name(payload: bytes) -> str:
+    if b"f\x00o\x00r\x00m\x00" in payload:
+        return "form"
+    if b"m\x00o\x00d\x00u\x00l\x00e\x00" in payload:
+        return "module"
+    return ""
+
+
+def _decode_text_payload(payload: bytes) -> str | None:
+    for encoding in ("utf-8-sig", "utf-8", "cp1251"):
+        try:
+            return payload.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return None
+
+
+def _looks_textual(payload: bytes) -> bool:
+    text = _decode_text_payload(payload)
+    if text is None:
+        return False
+    meaningful = [char for char in text if char not in "\ufeff\r\n\t "]
+    if not meaningful:
+        return False
+    printable = sum(1 for char in meaningful if char.isprintable())
+    return printable / len(meaningful) > 0.8
+
+
+def _brace_balance(payload: bytes) -> int:
+    text = _decode_text_payload(payload) or ""
+    balance = 0
+    in_string = False
+    escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            balance += 1
+        elif char == "}":
+            balance -= 1
+    return balance
+
+
+def _first_bracket_payload_index(sections: list[FormBinSection], start: int = 0) -> int | None:
+    for index, section in enumerate(sections[start:], start=start):
+        if _descriptor_name(section.payload):
+            continue
+        text = _decode_text_payload(section.payload)
+        if text is not None and text.lstrip("\ufeff\r\n\t ").startswith("{"):
+            return index
+    return None
+
+
+def logical_streams(parts: FormBinParts) -> dict[str, bytes]:
+    descriptors = {_descriptor_name(section.payload): index for index, section in enumerate(parts.sections)}
+    module_index = descriptors.get("module")
+    form_index = descriptors.get("form")
+
+    module_payload_index = module_index + 1 if module_index is not None and module_index + 1 < len(parts.sections) else 3
+    form_payload_indexes: list[int] = []
+    first_form = _first_bracket_payload_index(parts.sections, (form_index + 1) if form_index is not None else 0)
+    if first_form is not None:
+        form_payload_indexes.append(first_form)
+    elif len(parts.sections) > 4:
+        form_payload_indexes.append(4)
+
+    if form_payload_indexes:
+        balance = sum(_brace_balance(parts.sections[index].payload) for index in form_payload_indexes)
+        for index, section in enumerate(parts.sections):
+            if index <= max(form_payload_indexes):
+                continue
+            if index in form_payload_indexes or index == module_payload_index:
+                continue
+            if _descriptor_name(section.payload) or not _looks_textual(section.payload):
+                continue
+            if balance > 0 or not section.payload.lstrip().startswith(BOM):
+                form_payload_indexes.append(index)
+                balance += _brace_balance(section.payload)
+                if balance <= 0:
+                    break
+
+    streams: dict[str, bytes] = {}
+    if module_payload_index < len(parts.sections):
+        streams["Module.bsl"] = parts.sections[module_payload_index].payload
+    if form_payload_indexes:
+        streams["Form.xml"] = b"".join(parts.sections[index].payload for index in form_payload_indexes)
+    return streams
 
 
 def unpack_form_bin(form_bin: Path, out_dir: Path) -> dict[str, object]:
@@ -76,12 +170,16 @@ def unpack_form_bin(form_bin: Path, out_dir: Path) -> dict[str, object]:
         manifest_sections.append(
             {
                 "file": payload_file,
+                "role": _descriptor_name(section.payload) or "payload",
                 "firstSize": section.first_size,
                 "secondSize": section.second_size,
                 "limit": section.limit,
                 "size": len(section.payload),
             }
         )
+
+    for logical_file, payload in logical_streams(parts).items():
+        (out_dir / logical_file).write_bytes(payload)
 
     manifest = {
         "format": "onec-ordinary-formbin-parts",

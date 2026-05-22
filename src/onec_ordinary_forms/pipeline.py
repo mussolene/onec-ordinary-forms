@@ -9,12 +9,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 import tempfile
+from typing import Optional
 
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
 from onec_ordinary_forms.formbin import unpack_form_bin
 
 
-ModelXmlWriter = Callable[[Path, Path, Path | None, Path, Path | None, Path], None]
+ModelXmlWriter = Callable[[Path, Path, Optional[Path], Path, Optional[Path], Path], None]
 
 
 def dump_form_bin_to_xml(
