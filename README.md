@@ -107,6 +107,20 @@ PYTHONPATH=src python -m onec_ordinary_forms.cli dump-bin \
 With that output path, sidecars follow the same layout as managed forms:
 `Form/Module.bsl` and `Form/Items/<ElementName>/Picture.gif`.
 
+`dump-bin` also embeds the remaining `Form.bin` section metadata into the
+resulting ordinary `Form.xml`. This lets the project rebuild the platform
+`Form.bin` without keeping the original binary next to the XML:
+
+```bash
+PYTHONPATH=src python -m onec_ordinary_forms.cli build-bin \
+  --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
+  --out-bin scan-output/rebuilt/Form.bin
+```
+
+This is still a lossless transition format: unknown service sections and the
+original bracket stream are retained in the XML until their fields are decoded
+semantically.
+
 To inspect or reuse the intermediate legacy index:
 
 ```bash

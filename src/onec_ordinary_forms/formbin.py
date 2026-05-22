@@ -30,6 +30,12 @@ class FormBinParts:
     sections: list[FormBinSection]
 
 
+@dataclass(frozen=True)
+class FormBinLogicalLayout:
+    module_payload_index: int | None
+    form_payload_indexes: list[int]
+
+
 def parse_form_bin(data: bytes) -> FormBinParts:
     matches = list(MARKER_RE.finditer(data))
     if len(matches) < 5:
@@ -125,7 +131,7 @@ def _first_bracket_payload_index(sections: list[FormBinSection], start: int = 0)
     return None
 
 
-def logical_streams(parts: FormBinParts) -> dict[str, bytes]:
+def logical_layout(parts: FormBinParts) -> FormBinLogicalLayout:
     descriptors = {_descriptor_name(section.payload): index for index, section in enumerate(parts.sections)}
     module_index = descriptors.get("module")
     form_index = descriptors.get("form")
@@ -153,12 +159,109 @@ def logical_streams(parts: FormBinParts) -> dict[str, bytes]:
                 if balance <= 0:
                     break
 
+    return FormBinLogicalLayout(
+        module_payload_index=module_payload_index if module_payload_index < len(parts.sections) else None,
+        form_payload_indexes=form_payload_indexes,
+    )
+
+
+def logical_streams(parts: FormBinParts) -> dict[str, bytes]:
+    layout = logical_layout(parts)
     streams: dict[str, bytes] = {}
-    if module_payload_index < len(parts.sections):
-        streams["Module.bsl"] = parts.sections[module_payload_index].payload
-    if form_payload_indexes:
-        streams["Form.xml"] = b"".join(parts.sections[index].payload for index in form_payload_indexes)
+    if layout.module_payload_index is not None:
+        streams["Module.bsl"] = parts.sections[layout.module_payload_index].payload
+    if layout.form_payload_indexes:
+        streams["Form.xml"] = b"".join(parts.sections[index].payload for index in layout.form_payload_indexes)
     return streams
+
+
+def manifest_from_parts(parts: FormBinParts, *, include_payloads: bool = False) -> dict[str, object]:
+    layout = logical_layout(parts)
+    manifest_sections: list[dict[str, object]] = []
+    for index, section in enumerate(parts.sections):
+        role = _descriptor_name(section.payload) or "payload"
+        logical_file = ""
+        if index == layout.module_payload_index:
+            logical_file = "Module.bsl"
+        elif index in layout.form_payload_indexes:
+            logical_file = "Form.xml"
+        entry: dict[str, object] = {
+            "role": role,
+            "logicalFile": logical_file,
+            "firstSize": section.first_size,
+            "secondSize": section.second_size,
+            "limit": section.limit,
+            "size": len(section.payload),
+        }
+        if include_payloads and not logical_file:
+            entry["payloadBase64"] = base64.b64encode(section.payload).decode("ascii")
+        manifest_sections.append(entry)
+
+    return {
+        "format": "onec-ordinary-formbin-parts",
+        "version": 2,
+        "prefix": base64.b64encode(parts.prefix).decode("ascii"),
+        "sections": manifest_sections,
+    }
+
+
+def _split_logical_payload(payload: bytes, sizes: list[int]) -> list[bytes]:
+    if not sizes:
+        return []
+    if len(sizes) == 1:
+        return [payload]
+    if len(payload) == sum(sizes):
+        chunks: list[bytes] = []
+        offset = 0
+        for size in sizes:
+            chunks.append(payload[offset : offset + size])
+            offset += size
+        return chunks
+    return [payload] + [b"" for _ in sizes[1:]]
+
+
+def build_form_bin_from_manifest(manifest: dict[str, object], logical_payloads: dict[str, bytes]) -> bytes:
+    if manifest.get("format") != "onec-ordinary-formbin-parts":
+        raise ValueError(f"Unsupported manifest format: {manifest.get('format')}")
+
+    sections = manifest["sections"]
+    if not isinstance(sections, list):
+        raise ValueError("Invalid Form.bin manifest: sections must be a list")
+
+    logical_indexes: dict[str, list[int]] = {}
+    for index, section in enumerate(sections):
+        if isinstance(section, dict) and section.get("logicalFile"):
+            logical_indexes.setdefault(str(section["logicalFile"]), []).append(index)
+
+    split_payloads: dict[int, bytes] = {}
+    for logical_file, indexes in logical_indexes.items():
+        payload = logical_payloads.get(logical_file, b"")
+        sizes = [int(sections[index].get("size", 0)) for index in indexes if isinstance(sections[index], dict)]
+        for index, chunk in zip(indexes, _split_logical_payload(payload, sizes)):
+            split_payloads[index] = chunk
+
+    data = bytearray(base64.b64decode(str(manifest["prefix"])))
+    for index, section in enumerate(sections):
+        if not isinstance(section, dict):
+            raise ValueError(f"Invalid Form.bin manifest section {index}")
+        if index in split_payloads:
+            payload = split_payloads[index]
+        elif section.get("payloadBase64") is not None:
+            payload = base64.b64decode(str(section["payloadBase64"]))
+        else:
+            raise ValueError(f"Form.bin manifest section {index} has no payload")
+
+        size = len(payload)
+        original_size = int(section.get("size", size))
+        original_first_size = int(section.get("firstSize", size))
+        original_second_size = int(section.get("secondSize", size))
+        first_size = size if original_first_size == original_size else original_first_size
+        second_size = size if original_second_size == original_size else original_second_size
+        data.extend(f"{first_size:08x} {second_size:08x} {section['limit']} \r\n".encode("ascii"))
+        data.extend(payload)
+        if index + 1 < len(sections):
+            data.extend(b"\r\n")
+    return bytes(data)
 
 
 def unpack_form_bin(form_bin: Path, out_dir: Path) -> dict[str, object]:

@@ -261,7 +261,16 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn('modeName="edgeToEdge"', xml)
             self.assertIn('kindName="targetEdgeOffset"', xml)
             self.assertIn('offsetType="integer"', xml)
+            self.assertIn("<FormBin", xml)
+            self.assertIn("<LogicalStream", xml)
             self.assertEqual((root / "Form" / "Module.bsl").read_bytes(), module)
+
+            rebuilt = root / "rebuilt.bin"
+            from onec_ordinary_forms.cli import build_bin
+
+            build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
+
+            self.assertEqual(rebuilt.read_bytes(), source.read_bytes())
 
     def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
         with TemporaryDirectory() as temp_dir:

@@ -13,7 +13,13 @@ import base64
 import json
 
 from onec_ordinary_forms.corpus import build_corpus_report, write_report
-from onec_ordinary_forms.formbin import pack_form_bin, unpack_form_bin
+from onec_ordinary_forms.formbin import (
+    build_form_bin_from_manifest,
+    manifest_from_parts,
+    pack_form_bin,
+    parse_form_bin,
+    unpack_form_bin,
+)
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
@@ -729,6 +735,35 @@ def add_semantic_pages(
             add_semantic_item(items, item, data, raw_key, element_index, asset_root)
 
 
+def add_form_bin_container(root: ET.Element, bin_bytes: bytes, form_bytes: bytes) -> None:
+    manifest = manifest_from_parts(parse_form_bin(bin_bytes), include_payloads=True)
+    container = ET.SubElement(root, "FormBin")
+    container.set("format", str(manifest["format"]))
+    container.set("version", str(manifest["version"]))
+    container.set("prefixBase64", str(manifest["prefix"]))
+
+    form_stream = ET.SubElement(container, "LogicalStream")
+    form_stream.set("file", "Form.xml")
+    form_stream.set("encoding", "base64")
+    form_stream.set("size", str(len(form_bytes)))
+    form_stream.set("sha256", sha256_bytes(form_bytes))
+    form_stream.text = base64.b64encode(form_bytes).decode("ascii")
+
+    sections = ET.SubElement(container, "Sections")
+    for index, section in enumerate(manifest["sections"]):
+        if not isinstance(section, dict):
+            continue
+        node = ET.SubElement(sections, "Section")
+        node.set("index", str(index))
+        for key in ("role", "logicalFile", "firstSize", "secondSize", "limit", "size"):
+            value = section.get(key)
+            if value not in (None, ""):
+                node.set(key, str(value))
+        if section.get("payloadBase64") is not None:
+            node.set("encoding", "base64")
+            node.text = str(section["payloadBase64"])
+
+
 def dump_xml(args: argparse.Namespace) -> None:
     form_path = Path(args.form)
     bin_path = Path(args.bin)
@@ -811,6 +846,7 @@ def dump_xml_from_paths(
 
     form_structure = ET.SubElement(root, "FormStructure")
     add_semantic_pages(form_structure, elem, element_index, asset_root)
+    add_form_bin_container(root, bin_bytes, form_bytes)
 
     ET.indent(root, space="  ")
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -856,6 +892,63 @@ def module_data_from_xml(root: ET.Element, asset_root: Path) -> bytes:
     if expected_hash and sha256_bytes(data) != expected_hash:
         raise ValueError(f"Module hash mismatch: {module_path}")
     return data
+
+
+def form_bin_manifest_from_xml(root: ET.Element) -> dict[str, object]:
+    node = root.find("./FormBin")
+    if node is None:
+        raise ValueError("OrdinaryForm XML does not contain FormBin container metadata")
+    sections_node = node.find("./Sections")
+    if sections_node is None:
+        raise ValueError("FormBin container metadata does not contain Sections")
+
+    sections: list[dict[str, object]] = []
+    for section_node in sections_node.findall("./Section"):
+        section: dict[str, object] = {}
+        for key in ("role", "logicalFile", "firstSize", "secondSize", "limit", "size"):
+            value = section_node.get(key)
+            if value is not None:
+                section[key] = value
+        if section_node.text and section_node.get("encoding") == "base64":
+            section["payloadBase64"] = "".join(section_node.text.split())
+        sections.append(section)
+
+    return {
+        "format": node.get("format", ""),
+        "version": int(node.get("version", "0")),
+        "prefix": node.get("prefixBase64", ""),
+        "sections": sections,
+    }
+
+
+def embedded_form_stream_from_xml(root: ET.Element) -> bytes:
+    stream = root.find("./FormBin/LogicalStream[@file='Form.xml']")
+    if stream is None or stream.get("encoding") != "base64" or not stream.text:
+        raise ValueError("OrdinaryForm XML does not contain embedded Form.xml stream")
+    data = base64.b64decode("".join(stream.text.split()))
+    expected_hash = stream.get("sha256")
+    if expected_hash and sha256_bytes(data) != expected_hash:
+        raise ValueError("Embedded Form.xml stream hash mismatch")
+    return data
+
+
+def build_bin(args: argparse.Namespace) -> None:
+    xml_path = Path(args.xml)
+    out_bin = Path(args.out_bin)
+    asset_root = Path(args.asset_root) if args.asset_root else xml_path.with_suffix("")
+    root = ET.parse(xml_path).getroot()
+    manifest = form_bin_manifest_from_xml(root)
+    form_data = apply_semantic_edits_to_form(root, embedded_form_stream_from_xml(root))
+    module_data = module_data_from_xml(root, asset_root)
+    bin_data = build_form_bin_from_manifest(
+        manifest,
+        {
+            "Form.xml": form_data,
+            "Module.bsl": module_data,
+        },
+    )
+    out_bin.parent.mkdir(parents=True, exist_ok=True)
+    out_bin.write_bytes(bin_data)
 
 
 def apply_semantic_edits_to_form(root: ET.Element, base_form_data: bytes) -> bytes:
@@ -931,6 +1024,12 @@ def main() -> None:
     rebuild_parser.add_argument("--out-module")
     rebuild_parser.add_argument("--asset-root")
     rebuild_parser.set_defaults(func=rebuild)
+
+    build_bin_parser = subparsers.add_parser("build-bin")
+    build_bin_parser.add_argument("--xml", required=True, help="OrdinaryForm XML produced by dump-bin")
+    build_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
+    build_bin_parser.add_argument("--asset-root", help="Directory with Module.bsl and extracted assets")
+    build_bin_parser.set_defaults(func=build_bin)
 
     scan_parser = subparsers.add_parser("scan-corpus")
     scan_parser.add_argument("--root", required=True, help="Directory with .epf/.erf files")
