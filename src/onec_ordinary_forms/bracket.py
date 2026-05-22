@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 import json
 import re
+
+from onec_ordinary_forms.liststream import ListStreamParseError, parse_list_stream
 
 
 IDENT_RE = re.compile(r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$")
@@ -26,22 +27,11 @@ KNOWN_ITEM_TYPES = {
 }
 
 
-@dataclass(frozen=True)
-class Token:
-    kind: str
-    value: str
-
-
-class BracketParseError(ValueError):
-    pass
+BracketParseError = ListStreamParseError
 
 
 def parse_bracket_text(text: str, *, allow_trailing: bool = False) -> object:
-    parser = _Parser(_tokenize(text))
-    result = parser.parse_value()
-    if not allow_trailing:
-        parser.expect_eof()
-    return result
+    return parse_list_stream(text, allow_trailing=allow_trailing)
 
 
 def read_bracket_text(path: Path) -> str:
@@ -80,78 +70,6 @@ def write_elem_json_from_bracket(form_path: Path, out_path: Path) -> None:
     elem = extract_elem_json_from_bracket(read_bracket_text(form_path))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(elem, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def _tokenize(text: str) -> list[Token]:
-    tokens: list[Token] = []
-    index = 0
-    while index < len(text):
-        char = text[index]
-        if char.isspace():
-            index += 1
-            continue
-        if char in "{}[],":
-            tokens.append(Token(char, char))
-            index += 1
-            continue
-        if char == '"':
-            value = ['"']
-            index += 1
-            escaped = False
-            while index < len(text):
-                current = text[index]
-                value.append(current)
-                index += 1
-                if escaped:
-                    escaped = False
-                elif current == "\\":
-                    escaped = True
-                elif current == '"':
-                    break
-            else:
-                raise BracketParseError("Unterminated string literal")
-            tokens.append(Token("atom", "".join(value)))
-            continue
-        start = index
-        while index < len(text) and not text[index].isspace() and text[index] not in "{}[],":
-            index += 1
-        tokens.append(Token("atom", text[start:index]))
-    return tokens
-
-
-class _Parser:
-    def __init__(self, tokens: list[Token]) -> None:
-        self.tokens = tokens
-        self.index = 0
-
-    def parse_value(self) -> object:
-        if self.index >= len(self.tokens):
-            raise BracketParseError("Unexpected end of input")
-        token = self.tokens[self.index]
-        if token.kind in ("{", "["):
-            return self.parse_list("}" if token.kind == "{" else "]")
-        if token.kind == "atom":
-            self.index += 1
-            return token.value
-        raise BracketParseError(f"Unexpected token: {token.value}")
-
-    def parse_list(self, close: str) -> list[object]:
-        self.index += 1
-        result: list[object] = []
-        while self.index < len(self.tokens):
-            token = self.tokens[self.index]
-            if token.kind == close:
-                self.index += 1
-                return result
-            if token.kind == ",":
-                self.index += 1
-                continue
-            result.append(self.parse_value())
-        raise BracketParseError(f"Missing closing {close}")
-
-    def expect_eof(self) -> None:
-        if self.index != len(self.tokens):
-            raise BracketParseError(f"Unexpected trailing token: {self.tokens[self.index].value}")
 
 
 def _walk_lists(value: object) -> list[list[object]]:

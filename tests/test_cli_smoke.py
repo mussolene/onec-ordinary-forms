@@ -8,6 +8,7 @@ from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_fo
 from onec_ordinary_forms.cli import replace_root_title
 from onec_ordinary_forms.formbin import pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
+from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
@@ -148,6 +149,19 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("data", data)
         self.assertIn("tree", data)
         self.assertIn("-pages-", data["data"])
+
+    def test_list_stream_parser_preserves_trailing_text_boundary(self) -> None:
+        document = parse_list_stream_document('{1,{"ru","Main"}}\n// module tail', allow_trailing=True)
+
+        self.assertEqual(document.value, ["1", ['"ru"', '"Main"']])
+        self.assertEqual(document.trailing, "// module tail")
+        self.assertEqual(dumps(document.value), '{1,{"ru","Main"}}')
+
+    def test_list_stream_parser_accepts_square_brackets_as_lists(self) -> None:
+        document = parse_list_stream_document('[1,{"x","y"}]')
+
+        self.assertEqual(document.value, ["1", ['"x"', '"y"']])
+        self.assertEqual(dumps(document.value), '{1,{"x","y"}}')
 
     def test_extract_elem_json_from_bracket_stream(self) -> None:
         bracket = """
