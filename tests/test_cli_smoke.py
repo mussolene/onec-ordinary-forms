@@ -258,7 +258,46 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn("<Attributes>", xml)
             self.assertIn('name="InputValue"', xml)
             self.assertIn('rawKey="Main/InputValue"', xml)
+            self.assertIn('modeName="edgeToEdge"', xml)
+            self.assertIn('kindName="targetEdgeOffset"', xml)
+            self.assertIn('offsetType="integer"', xml)
             self.assertEqual((root / "Form" / "Module.bsl").read_bytes(), module)
+
+    def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            bracket = (
+                "{"
+                '{"MainCaption",1,1,{"ru","Main"}},'
+                '{"Panel","Panel",0,{0,1,2,3,4,0,0,0,0,'
+                '{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100},'
+                '0,0,0,0}}'
+                "}"
+            ).encode("utf-8")
+            module = b""
+            source.write_bytes(
+                b"HEAD\r\n"
+                b"00000003 00000003 7fffffff \r\none"
+                b"\r\n00000003 00000003 7fffffff \r\ntwo"
+                b"\r\n00000005 00000005 7fffffff \r\nthree"
+                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
+                + module
+                + f"\r\n{len(bracket):08x} {len(bracket):08x} 7fffffff \r\n".encode("ascii")
+                + bracket
+            )
+
+            out = root / "Form.xml"
+            from onec_ordinary_forms.cli import dump_bin
+
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+
+            xml = out.read_text(encoding="utf-8")
+            self.assertIn('modeName="compound"', xml)
+            self.assertIn('kindName="rawList"', xml)
+            self.assertIn("<Value", xml)
+            self.assertNotIn('edge="[', xml)
+            self.assertNotIn('side="edge[', xml)
 
     def test_form_bin_pipeline_keeps_cli_out_of_section_details(self) -> None:
         with TemporaryDirectory() as temp_dir:

@@ -28,6 +28,16 @@ TYPE_CODE_MAP = {
     "D": "xs:dateTime",
 }
 
+ANCHOR_KIND_MAP = {
+    "0": "none",
+    "1": "absolute",
+    "2": "targetEdgeOffset",
+    "3": "targetCenterOffset",
+    "4": "expression",
+    "5": "relative",
+    "6": "group",
+}
+
 EDGE_NAME_MAP = {
     "-1": "unknown",
     "0": "top",
@@ -53,6 +63,19 @@ DIMENSION_SLOT_ROLE = {
     2: "minHeight",
     3: "stretch",
     4: "width",
+}
+
+DIMENSION_MODE_MAP = {
+    "0": "fixed",
+    "1": "auto",
+    "2": "bound",
+    "20": "stretch",
+}
+
+BINDING_MODE_MAP = {
+    "0": "edgeToEdge",
+    "1": "group",
+    "10": "compound",
 }
 
 
@@ -125,8 +148,33 @@ def raw_to_text(value: object) -> str:
 def clean_token(value: object) -> str:
     text = str(value)
     if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
-        return text[1:-1]
+        return text[1:-1].replace('\\"', '"')
     return text
+
+
+def scalar_kind(value: object) -> str:
+    text = clean_token(value)
+    if text in ("true", "false"):
+        return "boolean"
+    try:
+        int(text)
+        return "integer"
+    except (TypeError, ValueError):
+        pass
+    try:
+        float(text)
+        return "number"
+    except (TypeError, ValueError):
+        return "string"
+
+
+def is_scalar(value: object) -> bool:
+    return not isinstance(value, list)
+
+
+def set_typed_attr(node: ET.Element, name: str, value: object) -> None:
+    node.set(name, clean_token(value))
+    node.set(f"{name}Type", scalar_kind(value))
 
 
 def pattern_node_from_prop(prop: dict) -> list | None:
@@ -204,6 +252,7 @@ def add_type(parent: ET.Element, pattern: list | None, object_types: dict[str, s
     if pattern is not None:
         pattern_node = ET.SubElement(type_node, "Pattern")
         pattern_node.set("encoding", "TypeDomainPattern")
+        pattern_node.set("itemCount", str(len(decoded)))
         index = 0
         while index < len(pattern):
             code = clean_token(pattern[index])
@@ -225,6 +274,11 @@ def add_type(parent: ET.Element, pattern: list | None, object_types: dict[str, s
         if item.get("uuid"):
             item_node.set("uuid", item["uuid"])
         item_node.text = item["name"]
+    if pattern is not None and not decoded:
+        item_node = ET.SubElement(type_node, "TypeName")
+        item_node.set("kind", "any")
+        item_node.set("code", "")
+        item_node.text = "xs:anyType"
 
 
 def add_multilang_text(parent: ET.Element, tag: str, value: str) -> ET.Element:
@@ -365,6 +419,25 @@ def describe_target(target: object, current_id: str, element_index: dict[str, di
     return {"target": "unknown", "targetId": target_id}
 
 
+def add_raw_value(parent: ET.Element, tag: str, value: object, *, index: int | None = None) -> ET.Element:
+    node = ET.SubElement(parent, tag)
+    if index is not None:
+        node.set("index", str(index))
+    if isinstance(value, list):
+        node.set("kind", "list")
+        node.set("count", str(len(value)))
+        for child_index, child in enumerate(value, start=1):
+            add_raw_value(node, "Value", child, index=child_index)
+    else:
+        node.set("kind", scalar_kind(value))
+        node.text = clean_token(value)
+    return node
+
+
+def is_simple_anchor(value: object) -> bool:
+    return isinstance(value, list) and len(value) >= 4 and all(is_scalar(item) for item in value[:4])
+
+
 def add_anchor(
     parent: ET.Element,
     tag: str,
@@ -373,11 +446,16 @@ def add_anchor(
     element_index: dict[str, dict[str, str]],
 ) -> None:
     node = ET.SubElement(parent, tag)
-    if isinstance(value, list):
+    if is_simple_anchor(value):
         fields = ("kind", "targetId", "edge", "offset")
         for index, item in enumerate(value):
             name = fields[index] if index < len(fields) else f"value{index + 1}"
-            int_attr(node, name, item)
+            if index < len(fields):
+                set_typed_attr(node, name, item)
+            else:
+                add_raw_value(node, "ExtraValue", item, index=index + 1)
+        kind = clean_token(value[0])
+        node.set("kindName", ANCHOR_KIND_MAP.get(kind, f"kind{kind}"))
         if len(value) > 1:
             for name, attr_value in describe_target(value[1], current_id, element_index).items():
                 if attr_value:
@@ -385,8 +463,14 @@ def add_anchor(
         if len(value) > 2:
             edge = clean_token(value[2])
             node.set("side", EDGE_NAME_MAP.get(edge, f"edge{edge}"))
+    elif isinstance(value, list):
+        node.set("kind", "complex")
+        node.set("kindName", "rawList")
+        node.set("count", str(len(value)))
+        for index, item in enumerate(value, start=1):
+            add_raw_value(node, "Value", item, index=index)
     else:
-        int_attr(node, "value", value)
+        set_typed_attr(node, "value", value)
 
 
 def add_binding(
@@ -406,13 +490,18 @@ def add_binding(
         if isinstance(binding, list):
             if binding:
                 int_attr(node, "mode", binding[0])
+                node.set("modeType", scalar_kind(binding[0]))
+                mode = clean_token(binding[0])
+                node.set("modeName", DIMENSION_MODE_MAP.get(mode, f"mode{mode}"))
             if len(binding) > 1:
                 int_attr(node, "targetId", binding[1])
+                node.set("targetIdType", scalar_kind(binding[1]))
                 for name, attr_value in describe_target(binding[1], current_id, element_index).items():
                     if attr_value:
                         node.set(name, attr_value)
             if len(binding) > 2:
                 int_attr(node, "edge", binding[2])
+                node.set("edgeType", scalar_kind(binding[2]))
                 edge = clean_token(binding[2])
                 node.set("side", EDGE_NAME_MAP.get(edge, f"edge{edge}"))
             for extra_index, extra in enumerate(binding[3:], start=1):
@@ -421,6 +510,9 @@ def add_binding(
     if isinstance(binding, list):
         if binding:
             int_attr(node, "mode", binding[0])
+            node.set("modeType", scalar_kind(binding[0]))
+            mode = clean_token(binding[0])
+            node.set("modeName", BINDING_MODE_MAP.get(mode, f"mode{mode}"))
         if len(binding) > 1:
             add_anchor(node, "From", binding[1], current_id, element_index)
         if len(binding) > 2:
@@ -428,7 +520,7 @@ def add_binding(
         for extra_index, extra in enumerate(binding[3:], start=1):
             add_anchor(node, f"Extra{extra_index}", extra, current_id, element_index)
     else:
-        int_attr(node, "value", binding)
+        set_typed_attr(node, "value", binding)
 
 
 def binding_to_raw(node: ET.Element) -> object:
