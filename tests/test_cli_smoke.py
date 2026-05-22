@@ -7,6 +7,7 @@ from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
 from onec_ordinary_forms.cli import replace_root_title
 from onec_ordinary_forms.formbin import pack_form_bin, unpack_form_bin
+from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 
 
 class CliSmokeTest(unittest.TestCase):
@@ -82,6 +83,56 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("data", data)
         self.assertIn("tree", data)
         self.assertIn("-pages-", data["data"])
+
+    def test_extract_elem_json_from_bracket_stream(self) -> None:
+        bracket = """
+        {
+          {"InputValue","Pattern",{"S"}},
+          {"MainCaption",1,1,{"ru","Main"}},
+          {"InputValue","InputField",0,{0,10,10,200,30,0,{0,{2,0,0,10},{2,-1,6,0}}}}
+        }
+        """
+
+        elem = extract_elem_json_from_bracket(bracket)
+
+        self.assertEqual(elem["props"][0]["name"], "InputValue")
+        self.assertEqual(elem["data"]["-pages-"], ["Main"])
+        self.assertEqual(elem["tree"][0]["name"], "InputValue")
+        self.assertEqual(elem["tree"][0]["type"], "InputField")
+        self.assertIn("Main/InputValue", elem["data"])
+
+    def test_dump_bin_creates_object_xml(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            bracket = (
+                "{"
+                '{"InputValue","Pattern",{"S"}},'
+                '{"MainCaption",1,1,{"ru","Main"}},'
+                '{"InputValue","InputField",0,{0,10,10,200,30,0,{0,{2,0,0,10},{2,-1,6,0}}}}'
+                "}"
+            ).encode("utf-8")
+            module = b"Procedure Run()\nEndProcedure\n"
+            source.write_bytes(
+                b"HEAD\r\n"
+                b"00000003 00000003 7fffffff \r\none"
+                b"\r\n00000003 00000003 7fffffff \r\ntwo"
+                b"\r\n00000005 00000005 7fffffff \r\nthree"
+                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
+                + module
+                + f"\r\n{len(bracket):08x} {len(bracket):08x} 7fffffff \r\n".encode("ascii")
+                + bracket
+            )
+
+            out = root / "OrdinaryForm.xml"
+            from onec_ordinary_forms.cli import dump_bin
+
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+
+            xml = out.read_text(encoding="utf-8")
+            self.assertIn("<OrdinaryForm", xml)
+            self.assertIn("<Attributes>", xml)
+            self.assertIn('name="InputValue"', xml)
 
 
 if __name__ == "__main__":

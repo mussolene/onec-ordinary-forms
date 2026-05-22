@@ -26,7 +26,7 @@ structure to disclose private business logic.
 
 ## Current Status
 
-There are now two separate paths:
+There are now three related paths:
 
 - `dump --elem-json`: the early object-model path. It still needs the legacy
   semantic index because it maps raw ordinary form nodes to attributes,
@@ -34,10 +34,23 @@ There are now two separate paths:
 - `unpack-bin` / `pack-bin`: the platform-export path for ordinary forms that
   arrive from `ibcmd` as `Forms/<Form>/Ext/Form.bin`. This can split and
   rebuild the sectioned binary stream without `elem-json`.
+- `dump-bin`: the convenience path for `Form.bin -> OrdinaryForm.xml`. It
+  unpacks `Form.bin`, extracts `elem-json` from the bracket stream, and runs
+  the object-model dump.
 
-The next implementation step is to remove the legacy dependency by decoding the
-ordinary form bracket stream extracted from `Form.bin` into the same object
-model that `dump --elem-json` currently produces.
+The intermediate extractor is also available directly:
+
+```bash
+PYTHONPATH=src python -m onec_ordinary_forms.cli extract-elem-json \
+  --form scan-output/form-parts/Form.xml \
+  --out scan-output/form-parts/elem.json
+```
+
+The extractor is intentionally conservative. It parses the bracket stream,
+finds `Pattern` fragments, page captions, and element-like nodes with geometry,
+then writes the legacy `props`/`commands`/`data`/`tree` shape. The next
+implementation step is to replace these heuristics with a fuller semantic
+decoder for all ordinary-form controls and properties.
 
 ## Minimal Shape
 

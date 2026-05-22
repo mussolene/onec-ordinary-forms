@@ -11,9 +11,11 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 import base64
 import json
+import tempfile
 
 from onec_ordinary_forms.corpus import build_corpus_report, write_report
 from onec_ordinary_forms.formbin import pack_form_bin, unpack_form_bin
+from onec_ordinary_forms.bracket import write_elem_json_from_bracket
 
 
 SCHEMA_VERSION = "0.1"
@@ -783,6 +785,32 @@ def pack_bin(args: argparse.Namespace) -> None:
     pack_form_bin(Path(args.parts_dir), Path(args.out_bin))
 
 
+def extract_elem_json(args: argparse.Namespace) -> None:
+    write_elem_json_from_bracket(Path(args.form), Path(args.out))
+
+
+def dump_bin(args: argparse.Namespace) -> None:
+    bin_path = Path(args.bin)
+    out_path = Path(args.out)
+    with tempfile.TemporaryDirectory(prefix="onec-ordinary-form-") as temp_dir:
+        work_dir = Path(temp_dir)
+        unpack_form_bin(bin_path, work_dir)
+        form_path = work_dir / "Form.xml"
+        elem_path = work_dir / "elem.json"
+        write_elem_json_from_bracket(form_path, elem_path)
+        module_path = work_dir / "Module.bsl"
+        dump_xml(
+            argparse.Namespace(
+                form=str(form_path),
+                bin=str(bin_path),
+                module=str(module_path) if module_path.exists() else None,
+                elem_json=str(elem_path),
+                metadata_json=args.metadata_json,
+                out=str(out_path),
+            )
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -827,6 +855,17 @@ def main() -> None:
     pack_bin_parser.add_argument("--parts-dir", required=True, help="Directory created by unpack-bin")
     pack_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
     pack_bin_parser.set_defaults(func=pack_bin)
+
+    extract_elem_parser = subparsers.add_parser("extract-elem-json")
+    extract_elem_parser.add_argument("--form", required=True, help="Ordinary form bracket stream, often unpack-bin Form.xml")
+    extract_elem_parser.add_argument("--out", required=True, help="elem-json output path")
+    extract_elem_parser.set_defaults(func=extract_elem_json)
+
+    dump_bin_parser = subparsers.add_parser("dump-bin")
+    dump_bin_parser.add_argument("--bin", required=True, help="Ordinary form Form.bin")
+    dump_bin_parser.add_argument("--metadata-json")
+    dump_bin_parser.add_argument("--out", required=True, help="OrdinaryForm XML output path")
+    dump_bin_parser.set_defaults(func=dump_bin)
 
     args = parser.parse_args()
     args.func(args)

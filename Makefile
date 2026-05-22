@@ -11,6 +11,8 @@ smoke:
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli rebuild --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli unpack-bin --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli pack-bin --help
+	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli extract-elem-json --help
+	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli dump-bin --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli scan-corpus --help
 
 clean:
