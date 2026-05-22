@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
 from onec_ordinary_forms.cli import replace_root_title
-from onec_ordinary_forms.formbin import pack_form_bin, unpack_form_bin
+from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
@@ -58,14 +58,7 @@ class CliSmokeTest(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             source = root / "Form.bin"
-            source.write_bytes(
-                b"HEAD\r\n"
-                b"00000003 00000003 7fffffff \r\none"
-                b"\r\n00000003 00000003 7fffffff \r\ntwo"
-                b"\r\n00000005 00000005 7fffffff \r\nthree"
-                b"\r\n00000006 00000006 7fffffff \r\nmodule"
-                b"\r\n00000004 00000004 7fffffff \r\nform"
-            )
+            source.write_bytes(build_form_bin_container(b"form", b"module"))
 
             parts = root / "parts"
             unpack_form_bin(source, parts)
@@ -80,27 +73,9 @@ class CliSmokeTest(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             source = root / "Form.bin"
-            form_head = b'\xef\xbb\xbf{1,'
-            form_tail = b'2}'
+            form = b'\xef\xbb\xbf{1,2}'
             module = b'\xef\xbb\xbf// module\r\n'
-            source.write_bytes(
-                b"HEAD\r\n"
-                b"00000003 00000003 7fffffff \r\none"
-                b"\r\n00000020 00000020 7fffffff \r\n"
-                + b"\x00" * 16
-                + b"f\x00o\x00r\x00m\x00"
-                + b"\x00" * 8
-                + f"\r\n{len(form_head):08x} {len(form_head):08x} 7fffffff \r\n".encode("ascii")
-                + form_head
-                + b"\r\n00000024 00000024 7fffffff \r\n"
-                + b"\x00" * 16
-                + b"m\x00o\x00d\x00u\x00l\x00e\x00"
-                + b"\x00" * 8
-                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
-                + module
-                + f"\r\n{len(form_tail):08x} {len(form_tail):08x} 7fffffff \r\n".encode("ascii")
-                + form_tail
-            )
+            source.write_bytes(build_form_bin_container(form, module))
 
             parts = root / "parts"
             unpack_form_bin(source, parts)
@@ -108,7 +83,7 @@ class CliSmokeTest(unittest.TestCase):
             pack_form_bin(parts, rebuilt)
 
             self.assertEqual(rebuilt.read_bytes(), source.read_bytes())
-            self.assertEqual((parts / "Form.xml").read_bytes(), form_head + form_tail)
+            self.assertEqual((parts / "Form.xml").read_bytes(), form)
             self.assertEqual((parts / "Module.bsl").read_bytes(), module)
 
     def test_form_bin_unpack_detects_bom_bracket_with_invalid_text_bytes(self) -> None:
@@ -117,22 +92,7 @@ class CliSmokeTest(unittest.TestCase):
             source = root / "Form.bin"
             form = b'\xef\xbb\xbf{1,"\xff"}'
             module = b'\xef\xbb\xbf// module\r\n'
-            source.write_bytes(
-                b"HEAD\r\n"
-                b"00000003 00000003 7fffffff \r\none"
-                b"\r\n00000020 00000020 7fffffff \r\n"
-                + b"\x00" * 16
-                + b"f\x00o\x00r\x00m\x00"
-                + b"\x00" * 8
-                + f"\r\n{len(form):08x} {len(form):08x} 7fffffff \r\n".encode("ascii")
-                + form
-                + b"\r\n00000024 00000024 7fffffff \r\n"
-                + b"\x00" * 16
-                + b"m\x00o\x00d\x00u\x00l\x00e\x00"
-                + b"\x00" * 8
-                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
-                + module
-            )
+            source.write_bytes(build_form_bin_container(form, module))
 
             parts = root / "parts"
             unpack_form_bin(source, parts)
@@ -237,16 +197,7 @@ class CliSmokeTest(unittest.TestCase):
                 "}"
             ).encode("utf-8")
             module = b"Procedure Run()\nEndProcedure\n"
-            source.write_bytes(
-                b"HEAD\r\n"
-                b"00000003 00000003 7fffffff \r\none"
-                b"\r\n00000003 00000003 7fffffff \r\ntwo"
-                b"\r\n00000005 00000005 7fffffff \r\nthree"
-                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
-                + module
-                + f"\r\n{len(bracket):08x} {len(bracket):08x} 7fffffff \r\n".encode("ascii")
-                + bracket
-            )
+            source.write_bytes(build_form_bin_container(bracket, module))
 
             out = root / "Form.xml"
             from onec_ordinary_forms.cli import dump_bin
@@ -270,7 +221,11 @@ class CliSmokeTest(unittest.TestCase):
 
             build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
 
-            self.assertEqual(rebuilt.read_bytes(), source.read_bytes())
+            from onec_ordinary_forms.formbin import logical_streams, parse_form_bin
+
+            rebuilt_streams = logical_streams(parse_form_bin(rebuilt.read_bytes()))
+            self.assertEqual(rebuilt_streams["Form.xml"], bracket)
+            self.assertEqual(rebuilt_streams["Module.bsl"], module)
 
     def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -285,16 +240,7 @@ class CliSmokeTest(unittest.TestCase):
                 "}"
             ).encode("utf-8")
             module = b""
-            source.write_bytes(
-                b"HEAD\r\n"
-                b"00000003 00000003 7fffffff \r\none"
-                b"\r\n00000003 00000003 7fffffff \r\ntwo"
-                b"\r\n00000005 00000005 7fffffff \r\nthree"
-                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
-                + module
-                + f"\r\n{len(bracket):08x} {len(bracket):08x} 7fffffff \r\n".encode("ascii")
-                + bracket
-            )
+            source.write_bytes(build_form_bin_container(bracket, module))
 
             out = root / "Form.xml"
             from onec_ordinary_forms.cli import dump_bin
@@ -314,16 +260,7 @@ class CliSmokeTest(unittest.TestCase):
             source = root / "Form.bin"
             bracket = b'{{"MainCaption",1,1,{"ru","Main"}}}'
             module = b"Procedure Run()\nEndProcedure\n"
-            source.write_bytes(
-                b"HEAD\r\n"
-                b"00000003 00000003 7fffffff \r\none"
-                b"\r\n00000003 00000003 7fffffff \r\ntwo"
-                b"\r\n00000005 00000005 7fffffff \r\nthree"
-                + f"\r\n{len(module):08x} {len(module):08x} 7fffffff \r\n".encode("ascii")
-                + module
-                + f"\r\n{len(bracket):08x} {len(bracket):08x} 7fffffff \r\n".encode("ascii")
-                + bracket
-            )
+            source.write_bytes(build_form_bin_container(bracket, module))
             calls = []
             observed = {}
 

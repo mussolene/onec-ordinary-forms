@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
-import base64
 import json
 import re
+from struct import pack, unpack
 
 
 MARKER_RE = re.compile(rb"(?:(?<=\n)|^)([0-9a-f]{8}) ([0-9a-f]{8}) ([0-9a-f]{8}) \r?\n")
-MANIFEST_NAME = "Form.bin.parts.json"
-BOM = b"\xef\xbb\xbf"
+CONTAINER_INFO_NAME = "Form.bin.container.json"
+CONTAINER_END_MARKER = 0x7FFFFFFF
+CONTAINER_BLOCK_SIZE = 0x200
+CONTAINER_HEADER_SIZE = 16
+CONTAINER_BLOCK_HEADER_SIZE = 31
+CONTAINER_TOC_BLOCK_SIZE = 0x200
+DEFAULT_CONTAINER_TIME = datetime(2000, 1, 1)
 
 
 @dataclass(frozen=True)
@@ -31,9 +37,25 @@ class FormBinParts:
 
 
 @dataclass(frozen=True)
-class FormBinLogicalLayout:
-    module_payload_index: int | None
-    form_payload_indexes: list[int]
+class FormBinFileDescriptor:
+    name: str
+    created: int
+    modified: int
+    section_index: int
+
+
+@dataclass(frozen=True)
+class OneCContainerFile:
+    name: str
+    created: int
+    modified: int
+    payload: bytes
+
+
+@dataclass(frozen=True)
+class OneCContainer:
+    block_size: int
+    files: list[OneCContainerFile]
 
 
 def parse_form_bin(data: bytes) -> FormBinParts:
@@ -64,258 +86,224 @@ def parse_form_bin(data: bytes) -> FormBinParts:
     return FormBinParts(prefix=data[: matches[0].start()], sections=sections)
 
 
-def _section_payload_file(index: int) -> str:
-    return f"section-{index}.bin"
+def _read_block_header(data: bytes, offset: int) -> tuple[int, int, int, int]:
+    if data[offset : offset + 2] != b"\r\n":
+        raise ValueError(f"Invalid 1C container block header at offset {offset}: missing CRLF prefix")
+    header_end = data.find(b"\r\n", offset + 2)
+    if header_end < 0:
+        raise ValueError(f"Invalid 1C container block header at offset {offset}: missing CRLF suffix")
+    header = data[offset + 2 : header_end].decode("ascii")
+    parts = header.split()
+    if len(parts) != 3:
+        raise ValueError(f"Invalid 1C container block header at offset {offset}: {header!r}")
+    doc_size, current_size, next_offset = (int(part, 16) for part in parts)
+    return doc_size, current_size, next_offset, header_end + 2
 
 
-def _descriptor_name(payload: bytes) -> str:
-    if b"f\x00o\x00r\x00m\x00" in payload:
-        return "form"
-    if b"m\x00o\x00d\x00u\x00l\x00e\x00" in payload:
-        return "module"
-    return ""
+def _read_document(data: bytes, offset: int) -> bytes:
+    chunks: list[bytes] = []
+    total_size: int | None = None
+    current_offset = offset
+    while True:
+        doc_size, current_size, next_offset, payload_offset = _read_block_header(data, current_offset)
+        if total_size is None:
+            total_size = doc_size
+        payload_end = payload_offset + current_size
+        if payload_end > len(data):
+            raise ValueError(f"Invalid 1C container block at offset {current_offset}: payload exceeds file size")
+        chunks.append(data[payload_offset:payload_end])
+        if next_offset == CONTAINER_END_MARKER:
+            break
+        current_offset = next_offset
+    payload = b"".join(chunks)
+    return payload[:total_size]
 
 
-def _decode_text_payload(payload: bytes) -> str | None:
-    if payload.startswith(BOM):
-        return payload[3:].decode("utf-8", errors="replace")
-    for encoding in ("utf-8-sig", "utf-8", "cp1251"):
-        try:
-            return payload.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    return payload.decode("utf-8", errors="replace")
+def parse_form_bin_container(data: bytes) -> OneCContainer:
+    if len(data) < CONTAINER_HEADER_SIZE:
+        raise ValueError("Invalid Form.bin container: too small")
+    end_marker, block_size, count_files, reserved = unpack("<4i", data[:CONTAINER_HEADER_SIZE])
+    if end_marker != CONTAINER_END_MARKER or block_size <= 0 or count_files < 0 or reserved != 0:
+        raise ValueError("Invalid Form.bin container header")
+
+    toc = _read_document(data, CONTAINER_HEADER_SIZE)
+    files: list[OneCContainerFile] = []
+    for index in range(count_files):
+        entry_offset = index * 12
+        if entry_offset + 12 > len(toc):
+            raise ValueError("Invalid Form.bin container TOC: truncated entry")
+        descriptor_offset, data_offset, entry_marker = unpack("<3i", toc[entry_offset : entry_offset + 12])
+        if entry_marker != CONTAINER_END_MARKER:
+            raise ValueError("Invalid Form.bin container TOC: bad entry marker")
+        descriptor = _read_document(data, descriptor_offset)
+        if len(descriptor) < 24:
+            raise ValueError("Invalid Form.bin file descriptor: too small")
+        created, modified, flags = unpack("<QQi", descriptor[:20])
+        if flags != 0:
+            raise ValueError("Invalid Form.bin file descriptor: unsupported flags")
+        name = descriptor[20:].decode("utf-16le").partition("\x00")[0]
+        files.append(
+            OneCContainerFile(
+                name=name,
+                created=created,
+                modified=modified,
+                payload=_read_document(data, data_offset),
+            )
+        )
+    return OneCContainer(block_size=block_size, files=files)
 
 
-def _looks_textual(payload: bytes) -> bool:
-    text = _decode_text_payload(payload)
-    if text is None:
-        return False
-    meaningful = [char for char in text if char not in "\ufeff\r\n\t "]
-    if not meaningful:
-        return False
-    printable = sum(1 for char in meaningful if char.isprintable())
-    return printable / len(meaningful) > 0.8
+def datetime_to_container_ticks(value: datetime) -> int:
+    return int((value - datetime(1, 1, 1)) // timedelta(microseconds=100))
 
 
-def _brace_balance(payload: bytes) -> int:
-    text = _decode_text_payload(payload) or ""
-    balance = 0
-    in_string = False
-    escaped = False
-    for char in text:
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char == "{":
-            balance += 1
-        elif char == "}":
-            balance -= 1
-    return balance
+def container_ticks_to_datetime(value: int) -> datetime:
+    return datetime(1, 1, 1) + timedelta(microseconds=value * 100)
 
 
-def _first_bracket_payload_index(sections: list[FormBinSection], start: int = 0) -> int | None:
-    for index, section in enumerate(sections[start:], start=start):
-        if _descriptor_name(section.payload):
-            continue
-        text = _decode_text_payload(section.payload)
-        if text is not None and text.lstrip("\ufeff\r\n\t ").startswith("{"):
-            return index
-    return None
+def _default_container_ticks() -> int:
+    return datetime_to_container_ticks(DEFAULT_CONTAINER_TIME)
 
 
-def logical_layout(parts: FormBinParts) -> FormBinLogicalLayout:
-    descriptors = {_descriptor_name(section.payload): index for index, section in enumerate(parts.sections)}
-    module_index = descriptors.get("module")
-    form_index = descriptors.get("form")
+def _parse_file_descriptor(section: FormBinSection, index: int) -> FormBinFileDescriptor | None:
+    if len(section.payload) < 24:
+        return None
+    try:
+        created, modified, flags = unpack("<QQi", section.payload[:20])
+        name = section.payload[20:].decode("utf-16le").partition("\x00")[0]
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if flags != 0 or name not in {"form", "module"}:
+        return None
+    return FormBinFileDescriptor(name=name, created=created, modified=modified, section_index=index)
 
-    module_payload_index = module_index + 1 if module_index is not None and module_index + 1 < len(parts.sections) else 3
-    form_payload_indexes: list[int] = []
-    first_form = _first_bracket_payload_index(parts.sections, (form_index + 1) if form_index is not None else 0)
-    if first_form is not None:
-        form_payload_indexes.append(first_form)
-    elif len(parts.sections) > 4:
-        form_payload_indexes.append(4)
 
-    if form_payload_indexes:
-        balance = sum(_brace_balance(parts.sections[index].payload) for index in form_payload_indexes)
-        for index, section in enumerate(parts.sections):
-            if index <= max(form_payload_indexes):
-                continue
-            if index in form_payload_indexes or index == module_payload_index:
-                continue
-            if _descriptor_name(section.payload) or not _looks_textual(section.payload):
-                continue
-            if balance > 0 or not section.payload.lstrip().startswith(BOM):
-                form_payload_indexes.append(index)
-                balance += _brace_balance(section.payload)
-                if balance <= 0:
-                    break
-
-    return FormBinLogicalLayout(
-        module_payload_index=module_payload_index if module_payload_index < len(parts.sections) else None,
-        form_payload_indexes=form_payload_indexes,
-    )
+def file_descriptors(parts: FormBinParts) -> dict[str, FormBinFileDescriptor]:
+    result: dict[str, FormBinFileDescriptor] = {}
+    for index, section in enumerate(parts.sections):
+        descriptor = _parse_file_descriptor(section, index)
+        if descriptor is not None:
+            result[descriptor.name] = descriptor
+    return result
 
 
 def logical_streams(parts: FormBinParts) -> dict[str, bytes]:
-    layout = logical_layout(parts)
+    container = parse_form_bin_container(serialize_parts(parts))
+    by_name = {file.name: file.payload for file in container.files}
     streams: dict[str, bytes] = {}
-    if layout.module_payload_index is not None:
-        streams["Module.bsl"] = parts.sections[layout.module_payload_index].payload
-    if layout.form_payload_indexes:
-        streams["Form.xml"] = b"".join(parts.sections[index].payload for index in layout.form_payload_indexes)
+    if "module" in by_name:
+        streams["Module.bsl"] = by_name["module"]
+    if "form" in by_name:
+        streams["Form.xml"] = by_name["form"]
     return streams
 
 
-def manifest_from_parts(parts: FormBinParts, *, include_payloads: bool = False) -> dict[str, object]:
-    layout = logical_layout(parts)
-    manifest_sections: list[dict[str, object]] = []
+def serialize_parts(parts: FormBinParts) -> bytes:
+    data = bytearray(parts.prefix)
     for index, section in enumerate(parts.sections):
-        role = _descriptor_name(section.payload) or "payload"
-        logical_file = ""
-        if index == layout.module_payload_index:
-            logical_file = "Module.bsl"
-        elif index in layout.form_payload_indexes:
-            logical_file = "Form.xml"
-        entry: dict[str, object] = {
-            "role": role,
-            "logicalFile": logical_file,
-            "firstSize": section.first_size,
-            "secondSize": section.second_size,
-            "limit": section.limit,
-            "size": len(section.payload),
-        }
-        if include_payloads and not logical_file:
-            entry["payloadBase64"] = base64.b64encode(section.payload).decode("ascii")
-        manifest_sections.append(entry)
-
-    return {
-        "format": "onec-ordinary-formbin-parts",
-        "version": 2,
-        "prefix": base64.b64encode(parts.prefix).decode("ascii"),
-        "sections": manifest_sections,
-    }
-
-
-def _split_logical_payload(payload: bytes, sizes: list[int]) -> list[bytes]:
-    if not sizes:
-        return []
-    if len(sizes) == 1:
-        return [payload]
-    if len(payload) == sum(sizes):
-        chunks: list[bytes] = []
-        offset = 0
-        for size in sizes:
-            chunks.append(payload[offset : offset + size])
-            offset += size
-        return chunks
-    return [payload] + [b"" for _ in sizes[1:]]
-
-
-def build_form_bin_from_manifest(manifest: dict[str, object], logical_payloads: dict[str, bytes]) -> bytes:
-    if manifest.get("format") != "onec-ordinary-formbin-parts":
-        raise ValueError(f"Unsupported manifest format: {manifest.get('format')}")
-
-    sections = manifest["sections"]
-    if not isinstance(sections, list):
-        raise ValueError("Invalid Form.bin manifest: sections must be a list")
-
-    logical_indexes: dict[str, list[int]] = {}
-    for index, section in enumerate(sections):
-        if isinstance(section, dict) and section.get("logicalFile"):
-            logical_indexes.setdefault(str(section["logicalFile"]), []).append(index)
-
-    split_payloads: dict[int, bytes] = {}
-    for logical_file, indexes in logical_indexes.items():
-        payload = logical_payloads.get(logical_file, b"")
-        sizes = [int(sections[index].get("size", 0)) for index in indexes if isinstance(sections[index], dict)]
-        for index, chunk in zip(indexes, _split_logical_payload(payload, sizes)):
-            split_payloads[index] = chunk
-
-    data = bytearray(base64.b64decode(str(manifest["prefix"])))
-    for index, section in enumerate(sections):
-        if not isinstance(section, dict):
-            raise ValueError(f"Invalid Form.bin manifest section {index}")
-        if index in split_payloads:
-            payload = split_payloads[index]
-        elif section.get("payloadBase64") is not None:
-            payload = base64.b64decode(str(section["payloadBase64"]))
-        else:
-            raise ValueError(f"Form.bin manifest section {index} has no payload")
-
-        size = len(payload)
-        original_size = int(section.get("size", size))
-        original_first_size = int(section.get("firstSize", size))
-        original_second_size = int(section.get("secondSize", size))
-        first_size = size if original_first_size == original_size else original_first_size
-        second_size = size if original_second_size == original_size else original_second_size
-        data.extend(f"{first_size:08x} {second_size:08x} {section['limit']} \r\n".encode("ascii"))
-        data.extend(payload)
-        if index + 1 < len(sections):
+        data.extend(f"{section.first_size:08x} {section.second_size:08x} {section.limit} \r\n".encode("ascii"))
+        data.extend(section.payload)
+        if index + 1 < len(parts.sections):
             data.extend(b"\r\n")
     return bytes(data)
 
 
+def _block_header(doc_size: int, current_block_size: int, next_block_offset: int = CONTAINER_END_MARKER) -> bytes:
+    return f"\r\n{doc_size:08x} {current_block_size:08x} {next_block_offset:08x} \r\n".encode("ascii")
+
+
+def _append_block(data: bytearray, payload: bytes, *, doc_size: int | None = None, min_block_size: int = 0) -> int:
+    offset = len(data)
+    size = len(payload) if doc_size is None else doc_size
+    current_size = max(min_block_size, len(payload))
+    data.extend(_block_header(size, current_size))
+    data.extend(payload)
+    if current_size > len(payload):
+        data.extend(b"\x00" * (current_size - len(payload)))
+    return offset
+
+
+def _file_descriptor_payload(name: str, created: int, modified: int) -> bytes:
+    return pack("<QQi", created, modified, 0) + name.encode("utf-16le") + b"\x00" * 4
+
+
+def build_form_bin_container(
+    form_payload: bytes,
+    module_payload: bytes,
+    *,
+    created: int | None = None,
+    modified: int | None = None,
+) -> bytes:
+    """Build ordinary-form ``Form.bin`` as a canonical 32-bit 1C container.
+
+    The container stores two files named ``form`` and ``module``. File
+    descriptors use the standard 1C layout: created ticks, modified ticks,
+    zero flags, UTF-16LE file name, and a UTF-16 terminator.
+    """
+
+    created_ticks = _default_container_ticks() if created is None else created
+    modified_ticks = created_ticks if modified is None else modified
+    data = bytearray(pack("<4i", CONTAINER_END_MARKER, CONTAINER_BLOCK_SIZE, 2, 0))
+
+    toc_offset = len(data)
+    data.extend(b"\x00" * (CONTAINER_BLOCK_HEADER_SIZE + CONTAINER_TOC_BLOCK_SIZE))
+
+    entries: list[tuple[int, int]] = []
+    for name, payload in (("form", form_payload), ("module", module_payload)):
+        descriptor_offset = _append_block(data, _file_descriptor_payload(name, created_ticks, modified_ticks))
+        payload_offset = _append_block(data, payload, min_block_size=CONTAINER_BLOCK_SIZE)
+        entries.append((descriptor_offset, payload_offset))
+
+    toc_payload = b"".join(pack("<3i", descriptor_offset, payload_offset, CONTAINER_END_MARKER) for descriptor_offset, payload_offset in entries)
+    toc_block = _block_header(len(toc_payload), CONTAINER_TOC_BLOCK_SIZE) + toc_payload
+    toc_block += b"\x00" * (CONTAINER_BLOCK_HEADER_SIZE + CONTAINER_TOC_BLOCK_SIZE - len(toc_block))
+    data[toc_offset : toc_offset + len(toc_block)] = toc_block
+    return bytes(data)
+
+
 def unpack_form_bin(form_bin: Path, out_dir: Path) -> dict[str, object]:
-    parts = parse_form_bin(form_bin.read_bytes())
+    container = parse_form_bin_container(form_bin.read_bytes())
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    manifest_sections: list[dict[str, object]] = []
-    for index, section in enumerate(parts.sections):
-        payload_file = _section_payload_file(index)
-        (out_dir / payload_file).write_bytes(section.payload)
-        manifest_sections.append(
-            {
-                "file": payload_file,
-                "role": _descriptor_name(section.payload) or "payload",
-                "firstSize": section.first_size,
-                "secondSize": section.second_size,
-                "limit": section.limit,
-                "size": len(section.payload),
-            }
-        )
+    files = {file.name: file for file in container.files}
+    if "form" not in files or "module" not in files:
+        raise ValueError("Ordinary Form.bin container must contain form and module files")
 
-    for logical_file, payload in logical_streams(parts).items():
-        (out_dir / logical_file).write_bytes(payload)
+    (out_dir / "Form.xml").write_bytes(files["form"].payload)
+    (out_dir / "Module.bsl").write_bytes(files["module"].payload)
 
-    manifest = {
-        "format": "onec-ordinary-formbin-parts",
+    metadata = {
+        "format": "onec-ordinary-formbin-container",
         "version": 1,
-        "prefix": base64.b64encode(parts.prefix).decode("ascii"),
-        "sections": manifest_sections,
+        "blockSize": container.block_size,
+        "files": [
+            {
+                "name": file.name,
+                "createdTicks": file.created,
+                "modifiedTicks": file.modified,
+                "size": len(file.payload),
+            }
+            for file in container.files
+        ],
     }
-    (out_dir / MANIFEST_NAME).write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return manifest
+    (out_dir / CONTAINER_INFO_NAME).write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return metadata
 
 
 def pack_form_bin(parts_dir: Path, out_form_bin: Path) -> None:
-    manifest = json.loads((parts_dir / MANIFEST_NAME).read_text(encoding="utf-8"))
-    if manifest.get("format") != "onec-ordinary-formbin-parts":
-        raise ValueError(f"Unsupported manifest format: {manifest.get('format')}")
-
-    data = bytearray(base64.b64decode(manifest["prefix"]))
-    sections = manifest["sections"]
-    for index, section in enumerate(sections):
-        payload = (parts_dir / section["file"]).read_bytes()
-        size = len(payload)
-        limit = str(section["limit"])
-        original_size = int(section.get("size", size))
-        original_first_size = int(section.get("firstSize", size))
-        original_second_size = int(section.get("secondSize", size))
-        first_size = size if original_first_size == original_size else original_first_size
-        second_size = size if original_second_size == original_size else original_second_size
-        data.extend(f"{first_size:08x} {second_size:08x} {limit} \r\n".encode("ascii"))
-        data.extend(payload)
-        if index + 1 < len(sections):
-            data.extend(b"\r\n")
-
+    info_path = parts_dir / CONTAINER_INFO_NAME
+    metadata = json.loads(info_path.read_text(encoding="utf-8")) if info_path.exists() else {}
+    times = {
+        str(file.get("name")): (int(file["createdTicks"]), int(file["modifiedTicks"]))
+        for file in metadata.get("files", [])
+        if isinstance(file, dict) and file.get("createdTicks") is not None and file.get("modifiedTicks") is not None
+    }
+    created, modified = times.get("form", (None, None))
+    data = build_form_bin_container(
+        (parts_dir / "Form.xml").read_bytes(),
+        (parts_dir / "Module.bsl").read_bytes(),
+        created=created,
+        modified=modified,
+    )
     out_form_bin.parent.mkdir(parents=True, exist_ok=True)
-    out_form_bin.write_bytes(bytes(data))
+    out_form_bin.write_bytes(data)
