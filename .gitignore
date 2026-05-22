@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+build/
+dist/
+
+# Local/private 1C artifacts
+examples/fixtures/*
+!examples/fixtures/.gitkeep
+*.epf
+*.erf
+*.dt
+*.cf
+*.cfu
+*.1CD
+*.run
+*.tar
+*.tar.gz
+*.zip
+nethasp.ini
+
+# Local agent/OACS state
+.agent/
+.oacs/
+oacs.db
+key.json
+unlocked.key
+.env
