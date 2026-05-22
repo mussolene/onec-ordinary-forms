@@ -10,6 +10,7 @@ from onec_ordinary_forms.cli import apply_semantic_edits_to_form, replace_root_t
 from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
+from onec_ordinary_forms.liststream_xml import bracket_text_to_xml, bracket_xml_to_text
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
@@ -23,6 +24,14 @@ class CliSmokeTest(unittest.TestCase):
         source = '{"ru","Old"}\n{"ru","Other"}\n'
         result = replace_root_title(source, "New")
         self.assertEqual(result, '{"ru","New"}\n{"ru","Other"}\n')
+
+    def test_liststream_xml_round_trips_bracket_text(self) -> None:
+        source = '{1,{"ru","Привет"},abc,{2,"A \\"quote\\""}}'
+        node = bracket_text_to_xml(source, has_bom=True)
+
+        self.assertEqual(node.get("format"), "1c-list-stream-xml")
+        self.assertEqual(node.get("bom"), "true")
+        self.assertEqual(bracket_xml_to_text(node), source)
 
     def test_apply_semantic_edits_rejects_raw_xml_item_insert(self) -> None:
         root = ET.Element("OrdinaryForm")
@@ -326,6 +335,7 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn('offsetType="integer"', xml)
             self.assertIn("<FormBin", xml)
             self.assertIn("<LogicalStream", xml)
+            self.assertIn("<BracketStream", xml)
             self.assertEqual((root / "Form" / "Module.bsl").read_bytes(), module)
 
             rebuilt = root / "rebuilt.bin"
@@ -338,6 +348,16 @@ class CliSmokeTest(unittest.TestCase):
             rebuilt_streams = logical_streams(parse_form_bin(rebuilt.read_bytes()))
             self.assertEqual(rebuilt_streams["Form.xml"], bracket)
             self.assertEqual(rebuilt_streams["Module.bsl"], module)
+
+            tree = ET.parse(out)
+            first_string = tree.getroot().find("./FormBin/BracketStream//String")
+            self.assertIsNotNone(first_string)
+            first_string.text = "Changed"
+            tree.write(out, encoding="utf-8", xml_declaration=True)
+
+            build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
+            edited_streams = logical_streams(parse_form_bin(rebuilt.read_bytes()))
+            self.assertIn(b'"Changed"', edited_streams["Form.xml"])
 
     def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
         with TemporaryDirectory() as temp_dir:
