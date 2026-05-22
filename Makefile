@@ -9,6 +9,7 @@ smoke:
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli dump --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli rebuild --help
+	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli scan-corpus --help
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

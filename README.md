@@ -18,6 +18,8 @@ forms, similar in spirit to platform XML for managed forms.
 - Rebuild using explicit base `form`/`Form.bin` streams.
 - Apply the first semantic write-back slice: root form title.
 - Restore `Module.bsl` from the XML package.
+- Scan a private EPF/ERF corpus and classify platform-exported ordinary forms
+  without hardcoding local paths into reports.
 
 ## Known Gaps
 
@@ -44,17 +46,43 @@ PYTHONPATH=src python -m unittest discover -s tests
 PYTHONPATH=src python -m onec_ordinary_forms.cli --help
 ```
 
+Platform/container notes live in [docs/containers.md](docs/containers.md).
+
 ## CLI
 
 ```bash
 onec-ordinary-forms dump --help
 onec-ordinary-forms rebuild --help
+onec-ordinary-forms scan-corpus --help
 ```
 
 For direct source execution:
 
 ```bash
 PYTHONPATH=src python -m onec_ordinary_forms.cli dump --help
+```
+
+## Corpus Scanning
+
+The scanner is intentionally split from platform export. It can list private
+`.epf`/`.erf` files directly, and it can classify a directory that was already
+exported by `ibcmd config export --file`.
+
+```bash
+PYTHONPATH=src python -m onec_ordinary_forms.cli scan-corpus \
+  --root "<private-processors-dir>" \
+  --name-regex 'обычн|obychn|8\.2|8\.1' \
+  --limit 50 \
+  --out-json scan-output/corpus.json
+```
+
+After exporting several candidates to a temporary directory:
+
+```bash
+PYTHONPATH=src python -m onec_ordinary_forms.cli scan-corpus \
+  --root "<private-processors-dir>" \
+  --exported-root scan-output/exported \
+  --out-json scan-output/exported-forms.json
 ```
 
 ## Fixture Policy

@@ -12,6 +12,8 @@ from pathlib import Path
 import base64
 import json
 
+from onec_ordinary_forms.corpus import build_corpus_report, write_report
+
 
 SCHEMA_VERSION = "0.1"
 
@@ -762,6 +764,16 @@ def replace_root_title(form_text: str, title: str) -> str:
     return new_text
 
 
+def scan_corpus(args: argparse.Namespace) -> None:
+    report = build_corpus_report(
+        root=Path(args.root),
+        name_regex=args.name_regex,
+        limit=args.limit,
+        exported_root=Path(args.exported_root) if args.exported_root else None,
+    )
+    write_report(report, Path(args.out_json) if args.out_json else None)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -784,6 +796,14 @@ def main() -> None:
     rebuild_parser.add_argument("--out-module")
     rebuild_parser.add_argument("--asset-root")
     rebuild_parser.set_defaults(func=rebuild)
+
+    scan_parser = subparsers.add_parser("scan-corpus")
+    scan_parser.add_argument("--root", required=True, help="Directory with .epf/.erf files")
+    scan_parser.add_argument("--name-regex", help="Optional regex filter for relative paths")
+    scan_parser.add_argument("--limit", type=int, help="Limit selected files after sorting/filtering")
+    scan_parser.add_argument("--exported-root", help="Optional ibcmd-exported directory to classify")
+    scan_parser.add_argument("--out-json", help="Write JSON report instead of stdout")
+    scan_parser.set_defaults(func=scan_corpus)
 
     args = parser.parse_args()
     args.func(args)

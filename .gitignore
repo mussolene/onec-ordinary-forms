@@ -12,6 +12,8 @@ dist/
 # Local/private 1C artifacts
 examples/fixtures/*
 !examples/fixtures/.gitkeep
+scan-output/
+work/
 *.epf
 *.erf
 *.dt
