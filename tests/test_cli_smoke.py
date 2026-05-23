@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 
 from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
-from onec_ordinary_forms.cli import apply_semantic_edits_to_form, replace_root_title, validate_xml_file
+from onec_ordinary_forms.cli import apply_semantic_edits_to_form, format_xml_file, replace_root_title, validate_xml_file
 from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
@@ -328,6 +328,9 @@ class CliSmokeTest(unittest.TestCase):
             dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
 
             xml = out.read_text(encoding="utf-8")
+            self.assertTrue(xml.startswith("<?xml version='1.0' encoding='utf-8'?>\n"))
+            self.assertIn("\n  <Source ", xml)
+            self.assertIn("\n          <InputField ", xml)
             self.assertIn("<OrdinaryForm", xml)
             self.assertIn("noNamespaceSchemaLocation", xml)
             self.assertIn("<Attributes>", xml)
@@ -352,6 +355,17 @@ class CliSmokeTest(unittest.TestCase):
             rebuilt_streams = logical_streams(parse_form_bin(rebuilt.read_bytes()))
             self.assertEqual(rebuilt_streams["Form.xml"], bracket)
             self.assertEqual(rebuilt_streams["Module.bsl"], module)
+
+    def test_format_xml_file_pretty_prints_schema_like_xml(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "schema.xsd"
+            path.write_text(
+                '<?xml version="1.0" encoding="UTF-8"?><xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="A"/></xs:schema>',
+                encoding="utf-8",
+            )
+            format_xml_file(path)
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("\n  <xs:element name=\"A\"/>\n", text)
 
     def test_dump_bin_uses_managed_like_sidecars_for_module_and_pictures(self) -> None:
         with TemporaryDirectory() as temp_dir:

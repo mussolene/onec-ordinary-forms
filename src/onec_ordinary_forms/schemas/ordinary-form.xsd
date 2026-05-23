@@ -1,7 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           elementFormDefault="unqualified"
-           attributeFormDefault="unqualified">
+<?xml version='1.0' encoding='utf-8'?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
 
   <xs:element name="OrdinaryForm" type="OrdinaryFormType"/>
 
@@ -134,7 +132,6 @@
       <xs:element name="Action" type="OpenElementType"/>
       <xs:element name="Pages" type="PagesType"/>
       <xs:element name="ChildItems" type="ItemsType"/>
-
       <xs:element name="DataPath" type="xs:string"/>
       <xs:element name="Visible" type="xs:boolean"/>
       <xs:element name="Enabled" type="xs:boolean"/>
@@ -156,7 +153,6 @@
       <xs:element name="OpenButton" type="xs:boolean"/>
       <xs:element name="CreateButton" type="xs:boolean"/>
       <xs:element name="EditButton" type="xs:boolean"/>
-
       <xs:element name="Width" type="xs:integer"/>
       <xs:element name="Height" type="xs:integer"/>
       <xs:element name="MinWidth" type="xs:integer"/>
@@ -167,7 +163,6 @@
       <xs:element name="ColumnsCount" type="xs:integer"/>
       <xs:element name="RowsCount" type="xs:integer"/>
       <xs:element name="MaxLength" type="xs:integer"/>
-
       <xs:element name="TextColor" type="xs:string"/>
       <xs:element name="BackColor" type="xs:string"/>
       <xs:element name="BorderColor" type="xs:string"/>

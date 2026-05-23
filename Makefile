@@ -1,4 +1,4 @@
-.PHONY: test smoke clean
+.PHONY: test smoke format-xml clean
 
 PYTHON ?= python3
 
@@ -14,6 +14,9 @@ smoke:
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli extract-elem-json --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli dump-bin --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli scan-corpus --help
+
+format-xml:
+	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/ordinary-form.xsd
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

@@ -870,9 +870,31 @@ def dump_xml_from_paths(
     add_semantic_pages(form_structure, elem, element_index, asset_root)
     add_form_bin_container(root, bin_bytes, form_bytes)
 
-    ET.indent(root, space="  ")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    ET.ElementTree(root).write(out_path, encoding="utf-8", xml_declaration=True)
+    write_pretty_xml(root, out_path)
+
+
+def pretty_xml_bytes(root: ET.Element) -> bytes:
+    try:
+        from lxml import etree
+    except ImportError:
+        ET.indent(root, space="  ")
+        return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    parser = etree.XMLParser(remove_blank_text=True)
+    document = etree.fromstring(ET.tostring(root, encoding="utf-8"), parser)
+    return polish_pretty_xml(etree.tostring(document, encoding="utf-8", xml_declaration=True, pretty_print=True))
+
+
+def polish_pretty_xml(data: bytes) -> bytes:
+    text = data.decode("utf-8")
+    if "<xs:schema " in text:
+        text = re.sub(r"\n  <xs:", "\n\n  <xs:", text)
+        text = text.replace(">\n\n\n  <xs:", ">\n\n  <xs:")
+    return text.encode("utf-8")
+
+
+def write_pretty_xml(root: ET.Element, path: Path) -> None:
+    path.write_bytes(pretty_xml_bytes(root))
 
 
 def schema_path() -> Path:
@@ -893,6 +915,20 @@ def validate_xml_file(xml_path: Path, xsd_path: Path | None = None) -> None:
 def validate_xml(args: argparse.Namespace) -> None:
     validate_xml_file(Path(args.xml), Path(args.schema) if args.schema else None)
     print("OK")
+
+
+def format_xml_file(path: Path) -> None:
+    try:
+        from lxml import etree
+    except ImportError as exc:
+        raise RuntimeError("XML formatting requires lxml") from exc
+    parser = etree.XMLParser(remove_blank_text=True)
+    document = etree.parse(str(path), parser)
+    path.write_bytes(polish_pretty_xml(etree.tostring(document, encoding="utf-8", xml_declaration=True, pretty_print=True)))
+
+
+def format_xml(args: argparse.Namespace) -> None:
+    format_xml_file(Path(args.xml))
 
 
 def rebuild(args: argparse.Namespace) -> None:
@@ -1226,6 +1262,10 @@ def main() -> None:
     validate_parser.add_argument("--xml", required=True, help="OrdinaryForm XML to validate")
     validate_parser.add_argument("--schema", help="Override ordinary-form XSD path")
     validate_parser.set_defaults(func=validate_xml)
+
+    format_parser = subparsers.add_parser("format-xml")
+    format_parser.add_argument("--xml", required=True, help="XML or XSD file to rewrite with stable pretty formatting")
+    format_parser.set_defaults(func=format_xml)
 
     scan_parser = subparsers.add_parser("scan-corpus")
     scan_parser.add_argument("--root", required=True, help="Directory with .epf/.erf files")
