@@ -203,7 +203,7 @@ def base_info_record_from_xml(element: ET.Element | None) -> list[object]:
         ["3", "3", ["-7"]],
         ["3", "3", ["-21"]],
         ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
-        ["1", "0"],
+        tooltip_record_from_xml(element),
     ]
 
 
@@ -212,6 +212,11 @@ def visible_record_from_xml(element: ET.Element | None) -> str:
         return "1"
     value = (element.findtext("Visible") or "").strip().lower()
     return "0" if value in {"false", "0"} else "1"
+
+
+def tooltip_record_from_xml(element: ET.Element | None) -> list[object]:
+    text = get_multilang_text(element, "ToolTip")
+    return localized_text_record(text) if text else ["1", "0"]
 
 
 def color_record_from_xml(element: ET.Element | None, tag: str) -> list[object]:

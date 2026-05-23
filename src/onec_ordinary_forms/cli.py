@@ -281,22 +281,56 @@ def page_title(page_data: dict | None) -> str:
         return ""
 
 
-def item_title(item_data: dict | None) -> str:
+def localized_text_from_record(value: object) -> str:
+    if (
+        isinstance(value, list)
+        and len(value) >= 3
+        and clean_token(value[0]) == "1"
+        and clean_token(value[1]) == "1"
+        and isinstance(value[2], list)
+        and len(value[2]) >= 2
+        and clean_token(value[2][0]) == "ru"
+    ):
+        return clean_token(value[2][1])
+    return ""
+
+
+def item_title(item_data: dict | None, control_type: str) -> str:
     if not isinstance(item_data, dict):
         return ""
     raw = item_data.get("raw") or []
-    candidates: list[str] = []
+    if not isinstance(raw, list):
+        return ""
+    if len(raw) <= 2 or not isinstance(raw[2], list):
+        return first_localized_text_without_base_tooltip(raw)
+    info = raw[2]
+    if clean_token(info[0]) == "3" and len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 2:
+        return localized_text_from_record(info[1][2])
+    if clean_token(info[0]) == "1" and len(info) > 1 and isinstance(info[1], list):
+        if len(info[1]) > 2:
+            title = localized_text_from_record(info[1][2])
+            if title:
+                return title
+        if control_type == "Panel":
+            pages = panel_pages_from_raw(raw)
+            return pages[0]["title"] if pages else ""
+    return first_localized_text_without_base_tooltip(raw)
 
-    def walk(value: object) -> None:
-        if isinstance(value, list):
-            if len(value) >= 3 and value[0] == "1" and value[1] == "1" and isinstance(value[2], list):
-                if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
-                    candidates.append(clean_token(value[2][1]))
-            for child in value:
-                walk(child)
 
-    walk(raw)
-    return candidates[0] if candidates else ""
+def first_localized_text_without_base_tooltip(value: object) -> str:
+    if not isinstance(value, list):
+        return ""
+    text = localized_text_from_record(value)
+    if text:
+        return text
+    base = value if len(value) >= 13 and clean_token(value[0]) == "10" else None
+    for index, child in enumerate(value):
+        if base is not None and index == 12:
+            continue
+        found = first_localized_text_without_base_tooltip(child)
+        if found:
+            return found
+    return ""
 
 
 def build_element_index(elem: dict) -> dict[str, dict[str, str]]:
@@ -642,9 +676,10 @@ def add_semantic_item(
     item_data = data.get(raw_key)
     if isinstance(item_data, dict) and item_data.get("id") is not None:
         node.set("id", str(item_data["id"]))
-    title = item_title(data.get(raw_key))
+    title = item_title(data.get(raw_key), str(item.get("type", "")))
     if title:
         add_multilang_text(node, "Title", title)
+    add_tooltip(node, item_data)
     add_data_path(node, item, item_data)
     add_visible(node, item_data)
     add_read_only(node, item, item_data)
@@ -749,6 +784,15 @@ def add_visible(parent: ET.Element, item_data: object) -> None:
         set_text(parent, "Visible", "false")
 
 
+def add_tooltip(parent: ET.Element, item_data: object) -> None:
+    base = base_info_from_item_data(item_data)
+    if base is None or len(base) <= 12:
+        return
+    tooltip = localized_text_from_record(base[12])
+    if tooltip:
+        add_multilang_text(parent, "ToolTip", tooltip)
+
+
 def add_read_only(parent: ET.Element, item: dict, item_data: object) -> None:
     if str(item.get("type", "")) != "InputField":
         return
@@ -803,9 +847,9 @@ def panel_pages_from_raw(raw: object) -> list[dict[str, str]]:
 
 def first_localized_text(value: object) -> str:
     if isinstance(value, list):
-        if len(value) >= 3 and clean_token(value[0]) == "1" and clean_token(value[1]) == "1" and isinstance(value[2], list):
-            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
-                return clean_token(value[2][1])
+        text = localized_text_from_record(value)
+        if text:
+            return text
         for child in value:
             found = first_localized_text(child)
             if found:

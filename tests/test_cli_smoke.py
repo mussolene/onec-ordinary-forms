@@ -560,6 +560,65 @@ class CliSmokeTest(unittest.TestCase):
             ].decode("utf-8-sig")
             self.assertIn("{10,0,", rebuilt_form)
 
+    def test_dump_bin_emits_tooltip_without_fake_input_title(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            bracket = (
+                "{"
+                '{"MainCaption",1,1,{"ru","Main"}},'
+                "{381ed624-9217-4e63-85db-c4c3cb87daae,159,"
+                '{9,{"Pattern",{"S"}},{{{10,1,{3,4,{0}},{3,4,{0}},{6,3,0,{0},0},0,{3,4,{0}},{3,4,{0}},{3,4,{0}},{3,3,{-7}},{3,3,{-21}},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,1,{"ru","Номер документа"}}}},0,{0},0,1,0,{1,0},0}},'
+                "{8,10,10,200,30,0,{0,{2,0,0,10},{2,-1,6,0}}},"
+                '{14,"Number",4294967295,0,0,0},'
+                "{0}}"
+                "}"
+            ).encode("utf-8")
+            source.write_bytes(build_form_bin_container(bracket, b""))
+
+            out = root / "Form.xml"
+            from onec_ordinary_forms.cli import dump_bin
+
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            xml_root = ET.parse(out).getroot()
+            field = xml_root.find(".//InputField[@name='Number']")
+            self.assertIsNotNone(field)
+            self.assertIsNone(field.find("Title"))
+            self.assertEqual(field.findtext("./ToolTip/Item"), "Номер документа")
+            validate_xml_file(out)
+
+    def test_build_bin_writes_tooltip_to_base_info_slot_12(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <InputField name="Number" id="159">
+                    <ToolTip><Item lang="ru">Номер документа</Item></ToolTip>
+                  </InputField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+
+        def find_tooltip_base(value: object) -> bool:
+            if isinstance(value, list):
+                if (
+                    len(value) > 12
+                    and value[0] == "10"
+                    and isinstance(value[12], list)
+                    and len(value[12]) > 2
+                    and value[12][2] == ['"ru"', '"Номер документа"']
+                ):
+                    return True
+                return any(find_tooltip_base(child) for child in value)
+            return False
+
+        self.assertTrue(find_tooltip_base(stream))
+
     def test_add_read_only_uses_input_field_info_slot(self) -> None:
         from onec_ordinary_forms.cli import add_read_only
 
