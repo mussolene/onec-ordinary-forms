@@ -329,15 +329,21 @@
     <xs:sequence>
       <xs:element name="From" type="AnchorType" minOccurs="0"/>
       <xs:element name="To" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra1" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra2" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra3" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra4" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra5" type="AnchorType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="coordinate" type="xs:string" use="required"/>
-    <xs:attribute name="mode" type="xs:integer"/>
+    <xs:attribute name="value" type="xs:string"/>
+    <xs:attribute name="mode" type="xs:string"/>
     <xs:attribute name="modeName" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="DimensionBindingType">
     <xs:attribute name="dimension" type="xs:string" use="required"/>
     <xs:attribute name="value" type="xs:string"/>
-    <xs:attribute name="mode" type="xs:integer"/>
+    <xs:attribute name="mode" type="xs:string"/>
     <xs:attribute name="modeName" type="xs:string"/>
     <xs:attribute name="target" type="xs:string"/>
     <xs:attribute name="targetId" type="xs:integer"/>
@@ -345,12 +351,22 @@
     <xs:attribute name="side" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="AnchorType">
+    <xs:sequence>
+      <xs:element name="Value" type="IndexedValueType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="value" type="xs:string"/>
+    <xs:attribute name="valueType" type="xs:string"/>
     <xs:attribute name="relation" type="xs:string"/>
+    <xs:attribute name="count" type="xs:nonNegativeInteger"/>
     <xs:attribute name="target" type="xs:string"/>
     <xs:attribute name="targetId" type="xs:integer"/>
     <xs:attribute name="targetName" type="xs:string"/>
     <xs:attribute name="side" type="xs:string"/>
     <xs:attribute name="offset" type="xs:integer"/>
+  </xs:complexType>
+  <xs:complexType name="IndexedValueType" mixed="true">
+    <xs:attribute name="index" type="xs:nonNegativeInteger" use="required"/>
+    <xs:attribute name="kind" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="FormBinType">
     <xs:sequence>
