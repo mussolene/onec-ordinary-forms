@@ -156,6 +156,7 @@
       <xs:element name="BackColor" type="xs:string"/>
       <xs:element name="BorderColor" type="xs:string"/>
       <xs:element name="Font" type="OpenElementType"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean"/>
       <xs:element name="Representation" type="xs:string"/>
       <xs:element name="HorizontalAlign" type="xs:string"/>
       <xs:element name="VerticalAlign" type="xs:string"/>
@@ -169,6 +170,8 @@
       <xs:element name="PagesRepresentation" type="xs:string"/>
       <xs:element name="EditMode" type="xs:string"/>
       <xs:element name="ChoiceMode" type="xs:string"/>
+      <xs:element name="RegulationButton" type="xs:boolean"/>
+      <xs:element name="ChoiceList" type="OpenElementType"/>
       <xs:element name="ValueType" type="OpenElementType"/>
       <xs:element name="ContextMenu" type="NamedRefType"/>
       <xs:element name="ExtendedTooltip" type="NamedRefType"/>

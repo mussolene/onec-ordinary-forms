@@ -31,6 +31,7 @@ COMMON_CONTROL_PROPERTIES = (
     "BackColor",
     "BorderColor",
     "ContextMenu",
+    "AutoContextMenu",
     "ExtendedTooltip",
     "Events",
 )
@@ -57,6 +58,7 @@ INPUT_CONTROL_PROPERTIES = (
     "OpenButton",
     "CreateButton",
     "EditButton",
+    "RegulationButton",
 )
 
 
@@ -94,7 +96,12 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "Table",
         COMMON_CONTROL_PROPERTIES + ("Columns", "Rows", "ColumnsCount", "RowsCount", "AutoMarkIncomplete"),
     ),
-    "ChoiceField": OrdinaryControlDescriptor("ChoiceField", "ПолеВыбора", "ChoiceField", COMMON_CONTROL_PROPERTIES + INPUT_CONTROL_PROPERTIES),
+    "ChoiceField": OrdinaryControlDescriptor(
+        "ChoiceField",
+        "ПолеВыбора",
+        "ChoiceField",
+        COMMON_CONTROL_PROPERTIES + INPUT_CONTROL_PROPERTIES + ("ChoiceList",),
+    ),
     "SpreadsheetDocumentField": OrdinaryControlDescriptor(
         "SpreadsheetDocumentField",
         "ПолеТабличногоДокумента",

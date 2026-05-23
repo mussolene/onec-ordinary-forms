@@ -25,6 +25,8 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 21)
         self.assertIn("Title", ORDINARY_CONTROL_DESCRIPTORS["Label"].properties)
         self.assertIn("ChoiceButton", ORDINARY_CONTROL_DESCRIPTORS["InputField"].properties)
+        self.assertIn("RegulationButton", ORDINARY_CONTROL_DESCRIPTORS["InputField"].properties)
+        self.assertIn("ChoiceList", ORDINARY_CONTROL_DESCRIPTORS["ChoiceField"].properties)
         self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["Image"].xml_tag, "PictureDecoration")
         self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["ProgressBar"].platform_name, "Индикатор")
         self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["CommandBarButton"].platform_name, "КнопкаКоманднойПанели")
