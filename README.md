@@ -30,23 +30,18 @@ named controls and properties, not with raw platform records:
 
 ```xml
 <Form>
-  <Properties>
-    <Title>
-      <Item lang="ru">Form title</Item>
-    </Title>
-  </Properties>
+  <Title>
+    <Item lang="ru">Form title</Item>
+  </Title>
   <Attributes>
     <Attribute name="InputValue">
       <Type>...</Type>
     </Attribute>
   </Attributes>
-  <Commands>
-    <Command name="Run"/>
-  </Commands>
-  <ChildItems>
-    <Panel name="MainPanel">
-      <Position left="8" top="8" right="640" bottom="480"/>
-      <ChildItems>
+  <Pages>
+    <Page name="Main">
+      <Panel name="MainPanel">
+        <Position left="8" top="8" right="640" bottom="480"/>
         <LabelDecoration name="Caption">
           <Title>
             <Item lang="ru">Caption text</Item>
@@ -56,16 +51,22 @@ named controls and properties, not with raw platform records:
           <Title>
             <Item lang="ru">Run</Item>
           </Title>
-          <Action name="Run"/>
+          <Events>
+            <Event name="Нажатие">Run</Event>
+          </Events>
         </Button>
         <PictureDecoration name="Logo">
           <Picture file="Items/Logo/Picture.gif"/>
         </PictureDecoration>
-      </ChildItems>
-    </Panel>
-  </ChildItems>
+      </Panel>
+    </Page>
+  </Pages>
 </Form>
 ```
+
+Control properties and events are type-specific and come from the platform help
+palette for ordinary controls. The XML should contain only values explicitly
+set on the form; platform defaults should stay implicit.
 
 The exact schema is still being expanded, but the target direction is fixed:
 public XML must be managed-form-like, named, and understandable to a 1C
@@ -126,23 +127,18 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 
 ```xml
 <Form>
-  <Properties>
-    <Title>
-      <Item lang="ru">Заголовок формы</Item>
-    </Title>
-  </Properties>
+  <Title>
+    <Item lang="ru">Заголовок формы</Item>
+  </Title>
   <Attributes>
     <Attribute name="ВходноеЗначение">
       <Type>...</Type>
     </Attribute>
   </Attributes>
-  <Commands>
-    <Command name="Выполнить"/>
-  </Commands>
-  <ChildItems>
-    <Panel name="ОсновнаяПанель">
-      <Position left="8" top="8" right="640" bottom="480"/>
-      <ChildItems>
+  <Pages>
+    <Page name="Основная">
+      <Panel name="ОсновнаяПанель">
+        <Position left="8" top="8" right="640" bottom="480"/>
         <LabelDecoration name="Надпись">
           <Title>
             <Item lang="ru">Текст надписи</Item>
@@ -152,16 +148,22 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
           <Title>
             <Item lang="ru">Выполнить</Item>
           </Title>
-          <Action name="Выполнить"/>
+          <Events>
+            <Event name="Нажатие">Выполнить</Event>
+          </Events>
         </Button>
         <PictureDecoration name="Логотип">
           <Picture file="Items/Логотип/Picture.gif"/>
         </PictureDecoration>
-      </ChildItems>
-    </Panel>
-  </ChildItems>
+      </Panel>
+    </Page>
+  </Pages>
 </Form>
 ```
+
+Свойства и события контролов зависят от типа контрола и берутся из
+платформенной палитры обычных элементов. В XML должны попадать только явно
+заданные значения; дефолты платформы остаются неявными.
 
 Схема еще расширяется, но направление фиксированное: публичный XML должен быть
 похож на XML управляемой формы, быть именованным и понятным разработчику 1С.
@@ -257,8 +259,9 @@ Use `--asset-root` only when sidecars are not next to the XML as
 `<Form.xml without suffix>/...`.
 
 Writer behavior is intentionally conservative while the named ordinary-form
-object model is being completed. Do not rely on raw diagnostic formats as the
-public source contract.
+object model is being completed. The only public source contract is `Form.xml`
+with named form objects plus sidecars; old base-stream rebuild paths and raw
+diagnostic formats are not supported public workflows.
 
 Diagnostic commands:
 

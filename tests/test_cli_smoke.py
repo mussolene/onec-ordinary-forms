@@ -9,9 +9,7 @@ from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
 from onec_ordinary_forms.cli import (
     apply_geometry_bindings_to_raw,
-    apply_semantic_edits_to_form,
     format_xml_file,
-    replace_root_title,
     validate_xml_file,
 )
 from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, parse_form_bin_container, unpack_form_bin
@@ -55,19 +53,17 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["ProgressBar"].platform_name, "Индикатор")
         self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["CommandBarButton"].platform_name, "КнопкаКоманднойПанели")
 
-    def test_replace_root_title_updates_first_title_only(self) -> None:
-        source = '{"ru","Old"}\n{"ru","Other"}\n'
-        result = replace_root_title(source, "New")
-        self.assertEqual(result, '{"ru","New"}\n{"ru","Other"}\n')
+    def test_ordinary_palette_uses_platform_members_from_82_help(self) -> None:
+        button = ORDINARY_CONTROL_DESCRIPTORS["Button"]
+        input_field = ORDINARY_CONTROL_DESCRIPTORS["InputField"]
+        table = ORDINARY_CONTROL_DESCRIPTORS["Table"]
 
-    def test_apply_semantic_edits_rejects_raw_xml_item_insert(self) -> None:
-        root = ET.Element("OrdinaryForm")
-        structure = ET.SubElement(root, "FormStructure")
-        inserted = ET.SubElement(structure, "Item", {"name": "Inserted", "insert": "true", "after": "A"})
-        ET.SubElement(inserted, "RawBracket")
-
-        with self.assertRaisesRegex(ValueError, "typed rebuild"):
-            apply_semantic_edits_to_form(root, b'{"ru","Main"}')
+        self.assertIn("Нажатие", {event.name for event in button.platform_events})
+        self.assertIn("ПриИзменении", {event.name for event in input_field.platform_events})
+        self.assertIn("НачалоВыбора", {event.name for event in input_field.platform_events})
+        self.assertIn("ПриВыводеСтроки", {event.name for event in table.platform_events})
+        self.assertIn("КнопкаВыбора", {prop.name for prop in input_field.platform_properties})
+        self.assertIn("АвтоВводНовойСтроки", {prop.name for prop in table.platform_properties})
 
     def test_platform_control_guids_drive_item_types(self) -> None:
         self.assertEqual(ordinary_control_type("0fc7e20d-f241-460c-bdf4-5ad88e5474a5"), "Label")
@@ -389,13 +385,20 @@ class CliSmokeTest(unittest.TestCase):
 
             xml = out.read_text(encoding="utf-8")
             self.assertTrue(xml.startswith("<?xml version='1.0' encoding='utf-8'?>\n"))
-            self.assertIn("\n  <Source ", xml)
-            self.assertIn("\n          <InputField ", xml)
-            self.assertIn("<OrdinaryForm", xml)
+            self.assertIn("<Form", xml)
+            self.assertIn("\n      <InputField ", xml)
+            self.assertNotIn("<OrdinaryForm", xml)
+            self.assertNotIn("<Source", xml)
+            self.assertNotIn("<FormStructure", xml)
+            self.assertNotIn("<ChildItems", xml)
+            self.assertNotIn("<Commands", xml)
             self.assertIn("noNamespaceSchemaLocation", xml)
             self.assertIn("<Attributes>", xml)
             self.assertIn('name="InputValue"', xml)
-            self.assertIn('rawKey="Main/InputValue"', xml)
+            self.assertNotIn("rawKey=", xml)
+            self.assertNotIn("platformType=", xml)
+            self.assertNotIn("managedEquivalent=", xml)
+            self.assertNotIn("childCount=", xml)
             self.assertIn('modeName="edgeToEdge"', xml)
             self.assertIn('relation="targetEdgeOffset"', xml)
             self.assertIn('offset="10"', xml)
@@ -468,7 +471,7 @@ class CliSmokeTest(unittest.TestCase):
             xml = out.read_text(encoding="utf-8")
             self.assertEqual((form_dir / "Module.bsl").read_bytes(), module)
             self.assertEqual((form_dir / "Items" / "Image1" / "Picture.gif").read_bytes(), b"GIF89a")
-            self.assertIn('file="Module.bsl"', xml)
+            self.assertNotIn('file="Module.bsl"', xml)
             self.assertIn('file="Items/Image1/Picture.gif"', xml)
             self.assertNotIn("Procedure Run", xml)
             self.assertNotIn(picture, xml)

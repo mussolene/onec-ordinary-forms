@@ -16,13 +16,11 @@ import json
 from onec_ordinary_forms.corpus import build_corpus_report, write_report
 from onec_ordinary_forms.formbin import (
     build_form_bin_container,
-    file_descriptors,
     pack_form_bin,
-    parse_form_bin,
     unpack_form_bin,
 )
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
-from onec_ordinary_forms.liststream import dumps_list_out_stream, parse_list_stream_document
+from onec_ordinary_forms.liststream import dumps_list_out_stream
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ORDINARY_CONTROL_GUID_BY_TYPE
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
@@ -101,60 +99,10 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def read_text_lossless(path: Path) -> str:
-    data = path.read_bytes()
-    for encoding in ("utf-8-sig", "utf-8", "cp1251"):
-        try:
-            return data.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    return data.decode("utf-8", errors="replace")
-
-
-def decode_text_preserve_bom(data: bytes) -> tuple[str, bool]:
-    has_bom = data.startswith(b"\xef\xbb\xbf")
-    payload = data[3:] if has_bom else data
-    for encoding in ("utf-8", "cp1251"):
-        try:
-            return payload.decode(encoding), has_bom
-        except UnicodeDecodeError:
-            continue
-    return payload.decode("utf-8", errors="replace"), has_bom
-
-
-def encode_text_preserve_bom(text: str, has_bom: bool) -> bytes:
-    data = text.encode("utf-8")
-    return b"\xef\xbb\xbf" + data if has_bom else data
-
-
 def set_text(parent: ET.Element, tag: str, text: object | None) -> ET.Element:
     child = ET.SubElement(parent, tag)
     child.text = "" if text is None else str(text)
     return child
-
-
-def unique_in_order(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        if value in seen:
-            continue
-        seen.add(value)
-        result.append(value)
-    return result
-
-
-def extract_quoted_strings(form_text: str) -> list[str]:
-    values: list[str] = []
-    for match in re.finditer(r'"((?:[^"\\]|\\.)*)"', form_text):
-        value = match.group(1).replace('\\"', '"')
-        if value:
-            values.append(value)
-    return unique_in_order(values)
-
-
-def looks_human_text(value: str) -> bool:
-    return any("А" <= ch <= "я" or ch == "ё" or ch == "Ё" for ch in value)
 
 
 def raw_to_text(value: object) -> str:
@@ -664,20 +612,6 @@ def add_picture(parent: ET.Element, item_data: dict | None, item_name: str, asse
             node.set("mime", "image/gif")
 
 
-def add_items(parent: ET.Element, items: list[dict]) -> None:
-    for item in items:
-        node = ET.SubElement(parent, "Item")
-        for attr in ("name", "type", "page"):
-            value = item.get(attr)
-            if value is not None:
-                node.set(attr, str(value))
-        children = item.get("child") or []
-        node.set("childCount", str(len(children)))
-        if children:
-            child_items = ET.SubElement(node, "ChildItems")
-            add_items(child_items, children)
-
-
 def add_semantic_item(
     parent: ET.Element,
     item: dict,
@@ -689,14 +623,7 @@ def add_semantic_item(
     descriptor = control_descriptor(item.get("type"))
     node = ET.SubElement(parent, descriptor.xml_tag if descriptor is not None else str(item.get("type") or "Item"))
     node.set("name", str(item.get("name", "")))
-    node.set("rawKey", raw_key)
-    if descriptor is not None:
-        node.set("platformType", descriptor.platform_name)
-        node.set("managedEquivalent", descriptor.managed_equivalent)
-    if item.get("page") is not None:
-        node.set("page", str(item["page"]))
     children = item.get("child") or []
-    node.set("childCount", str(len(children)))
     item_data = data.get(raw_key)
     if isinstance(item_data, dict) and item_data.get("id") is not None:
         node.set("id", str(item_data["id"]))
@@ -729,7 +656,7 @@ def add_semantic_item(
                 if str(child.get("page", "")) == str(page_name)
                 or str(child.get("page", "")) == page_path
             ]
-            page_items_node = ET.SubElement(page, "Items")
+            page_items_node = page
             for child in page_items:
                 add_semantic_item(page_items_node, child, data, f"{page_path}/{child.get('name', '')}", element_index, asset_root)
         loose_children = [
@@ -741,15 +668,13 @@ def add_semantic_item(
             )
         ]
         if loose_children:
-            child_items = ET.SubElement(node, "ChildItems")
             for child in loose_children:
                 child_key = f"{raw_key}/{child.get('name', '')}"
-                add_semantic_item(child_items, child, data, child_key, element_index, asset_root)
+                add_semantic_item(node, child, data, child_key, element_index, asset_root)
     elif children:
-        child_items = ET.SubElement(node, "ChildItems")
         for child in children:
             child_key = str(child.get("rawKey") or f"{raw_key}/{child.get('name', '')}")
-            add_semantic_item(child_items, child, data, child_key, element_index, asset_root)
+            add_semantic_item(node, child, data, child_key, element_index, asset_root)
 
 
 def add_semantic_pages(
@@ -764,27 +689,14 @@ def add_semantic_pages(
         page_path = str(page_name)
         page = ET.SubElement(pages, "Page")
         page.set("name", page_path)
-        page.set("rawKey", page_path)
         title = page_title(data.get(page_path))
         if title:
             add_multilang_text(page, "Title", title)
-        items = ET.SubElement(page, "Items")
         for item in elem.get("tree", []):
             if str(item.get("page", "")) != page_path:
                 continue
             raw_key = str(item.get("rawKey") or f"{page_path}/{item.get('name', '')}")
-            add_semantic_item(items, item, data, raw_key, element_index, asset_root)
-
-
-def add_form_container_metadata(root: ET.Element, bin_bytes: bytes) -> None:
-    parts = parse_form_bin(bin_bytes)
-    descriptors = file_descriptors(parts)
-    for name in ("form", "module"):
-        descriptor = descriptors.get(name)
-        if descriptor is None:
-            continue
-        root.set(f"{name}CreatedTicks", str(descriptor.created))
-        root.set(f"{name}ModifiedTicks", str(descriptor.modified))
+            add_semantic_item(page, item, data, raw_key, element_index, asset_root)
 
 
 def dump_xml(args: argparse.Namespace) -> None:
@@ -808,45 +720,23 @@ def dump_xml_from_paths(
 ) -> None:
     asset_root = out_path.with_suffix("")
 
-    form_bytes = form_path.read_bytes()
-    bin_bytes = bin_path.read_bytes()
     module_bytes = module_path.read_bytes() if module_path and module_path.exists() else b""
-    form_text = read_text_lossless(form_path)
     elem = json.loads(elem_path.read_text(encoding="utf-8"))
     metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path else None
     object_types = metadata_object_type_map(metadata)
     element_index = build_element_index(elem)
-    quoted_strings = extract_quoted_strings(form_text)
     root_title = str((elem.get("data", {}).get("-pages-") or [""])[0])
 
-    root = ET.Element("OrdinaryForm")
-    root.set("schemaVersion", SCHEMA_VERSION)
-    root.set("sourceKind", "1C.OrdinaryForm")
-    root.set("roundTrip", "object-model")
+    root = ET.Element("Form")
+    root.set("version", SCHEMA_VERSION)
     root.set(f"{{{XSI_NS}}}noNamespaceSchemaLocation", ORDINARY_FORM_SCHEMA)
 
-    source = ET.SubElement(root, "Source")
-    source.set("formFile", form_path.name)
-    source.set("formSha256", sha256_bytes(form_bytes))
-    source.set("formSize", str(len(form_bytes)))
-    add_form_container_metadata(source, bin_bytes)
-    if module_path and module_bytes:
-        source.set("moduleFile", module_path.name)
-        source.set("moduleSha256", sha256_bytes(module_bytes))
-        source.set("moduleSize", str(len(module_bytes)))
-
-    properties = ET.SubElement(root, "Properties")
     if root_title:
-        add_multilang_text(properties, "Title", root_title)
-    set_text(properties, "BracketFormatVersion", quoted_strings[0] if quoted_strings else "")
+        add_multilang_text(root, "Title", root_title)
     if module_path and module_bytes:
         module_out = asset_root / "Module.bsl"
         module_out.parent.mkdir(parents=True, exist_ok=True)
         module_out.write_bytes(module_bytes)
-        module = ET.SubElement(properties, "Module")
-        module.set("file", "Module.bsl")
-        module.set("sha256", sha256_bytes(module_bytes))
-        module.set("size", str(len(module_bytes)))
 
     attrs = ET.SubElement(root, "Attributes")
     for prop in elem.get("props", []):
@@ -856,19 +746,7 @@ def dump_xml_from_paths(
         pattern_node = pattern_node_from_prop(prop)
         add_type(attr, pattern_node, object_types)
 
-    commands = ET.SubElement(root, "Commands")
-    for command in elem.get("commands", []):
-        cmd = ET.SubElement(commands, "Command")
-        if isinstance(command, dict):
-            for key, value in command.items():
-                if not isinstance(value, (dict, list)):
-                    cmd.set(str(key), str(value))
-        else:
-            cmd.text = str(command)
-
-    form_structure = ET.SubElement(root, "FormStructure")
-    add_semantic_pages(form_structure, elem, element_index, asset_root)
-    source.set("modelSha256", semantic_model_hash(root))
+    add_semantic_pages(root, elem, element_index, asset_root)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     write_pretty_xml(root, out_path)
@@ -891,7 +769,7 @@ def write_pretty_xml(root: ET.Element, path: Path) -> None:
 
 def semantic_model_hash(root: ET.Element) -> str:
     model = ET.Element("SemanticModel")
-    for tag in ("Properties", "Attributes", "Commands", "FormStructure"):
+    for tag in ("Title", "Attributes", "Pages"):
         child = root.find(tag)
         if child is not None:
             model.append(clone_without_blank_text(child))
@@ -947,40 +825,10 @@ def format_xml(args: argparse.Namespace) -> None:
     format_xml_file(Path(args.xml))
 
 
-def rebuild(args: argparse.Namespace) -> None:
-    xml_path = Path(args.xml)
-    out_form = Path(args.out_form)
-    out_bin = Path(args.out_bin)
-    out_module = Path(args.out_module) if args.out_module else None
-    asset_root = Path(args.asset_root) if args.asset_root else xml_path.with_suffix("")
-
-    root = ET.parse(xml_path).getroot()
-    if root.find("./RawPayloads") is not None:
-        raise ValueError("RawPayloads are not supported by the object-model rebuild")
-    for bad in root.findall(".//*[@raw]"):
-        raise ValueError(f"Raw attribute is not supported in object model: <{bad.tag}>")
-
-    base_form = Path(args.base_form)
-    base_bin = Path(args.base_bin)
-    form_data = apply_semantic_edits_to_form(root, base_form.read_bytes())
-    bin_data = base_bin.read_bytes()
-
-    out_form.parent.mkdir(parents=True, exist_ok=True)
-    out_bin.parent.mkdir(parents=True, exist_ok=True)
-    out_form.write_bytes(form_data)
-    out_bin.write_bytes(bin_data)
-    if out_module:
-        module_data = module_data_from_xml(root, asset_root)
-        if module_data:
-            out_module.parent.mkdir(parents=True, exist_ok=True)
-            out_module.write_bytes(module_data)
-
-
 def module_data_from_xml(root: ET.Element, asset_root: Path) -> bytes:
-    module = root.find("./Properties/Module")
-    if module is None or not module.get("file"):
+    module_path = asset_root / "Module.bsl"
+    if not module_path.exists():
         return b""
-    module_path = asset_root / module.get("file", "")
     return module_path.read_bytes()
 
 
@@ -998,6 +846,18 @@ def container_times_from_xml(root: ET.Element) -> tuple[int | None, int | None]:
     except ValueError:
         return None, None
     return None, None
+
+
+def form_title_from_xml(root: ET.Element) -> str:
+    return get_multilang_text(root, "Title")
+
+
+def top_level_pages(root: ET.Element) -> list[ET.Element]:
+    return root.findall("./Pages/Page")
+
+
+def item_container(element: ET.Element) -> ET.Element | None:
+    return element
 
 
 def build_bin(args: argparse.Namespace) -> None:
@@ -1021,10 +881,14 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
     back into the platform ListOutStream representation.
     """
 
+    if root.tag != "Form":
+        raise ValueError("Expected public ordinary form XML root <Form>")
+
     stream: list[object] = []
-    title = get_multilang_text(root.find("./Properties"), "Title")
+    title = form_title_from_xml(root)
     if not title:
-        first_page = root.find("./FormStructure/Pages/Page")
+        pages = top_level_pages(root)
+        first_page = pages[0] if pages else None
         title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
     stream.append(localized_text_record(title or "Main"))
 
@@ -1035,12 +899,12 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         stream.append([quoted_atom(name), quoted_atom("Pattern"), type_pattern_from_xml(attribute)])
 
     next_id = next_control_id(root)
-    pages = root.findall("./FormStructure/Pages/Page")
+    pages = top_level_pages(root)
     for page in pages:
         page_title_value = get_multilang_text(page, "Title") or page.get("name", "")
         if page_title_value and page_title_value != title:
             stream.append(localized_text_record(page_title_value))
-        items = page.find("Items")
+        items = item_container(page)
         if items is not None:
             for child in items:
                 control, next_id = control_stream_from_xml(child, asset_root, next_id)
@@ -1100,18 +964,14 @@ def control_stream_from_xml(element: ET.Element, asset_root: Path | None, fallba
     geometry = geometry_stream_from_xml(element.find("Position"))
     metadata = ["14", quoted_atom(name), "4294967295", "0", "0", "0"]
     children: list[object] = []
-    for container_tag in ("ChildItems",):
-        child_container = element.find(container_tag)
-        if child_container is None:
-            continue
-        for child in child_container:
-            child_stream, next_id_value = control_stream_from_xml(child, asset_root, next_id_value)
-            if child_stream:
-                children.append(child_stream)
+    for child in element:
+        child_stream, next_id_value = control_stream_from_xml(child, asset_root, next_id_value)
+        if child_stream:
+            children.append(child_stream)
     pages = element.find("Pages")
     if pages is not None:
         for page in pages.findall("Page"):
-            items = page.find("Items")
+            items = item_container(page)
             if items is None:
                 continue
             for child in items:
@@ -1195,76 +1055,12 @@ def geometry_stream_from_xml(position: ET.Element | None) -> list[object]:
     return ["8", left, top, right, bottom, "0", *bindings, "0", *dimensions]
 
 
-def apply_semantic_edits_to_form(root: ET.Element, base_form_data: bytes, asset_root: Path | None = None) -> bytes:
-    if root.find(".//RawBracket") is not None or root.find(".//*[@insert='true']") is not None:
-        raise ValueError("RawBracket/insert XML edits are not supported; ordinary form elements require typed rebuild")
-    form_text, has_bom = decode_text_preserve_bom(base_form_data)
-    document = parse_list_stream_document(form_text, allow_trailing=True)
-    apply_xml_to_list_stream_model(root, document.value, asset_root)
-    form_text = dumps_list_out_stream(document.value) + document.trailing
-    return encode_text_preserve_bom(form_text, has_bom)
-
-
-def apply_xml_to_list_stream_model(root: ET.Element, list_stream_root: object, asset_root: Path | None = None) -> None:
-    title = get_multilang_text(root.find("./Properties"), "Title")
-    if title and first_ru_text(list_stream_root) != title:
-        replace_first_ru_text(list_stream_root, title)
-    controls = raw_controls_by_id(list_stream_root)
-    controls.update({control.object_id: control.raw for control in parse_ordinary_form_model(list_stream_root).flatten()})
-    for element in xml_control_elements(root):
-        object_id = element.get("id", "")
-        raw = controls.get(object_id)
-        if raw is None:
-            continue
-        apply_xml_control_to_raw(element, raw, asset_root)
-
-
 def xml_control_elements(root: ET.Element) -> list[ET.Element]:
     result: list[ET.Element] = []
     for element in root.iter():
         if element.get("id"):
             result.append(element)
     return result
-
-
-def raw_controls_by_id(value: object) -> dict[str, list[object]]:
-    result: dict[str, list[object]] = {}
-    for node in walk_lists(value):
-        if len(node) >= 3 and raw_metadata_record(node) is not None and is_plausible_control_id(node[1]):
-            result[str(node[1])] = node
-    return result
-
-
-def is_plausible_control_id(value: object) -> bool:
-    try:
-        int(str(value))
-        return True
-    except ValueError:
-        return False
-
-
-def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root: Path | None = None) -> None:
-    name = element.get("name")
-    if name:
-        metadata = raw_metadata_record(raw)
-        if metadata is not None and len(metadata) > 1 and clean_token(metadata[1]) != name:
-            metadata[1] = quoted_atom(name)
-    title = get_multilang_text(element, "Title")
-    if title and first_ru_text(raw) != title:
-        replace_first_ru_text(raw, title)
-    geometry = element.find("Position")
-    if geometry is None:
-        geometry = element.find("Geometry")
-    if geometry is not None:
-        raw_geometry = raw_geometry_record(raw)
-        if raw_geometry is not None:
-            for index, name in enumerate(("left", "top", "right", "bottom"), start=1):
-                if name in geometry.attrib:
-                    raw_geometry[index] = geometry.get(name, raw_geometry[index])
-            apply_geometry_bindings_to_raw(geometry, raw_geometry)
-    picture = element.find("Picture")
-    if picture is not None:
-        apply_picture_to_raw(raw, picture, asset_root)
 
 
 def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[object]) -> None:
@@ -1299,79 +1095,6 @@ def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[obje
             raw_geometry[index] = dimension_binding_to_raw(binding)
 
 
-def apply_picture_to_raw(raw: list[object], picture: ET.Element, asset_root: Path | None) -> None:
-    file_name = picture.get("file")
-    if not file_name or asset_root is None:
-        return
-    image_path = asset_root / file_name
-    if not image_path.exists():
-        return
-    data = image_path.read_bytes()
-    expected_hash = picture.get("sha256")
-    if expected_hash and sha256_bytes(data) == expected_hash:
-        return
-    payload = "#base64:" + base64.b64encode(data).decode("ascii")
-    replace_first_base64_payload(raw, payload)
-
-
-def replace_first_base64_payload(value: object, payload: str) -> bool:
-    if isinstance(value, list):
-        for index, child in enumerate(value):
-            if isinstance(child, str) and clean_token(child).startswith("#base64:"):
-                value[index] = payload
-                return True
-            if replace_first_base64_payload(child, payload):
-                return True
-    return False
-
-
-def first_ru_text(value: object) -> str:
-    if isinstance(value, list):
-        if len(value) >= 3 and str(value[0]) == "1" and str(value[1]) == "1" and isinstance(value[2], list):
-            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
-                return clean_token(value[2][1])
-        for child in value:
-            found = first_ru_text(child)
-            if found:
-                return found
-    return ""
-
-
-def raw_metadata_record(raw: list[object]) -> list[object] | None:
-    for child in walk_lists(raw):
-        if len(child) >= 2 and str(child[0]) == "14":
-            return child
-    return None
-
-
-def raw_geometry_record(raw: list[object]) -> list[object] | None:
-    if len(raw) > 3 and isinstance(raw[3], list) and len(raw[3]) >= 5:
-        return raw[3]
-    for child in walk_lists(raw):
-        if len(child) >= 5:
-            try:
-                int(str(child[1]))
-                int(str(child[2]))
-                int(str(child[3]))
-                int(str(child[4]))
-            except ValueError:
-                continue
-            return child
-    return None
-
-
-def replace_first_ru_text(value: object, text: str) -> bool:
-    if isinstance(value, list):
-        if len(value) >= 3 and str(value[0]) == "1" and str(value[1]) == "1" and isinstance(value[2], list):
-            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
-                value[2][1] = quoted_atom(text)
-                return True
-        for child in value:
-            if replace_first_ru_text(child, text):
-                return True
-    return False
-
-
 def walk_lists(value: object) -> list[list[object]]:
     result: list[list[object]] = []
     if isinstance(value, list):
@@ -1383,14 +1106,6 @@ def walk_lists(value: object) -> list[list[object]]:
 
 def quoted_atom(value: str) -> str:
     return '"' + quote_form_string(value) + '"'
-
-
-def replace_root_title(form_text: str, title: str) -> str:
-    pattern = re.compile(r'(\{\s*"ru"\s*,\s*")((?:[^"\\]|\\.)*)("\s*\})', re.MULTILINE)
-    new_text, count = pattern.subn(lambda match: match.group(1) + quote_form_string(title) + match.group(3), form_text, count=1)
-    if count != 1:
-        raise ValueError("Root form title was not found in bracket form stream")
-    return new_text
 
 
 def scan_corpus(args: argparse.Namespace) -> None:
@@ -1441,24 +1156,14 @@ def main() -> None:
     dump_parser.add_argument("--out", required=True)
     dump_parser.set_defaults(func=dump_xml)
 
-    rebuild_parser = subparsers.add_parser("rebuild")
-    rebuild_parser.add_argument("--xml", required=True)
-    rebuild_parser.add_argument("--base-form", required=True)
-    rebuild_parser.add_argument("--base-bin", required=True)
-    rebuild_parser.add_argument("--out-form", required=True)
-    rebuild_parser.add_argument("--out-bin", required=True)
-    rebuild_parser.add_argument("--out-module")
-    rebuild_parser.add_argument("--asset-root")
-    rebuild_parser.set_defaults(func=rebuild)
-
     build_bin_parser = subparsers.add_parser("build-bin")
-    build_bin_parser.add_argument("--xml", required=True, help="OrdinaryForm XML produced by dump-bin")
+    build_bin_parser.add_argument("--xml", required=True, help="Form.xml produced by dump-bin")
     build_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
     build_bin_parser.add_argument("--asset-root", help="Directory with Module.bsl and extracted assets")
     build_bin_parser.set_defaults(func=build_bin)
 
     validate_parser = subparsers.add_parser("validate")
-    validate_parser.add_argument("--xml", required=True, help="OrdinaryForm XML to validate")
+    validate_parser.add_argument("--xml", required=True, help="Form.xml to validate")
     validate_parser.add_argument("--schema", help="Override ordinary-form XSD path")
     validate_parser.set_defaults(func=validate_xml)
 
@@ -1492,7 +1197,7 @@ def main() -> None:
     dump_bin_parser = subparsers.add_parser("dump-bin")
     dump_bin_parser.add_argument("--bin", required=True, help="Ordinary form Form.bin")
     dump_bin_parser.add_argument("--metadata-json")
-    dump_bin_parser.add_argument("--out", required=True, help="OrdinaryForm XML output path")
+    dump_bin_parser.add_argument("--out", required=True, help="Form.xml output path")
     dump_bin_parser.set_defaults(func=dump_bin)
 
     args = parser.parse_args()

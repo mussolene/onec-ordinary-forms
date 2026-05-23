@@ -6,7 +6,15 @@ platform names match the 1C ordinary-form control palette/API terminology.
 
 from __future__ import annotations
 
+import json
+import importlib.resources
 from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class PlatformMember:
+    name: str
+    type: str = ""
 
 
 @dataclass(frozen=True)
@@ -15,6 +23,29 @@ class OrdinaryControlDescriptor:
     platform_name: str
     managed_equivalent: str
     properties: tuple[str, ...] = ()
+    platform_properties: tuple[PlatformMember, ...] = ()
+    platform_events: tuple[PlatformMember, ...] = ()
+
+
+def load_platform_palette() -> dict[str, dict[str, object]]:
+    path = importlib.resources.files("onec_ordinary_forms") / "data" / "ordinary-form-palette-8.2.19.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def platform_members(control: str, key: str) -> tuple[PlatformMember, ...]:
+    raw_palette = PLATFORM_PALETTE.get(control, {})
+    raw_members = raw_palette.get(key, [])
+    if not isinstance(raw_members, list):
+        return ()
+    result: list[PlatformMember] = []
+    for item in raw_members:
+        if not isinstance(item, dict) or not item.get("name"):
+            continue
+        result.append(PlatformMember(name=str(item["name"]), type=str(item.get("type", ""))))
+    return tuple(result)
+
+
+PLATFORM_PALETTE = load_platform_palette()
 
 
 COMMON_CONTROL_PROPERTIES = (
@@ -144,3 +175,16 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
 
 def control_descriptor(control_type: object) -> OrdinaryControlDescriptor | None:
     return ORDINARY_CONTROL_DESCRIPTORS.get(str(control_type))
+
+
+ORDINARY_CONTROL_DESCRIPTORS = {
+    key: OrdinaryControlDescriptor(
+        xml_tag=value.xml_tag,
+        platform_name=value.platform_name,
+        managed_equivalent=value.managed_equivalent,
+        properties=value.properties,
+        platform_properties=platform_members(value.xml_tag, "properties"),
+        platform_events=platform_members(value.xml_tag, "events"),
+    )
+    for key, value in ORDINARY_CONTROL_DESCRIPTORS.items()
+}

@@ -1,44 +1,29 @@
 <?xml version='1.0' encoding='utf-8'?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:md="urn:onec:ordinary-form:metadata" elementFormDefault="unqualified" attributeFormDefault="unqualified">
-  <xs:import namespace="urn:onec:ordinary-form:metadata" schemaLocation="metadata.xsd"/>
-  <xs:element name="OrdinaryForm" type="OrdinaryFormType"/>
-  <xs:complexType name="OrdinaryFormType">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
+  <xs:element name="Form" type="FormType"/>
+  <xs:complexType name="FormType">
     <xs:sequence>
-      <xs:element name="Source" type="SourceType"/>
-      <xs:element name="Properties" type="PropertiesType"/>
-      <xs:element name="Attributes" type="AttributesType"/>
-      <xs:element name="Commands" type="CommandsType"/>
-      <xs:element name="FormStructure" type="FormStructureType"/>
+      <xs:element name="Title" type="LocalizedTextType" minOccurs="0"/>
+      <xs:element name="Width" type="xs:integer" minOccurs="0"/>
+      <xs:element name="Height" type="xs:integer" minOccurs="0"/>
+      <xs:element name="WindowOpeningMode" type="xs:string" minOccurs="0"/>
+      <xs:element name="AutoTitle" type="xs:boolean" minOccurs="0"/>
+      <xs:element name="Group" type="xs:string" minOccurs="0"/>
+      <xs:element name="CommandBarLocation" type="xs:string" minOccurs="0"/>
+      <xs:element name="VerticalScroll" type="xs:string" minOccurs="0"/>
+      <xs:element name="ShowCommandBar" type="xs:boolean" minOccurs="0"/>
+      <xs:element name="AutoCommandBar" type="CommandBarType" minOccurs="0"/>
+      <xs:element name="Events" type="EventsType" minOccurs="0"/>
+      <xs:element name="Attributes" type="AttributesType" minOccurs="0"/>
+      <xs:element name="Pages" type="PagesType" minOccurs="0"/>
     </xs:sequence>
-    <xs:attribute name="schemaVersion" type="xs:string" use="required"/>
-    <xs:attribute name="sourceKind" type="xs:string" use="required"/>
-    <xs:attribute name="roundTrip" type="xs:string" use="required"/>
-  </xs:complexType>
-  <xs:complexType name="SourceType">
-    <xs:attribute name="formFile" type="xs:string" use="required"/>
-    <xs:attribute name="formSha256" type="Sha256Type" use="required"/>
-    <xs:attribute name="formSize" type="xs:nonNegativeInteger" use="required"/>
-    <xs:attribute name="moduleFile" type="xs:string"/>
-    <xs:attribute name="moduleSha256" type="Sha256Type"/>
-    <xs:attribute name="moduleSize" type="xs:nonNegativeInteger"/>
-    <xs:attribute name="modelSha256" type="Sha256Type"/>
-    <xs:attribute name="formCreatedTicks" type="xs:integer"/>
-    <xs:attribute name="formModifiedTicks" type="xs:integer"/>
-    <xs:attribute name="moduleCreatedTicks" type="xs:integer"/>
-    <xs:attribute name="moduleModifiedTicks" type="xs:integer"/>
+    <xs:attribute name="version" type="xs:string" use="required"/>
   </xs:complexType>
   <xs:simpleType name="Sha256Type">
     <xs:restriction base="xs:string">
       <xs:pattern value="[0-9a-f]{64}"/>
     </xs:restriction>
   </xs:simpleType>
-  <xs:complexType name="PropertiesType">
-    <xs:sequence>
-      <xs:element name="Title" type="LocalizedTextType" minOccurs="0"/>
-      <xs:element name="BracketFormatVersion" type="xs:string" minOccurs="0"/>
-      <xs:element name="Module" type="FileRefType" minOccurs="0"/>
-    </xs:sequence>
-  </xs:complexType>
   <xs:complexType name="LocalizedTextType">
     <xs:sequence>
       <xs:element name="Item" type="LocalizedTextItemType" minOccurs="0" maxOccurs="unbounded"/>
@@ -66,31 +51,25 @@
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="id" type="xs:integer"/>
   </xs:complexType>
-  <xs:complexType name="CommandsType">
-    <xs:sequence>
-      <xs:element name="Command" type="OpenElementType" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-  </xs:complexType>
-  <xs:complexType name="FormStructureType">
-    <xs:sequence>
-      <xs:element name="Pages" type="PagesType"/>
-    </xs:sequence>
-  </xs:complexType>
   <xs:complexType name="PagesType">
     <xs:sequence>
       <xs:element name="Page" type="PageType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
   <xs:complexType name="PageType">
-    <xs:sequence>
-      <xs:element name="Title" type="LocalizedTextType" minOccurs="0"/>
-      <xs:element name="Items" type="ItemsType" minOccurs="0"/>
-    </xs:sequence>
-    <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="rawKey" type="xs:string"/>
-  </xs:complexType>
-  <xs:complexType name="ItemsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="Title" type="LocalizedTextType" minOccurs="0"/>
+      <xs:element name="ToolTip" type="LocalizedTextType" minOccurs="0"/>
+      <xs:element name="Group" type="xs:string" minOccurs="0"/>
+      <xs:element name="ExtendedTooltip" type="NamedRefType" minOccurs="0"/>
+      <xs:group ref="ControlElementGroup"/>
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="xs:integer"/>
+  </xs:complexType>
+  <xs:group name="ControlElementGroup">
+    <xs:choice>
+      <xs:element name="Pages" type="PagesControlType"/>
       <xs:element name="Panel" type="PanelType"/>
       <xs:element name="LabelDecoration" type="LabelDecorationType"/>
       <xs:element name="PictureDecoration" type="PictureDecorationType"/>
@@ -113,6 +92,11 @@
       <xs:element name="TextDocumentField" type="TextDocumentFieldType"/>
       <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
     </xs:choice>
+  </xs:group>
+  <xs:complexType name="PagesControlType">
+    <xs:complexContent>
+      <xs:extension base="ControlType"/>
+    </xs:complexContent>
   </xs:complexType>
   <xs:complexType name="ControlType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
@@ -121,8 +105,6 @@
       <xs:element name="Position" type="PositionType"/>
       <xs:element name="Picture" type="FileRefType"/>
       <xs:element name="Action" type="OpenElementType"/>
-      <xs:element name="Pages" type="PagesType"/>
-      <xs:element name="ChildItems" type="ItemsType"/>
       <xs:element name="DataPath" type="xs:string"/>
       <xs:element name="Visible" type="xs:boolean"/>
       <xs:element name="Enabled" type="xs:boolean"/>
@@ -181,15 +163,10 @@
       <xs:element name="Columns" type="OpenElementType"/>
       <xs:element name="Rows" type="OpenElementType"/>
       <xs:element name="Items" type="OpenElementType"/>
+      <xs:group ref="ControlElementGroup"/>
     </xs:choice>
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="id" type="xs:integer"/>
-    <xs:attribute name="rawKey" type="xs:string"/>
-    <xs:attribute name="platformType" type="md:PlatformControlNameType"/>
-    <xs:attribute name="managedEquivalent" type="xs:string"/>
-    <xs:attribute name="page" type="xs:string"/>
-    <xs:attribute name="childCount" type="xs:nonNegativeInteger"/>
-    <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
   <xs:complexType name="PanelType">
     <xs:complexContent>
