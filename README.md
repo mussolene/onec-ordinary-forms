@@ -197,14 +197,11 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 публичный XML все равно должен оставаться чистой объектной моделью, а не
 переименованным сырым потоком.
 
-Текущая строгая проверка 1C использует полный платформенный stream как
-внутренний template, пока writer объектной модели добирается до полностью
-самостоятельной сериализации. После `dump-bin` исходный ordinary `Form.bin`
-переносится из платформенной source-раскладки в quarantine и передается в
-`build-bin` через `--template-bin`. Перед импортом платформой используется
-копия source-раскладки, где публичный ordinary `Ext/Form.xml` и каталог
-`Ext/Form/` удалены; для обычной формы в платформенной раскладке остается
-только `Ext/Form.bin`.
+Текущая строгая проверка 1C выполняется без template/fallback: `build-bin`
+собирает ordinary `Form.bin` из чистого объектного `Form.xml`, `Module.bsl` и
+картинок. Перед импортом платформой используется копия source-раскладки, где
+публичный ordinary `Ext/Form.xml` и каталог `Ext/Form/` удалены; для обычной
+формы в платформенной раскладке остается только `Ext/Form.bin`.
 
 ## Status
 
@@ -216,12 +213,9 @@ Current implementation status:
 - dump readable object-model `Form.xml`;
 - extract `Module.bsl` and picture sidecars;
 - validate `Form.xml` against bundled XSD schemas;
+- build ordinary `Form.bin` back from the named object XML package without
+  template `Form.bin`;
 - scan local EPF/ERF corpora without committing private processors or exports.
-
-The final writer is still under active development. The accepted architecture
-is to build `Form.bin` from the named object XML plus `Module.bsl` and picture
-sidecars. Raw public stream dumps and renamed low-level record trees are not
-part of the target format.
 
 ## Install
 
@@ -263,19 +257,6 @@ Build `Form.bin` back from the object XML package:
 onec-ordinary-forms build-bin \
   --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
   --out-bin scan-output/rebuilt/Form.bin
-```
-
-Current strict 1C validation uses the full platform stream as an internal
-template while the object writer is being completed. After `dump-bin`, move the
-original ordinary `Form.bin` out of the platform source tree and pass it to
-`build-bin`:
-
-```bash
-mv scan-output/exported/Object/Forms/Form/Ext/Form.bin scan-output/quarantine/Form.bin.original
-onec-ordinary-forms build-bin \
-  --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
-  --template-bin scan-output/quarantine/Form.bin.original \
-  --out-bin scan-output/exported/Object/Forms/Form/Ext/Form.bin
 ```
 
 Before platform import, use a copy of the source tree where the public ordinary

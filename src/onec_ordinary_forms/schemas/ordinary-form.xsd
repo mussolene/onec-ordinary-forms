@@ -53,6 +53,7 @@
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="id" type="xs:integer"/>
+    <xs:attribute name="slot" type="xs:integer"/>
   </xs:complexType>
   <xs:complexType name="PagesType">
     <xs:sequence>
@@ -357,6 +358,7 @@
           <xs:element name="Title" type="LocalizedTextType"/>
           <xs:element name="ToolTip" type="LocalizedTextType"/>
           <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Action" type="OpenElementType"/>
           <xs:element name="Visible" type="xs:boolean"/>
           <xs:element name="Enabled" type="xs:boolean"/>
           <xs:element name="ReadOnly" type="xs:boolean"/>
@@ -402,6 +404,7 @@
           <xs:element name="Title" type="LocalizedTextType"/>
           <xs:element name="ToolTip" type="LocalizedTextType"/>
           <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Action" type="OpenElementType"/>
           <xs:element name="Visible" type="xs:boolean"/>
           <xs:element name="Enabled" type="xs:boolean"/>
           <xs:element name="ReadOnly" type="xs:boolean"/>
@@ -1866,6 +1869,7 @@
   </xs:complexType>
   <xs:complexType name="EventType" mixed="true">
     <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="uuid" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PositionType">
     <xs:sequence>

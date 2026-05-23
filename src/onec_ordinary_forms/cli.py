@@ -16,15 +16,13 @@ import json
 from onec_ordinary_forms.corpus import build_corpus_report, write_report
 from onec_ordinary_forms.formbin import (
     build_form_bin_container,
-    parse_form_bin_container,
     pack_form_bin,
     unpack_form_bin,
 )
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
-from onec_ordinary_forms.liststream import dumps_list_out_stream, parse_list_stream_document
-from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
+from onec_ordinary_forms.liststream import parse_list_stream_document
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
-from onec_ordinary_forms.ordinary_stream import apply_geometry_bindings_to_raw, form_stream_from_object_xml
+from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
@@ -352,6 +350,9 @@ def action_binding(item_data: dict | None) -> dict[str, str]:
         ):
             result["uuid"] = value[1]
             result["name"] = clean_token(value[2][1])
+            title = first_localized_text(value[2])
+            if title:
+                result["title"] = title
             return
         for index, child in enumerate(value):
             walk(child)
@@ -644,42 +645,51 @@ def add_semantic_item(
     title = item_title(data.get(raw_key))
     if title:
         add_multilang_text(node, "Title", title)
+    add_back_color(node, item_data)
+    add_font(node, item_data)
     add_geometry(node, item_data, element_index)
     if str(item.get("type", "")) == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
-    if str(item.get("type", "")) == "Button":
-        action = action_binding(item_data)
-        if action:
-            action_node = ET.SubElement(node, "Action")
-            for key, value in action.items():
-                action_node.set(key, value)
+    action = action_binding(item_data) if str(item.get("type", "")) in {"Button", "Label"} else {}
+    if action:
+        action_node = ET.SubElement(node, "Action")
+        for key, value in action.items():
+            action_node.set(key, value)
 
     page_names = data.get(f"{raw_key}/-pages-", [])
-    if page_names:
+    parsed_pages = panel_pages_from_raw(item_data.get("raw") if isinstance(item_data, dict) else None)
+    page_descriptors = (
+        parsed_pages
+        if parsed_pages
+        else [{"name": str(page_name), "title": page_title(data.get(f"{raw_key}/{page_name}"))} for page_name in page_names]
+    )
+    if page_descriptors:
         pages = ET.SubElement(node, "Pages")
-        for page_name in page_names:
+        placed_child_names: set[str] = set()
+        for page_index, page_descriptor in enumerate(page_descriptors):
+            page_name = page_descriptor["name"]
             page_path = f"{raw_key}/{page_name}"
             page = ET.SubElement(pages, "Page")
             page.set("name", str(page_name))
-            title = page_title(data.get(page_path))
+            title = page_descriptor.get("title") or page_title(data.get(page_path))
             if title:
                 add_multilang_text(page, "Title", title)
             page_items = [
                 child
                 for child in children
-                if str(child.get("page", "")) == str(page_name)
+                if child_page_index(data, raw_key, child) == page_index
+                or str(child.get("page", "")) == str(page_name)
                 or str(child.get("page", "")) == page_path
             ]
             page_items_node = page
             for child in page_items:
-                add_semantic_item(page_items_node, child, data, f"{page_path}/{child.get('name', '')}", element_index, asset_root)
+                placed_child_names.add(str(child.get("name", "")))
+                child_key = str(child.get("rawKey") or f"{page_path}/{child.get('name', '')}")
+                add_semantic_item(page_items_node, child, data, child_key, element_index, asset_root)
         loose_children = [
             child
             for child in children
-            if all(
-                str(child.get("page", "")) not in {str(page_name), f"{raw_key}/{page_name}"}
-                for page_name in page_names
-            )
+            if str(child.get("name", "")) not in placed_child_names and child_page_index(data, raw_key, child) is None
         ]
         if loose_children:
             for child in loose_children:
@@ -689,6 +699,113 @@ def add_semantic_item(
         for child in children:
             child_key = str(child.get("rawKey") or f"{raw_key}/{child.get('name', '')}")
             add_semantic_item(node, child, data, child_key, element_index, asset_root)
+
+
+def panel_pages_from_raw(raw: object) -> list[dict[str, str]]:
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return []
+    info = raw[2]
+    if len(info) <= 1 or not isinstance(info[1], list):
+        return []
+    for child in info[1]:
+        if not isinstance(child, list) or len(child) < 3 or clean_token(child[0]) != "1":
+            continue
+        try:
+            count = int(clean_token(child[1]))
+        except ValueError:
+            continue
+        states = [state for state in child[2:] if isinstance(state, list) and state and clean_token(state[0]) == "3"]
+        if count != len(states) or not states:
+            continue
+        result: list[dict[str, str]] = []
+        for state in states:
+            name = clean_token(state[6]) if len(state) > 6 else ""
+            title = first_localized_text(state)
+            if name:
+                result.append({"name": name, "title": title or name})
+        if result:
+            return result
+    return []
+
+
+def first_localized_text(value: object) -> str:
+    if isinstance(value, list):
+        if len(value) >= 3 and clean_token(value[0]) == "1" and clean_token(value[1]) == "1" and isinstance(value[2], list):
+            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
+                return clean_token(value[2][1])
+        for child in value:
+            found = first_localized_text(child)
+            if found:
+                return found
+    return ""
+
+
+def child_page_index(data: dict, parent_raw_key: str, child: dict) -> int | None:
+    child_key = str(child.get("rawKey") or f"{parent_raw_key}/{child.get('name', '')}")
+    child_data = data.get(child_key)
+    if not isinstance(child_data, dict):
+        return None
+    raw = child_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 3 or not isinstance(raw[3], list):
+        return None
+    geometry = raw[3]
+    if len(geometry) < 25:
+        return None
+    try:
+        return int(clean_token(geometry[-5]))
+    except ValueError:
+        return None
+
+
+def add_font(parent: ET.Element, item_data: object) -> None:
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    if len(info) <= 1 or not isinstance(info[1], list) or not info[1] or not isinstance(info[1][0], list):
+        return
+    base = info[1][0]
+    if len(base) <= 4 or not isinstance(base[4], list):
+        return
+    font = base[4]
+    if font == ["6", "3", "0", "1"] or len(font) < 4:
+        return
+    node = ET.SubElement(parent, "Font")
+    node.set("kind", clean_token(font[0]))
+    node.set("family", clean_token(font[1]))
+    node.set("style", clean_token(font[2]))
+    if isinstance(font[3], list):
+        for value in font[3]:
+            delta = ET.SubElement(node, "Delta")
+            delta.text = clean_token(value)
+    for index, value in enumerate(font[4:], start=1):
+        extra = ET.SubElement(node, "Value")
+        extra.set("index", str(index))
+        extra.text = clean_token(value)
+
+
+def add_back_color(parent: ET.Element, item_data: object) -> None:
+    base = base_info_from_item_data(item_data)
+    if base is None or len(base) <= 3 or base[3] == ["3", "4", ["0"]]:
+        return
+    value = base[3]
+    if isinstance(value, list) and len(value) >= 3 and isinstance(value[2], list) and value[2]:
+        node = ET.SubElement(parent, "BackColor")
+        node.text = clean_token(value[2][0])
+
+
+def base_info_from_item_data(item_data: object) -> list[object] | None:
+    if not isinstance(item_data, dict):
+        return None
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return None
+    info = raw[2]
+    if len(info) <= 1 or not isinstance(info[1], list) or not info[1] or not isinstance(info[1][0], list):
+        return None
+    return info[1][0]
 
 
 def add_semantic_pages(
@@ -735,6 +852,7 @@ def dump_xml_from_paths(
     asset_root = out_path.with_suffix("")
 
     module_bytes = module_path.read_bytes() if module_path and module_path.exists() else b""
+    form_root = parse_list_stream_document(form_path.read_text(encoding="utf-8-sig"), allow_trailing=True).value
     elem = json.loads(elem_path.read_text(encoding="utf-8"))
     metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path else None
     object_types = metadata_object_type_map(metadata)
@@ -752,11 +870,19 @@ def dump_xml_from_paths(
         module_out.parent.mkdir(parents=True, exist_ok=True)
         module_out.write_bytes(module_bytes)
 
+    add_form_events(root, form_root)
+
     attrs = ET.SubElement(root, "Attributes")
+    attribute_slots = attribute_slots_from_form_root(form_root)
     for prop in elem.get("props", []):
+        prop_name = str(prop.get("name", ""))
+        if re.fullmatch(r"Attribute\d+", prop_name):
+            continue
         attr = ET.SubElement(attrs, "Attribute")
-        attr.set("name", str(prop.get("name", "")))
+        attr.set("name", prop_name)
         attr.set("id", str(prop.get("id", "")))
+        if prop_name in attribute_slots:
+            attr.set("slot", attribute_slots[prop_name])
         pattern_node = pattern_node_from_prop(prop)
         add_type(attr, pattern_node, object_types)
 
@@ -764,6 +890,55 @@ def dump_xml_from_paths(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     write_pretty_xml(root, out_path)
+
+
+def add_form_events(parent: ET.Element, form_root: object) -> None:
+    if not isinstance(form_root, list) or len(form_root) <= 4 or not isinstance(form_root[4], list):
+        return
+    event_table = form_root[4]
+    if not event_table or clean_token(event_table[0]) not in {"1", str(max(len(event_table) - 1, 0))}:
+        return
+    events_node = ET.SubElement(parent, "Events")
+    for event_record in event_table[1:]:
+        event = event_from_record(event_record)
+        if event:
+            node = ET.SubElement(events_node, "Event")
+            node.set("name", event["name"])
+            node.set("uuid", event["uuid"])
+    if len(events_node) == 0:
+        parent.remove(events_node)
+
+
+def attribute_slots_from_form_root(form_root: object) -> dict[str, str]:
+    if not isinstance(form_root, list) or len(form_root) <= 2 or not isinstance(form_root[2], list):
+        return {}
+    table = form_root[2]
+    if len(table) <= 2 or not isinstance(table[2], list):
+        return {}
+    result: dict[str, str] = {}
+    for record in table[2][1:]:
+        if not isinstance(record, list) or len(record) < 5:
+            continue
+        slot_record = record[0]
+        if isinstance(slot_record, list) and slot_record:
+            result[clean_token(record[4])] = clean_token(slot_record[0])
+    return result
+
+
+def event_from_record(record: object) -> dict[str, str]:
+    if not isinstance(record, list) or len(record) < 3:
+        return {}
+    uuid = clean_token(record[1])
+    payload = record[2]
+    if not isinstance(payload, list) or len(payload) < 2:
+        return {}
+    name = clean_token(payload[1])
+    if not name or not re.fullmatch(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        uuid,
+    ):
+        return {}
+    return {"name": name, "uuid": uuid}
 
 
 def pretty_xml_bytes(root: ET.Element) -> bytes:
@@ -880,203 +1055,12 @@ def build_bin(args: argparse.Namespace) -> None:
     asset_root = Path(args.asset_root) if args.asset_root else xml_path.with_suffix("")
     validate_xml_file(xml_path)
     root = ET.parse(xml_path).getroot()
-    template_bin = Path(args.template_bin) if getattr(args, "template_bin", None) else None
-    if template_bin is not None:
-        form_data, template_created, template_modified = form_stream_from_template(root, template_bin, asset_root)
-    else:
-        form_data = form_stream_from_object_xml(root, asset_root)
-        template_created = None
-        template_modified = None
+    form_data = form_stream_from_object_xml(root, asset_root)
     module_data = module_data_from_xml(root, asset_root)
     created, modified = container_times_from_xml(root)
-    if created is None:
-        created = template_created
-    if modified is None:
-        modified = template_modified
     bin_data = build_form_bin_container(form_data, module_data, created=created, modified=modified)
     out_bin.parent.mkdir(parents=True, exist_ok=True)
     out_bin.write_bytes(bin_data)
-
-
-def form_stream_from_template(root: ET.Element, template_bin: Path, asset_root: Path | None) -> tuple[bytes, int | None, int | None]:
-    container = parse_form_bin_container(template_bin.read_bytes())
-    form_file = next((file for file in container.files if file.name == "form"), None)
-    if form_file is None:
-        raise ValueError(f"Template Form.bin has no form stream: {template_bin}")
-    form_text, has_bom = decode_form_stream_text(form_file.payload)
-    document = parse_list_stream_document(form_text, allow_trailing=True)
-    apply_xml_to_list_stream_model(root, document.value, asset_root)
-    serialized = dumps_list_out_stream(document.value) + document.trailing
-    return encode_form_stream_text(serialized, has_bom), form_file.created, form_file.modified
-
-
-def decode_form_stream_text(data: bytes) -> tuple[str, bool]:
-    has_bom = data.startswith(b"\xef\xbb\xbf")
-    return data.decode("utf-8-sig" if has_bom else "utf-8"), has_bom
-
-
-def encode_form_stream_text(text: str, has_bom: bool) -> bytes:
-    data = text.encode("utf-8")
-    return b"\xef\xbb\xbf" + data if has_bom else data
-
-
-def apply_xml_to_list_stream_model(root: ET.Element, list_stream_root: object, asset_root: Path | None = None) -> None:
-    title = get_multilang_text(root, "Title")
-    if title and first_ru_text(list_stream_root) != title:
-        replace_first_ru_text(list_stream_root, title)
-    controls = raw_controls_by_id(list_stream_root)
-    controls.update({control.object_id: control.raw for control in parse_ordinary_form_model(list_stream_root).flatten()})
-    for element in xml_control_elements(root):
-        object_id = element.get("id", "")
-        raw = controls.get(object_id)
-        if raw is None:
-            continue
-        apply_xml_control_to_raw(element, raw, asset_root)
-
-
-def xml_control_elements(root: ET.Element) -> list[ET.Element]:
-    return [element for element in root.iter() if element.get("id")]
-
-
-def raw_controls_by_id(value: object) -> dict[str, list[object]]:
-    result: dict[str, list[object]] = {}
-    for node in walk_lists(value):
-        if len(node) >= 3 and raw_metadata_record(node) is not None and is_plausible_control_id(node[1]):
-            result[str(node[1])] = node
-    return result
-
-
-def walk_lists(value: object) -> list[list[object]]:
-    result: list[list[object]] = []
-    if isinstance(value, list):
-        result.append(value)
-        for item in value:
-            result.extend(walk_lists(item))
-    return result
-
-
-def is_plausible_control_id(value: object) -> bool:
-    try:
-        int(str(value))
-        return True
-    except ValueError:
-        return False
-
-
-def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root: Path | None = None) -> None:
-    name = element.get("name")
-    if name:
-        metadata = raw_metadata_record(raw)
-        if metadata is not None and len(metadata) > 1 and clean_token(metadata[1]) != name:
-            metadata[1] = quote_form_string_atom(name)
-    title = get_multilang_text(element, "Title")
-    if title and first_ru_text(raw) != title:
-        replace_first_ru_text(raw, title)
-    geometry = element.find("Position")
-    if geometry is not None:
-        raw_geometry = raw_geometry_record(raw)
-        if raw_geometry is not None:
-            for index, name in enumerate(("left", "top", "right", "bottom"), start=1):
-                if name in geometry.attrib:
-                    raw_geometry[index] = geometry.get(name, raw_geometry[index])
-            apply_geometry_bindings_to_raw(geometry, raw_geometry)
-    picture = element.find("Picture")
-    if picture is not None:
-        apply_picture_to_raw(raw, picture, asset_root)
-    action = element.find("Action")
-    if action is not None:
-        apply_action_to_raw(raw, action)
-
-
-def quote_form_string_atom(value: str) -> str:
-    return '"' + quote_form_string(value) + '"'
-
-
-def raw_metadata_record(raw: list[object]) -> list[object] | None:
-    for child in walk_lists(raw):
-        if len(child) >= 2 and str(child[0]) == "14":
-            return child
-    return None
-
-
-def raw_geometry_record(raw: list[object]) -> list[object] | None:
-    if len(raw) > 3 and isinstance(raw[3], list) and len(raw[3]) >= 5:
-        return raw[3]
-    for child in walk_lists(raw):
-        if len(child) >= 5 and str(child[0]) == "8":
-            return child
-    return None
-
-
-def apply_picture_to_raw(raw: list[object], picture: ET.Element, asset_root: Path | None) -> None:
-    file_name = picture.get("file")
-    if not file_name or asset_root is None:
-        return
-    image_path = asset_root / file_name
-    if not image_path.exists():
-        return
-    data = image_path.read_bytes()
-    expected_hash = picture.get("sha256")
-    if expected_hash and sha256_bytes(data) == expected_hash:
-        return
-    payload = "#base64:" + base64.b64encode(data).decode("ascii")
-    replace_first_base64_payload(raw, payload)
-
-
-def apply_action_to_raw(raw: list[object], action: ET.Element) -> None:
-    name = action.get("name")
-    uuid = action.get("uuid")
-    if not name or not uuid:
-        return
-    for child in walk_lists(raw):
-        if (
-            len(child) >= 3
-            and clean_token(child[0]) == "3"
-            and isinstance(child[1], str)
-            and isinstance(child[2], str)
-            and re.fullmatch(
-                r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
-                clean_token(child[2]),
-            )
-        ):
-            child[1] = quote_form_string_atom(name)
-            child[2] = uuid
-            return
-
-
-def replace_first_base64_payload(value: object, payload: str) -> bool:
-    if isinstance(value, list):
-        for index, child in enumerate(value):
-            if isinstance(child, str) and clean_token(child).startswith("#base64:"):
-                value[index] = payload
-                return True
-            if replace_first_base64_payload(child, payload):
-                return True
-    return False
-
-
-def first_ru_text(value: object) -> str:
-    if isinstance(value, list):
-        if len(value) >= 3 and str(value[0]) == "1" and str(value[1]) == "1" and isinstance(value[2], list):
-            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
-                return clean_token(value[2][1])
-        for child in value:
-            found = first_ru_text(child)
-            if found:
-                return found
-    return ""
-
-
-def replace_first_ru_text(value: object, text: str) -> bool:
-    if isinstance(value, list):
-        if len(value) >= 3 and str(value[0]) == "1" and str(value[1]) == "1" and isinstance(value[2], list):
-            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
-                value[2][1] = quote_form_string_atom(text)
-                return True
-        for child in value:
-            if replace_first_ru_text(child, text):
-                return True
-    return False
 
 
 def scan_corpus(args: argparse.Namespace) -> None:
@@ -1131,7 +1115,6 @@ def main() -> None:
     build_bin_parser.add_argument("--xml", required=True, help="Form.xml produced by dump-bin")
     build_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
     build_bin_parser.add_argument("--asset-root", help="Directory with Module.bsl and extracted assets")
-    build_bin_parser.add_argument("--template-bin", help="Original Form.bin moved out of platform source; used as the internal full platform stream template")
     build_bin_parser.set_defaults(func=build_bin)
 
     validate_parser = subparsers.add_parser("validate")

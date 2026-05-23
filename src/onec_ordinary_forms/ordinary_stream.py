@@ -72,30 +72,209 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
     if root.tag != "Form":
         raise ValueError("Expected public ordinary form XML root <Form>")
 
-    stream: list[object] = []
     title = form_title_from_xml(root)
     if not title:
         pages = top_level_pages(root)
         first_page = pages[0] if pages else None
         title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
-    stream.append(localized_text_record(title or "Main"))
 
+    attributes = []
     for attribute in root.findall("./Attributes/Attribute"):
         name = attribute.get("name", "")
         if not name:
             continue
-        stream.append([quoted_atom(name), quoted_atom("Pattern"), type_pattern_from_xml(attribute)])
+        attributes.append(attribute_record_from_xml(attribute))
 
+    controls: list[object] = []
     for page in top_level_pages(root):
-        page_title_value = get_multilang_text(page, "Title") or page.get("name", "")
-        if page_title_value and page_title_value != title:
-            stream.append(localized_text_record(page_title_value))
         for child in page:
             control = control_stream_from_xml(child, asset_root)
             if control:
-                stream.append(control)
+                controls.append(control)
 
-    return dumps_list_out_stream(stream).encode("utf-8")
+    stream = ordinary_form_stream(title or "Main", attributes, controls, events_from_xml(root))
+    return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
+
+
+def ordinary_form_stream(
+    title: str,
+    attributes: list[object],
+    controls: list[object],
+    events: list[object],
+) -> list[object]:
+    return [
+        "27",
+        form_root_record(title, controls),
+        attributes_table(attributes),
+        form_object_info_record(),
+        ["1", *events] if events else ["0"],
+        "1",
+        "4",
+        "1",
+        "0",
+        "0",
+        "0",
+        ["0"],
+        ["0"],
+        ["3", "0", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
+        "1",
+        "2",
+        "0",
+        "0",
+        "1",
+        "1",
+    ]
+
+
+def form_root_record(title: str, controls: list[object]) -> list[object]:
+    root_panel = [
+        ORDINARY_CONTROL_GUID_BY_TYPE["Panel"],
+        root_panel_info(title),
+        ["1", *controls] if len(controls) == 1 else [str(len(controls)), *controls],
+    ]
+    return [
+        "16",
+        [localized_text_record(title), "52", "4294967295"],
+        root_panel,
+        "885",
+        "244",
+        "1",
+        "0",
+        "1",
+        "4",
+        "4",
+        "6",
+    ]
+
+
+def root_panel_info(title: str) -> list[object]:
+    return [
+        "1",
+        [
+            panel_base_info_record(),
+            "21",
+            "0",
+            "1",
+            ["0", "19", "1"],
+            "0",
+            "1",
+            ["0", "19", "3"],
+            "0",
+            "0",
+            ["3", "1", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
+            "0",
+            "1",
+            ["1", "1", ["3", localized_text_record("Страница1"), ["3", "0", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]], "-1", "1", "1", quoted_atom("Страница1"), "1"]],
+            "1",
+            "1",
+            "0",
+            "4",
+            ["2", "8", "1", "1", "1", "0", "0", "0", "0"],
+            ["2", "8", "0", "1", "2", "0", "0", "0", "0"],
+            ["2", "877", "1", "1", "3", "0", "0", "8", "0"],
+            ["2", "236", "0", "1", "4", "0", "0", "8", "0"],
+            "0",
+            "4294967295",
+            "5",
+            "64",
+            "0",
+        ],
+        ["0"],
+    ]
+
+
+def panel_base_info_record() -> list[object]:
+    return base_info_record_from_xml(None)
+
+
+def base_info_record_from_xml(element: ET.Element | None) -> list[object]:
+    back_color = ["3", "4", ["0"]]
+    if element is not None:
+        back_color_node = element.find("BackColor")
+        if back_color_node is not None and back_color_node.text:
+            back_color = ["3", "3", [back_color_node.text]]
+    return [
+        "10",
+        "1",
+        ["3", "4", ["0"]],
+        back_color,
+        font_record_from_xml(element.find("Font") if element is not None else None),
+        "0",
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "3", ["-7"]],
+        ["3", "3", ["-21"]],
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["1", "0"],
+    ]
+
+
+def font_record_from_xml(font: ET.Element | None) -> list[object]:
+    if font is None:
+        return ["6", "3", "0", "1"]
+    result: list[object] = [font.get("kind", "6"), font.get("family", "3"), font.get("style", "0")]
+    deltas = [delta.text or "0" for delta in font.findall("Delta")]
+    result.append(deltas if deltas else ["0"])
+    for value in font.findall("Value"):
+        result.append(value.text or "0")
+    return result
+
+
+def attributes_table(attributes: list[object]) -> list[object]:
+    max_slot = 0
+    for attribute in attributes:
+        if isinstance(attribute, list) and attribute and isinstance(attribute[0], list) and attribute[0]:
+            try:
+                max_slot = max(max_slot, int(str(attribute[0][0])))
+            except ValueError:
+                pass
+    return [["1"], str(max_slot + 1 if attributes else 0), ["3", *attributes], ["0"]]
+
+
+def attribute_record_from_xml(attribute: ET.Element) -> list[object]:
+    object_id = attribute.get("id", "0")
+    visible_id = attribute.get("slot") or object_id
+    pattern = type_pattern_from_xml(attribute)
+    type_record: list[object] = [quoted_atom("Pattern")]
+    if pattern:
+        type_record.append(pattern)
+    return [
+        [visible_id],
+        "0",
+        "0",
+        "1",
+        quoted_atom(attribute.get("name", "")),
+        type_record,
+    ]
+
+
+def form_object_info_record() -> list[object]:
+    return ["59d6c227-97d3-46f6-84a0-584c5a2807e1", "1", ["2", "0", ["0", "0"], ["0"], "1"]]
+
+
+def events_from_xml(root: ET.Element) -> list[object]:
+    result: list[object] = []
+    for event in root.findall("./Events/Event"):
+        name = event.get("name")
+        uuid = event.get("uuid")
+        if not name or not uuid:
+            continue
+        result.append(["70001", uuid, ["3", quoted_atom(name), event_descriptor(name)]])
+    return result
+
+
+def event_descriptor(name: str, title: str | None = None) -> list[object]:
+    title = title or name.replace("ПриОткрытии", "При открытии")
+    return [
+        "1",
+        quoted_atom(name),
+        localized_text_record(title),
+        localized_text_record(title),
+        localized_text_record(title),
+        ["3", "0", ["0"], '""', "-1", "-1", "1", "0"],
+        ["0", "0", "0"],
+    ]
 
 
 def form_title_from_xml(root: ET.Element) -> str:
@@ -132,10 +311,10 @@ def type_pattern_from_xml(attribute: ET.Element) -> list[object]:
         code = item.get("code", "")
         if not code:
             continue
-        result.append(quoted_atom(code) if not is_numeric_atom(code) and code != "#" else code)
+        result.append(quoted_atom(code) if not is_numeric_atom(code) else code)
         uuid = item.get("uuid")
         if code == "#" and uuid:
-            result.append(quoted_atom(uuid))
+            result.append(uuid)
     return result
 
 
@@ -148,6 +327,15 @@ def is_numeric_atom(value: str) -> bool:
 
 
 def control_stream_from_xml(element: ET.Element, asset_root: Path | None) -> list[object] | None:
+    return control_stream_from_xml_with_page(element, asset_root, None, None)
+
+
+def control_stream_from_xml_with_page(
+    element: ET.Element,
+    asset_root: Path | None,
+    page_index: int | None,
+    page_order: int | None,
+) -> list[object] | None:
     control_type = control_type_from_xml_tag(element.tag)
     if not control_type:
         return None
@@ -157,20 +345,26 @@ def control_stream_from_xml(element: ET.Element, asset_root: Path | None) -> lis
     object_id = required_control_id(element)
     name = required_control_name(element)
     info = control_info_from_xml(element, name, control_type, asset_root)
-    geometry = geometry_stream_from_xml(element.find("Position"))
+    geometry = geometry_stream_from_xml(element.find("Position"), page_index, page_order)
     metadata = ["14", quoted_atom(name), "4294967295", "0", "0", "0"]
     children: list[object] = []
     for child in element:
-        child_stream = control_stream_from_xml(child, asset_root)
+        child_stream = control_stream_from_xml_with_page(child, asset_root, None, None)
         if child_stream:
             children.append(child_stream)
     pages = element.find("Pages")
     if pages is not None:
-        for page in pages.findall("Page"):
+        page_children: list[tuple[int, list[object]]] = []
+        for page_number, page in enumerate(pages.findall("Page")):
+            page_child_order = 0
             for child in page:
-                child_stream = control_stream_from_xml(child, asset_root)
+                if not control_type_from_xml_tag(child.tag):
+                    continue
+                child_stream = control_stream_from_xml_with_page(child, asset_root, page_number, page_child_order)
                 if child_stream:
-                    children.append(child_stream)
+                    page_children.append((int(child_stream[1]), child_stream))
+                    page_child_order += 1
+        children.extend(child for _, child in sorted(page_children, key=lambda item: item[0]))
     child_table: list[object] = [str(len(children)), *children]
     return [class_id, object_id, info, geometry, metadata, child_table]
 
@@ -201,20 +395,191 @@ def required_control_name(element: ET.Element) -> str:
 
 
 def control_info_from_xml(element: ET.Element, name: str, control_type: str, asset_root: Path | None) -> list[object]:
-    values: list[object] = ["1"]
     title = get_multilang_text(element, "Title")
-    if title:
-        values.append(localized_text_record(title))
+    title_record = localized_text_record(title or name)
+    action = element.find("Action")
+    actions = action_table_from_xml(action)
+    if control_type == "Panel":
+        return panel_control_info_from_xml(element, title_record)
+    if control_type == "Button":
+        return button_control_info(title_record, actions)
     if control_type == "Image":
         picture_payload = picture_payload_from_xml(element.find("Picture"), asset_root)
-        if picture_payload:
-            values.append(quoted_atom(picture_payload))
-    action = element.find("Action")
-    if action is not None and action.get("name"):
-        values.append(["3", quoted_atom(action.get("name", "")), action.get("uuid", "")])
-    if len(values) == 1:
-        values.append(localized_text_record(name))
-    return values
+        return image_control_info(title_record, picture_payload)
+    return label_control_info(element, title_record, actions)
+
+
+def panel_control_info_from_xml(element: ET.Element, title_record: list[object]) -> list[object]:
+    child_count = len([child for child in element if control_type_from_xml_tag(child.tag)])
+    pages = element.find("Pages")
+    page_nodes = pages.findall("Page") if pages is not None else []
+    page_count = len(page_nodes) or 1
+    right = element.find("Position").get("right", "877") if element.find("Position") is not None else "877"
+    bottom = element.find("Position").get("bottom", "236") if element.find("Position") is not None else "236"
+    width = str(max(int(right) - 12, 0)) if right.isdigit() else right
+    height = str(max(int(bottom) - 30, 0)) if bottom.isdigit() else bottom
+    state_table = panel_state_table(element, title_record)
+    position_records = panel_position_records(page_count, width, height)
+    return [
+        "1",
+        [
+            base_info_record_from_xml(element),
+            "21",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            ["3", "1", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
+            "1",
+            "1",
+            state_table,
+            "1",
+            "1",
+            "0",
+            str(len(position_records)),
+            *position_records,
+            "0",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "5",
+            "64",
+            "0",
+        ],
+        ["0"],
+    ]
+
+
+def panel_state_table(element: ET.Element, fallback_title: list[object]) -> list[object]:
+    pages = element.find("Pages")
+    page_nodes = pages.findall("Page") if pages is not None else []
+    if not page_nodes:
+        name = element.get("name", "Страница1")
+        return ["1", "1", ["3", fallback_title, ["3", "0", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]], "-1", "1", "1", quoted_atom(name), "1"]]
+    states: list[object] = []
+    for page in page_nodes:
+        name = page.get("name", "Страница1")
+        title = get_multilang_text(page, "Title") or name
+        states.append(
+            [
+                "3",
+                localized_text_record(title),
+                ["3", "0", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
+                "-1",
+                "1",
+                "1",
+                quoted_atom(name),
+                "1",
+            ]
+        )
+    return ["1", str(len(states)), *states]
+
+
+def panel_position_records(page_count: int, width: str, height: str) -> list[list[object]]:
+    records: list[list[object]] = []
+    for page_index in range(page_count):
+        page_width = width
+        page_height = height
+        horizontal_mode = "2"
+        vertical_mode = "2"
+        if page_count > 1 and page_index == page_count - 1 and width.isdigit() and height.isdigit():
+            page_width = str(max(int(width) - 2, 0))
+            page_height = str(max(int(height) - 2, 0))
+            horizontal_mode = "4"
+            vertical_mode = "4"
+        records.extend(
+            [
+                ["2", "6", "1", "1", "1", str(page_index), "0", "0", "0"],
+                ["2", "6", "0", "1", "2", str(page_index), "0", "0", "0"],
+                ["2", page_width, "1", "1", "3", str(page_index), "0", horizontal_mode, "0"],
+                ["2", page_height, "0", "1", "4", str(page_index), "0", vertical_mode, "0"],
+            ]
+        )
+    return records
+
+
+def label_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
+    return [
+        "3",
+        [
+            base_info_record_from_xml(element),
+            "7",
+            title_record,
+            "4",
+            "1",
+            "1" if actions else "0",
+            "0",
+            "0",
+            ["0", "0", "0"],
+            "0",
+            ["1", "0"],
+            "1",
+            ["3", "4", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
+            "4",
+        ],
+        ["1", *actions] if actions else ["0"],
+    ]
+
+
+def button_control_info(title_record: list[object], actions: list[object]) -> list[object]:
+    return [
+        "1",
+        [
+            button_base_info_record(),
+            "10",
+            title_record,
+            "1",
+            "1",
+            "0",
+            "0",
+            "0",
+            ["3", "0", ["0"], '""', "-1", "-1", "1", "0"],
+            ["0", "0", "0"],
+            "0",
+            "0",
+        ],
+        ["1", *actions] if actions else ["0"],
+    ]
+
+
+def image_control_info(title_record: list[object], picture_payload: str) -> list[object]:
+    picture_record = ["3", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload if picture_payload else '""']], "0"]
+    return [
+        "1",
+        [
+            base_info_record_from_xml(None),
+            "15",
+            "2",
+            "0",
+            picture_record,
+            ["0", "0", "0"],
+            "1",
+            "1",
+            "0",
+            "0",
+            ["1", "0"],
+        ],
+        ["0"],
+    ]
+
+
+def button_base_info_record() -> list[object]:
+    base = base_info_record_from_xml(None)
+    base[5] = "1"
+    return base
+
+
+def action_table_from_xml(action: ET.Element | None) -> list[object]:
+    if action is None or not action.get("name") or not action.get("uuid"):
+        return []
+    name = action.get("name", "")
+    uuid = action.get("uuid", "")
+    title = action.get("title") or name
+    return [["0", uuid, ["3", quoted_atom(name), event_descriptor(name, title)]]]
 
 
 def picture_payload_from_xml(picture: ET.Element | None, asset_root: Path | None) -> str:
@@ -226,10 +591,20 @@ def picture_payload_from_xml(picture: ET.Element | None, asset_root: Path | None
     image_path = asset_root / file_name
     if not image_path.exists():
         return ""
-    return "#base64:" + base64.b64encode(image_path.read_bytes()).decode("ascii")
+    return wrap_base64_payload(base64.b64encode(image_path.read_bytes()).decode("ascii"))
 
 
-def geometry_stream_from_xml(position: ET.Element | None) -> list[object]:
+def wrap_base64_payload(payload: str) -> str:
+    lines = ["#base64:" + payload[:64]]
+    lines.extend(payload[index : index + 64] for index in range(64, len(payload), 64))
+    return "\r\n\r\n".join(lines)
+
+
+def geometry_stream_from_xml(
+    position: ET.Element | None,
+    page_index: int | None = None,
+    page_order: int | None = None,
+) -> list[object]:
     left = position.get("left", "0") if position is not None else "0"
     top = position.get("top", "0") if position is not None else "0"
     right = position.get("right", "0") if position is not None else "0"
@@ -263,7 +638,27 @@ def geometry_stream_from_xml(position: ET.Element | None) -> list[object]:
                         index = -1
                     if 0 <= index < len(dimensions):
                         dimensions[index] = dimension_binding_to_raw(binding)
-    return ["8", left, top, right, bottom, "0", *bindings, "0", *dimensions]
+    if page_index is None or page_order is None:
+        return ["8", left, top, right, bottom, "1", *bindings, "0", *dimensions, "0", "0", "0", "1", "0", "0"]
+    return [
+        "8",
+        left,
+        top,
+        right,
+        bottom,
+        "1",
+        *bindings,
+        "1",
+        *dimensions,
+        "0",
+        "0",
+        "0",
+        str(page_index),
+        str(page_order),
+        str(page_order + 1),
+        "0",
+        "0",
+    ]
 
 
 def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[object]) -> None:
