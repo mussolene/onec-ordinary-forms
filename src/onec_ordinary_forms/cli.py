@@ -868,6 +868,10 @@ def dump_xml_from_paths(
 
     form_structure = ET.SubElement(root, "FormStructure")
     add_semantic_pages(form_structure, elem, element_index, asset_root)
+    platform_records = ET.SubElement(root, "PlatformRecords")
+    platform_records.set("format", "cf_form_records8")
+    platform_records.set("source", "platform")
+    platform_value_to_xml(platform_records, "FormRecord", parse_list_stream_document(form_text, allow_trailing=True).value, asset_root)
     source.set("modelSha256", semantic_model_hash(root))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -891,7 +895,7 @@ def write_pretty_xml(root: ET.Element, path: Path) -> None:
 
 def semantic_model_hash(root: ET.Element) -> str:
     model = ET.Element("SemanticModel")
-    for tag in ("Properties", "Attributes", "Commands", "FormStructure"):
+    for tag in ("Properties", "Attributes", "Commands", "FormStructure", "PlatformRecords"):
         child = root.find(tag)
         if child is not None:
             model.append(clone_without_blank_text(child))
@@ -984,6 +988,69 @@ def module_data_from_xml(root: ET.Element, asset_root: Path) -> bytes:
     return module_path.read_bytes()
 
 
+def platform_value_to_xml(parent: ET.Element, tag: str, value: object, asset_root: Path) -> ET.Element:
+    node = ET.SubElement(parent, tag)
+    if isinstance(value, list):
+        node.set("kind", "list")
+        node.set("count", str(len(value)))
+        for index, child in enumerate(value, start=1):
+            child_node = platform_value_to_xml(node, "Field", child, asset_root)
+            child_node.set("index", str(index))
+        return node
+
+    atom = str(value)
+    clean = clean_token(atom)
+    if clean.startswith("#base64:"):
+        rel_path = find_asset_for_base64(clean[8:], asset_root)
+        node.set("kind", "picture")
+        if rel_path:
+            node.set("file", rel_path)
+        node.set("sha256", sha256_bytes(base64.b64decode(clean[8:])))
+        return node
+    node.set("kind", "atom")
+    node.set("text", atom)
+    return node
+
+
+def find_asset_for_base64(payload: str, asset_root: Path) -> str:
+    try:
+        data = base64.b64decode(payload)
+    except Exception:
+        return ""
+    digest = sha256_bytes(data)
+    if not asset_root.exists():
+        return ""
+    for path in asset_root.rglob("*"):
+        if path.is_file() and sha256_bytes(path.read_bytes()) == digest:
+            return path.relative_to(asset_root).as_posix()
+    return ""
+
+
+def platform_value_from_xml(node: ET.Element, asset_root: Path | None = None) -> object:
+    kind = node.get("kind", "atom")
+    if kind == "list":
+        fields = sorted(node.findall("Field"), key=lambda item: int(item.get("index", "0")))
+        return [platform_value_from_xml(field, asset_root) for field in fields]
+    if kind == "picture":
+        file_name = node.get("file", "")
+        if not file_name or asset_root is None:
+            return quoted_atom("#base64:")
+        image_path = asset_root / file_name
+        return "#base64:" + wrap_platform_base64(base64.b64encode(image_path.read_bytes()).decode("ascii"))
+    return node.get("text", "")
+
+
+def wrap_platform_base64(payload: str) -> str:
+    return "\n\n".join(textwrap.wrap(payload, 64))
+
+
+def platform_form_record_from_xml(root: ET.Element, asset_root: Path | None = None) -> object | None:
+    record = root.find("./PlatformRecords/FormRecord")
+    if record is None:
+        return None
+    return platform_value_from_xml(record, asset_root)
+
+
 def container_times_from_xml(root: ET.Element) -> tuple[int | None, int | None]:
     source = root.find("./Source")
     if source is None:
@@ -1005,7 +1072,12 @@ def build_bin(args: argparse.Namespace) -> None:
     out_bin = Path(args.out_bin)
     asset_root = Path(args.asset_root) if args.asset_root else xml_path.with_suffix("")
     root = ET.parse(xml_path).getroot()
-    form_data = form_stream_from_object_xml(root, asset_root)
+    platform_record = platform_form_record_from_xml(root, asset_root)
+    if platform_record is not None:
+        apply_xml_to_list_stream_model(root, platform_record, asset_root)
+        form_data = dumps_list_out_stream(platform_record).encode("utf-8")
+    else:
+        form_data = form_stream_from_object_xml(root, asset_root)
     module_data = module_data_from_xml(root, asset_root)
     created, modified = container_times_from_xml(root)
     bin_data = build_form_bin_container(form_data, module_data, created=created, modified=modified)
@@ -1021,33 +1093,184 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
     back into the platform ListOutStream representation.
     """
 
-    stream: list[object] = []
     title = get_multilang_text(root.find("./Properties"), "Title")
     if not title:
         first_page = root.find("./FormStructure/Pages/Page")
         title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
-    stream.append(localized_text_record(title or "Main"))
+    title = title or "Main"
 
+    attributes: list[object] = []
     for attribute in root.findall("./Attributes/Attribute"):
         name = attribute.get("name", "")
         if not name:
             continue
-        stream.append([quoted_atom(name), quoted_atom("Pattern"), type_pattern_from_xml(attribute)])
+        attributes.append([quoted_atom(name), quoted_atom("Pattern"), type_pattern_from_xml(attribute)])
 
     next_id = next_control_id(root)
+    top_controls: list[object] = []
     pages = root.findall("./FormStructure/Pages/Page")
     for page in pages:
-        page_title_value = get_multilang_text(page, "Title") or page.get("name", "")
-        if page_title_value and page_title_value != title:
-            stream.append(localized_text_record(page_title_value))
         items = page.find("Items")
         if items is not None:
             for child in items:
                 control, next_id = control_stream_from_xml(child, asset_root, next_id)
                 if control:
-                    stream.append(control)
+                    top_controls.append(control)
 
+    stream = platform_form_stream(title, attributes, top_controls)
     return dumps_list_out_stream(stream).encode("utf-8")
+
+
+def platform_form_stream(title: str, attributes: list[object], top_controls: list[object]) -> list[object]:
+    """Build the outer ordinary-form platform descriptor.
+
+    1C ordinary forms do not store controls as direct root list items.  The
+    controls are nested under the form descriptor record that the 8.2 runtime
+    exposes as cf_form_controls8/cf_form_controls_position8/cf_form_controls_info8.
+    This function is the internal bridge from the public XML object model to the
+    platform ListOutStream object graph.
+    """
+
+    width, height = form_extent(top_controls)
+    root_control = top_controls[0] if top_controls else default_root_panel(width, height)
+    root_control_type = str(root_control[0]) if root_control else ORDINARY_CONTROL_GUID_BY_TYPE["Panel"]
+    form_descriptor = [
+        "18",
+        [localized_text_record(title), "52", "4294967295"],
+        [
+            root_control_type,
+            default_form_control_info(root_control, title),
+            [str(len(top_controls)), *top_controls],
+        ],
+        str(width),
+        str(height),
+        "1",
+        "0",
+        "1",
+        "4",
+        "4",
+        "7",
+        str(width),
+        str(height),
+        "96",
+    ]
+    return [
+        "27",
+        form_descriptor,
+        *attributes,
+        "1",
+        "4",
+        "1",
+        "0",
+        "0",
+        "0",
+        ["0"],
+        ["0"],
+        default_form_layout_record(),
+        "1",
+        "2",
+        "0",
+        "0",
+        "1",
+        "1",
+    ]
+
+
+def form_extent(top_controls: list[object]) -> tuple[int, int]:
+    max_right = 640
+    max_bottom = 480
+    for control in top_controls:
+        geometry = control[3] if isinstance(control, list) and len(control) > 3 else None
+        if not isinstance(geometry, list) or len(geometry) < 5:
+            continue
+        try:
+            max_right = max(max_right, int(str(geometry[3])) + 8)
+            max_bottom = max(max_bottom, int(str(geometry[4])) + 8)
+        except ValueError:
+            continue
+    return max_right, max_bottom
+
+
+def default_root_panel(width: int, height: int) -> list[object]:
+    class_id = ORDINARY_CONTROL_GUID_BY_TYPE["Panel"]
+    return [
+        class_id,
+        "1",
+        default_form_control_info(None, "Main"),
+        ["8", "0", "0", str(width), str(height), "1", *["0"] * 6, "0", *["0"] * 4, "0", "0", "0", "0"],
+        ["14", quoted_atom("Main"), "4294967295", "0", "0", "0"],
+        ["0"],
+    ]
+
+
+def default_form_control_info(root_control: object | None, title: str) -> list[object]:
+    object_id = "1"
+    if isinstance(root_control, list) and len(root_control) > 1:
+        object_id = str(root_control[1])
+    return [
+        "1",
+        [
+            [
+                object_id,
+                "1",
+                ["4", "4", ["0"], "4"],
+                ["4", "4", ["0"], "4"],
+                ["8", "3", "0", "1", "100"],
+                "0",
+                ["4", "4", ["0"], "4"],
+                ["4", "4", ["0"], "4"],
+                ["4", "4", ["0"], "4"],
+                ["4", "3", ["-7"], "3"],
+                ["4", "3", ["-21"], "3"],
+                ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+                ["1", "0"],
+                "0",
+                "0",
+                "100",
+                "2",
+                "2",
+                "1",
+                "2",
+                ["4", "4", ["0"], "4"],
+            ],
+            "26",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            default_form_layout_record(),
+            "1",
+            "1",
+            ["1", "1", ["6", localized_text_record(title), default_form_layout_record(), "-1", "1", "1", quoted_atom(title), "1"]],
+            "1",
+            "1",
+            "0",
+            "4",
+            ["2", "8", "1", "1", "1", "0", "0", "0", "0"],
+            ["2", "8", "0", "1", "2", "0", "0", "0", "0"],
+            ["2", "640", "1", "1", "3", "0", "0", "8", "0"],
+            ["2", "480", "0", "1", "4", "0", "0", "8", "0"],
+            "0",
+            "4294967295",
+            "5",
+            "64",
+            "0",
+            ["4", "4", ["0"], "4"],
+            "0",
+            "0",
+            "57",
+            "0",
+            "0",
+        ],
+        ["0"],
+    ]
+
+
+def default_form_layout_record() -> list[object]:
+    empty_style = ["4", "0", ["0"], quoted_atom(""), "-1", "-1", "1", "0", quoted_atom("")]
+    return ["10", "1", empty_style, empty_style, empty_style, "100", "0", "0", "0", "0", "0"]
 
 
 def localized_text_record(text: str) -> list[object]:

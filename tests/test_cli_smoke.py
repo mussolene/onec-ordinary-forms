@@ -399,6 +399,8 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn('modeName="edgeToEdge"', xml)
             self.assertIn('relation="targetEdgeOffset"', xml)
             self.assertIn('offset="10"', xml)
+            self.assertIn("<PlatformRecords", xml)
+            self.assertIn("<FormRecord", xml)
             self.assertNotIn('offsetType=', xml)
             self.assertNotIn("<ListStream", xml)
             self.assertNotIn("<FormBin", xml)
@@ -472,6 +474,7 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn('file="Items/Image1/Picture.gif"', xml)
             self.assertNotIn("Procedure Run", xml)
             self.assertNotIn(picture, xml)
+            self.assertNotIn("#base64", xml)
 
     def test_build_bin_writes_control_xml_edits_into_list_stream(self) -> None:
         with TemporaryDirectory() as temp_dir:
