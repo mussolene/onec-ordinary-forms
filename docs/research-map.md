@@ -96,8 +96,28 @@ a stronger conclusion.
 
 ## Validation Tooling Notes
 
-Primary validation should use `ibcmd` because it is platform tooling and does
-not require the source layout assumptions that `vrunner`/Vanessa use.
+Primary container validation should use platform tooling and should match the
+layer being checked.
+
+For ordinary `Form.bin` writer work, `ibcmd config load` plus
+`ibcmd config check` is not strict enough: it can accept an EPF whose ordinary
+form later fails with "Ошибка формата потока". The stricter platform check is:
+
+```bash
+. .agent/local/nethasp.env
+tools/platform_validate_epf.sh /path/to/processor.epf
+```
+
+That helper runs Designer batch mode in the 8.5 amd64 container and executes
+`/DumpExternalDataProcessorOrReportToFiles`. This command reads the external
+processor and deserializes ordinary `Ext/Form.bin` deeply enough to reject a
+malformed list stream.
+
+The matching platform writer for external processor XML is
+`/LoadExternalDataProcessorOrReportFromFiles`. A platform dump loaded with that
+command and then dumped again should validate cleanly. This pair is useful as a
+reference behavior check, while the repository still owns its own editable
+ordinary-form XML model.
 
 Useful fallback knowledge:
 
@@ -148,6 +168,42 @@ concepts.
   formatting and picture handling.
 - `pack.so`, `xml2.so`, `crcore.so`, `core85.so`, `wbase.so`: stream/container
   infrastructure.
+
+Observed with `LD_DEBUG=libs,files` during both
+`/DumpExternalDataProcessorOrReportToFiles` and
+`/LoadExternalDataProcessorOrReportFromFiles`, the important modules initialize
+in the same order:
+
+1. `core85.so`, `coreui85.so`
+2. `xml2.so`, `xdto.so`, `pack.so`
+3. `frmcore.so`, `dsgnfrm.so`, `dsgncmd.so`
+4. `fmtd.so`, `fmtdcmn.so`, `bsl.so`
+5. `mngcore.so`, `scheme.so`, `mngbase.so`, `mngui.so`, `mngdsgn.so`
+6. `config.so`, `crcore.so`
+
+Symbol and resource inspection confirms the split of responsibilities:
+
+- `core85.so` defines `ListInStream`, `ListOutStream`, `GenericValue`,
+  `TypeDomainPattern`, `CompositeID`, and typed serializers such as
+  `Font`, `Color`, `V8Border`, `V8Line`, `ShortCut`, `LocalWString`.
+- `mngui.so` and `config.so` import `ListInStream`/`ListOutStream` and the
+  core typed serializers. They also contain many form/property resource names.
+- `dsgnfrm` resources contain form designer dialogs, `controls.png`, and
+  ordinary form designer property identifiers such as `IDS_PROPERTY_NAME`,
+  `IDS_PROPERTY_TYPE`, `IDS_PROPERTY_LENGHT`, `IDS_PROPERTY_PRECISION`,
+  `IDS_PROPERTY_DATE_TIME_MODE`, and `IDS_PROPERTY_FILL_CHECK`.
+- `mngui` resources contain the managed/logical form vocabulary for shared
+  form controls: `IDS_FIELDKIND_TEXT`, `IDS_FIELDKIND_INPUT`,
+  `IDS_FIELDKIND_CHECKBOX`, `IDS_FIELDKIND_IMAGE`,
+  `IDS_FIELDKIND_RADIOBUTTONS`, `IDS_FIELDKIND_MOXEL`,
+  `IDS_FIELDKIND_TEXTDOC`, `IDS_FIELDKIND_CALENDAR`,
+  `IDS_FIELDKIND_PROGRESSBAR`, `IDS_FIELDKIND_TRACKBAR`,
+  `IDS_FIELDKIND_CHART`, `IDS_FIELDKIND_GANTTCHART`,
+  `IDS_FIELDKIND_DENDROGRAM`, `IDS_GROUPKIND_*`, and `IDS_BUTTONREPRES_*`.
+- `config` resources include XCF command/resource files such as `model.xdto`,
+  `mobileApp.xsd`, `mobileForm.xsd`, and `xcf_dump_info.xsd`, but the platform
+  XML export still keeps ordinary forms as `Ext/Form.bin`; there is no observed
+  public ordinary-form object-model XML schema emitted by platform export.
 
 Suggested inspection order:
 
