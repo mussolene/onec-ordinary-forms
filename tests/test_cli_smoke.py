@@ -18,6 +18,7 @@ from onec_ordinary_forms.liststream import dumps, dumps_list_out_stream, parse_l
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
+from onec_ordinary_forms.ordinary_stream import PLATFORM_RECORD_TYPE_IDS, form_stream_from_object_xml
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
@@ -301,6 +302,27 @@ class CliSmokeTest(unittest.TestCase):
         apply_geometry_bindings_to_raw(geometry, raw_geometry)
 
         self.assertEqual(raw_geometry[13], ["0", "20", "1"])
+
+    def test_stream_writer_uses_known_platform_record_type_ids(self) -> None:
+        self.assertEqual(PLATFORM_RECORD_TYPE_IDS["controls"], 0x2500)
+        self.assertEqual(PLATFORM_RECORD_TYPE_IDS["position"], 0x5500)
+        self.assertEqual(PLATFORM_RECORD_TYPE_IDS["info"], 0x9D00)
+
+    def test_stream_writer_requires_explicit_control_id(self) -> None:
+        root = ET.fromstring(
+            """
+            <Form version="0.1">
+              <Pages>
+                <Page name="Main">
+                  <Button name="Run"/>
+                </Page>
+              </Pages>
+            </Form>
+            """
+        )
+
+        with self.assertRaisesRegex(ValueError, "explicit id"):
+            form_stream_from_object_xml(root)
 
     def test_extract_elem_json_from_bracket_stream(self) -> None:
         bracket = """

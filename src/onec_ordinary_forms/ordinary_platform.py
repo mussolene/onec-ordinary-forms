@@ -10,6 +10,11 @@ stable bridge between list-stream nodes and the editable XML object model.
 from __future__ import annotations
 
 
+CF_FORM_CONTROLS8_TYPE_ID = 0x2500
+CF_FORM_CONTROLS_POSITION8_TYPE_ID = 0x5500
+CF_FORM_CONTROLS_INFO8_TYPE_ID = 0x9D00
+
+
 ORDINARY_CONTROL_CLASS_BY_GUID = {
     "09ccdc77-ea1a-4a6d-ab1c-3435eada2433": "Panel",
     "0fc7e20d-f241-460c-bdf4-5ad88e5474a5": "Label",
