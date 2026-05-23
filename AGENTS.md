@@ -81,3 +81,83 @@ Hard rules:
 - If a command fails because the local environment lacks license, container, or
   platform prerequisites, ingest the failure as evidence and checkpoint the
   blocked state instead of silently skipping validation.
+
+## Ordinary Form Target Architecture / Целевая архитектура обычных форм
+
+### English
+
+This repository builds a Git-friendly source representation for 1C ordinary
+forms. The goal is to make ordinary forms look and behave like managed forms in
+source control:
+
+```text
+Forms/<FormName>/Ext/Form.xml
+Forms/<FormName>/Ext/Form/Module.bsl
+Forms/<FormName>/Ext/Form/Items/<ElementName>/Picture.gif
+```
+
+`Form.xml` is the public editable object model. It must contain named form
+objects and properties: `Form`, `Properties`, `Attributes`, `Commands`,
+`Events`, `ChildItems`, `Panel`, `Button`, `LabelDecoration`,
+`PictureDecoration`, `InputField`, `Position`, `Bindings`, and other
+platform-derived control/property names. It should be understandable to a 1C
+developer in the same way managed-form XML is understandable.
+
+The ordinary form binary internals are implementation details. The parser and
+writer may internally decode and encode 1C list-stream/bracket data and the
+platform records known from 8.2.19 as `cf_form_controls8`,
+`cf_form_controls_position8`, and `cf_form_controls_info8`. Those records are
+the codec layer, not the public XML format.
+
+Hard public XML rule: never expose raw or indexed platform data under any name.
+Do not add `ObjectModel`, `ListStream`, `BracketStream`, `FormBin`,
+`LogicalStream`, `RawBracket`, `PlatformRecords`, `Field kind="list"`,
+`Field kind="atom"`, base64 source streams, binary placeholders, or any
+equivalent renamed dump/fallback/lossless structure. Passing platform validation
+is not enough if the public XML is just a renamed raw stream dump.
+
+If a low-level value is required for correct rebuild, promote it into a named,
+schema-backed object-model concept: a control, property, event, command,
+binding, picture reference, type descriptor, or other platform-derived public
+property. The serializer must map that named XML back to the internal platform
+records and then write the platform ListOutStream/Form.bin.
+
+### Русский
+
+Этот репозиторий делает человекочитаемое и удобное для Git представление
+обычных форм 1С. Цель - чтобы обычные формы в исходниках выглядели и
+использовались максимально похоже на управляемые формы:
+
+```text
+Forms/<ИмяФормы>/Ext/Form.xml
+Forms/<ИмяФормы>/Ext/Form/Module.bsl
+Forms/<ИмяФормы>/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
+```
+
+`Form.xml` - это публичная редактируемая объектная модель. В нем должны быть
+именованные объекты и свойства формы: `Form`, `Properties`, `Attributes`,
+`Commands`, `Events`, `ChildItems`, `Panel`, `Button`, `LabelDecoration`,
+`PictureDecoration`, `InputField`, `Position`, `Bindings` и другие имена
+контролов/свойств, взятые из платформенной модели. Такой XML должен быть
+понятен разработчику 1С примерно так же, как понятен XML управляемой формы.
+
+Внутренности обычной `Form.bin` - это деталь реализации. Парсер и writer могут
+внутри разбирать и собирать list-stream/скобкоформат 1С и платформенные записи,
+известные по 8.2.19 как `cf_form_controls8`,
+`cf_form_controls_position8`, `cf_form_controls_info8`. Но эти записи являются
+внутренним codec-слоем, а не публичным форматом XML.
+
+Жесткое правило публичного XML: нельзя выводить наружу сырые или индексные
+платформенные данные ни под каким названием. Запрещены `ObjectModel`,
+`ListStream`, `BracketStream`, `FormBin`, `LogicalStream`, `RawBracket`,
+`PlatformRecords`, `Field kind="list"`, `Field kind="atom"`, base64-потоки,
+binary placeholders и любые аналогичные переименованные dump/fallback/lossless
+структуры. Если XML является просто переименованным сырым потоком, это
+неправильная архитектура даже тогда, когда платформа его принимает.
+
+Если низкоуровневое значение нужно для корректной обратной сборки, его нужно
+поднять в именованное понятие объектной модели со схемой: контрол, свойство,
+событие, команда, привязка, ссылка на картинку, описание типа или другое
+публичное платформенное свойство. Serializer должен преобразовывать такой XML
+во внутренние платформенные записи и уже затем писать platform
+ListOutStream/Form.bin.

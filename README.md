@@ -1,7 +1,19 @@
 # onec-ordinary-forms
 
-Python tools for splitting 1C ordinary form `Form.bin` into a Git-friendly
+Python tools for converting 1C ordinary form `Form.bin` into a Git-friendly
 source package and building it back.
+
+## English
+
+### What This Project Does
+
+1C ordinary forms are stored inside `Form.bin`. That binary contains the form
+module, pictures, and the ordinary-form layout/control data in the platform's
+internal list-stream format. This is hard to review, diff, edit, and merge.
+
+The goal of this project is to expose ordinary forms as source files that are
+close to managed-form source exports: readable XML for the form object model,
+`Module.bsl` as a separate file, and pictures as sidecar files.
 
 The public source layout mirrors managed forms:
 
@@ -11,28 +23,193 @@ Forms/Form/Ext/Form/Module.bsl
 Forms/Form/Ext/Form/Items/<ElementName>/Picture.gif
 ```
 
-`Form.xml` is the editable object model. It does not contain public
-`ListStream`, `FormBin`, `LogicalStream`, or binary placeholder nodes. The
-package translates the object model to and from the platform list/bracket
-stream internally.
+### Target Public XML
+
+`Form.xml` is the public editable object model. It should describe the form with
+named controls and properties, not with raw platform records:
+
+```xml
+<Form>
+  <Properties>
+    <Title>
+      <Item lang="ru">Form title</Item>
+    </Title>
+  </Properties>
+  <Attributes>
+    <Attribute name="InputValue">
+      <Type>...</Type>
+    </Attribute>
+  </Attributes>
+  <Commands>
+    <Command name="Run"/>
+  </Commands>
+  <ChildItems>
+    <Panel name="MainPanel">
+      <Position left="8" top="8" right="640" bottom="480"/>
+      <ChildItems>
+        <LabelDecoration name="Caption">
+          <Title>
+            <Item lang="ru">Caption text</Item>
+          </Title>
+        </LabelDecoration>
+        <Button name="RunButton">
+          <Title>
+            <Item lang="ru">Run</Item>
+          </Title>
+          <Action name="Run"/>
+        </Button>
+        <PictureDecoration name="Logo">
+          <Picture file="Items/Logo/Picture.gif"/>
+        </PictureDecoration>
+      </ChildItems>
+    </Panel>
+  </ChildItems>
+</Form>
+```
+
+The exact schema is still being expanded, but the target direction is fixed:
+public XML must be managed-form-like, named, and understandable to a 1C
+developer.
+
+### What Must Not Be In Public XML
+
+Public `Form.xml` must not contain raw or renamed platform dumps. The following
+are not acceptable public structures:
+
+- `ObjectModel`
+- `ListStream`
+- `BracketStream`
+- `FormBin`
+- `LogicalStream`
+- `RawBracket`
+- `PlatformRecords`
+- indexed trees such as `Field kind="list"` or `Field kind="atom"`
+- embedded base64 source streams
+- binary placeholders or other lossless/fallback stream copies
+
+The parser/writer may use the platform list-stream format internally. It may
+internally decode and encode platform records such as `cf_form_controls8`,
+`cf_form_controls_position8`, and `cf_form_controls_info8`. Those records are
+implementation details. If a value is needed for rebuild, it must be promoted
+to a named XML concept: a control, property, event, command, binding, picture
+reference, or type descriptor.
+
+Passing 1C Designer validation is required, but not sufficient by itself: the
+public XML must also remain a clean object model, not a renamed raw stream.
+
+## Русский
+
+### Что делает проект
+
+Обычные формы 1С лежат внутри `Form.bin`. В этом бинарном файле находятся
+модуль формы, картинки и данные обычной формы во внутреннем list-stream /
+скобкоформате платформы. Такой файл сложно смотреть в Git, сравнивать,
+редактировать и мержить.
+
+Цель проекта - разложить обычную форму в исходники примерно так же, как
+платформа раскладывает управляемую форму: человекочитаемый XML объектной
+модели, отдельный `Module.bsl` и картинки рядом.
+
+Целевая структура файлов:
+
+```text
+Forms/Form/Ext/Form.xml
+Forms/Form/Ext/Form/Module.bsl
+Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
+```
+
+### Целевой публичный XML
+
+`Form.xml` - это публичная редактируемая объектная модель. Он должен описывать
+форму именованными элементами и свойствами, а не сырыми платформенными
+записями:
+
+```xml
+<Form>
+  <Properties>
+    <Title>
+      <Item lang="ru">Заголовок формы</Item>
+    </Title>
+  </Properties>
+  <Attributes>
+    <Attribute name="ВходноеЗначение">
+      <Type>...</Type>
+    </Attribute>
+  </Attributes>
+  <Commands>
+    <Command name="Выполнить"/>
+  </Commands>
+  <ChildItems>
+    <Panel name="ОсновнаяПанель">
+      <Position left="8" top="8" right="640" bottom="480"/>
+      <ChildItems>
+        <LabelDecoration name="Надпись">
+          <Title>
+            <Item lang="ru">Текст надписи</Item>
+          </Title>
+        </LabelDecoration>
+        <Button name="КнопкаВыполнить">
+          <Title>
+            <Item lang="ru">Выполнить</Item>
+          </Title>
+          <Action name="Выполнить"/>
+        </Button>
+        <PictureDecoration name="Логотип">
+          <Picture file="Items/Логотип/Picture.gif"/>
+        </PictureDecoration>
+      </ChildItems>
+    </Panel>
+  </ChildItems>
+</Form>
+```
+
+Схема еще расширяется, но направление фиксированное: публичный XML должен быть
+похож на XML управляемой формы, быть именованным и понятным разработчику 1С.
+
+### Чего не должно быть в публичном XML
+
+Публичный `Form.xml` не должен содержать сырые или переименованные дампы
+платформенного формата. Нельзя выводить наружу:
+
+- `ObjectModel`
+- `ListStream`
+- `BracketStream`
+- `FormBin`
+- `LogicalStream`
+- `RawBracket`
+- `PlatformRecords`
+- индексные деревья вроде `Field kind="list"` или `Field kind="atom"`
+- встроенные base64-потоки исходного файла
+- binary placeholders и другие lossless/fallback копии stream-структур
+
+Парсер и writer могут использовать list-stream/скобкоформат платформы внутри.
+Они могут внутри разбирать и собирать платформенные записи
+`cf_form_controls8`, `cf_form_controls_position8`,
+`cf_form_controls_info8`. Но это внутренняя реализация, а не публичный XML.
+Если значение нужно для обратной сборки, его нужно поднять в именованное
+понятие XML: контрол, свойство, событие, команда, привязка, ссылка на картинку
+или описание типа.
+
+Проверка через 1C Designer обязательна, но сама по себе недостаточна:
+публичный XML все равно должен оставаться чистой объектной моделью, а не
+переименованным сырым потоком.
 
 ## Status
 
 Current release: `0.2.0`.
 
-Implemented:
+Current implementation status:
 
 - read ordinary `Form.bin` containers;
 - dump readable object-model `Form.xml`;
 - extract `Module.bsl` and picture sidecars;
-- build `Form.bin` from `Form.xml`, `Module.bsl`, and picture sidecars;
 - validate `Form.xml` against bundled XSD schemas;
 - scan local EPF/ERF corpora without committing private processors or exports.
 
-The writer is intentionally conservative while the full ordinary-form object
-model is being expanded. It preserves the public source contract and writes a
-canonical platform list-stream representation rather than byte-for-byte
-recreating the original container layout.
+The final writer is still under active development. The accepted architecture
+is to build `Form.bin` from the named object XML plus `Module.bsl` and picture
+sidecars. Raw public stream dumps and renamed low-level record trees are not
+part of the target format.
 
 ## Install
 
@@ -78,6 +255,10 @@ onec-ordinary-forms build-bin \
 
 Use `--asset-root` only when sidecars are not next to the XML as
 `<Form.xml without suffix>/...`.
+
+Writer behavior is intentionally conservative while the named ordinary-form
+object model is being completed. Do not rely on raw diagnostic formats as the
+public source contract.
 
 Diagnostic commands:
 
