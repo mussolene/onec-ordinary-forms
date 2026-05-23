@@ -27,6 +27,8 @@ PLATFORM_CONTROL_FORMAT_IDS = {
     "info": CF_FORM_CONTROLS_INFO8_FORMAT_ID,
 }
 
+DEFAULT_CONTROL_EVENT_UUID = "e1692cc2-605b-4535-84dd-28440238746c"
+
 
 BINDING_COORDINATE_SLOT = {
     "top": 1,
@@ -446,8 +448,7 @@ def required_control_name(element: ET.Element) -> str:
 def control_info_from_xml(element: ET.Element, name: str, control_type: str, asset_root: Path | None) -> list[object]:
     title = get_multilang_text(element, "Title")
     title_record = localized_text_record(title or name)
-    action = element.find("Action")
-    actions = action_table_from_xml(action)
+    actions = action_table_from_xml(element.find("Action")) + event_table_from_xml(element.find("Events"))
     if control_type == "Panel":
         return panel_control_info_from_xml(element, title_record)
     if control_type == "Button":
@@ -629,6 +630,18 @@ def action_table_from_xml(action: ET.Element | None) -> list[object]:
     uuid = action.get("uuid", "")
     title = action.get("title") or name
     return [["0", uuid, ["3", quoted_atom(name), event_descriptor(name, title)]]]
+
+
+def event_table_from_xml(events: ET.Element | None) -> list[object]:
+    if events is None:
+        return []
+    result: list[object] = []
+    for event in events.findall("Event"):
+        event_name = event.get("name", "")
+        handler = (event.text or "").strip() or event_name
+        uuid = event.get("uuid") or DEFAULT_CONTROL_EVENT_UUID
+        result.append(["2147483647", uuid, ["3", quoted_atom(handler), event_descriptor(handler, event_name)]])
+    return result
 
 
 def picture_payload_from_xml(picture: ET.Element | None, asset_root: Path | None) -> str:

@@ -302,7 +302,7 @@ def item_title(item_data: dict | None, control_type: str) -> str:
     if not isinstance(raw, list):
         return ""
     if len(raw) <= 2 or not isinstance(raw[2], list):
-        return first_localized_text_without_base_tooltip(raw)
+        return first_localized_text_without_base_tooltip(raw, control_type)
     info = raw[2]
     if clean_token(info[0]) == "3" and len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 2:
         return localized_text_from_record(info[1][2])
@@ -314,11 +314,13 @@ def item_title(item_data: dict | None, control_type: str) -> str:
         if control_type == "Panel":
             pages = panel_pages_from_raw(raw)
             return pages[0]["title"] if pages else ""
-    return first_localized_text_without_base_tooltip(raw)
+    return first_localized_text_without_base_tooltip(raw, control_type)
 
 
-def first_localized_text_without_base_tooltip(value: object) -> str:
+def first_localized_text_without_base_tooltip(value: object, control_type: str = "") -> str:
     if not isinstance(value, list):
+        return ""
+    if event_binding_from_record(value, control_type):
         return ""
     text = localized_text_from_record(value)
     if text:
@@ -327,7 +329,7 @@ def first_localized_text_without_base_tooltip(value: object) -> str:
     for index, child in enumerate(value):
         if base is not None and index == 12:
             continue
-        found = first_localized_text_without_base_tooltip(child)
+        found = first_localized_text_without_base_tooltip(child, control_type)
         if found:
             return found
     return ""
@@ -695,6 +697,7 @@ def add_semantic_item(
         action_node = ET.SubElement(node, "Action")
         for key, value in action.items():
             action_node.set(key, value)
+    add_control_events(node, str(item.get("type", "")), item_data)
 
     page_names = data.get(f"{raw_key}/-pages-", [])
     parsed_pages = panel_pages_from_raw(item_data.get("raw") if isinstance(item_data, dict) else None)
@@ -801,6 +804,80 @@ def add_read_only(parent: ET.Element, item: dict, item_data: object) -> None:
         return
     if clean_token(input_info[12]) == "1":
         set_text(parent, "ReadOnly", "true")
+
+
+def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list):
+        return
+    events = control_events_from_raw(raw, control_type)
+    if not events:
+        return
+    events_node = ET.SubElement(parent, "Events")
+    seen: set[tuple[str, str]] = set()
+    for event in events:
+        key = (event["name"], event["handler"])
+        if key in seen:
+            continue
+        seen.add(key)
+        node = ET.SubElement(events_node, "Event")
+        node.set("name", event["name"])
+        node.text = event["handler"]
+
+
+def control_events_from_raw(raw: object, control_type: str) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+
+    def walk(value: object) -> None:
+        event = event_binding_from_record(value, control_type)
+        if event:
+            result.append(event)
+            return
+        if isinstance(value, list):
+            for child in value:
+                walk(child)
+
+    walk(raw)
+    return result
+
+
+def event_binding_from_record(record: object, control_type: str) -> dict[str, str]:
+    if not isinstance(record, list) or len(record) < 3:
+        return {}
+    uuid = clean_token(record[1])
+    payload = record[2]
+    if not isinstance(payload, list) or len(payload) < 3 or clean_token(payload[0]) != "3":
+        return {}
+    if not re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", uuid):
+        return {}
+    handler = clean_token(payload[1])
+    if not handler:
+        return {}
+    title = first_localized_text(payload[2])
+    event_name = infer_platform_event_name(control_type, handler, title)
+    if not event_name:
+        return {}
+    return {"name": event_name, "handler": handler, "uuid": uuid}
+
+
+def infer_platform_event_name(control_type: str, handler: str, title: str = "") -> str:
+    descriptor = control_descriptor(control_type)
+    if descriptor is None:
+        return ""
+    candidates = sorted((member.name for member in descriptor.platform_events), key=len, reverse=True)
+    handler_key = compact_event_text(handler)
+    title_key = compact_event_text(title)
+    for event_name in candidates:
+        event_key = compact_event_text(event_name)
+        if event_key and (handler_key.endswith(event_key) or title_key.endswith(event_key)):
+            return event_name
+    return ""
+
+
+def compact_event_text(value: str) -> str:
+    return re.sub(r"[^0-9A-Za-zА-Яа-яЁё]", "", value).lower()
 
 
 def input_field_info_record(item_data: object) -> list[object] | None:

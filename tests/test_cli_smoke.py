@@ -587,6 +587,51 @@ class CliSmokeTest(unittest.TestCase):
             self.assertEqual(field.findtext("./ToolTip/Item"), "Номер документа")
             validate_xml_file(out)
 
+    def test_dump_bin_emits_control_events_without_fake_input_title(self) -> None:
+        from onec_ordinary_forms.cli import add_control_events, item_title
+
+        event_uuid = "e1692cc2-605b-4535-84dd-28440238746c"
+        item_data = {
+            "raw": [
+                "381ed624-9217-4e63-85db-c4c3cb87daae",
+                "160",
+                [
+                    "9",
+                    ['"Pattern"', ['"D"']],
+                    [],
+                    [
+                        "1",
+                        [
+                            "2147483647",
+                            event_uuid,
+                            [
+                                "3",
+                                '"DateOnChange"',
+                                [
+                                    "1",
+                                    '"DateOnChange"',
+                                    ["1", "1", ['"ru"', '"Дата при изменении"']],
+                                    ["1", "1", ['"ru"', '"Дата при изменении"']],
+                                    ["1", "1", ['"ru"', '"Дата при изменении"']],
+                                    ["3", "0", ["0"], '""', "-1", "1242684", "1", "0"],
+                                    ["0", "0", "0"],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ]
+        }
+        field = ET.Element("InputField")
+
+        add_control_events(field, "InputField", item_data)
+
+        self.assertEqual(item_title(item_data, "InputField"), "")
+        event = field.find("./Events/Event")
+        self.assertIsNotNone(event)
+        self.assertEqual(event.get("name"), "ПриИзменении")
+        self.assertEqual(event.text, "DateOnChange")
+
     def test_build_bin_writes_tooltip_to_base_info_slot_12(self) -> None:
         root = ET.fromstring(
             """<Form>
@@ -618,6 +663,25 @@ class CliSmokeTest(unittest.TestCase):
             return False
 
         self.assertTrue(find_tooltip_base(stream))
+
+    def test_build_bin_writes_control_events_to_action_table(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <InputField name="Date" id="160">
+                    <Events><Event name="ПриИзменении">DateOnChange</Event></Events>
+                  </InputField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+
+        self.assertIn('"DateOnChange"', form_text)
+        self.assertIn("e1692cc2-605b-4535-84dd-28440238746c", form_text)
 
     def test_add_read_only_uses_input_field_info_slot(self) -> None:
         from onec_ordinary_forms.cli import add_read_only
