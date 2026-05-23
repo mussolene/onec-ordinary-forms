@@ -646,6 +646,8 @@ def add_semantic_item(
     if title:
         add_multilang_text(node, "Title", title)
     add_data_path(node, item, item_data)
+    add_visible(node, item_data)
+    add_read_only(node, item, item_data)
     add_text_color(node, item_data)
     add_back_color(node, item_data)
     add_border_color(node, item_data)
@@ -736,6 +738,40 @@ def add_data_path(parent: ET.Element, item: dict, item_data: object) -> None:
     if not data_path:
         return
     set_text(parent, "DataPath", data_path)
+
+
+def add_visible(parent: ET.Element, item_data: object) -> None:
+    base = base_info_from_item_data(item_data)
+    if base is None or len(base) <= 1:
+        return
+    value = clean_token(base[1])
+    if value == "0":
+        set_text(parent, "Visible", "false")
+
+
+def add_read_only(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "InputField":
+        return
+    input_info = input_field_info_record(item_data)
+    if input_info is None or len(input_info) <= 12:
+        return
+    if clean_token(input_info[12]) == "1":
+        set_text(parent, "ReadOnly", "true")
+
+
+def input_field_info_record(item_data: object) -> list[object] | None:
+    if not isinstance(item_data, dict):
+        return None
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return None
+    info = raw[2]
+    if not info or clean_token(info[0]) != "9" or len(info) <= 2 or not isinstance(info[2], list):
+        return None
+    for candidate in info[2]:
+        if isinstance(candidate, list) and candidate and isinstance(candidate[0], list):
+            return candidate
+    return None
 
 
 def panel_pages_from_raw(raw: object) -> list[dict[str, str]]:

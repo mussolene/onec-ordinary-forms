@@ -192,7 +192,7 @@ def panel_base_info_record() -> list[object]:
 def base_info_record_from_xml(element: ET.Element | None) -> list[object]:
     return [
         "10",
-        "1",
+        visible_record_from_xml(element),
         color_record_from_xml(element, "TextColor"),
         color_record_from_xml(element, "BackColor"),
         font_record_from_xml(element.find("Font") if element is not None else None),
@@ -205,6 +205,13 @@ def base_info_record_from_xml(element: ET.Element | None) -> list[object]:
         ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
         ["1", "0"],
     ]
+
+
+def visible_record_from_xml(element: ET.Element | None) -> str:
+    if element is None:
+        return "1"
+    value = (element.findtext("Visible") or "").strip().lower()
+    return "0" if value in {"false", "0"} else "1"
 
 
 def color_record_from_xml(element: ET.Element | None, tag: str) -> list[object]:
