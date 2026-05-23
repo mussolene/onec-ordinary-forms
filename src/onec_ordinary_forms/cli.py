@@ -22,7 +22,7 @@ from onec_ordinary_forms.formbin import (
     unpack_form_bin,
 )
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
-from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
+from onec_ordinary_forms.liststream import dumps_list_out_stream, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_properties import control_descriptor
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
@@ -1010,7 +1010,7 @@ def apply_semantic_edits_to_form(root: ET.Element, base_form_data: bytes, asset_
     form_text, has_bom = decode_text_preserve_bom(base_form_data)
     document = parse_list_stream_document(form_text, allow_trailing=True)
     apply_xml_to_list_stream_model(root, document.value, asset_root)
-    form_text = dumps(document.value) + document.trailing
+    form_text = dumps_list_out_stream(document.value) + document.trailing
     return encode_text_preserve_bom(form_text, has_bom)
 
 

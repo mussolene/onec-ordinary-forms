@@ -10,7 +10,7 @@ from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_fo
 from onec_ordinary_forms.cli import apply_semantic_edits_to_form, format_xml_file, replace_root_title, validate_xml_file
 from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
-from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
+from onec_ordinary_forms.liststream import dumps, dumps_list_out_stream, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
@@ -250,6 +250,14 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(document.value, ["1", ['"x"', '"y"']])
         self.assertEqual(dumps(document.value), '{1,{"x","y"}}')
 
+    def test_list_out_stream_writer_uses_platform_crlf_layout(self) -> None:
+        document = parse_list_stream_document('{1,{"ru","Main"},{2,{0},4}}')
+
+        self.assertEqual(
+            dumps_list_out_stream(document.value),
+            '{1,\r\n{"ru","Main"},\r\n{2,\r\n{0},4\r\n}\r\n}',
+        )
+
     def test_extract_elem_json_from_bracket_stream(self) -> None:
         bracket = """
         {
@@ -357,7 +365,11 @@ class CliSmokeTest(unittest.TestCase):
             from onec_ordinary_forms.formbin import logical_streams, parse_form_bin
 
             rebuilt_streams = logical_streams(parse_form_bin(rebuilt.read_bytes()))
-            self.assertEqual(rebuilt_streams["Form.xml"], bracket)
+            self.assertEqual(
+                parse_list_stream_document(rebuilt_streams["Form.xml"].decode("utf-8")).value,
+                parse_list_stream_document(bracket.decode("utf-8-sig")).value,
+            )
+            self.assertIn(b"\r\n", rebuilt_streams["Form.xml"])
             self.assertEqual(rebuilt_streams["Module.bsl"], module)
 
     def test_format_xml_file_pretty_prints_schema_like_xml(self) -> None:
@@ -472,7 +484,8 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn('"Image title"', rebuilt_stream)
             self.assertIn("#base64:" + base64.b64encode(b"GIF89aChanged").decode("ascii"), rebuilt_stream)
             self.assertIn('{14,"Image2",0,0,0}', rebuilt_stream)
-            self.assertIn("{8,42,2,3,4,1,{0,{2,-1,6,99},{2,-1,6,0}}", rebuilt_stream)
+            self.assertIn("\r\n", rebuilt_stream)
+            self.assertIn("{8,42,2,3,4,1,\r\n{0,\r\n{2,-1,6,99},\r\n{2,-1,6,0}", rebuilt_stream)
 
     def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
         with TemporaryDirectory() as temp_dir:

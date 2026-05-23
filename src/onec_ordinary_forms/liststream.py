@@ -49,6 +49,33 @@ def dumps(value: object) -> str:
     return str(value)
 
 
+def dumps_list_out_stream(value: object) -> str:
+    """Serialize using the CRLF-oriented style used by platform ListOutStream.
+
+    The platform writer keeps scalar-only lists compact, but starts nested list
+    values on a new CRLF line. Ordinary form streams written as one compact line
+    can pass loose container import checks and still fail when Configurator
+    opens the form, so build-bin must use this stream style.
+    """
+
+    if not isinstance(value, list):
+        return str(value)
+    if not any(isinstance(item, list) for item in value):
+        return "{" + ",".join(dumps_list_out_stream(item) for item in value) + "}"
+
+    parts: list[str] = ["{"]
+    for index, item in enumerate(value):
+        if index:
+            parts.append(",")
+        if isinstance(item, list):
+            parts.append("\r\n")
+            parts.append(dumps_list_out_stream(item))
+        else:
+            parts.append(dumps_list_out_stream(item))
+    parts.append("\r\n}")
+    return "".join(parts)
+
+
 def tokenize(text: str) -> list[Token]:
     tokens: list[Token] = []
     index = 0
