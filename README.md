@@ -197,6 +197,15 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 публичный XML все равно должен оставаться чистой объектной моделью, а не
 переименованным сырым потоком.
 
+Текущая строгая проверка 1C использует полный платформенный stream как
+внутренний template, пока writer объектной модели добирается до полностью
+самостоятельной сериализации. После `dump-bin` исходный ordinary `Form.bin`
+переносится из платформенной source-раскладки в quarantine и передается в
+`build-bin` через `--template-bin`. Перед импортом платформой используется
+копия source-раскладки, где публичный ordinary `Ext/Form.xml` и каталог
+`Ext/Form/` удалены; для обычной формы в платформенной раскладке остается
+только `Ext/Form.bin`.
+
 ## Status
 
 Current release: `0.2.0`.
@@ -255,6 +264,24 @@ onec-ordinary-forms build-bin \
   --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
   --out-bin scan-output/rebuilt/Form.bin
 ```
+
+Current strict 1C validation uses the full platform stream as an internal
+template while the object writer is being completed. After `dump-bin`, move the
+original ordinary `Form.bin` out of the platform source tree and pass it to
+`build-bin`:
+
+```bash
+mv scan-output/exported/Object/Forms/Form/Ext/Form.bin scan-output/quarantine/Form.bin.original
+onec-ordinary-forms build-bin \
+  --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
+  --template-bin scan-output/quarantine/Form.bin.original \
+  --out-bin scan-output/exported/Object/Forms/Form/Ext/Form.bin
+```
+
+Before platform import, use a copy of the source tree where the public ordinary
+`Ext/Form.xml` and `Ext/Form/` sidecar directory are removed. The platform
+source layout for ordinary forms should contain `Ext/Form.bin`; managed forms
+keep their native `Ext/Form.xml`.
 
 Use `--asset-root` only when sidecars are not next to the XML as
 `<Form.xml without suffix>/...`.

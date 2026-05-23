@@ -354,6 +354,64 @@ class CliSmokeTest(unittest.TestCase):
             rebuilt_files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
             self.assertIn('{3,"RunCommand",e1692cc2-605b-4535-84dd-28440238746c}', rebuilt_files["form"].decode("utf-8"))
 
+    def test_template_build_preserves_full_platform_stream_shape(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            action_uuid = "e1692cc2-605b-4535-84dd-28440238746c"
+            template_stream = (
+                b'\xef\xbb\xbf{27,{16,{1,1,{"ru","Main"}},'
+                b'{6ff79819-710e-4145-97cd-1618da79e3e2,7,'
+                b'{1,{1,1,{"ru","Run"}},{3,"RunCommand",'
+                + action_uuid.encode("ascii")
+                + b'}},'
+                b'{8,1,2,101,22,0,0,0,0,0,0,0,0,0,0,0,0},'
+                b'{14,"RunButton",4294967295,0,0,0},{0}},100,100},'
+                b'{0},{0},0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}'
+            )
+            template_bin = root / "template.bin"
+            template_bin.write_bytes(build_form_bin_container(template_stream, b"module"))
+            xml = root / "Form.xml"
+            xml.write_text(
+                """
+                <Form version="0.1">
+                  <Title><Item lang="ru">Main</Item></Title>
+                  <Attributes/>
+                  <Pages>
+                    <Page name="Main">
+                      <Button name="RunButton" id="7">
+                        <Title><Item lang="ru">Run edited</Item></Title>
+                        <Action name="RunEdited" uuid="e1692cc2-605b-4535-84dd-28440238746c"/>
+                      </Button>
+                    </Page>
+                  </Pages>
+                </Form>
+                """,
+                encoding="utf-8",
+            )
+            rebuilt = root / "rebuilt.bin"
+
+            from onec_ordinary_forms.cli import build_bin
+
+            build_bin(
+                type(
+                    "Args",
+                    (),
+                    {
+                        "xml": str(xml),
+                        "out_bin": str(rebuilt),
+                        "asset_root": None,
+                        "template_bin": str(template_bin),
+                    },
+                )()
+            )
+
+            rebuilt_files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
+            rebuilt_form = rebuilt_files["form"].decode("utf-8-sig")
+            self.assertTrue(rebuilt_files["form"].startswith(b"\xef\xbb\xbf"))
+            self.assertTrue(rebuilt_form.startswith("{27,"))
+            self.assertIn('{"ru","Run edited"}', rebuilt_form)
+            self.assertIn('{3,"RunEdited",e1692cc2-605b-4535-84dd-28440238746c}', rebuilt_form)
+
     def test_extract_elem_json_from_bracket_stream(self) -> None:
         bracket = """
         {

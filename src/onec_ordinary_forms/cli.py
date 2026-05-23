@@ -16,10 +16,12 @@ import json
 from onec_ordinary_forms.corpus import build_corpus_report, write_report
 from onec_ordinary_forms.formbin import (
     build_form_bin_container,
+    parse_form_bin_container,
     pack_form_bin,
     unpack_form_bin,
 )
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
+from onec_ordinary_forms.liststream import dumps_list_out_stream, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
 from onec_ordinary_forms.ordinary_stream import apply_geometry_bindings_to_raw, form_stream_from_object_xml
@@ -878,12 +880,203 @@ def build_bin(args: argparse.Namespace) -> None:
     asset_root = Path(args.asset_root) if args.asset_root else xml_path.with_suffix("")
     validate_xml_file(xml_path)
     root = ET.parse(xml_path).getroot()
-    form_data = form_stream_from_object_xml(root, asset_root)
+    template_bin = Path(args.template_bin) if getattr(args, "template_bin", None) else None
+    if template_bin is not None:
+        form_data, template_created, template_modified = form_stream_from_template(root, template_bin, asset_root)
+    else:
+        form_data = form_stream_from_object_xml(root, asset_root)
+        template_created = None
+        template_modified = None
     module_data = module_data_from_xml(root, asset_root)
     created, modified = container_times_from_xml(root)
+    if created is None:
+        created = template_created
+    if modified is None:
+        modified = template_modified
     bin_data = build_form_bin_container(form_data, module_data, created=created, modified=modified)
     out_bin.parent.mkdir(parents=True, exist_ok=True)
     out_bin.write_bytes(bin_data)
+
+
+def form_stream_from_template(root: ET.Element, template_bin: Path, asset_root: Path | None) -> tuple[bytes, int | None, int | None]:
+    container = parse_form_bin_container(template_bin.read_bytes())
+    form_file = next((file for file in container.files if file.name == "form"), None)
+    if form_file is None:
+        raise ValueError(f"Template Form.bin has no form stream: {template_bin}")
+    form_text, has_bom = decode_form_stream_text(form_file.payload)
+    document = parse_list_stream_document(form_text, allow_trailing=True)
+    apply_xml_to_list_stream_model(root, document.value, asset_root)
+    serialized = dumps_list_out_stream(document.value) + document.trailing
+    return encode_form_stream_text(serialized, has_bom), form_file.created, form_file.modified
+
+
+def decode_form_stream_text(data: bytes) -> tuple[str, bool]:
+    has_bom = data.startswith(b"\xef\xbb\xbf")
+    return data.decode("utf-8-sig" if has_bom else "utf-8"), has_bom
+
+
+def encode_form_stream_text(text: str, has_bom: bool) -> bytes:
+    data = text.encode("utf-8")
+    return b"\xef\xbb\xbf" + data if has_bom else data
+
+
+def apply_xml_to_list_stream_model(root: ET.Element, list_stream_root: object, asset_root: Path | None = None) -> None:
+    title = get_multilang_text(root, "Title")
+    if title and first_ru_text(list_stream_root) != title:
+        replace_first_ru_text(list_stream_root, title)
+    controls = raw_controls_by_id(list_stream_root)
+    controls.update({control.object_id: control.raw for control in parse_ordinary_form_model(list_stream_root).flatten()})
+    for element in xml_control_elements(root):
+        object_id = element.get("id", "")
+        raw = controls.get(object_id)
+        if raw is None:
+            continue
+        apply_xml_control_to_raw(element, raw, asset_root)
+
+
+def xml_control_elements(root: ET.Element) -> list[ET.Element]:
+    return [element for element in root.iter() if element.get("id")]
+
+
+def raw_controls_by_id(value: object) -> dict[str, list[object]]:
+    result: dict[str, list[object]] = {}
+    for node in walk_lists(value):
+        if len(node) >= 3 and raw_metadata_record(node) is not None and is_plausible_control_id(node[1]):
+            result[str(node[1])] = node
+    return result
+
+
+def walk_lists(value: object) -> list[list[object]]:
+    result: list[list[object]] = []
+    if isinstance(value, list):
+        result.append(value)
+        for item in value:
+            result.extend(walk_lists(item))
+    return result
+
+
+def is_plausible_control_id(value: object) -> bool:
+    try:
+        int(str(value))
+        return True
+    except ValueError:
+        return False
+
+
+def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root: Path | None = None) -> None:
+    name = element.get("name")
+    if name:
+        metadata = raw_metadata_record(raw)
+        if metadata is not None and len(metadata) > 1 and clean_token(metadata[1]) != name:
+            metadata[1] = quote_form_string_atom(name)
+    title = get_multilang_text(element, "Title")
+    if title and first_ru_text(raw) != title:
+        replace_first_ru_text(raw, title)
+    geometry = element.find("Position")
+    if geometry is not None:
+        raw_geometry = raw_geometry_record(raw)
+        if raw_geometry is not None:
+            for index, name in enumerate(("left", "top", "right", "bottom"), start=1):
+                if name in geometry.attrib:
+                    raw_geometry[index] = geometry.get(name, raw_geometry[index])
+            apply_geometry_bindings_to_raw(geometry, raw_geometry)
+    picture = element.find("Picture")
+    if picture is not None:
+        apply_picture_to_raw(raw, picture, asset_root)
+    action = element.find("Action")
+    if action is not None:
+        apply_action_to_raw(raw, action)
+
+
+def quote_form_string_atom(value: str) -> str:
+    return '"' + quote_form_string(value) + '"'
+
+
+def raw_metadata_record(raw: list[object]) -> list[object] | None:
+    for child in walk_lists(raw):
+        if len(child) >= 2 and str(child[0]) == "14":
+            return child
+    return None
+
+
+def raw_geometry_record(raw: list[object]) -> list[object] | None:
+    if len(raw) > 3 and isinstance(raw[3], list) and len(raw[3]) >= 5:
+        return raw[3]
+    for child in walk_lists(raw):
+        if len(child) >= 5 and str(child[0]) == "8":
+            return child
+    return None
+
+
+def apply_picture_to_raw(raw: list[object], picture: ET.Element, asset_root: Path | None) -> None:
+    file_name = picture.get("file")
+    if not file_name or asset_root is None:
+        return
+    image_path = asset_root / file_name
+    if not image_path.exists():
+        return
+    data = image_path.read_bytes()
+    expected_hash = picture.get("sha256")
+    if expected_hash and sha256_bytes(data) == expected_hash:
+        return
+    payload = "#base64:" + base64.b64encode(data).decode("ascii")
+    replace_first_base64_payload(raw, payload)
+
+
+def apply_action_to_raw(raw: list[object], action: ET.Element) -> None:
+    name = action.get("name")
+    uuid = action.get("uuid")
+    if not name or not uuid:
+        return
+    for child in walk_lists(raw):
+        if (
+            len(child) >= 3
+            and clean_token(child[0]) == "3"
+            and isinstance(child[1], str)
+            and isinstance(child[2], str)
+            and re.fullmatch(
+                r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                clean_token(child[2]),
+            )
+        ):
+            child[1] = quote_form_string_atom(name)
+            child[2] = uuid
+            return
+
+
+def replace_first_base64_payload(value: object, payload: str) -> bool:
+    if isinstance(value, list):
+        for index, child in enumerate(value):
+            if isinstance(child, str) and clean_token(child).startswith("#base64:"):
+                value[index] = payload
+                return True
+            if replace_first_base64_payload(child, payload):
+                return True
+    return False
+
+
+def first_ru_text(value: object) -> str:
+    if isinstance(value, list):
+        if len(value) >= 3 and str(value[0]) == "1" and str(value[1]) == "1" and isinstance(value[2], list):
+            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
+                return clean_token(value[2][1])
+        for child in value:
+            found = first_ru_text(child)
+            if found:
+                return found
+    return ""
+
+
+def replace_first_ru_text(value: object, text: str) -> bool:
+    if isinstance(value, list):
+        if len(value) >= 3 and str(value[0]) == "1" and str(value[1]) == "1" and isinstance(value[2], list):
+            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
+                value[2][1] = quote_form_string_atom(text)
+                return True
+        for child in value:
+            if replace_first_ru_text(child, text):
+                return True
+    return False
 
 
 def scan_corpus(args: argparse.Namespace) -> None:
@@ -938,6 +1131,7 @@ def main() -> None:
     build_bin_parser.add_argument("--xml", required=True, help="Form.xml produced by dump-bin")
     build_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
     build_bin_parser.add_argument("--asset-root", help="Directory with Module.bsl and extracted assets")
+    build_bin_parser.add_argument("--template-bin", help="Original Form.bin moved out of platform source; used as the internal full platform stream template")
     build_bin_parser.set_defaults(func=build_bin)
 
     validate_parser = subparsers.add_parser("validate")
