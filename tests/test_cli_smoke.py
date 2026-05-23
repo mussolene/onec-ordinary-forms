@@ -497,6 +497,38 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn('"InputValue"', rebuilt_text)
             self.assertIn("381ed624-9217-4e63-85db-c4c3cb87daae", rebuilt_text)
 
+    def test_dump_bin_emits_data_path_for_bound_input_field(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            bracket = (
+                "{"
+                '{"MainCaption",1,1,{"ru","Main"}},'
+                "{381ed624-9217-4e63-85db-c4c3cb87daae,159,"
+                '{9,{"Pattern",{"S"}},{{{10,1,{3,4,{0}},{3,4,{0}},{6,3,0,{0},0},0,{3,4,{0}},{3,4,{0}},{3,4,{0}},{3,3,{-7}},{3,3,{-21}},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,1,{"ru","Number"}}}},0,{0},0,1,0,{1,0},0}},'
+                "{8,10,10,200,30,0,{0,{2,0,0,10},{2,-1,6,0}}},"
+                '{14,"InputValue",4294967295,0,0,0},'
+                "{0}}"
+                "}"
+            ).encode("utf-8")
+            source.write_bytes(build_form_bin_container(bracket, b""))
+
+            out = root / "Form.xml"
+            from onec_ordinary_forms.cli import build_bin, dump_bin
+
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            xml = out.read_text(encoding="utf-8")
+            self.assertIn('<InputField name="InputValue" id="159">', xml)
+            self.assertIn("<DataPath>InputValue</DataPath>", xml)
+            validate_xml_file(out)
+
+            rebuilt = root / "rebuilt.bin"
+            build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
+            rebuilt_form = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}[
+                "form"
+            ].decode("utf-8-sig")
+            self.assertIn('"InputValue"', rebuilt_form)
+
     def test_format_xml_file_pretty_prints_schema_like_xml(self) -> None:
         with TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "schema.xsd"

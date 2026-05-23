@@ -645,7 +645,10 @@ def add_semantic_item(
     title = item_title(data.get(raw_key))
     if title:
         add_multilang_text(node, "Title", title)
+    add_data_path(node, item, item_data)
+    add_text_color(node, item_data)
     add_back_color(node, item_data)
+    add_border_color(node, item_data)
     add_font(node, item_data)
     add_geometry(node, item_data, element_index)
     if str(item.get("type", "")) == "Image":
@@ -699,6 +702,40 @@ def add_semantic_item(
         for child in children:
             child_key = str(child.get("rawKey") or f"{raw_key}/{child.get('name', '')}")
             add_semantic_item(node, child, data, child_key, element_index, asset_root)
+
+
+DATA_BOUND_CONTROL_TYPES = {
+    "InputField",
+    "CheckBox",
+    "Table",
+    "ChoiceField",
+    "SpreadsheetDocumentField",
+    "RadioButton",
+    "Chart",
+    "ListBox",
+    "HTMLDocumentField",
+    "ProgressBar",
+    "TrackBar",
+    "CalendarField",
+    "TextDocumentField",
+}
+
+
+def add_data_path(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) not in DATA_BOUND_CONTROL_TYPES:
+        return
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 4 or not isinstance(raw[4], list):
+        return
+    metadata = raw[4]
+    if len(metadata) < 2:
+        return
+    data_path = clean_token(metadata[1])
+    if not data_path:
+        return
+    set_text(parent, "DataPath", data_path)
 
 
 def panel_pages_from_raw(raw: object) -> list[dict[str, str]]:
@@ -758,15 +795,9 @@ def child_page_index(data: dict, parent_raw_key: str, child: dict) -> int | None
 
 
 def add_font(parent: ET.Element, item_data: object) -> None:
-    if not isinstance(item_data, dict):
+    base = base_info_from_item_data(item_data)
+    if base is None:
         return
-    raw = item_data.get("raw")
-    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
-        return
-    info = raw[2]
-    if len(info) <= 1 or not isinstance(info[1], list) or not info[1] or not isinstance(info[1][0], list):
-        return
-    base = info[1][0]
     if len(base) <= 4 or not isinstance(base[4], list):
         return
     font = base[4]
@@ -787,12 +818,24 @@ def add_font(parent: ET.Element, item_data: object) -> None:
 
 
 def add_back_color(parent: ET.Element, item_data: object) -> None:
+    add_color(parent, "BackColor", item_data, 3)
+
+
+def add_text_color(parent: ET.Element, item_data: object) -> None:
+    add_color(parent, "TextColor", item_data, 2)
+
+
+def add_border_color(parent: ET.Element, item_data: object) -> None:
+    add_color(parent, "BorderColor", item_data, 6)
+
+
+def add_color(parent: ET.Element, tag: str, item_data: object, slot: int) -> None:
     base = base_info_from_item_data(item_data)
-    if base is None or len(base) <= 3 or base[3] == ["3", "4", ["0"]]:
+    if base is None or len(base) <= slot or base[slot] == ["3", "4", ["0"]]:
         return
-    value = base[3]
+    value = base[slot]
     if isinstance(value, list) and len(value) >= 3 and isinstance(value[2], list) and value[2]:
-        node = ET.SubElement(parent, "BackColor")
+        node = ET.SubElement(parent, tag)
         node.text = clean_token(value[2][0])
 
 
@@ -802,10 +845,19 @@ def base_info_from_item_data(item_data: object) -> list[object] | None:
     raw = item_data.get("raw")
     if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
         return None
-    info = raw[2]
-    if len(info) <= 1 or not isinstance(info[1], list) or not info[1] or not isinstance(info[1][0], list):
+    return find_base_info_record(raw[2])
+
+
+def find_base_info_record(value: object) -> list[object] | None:
+    if not isinstance(value, list):
         return None
-    return info[1][0]
+    if len(value) >= 13 and clean_token(value[0]) == "10":
+        return value
+    for child in value:
+        found = find_base_info_record(child)
+        if found is not None:
+            return found
+    return None
 
 
 def add_semantic_pages(
@@ -865,6 +917,7 @@ def dump_xml_from_paths(
 
     if root_title:
         add_multilang_text(root, "Title", root_title)
+    add_form_properties(root, form_root)
     if module_path and module_bytes:
         module_out = asset_root / "Module.bsl"
         module_out.parent.mkdir(parents=True, exist_ok=True)
@@ -890,6 +943,20 @@ def dump_xml_from_paths(
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     write_pretty_xml(root, out_path)
+
+
+def add_form_properties(parent: ET.Element, form_root: object) -> None:
+    if not isinstance(form_root, list) or len(form_root) <= 1 or not isinstance(form_root[1], list):
+        return
+    form_record = form_root[1]
+    if len(form_record) <= 4:
+        return
+    width = clean_token(form_record[3])
+    height = clean_token(form_record[4])
+    if width.isdigit():
+        set_text(parent, "Width", width)
+    if height.isdigit():
+        set_text(parent, "Height", height)
 
 
 def add_form_events(parent: ET.Element, form_root: object) -> None:

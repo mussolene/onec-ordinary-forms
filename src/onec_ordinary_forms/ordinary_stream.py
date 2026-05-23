@@ -92,7 +92,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
             if control:
                 controls.append(control)
 
-    stream = ordinary_form_stream(title or "Main", attributes, controls, events_from_xml(root))
+    stream = ordinary_form_stream(title or "Main", attributes, controls, events_from_xml(root), form_size_from_xml(root))
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
 
 
@@ -101,10 +101,11 @@ def ordinary_form_stream(
     attributes: list[object],
     controls: list[object],
     events: list[object],
+    form_size: tuple[str, str],
 ) -> list[object]:
     return [
         "27",
-        form_root_record(title, controls),
+        form_root_record(title, controls, form_size),
         attributes_table(attributes),
         form_object_info_record(),
         ["1", *events] if events else ["0"],
@@ -126,7 +127,8 @@ def ordinary_form_stream(
     ]
 
 
-def form_root_record(title: str, controls: list[object]) -> list[object]:
+def form_root_record(title: str, controls: list[object], form_size: tuple[str, str]) -> list[object]:
+    width, height = form_size
     root_panel = [
         ORDINARY_CONTROL_GUID_BY_TYPE["Panel"],
         root_panel_info(title),
@@ -136,8 +138,8 @@ def form_root_record(title: str, controls: list[object]) -> list[object]:
         "16",
         [localized_text_record(title), "52", "4294967295"],
         root_panel,
-        "885",
-        "244",
+        width,
+        height,
         "1",
         "0",
         "1",
@@ -188,19 +190,14 @@ def panel_base_info_record() -> list[object]:
 
 
 def base_info_record_from_xml(element: ET.Element | None) -> list[object]:
-    back_color = ["3", "4", ["0"]]
-    if element is not None:
-        back_color_node = element.find("BackColor")
-        if back_color_node is not None and back_color_node.text:
-            back_color = ["3", "3", [back_color_node.text]]
     return [
         "10",
         "1",
-        ["3", "4", ["0"]],
-        back_color,
+        color_record_from_xml(element, "TextColor"),
+        color_record_from_xml(element, "BackColor"),
         font_record_from_xml(element.find("Font") if element is not None else None),
         "0",
-        ["3", "4", ["0"]],
+        color_record_from_xml(element, "BorderColor"),
         ["3", "4", ["0"]],
         ["3", "4", ["0"]],
         ["3", "3", ["-7"]],
@@ -208,6 +205,15 @@ def base_info_record_from_xml(element: ET.Element | None) -> list[object]:
         ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
         ["1", "0"],
     ]
+
+
+def color_record_from_xml(element: ET.Element | None, tag: str) -> list[object]:
+    if element is None:
+        return ["3", "4", ["0"]]
+    node = element.find(tag)
+    if node is None or not node.text:
+        return ["3", "4", ["0"]]
+    return ["3", "3", [node.text.strip()]]
 
 
 def font_record_from_xml(font: ET.Element | None) -> list[object]:
@@ -281,6 +287,12 @@ def form_title_from_xml(root: ET.Element) -> str:
     return get_multilang_text(root, "Title")
 
 
+def form_size_from_xml(root: ET.Element) -> tuple[str, str]:
+    width = (root.findtext("Width") or "").strip()
+    height = (root.findtext("Height") or "").strip()
+    return width or "885", height or "244"
+
+
 def top_level_pages(root: ET.Element) -> list[ET.Element]:
     return root.findall("./Pages/Page")
 
@@ -346,7 +358,8 @@ def control_stream_from_xml_with_page(
     name = required_control_name(element)
     info = control_info_from_xml(element, name, control_type, asset_root)
     geometry = geometry_stream_from_xml(element.find("Position"), page_index, page_order)
-    metadata = ["14", quoted_atom(name), "4294967295", "0", "0", "0"]
+    metadata_name = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else name
+    metadata = ["14", quoted_atom(metadata_name), "4294967295", "0", "0", "0"]
     children: list[object] = []
     for child in element:
         child_stream = control_stream_from_xml_with_page(child, asset_root, None, None)
@@ -367,6 +380,30 @@ def control_stream_from_xml_with_page(
         children.extend(child for _, child in sorted(page_children, key=lambda item: item[0]))
     child_table: list[object] = [str(len(children)), *children]
     return [class_id, object_id, info, geometry, metadata, child_table]
+
+
+DATA_BOUND_CONTROL_TYPES = {
+    "InputField",
+    "CheckBox",
+    "Table",
+    "ChoiceField",
+    "SpreadsheetDocumentField",
+    "RadioButton",
+    "Chart",
+    "ListBox",
+    "HTMLDocumentField",
+    "ProgressBar",
+    "TrackBar",
+    "CalendarField",
+    "TextDocumentField",
+}
+
+
+def data_path_from_xml(element: ET.Element) -> str:
+    data_path = element.findtext("DataPath")
+    if data_path and data_path.strip():
+        return data_path.strip()
+    return required_control_name(element)
 
 
 def control_type_from_xml_tag(tag: str) -> str:
