@@ -105,6 +105,11 @@
       <xs:element name="Chart" type="ChartType"/>
       <xs:element name="ListBox" type="ListBoxType"/>
       <xs:element name="HTMLDocumentField" type="HTMLDocumentFieldType"/>
+      <xs:element name="ProgressBar" type="ProgressBarType"/>
+      <xs:element name="TrackBar" type="TrackBarType"/>
+      <xs:element name="CalendarField" type="CalendarFieldType"/>
+      <xs:element name="TextDocumentField" type="TextDocumentFieldType"/>
+      <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
     </xs:choice>
   </xs:complexType>
   <xs:complexType name="ControlType">
@@ -157,6 +162,7 @@
       <xs:element name="TextPosition" type="xs:string"/>
       <xs:element name="PicturePosition" type="xs:string"/>
       <xs:element name="Border" type="xs:string"/>
+      <xs:element name="Orientation" type="xs:string"/>
       <xs:element name="ButtonType" type="xs:string"/>
       <xs:element name="CommandName" type="xs:string"/>
       <xs:element name="ToolTipRepresentation" type="xs:string"/>
@@ -256,6 +262,31 @@
     </xs:complexContent>
   </xs:complexType>
   <xs:complexType name="HTMLDocumentFieldType">
+    <xs:complexContent>
+      <xs:extension base="ControlType"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="ProgressBarType">
+    <xs:complexContent>
+      <xs:extension base="ControlType"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="TrackBarType">
+    <xs:complexContent>
+      <xs:extension base="ControlType"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="CalendarFieldType">
+    <xs:complexContent>
+      <xs:extension base="ControlType"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="TextDocumentFieldType">
+    <xs:complexContent>
+      <xs:extension base="ControlType"/>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="CommandBarButtonType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>

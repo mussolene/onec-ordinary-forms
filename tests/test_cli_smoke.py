@@ -22,10 +22,12 @@ class CliSmokeTest(unittest.TestCase):
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
 
     def test_ordinary_palette_describes_all_known_controls(self) -> None:
-        self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 16)
+        self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 21)
         self.assertIn("Title", ORDINARY_CONTROL_DESCRIPTORS["Label"].properties)
         self.assertIn("ChoiceButton", ORDINARY_CONTROL_DESCRIPTORS["InputField"].properties)
         self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["Image"].xml_tag, "PictureDecoration")
+        self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["ProgressBar"].platform_name, "Индикатор")
+        self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["CommandBarButton"].platform_name, "КнопкаКоманднойПанели")
 
     def test_replace_root_title_updates_first_title_only(self) -> None:
         source = '{"ru","Old"}\n{"ru","Other"}\n'

@@ -112,6 +112,26 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "HTMLDocumentField",
         COMMON_CONTROL_PROPERTIES,
     ),
+    "ProgressBar": OrdinaryControlDescriptor("ProgressBar", "Индикатор", "ProgressBar", COMMON_CONTROL_PROPERTIES + ("MinWidth", "MaxWidth")),
+    "TrackBar": OrdinaryControlDescriptor(
+        "TrackBar",
+        "ПолосаРегулирования",
+        "TrackBar",
+        COMMON_CONTROL_PROPERTIES + ("Orientation", "MinWidth", "MaxWidth"),
+    ),
+    "CalendarField": OrdinaryControlDescriptor("CalendarField", "ПолеКалендаря", "CalendarField", COMMON_CONTROL_PROPERTIES + ("ValueType",)),
+    "TextDocumentField": OrdinaryControlDescriptor(
+        "TextDocumentField",
+        "ПолеТекстовогоДокумента",
+        "TextDocumentField",
+        COMMON_CONTROL_PROPERTIES + ("Border", "HorizontalStretch", "VerticalStretch"),
+    ),
+    "CommandBarButton": OrdinaryControlDescriptor(
+        "CommandBarButton",
+        "КнопкаКоманднойПанели",
+        "CommandBarButton",
+        ("Title", "ToolTip", "Picture", "Action", "CommandName"),
+    ),
 }
 
 
