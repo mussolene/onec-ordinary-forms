@@ -9,7 +9,6 @@
       <xs:element name="Attributes" type="AttributesType"/>
       <xs:element name="Commands" type="CommandsType"/>
       <xs:element name="FormStructure" type="FormStructureType"/>
-      <xs:element name="PlatformRecords" type="PlatformRecordsType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="schemaVersion" type="xs:string" use="required"/>
     <xs:attribute name="sourceKind" type="xs:string" use="required"/>
@@ -376,23 +375,5 @@
       <xs:any minOccurs="0" maxOccurs="unbounded" processContents="lax"/>
     </xs:sequence>
     <xs:anyAttribute processContents="lax"/>
-  </xs:complexType>
-  <xs:complexType name="PlatformRecordsType">
-    <xs:sequence>
-      <xs:element name="FormRecord" type="PlatformValueType"/>
-    </xs:sequence>
-    <xs:attribute name="format" type="xs:string" use="required"/>
-    <xs:attribute name="source" type="xs:string"/>
-  </xs:complexType>
-  <xs:complexType name="PlatformValueType">
-    <xs:sequence>
-      <xs:element name="Field" type="PlatformValueType" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-    <xs:attribute name="kind" type="xs:string" use="required"/>
-    <xs:attribute name="index" type="xs:nonNegativeInteger"/>
-    <xs:attribute name="count" type="xs:nonNegativeInteger"/>
-    <xs:attribute name="text" type="xs:string"/>
-    <xs:attribute name="file" type="xs:string"/>
-    <xs:attribute name="sha256" type="Sha256Type"/>
   </xs:complexType>
 </xs:schema>
