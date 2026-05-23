@@ -511,6 +511,7 @@
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ButtonType" type="xs:string"/>
+          <xs:element name="Action" type="OpenElementType"/>
           <xs:element name="CommandName" type="xs:string"/>
           <xs:element name="DefaultButton" type="xs:boolean"/>
           <xs:element name="CancelButton" type="xs:boolean"/>

@@ -111,7 +111,7 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "Button",
         "Кнопка",
         "Button",
-        COMMON_CONTROL_PROPERTIES + ("ButtonType", "CommandName", "DefaultButton", "CancelButton", "Picture", "PicturePosition"),
+        COMMON_CONTROL_PROPERTIES + ("ButtonType", "Action", "CommandName", "DefaultButton", "CancelButton", "Picture", "PicturePosition"),
     ),
     "InputField": OrdinaryControlDescriptor(
         "InputField",

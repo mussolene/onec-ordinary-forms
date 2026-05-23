@@ -1,18 +1,18 @@
 """Platform-derived ordinary form constants.
 
-The 8.2 ordinary form designer imports these wbase/core entry points:
-cf_form_controls8, cf_form_controls_position8, cf_form_controls_info8,
-ListInStream/ListOutStream, CompositeID, and TypeDomainPattern serializers.
-The class IDs below are decoded from forms produced by that runtime and are the
-stable bridge between list-stream nodes and the editable XML object model.
+The ordinary form designer imports the wbase ``cf_form_controls8`` family in
+platform data-object/list-stream paths. Those values identify platform formats
+for ordinary-control payloads. The class IDs below are decoded from forms
+produced by that runtime and are the stable bridge between list-stream nodes and
+the editable XML object model.
 """
 
 from __future__ import annotations
 
 
-CF_FORM_CONTROLS8_TYPE_ID = 0x2500
-CF_FORM_CONTROLS_POSITION8_TYPE_ID = 0x5500
-CF_FORM_CONTROLS_INFO8_TYPE_ID = 0x9D00
+CF_FORM_CONTROLS8_FORMAT_ID = 0x2500
+CF_FORM_CONTROLS_POSITION8_FORMAT_ID = 0x5500
+CF_FORM_CONTROLS_INFO8_FORMAT_ID = 0x9D00
 
 
 ORDINARY_CONTROL_CLASS_BY_GUID = {

@@ -13,18 +13,18 @@ from pathlib import Path
 
 from onec_ordinary_forms.liststream import dumps_list_out_stream
 from onec_ordinary_forms.ordinary_platform import (
-    CF_FORM_CONTROLS8_TYPE_ID,
-    CF_FORM_CONTROLS_INFO8_TYPE_ID,
-    CF_FORM_CONTROLS_POSITION8_TYPE_ID,
+    CF_FORM_CONTROLS8_FORMAT_ID,
+    CF_FORM_CONTROLS_INFO8_FORMAT_ID,
+    CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
     ORDINARY_CONTROL_GUID_BY_TYPE,
 )
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
 
 
-PLATFORM_RECORD_TYPE_IDS = {
-    "controls": CF_FORM_CONTROLS8_TYPE_ID,
-    "position": CF_FORM_CONTROLS_POSITION8_TYPE_ID,
-    "info": CF_FORM_CONTROLS_INFO8_TYPE_ID,
+PLATFORM_CONTROL_FORMAT_IDS = {
+    "controls": CF_FORM_CONTROLS8_FORMAT_ID,
+    "position": CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
+    "info": CF_FORM_CONTROLS_INFO8_FORMAT_ID,
 }
 
 

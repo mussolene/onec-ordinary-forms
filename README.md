@@ -88,12 +88,13 @@ are not acceptable public structures:
 - embedded base64 source streams
 - binary placeholders or other lossless/fallback stream copies
 
-The parser/writer may use the platform list-stream format internally. It may
-internally decode and encode platform records such as `cf_form_controls8`,
-`cf_form_controls_position8`, and `cf_form_controls_info8`. Those records are
-implementation details. If a value is needed for rebuild, it must be promoted
-to a named XML concept: a control, property, event, command, binding, picture
-reference, or type descriptor.
+The parser/writer may use the platform list-stream format internally. Platform
+symbols such as `cf_form_controls8`, `cf_form_controls_position8`, and
+`cf_form_controls_info8` identify ordinary-control payload formats in the
+platform mechanism. They are implementation details, not public XML nodes. If
+a value is needed for rebuild, it must be promoted to a named XML concept: a
+control, property, event, command, binding, picture reference, or type
+descriptor.
 
 Passing 1C Designer validation is required, but not sufficient by itself: the
 public XML must also remain a clean object model, not a renamed raw stream.
@@ -185,12 +186,12 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 - binary placeholders и другие lossless/fallback копии stream-структур
 
 Парсер и writer могут использовать list-stream/скобкоформат платформы внутри.
-Они могут внутри разбирать и собирать платформенные записи
-`cf_form_controls8`, `cf_form_controls_position8`,
-`cf_form_controls_info8`. Но это внутренняя реализация, а не публичный XML.
-Если значение нужно для обратной сборки, его нужно поднять в именованное
-понятие XML: контрол, свойство, событие, команда, привязка, ссылка на картинку
-или описание типа.
+Платформенные символы `cf_form_controls8`, `cf_form_controls_position8`,
+`cf_form_controls_info8` являются идентификаторами форматов payload обычных
+контролов в типовом механизме платформы. Это внутренняя реализация, а не
+публичные XML-узлы. Если значение нужно для обратной сборки, его нужно поднять
+в именованное понятие XML: контрол, свойство, событие, команда, привязка,
+ссылка на картинку или описание типа.
 
 Проверка через 1C Designer обязательна, но сама по себе недостаточна:
 публичный XML все равно должен оставаться чистой объектной моделью, а не

@@ -18,7 +18,7 @@ from onec_ordinary_forms.liststream import dumps, dumps_list_out_stream, parse_l
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
-from onec_ordinary_forms.ordinary_stream import PLATFORM_RECORD_TYPE_IDS, form_stream_from_object_xml
+from onec_ordinary_forms.ordinary_stream import PLATFORM_CONTROL_FORMAT_IDS, form_stream_from_object_xml
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
@@ -303,10 +303,10 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertEqual(raw_geometry[13], ["0", "20", "1"])
 
-    def test_stream_writer_uses_known_platform_record_type_ids(self) -> None:
-        self.assertEqual(PLATFORM_RECORD_TYPE_IDS["controls"], 0x2500)
-        self.assertEqual(PLATFORM_RECORD_TYPE_IDS["position"], 0x5500)
-        self.assertEqual(PLATFORM_RECORD_TYPE_IDS["info"], 0x9D00)
+    def test_platform_control_format_ids_are_known(self) -> None:
+        self.assertEqual(PLATFORM_CONTROL_FORMAT_IDS["controls"], 0x2500)
+        self.assertEqual(PLATFORM_CONTROL_FORMAT_IDS["position"], 0x5500)
+        self.assertEqual(PLATFORM_CONTROL_FORMAT_IDS["info"], 0x9D00)
 
     def test_stream_writer_requires_explicit_control_id(self) -> None:
         root = ET.fromstring(
@@ -323,6 +323,36 @@ class CliSmokeTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "explicit id"):
             form_stream_from_object_xml(root)
+
+    def test_button_action_roundtrips_as_named_xml(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            action_uuid = "e1692cc2-605b-4535-84dd-28440238746c"
+            bracket = (
+                "{"
+                '{"MainCaption",1,1,{"ru","Main"}},'
+                "{6ff79819-710e-4145-97cd-1618da79e3e2,7,"
+                '{1,{1,1,{"ru","Run"}},{3,"RunCommand",' + action_uuid + "}},"
+                "{8,1,2,101,22,0,0,0,0,0,0,0,0,0,0,0,0},"
+                '{14,"RunButton",4294967295,0,0,0},'
+                "{0}}"
+                "}"
+            ).encode("utf-8")
+            source.write_bytes(build_form_bin_container(bracket, b""))
+
+            out = root / "Form.xml"
+            from onec_ordinary_forms.cli import build_bin, dump_bin
+
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            xml = out.read_text(encoding="utf-8")
+            self.assertIn('<Action name="RunCommand" uuid="e1692cc2-605b-4535-84dd-28440238746c"/>', xml)
+            validate_xml_file(out)
+
+            rebuilt = root / "rebuilt.bin"
+            build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
+            rebuilt_files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
+            self.assertIn('{3,"RunCommand",e1692cc2-605b-4535-84dd-28440238746c}', rebuilt_files["form"].decode("utf-8"))
 
     def test_extract_elem_json_from_bracket_stream(self) -> None:
         bracket = """

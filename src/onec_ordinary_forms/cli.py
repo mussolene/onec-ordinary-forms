@@ -326,6 +326,19 @@ def action_binding(item_data: dict | None) -> dict[str, str]:
             return
         if (
             len(value) >= 3
+            and clean_token(value[0]) == "3"
+            and isinstance(value[1], str)
+            and isinstance(value[2], str)
+            and re.fullmatch(
+                r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+                clean_token(value[2]),
+            )
+        ):
+            result["name"] = clean_token(value[1])
+            result["uuid"] = clean_token(value[2])
+            return
+        if (
+            len(value) >= 3
             and isinstance(value[1], str)
             and re.fullmatch(
                 r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
