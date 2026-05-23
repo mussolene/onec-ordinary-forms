@@ -545,6 +545,22 @@ def binding_to_raw(node: ET.Element) -> object:
     return result
 
 
+def dimension_binding_to_raw(node: ET.Element) -> object:
+    if "value" in node.attrib:
+        return node.get("value", "")
+    result: list[object] = []
+    if "mode" in node.attrib:
+        result.append(node.get("mode", "0"))
+    if "target" in node.attrib or "targetId" in node.attrib:
+        result.append(anchor_target_id(node))
+    if "side" in node.attrib:
+        result.append(anchor_edge_code(node.get("side", "none")))
+    for child in node:
+        if child.tag.startswith("Extra"):
+            result.append(anchor_to_raw(child))
+    return result
+
+
 def anchor_to_raw(node: ET.Element) -> object:
     if "value" in node.attrib:
         return node.get("value", "")
@@ -1105,7 +1121,7 @@ def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[obje
         except ValueError:
             continue
         if 0 <= index < len(raw_geometry):
-            raw_geometry[index] = binding_to_raw(binding)
+            raw_geometry[index] = dimension_binding_to_raw(binding)
 
 
 def apply_picture_to_raw(raw: list[object], picture: ET.Element, asset_root: Path | None) -> None:
@@ -1115,7 +1131,11 @@ def apply_picture_to_raw(raw: list[object], picture: ET.Element, asset_root: Pat
     image_path = asset_root / file_name
     if not image_path.exists():
         return
-    payload = "#base64:" + base64.b64encode(image_path.read_bytes()).decode("ascii")
+    data = image_path.read_bytes()
+    expected_hash = picture.get("sha256")
+    if expected_hash and sha256_bytes(data) == expected_hash:
+        return
+    payload = "#base64:" + base64.b64encode(data).decode("ascii")
     replace_first_base64_payload(raw, payload)
 
 
@@ -1123,7 +1143,7 @@ def replace_first_base64_payload(value: object, payload: str) -> bool:
     if isinstance(value, list):
         for index, child in enumerate(value):
             if isinstance(child, str) and clean_token(child).startswith("#base64:"):
-                value[index] = quoted_atom(payload)
+                value[index] = payload
                 return True
             if replace_first_base64_payload(child, payload):
                 return True

@@ -7,8 +7,14 @@ from tempfile import TemporaryDirectory
 
 from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
-from onec_ordinary_forms.cli import apply_semantic_edits_to_form, format_xml_file, replace_root_title, validate_xml_file
-from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, unpack_form_bin
+from onec_ordinary_forms.cli import (
+    apply_geometry_bindings_to_raw,
+    apply_semantic_edits_to_form,
+    format_xml_file,
+    replace_root_title,
+    validate_xml_file,
+)
+from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, parse_form_bin_container, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, dumps_list_out_stream, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
@@ -196,6 +202,14 @@ class CliSmokeTest(unittest.TestCase):
             self.assertEqual((parts / "Module.bsl").read_bytes(), b"module")
             self.assertEqual((parts / "Form.xml").read_bytes(), b"form")
 
+    def test_form_bin_container_splits_large_documents_like_platform(self) -> None:
+        form = b"x" * (0xA000 + 17)
+        data = build_form_bin_container(form, b"module")
+        container = parse_form_bin_container(data)
+
+        self.assertEqual({file.name: file.payload for file in container.files}["form"], form)
+        self.assertIn(f"{len(form):08x} 0000a000".encode("ascii"), data)
+
     def test_form_bin_unpack_assembles_descriptor_split_streams(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -255,8 +269,24 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertEqual(
             dumps_list_out_stream(document.value),
-            '{1,\r\n{"ru","Main"},\r\n{2,\r\n{0},4\r\n}\r\n}',
+            '{1,\r\n{"ru","Main"},\r\n{2,\r\n{0},4}\r\n}',
         )
+
+    def test_geometry_dimension_binding_round_trips_as_dimension_record(self) -> None:
+        geometry = ET.fromstring(
+            """
+            <Position>
+              <Bindings>
+                <DimensionBinding dimension="height" mode="0" target="self" targetId="20" side="bottom"/>
+              </Bindings>
+            </Position>
+            """
+        )
+        raw_geometry = ["8", "1", "2", "3", "4", "1", ["0"], ["0"], ["0"], ["0"], ["0"], ["0"], "0", "0", "0", "0", "0"]
+
+        apply_geometry_bindings_to_raw(geometry, raw_geometry)
+
+        self.assertEqual(raw_geometry[13], ["0", "20", "1"])
 
     def test_extract_elem_json_from_bracket_stream(self) -> None:
         bracket = """

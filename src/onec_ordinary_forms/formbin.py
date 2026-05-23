@@ -17,6 +17,7 @@ CONTAINER_BLOCK_SIZE = 0x200
 CONTAINER_HEADER_SIZE = 16
 CONTAINER_BLOCK_HEADER_SIZE = 31
 CONTAINER_TOC_BLOCK_SIZE = 0x200
+CONTAINER_DOCUMENT_BLOCK_SIZE = 0xA000
 DEFAULT_CONTAINER_TIME = datetime(2000, 1, 1)
 
 
@@ -212,15 +213,42 @@ def _block_header(doc_size: int, current_block_size: int, next_block_offset: int
     return f"\r\n{doc_size:08x} {current_block_size:08x} {next_block_offset:08x} \r\n".encode("ascii")
 
 
-def _append_block(data: bytearray, payload: bytes, *, doc_size: int | None = None, min_block_size: int = 0) -> int:
+def _append_block(
+    data: bytearray,
+    payload: bytes,
+    *,
+    doc_size: int | None = None,
+    min_block_size: int = 0,
+    next_block_offset: int = CONTAINER_END_MARKER,
+) -> int:
     offset = len(data)
     size = len(payload) if doc_size is None else doc_size
     current_size = max(min_block_size, len(payload))
-    data.extend(_block_header(size, current_size))
+    data.extend(_block_header(size, current_size, next_block_offset))
     data.extend(payload)
     if current_size > len(payload):
         data.extend(b"\x00" * (current_size - len(payload)))
     return offset
+
+
+def _append_document(data: bytearray, payload: bytes, *, min_block_size: int = 0) -> int:
+    if len(payload) <= CONTAINER_DOCUMENT_BLOCK_SIZE:
+        return _append_block(data, payload, min_block_size=min_block_size)
+
+    chunks = [payload[index : index + CONTAINER_DOCUMENT_BLOCK_SIZE] for index in range(0, len(payload), CONTAINER_DOCUMENT_BLOCK_SIZE)]
+    first_offset = len(data)
+    header_size = len(_block_header(0, 0))
+    offsets: list[int] = []
+    current_offset = first_offset
+    for chunk in chunks:
+        offsets.append(current_offset)
+        current_offset += header_size + len(chunk)
+
+    for index, chunk in enumerate(chunks):
+        next_offset = offsets[index + 1] if index + 1 < len(offsets) else CONTAINER_END_MARKER
+        doc_size = len(payload) if index == 0 else 0
+        _append_block(data, chunk, doc_size=doc_size, next_block_offset=next_offset)
+    return first_offset
 
 
 def _file_descriptor_payload(name: str, created: int, modified: int) -> bytes:
@@ -250,8 +278,8 @@ def build_form_bin_container(
 
     entries: list[tuple[int, int]] = []
     for name, payload in (("form", form_payload), ("module", module_payload)):
-        descriptor_offset = _append_block(data, _file_descriptor_payload(name, created_ticks, modified_ticks))
-        payload_offset = _append_block(data, payload, min_block_size=CONTAINER_BLOCK_SIZE)
+        descriptor_offset = _append_document(data, _file_descriptor_payload(name, created_ticks, modified_ticks))
+        payload_offset = _append_document(data, payload, min_block_size=CONTAINER_BLOCK_SIZE)
         entries.append((descriptor_offset, payload_offset))
 
     toc_payload = b"".join(pack("<3i", descriptor_offset, payload_offset, CONTAINER_END_MARKER) for descriptor_offset, payload_offset in entries)

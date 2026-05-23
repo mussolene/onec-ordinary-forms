@@ -72,7 +72,9 @@ def dumps_list_out_stream(value: object) -> str:
             parts.append(dumps_list_out_stream(item))
         else:
             parts.append(dumps_list_out_stream(item))
-    parts.append("\r\n}")
+    if value and isinstance(value[-1], list):
+        parts.append("\r\n")
+    parts.append("}")
     return "".join(parts)
 
 
@@ -108,6 +110,9 @@ def tokenize(text: str) -> list[Token]:
         start = index
         while index < len(text) and not text[index].isspace() and text[index] not in "{}[],":
             index += 1
+        if text[start:index].startswith("#base64:"):
+            while index < len(text) and text[index] not in "{}[],":
+                index += 1
         tokens.append(Token("atom", text[start:index], start, index))
     return tokens
 
