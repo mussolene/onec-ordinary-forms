@@ -139,7 +139,7 @@ def scan_tokens(libraries: list[Path], tokens: set[str]) -> dict[str, list[Hit]]
 def xsd_palette(path: Path) -> set[str]:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     root = ET.parse(path).getroot()
-    choice = root.find("xs:complexType[@name='ItemsType']/xs:choice", ns)
+    choice = root.find("xs:group[@name='ControlElementGroup']/xs:choice", ns)
     if choice is None:
         return set()
     return {element.get("name", "") for element in choice.findall("xs:element", ns)}
