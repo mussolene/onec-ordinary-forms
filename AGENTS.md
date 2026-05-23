@@ -1,9 +1,14 @@
 ## OACS Repo Workflow
 
 For any non-trivial work in this repository, including form parser changes,
-corpus experiments, platform export/rebuild checks, documentation changes, and
-release work, use OACS as the durable project memory, context, and evidence
-surface.
+schema/XSD changes, corpus experiments, platform export/rebuild checks,
+platform-library inspection, documentation changes, and release work, use OACS
+as the durable project memory, context, and evidence surface.
+
+OACS is mandatory for parser and platform work. Do not treat chat history,
+local recollection, or unrecorded terminal output as durable project state. If
+work changes behavior, tests a platform hypothesis, rejects an approach, or
+finds a blocker, it must leave an OACS evidence trail and checkpoint.
 
 Required sequence:
 
@@ -17,31 +22,44 @@ Required sequence:
 4. Ask the reference context gate before building context:
    `acs context gate --intent repo_development --scope project --task "<task>" --json`.
    Treat `decision=build` as the signal to run `acs context build`. Treat
-   `decision=skip` as valid only for tiny visible-file edits.
+   `decision=skip` as valid only for tiny visible-file edits that do not depend
+   on prior parser/platform decisions. If unsure, build context anyway.
 5. Query durable memory first, then build or inspect fresh context when the gate
    says `build`, when prior project memory/evidence may matter, or when in
    doubt:
    `acs memory query --query "<task intent>" --scope project --json` and
    `acs context build --intent "<task intent>" --scope project --json`.
-6. Treat command outputs, Docker checks, OACS/MCP results, and runtime checks as
-   evidence with `acs tool ingest-result ...`.
+6. Treat command outputs, Docker checks, OACS/MCP results, runtime checks,
+   failed experiments, and rejected hypotheses as evidence with
+   `acs tool ingest-result ...`.
 7. Promote verified reusable conclusions with `acs memory propose`,
    `acs memory commit`, and `acs memory sharpen`.
-8. Record a checkpoint for each completed iteration with outcome, evidence refs,
-   and next step: `acs checkpoint add ... --evidence <ev_...> --json`.
-9. Before every commit, check staged changes for non-project information and
+8. Record a checkpoint for each completed, partial, or blocked iteration with
+   outcome, PASS/FAIL/PARTIAL acceptance criteria, evidence refs, remaining
+   risk, and next step:
+   `acs checkpoint add ... --evidence <ev_...> --json`.
+9. Before every commit, inspect staged changes and generated files for
+   non-project information and
    sensitive data: no private EPF/ERF files, customer dumps, local host paths,
    `.env`, OACS DB files, `nethasp.ini` contents, credentials, tokens, license
    data, platform archives, local volumes, or unrelated artifacts.
 10. Close each completed work iteration with a focused commit after checks pass.
+    If there are unrelated dirty files, leave them unstaged and mention that
+    they were not part of the iteration.
 
 Hard rules:
 
 - Do not claim completion unless every acceptance criterion is `PASS`.
 - Do not claim completion unless current verification, OACS evidence, and an
   OACS checkpoint exist for the iteration.
+- Do not hide partial work behind successful unrelated checks. If build,
+  platform validation, or object-model serialization is incomplete, say
+  `PARTIAL` or `BLOCKED`, record it in OACS, and state the next concrete step.
 - Current code and current command results are the source of truth, not prior
   chat claims.
+- Parser, serializer, XSD, and platform-library claims must cite current
+  evidence from OACS or a command run in the current iteration. If evidence is
+  stale, rerun the check or downgrade the claim.
 - Keep secrets out of OACS: no customer file paths, EPF payloads, ITS
   credentials, license data, `nethasp.ini` contents, platform archives, full
   help dumps, or local host paths.
@@ -53,3 +71,13 @@ Hard rules:
 - Prefer platform `ibcmd` for export/import/rebuild validation. Do not route
   this repository's parser work through `vrunner` unless a task explicitly
   requires that separate tool.
+- For ordinary Form.bin validity, prefer strict Designer
+  `/DumpExternalDataProcessorOrReportToFiles` validation via
+  `tools/platform_validate_epf.sh`; metadata-only load/check results are not
+  enough to prove the form stream opens correctly.
+- Do not commit generated private reports from `scan-output/`, copied platform
+  libraries, DMF jars, platform archives, local database directories, or
+  extracted customer configuration trees.
+- If a command fails because the local environment lacks license, container, or
+  platform prerequisites, ingest the failure as evidence and checkpoint the
+  blocked state instead of silently skipping validation.
