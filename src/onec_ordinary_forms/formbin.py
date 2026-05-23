@@ -240,15 +240,57 @@ def _append_document(data: bytearray, payload: bytes, *, min_block_size: int = 0
     header_size = len(_block_header(0, 0))
     offsets: list[int] = []
     current_offset = first_offset
-    for chunk in chunks:
+    for index, chunk in enumerate(chunks):
         offsets.append(current_offset)
-        current_offset += header_size + len(chunk)
+        current_size = max(min_block_size, len(chunk)) if index + 1 == len(chunks) else len(chunk)
+        current_offset += header_size + current_size
 
     for index, chunk in enumerate(chunks):
         next_offset = offsets[index + 1] if index + 1 < len(offsets) else CONTAINER_END_MARKER
         doc_size = len(payload) if index == 0 else 0
-        _append_block(data, chunk, doc_size=doc_size, next_block_offset=next_offset)
+        current_size = max(min_block_size, len(chunk)) if index + 1 == len(chunks) else len(chunk)
+        _append_block(data, chunk, doc_size=doc_size, min_block_size=current_size, next_block_offset=next_offset)
     return first_offset
+
+
+def _append_document_aligned_to_odd_end(data: bytearray, payload: bytes, *, min_block_size: int = 0) -> int:
+    """Append a container document and leave the next document on an odd offset.
+
+    1C container block headers distinguish logical document size from physical
+    block size. Platform exports use that slack in the last block so the next
+    document descriptor starts on the same odd/even boundary after payload size
+    changes. Keeping ``doc_size`` logical while increasing ``current_size`` is
+    what lets readers ignore the padding bytes.
+    """
+
+    predicted = _document_end_offset(len(data), len(payload), min_block_size=min_block_size)
+    padding = 1 if predicted % 2 == 0 else 0
+    return _append_document(data, payload, min_block_size=_last_block_min_size(len(payload), min_block_size) + padding)
+
+
+def _document_end_offset(start_offset: int, payload_size: int, *, min_block_size: int = 0) -> int:
+    header_size = len(_block_header(0, 0))
+    if payload_size <= CONTAINER_DOCUMENT_BLOCK_SIZE:
+        return start_offset + header_size + max(min_block_size, payload_size)
+    full_chunks, last_chunk_size = divmod(payload_size, CONTAINER_DOCUMENT_BLOCK_SIZE)
+    chunk_count = full_chunks + (1 if last_chunk_size else 0)
+    if last_chunk_size == 0:
+        last_chunk_size = CONTAINER_DOCUMENT_BLOCK_SIZE
+    return (
+        start_offset
+        + chunk_count * header_size
+        + max(chunk_count - 1, 0) * CONTAINER_DOCUMENT_BLOCK_SIZE
+        + max(min_block_size, last_chunk_size)
+    )
+
+
+def _last_block_min_size(payload_size: int, min_block_size: int = 0) -> int:
+    if payload_size <= CONTAINER_DOCUMENT_BLOCK_SIZE:
+        return max(min_block_size, payload_size)
+    last_chunk_size = payload_size % CONTAINER_DOCUMENT_BLOCK_SIZE
+    if last_chunk_size == 0:
+        last_chunk_size = CONTAINER_DOCUMENT_BLOCK_SIZE
+    return max(min_block_size, last_chunk_size)
 
 
 def _file_descriptor_payload(name: str, created: int, modified: int) -> bytes:
@@ -277,9 +319,11 @@ def build_form_bin_container(
     data.extend(b"\x00" * (CONTAINER_BLOCK_HEADER_SIZE + CONTAINER_TOC_BLOCK_SIZE))
 
     entries: list[tuple[int, int]] = []
-    for name, payload in (("form", form_payload), ("module", module_payload)):
+    files = (("form", form_payload), ("module", module_payload))
+    for index, (name, payload) in enumerate(files):
         descriptor_offset = _append_document(data, _file_descriptor_payload(name, created_ticks, modified_ticks))
-        payload_offset = _append_document(data, payload, min_block_size=CONTAINER_BLOCK_SIZE)
+        append_payload = _append_document_aligned_to_odd_end if index + 1 < len(files) else _append_document
+        payload_offset = append_payload(data, payload, min_block_size=CONTAINER_BLOCK_SIZE)
         entries.append((descriptor_offset, payload_offset))
 
     toc_payload = b"".join(pack("<3i", descriptor_offset, payload_offset, CONTAINER_END_MARKER) for descriptor_offset, payload_offset in entries)

@@ -3,6 +3,7 @@ import base64
 import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from struct import unpack
 from tempfile import TemporaryDirectory
 
 from onec_ordinary_forms import __version__
@@ -11,7 +12,14 @@ from onec_ordinary_forms.cli import (
     format_xml_file,
     validate_xml_file,
 )
-from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, parse_form_bin_container, unpack_form_bin
+from onec_ordinary_forms.formbin import (
+    CONTAINER_HEADER_SIZE,
+    _read_document,
+    build_form_bin_container,
+    pack_form_bin,
+    parse_form_bin_container,
+    unpack_form_bin,
+)
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, dumps_list_out_stream, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
@@ -223,6 +231,17 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertEqual({file.name: file.payload for file in container.files}["form"], form)
         self.assertIn(f"{len(form):08x} 0000a000".encode("ascii"), data)
+
+    def test_form_bin_container_aligns_next_document_after_resized_form(self) -> None:
+        form = b"x" * (0xA000 + 16)
+        data = build_form_bin_container(form, b"module")
+        toc = _read_document(data, CONTAINER_HEADER_SIZE)
+        module_descriptor_offset, module_data_offset, marker = unpack("<3i", toc[12:24])
+
+        self.assertEqual(marker, 0x7FFFFFFF)
+        self.assertEqual(module_descriptor_offset % 2, 1)
+        self.assertEqual(module_data_offset % 2, 0)
+        self.assertEqual({file.name: file.payload for file in parse_form_bin_container(data).files}["form"], form)
 
     def test_form_bin_unpack_assembles_descriptor_split_streams(self) -> None:
         with TemporaryDirectory() as temp_dir:
