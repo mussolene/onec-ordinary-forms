@@ -882,15 +882,7 @@ def pretty_xml_bytes(root: ET.Element) -> bytes:
         return ET.tostring(root, encoding="utf-8", xml_declaration=True)
     parser = etree.XMLParser(remove_blank_text=True)
     document = etree.fromstring(ET.tostring(root, encoding="utf-8"), parser)
-    return polish_pretty_xml(etree.tostring(document, encoding="utf-8", xml_declaration=True, pretty_print=True))
-
-
-def polish_pretty_xml(data: bytes) -> bytes:
-    text = data.decode("utf-8")
-    if "<xs:schema " in text:
-        text = re.sub(r"\n  <xs:", "\n\n  <xs:", text)
-        text = text.replace(">\n\n\n  <xs:", ">\n\n  <xs:")
-    return text.encode("utf-8")
+    return etree.tostring(document, encoding="utf-8", xml_declaration=True, pretty_print=True)
 
 
 def write_pretty_xml(root: ET.Element, path: Path) -> None:
@@ -924,7 +916,7 @@ def format_xml_file(path: Path) -> None:
         raise RuntimeError("XML formatting requires lxml") from exc
     parser = etree.XMLParser(remove_blank_text=True)
     document = etree.parse(str(path), parser)
-    path.write_bytes(polish_pretty_xml(etree.tostring(document, encoding="utf-8", xml_declaration=True, pretty_print=True)))
+    path.write_bytes(etree.tostring(document, encoding="utf-8", xml_declaration=True, pretty_print=True))
 
 
 def format_xml(args: argparse.Namespace) -> None:

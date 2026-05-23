@@ -1,8 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
-
   <xs:element name="OrdinaryForm" type="OrdinaryFormType"/>
-
   <xs:complexType name="OrdinaryFormType">
     <xs:sequence>
       <xs:element name="Source" type="SourceType"/>
@@ -16,7 +14,6 @@
     <xs:attribute name="sourceKind" type="xs:string" use="required"/>
     <xs:attribute name="roundTrip" type="xs:string" use="required"/>
   </xs:complexType>
-
   <xs:complexType name="SourceType">
     <xs:attribute name="formFile" type="xs:string" use="required"/>
     <xs:attribute name="binFile" type="xs:string" use="required"/>
@@ -28,13 +25,11 @@
     <xs:attribute name="moduleSha256" type="Sha256Type"/>
     <xs:attribute name="moduleSize" type="xs:nonNegativeInteger"/>
   </xs:complexType>
-
   <xs:simpleType name="Sha256Type">
     <xs:restriction base="xs:string">
       <xs:pattern value="[0-9a-f]{64}"/>
     </xs:restriction>
   </xs:simpleType>
-
   <xs:complexType name="PropertiesType">
     <xs:sequence>
       <xs:element name="Title" type="LocalizedTextType" minOccurs="0"/>
@@ -42,31 +37,26 @@
       <xs:element name="Module" type="FileRefType" minOccurs="0"/>
     </xs:sequence>
   </xs:complexType>
-
   <xs:complexType name="LocalizedTextType">
     <xs:sequence>
       <xs:element name="Item" type="LocalizedTextItemType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
-
   <xs:complexType name="LocalizedTextItemType" mixed="true">
     <xs:attribute name="lang" type="xs:language"/>
   </xs:complexType>
-
   <xs:complexType name="FileRefType">
     <xs:attribute name="file" type="xs:string" use="required"/>
     <xs:attribute name="sha256" type="Sha256Type"/>
     <xs:attribute name="size" type="xs:nonNegativeInteger"/>
     <xs:attribute name="mime" type="xs:string"/>
   </xs:complexType>
-
   <xs:complexType name="AttributesType">
     <xs:sequence>
       <xs:element name="Attribute" type="AttributeType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
-
   <xs:complexType name="AttributeType">
     <xs:sequence>
       <xs:element name="Type" type="OpenElementType" minOccurs="0"/>
@@ -74,25 +64,21 @@
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="id" type="xs:integer"/>
   </xs:complexType>
-
   <xs:complexType name="CommandsType">
     <xs:sequence>
       <xs:element name="Command" type="OpenElementType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
-
   <xs:complexType name="FormStructureType">
     <xs:sequence>
       <xs:element name="Pages" type="PagesType"/>
     </xs:sequence>
   </xs:complexType>
-
   <xs:complexType name="PagesType">
     <xs:sequence>
       <xs:element name="Page" type="PageType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
-
   <xs:complexType name="PageType">
     <xs:sequence>
       <xs:element name="Title" type="LocalizedTextType" minOccurs="0"/>
@@ -101,7 +87,6 @@
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="rawKey" type="xs:string"/>
   </xs:complexType>
-
   <xs:complexType name="ItemsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="Panel" type="PanelType"/>
@@ -122,7 +107,6 @@
       <xs:element name="HTMLDocumentField" type="HTMLDocumentFieldType"/>
     </xs:choice>
   </xs:complexType>
-
   <xs:complexType name="ControlType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="Title" type="LocalizedTextType"/>
@@ -196,119 +180,99 @@
     <xs:attribute name="childCount" type="xs:nonNegativeInteger"/>
     <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
-
   <xs:complexType name="PanelType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="LabelDecorationType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="PictureDecorationType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="ButtonType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="InputFieldType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="CommandBarType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="CheckBoxType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="TableType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="ChoiceFieldType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="SpreadsheetDocumentFieldType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="GroupBoxType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="RadioButtonType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="SplitterType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="ChartType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="ListBoxType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="HTMLDocumentFieldType">
     <xs:complexContent>
       <xs:extension base="ControlType"/>
     </xs:complexContent>
   </xs:complexType>
-
   <xs:complexType name="NamedRefType">
     <xs:attribute name="name" type="xs:string"/>
     <xs:attribute name="id" type="xs:integer"/>
     <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
-
   <xs:complexType name="EventsType">
     <xs:sequence>
       <xs:element name="Event" type="EventType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
-
   <xs:complexType name="EventType" mixed="true">
     <xs:attribute name="name" type="xs:string" use="required"/>
   </xs:complexType>
-
   <xs:complexType name="PositionType">
     <xs:sequence>
       <xs:element name="Bindings" type="BindingsType" minOccurs="0"/>
@@ -321,14 +285,12 @@
     <xs:attribute name="height" type="xs:integer"/>
     <xs:attribute name="unit" type="xs:string"/>
   </xs:complexType>
-
   <xs:complexType name="BindingsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element name="Binding" type="BindingType"/>
       <xs:element name="DimensionBinding" type="DimensionBindingType"/>
     </xs:choice>
   </xs:complexType>
-
   <xs:complexType name="BindingType">
     <xs:sequence>
       <xs:element name="From" type="AnchorType" minOccurs="0"/>
@@ -338,7 +300,6 @@
     <xs:attribute name="mode" type="xs:integer"/>
     <xs:attribute name="modeName" type="xs:string"/>
   </xs:complexType>
-
   <xs:complexType name="DimensionBindingType">
     <xs:attribute name="dimension" type="xs:string" use="required"/>
     <xs:attribute name="value" type="xs:string"/>
@@ -349,7 +310,6 @@
     <xs:attribute name="targetName" type="xs:string"/>
     <xs:attribute name="side" type="xs:string"/>
   </xs:complexType>
-
   <xs:complexType name="AnchorType">
     <xs:attribute name="relation" type="xs:string"/>
     <xs:attribute name="target" type="xs:string"/>
@@ -358,7 +318,6 @@
     <xs:attribute name="side" type="xs:string"/>
     <xs:attribute name="offset" type="xs:integer"/>
   </xs:complexType>
-
   <xs:complexType name="FormBinType">
     <xs:sequence>
       <xs:element name="LogicalStream" type="LogicalStreamType" minOccurs="0" maxOccurs="unbounded"/>
@@ -366,14 +325,12 @@
     </xs:sequence>
     <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
-
   <xs:complexType name="LogicalStreamType" mixed="true">
     <xs:attribute name="file" type="xs:string" use="required"/>
     <xs:attribute name="encoding" type="xs:string"/>
     <xs:attribute name="size" type="xs:nonNegativeInteger"/>
     <xs:attribute name="sha256" type="Sha256Type"/>
   </xs:complexType>
-
   <xs:complexType name="OpenElementType" mixed="true">
     <xs:sequence>
       <xs:any minOccurs="0" maxOccurs="unbounded" processContents="lax"/>
