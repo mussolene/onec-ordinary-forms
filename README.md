@@ -72,6 +72,43 @@ The exact schema is still being expanded, but the target direction is fixed:
 public XML must be managed-form-like, named, and understandable to a 1C
 developer.
 
+### Reading Form.xml
+
+The ordinary form source package is meant to be read from the top down:
+
+- `Form.xml` is the form object model.
+- `Form/Module.bsl` is the ordinary form module.
+- `Form/Items/...` contains extracted sidecar files such as pictures.
+
+Inside `Form.xml`, the main sections are:
+
+- `Title` - localized form title.
+- `Events` - form-level event handlers, for example `ПриОткрытии`.
+- `Attributes` - form attributes and their 1C type descriptions.
+- `Pages` - top-level form pages and their nested controls.
+- control nodes such as `Panel`, `InputField`, `Button`, `Table`,
+  `CommandBar`, `LabelDecoration`, and `PictureDecoration`.
+- `Position` - control geometry and bindings.
+- `Action` or `Events` under a control - handlers connected to that control.
+- `Picture file="..."` - a reference to a sidecar image next to the XML.
+
+For example, a button is edited as a named object:
+
+```xml
+<Button name="RunButton" id="12">
+  <Title>
+    <Item lang="ru">Run</Item>
+  </Title>
+  <Position left="16" top="40" right="120" bottom="64"/>
+  <Action name="RunButtonНажатие" title="Run button click"/>
+</Button>
+```
+
+During `build-bin`, the writer serializes these named XML objects into the
+platform list-stream representation and then packs `form` and `module` into
+`Form.bin`. That container layer is internal; users edit `Form.xml`,
+`Module.bsl`, and sidecar files.
+
 ### What Must Not Be In Public XML
 
 Public `Form.xml` must not contain raw or renamed platform dumps. The following
@@ -168,6 +205,43 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 
 Схема еще расширяется, но направление фиксированное: публичный XML должен быть
 похож на XML управляемой формы, быть именованным и понятным разработчику 1С.
+
+### Как читать Form.xml
+
+Пакет исходников обычной формы читается сверху вниз:
+
+- `Form.xml` - объектная модель формы.
+- `Form/Module.bsl` - модуль обычной формы.
+- `Form/Items/...` - вынесенные рядом файлы, например картинки.
+
+Внутри `Form.xml` основные разделы такие:
+
+- `Title` - локализованный заголовок формы.
+- `Events` - события самой формы, например `ПриОткрытии`.
+- `Attributes` - реквизиты формы и описания их типов 1С.
+- `Pages` - страницы формы и вложенные в них элементы.
+- узлы контролов: `Panel`, `InputField`, `Button`, `Table`, `CommandBar`,
+  `LabelDecoration`, `PictureDecoration` и другие элементы палитры.
+- `Position` - геометрия элемента и привязки.
+- `Action` или `Events` внутри элемента - обработчики, подключенные к нему.
+- `Picture file="..."` - ссылка на картинку рядом с XML.
+
+Например, кнопка редактируется как именованный объект:
+
+```xml
+<Button name="КнопкаВыполнить" id="12">
+  <Title>
+    <Item lang="ru">Выполнить</Item>
+  </Title>
+  <Position left="16" top="40" right="120" bottom="64"/>
+  <Action name="КнопкаВыполнитьНажатие" title="Нажатие кнопки выполнить"/>
+</Button>
+```
+
+При `build-bin` writer сериализует эти именованные XML-объекты во внутренний
+list-stream/скобкоформат платформы и затем упаковывает документы `form` и
+`module` в `Form.bin`. Этот контейнерный слой внутренний; пользователь
+редактирует `Form.xml`, `Module.bsl` и файлы рядом.
 
 ### Чего не должно быть в публичном XML
 
