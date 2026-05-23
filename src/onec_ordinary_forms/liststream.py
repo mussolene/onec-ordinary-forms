@@ -102,6 +102,9 @@ def tokenize(text: str) -> list[Token]:
                 elif current == "\\":
                     escaped = True
                 elif current == '"':
+                    if index < len(text) and text[index] == '"':
+                        index += 1
+                        continue
                     break
             else:
                 raise ListStreamParseError("Unterminated string literal")

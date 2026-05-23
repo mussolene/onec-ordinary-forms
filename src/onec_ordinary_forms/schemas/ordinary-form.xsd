@@ -1,5 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:md="urn:onec:ordinary-form:metadata" elementFormDefault="unqualified" attributeFormDefault="unqualified">
+  <xs:import namespace="urn:onec:ordinary-form:metadata" schemaLocation="metadata.xsd"/>
   <xs:element name="OrdinaryForm" type="OrdinaryFormType"/>
   <xs:complexType name="OrdinaryFormType">
     <xs:sequence>
@@ -8,7 +9,6 @@
       <xs:element name="Attributes" type="AttributesType"/>
       <xs:element name="Commands" type="CommandsType"/>
       <xs:element name="FormStructure" type="FormStructureType"/>
-      <xs:element name="FormBin" type="FormBinType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="schemaVersion" type="xs:string" use="required"/>
     <xs:attribute name="sourceKind" type="xs:string" use="required"/>
@@ -16,14 +16,16 @@
   </xs:complexType>
   <xs:complexType name="SourceType">
     <xs:attribute name="formFile" type="xs:string" use="required"/>
-    <xs:attribute name="binFile" type="xs:string" use="required"/>
     <xs:attribute name="formSha256" type="Sha256Type" use="required"/>
-    <xs:attribute name="binSha256" type="Sha256Type" use="required"/>
     <xs:attribute name="formSize" type="xs:nonNegativeInteger" use="required"/>
-    <xs:attribute name="binSize" type="xs:nonNegativeInteger" use="required"/>
     <xs:attribute name="moduleFile" type="xs:string"/>
     <xs:attribute name="moduleSha256" type="Sha256Type"/>
     <xs:attribute name="moduleSize" type="xs:nonNegativeInteger"/>
+    <xs:attribute name="modelSha256" type="Sha256Type"/>
+    <xs:attribute name="formCreatedTicks" type="xs:integer"/>
+    <xs:attribute name="formModifiedTicks" type="xs:integer"/>
+    <xs:attribute name="moduleCreatedTicks" type="xs:integer"/>
+    <xs:attribute name="moduleModifiedTicks" type="xs:integer"/>
   </xs:complexType>
   <xs:simpleType name="Sha256Type">
     <xs:restriction base="xs:string">
@@ -183,7 +185,7 @@
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="id" type="xs:integer"/>
     <xs:attribute name="rawKey" type="xs:string"/>
-    <xs:attribute name="platformType" type="xs:string"/>
+    <xs:attribute name="platformType" type="md:PlatformControlNameType"/>
     <xs:attribute name="managedEquivalent" type="xs:string"/>
     <xs:attribute name="page" type="xs:string"/>
     <xs:attribute name="childCount" type="xs:nonNegativeInteger"/>
@@ -367,19 +369,6 @@
   <xs:complexType name="IndexedValueType" mixed="true">
     <xs:attribute name="index" type="xs:nonNegativeInteger" use="required"/>
     <xs:attribute name="kind" type="xs:string"/>
-  </xs:complexType>
-  <xs:complexType name="FormBinType">
-    <xs:sequence>
-      <xs:element name="LogicalStream" type="LogicalStreamType" minOccurs="0" maxOccurs="unbounded"/>
-      <xs:element name="Files" type="OpenElementType" minOccurs="0"/>
-    </xs:sequence>
-    <xs:anyAttribute processContents="lax"/>
-  </xs:complexType>
-  <xs:complexType name="LogicalStreamType" mixed="true">
-    <xs:attribute name="file" type="xs:string" use="required"/>
-    <xs:attribute name="encoding" type="xs:string"/>
-    <xs:attribute name="size" type="xs:nonNegativeInteger"/>
-    <xs:attribute name="sha256" type="Sha256Type"/>
   </xs:complexType>
   <xs:complexType name="OpenElementType" mixed="true">
     <xs:sequence>

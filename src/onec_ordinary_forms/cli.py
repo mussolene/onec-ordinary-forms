@@ -165,7 +165,7 @@ def raw_to_text(value: object) -> str:
 def clean_token(value: object) -> str:
     text = str(value)
     if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
-        return text[1:-1].replace('\\"', '"')
+        return text[1:-1].replace('""', '"').replace('\\"', '"')
     return text
 
 
@@ -320,7 +320,7 @@ def get_multilang_text(parent: ET.Element | None, tag: str) -> str:
 
 
 def quote_form_string(value: str) -> str:
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    return value.replace('"', '""')
 
 
 def page_title(page_data: dict | None) -> str:
@@ -775,30 +775,15 @@ def add_semantic_pages(
             add_semantic_item(items, item, data, raw_key, element_index, asset_root)
 
 
-def add_form_bin_container(root: ET.Element, bin_bytes: bytes, form_bytes: bytes) -> None:
+def add_form_container_metadata(root: ET.Element, bin_bytes: bytes) -> None:
     parts = parse_form_bin(bin_bytes)
     descriptors = file_descriptors(parts)
-    container = ET.SubElement(root, "FormBin")
-    container.set("format", "onec-ordinary-formbin-container")
-    container.set("version", "3")
-    container.set("container", "1c-container32")
-    container.set("blockSize", "512")
-
-    form_stream = ET.SubElement(container, "LogicalStream")
-    form_stream.set("file", "Form.xml")
-    form_stream.set("encoding", "base64")
-    form_stream.set("size", str(len(form_bytes)))
-    form_stream.set("sha256", sha256_bytes(form_bytes))
-    form_stream.text = base64.b64encode(form_bytes).decode("ascii")
-
-    files = ET.SubElement(container, "Files")
     for name in ("form", "module"):
         descriptor = descriptors.get(name)
-        file_node = ET.SubElement(files, "File")
-        file_node.set("name", name)
-        if descriptor is not None:
-            file_node.set("createdTicks", str(descriptor.created))
-            file_node.set("modifiedTicks", str(descriptor.modified))
+        if descriptor is None:
+            continue
+        root.set(f"{name}CreatedTicks", str(descriptor.created))
+        root.set(f"{name}ModifiedTicks", str(descriptor.modified))
 
 
 def dump_xml(args: argparse.Namespace) -> None:
@@ -841,11 +826,9 @@ def dump_xml_from_paths(
 
     source = ET.SubElement(root, "Source")
     source.set("formFile", form_path.name)
-    source.set("binFile", bin_path.name)
     source.set("formSha256", sha256_bytes(form_bytes))
-    source.set("binSha256", sha256_bytes(bin_bytes))
     source.set("formSize", str(len(form_bytes)))
-    source.set("binSize", str(len(bin_bytes)))
+    add_form_container_metadata(source, bin_bytes)
     if module_path and module_bytes:
         source.set("moduleFile", module_path.name)
         source.set("moduleSha256", sha256_bytes(module_bytes))
@@ -884,7 +867,7 @@ def dump_xml_from_paths(
 
     form_structure = ET.SubElement(root, "FormStructure")
     add_semantic_pages(form_structure, elem, element_index, asset_root)
-    add_form_bin_container(root, bin_bytes, form_bytes)
+    source.set("modelSha256", semantic_model_hash(root))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     write_pretty_xml(root, out_path)
@@ -903,6 +886,30 @@ def pretty_xml_bytes(root: ET.Element) -> bytes:
 
 def write_pretty_xml(root: ET.Element, path: Path) -> None:
     path.write_bytes(pretty_xml_bytes(root))
+
+
+def semantic_model_hash(root: ET.Element) -> str:
+    model = ET.Element("SemanticModel")
+    for tag in ("Properties", "Attributes", "Commands", "FormStructure"):
+        child = root.find(tag)
+        if child is not None:
+            model.append(clone_without_blank_text(child))
+    return sha256_bytes(ET.tostring(model, encoding="utf-8"))
+
+
+def clone_without_blank_text(element: ET.Element) -> ET.Element:
+    clone = ET.Element(element.tag, element.attrib)
+    if element.text and element.text.strip():
+        clone.text = normalize_xml_text_for_hash(element.text)
+    for child in element:
+        clone.append(clone_without_blank_text(child))
+    if element.tail and element.tail.strip():
+        clone.tail = normalize_xml_text_for_hash(element.tail)
+    return clone
+
+
+def normalize_xml_text_for_hash(value: str) -> str:
+    return value.replace("\r\r\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def schema_path() -> Path:
@@ -980,30 +987,19 @@ def module_data_from_xml(root: ET.Element, asset_root: Path) -> bytes:
     return data
 
 
-def embedded_form_stream_from_xml(root: ET.Element) -> bytes:
-    stream = root.find("./FormBin/LogicalStream[@file='Form.xml']")
-    if stream is None or stream.get("encoding") != "base64" or not stream.text:
-        raise ValueError("OrdinaryForm XML does not contain embedded Form.xml stream")
-    data = base64.b64decode("".join(stream.text.split()))
-    expected_hash = stream.get("sha256")
-    if expected_hash and sha256_bytes(data) != expected_hash:
-        raise ValueError("Embedded Form.xml stream hash mismatch")
-    return data
-
-
 def container_times_from_xml(root: ET.Element) -> tuple[int | None, int | None]:
-    for file_node in root.findall("./FormBin/Files/File"):
-        if file_node.get("name") != "form":
-            continue
-        created = file_node.get("createdTicks")
-        modified = file_node.get("modifiedTicks")
-        try:
-            return (
-                int(created) if created is not None else None,
-                int(modified) if modified is not None else None,
-            )
-        except ValueError:
-            return None, None
+    source = root.find("./Source")
+    if source is None:
+        return None, None
+    created = source.get("formCreatedTicks")
+    modified = source.get("formModifiedTicks")
+    try:
+        return (
+            int(created) if created is not None else None,
+            int(modified) if modified is not None else None,
+        )
+    except ValueError:
+        return None, None
     return None, None
 
 
@@ -1012,12 +1008,28 @@ def build_bin(args: argparse.Namespace) -> None:
     out_bin = Path(args.out_bin)
     asset_root = Path(args.asset_root) if args.asset_root else xml_path.with_suffix("")
     root = ET.parse(xml_path).getroot()
-    form_data = apply_semantic_edits_to_form(root, embedded_form_stream_from_xml(root), asset_root)
+    form_data = form_stream_from_object_xml(root, asset_root)
     module_data = module_data_from_xml(root, asset_root)
     created, modified = container_times_from_xml(root)
     bin_data = build_form_bin_container(form_data, module_data, created=created, modified=modified)
     out_bin.parent.mkdir(parents=True, exist_ok=True)
     out_bin.write_bytes(bin_data)
+
+
+def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None) -> bytes:
+    """Build the platform ordinary form stream from public object XML.
+
+    The visible XML must stay a form model, not a second list-stream dump.  The
+    serializer below is deliberately the only place that translates that model
+    back into the platform ListOutStream representation.
+    """
+
+    raise NotImplementedError(
+        "Object-only ordinary form serialization is not complete yet: "
+        "Form.xml no longer carries ListStream/FormBin placeholders, so build-bin "
+        "must serialize FormStructure, Attributes, Commands, Module, and pictures "
+        "directly into the platform ListOutStream."
+    )
 
 
 def apply_semantic_edits_to_form(root: ET.Element, base_form_data: bytes, asset_root: Path | None = None) -> bytes:
@@ -1032,7 +1044,7 @@ def apply_semantic_edits_to_form(root: ET.Element, base_form_data: bytes, asset_
 
 def apply_xml_to_list_stream_model(root: ET.Element, list_stream_root: object, asset_root: Path | None = None) -> None:
     title = get_multilang_text(root.find("./Properties"), "Title")
-    if title:
+    if title and first_ru_text(list_stream_root) != title:
         replace_first_ru_text(list_stream_root, title)
     controls = raw_controls_by_id(list_stream_root)
     controls.update({control.object_id: control.raw for control in parse_ordinary_form_model(list_stream_root).flatten()})
@@ -1072,10 +1084,10 @@ def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root:
     name = element.get("name")
     if name:
         metadata = raw_metadata_record(raw)
-        if metadata is not None and len(metadata) > 1:
+        if metadata is not None and len(metadata) > 1 and clean_token(metadata[1]) != name:
             metadata[1] = quoted_atom(name)
     title = get_multilang_text(element, "Title")
-    if title:
+    if title and first_ru_text(raw) != title:
         replace_first_ru_text(raw, title)
     geometry = element.find("Position")
     if geometry is None:
@@ -1148,6 +1160,18 @@ def replace_first_base64_payload(value: object, payload: str) -> bool:
             if replace_first_base64_payload(child, payload):
                 return True
     return False
+
+
+def first_ru_text(value: object) -> str:
+    if isinstance(value, list):
+        if len(value) >= 3 and str(value[0]) == "1" and str(value[1]) == "1" and isinstance(value[2], list):
+            if len(value[2]) >= 2 and clean_token(value[2][0]) == "ru":
+                return clean_token(value[2][1])
+        for child in value:
+            found = first_ru_text(child)
+            if found:
+                return found
+    return ""
 
 
 def raw_metadata_record(raw: list[object]) -> list[object] | None:
