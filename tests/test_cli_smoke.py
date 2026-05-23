@@ -7,18 +7,25 @@ from tempfile import TemporaryDirectory
 
 from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
-from onec_ordinary_forms.cli import apply_semantic_edits_to_form, replace_root_title
+from onec_ordinary_forms.cli import apply_semantic_edits_to_form, replace_root_title, validate_xml_file
 from onec_ordinary_forms.formbin import build_form_bin_container, pack_form_bin, unpack_form_bin
 from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
+from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
 class CliSmokeTest(unittest.TestCase):
     def test_version_is_present(self) -> None:
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
+
+    def test_ordinary_palette_describes_all_known_controls(self) -> None:
+        self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 16)
+        self.assertIn("Title", ORDINARY_CONTROL_DESCRIPTORS["Label"].properties)
+        self.assertIn("ChoiceButton", ORDINARY_CONTROL_DESCRIPTORS["InputField"].properties)
+        self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["Image"].xml_tag, "PictureDecoration")
 
     def test_replace_root_title_updates_first_title_only(self) -> None:
         source = '{"ru","Old"}\n{"ru","Other"}\n'
@@ -322,15 +329,18 @@ class CliSmokeTest(unittest.TestCase):
 
             xml = out.read_text(encoding="utf-8")
             self.assertIn("<OrdinaryForm", xml)
+            self.assertIn("noNamespaceSchemaLocation", xml)
             self.assertIn("<Attributes>", xml)
             self.assertIn('name="InputValue"', xml)
             self.assertIn('rawKey="Main/InputValue"', xml)
             self.assertIn('modeName="edgeToEdge"', xml)
-            self.assertIn('kindName="targetEdgeOffset"', xml)
-            self.assertIn('offsetType="integer"', xml)
+            self.assertIn('relation="targetEdgeOffset"', xml)
+            self.assertIn('offset="10"', xml)
+            self.assertNotIn('offsetType=', xml)
             self.assertIn("<FormBin", xml)
             self.assertIn("<LogicalStream", xml)
             self.assertEqual((root / "Form" / "Module.bsl").read_bytes(), module)
+            validate_xml_file(out)
 
             rebuilt = root / "rebuilt.bin"
             from onec_ordinary_forms.cli import build_bin
@@ -418,44 +428,16 @@ class CliSmokeTest(unittest.TestCase):
             dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
             tree = ET.parse(out)
             xml_root = tree.getroot()
-            image = xml_root.find(".//Image[@name='Image1']")
+            image = xml_root.find(".//PictureDecoration[@name='Image1']")
             self.assertIsNotNone(image)
             image.set("name", "Image2")
-            ordinary = image.find("./OrdinaryControl")
-            if ordinary is None:
-                ordinary = ET.SubElement(image, "OrdinaryControl", {"objectId": "1"})
-            metadata = image.find("./OrdinaryControl/Metadata")
-            if metadata is None:
-                metadata = ET.SubElement(ordinary, "Metadata")
-            metadata.set("flag1", "7")
-            info_record = image.find("./OrdinaryControl/Info/Record")
-            if info_record is None:
-                info = image.find("./OrdinaryControl/Info")
-                if info is None:
-                    info = ET.SubElement(ordinary, "Info")
-                info_record = ET.SubElement(info, "Record", {"slot": "1"})
-                caption_node = ET.SubElement(info_record, "Caption", {"field": "3"})
-                ET.SubElement(caption_node, "Item", {"lang": "ru"})
-                ET.SubElement(info_record, "Fields")
-            caption = info_record.find("./Caption/Item")
-            self.assertIsNotNone(caption)
-            caption.text = "Info caption"
-            scalar_field = info_record.find("./Fields/Field[@index='2']")
-            if scalar_field is None:
-                fields = info_record.find("Fields")
-                self.assertIsNotNone(fields)
-                scalar_field = ET.SubElement(fields, "Field", {"index": "2"})
-            scalar_field.set("value", "21")
             title = image.find("./Title/Item")
             self.assertIsNotNone(title)
-            # In this synthetic image control, the semantic Title and
-            # OrdinaryControl/Info/Record/Caption point at the same ru text
-            # record, so keep both XML views coherent.
-            title.text = "Info caption"
-            geometry = image.find("./Geometry")
+            title.text = "Image title"
+            geometry = image.find("./Position")
             self.assertIsNotNone(geometry)
             geometry.set("left", "42")
-            first_binding_from = geometry.find("./Bindings/Binding[@slot='1']/From")
+            first_binding_from = geometry.find("./Bindings/Binding[@coordinate='top']/From")
             self.assertIsNotNone(first_binding_from)
             first_binding_from.set("offset", "99")
             picture_path = out.with_suffix("") / "Items" / "Image1" / "Picture.gif"
@@ -469,10 +451,9 @@ class CliSmokeTest(unittest.TestCase):
 
             rebuilt_stream = logical_streams(parse_form_bin(rebuilt.read_bytes()))["Form.xml"].decode("utf-8")
             self.assertIn('"Image2"', rebuilt_stream)
-            self.assertIn('"Info caption"', rebuilt_stream)
-            self.assertIn("{{19},21,{1,1", rebuilt_stream)
+            self.assertIn('"Image title"', rebuilt_stream)
             self.assertIn("#base64:" + base64.b64encode(b"GIF89aChanged").decode("ascii"), rebuilt_stream)
-            self.assertIn('{14,"Image2",0,7,0}', rebuilt_stream)
+            self.assertIn('{14,"Image2",0,0,0}', rebuilt_stream)
             self.assertIn("{8,42,2,3,4,1,{0,{2,-1,6,99},{2,-1,6,0}}", rebuilt_stream)
 
     def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
@@ -497,7 +478,7 @@ class CliSmokeTest(unittest.TestCase):
 
             xml = out.read_text(encoding="utf-8")
             self.assertIn('modeName="compound"', xml)
-            self.assertIn('kindName="rawList"', xml)
+            self.assertIn('relation="rawList"', xml)
             self.assertIn("<Value", xml)
             self.assertNotIn('edge="[', xml)
             self.assertNotIn('side="edge[', xml)

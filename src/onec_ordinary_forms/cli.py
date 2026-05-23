@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.resources
 import re
 import textwrap
 import xml.etree.ElementTree as ET
@@ -23,10 +24,15 @@ from onec_ordinary_forms.formbin import (
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
+from onec_ordinary_forms.ordinary_properties import control_descriptor
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
 SCHEMA_VERSION = "0.1"
+XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
+ORDINARY_FORM_SCHEMA = "ordinary-form.xsd"
+
+ET.register_namespace("xsi", XSI_NS)
 
 
 TYPE_CODE_MAP = {
@@ -85,6 +91,9 @@ BINDING_MODE_MAP = {
     "1": "group",
     "10": "compound",
 }
+
+BINDING_COORDINATE_SLOT = {value: key for key, value in BINDING_SLOT_ROLE.items()}
+DIMENSION_NAME_SLOT = {value: key for key, value in DIMENSION_SLOT_ROLE.items()}
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -455,15 +464,8 @@ def add_anchor(
 ) -> None:
     node = ET.SubElement(parent, tag)
     if is_simple_anchor(value):
-        fields = ("kind", "targetId", "edge", "offset")
-        for index, item in enumerate(value):
-            name = fields[index] if index < len(fields) else f"value{index + 1}"
-            if index < len(fields):
-                set_typed_attr(node, name, item)
-            else:
-                add_raw_value(node, "ExtraValue", item, index=index + 1)
         kind = clean_token(value[0])
-        node.set("kindName", ANCHOR_KIND_MAP.get(kind, f"kind{kind}"))
+        node.set("relation", ANCHOR_KIND_MAP.get(kind, f"kind{kind}"))
         if len(value) > 1:
             for name, attr_value in describe_target(value[1], current_id, element_index).items():
                 if attr_value:
@@ -471,9 +473,12 @@ def add_anchor(
         if len(value) > 2:
             edge = clean_token(value[2])
             node.set("side", EDGE_NAME_MAP.get(edge, f"edge{edge}"))
+        if len(value) > 3:
+            node.set("offset", clean_token(value[3]))
+        for extra_index, extra in enumerate(value[4:], start=1):
+            add_raw_value(node, "ExtraValue", extra, index=extra_index)
     elif isinstance(value, list):
-        node.set("kind", "complex")
-        node.set("kindName", "rawList")
+        node.set("relation", "rawList")
         node.set("count", str(len(value)))
         for index, item in enumerate(value, start=1):
             add_raw_value(node, "Value", item, index=index)
@@ -490,7 +495,6 @@ def add_binding(
     element_index: dict[str, dict[str, str]],
 ) -> None:
     node = ET.SubElement(parent, tag)
-    node.set("slot", str(slot))
     if tag == "Binding":
         node.set("coordinate", BINDING_SLOT_ROLE.get(slot, f"slot{slot}"))
     elif tag == "DimensionBinding":
@@ -498,18 +502,13 @@ def add_binding(
         if isinstance(binding, list):
             if binding:
                 int_attr(node, "mode", binding[0])
-                node.set("modeType", scalar_kind(binding[0]))
                 mode = clean_token(binding[0])
                 node.set("modeName", DIMENSION_MODE_MAP.get(mode, f"mode{mode}"))
             if len(binding) > 1:
-                int_attr(node, "targetId", binding[1])
-                node.set("targetIdType", scalar_kind(binding[1]))
                 for name, attr_value in describe_target(binding[1], current_id, element_index).items():
                     if attr_value:
                         node.set(name, attr_value)
             if len(binding) > 2:
-                int_attr(node, "edge", binding[2])
-                node.set("edgeType", scalar_kind(binding[2]))
                 edge = clean_token(binding[2])
                 node.set("side", EDGE_NAME_MAP.get(edge, f"edge{edge}"))
             for extra_index, extra in enumerate(binding[3:], start=1):
@@ -518,7 +517,6 @@ def add_binding(
     if isinstance(binding, list):
         if binding:
             int_attr(node, "mode", binding[0])
-            node.set("modeType", scalar_kind(binding[0]))
             mode = clean_token(binding[0])
             node.set("modeName", BINDING_MODE_MAP.get(mode, f"mode{mode}"))
         if len(binding) > 1:
@@ -528,7 +526,7 @@ def add_binding(
         for extra_index, extra in enumerate(binding[3:], start=1):
             add_anchor(node, f"Extra{extra_index}", extra, current_id, element_index)
     else:
-        set_typed_attr(node, "value", binding)
+        node.set("value", clean_token(binding))
 
 
 def binding_to_raw(node: ET.Element) -> object:
@@ -550,15 +548,37 @@ def binding_to_raw(node: ET.Element) -> object:
 def anchor_to_raw(node: ET.Element) -> object:
     if "value" in node.attrib:
         return node.get("value", "")
-    values: list[str] = []
-    for name in ("kind", "targetId", "edge", "offset"):
-        if name in node.attrib:
-            values.append(node.get(name, ""))
-    index = 1
-    while f"value{index}" in node.attrib:
-        values.append(node.get(f"value{index}", ""))
-        index += 1
-    return values
+    return [
+        anchor_kind_code(node.get("relation") or node.get("kindName", "targetEdgeOffset")),
+        anchor_target_id(node),
+        anchor_edge_code(node.get("side", "none")),
+        node.get("offset", "0"),
+    ]
+
+
+def anchor_kind_code(name: str) -> str:
+    for code, value in ANCHOR_KIND_MAP.items():
+        if value == name:
+            return code
+    return "2"
+
+
+def anchor_edge_code(name: str) -> str:
+    for code, value in EDGE_NAME_MAP.items():
+        if value == name:
+            return code
+    return "6"
+
+
+def anchor_target_id(node: ET.Element) -> str:
+    target = node.get("target")
+    if target == "none":
+        return "-1"
+    if target == "parent":
+        return "0"
+    if target == "self":
+        return node.get("targetId", "0")
+    return node.get("targetId", "-1")
 
 
 def add_geometry(
@@ -576,29 +596,17 @@ def add_geometry(
     if not geometry:
         return
     current_id = str(item_data.get("id", ""))
-    node = ET.SubElement(parent, "Geometry")
+    node = ET.SubElement(parent, "Position")
     for key, value in geometry.items():
         node.set(key, value)
     node.set("unit", "form")
 
     anchors = ET.SubElement(node, "Bindings")
     if isinstance(geometry_raw, list):
-        if geometry_raw:
-            node.set("recordType", clean_token(geometry_raw[0]))
-        node.set("fieldCount", str(len(geometry_raw)))
-        node.set("bindingCount", str(min(max(len(geometry_raw) - 6, 0), 6)))
-        node.set("dimensionBindingCount", str(min(max(len(geometry_raw) - 13, 0), 4)))
         for index, binding in enumerate(geometry_raw[6:12], start=1):
             add_binding(anchors, "Binding", index, binding, current_id, element_index)
         for index, binding in enumerate(geometry_raw[13:17], start=1):
             add_binding(anchors, "DimensionBinding", index, binding, current_id, element_index)
-        if len(geometry_raw) > 17:
-            flags = ET.SubElement(node, "Flags")
-            for index, value in enumerate(geometry_raw[17:], start=17):
-                flag = ET.SubElement(flags, "Flag")
-                flag.set("index", str(index))
-                flag.set("kind", scalar_kind(value))
-                flag.text = clean_token(value)
 
 
 def find_base64_payload(value: object) -> str:
@@ -661,11 +669,13 @@ def add_semantic_item(
     element_index: dict[str, dict[str, str]],
     asset_root: Path,
 ) -> None:
-    node = ET.SubElement(parent, str(item.get("type") or "Item"))
+    descriptor = control_descriptor(item.get("type"))
+    node = ET.SubElement(parent, descriptor.xml_tag if descriptor is not None else str(item.get("type") or "Item"))
     node.set("name", str(item.get("name", "")))
     node.set("rawKey", raw_key)
-    if item.get("type") is not None:
-        node.set("type", str(item["type"]))
+    if descriptor is not None:
+        node.set("platformType", descriptor.platform_name)
+        node.set("managedEquivalent", descriptor.managed_equivalent)
     if item.get("page") is not None:
         node.set("page", str(item["page"]))
     children = item.get("child") or []
@@ -673,7 +683,6 @@ def add_semantic_item(
     item_data = data.get(raw_key)
     if isinstance(item_data, dict) and item_data.get("id") is not None:
         node.set("id", str(item_data["id"]))
-    add_ordinary_control_metadata(node, item_data)
     title = item_title(data.get(raw_key))
     if title:
         add_multilang_text(node, "Title", title)
@@ -750,113 +759,6 @@ def add_semantic_pages(
             add_semantic_item(items, item, data, raw_key, element_index, asset_root)
 
 
-def add_ordinary_control_metadata(parent: ET.Element, item_data: dict | None) -> None:
-    if not isinstance(item_data, dict):
-        return
-    ordinary = item_data.get("ordinary")
-    if not isinstance(ordinary, dict) or not ordinary.get("classId"):
-        return
-    node = ET.SubElement(parent, "OrdinaryControl")
-    for attr in ("classId", "objectId", "type", "declaredChildCount", "actualChildCount", "stateCount", "positionRecordCount"):
-        value = ordinary.get(attr)
-        if value is not None:
-            node.set(attr, str(value))
-    info_kind = ordinary.get("infoKind")
-    if info_kind not in (None, ""):
-        info = ET.SubElement(node, "Info")
-        info.set("kind", str(info_kind))
-        add_info_table_slots(info, item_data)
-    metadata_record_type = ordinary.get("metadataRecordType")
-    if metadata_record_type not in (None, ""):
-        metadata = ET.SubElement(node, "Metadata")
-        metadata.set("recordType", str(metadata_record_type))
-        metadata.set("name", str(parent.get("name", "")))
-        for source, target in (
-            ("metadataOwnerId", "ownerId"),
-            ("metadataFlag1", "flag1"),
-            ("metadataFlag2", "flag2"),
-            ("metadataFlag3", "flag3"),
-        ):
-            value = ordinary.get(source)
-            if value not in (None, ""):
-                metadata.set(target, str(value))
-    state_names = ordinary.get("stateNames")
-    if isinstance(state_names, list) and state_names:
-        states = ET.SubElement(node, "States")
-        for state_name in state_names:
-            state = ET.SubElement(states, "State")
-            state.set("name", str(state_name))
-
-
-def add_info_table_slots(parent: ET.Element, item_data: dict | None) -> None:
-    if not isinstance(item_data, dict):
-        return
-    raw = item_data.get("raw")
-    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
-        return
-    info = raw[2]
-    parent.set("itemCount", str(len(info)))
-    parent.set("payloadCount", str(max(len(info) - 1, 0)))
-    add_info_record(parent, info)
-    slots = ET.SubElement(parent, "Slots")
-    for index, value in enumerate(info[1:], start=1):
-        slot = ET.SubElement(slots, "Slot")
-        slot.set("index", str(index))
-        slot.set("kind", "list" if isinstance(value, list) else scalar_kind(value))
-        if isinstance(value, list):
-            slot.set("count", str(len(value)))
-            if value and not isinstance(value[0], list):
-                slot.set("first", clean_token(value[0]))
-        else:
-            slot.set("value", clean_token(value))
-
-
-def add_info_record(parent: ET.Element, info: list[object]) -> None:
-    if len(info) <= 1 or not isinstance(info[1], list):
-        return
-    record = info[1]
-    record_node = ET.SubElement(parent, "Record")
-    record_node.set("slot", "1")
-    record_node.set("fieldCount", str(len(record)))
-    caption = _first_ru_text_record(record)
-    if caption is not None:
-        caption_node = add_multilang_text(record_node, "Caption", caption[1])
-        caption_node.set("field", str(caption[0]))
-    fields = ET.SubElement(record_node, "Fields")
-    for index, value in enumerate(record, start=1):
-        field = ET.SubElement(fields, "Field")
-        field.set("index", str(index))
-        field.set("kind", "list" if isinstance(value, list) else scalar_kind(value))
-        if isinstance(value, list):
-            field.set("count", str(len(value)))
-            if value and not isinstance(value[0], list):
-                field.set("first", clean_token(value[0]))
-        else:
-            field.set("value", clean_token(value))
-
-
-def _first_ru_text_record(record: list[object]) -> tuple[int, str] | None:
-    for index, value in enumerate(record, start=1):
-        text = multilang_text_value(value)
-        if text:
-            return index, text
-    return None
-
-
-def multilang_text_value(value: object) -> str:
-    if (
-        isinstance(value, list)
-        and len(value) >= 3
-        and str(value[0]) == "1"
-        and str(value[1]) == "1"
-        and isinstance(value[2], list)
-        and len(value[2]) >= 2
-        and clean_token(value[2][0]) == "ru"
-    ):
-        return clean_token(value[2][1])
-    return ""
-
-
 def add_form_bin_container(root: ET.Element, bin_bytes: bytes, form_bytes: bytes) -> None:
     parts = parse_form_bin(bin_bytes)
     descriptors = file_descriptors(parts)
@@ -919,6 +821,7 @@ def dump_xml_from_paths(
     root.set("schemaVersion", SCHEMA_VERSION)
     root.set("sourceKind", "1C.OrdinaryForm")
     root.set("roundTrip", "object-model")
+    root.set(f"{{{XSI_NS}}}noNamespaceSchemaLocation", ORDINARY_FORM_SCHEMA)
 
     source = ET.SubElement(root, "Source")
     source.set("formFile", form_path.name)
@@ -970,6 +873,26 @@ def dump_xml_from_paths(
     ET.indent(root, space="  ")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     ET.ElementTree(root).write(out_path, encoding="utf-8", xml_declaration=True)
+
+
+def schema_path() -> Path:
+    return Path(str(importlib.resources.files("onec_ordinary_forms") / "schemas" / ORDINARY_FORM_SCHEMA))
+
+
+def validate_xml_file(xml_path: Path, xsd_path: Path | None = None) -> None:
+    try:
+        from lxml import etree
+    except ImportError as exc:
+        raise RuntimeError("XML schema validation requires lxml") from exc
+    schema_doc = etree.parse(str(xsd_path or schema_path()))
+    schema = etree.XMLSchema(schema_doc)
+    document = etree.parse(str(xml_path))
+    schema.assertValid(document)
+
+
+def validate_xml(args: argparse.Namespace) -> None:
+    validate_xml_file(Path(args.xml), Path(args.schema) if args.schema else None)
+    print("OK")
 
 
 def rebuild(args: argparse.Namespace) -> None:
@@ -1070,8 +993,7 @@ def apply_xml_to_list_stream_model(root: ET.Element, list_stream_root: object, a
     controls = raw_controls_by_id(list_stream_root)
     controls.update({control.object_id: control.raw for control in parse_ordinary_form_model(list_stream_root).flatten()})
     for element in xml_control_elements(root):
-        ordinary = element.find("OrdinaryControl")
-        object_id = ordinary.get("objectId", "") if ordinary is not None else element.get("id", "")
+        object_id = element.get("id", "")
         raw = controls.get(object_id)
         if raw is None:
             continue
@@ -1081,7 +1003,7 @@ def apply_xml_to_list_stream_model(root: ET.Element, list_stream_root: object, a
 def xml_control_elements(root: ET.Element) -> list[ET.Element]:
     result: list[ET.Element] = []
     for element in root.iter():
-        if element.find("OrdinaryControl") is not None or element.get("id"):
+        if element.get("id"):
             result.append(element)
     return result
 
@@ -1108,13 +1030,12 @@ def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root:
         metadata = raw_metadata_record(raw)
         if metadata is not None and len(metadata) > 1:
             metadata[1] = quoted_atom(name)
-    apply_metadata_to_raw(element, raw)
-    apply_info_slots_to_raw(element, raw)
-    apply_info_record_to_raw(element, raw)
     title = get_multilang_text(element, "Title")
     if title:
         replace_first_ru_text(raw, title)
-    geometry = element.find("Geometry")
+    geometry = element.find("Position")
+    if geometry is None:
+        geometry = element.find("Geometry")
     if geometry is not None:
         raw_geometry = raw_geometry_record(raw)
         if raw_geometry is not None:
@@ -1127,76 +1048,15 @@ def apply_xml_control_to_raw(element: ET.Element, raw: list[object], asset_root:
         apply_picture_to_raw(raw, picture, asset_root)
 
 
-def apply_metadata_to_raw(element: ET.Element, raw: list[object]) -> None:
-    metadata_xml = element.find("./OrdinaryControl/Metadata")
-    metadata = raw_metadata_record(raw)
-    if metadata_xml is None or metadata is None:
-        return
-    if "name" in metadata_xml.attrib and len(metadata) > 1:
-        metadata[1] = quoted_atom(metadata_xml.get("name", ""))
-    for index, attr in ((2, "ownerId"), (3, "flag1"), (4, "flag2"), (5, "flag3")):
-        if attr in metadata_xml.attrib and len(metadata) > index:
-            metadata[index] = metadata_xml.get(attr, metadata[index])
-
-
-def apply_info_slots_to_raw(element: ET.Element, raw: list[object]) -> None:
-    slots = element.find("./OrdinaryControl/Info/Slots")
-    if slots is None or len(raw) <= 2 or not isinstance(raw[2], list):
-        return
-    info = raw[2]
-    for slot in slots.findall("Slot"):
-        if "value" not in slot.attrib:
-            continue
-        try:
-            index = int(slot.get("index", "0"))
-        except ValueError:
-            continue
-        if index <= 0 or index >= len(info) or isinstance(info[index], list):
-            continue
-        info[index] = slot.get("value", info[index])
-
-
-def apply_info_record_to_raw(element: ET.Element, raw: list[object]) -> None:
-    info_record = element.find("./OrdinaryControl/Info/Record")
-    if info_record is None or len(raw) <= 2 or not isinstance(raw[2], list):
-        return
-    info = raw[2]
-    try:
-        slot_index = int(info_record.get("slot", "1"))
-    except ValueError:
-        return
-    if slot_index <= 0 or slot_index >= len(info) or not isinstance(info[slot_index], list):
-        return
-    record = info[slot_index]
-    caption = get_multilang_text(info_record, "Caption")
-    caption_node = info_record.find("Caption")
-    if caption and caption_node is not None:
-        try:
-            field_index = int(caption_node.get("field", "0")) - 1
-        except ValueError:
-            field_index = -1
-        if 0 <= field_index < len(record):
-            replace_first_ru_text(record[field_index], caption)
-    fields = info_record.find("Fields")
-    if fields is None:
-        return
-    for field in fields.findall("Field"):
-        if "value" not in field.attrib:
-            continue
-        try:
-            index = int(field.get("index", "0")) - 1
-        except ValueError:
-            continue
-        if 0 <= index < len(record) and not isinstance(record[index], list):
-            record[index] = field.get("value", record[index])
-
-
 def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[object]) -> None:
     bindings = geometry.find("Bindings")
     if bindings is None:
         return
     for binding in bindings.findall("Binding"):
         slot = binding.get("slot")
+        if not slot and binding.get("coordinate"):
+            mapped = BINDING_COORDINATE_SLOT.get(binding.get("coordinate", ""))
+            slot = str(mapped) if mapped is not None else None
         if not slot:
             continue
         try:
@@ -1207,6 +1067,9 @@ def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[obje
             raw_geometry[index] = binding_to_raw(binding)
     for binding in bindings.findall("DimensionBinding"):
         slot = binding.get("slot")
+        if not slot and binding.get("dimension"):
+            mapped = DIMENSION_NAME_SLOT.get(binding.get("dimension", ""))
+            slot = str(mapped) if mapped is not None else None
         if not slot:
             continue
         try:
@@ -1358,6 +1221,11 @@ def main() -> None:
     build_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
     build_bin_parser.add_argument("--asset-root", help="Directory with Module.bsl and extracted assets")
     build_bin_parser.set_defaults(func=build_bin)
+
+    validate_parser = subparsers.add_parser("validate")
+    validate_parser.add_argument("--xml", required=True, help="OrdinaryForm XML to validate")
+    validate_parser.add_argument("--schema", help="Override ordinary-form XSD path")
+    validate_parser.set_defaults(func=validate_xml)
 
     scan_parser = subparsers.add_parser("scan-corpus")
     scan_parser.add_argument("--root", required=True, help="Directory with .epf/.erf files")
