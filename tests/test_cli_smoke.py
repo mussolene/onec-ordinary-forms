@@ -27,6 +27,24 @@ class CliSmokeTest(unittest.TestCase):
     def test_version_is_present(self) -> None:
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
 
+    def test_public_import_wrappers_dump_validate_and_build(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            source.write_bytes(build_form_bin_container(b'{{"MainCaption",1,1,{"ru","Main"}}}', b"module"))
+            xml = root / "Forms" / "Form" / "Ext" / "Form.xml"
+            rebuilt = root / "rebuilt.bin"
+
+            from onec_ordinary_forms import build_form_bin, dump_form_bin, validate_form_xml
+
+            dump_form_bin(source, xml)
+            validate_form_xml(xml)
+            build_form_bin(xml, rebuilt)
+
+            rebuilt_files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
+            self.assertEqual(rebuilt_files["module"], b"module")
+            self.assertIn(b"Main", rebuilt_files["form"])
+
     def test_ordinary_palette_describes_all_known_controls(self) -> None:
         self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 21)
         self.assertIn("Title", ORDINARY_CONTROL_DESCRIPTORS["Label"].properties)
@@ -392,8 +410,15 @@ class CliSmokeTest(unittest.TestCase):
             rebuilt = root / "rebuilt.bin"
             from onec_ordinary_forms.cli import build_bin
 
-            with self.assertRaisesRegex(NotImplementedError, "Object-only ordinary form serialization"):
-                build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
+            build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
+            rebuilt_container = parse_form_bin_container(rebuilt.read_bytes())
+            rebuilt_files = {file.name: file.payload for file in rebuilt_container.files}
+            self.assertEqual(rebuilt_files["module"], module)
+            rebuilt_elem = extract_elem_json_from_bracket(rebuilt_files["form"].decode("utf-8"))
+            self.assertEqual(rebuilt_elem["data"]["-pages-"], ["Main"])
+            self.assertEqual(rebuilt_elem["props"][0]["name"], "InputValue")
+            self.assertEqual(rebuilt_elem["tree"][0]["name"], "InputValue")
+            self.assertEqual(rebuilt_elem["tree"][0]["type"], "InputField")
 
     def test_format_xml_file_pretty_prints_schema_like_xml(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -498,8 +523,14 @@ class CliSmokeTest(unittest.TestCase):
             tree.write(out, encoding="utf-8", xml_declaration=True)
 
             rebuilt = root / "rebuilt.bin"
-            with self.assertRaisesRegex(NotImplementedError, "Object-only ordinary form serialization"):
-                build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
+            build_bin(type("Args", (), {"xml": str(out), "out_bin": str(rebuilt), "asset_root": None})())
+            rebuilt_container = parse_form_bin_container(rebuilt.read_bytes())
+            form_text = {file.name: file.payload for file in rebuilt_container.files}["form"].decode("utf-8")
+            self.assertIn('"Image2"', form_text)
+            self.assertIn('"Image title"', form_text)
+            self.assertIn("42", form_text)
+            self.assertIn("99", form_text)
+            self.assertIn(base64.b64encode(b"GIF89aChanged").decode("ascii"), form_text)
 
     def test_dump_bin_keeps_complex_bindings_structured(self) -> None:
         with TemporaryDirectory() as temp_dir:

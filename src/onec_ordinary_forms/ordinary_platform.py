@@ -29,6 +29,8 @@ ORDINARY_CONTROL_CLASS_BY_GUID = {
     "d92a805c-98ae-4750-9158-d9ce7cec2f20": "HTMLDocumentField",
 }
 
+ORDINARY_CONTROL_GUID_BY_TYPE = {value: key for key, value in ORDINARY_CONTROL_CLASS_BY_GUID.items()}
+
 
 def ordinary_control_type(class_id: object) -> str:
     return ORDINARY_CONTROL_CLASS_BY_GUID.get(str(class_id).lower(), "")

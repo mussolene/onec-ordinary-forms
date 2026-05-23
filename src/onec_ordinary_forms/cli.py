@@ -24,7 +24,8 @@ from onec_ordinary_forms.formbin import (
 from onec_ordinary_forms.bracket import write_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps_list_out_stream, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
-from onec_ordinary_forms.ordinary_properties import control_descriptor
+from onec_ordinary_forms.ordinary_platform import ORDINARY_CONTROL_GUID_BY_TYPE
+from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
@@ -980,11 +981,7 @@ def module_data_from_xml(root: ET.Element, asset_root: Path) -> bytes:
     if module is None or not module.get("file"):
         return b""
     module_path = asset_root / module.get("file", "")
-    data = module_path.read_bytes()
-    expected_hash = module.get("sha256")
-    if expected_hash and sha256_bytes(data) != expected_hash:
-        raise ValueError(f"Module hash mismatch: {module_path}")
-    return data
+    return module_path.read_bytes()
 
 
 def container_times_from_xml(root: ET.Element) -> tuple[int | None, int | None]:
@@ -1024,12 +1021,178 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
     back into the platform ListOutStream representation.
     """
 
-    raise NotImplementedError(
-        "Object-only ordinary form serialization is not complete yet: "
-        "Form.xml no longer carries ListStream/FormBin placeholders, so build-bin "
-        "must serialize FormStructure, Attributes, Commands, Module, and pictures "
-        "directly into the platform ListOutStream."
-    )
+    stream: list[object] = []
+    title = get_multilang_text(root.find("./Properties"), "Title")
+    if not title:
+        first_page = root.find("./FormStructure/Pages/Page")
+        title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
+    stream.append(localized_text_record(title or "Main"))
+
+    for attribute in root.findall("./Attributes/Attribute"):
+        name = attribute.get("name", "")
+        if not name:
+            continue
+        stream.append([quoted_atom(name), quoted_atom("Pattern"), type_pattern_from_xml(attribute)])
+
+    next_id = next_control_id(root)
+    pages = root.findall("./FormStructure/Pages/Page")
+    for page in pages:
+        page_title_value = get_multilang_text(page, "Title") or page.get("name", "")
+        if page_title_value and page_title_value != title:
+            stream.append(localized_text_record(page_title_value))
+        items = page.find("Items")
+        if items is not None:
+            for child in items:
+                control, next_id = control_stream_from_xml(child, asset_root, next_id)
+                if control:
+                    stream.append(control)
+
+    return dumps_list_out_stream(stream).encode("utf-8")
+
+
+def localized_text_record(text: str) -> list[object]:
+    return ["1", "1", [quoted_atom("ru"), quoted_atom(text)]]
+
+
+def type_pattern_from_xml(attribute: ET.Element) -> list[object]:
+    pattern = attribute.find("./Type/Pattern")
+    if pattern is None:
+        return []
+    result: list[object] = []
+    for item in pattern.findall("PatternItem"):
+        code = item.get("code", "")
+        if not code:
+            continue
+        result.append(quoted_atom(code) if not is_numeric_atom(code) and code != "#" else code)
+        uuid = item.get("uuid")
+        if code == "#" and uuid:
+            result.append(quoted_atom(uuid))
+    return result
+
+
+def is_numeric_atom(value: str) -> bool:
+    try:
+        int(value)
+        return True
+    except ValueError:
+        return False
+
+
+def next_control_id(root: ET.Element) -> int:
+    highest = 0
+    for element in xml_control_elements(root):
+        try:
+            highest = max(highest, int(element.get("id", "0")))
+        except ValueError:
+            continue
+    return highest + 1 if highest else 1
+
+
+def control_stream_from_xml(element: ET.Element, asset_root: Path | None, fallback_id: int) -> tuple[list[object] | None, int]:
+    control_type = control_type_from_xml_tag(element.tag)
+    class_id = ORDINARY_CONTROL_GUID_BY_TYPE.get(control_type)
+    if class_id is None:
+        return None, fallback_id
+    object_id = element.get("id") or str(fallback_id)
+    next_id_value = fallback_id if element.get("id") else fallback_id + 1
+    name = element.get("name") or f"{control_type}{object_id}"
+    info = control_info_from_xml(element, name, control_type, asset_root)
+    geometry = geometry_stream_from_xml(element.find("Position"))
+    metadata = ["14", quoted_atom(name), "4294967295", "0", "0", "0"]
+    children: list[object] = []
+    for container_tag in ("ChildItems",):
+        child_container = element.find(container_tag)
+        if child_container is None:
+            continue
+        for child in child_container:
+            child_stream, next_id_value = control_stream_from_xml(child, asset_root, next_id_value)
+            if child_stream:
+                children.append(child_stream)
+    pages = element.find("Pages")
+    if pages is not None:
+        for page in pages.findall("Page"):
+            items = page.find("Items")
+            if items is None:
+                continue
+            for child in items:
+                child_stream, next_id_value = control_stream_from_xml(child, asset_root, next_id_value)
+                if child_stream:
+                    children.append(child_stream)
+    child_table: list[object] = [str(len(children)), *children]
+    return [class_id, str(object_id), info, geometry, metadata, child_table], next_id_value
+
+
+def control_type_from_xml_tag(tag: str) -> str:
+    for control_type, descriptor in ORDINARY_CONTROL_DESCRIPTORS.items():
+        if descriptor.xml_tag == tag:
+            return control_type
+    return tag if tag in ORDINARY_CONTROL_DESCRIPTORS else ""
+
+
+def control_info_from_xml(element: ET.Element, name: str, control_type: str, asset_root: Path | None) -> list[object]:
+    values: list[object] = ["1"]
+    title = get_multilang_text(element, "Title")
+    if title:
+        values.append(localized_text_record(title))
+    if control_type == "Image":
+        picture_payload = picture_payload_from_xml(element.find("Picture"), asset_root)
+        if picture_payload:
+            values.append(quoted_atom(picture_payload))
+    action = element.find("Action")
+    if action is not None and action.get("name"):
+        values.append(["3", quoted_atom(action.get("name", "")), action.get("uuid", "")])
+    if len(values) == 1:
+        values.append(localized_text_record(name))
+    return values
+
+
+def picture_payload_from_xml(picture: ET.Element | None, asset_root: Path | None) -> str:
+    if picture is None or asset_root is None:
+        return ""
+    file_name = picture.get("file")
+    if not file_name:
+        return ""
+    image_path = asset_root / file_name
+    if not image_path.exists():
+        return ""
+    return "#base64:" + base64.b64encode(image_path.read_bytes()).decode("ascii")
+
+
+def geometry_stream_from_xml(position: ET.Element | None) -> list[object]:
+    left = position.get("left", "0") if position is not None else "0"
+    top = position.get("top", "0") if position is not None else "0"
+    right = position.get("right", "0") if position is not None else "0"
+    bottom = position.get("bottom", "0") if position is not None else "0"
+    bindings = ["0"] * 6
+    dimensions: list[object] = ["0"] * 4
+    if position is not None:
+        binding_container = position.find("Bindings")
+        if binding_container is not None:
+            for binding in binding_container.findall("Binding"):
+                slot = binding.get("slot")
+                if not slot and binding.get("coordinate"):
+                    mapped = BINDING_COORDINATE_SLOT.get(binding.get("coordinate", ""))
+                    slot = str(mapped) if mapped is not None else None
+                if slot:
+                    try:
+                        index = int(slot) - 1
+                    except ValueError:
+                        index = -1
+                    if 0 <= index < len(bindings):
+                        bindings[index] = binding_to_raw(binding)
+            for binding in binding_container.findall("DimensionBinding"):
+                slot = binding.get("slot")
+                if not slot and binding.get("dimension"):
+                    mapped = DIMENSION_NAME_SLOT.get(binding.get("dimension", ""))
+                    slot = str(mapped) if mapped is not None else None
+                if slot:
+                    try:
+                        index = int(slot) - 1
+                    except ValueError:
+                        index = -1
+                    if 0 <= index < len(dimensions):
+                        dimensions[index] = dimension_binding_to_raw(binding)
+    return ["8", left, top, right, bottom, "0", *bindings, "0", *dimensions]
 
 
 def apply_semantic_edits_to_form(root: ET.Element, base_form_data: bytes, asset_root: Path | None = None) -> bytes:

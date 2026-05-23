@@ -1,36 +1,38 @@
 # onec-ordinary-forms
 
-Experimental Python tools for studying and editing 1C ordinary forms as a
-Git-friendly object XML package.
+Python tools for splitting 1C ordinary form `Form.bin` into a Git-friendly
+source package and building it back.
 
-The project targets old ordinary forms that platform XML export still stores as
-`Forms/<Form>/Ext/Form.bin`. The long-term goal is the same source layout used
-for managed forms: readable `Form.xml`, separate `Module.bsl`, and picture
-sidecars next to the form.
+The public source layout mirrors managed forms:
+
+```text
+Forms/Form/Ext/Form.xml
+Forms/Form/Ext/Form/Module.bsl
+Forms/Form/Ext/Form/Items/<ElementName>/Picture.gif
+```
+
+`Form.xml` is the editable object model. It does not contain public
+`ListStream`, `FormBin`, `LogicalStream`, or binary placeholder nodes. The
+package translates the object model to and from the platform list/bracket
+stream internally.
 
 ## Status
 
-This is alpha research tooling. Reading and object-model XML dumping are ahead
-of writing.
+Current release: `0.2.0`.
 
 Implemented:
 
-- parse the sectioned ordinary `Form.bin` container;
-- decode the current ordinary form bracket/list stream enough to build readable
-  `Form.xml`;
-- write `Module.bsl` and picture files as sidecars;
-- validate the public XML shape with bundled XSD schemas;
+- read ordinary `Form.bin` containers;
+- dump readable object-model `Form.xml`;
+- extract `Module.bsl` and picture sidecars;
+- build `Form.bin` from `Form.xml`, `Module.bsl`, and picture sidecars;
+- validate `Form.xml` against bundled XSD schemas;
 - scan local EPF/ERF corpora without committing private processors or exports.
 
-In progress:
-
-- object-only `Form.xml` to `Form.bin` serialization;
-- complete typed properties for all ordinary controls;
-- platform-level validation for edited forms.
-
-The current public `Form.xml` intentionally does not expose low-level
-`ListStream`, `FormBin`, `LogicalStream`, or binary placeholder nodes. The
-writer must reconstruct the platform stream internally from the object model.
+The writer is intentionally conservative while the full ordinary-form object
+model is being expanded. It preserves the public source contract and writes a
+canonical platform list-stream representation rather than byte-for-byte
+recreating the original container layout.
 
 ## Install
 
@@ -41,55 +43,81 @@ python -m pip install -e '.[dev]'
 make test
 ```
 
-For direct source execution without installation:
-
-```bash
-PYTHONPATH=src python -m unittest discover -s tests
-PYTHONPATH=src python -m onec_ordinary_forms.cli --help
-```
-
 ## CLI
 
-```bash
-onec-ordinary-forms dump-bin --help
-onec-ordinary-forms build-bin --help
-onec-ordinary-forms unpack-bin --help
-onec-ordinary-forms pack-bin --help
-onec-ordinary-forms extract-elem-json --help
-onec-ordinary-forms scan-corpus --help
-```
-
-`dump-bin` is the main object XML path:
+Dump an ordinary form binary:
 
 ```bash
-PYTHONPATH=src python -m onec_ordinary_forms.cli dump-bin \
+onec-ordinary-forms dump-bin \
   --bin scan-output/exported/Object/Forms/Form/Ext/Form.bin \
   --out scan-output/exported/Object/Forms/Form/Ext/Form.xml
 ```
 
-With a managed-form-like output path, sidecars are written next to the form:
+This writes:
 
 ```text
-Forms/Form/Ext/Form.xml
-Forms/Form/Ext/Module.bsl
-Forms/Form/Ext/Items/<ElementName>/Picture.gif
+scan-output/exported/Object/Forms/Form/Ext/Form.xml
+scan-output/exported/Object/Forms/Form/Ext/Form/Module.bsl
+scan-output/exported/Object/Forms/Form/Ext/Form/Items/<ElementName>/Picture.gif
 ```
 
-`unpack-bin` and `pack-bin` are lower-level diagnostics for the sectioned
-binary container. They are useful for no-op stream investigation, but they are
-not the target public source layout.
-
-## Validation
-
-Run the unit suite for parser and schema checks:
+Validate and format the XML:
 
 ```bash
-make test
+onec-ordinary-forms validate --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml
+onec-ordinary-forms format-xml --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml
 ```
 
-For writer work, validate rebuilt processors through the 1C platform, not only
-through metadata-level checks. The helper in `tools/platform_validate_epf.sh`
-runs Designer batch export and catches malformed ordinary form streams.
+Build `Form.bin` back from the object XML package:
+
+```bash
+onec-ordinary-forms build-bin \
+  --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
+  --out-bin scan-output/rebuilt/Form.bin
+```
+
+Use `--asset-root` only when sidecars are not next to the XML as
+`<Form.xml without suffix>/...`.
+
+Diagnostic commands:
+
+```bash
+onec-ordinary-forms unpack-bin --bin Form.bin --out-dir scan-output/form-parts
+onec-ordinary-forms pack-bin --parts-dir scan-output/form-parts --out-bin Form.bin
+onec-ordinary-forms extract-elem-json --form scan-output/form-parts/Form.xml --out scan-output/form-parts/elem.json
+onec-ordinary-forms scan-corpus --root "<private-processors-dir>" --out-json scan-output/corpus.json
+```
+
+`unpack-bin`, `pack-bin`, and `extract-elem-json` are diagnostics for format
+research. They are not the target public source layout.
+
+## Python API
+
+```python
+from onec_ordinary_forms import build_form_bin, dump_form_bin, validate_form_xml
+
+dump_form_bin(
+    "scan-output/exported/Object/Forms/Form/Ext/Form.bin",
+    "scan-output/exported/Object/Forms/Form/Ext/Form.xml",
+)
+
+validate_form_xml("scan-output/exported/Object/Forms/Form/Ext/Form.xml")
+
+build_form_bin(
+    "scan-output/exported/Object/Forms/Form/Ext/Form.xml",
+    "scan-output/rebuilt/Form.bin",
+)
+```
+
+The default asset root is the XML path without the `.xml` suffix. For
+`Forms/Form/Ext/Form.xml`, sidecars are read from `Forms/Form/Ext/Form/`.
+
+## Platform Validation
+
+For writer changes, validate rebuilt processors through the 1C platform, not
+only through metadata-level checks. The helper in
+`tools/platform_validate_epf.sh` runs Designer batch export and catches
+malformed ordinary form streams.
 
 Private processors, platform exports, license configuration, and generated
 reports must stay in ignored local directories such as `scan-output/`, `work/`,
