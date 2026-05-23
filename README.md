@@ -1,36 +1,38 @@
 # onec-ordinary-forms
 
-Experimental Python tools for decomposing 1C ordinary forms into an editable
-object-model XML package and rebuilding selected semantic edits back into the
-platform form stream.
+Experimental Python tools for studying and editing 1C ordinary forms as a
+Git-friendly object XML package.
 
-The project started from a real ordinary form exported from an EPF and is
-intended to grow into a stable Git-friendly representation for 1C ordinary
-forms, similar in spirit to platform XML for managed forms.
+The project targets old ordinary forms that platform XML export still stores as
+`Forms/<Form>/Ext/Form.bin`. The long-term goal is the same source layout used
+for managed forms: readable `Form.xml`, separate `Module.bsl`, and picture
+sidecars next to the form.
 
-## Current Capabilities
+## Status
 
-- Dump ordinary form `form`, `Form.bin`, and optional `Module.bsl`.
-- Emit object-model XML with attributes, nested pages/items, geometry,
-  bindings, button actions, picture sidecars, and module sidecar.
-- Keep pictures as external files, for example
-  `Items/<ElementName>/Picture.gif`, not inline base64.
-- Rebuild using explicit base `form`/`Form.bin` streams.
-- Apply the first semantic write-back slice: root form title.
-- Restore `Module.bsl` from the XML package.
-- Scan a private EPF/ERF corpus and classify platform-exported ordinary forms
-  without hardcoding local paths into reports.
+This is alpha research tooling. Reading and object-model XML dumping are ahead
+of writing.
 
-## Known Gaps
+Implemented:
 
-- Element/page title write-back by stable `id`.
-- Geometry and binding write-back.
-- Attribute `TypeDomainPattern` write-back.
-- Picture sidecar re-embedding into the ordinary-form stream.
-- Decision on which `Form.bin` fields should be decoded semantically.
-- Regression corpus for more ordinary form control types.
+- parse the sectioned ordinary `Form.bin` container;
+- decode the current ordinary form bracket/list stream enough to build readable
+  `Form.xml`;
+- write `Module.bsl` and picture files as sidecars;
+- validate the public XML shape with bundled XSD schemas;
+- scan local EPF/ERF corpora without committing private processors or exports.
 
-## Development
+In progress:
+
+- object-only `Form.xml` to `Form.bin` serialization;
+- complete typed properties for all ordinary controls;
+- platform-level validation for edited forms.
+
+The current public `Form.xml` intentionally does not expose low-level
+`ListStream`, `FormBin`, `LogicalStream`, or binary placeholder nodes. The
+writer must reconstruct the platform stream internally from the object model.
+
+## Install
 
 ```bash
 python3 -m venv .venv
@@ -39,64 +41,25 @@ python -m pip install -e '.[dev]'
 make test
 ```
 
-Without creating a virtual environment:
+For direct source execution without installation:
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests
 PYTHONPATH=src python -m onec_ordinary_forms.cli --help
 ```
 
-Platform/container notes live in [docs/containers.md](docs/containers.md).
-Research and transfer notes live in [docs/research-map.md](docs/research-map.md).
-Module boundaries are summarized in [docs/architecture.md](docs/architecture.md).
-The legacy `dump --elem-json` input is documented in [docs/elem-json.md](docs/elem-json.md).
-
 ## CLI
 
 ```bash
-onec-ordinary-forms dump --help
-onec-ordinary-forms rebuild --help
+onec-ordinary-forms dump-bin --help
+onec-ordinary-forms build-bin --help
 onec-ordinary-forms unpack-bin --help
 onec-ordinary-forms pack-bin --help
 onec-ordinary-forms extract-elem-json --help
-onec-ordinary-forms dump-bin --help
 onec-ordinary-forms scan-corpus --help
 ```
 
-For direct source execution:
-
-```bash
-PYTHONPATH=src python -m onec_ordinary_forms.cli dump --help
-```
-
-`dump --elem-json` currently consumes a legacy semantic index. See
-[docs/elem-json.md](docs/elem-json.md) and `examples/elem-json/minimal.json`
-for the safe committed shape. For current `ibcmd` exports that contain only
-`Form.bin`, use `dump-bin` to split the binary stream, extract `elem-json`, and
-write object-model XML in one step.
-
-## Ordinary `Form.bin` Sections
-
-For platform XML exports that contain ordinary forms as
-`Forms/<Form>/Ext/Form.bin`, split the binary stream into editable section
-files:
-
-```bash
-PYTHONPATH=src python -m onec_ordinary_forms.cli unpack-bin \
-  --bin scan-output/exported/Object/Forms/Form/Ext/Form.bin \
-  --out-dir scan-output/form-parts
-```
-
-The output directory contains `Module.bsl`, `Form.xml`, service section files,
-and `Form.bin.parts.json` for exact reassembly:
-
-```bash
-PYTHONPATH=src python -m onec_ordinary_forms.cli pack-bin \
-  --parts-dir scan-output/form-parts \
-  --out-bin scan-output/rebuilt/Form.bin
-```
-
-To produce object-model XML directly from the ordinary form binary:
+`dump-bin` is the main object XML path:
 
 ```bash
 PYTHONPATH=src python -m onec_ordinary_forms.cli dump-bin \
@@ -104,56 +67,44 @@ PYTHONPATH=src python -m onec_ordinary_forms.cli dump-bin \
   --out scan-output/exported/Object/Forms/Form/Ext/Form.xml
 ```
 
-With that output path, sidecars follow the same layout as managed forms:
-`Form/Module.bsl` and `Form/Items/<ElementName>/Picture.gif`.
+With a managed-form-like output path, sidecars are written next to the form:
 
-`dump-bin` also embeds the remaining `Form.bin` section metadata into the
-resulting ordinary `Form.xml`. This lets the project rebuild the platform
-`Form.bin` without keeping the original binary next to the XML:
-
-```bash
-PYTHONPATH=src python -m onec_ordinary_forms.cli build-bin \
-  --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
-  --out-bin scan-output/rebuilt/Form.bin
+```text
+Forms/Form/Ext/Form.xml
+Forms/Form/Ext/Module.bsl
+Forms/Form/Ext/Items/<ElementName>/Picture.gif
 ```
 
-This is still a lossless transition format: unknown service sections and the
-original bracket stream are retained in the XML until their fields are decoded
-semantically.
+`unpack-bin` and `pack-bin` are lower-level diagnostics for the sectioned
+binary container. They are useful for no-op stream investigation, but they are
+not the target public source layout.
 
-To inspect or reuse the intermediate legacy index:
+## Validation
 
-```bash
-PYTHONPATH=src python -m onec_ordinary_forms.cli extract-elem-json \
-  --form scan-output/form-parts/Form.xml \
-  --out scan-output/form-parts/elem.json
-```
-
-## Corpus Scanning
-
-The scanner is intentionally split from platform export. It can list private
-`.epf`/`.erf` files directly, and it can classify a directory that was already
-exported by `ibcmd config export --file`.
+Run the unit suite for parser and schema checks:
 
 ```bash
-PYTHONPATH=src python -m onec_ordinary_forms.cli scan-corpus \
-  --root "<private-processors-dir>" \
-  --name-regex 'обычн|obychn|8\.2|8\.1' \
-  --limit 50 \
-  --out-json scan-output/corpus.json
+make test
 ```
 
-After exporting several candidates to a temporary directory:
+For writer work, validate rebuilt processors through the 1C platform, not only
+through metadata-level checks. The helper in `tools/platform_validate_epf.sh`
+runs Designer batch export and catches malformed ordinary form streams.
 
-```bash
-PYTHONPATH=src python -m onec_ordinary_forms.cli scan-corpus \
-  --root "<private-processors-dir>" \
-  --exported-root scan-output/exported \
-  --out-json scan-output/exported-forms.json
-```
+Private processors, platform exports, license configuration, and generated
+reports must stay in ignored local directories such as `scan-output/`, `work/`,
+or `/tmp`.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Development](docs/development.md)
+- [Container validation](docs/containers.md)
+- [Legacy elem-json input](docs/elem-json.md)
+- [Research notes](docs/research-map.md)
 
 ## Fixture Policy
 
-Do not commit private EPF files, platform archives, license files, `nethasp.ini`,
-OACS databases, or customer configuration dumps. Put local fixtures under
-`examples/fixtures/`; this directory is ignored except for `.gitkeep`.
+Do not commit private EPF/ERF files, CF/DT dumps, platform archives, license
+files, OACS databases, generated platform exports, or customer metadata. The
+`examples/fixtures/` directory is ignored except for `.gitkeep`.

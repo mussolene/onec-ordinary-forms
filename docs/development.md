@@ -13,7 +13,12 @@ The XML package should represent ordinary forms as an object model:
 - geometry and bindings with readable targets and sides;
 - button actions;
 - picture sidecars as files;
-- binary `Form.bin` sidecar until its semantic boundary is clear.
+- no public low-level `ListStream`, `FormBin`, `LogicalStream`, or binary
+  placeholder nodes.
+
+The parser/writer boundary is internal: object XML is the source format, and
+the package code is responsible for translating that model to and from the
+platform list/bracket stream.
 
 ## Verification Loop
 
@@ -32,7 +37,7 @@ can accept an EPF whose ordinary form later fails with "Ошибка форма�
 The stricter check is Designer batch mode:
 
 ```bash
-. .agent/local/nethasp.env
+export NETHASP_INI_PATH="<local-nethasp.ini>"
 tools/platform_validate_epf.sh /path/to/processor.epf
 ```
 
