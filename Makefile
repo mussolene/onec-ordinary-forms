@@ -8,7 +8,7 @@ test:
 smoke:
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli dump --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli rebuild --help
+	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli build-bin --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli unpack-bin --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli pack-bin --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli extract-elem-json --help

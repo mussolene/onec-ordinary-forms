@@ -205,7 +205,7 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 
 ## Status
 
-Current release: `0.2.0`.
+Current release: `0.3.0`.
 
 Current implementation status:
 
