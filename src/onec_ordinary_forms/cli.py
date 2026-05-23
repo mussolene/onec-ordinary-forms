@@ -941,15 +941,43 @@ def event_from_record(record: object) -> dict[str, str]:
     return {"name": name, "uuid": uuid}
 
 
+XML_TEXT_NEWLINE_SENTINEL = "__ONEC_ORDINARY_FORMS_XML_TEXT_LF_8F6F0B2194AA4F0C__"
+
+
+def _encode_multiline_text_nodes(document: object) -> None:
+    for element in document.iter():
+        text = getattr(element, "text", None)
+        if text and text.strip() and "\n" in text:
+            element.text = text.replace("\r\n", "\n").replace("\r", "\n").replace(
+                "\n",
+                XML_TEXT_NEWLINE_SENTINEL,
+            )
+
+
+def _restore_text_newline_entities(xml: bytes) -> bytes:
+    return xml.replace(XML_TEXT_NEWLINE_SENTINEL.encode("ascii"), b"&#10;")
+
+
 def pretty_xml_bytes(root: ET.Element) -> bytes:
     try:
         from lxml import etree
     except ImportError:
         ET.indent(root, space="  ")
-        return ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        _encode_multiline_text_nodes(root)
+        return _restore_text_newline_entities(
+            ET.tostring(root, encoding="utf-8", xml_declaration=True)
+        )
     parser = etree.XMLParser(remove_blank_text=True)
     document = etree.fromstring(ET.tostring(root, encoding="utf-8"), parser)
-    return etree.tostring(document, encoding="utf-8", xml_declaration=True, pretty_print=True)
+    _encode_multiline_text_nodes(document)
+    return _restore_text_newline_entities(
+        etree.tostring(
+            document,
+            encoding="utf-8",
+            xml_declaration=True,
+            pretty_print=True,
+        )
+    )
 
 
 def write_pretty_xml(root: ET.Element, path: Path) -> None:

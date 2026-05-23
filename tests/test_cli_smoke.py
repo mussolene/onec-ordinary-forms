@@ -10,6 +10,7 @@ from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
 from onec_ordinary_forms.cli import (
     format_xml_file,
+    pretty_xml_bytes,
     validate_xml_file,
 )
 from onec_ordinary_forms.formbin import (
@@ -506,6 +507,18 @@ class CliSmokeTest(unittest.TestCase):
             format_xml_file(path)
             text = path.read_text(encoding="utf-8")
             self.assertIn("\n  <xs:element name=\"A\"/>\n", text)
+
+    def test_pretty_xml_keeps_multiline_text_on_one_xml_line(self) -> None:
+        root = ET.Element("Form")
+        title = ET.SubElement(root, "Title")
+        item = ET.SubElement(title, "Item", {"lang": "ru"})
+        item.text = "Первая строка\nВторая строка"
+
+        xml = pretty_xml_bytes(root).decode("utf-8")
+
+        self.assertIn("Первая строка&#10;Вторая строка", xml)
+        self.assertNotIn("Первая строка\nВторая строка", xml)
+        self.assertEqual(ET.fromstring(xml).findtext("./Title/Item"), "Первая строка\nВторая строка")
 
     def test_dump_bin_uses_managed_like_sidecars_for_module_and_pictures(self) -> None:
         with TemporaryDirectory() as temp_dir:
