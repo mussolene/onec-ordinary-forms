@@ -6,8 +6,8 @@ platform names match the 1C ordinary-form control palette/API terminology.
 
 from __future__ import annotations
 
-import json
 import importlib.resources
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
 
@@ -28,8 +28,32 @@ class OrdinaryControlDescriptor:
 
 
 def load_platform_palette() -> dict[str, dict[str, object]]:
-    path = importlib.resources.files("onec_ordinary_forms") / "data" / "ordinary-form-palette-8.2.19.json"
-    return json.loads(path.read_text(encoding="utf-8"))
+    path = importlib.resources.files("onec_ordinary_forms") / "schemas" / "ordinary-form.xsd"
+    root = ET.fromstring(path.read_text(encoding="utf-8"))
+    palette = root.find(".//PlatformPalette")
+    if palette is None:
+        return {}
+    result: dict[str, dict[str, object]] = {}
+    for control in palette.findall("Control"):
+        name = control.get("name")
+        if not name:
+            continue
+        properties = [
+            {"name": prop.get("platformName", ""), "type": prop.get("platformType", "")}
+            for prop in control.findall("./Properties/Property")
+            if prop.get("platformName")
+        ]
+        events = [
+            {"name": event.get("platformName", "")}
+            for event in control.findall("./Events/Event")
+            if event.get("platformName")
+        ]
+        result[name] = {
+            "platformName": control.get("platformName", ""),
+            "properties": properties,
+            "events": events,
+        }
+    return result
 
 
 def platform_members(control: str, key: str) -> tuple[PlatformMember, ...]:

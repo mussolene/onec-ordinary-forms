@@ -1,7 +1,592 @@
 <?xml version='1.0' encoding='utf-8'?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
   <xs:annotation>
-    <xs:documentation>Ordinary Form.xml object model schema. Control, property, event, and metadata vocabularies are kept in this single schema; public XML exposes named form objects, not raw platform stream records.</xs:documentation>
+    <xs:documentation>Ordinary Form.xml public object model schema. Public XML element and type names use one English vocabulary; 1C platform Russian names, property names, event names, and value types are stored as schema appinfo metadata.</xs:documentation>
+    <xs:appinfo>
+      <PlatformPalette source="1C 8.2.19 ordinary-form help" language="ru" publicVocabulary="en">
+        <Control name="Button" platformName="Кнопка">
+          <Properties>
+            <Property platformName="ВертикальноеПоложение" platformType="ВертикальноеПоложение"/>
+            <Property platformName="ГоризонтальноеПоложение" platformType="ГоризонтальноеПоложение"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Заголовок" platformType="Строка"/>
+            <Property platformName="Картинка" platformType="Картинка"/>
+            <Property platformName="Кнопки" platformType="КнопкиКоманднойПанели"/>
+            <Property platformName="МногострочныйРежим" platformType="Булево"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПоложениеКартинки" platformType="ПоложениеКартинкиКнопки"/>
+            <Property platformName="РазмерКартинки" platformType="РазмерКартинки"/>
+            <Property platformName="РежимМеню" platformType="ИспользованиеРежимаМеню"/>
+            <Property platformName="СочетаниеКлавиш" platformType="СочетаниеКлавиш"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаКнопки" platformType="Цвет"/>
+            <Property platformName="ЦветФонаКнопки" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="Нажатие"/>
+          </Events>
+        </Control>
+        <Control name="CalendarField" platformName="ПолеКалендаря">
+          <Properties>
+            <Property platformName="ВыделенныеДаты" platformType="КоллекцияВыделенныхДат"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="КонецПериодаОтображения" platformType="Дата ; Неопределено"/>
+            <Property platformName="НачалоПериодаОтображения" platformType="Дата ; Неопределено"/>
+            <Property platformName="ОтображатьТекущуюДату" platformType="Булево"/>
+            <Property platformName="ПеремещениеПоКалендарю" platformType="Булево"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="РазрешитьНачалоПеретаскивания" platformType="Булево"/>
+            <Property platformName="РазрешитьПеретаскивание" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="РежимВыделения" platformType="РежимВыделенияДаты"/>
+            <Property platformName="ТекущаяДата" platformType="Дата"/>
+            <Property platformName="ЦветВыходныхДней" platformType="Цвет"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаВыделения" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаКнопки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаПоля" platformType="Цвет"/>
+            <Property platformName="ЦветФонаВыделения" platformType="Цвет"/>
+            <Property platformName="ЦветФонаКнопки" platformType="Цвет"/>
+            <Property platformName="ЦветФонаПоля" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="Выбор"/>
+            <Event platformName="НачалоПеретаскивания"/>
+            <Event platformName="ОкончаниеПеретаскивания"/>
+            <Event platformName="Перетаскивание"/>
+            <Event platformName="ПриАктивизацииДаты"/>
+            <Event platformName="ПриВыводеПериода"/>
+            <Event platformName="ПриИзменении"/>
+            <Event platformName="ПроверкаПеретаскивания"/>
+          </Events>
+        </Control>
+        <Control name="Chart" platformName="Диаграмма">
+          <Properties>
+            <Property platformName="АвтоМаксимальноеЗначение" platformType="Булево"/>
+            <Property platformName="АвтоМинимальноеЗначение" platformType="Булево"/>
+            <Property platformName="АвтоРаздвижениеСерий" platformType="АвтоРаздвижениеСерий"/>
+            <Property platformName="АвтоТранспонирование" platformType="Булево"/>
+            <Property platformName="АвтоУстановкаТекстаСерий" platformType="Булево"/>
+            <Property platformName="АвтоУстановкаТекстаТочек" platformType="Булево"/>
+            <Property platformName="АктивнаяСерия" platformType="СерияДиаграммы"/>
+            <Property platformName="АктивнаяТочка" platformType="ТочкаДиаграммы"/>
+            <Property platformName="БазовоеЗначение" platformType="Число"/>
+            <Property platformName="ВидПодписей" platformType="ВидПодписейКДиаграмме"/>
+            <Property platformName="Градиент" platformType="Булево"/>
+            <Property platformName="ИсточникДанных" platformType="ТаблицаЗначений ; ОбластьЯчеекТабличногоДокумента"/>
+            <Property platformName="КоличествоСерий" platformType="Число"/>
+            <Property platformName="КоличествоТочек" platformType="Число"/>
+            <Property platformName="КонечныйУголИзмерительнойДиаграммы" platformType="Число"/>
+            <Property platformName="МаксимальноеЗначение" platformType="Число"/>
+            <Property platformName="МаксимумСерий" platformType="МаксимумСерий"/>
+            <Property platformName="МаксимумСерийКоличество" platformType="Число"/>
+            <Property platformName="МаксимумСерийПроцент" platformType="Число"/>
+            <Property platformName="МинимальноеЗначение" platformType="Число"/>
+            <Property platformName="НачальныйУголИзмерительнойДиаграммы" platformType="Число"/>
+            <Property platformName="ОбластьЗаголовка" platformType="ОбластьЗаголовкаДиаграммы"/>
+            <Property platformName="ОбластьЛегенды" platformType="ОбластьЛегендыДиаграммы"/>
+            <Property platformName="ОбластьПостроения" platformType="ОбластьПостроенияДиаграммы"/>
+            <Property platformName="Обновление" platformType="Булево"/>
+            <Property platformName="Окантовка" platformType="Булево"/>
+            <Property platformName="Ориентация" platformType="ОриентацияДиаграммы"/>
+            <Property platformName="ОтображатьЗаголовок" platformType="Булево"/>
+            <Property platformName="ОтображатьЛегенду" platformType="Булево"/>
+            <Property platformName="ОтображениеЗначенияИзмерительнойДиаграммы" platformType="ОтображениеЗначенияИзмерительнойДиаграммы"/>
+            <Property platformName="ПалитраЦветов" platformType="ПалитраЦветовДиаграммы"/>
+            <Property platformName="ПодписиШкалыЗначенийИзмерительнойДиаграммыВдольШкалы" platformType="Булево"/>
+            <Property platformName="ПоложениеПодписей" platformType="ПоложениеПодписейКДиаграмме"/>
+            <Property platformName="ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы" platformType="ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы"/>
+            <Property platformName="ПолосыИзмерительнойДиаграммы" platformType="ПолосыИзмерительнойДиаграммы"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="ПрозрачныйФонПодписей" platformType="Булево"/>
+            <Property platformName="ПропускатьБазовоеЗначение" platformType="Булево"/>
+            <Property platformName="РазделительПодписей" platformType="Строка"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="РамкаПодписей" platformType="Рамка"/>
+            <Property platformName="РежимПробелов" platformType="РежимПробеловДиаграммы"/>
+            <Property platformName="Свет" platformType="Булево"/>
+            <Property platformName="СводнаяСерия" platformType="СерияДиаграммы"/>
+            <Property platformName="Серии" platformType="СерииДиаграммы"/>
+            <Property platformName="СерииВСтроках" platformType="Булево"/>
+            <Property platformName="ТипДиаграммы" platformType="ТипДиаграммы"/>
+            <Property platformName="ТолщинаВтулкиИзмерительнойДиаграммы" platformType="Число"/>
+            <Property platformName="ТолщинаШкалыИзмерительнойДиаграммы" platformType="Число"/>
+            <Property platformName="Точки" platformType="ТочкиДиаграммы"/>
+            <Property platformName="ФорматЗначенийВПодписях" platformType="Строка"/>
+            <Property platformName="ФорматПроцентовВПодписях" platformType="Строка"/>
+            <Property platformName="ЦветВтулкиИзмерительнойДиаграммы" platformType="Цвет"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветРамкиПодписей" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаПодписей" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="ЦветФонаПодписей" platformType="Цвет"/>
+            <Property platformName="ШрифтПодписей" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="Выбор"/>
+            <Event platformName="ОбработкаРасшифровки"/>
+          </Events>
+        </Control>
+        <Control name="CheckBox" platformName="Флажок">
+          <Properties>
+            <Property platformName="ВертикальноеПоложение" platformType="ВертикальноеПоложение"/>
+            <Property platformName="ГоризонтальноеПоложение" platformType="ГоризонтальноеПоложение"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Заголовок" platformType="Строка"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПоложениеЗаголовка" platformType="ПоложениеЗаголовка"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ТриСостояния" platformType="Булево"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекста" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаПоля" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="ЦветФонаПоля" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="ПриИзменении"/>
+          </Events>
+        </Control>
+        <Control name="ChoiceField" platformName="ПолеВыбора">
+          <Properties>
+            <Property platformName="ВысотаСпискаВыбора" platformType="Число"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Картинка" platformType="Картинка"/>
+            <Property platformName="КартинкаКнопкиВыбора" platformType="Картинка"/>
+            <Property platformName="КартинкаКнопкиВыбора" platformType="Картинка"/>
+            <Property platformName="КнопкаВыбора" platformType="Булево"/>
+            <Property platformName="КнопкаОткрытия" platformType="Булево"/>
+            <Property platformName="КнопкаОчистки" platformType="Булево"/>
+            <Property platformName="КнопкаРегулирования" platformType="Булево"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="СписокВыбора" platformType="СписокЗначений"/>
+            <Property platformName="ТолькоПросмотр" platformType="Булево"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаКнопки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаПоля" platformType="Цвет"/>
+            <Property platformName="ЦветФонаКнопки" platformType="Цвет"/>
+            <Property platformName="ЦветФонаПоля" platformType="Цвет"/>
+            <Property platformName="ШиринаСпискаВыбора" platformType="Число"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="НачалоВыбора"/>
+            <Event platformName="НачалоВыбораИзСписка"/>
+            <Event platformName="ОбработкаВыбора"/>
+            <Event platformName="Открытие"/>
+            <Event platformName="Очистка"/>
+            <Event platformName="ПриИзменении"/>
+            <Event platformName="Регулирование"/>
+          </Events>
+        </Control>
+        <Control name="CommandBar" platformName="КоманднаяПанель">
+          <Properties>
+            <Property platformName="АвтоЗаполнение" platformType="Булево"/>
+            <Property platformName="Вспомогательная" platformType="Булево"/>
+            <Property platformName="ВыравниваниеКнопок" platformType="ВыравниваниеКнопокКоманднойПанели"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Кнопки" platformType="КнопкиКоманднойПанели"/>
+            <Property platformName="Ориентация" platformType="Ориентация"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаКнопки" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="ЦветФонаКнопки" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events/>
+        </Control>
+        <Control name="CommandBarButton" platformName="КнопкаКоманднойПанели">
+          <Properties>
+            <Property platformName="Действие" platformType="Действие"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="ИзменяетДанные" platformType="Булево"/>
+            <Property platformName="Имя" platformType="Строка"/>
+            <Property platformName="Картинка" platformType="Картинка"/>
+            <Property platformName="КнопкаПоУмолчанию" platformType="Булево"/>
+            <Property platformName="Кнопки" platformType="КнопкиКоманднойПанели"/>
+            <Property platformName="Отображение" platformType="ОтображениеКнопкиКоманднойПанели"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="Пометка" platformType="Булево"/>
+            <Property platformName="ПорядокКнопок" platformType="ПорядокКнопокКоманднойПанели"/>
+            <Property platformName="Пояснение" platformType="Строка"/>
+            <Property platformName="СочетаниеКлавиш" platformType="СочетаниеКлавиш"/>
+            <Property platformName="Текст" platformType="Строка"/>
+            <Property platformName="ТипКнопки" platformType="ТипКнопкиКоманднойПанели"/>
+          </Properties>
+          <Events/>
+        </Control>
+        <Control name="GroupBox" platformName="РамкаГруппы">
+          <Properties>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Заголовок" platformType="Строка"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекста" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events/>
+        </Control>
+        <Control name="HTMLDocumentField" platformName="ПолеHTMLДокумента">
+          <Properties>
+            <Property platformName="Вывод" platformType="ИспользованиеВывода"/>
+            <Property platformName="Документ" platformType="COMОбъект"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+          </Properties>
+          <Events>
+            <Event platformName="ДокументСформирован"/>
+          </Events>
+        </Control>
+        <Control name="InputField" platformName="ПолеВвода">
+          <Properties>
+            <Property platformName="АвтоВыборНезаполненного" platformType="Булево"/>
+            <Property platformName="АвтоОтметкаНезаполненного" platformType="Булево"/>
+            <Property platformName="АвтоПереносСтрок" platformType="Булево"/>
+            <Property platformName="ВертикальноеПоложение" platformType="ВертикальноеПоложение"/>
+            <Property platformName="ВыбиратьТип" platformType="Булево"/>
+            <Property platformName="ВыборНезаполненного" platformType="Булево"/>
+            <Property platformName="ВыделенныйТекст" platformType="Строка"/>
+            <Property platformName="ВыделятьОтрицательные" platformType="Булево"/>
+            <Property platformName="ВысотаСпискаВыбора" platformType="Число"/>
+            <Property platformName="ГоризонтальноеПоложение" platformType="ГоризонтальноеПоложение"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Картинка" platformType="Картинка"/>
+            <Property platformName="КартинкаКнопкиВыбора" platformType="Картинка"/>
+            <Property platformName="КартинкаКнопкиВыбора" platformType="Картинка"/>
+            <Property platformName="КнопкаВыбора" platformType="Булево"/>
+            <Property platformName="КнопкаОткрытия" platformType="Булево"/>
+            <Property platformName="КнопкаОчистки" platformType="Булево"/>
+            <Property platformName="КнопкаРегулирования" platformType="Булево"/>
+            <Property platformName="КнопкаСпискаВыбора" platformType="Булево"/>
+            <Property platformName="МаксимальноеЗначение" platformType="Произвольный"/>
+            <Property platformName="Маска" platformType="Строка"/>
+            <Property platformName="МинимальноеЗначение" platformType="Произвольный"/>
+            <Property platformName="МногострочныйРежим" platformType="Булево"/>
+            <Property platformName="ОграничениеТипа" platformType="ОписаниеТипов"/>
+            <Property platformName="ОтметкаНезаполненного" platformType="Булево"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="РасширенноеРедактирование" platformType="Булево"/>
+            <Property platformName="РедактированиеТекста" platformType="Булево"/>
+            <Property platformName="РежимВыбораИзСписка" platformType="Булево"/>
+            <Property platformName="РежимВыбораНезаполненного" platformType="РежимВыбораНезаполненного"/>
+            <Property platformName="РежимПароля" platformType="Булево"/>
+            <Property platformName="СочетаниеКлавиш" platformType="СочетаниеКлавиш"/>
+            <Property platformName="СписокВыбора" platformType="СписокЗначений"/>
+            <Property platformName="ТолькоПросмотр" platformType="Булево"/>
+            <Property platformName="Формат" platformType="Строка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаКнопки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаПоля" platformType="Цвет"/>
+            <Property platformName="ЦветФонаКнопки" platformType="Цвет"/>
+            <Property platformName="ЦветФонаПоля" platformType="Цвет"/>
+            <Property platformName="ШиринаСпискаВыбора" platformType="Число"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+            <Property platformName="ЭлементСвязиПоТипу" platformType=""/>
+          </Properties>
+          <Events>
+            <Event platformName="АвтоПодборТекста"/>
+            <Event platformName="НачалоВыбора"/>
+            <Event platformName="НачалоВыбораИзСписка"/>
+            <Event platformName="ОбработкаВыбора"/>
+            <Event platformName="ОкончаниеВводаТекста"/>
+            <Event platformName="Открытие"/>
+            <Event platformName="Очистка"/>
+            <Event platformName="ПриИзменении"/>
+            <Event platformName="Регулирование"/>
+          </Events>
+        </Control>
+        <Control name="LabelDecoration" platformName="Надпись">
+          <Properties>
+            <Property platformName="БегущаяСтрока" platformType="РежимБегущейСтроки"/>
+            <Property platformName="ВертикальноеПоложение" platformType="ВертикальноеПоложение"/>
+            <Property platformName="ВыделятьОтрицательные" platformType="Булево"/>
+            <Property platformName="Гиперссылка" platformType="Булево"/>
+            <Property platformName="ГоризонтальноеПоложение" platformType="ГоризонтальноеПоложение"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Заголовок" platformType="Строка"/>
+            <Property platformName="Картинка" platformType="Картинка"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПоложениеКартинкиНадписи" platformType="ПоложениеКартинкиНадписи"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="РазмерКартинки" platformType="РазмерКартинки"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="СочетаниеКлавиш" platformType="СочетаниеКлавиш"/>
+            <Property platformName="Формат" platformType="Строка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекста" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="Нажатие"/>
+          </Events>
+        </Control>
+        <Control name="ListBox" platformName="ПолеСписка">
+          <Properties>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="ОтображатьКартинку" platformType="Булево"/>
+            <Property platformName="ОтображатьПометку" platformType="Булево"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ТекущаяСтрока" platformType="ЭлементСпискаЗначений"/>
+            <Property platformName="ТолькоПросмотр" platformType="Булево"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаПоля" platformType="Цвет"/>
+            <Property platformName="ЦветФонаПоля" platformType="Цвет"/>
+          </Properties>
+          <Events>
+            <Event platformName="Выбор"/>
+            <Event platformName="ПриАктивизацииСтроки"/>
+            <Event platformName="ПриИзмененииФлажка"/>
+          </Events>
+        </Control>
+        <Control name="Panel" platformName="Панель">
+          <Properties>
+            <Property platformName="АвтоПорядокОбхода" platformType="Булево"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Картинка" platformType="Картинка"/>
+            <Property platformName="ОтображениеЗакладок" platformType="ОтображениеЗакладок"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПоложениеКартинкиПанели" platformType="ПоложениеКартинкиПанели"/>
+            <Property platformName="ПорядокОбхода" platformType="Число"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="РазмерКартинки" platformType="РазмерКартинки"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="РаспределятьПоСтраницам" platformType="Булево"/>
+            <Property platformName="РежимПрокручиваемыхСтраниц" platformType="Булево"/>
+            <Property platformName="Страницы" platformType="СтраницыПанели"/>
+            <Property platformName="ТекущаяСтраница" platformType="СтраницаПанели"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекста" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="ПриСменеСтраницы"/>
+          </Events>
+        </Control>
+        <Control name="PictureDecoration" platformName="ПолеКартинки">
+          <Properties>
+            <Property platformName="Гиперссылка" platformType="Булево"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="ИспользоватьКонтекстноеМеню" platformType="Булево"/>
+            <Property platformName="Картинка" platformType="Картинка"/>
+            <Property platformName="Масштабировать" platformType="Булево"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="РазмерКартинки" platformType="РазмерКартинки"/>
+            <Property platformName="РазрешитьНачалоПеретаскивания" platformType="Булево"/>
+            <Property platformName="РазрешитьПеретаскивание" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="СочетаниеКлавиш" platformType="СочетаниеКлавиш"/>
+            <Property platformName="ТекстНевыбраннойКартинки" platformType="Строка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекста" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="Нажатие"/>
+            <Event platformName="НачалоПеретаскивания"/>
+            <Event platformName="ОкончаниеПеретаскивания"/>
+            <Event platformName="Перетаскивание"/>
+            <Event platformName="ПроверкаПеретаскивания"/>
+          </Events>
+        </Control>
+        <Control name="ProgressBar" platformName="Индикатор">
+          <Properties>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="МаксимальноеЗначение" platformType="Число"/>
+            <Property platformName="МинимальноеЗначение" platformType="Число"/>
+            <Property platformName="Ориентация" platformType="Ориентация"/>
+            <Property platformName="ОтображатьПроценты" platformType="Булево"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="СтильОтображения" platformType="РежимСглаживанияИндикатора"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="Шаг" platformType="Число"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events/>
+        </Control>
+        <Control name="RadioButton" platformName="Переключатель">
+          <Properties>
+            <Property platformName="ВертикальноеПоложение" platformType="ВертикальноеПоложение"/>
+            <Property platformName="ВыбираемоеЗначение" platformType="Совпадает с описанием типа первого в группе переключателя"/>
+            <Property platformName="ГоризонтальноеПоложение" platformType="ГоризонтальноеПоложение"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Заголовок" platformType="Строка"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПоложениеЗаголовка" platformType="ПоложениеЗаголовка"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекста" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаПоля" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="ЦветФонаПоля" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="ПриИзменении"/>
+          </Events>
+        </Control>
+        <Control name="Splitter" platformName="Разделитель">
+          <Properties>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Ориентация" platformType="Ориентация"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+          </Properties>
+          <Events/>
+        </Control>
+        <Control name="SpreadsheetDocumentField" platformName="ПолеТабличногоДокумента">
+          <Properties>
+            <Property platformName="ВертикальнаяПолосаПрокрутки" platformType="Булево"/>
+            <Property platformName="ГоризонтальнаяПолосаПрокрутки" platformType="Булево"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="ОтображатьВыделение" platformType="ТипОтображенияВыделенияТабличногоДокумента"/>
+            <Property platformName="РазрешитьНачалоПеретаскивания" platformType="Булево"/>
+            <Property platformName="РазрешитьПеретаскивание" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+          </Properties>
+          <Events>
+            <Event platformName="Выбор"/>
+            <Event platformName="НачалоПеретаскивания"/>
+            <Event platformName="ОбработкаРасшифровки"/>
+            <Event platformName="ОкончаниеПеретаскивания"/>
+            <Event platformName="Перетаскивание"/>
+            <Event platformName="ПриАктивизацииОбласти"/>
+            <Event platformName="ПриИзмененииСодержимогоОбласти"/>
+            <Event platformName="ПроверкаПеретаскивания"/>
+          </Events>
+        </Control>
+        <Control name="Table" platformName="ТабличноеПоле">
+          <Properties>
+            <Property platformName="АвтоВводНовойСтроки" platformType="Булево"/>
+            <Property platformName="ВертикальнаяПолосаПрокрутки" platformType="ИспользованиеПолосыПрокрутки"/>
+            <Property platformName="ВертикальныеЛинии" platformType="Булево"/>
+            <Property platformName="Вывод" platformType="ИспользованиеВывода"/>
+            <Property platformName="ВыделенныеСтроки" platformType="ВыделенныеСтрокиТабличногоПоля"/>
+            <Property platformName="ВысотаПодвала" platformType="Число"/>
+            <Property platformName="ВысотаШапки" platformType="Число"/>
+            <Property platformName="ГоризонтальнаяПолосаПрокрутки" platformType="ИспользованиеПолосыПрокрутки"/>
+            <Property platformName="ГоризонтальныеЛинии" platformType="Булево"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="ИзменятьНастройкуКолонок" platformType="Булево"/>
+            <Property platformName="ИзменятьПозициюКолонок" platformType="Булево"/>
+            <Property platformName="ИзменятьСоставСтрок" platformType="Булево"/>
+            <Property platformName="Колонки" platformType="КолонкиТабличногоПоля"/>
+            <Property platformName="НачальноеОтображениеДерева" platformType="НачальноеОтображениеДерева"/>
+            <Property platformName="НачальноеОтображениеСписка" platformType="НачальноеОтображениеСписка"/>
+            <Property platformName="Подвал" platformType="Булево"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="РазрешитьНачалоПеретаскивания" platformType="Булево"/>
+            <Property platformName="РазрешитьПеретаскивание" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="РежимВводаСтрок" platformType="РежимВводаСтрокТабличногоПоля"/>
+            <Property platformName="РежимВыбора" platformType="Булево"/>
+            <Property platformName="РежимВыделения" platformType="РежимВыделенияТабличногоПоля"/>
+            <Property platformName="РежимВыделенияСтроки" platformType="РежимВыделенияСтрокиТабличногоПоля"/>
+            <Property platformName="ТекущаяКолонка" platformType="КолонкаТабличногоПоля"/>
+            <Property platformName="ТекущаяСтрока" platformType=""/>
+            <Property platformName="ТекущиеДанные" platformType=""/>
+            <Property platformName="ТекущийРодитель" platformType=""/>
+            <Property platformName="ТолькоПросмотр" platformType="Булево"/>
+            <Property platformName="ФиксацияСлева" platformType="Число"/>
+            <Property platformName="ФиксацияСправа" platformType="Число"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаВыделения" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаПодвала" platformType="Цвет"/>
+            <Property platformName="ЦветТекстаШапки" platformType="Цвет"/>
+            <Property platformName="ЦветФонаВыделения" platformType="Цвет"/>
+            <Property platformName="ЦветФонаПодвала" platformType="Цвет"/>
+            <Property platformName="ЦветФонаПоля" platformType="Цвет"/>
+            <Property platformName="ЦветФонаЧередованияСтрок" platformType="Цвет"/>
+            <Property platformName="ЦветФонаШапки" platformType="Цвет"/>
+            <Property platformName="ЧередованиеЦветовСтрок" platformType="Булево"/>
+            <Property platformName="Шапка" platformType="Булево"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+            <Property platformName="ШрифтПодвала" platformType="Шрифт"/>
+            <Property platformName="ШрифтШапки" platformType="Шрифт"/>
+          </Properties>
+          <Events>
+            <Event platformName="Выбор"/>
+            <Event platformName="ВыборЗначения"/>
+            <Event platformName="НачалоПеретаскивания"/>
+            <Event platformName="ОбработкаВыбора"/>
+            <Event platformName="ОбработкаЗаписиНовогоОбъекта"/>
+            <Event platformName="ОкончаниеПеретаскивания"/>
+            <Event platformName="ПередНачаломДобавления"/>
+            <Event platformName="ПередНачаломИзменения"/>
+            <Event platformName="ПередОкончаниемРедактирования"/>
+            <Event platformName="ПередУдалением"/>
+            <Event platformName="Перетаскивание"/>
+            <Event platformName="ПослеУдаления"/>
+            <Event platformName="ПриАктивизацииКолонки"/>
+            <Event platformName="ПриАктивизацииСтроки"/>
+            <Event platformName="ПриАктивизацииЯчейки"/>
+            <Event platformName="ПриВыводеСтроки"/>
+            <Event platformName="ПриИзмененииФлажка"/>
+            <Event platformName="ПриНачалеРедактирования"/>
+            <Event platformName="ПриОкончанииРедактирования"/>
+            <Event platformName="ПриПолученииДанных"/>
+            <Event platformName="ПриСменеТекущегоРодителя"/>
+            <Event platformName="ПроверкаПеретаскивания"/>
+          </Events>
+        </Control>
+        <Control name="TextDocumentField" platformName="ПолеТекстовогоДокумента">
+          <Properties>
+            <Property platformName="ВыделенныйТекст" platformType="Строка"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="Шрифт" platformType="Шрифт"/>
+          </Properties>
+          <Events/>
+        </Control>
+        <Control name="TrackBar" platformName="ПолосаРегулирования">
+          <Properties>
+            <Property platformName="БольшойШаг" platformType="Число"/>
+            <Property platformName="Доступность" platformType="Булево"/>
+            <Property platformName="МаксимальноеЗначение" platformType="Число"/>
+            <Property platformName="МинимальноеЗначение" platformType="Число"/>
+            <Property platformName="Ориентация" platformType="Ориентация"/>
+            <Property platformName="ОтображениеРазметки" platformType="ОтображениеРазметкиПолосыРегулирования"/>
+            <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПрозрачныйФон" platformType="Булево"/>
+            <Property platformName="Рамка" platformType="Рамка"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="ЦветТекста" platformType="Цвет"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+            <Property platformName="ЦветФонаКнопки" platformType="Цвет"/>
+            <Property platformName="Шаг" platformType="Число"/>
+            <Property platformName="ШагРазметки" platformType="Число"/>
+          </Properties>
+          <Events>
+            <Event platformName="ПриИзменении"/>
+          </Events>
+        </Control>
+      </PlatformPalette>
+    </xs:appinfo>
   </xs:annotation>
   <xs:element name="Form" type="FormType"/>
   <xs:complexType name="FormType">
@@ -364,33 +949,15 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="Pages" type="PagesType"/>
           <xs:element name="PagesRepresentation" type="xs:string"/>
-          <xs:element name="АвтоПорядокОбхода" type="xs:boolean"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Картинка" type="FileRefType"/>
-          <xs:element name="ОтображениеЗакладок" type="xs:string"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПоложениеКартинкиПанели" type="xs:string"/>
-          <xs:element name="ПорядокОбхода" type="xs:decimal"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="РазмерКартинки" type="xs:string"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="РаспределятьПоСтраницам" type="xs:boolean"/>
-          <xs:element name="РежимПрокручиваемыхСтраниц" type="xs:boolean"/>
-          <xs:element name="Страницы" type="xs:string"/>
-          <xs:element name="ТекущаяСтраница" type="xs:string"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекста" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:element name="Events" type="PanelEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -410,10 +977,10 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
@@ -424,25 +991,6 @@
           <xs:element name="AutoMaxWidth" type="xs:boolean"/>
           <xs:element name="HorizontalStretch" type="xs:boolean"/>
           <xs:element name="Hyperlink" type="xs:boolean"/>
-          <xs:element name="БегущаяСтрока" type="xs:string"/>
-          <xs:element name="ВертикальноеПоложение" type="xs:string"/>
-          <xs:element name="ВыделятьОтрицательные" type="xs:boolean"/>
-          <xs:element name="Гиперссылка" type="xs:boolean"/>
-          <xs:element name="ГоризонтальноеПоложение" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Заголовок" type="xs:string"/>
-          <xs:element name="Картинка" type="FileRefType"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПоложениеКартинкиНадписи" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="РазмерКартинки" type="xs:string"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="СочетаниеКлавиш" type="OpenElementType"/>
-          <xs:element name="Формат" type="xs:string"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекста" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:element name="Events" type="LabelDecorationEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -461,33 +1009,16 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="Picture" type="FileRefType"/>
           <xs:element name="PicturePosition" type="xs:string"/>
           <xs:element name="Border" type="xs:string"/>
-          <xs:element name="Гиперссылка" type="xs:boolean"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="ИспользоватьКонтекстноеМеню" type="xs:boolean"/>
-          <xs:element name="Картинка" type="FileRefType"/>
-          <xs:element name="Масштабировать" type="xs:boolean"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="РазмерКартинки" type="xs:string"/>
-          <xs:element name="РазрешитьНачалоПеретаскивания" type="xs:boolean"/>
-          <xs:element name="РазрешитьПеретаскивание" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="СочетаниеКлавиш" type="OpenElementType"/>
-          <xs:element name="ТекстНевыбраннойКартинки" type="xs:string"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекста" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:element name="Events" type="PictureDecorationEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -506,10 +1037,10 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
@@ -520,22 +1051,6 @@
           <xs:element name="CancelButton" type="xs:boolean"/>
           <xs:element name="Picture" type="FileRefType"/>
           <xs:element name="PicturePosition" type="xs:string"/>
-          <xs:element name="ВертикальноеПоложение" type="xs:string"/>
-          <xs:element name="ГоризонтальноеПоложение" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Заголовок" type="xs:string"/>
-          <xs:element name="Картинка" type="FileRefType"/>
-          <xs:element name="Кнопки" type="xs:string"/>
-          <xs:element name="МногострочныйРежим" type="xs:boolean"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПоложениеКартинки" type="xs:string"/>
-          <xs:element name="РазмерКартинки" type="xs:string"/>
-          <xs:element name="РежимМеню" type="xs:string"/>
-          <xs:element name="СочетаниеКлавиш" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаКнопки" type="OpenElementType"/>
-          <xs:element name="ЦветФонаКнопки" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:element name="Events" type="ButtonEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -554,10 +1069,10 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
@@ -573,50 +1088,6 @@
           <xs:element name="CreateButton" type="xs:boolean"/>
           <xs:element name="EditButton" type="xs:boolean"/>
           <xs:element name="RegulationButton" type="xs:boolean"/>
-          <xs:element name="АвтоВыборНезаполненного" type="xs:boolean"/>
-          <xs:element name="АвтоОтметкаНезаполненного" type="xs:boolean"/>
-          <xs:element name="АвтоПереносСтрок" type="xs:boolean"/>
-          <xs:element name="ВертикальноеПоложение" type="xs:string"/>
-          <xs:element name="ВыбиратьТип" type="xs:boolean"/>
-          <xs:element name="ВыборНезаполненного" type="xs:boolean"/>
-          <xs:element name="ВыделенныйТекст" type="xs:string"/>
-          <xs:element name="ВыделятьОтрицательные" type="xs:boolean"/>
-          <xs:element name="ВысотаСпискаВыбора" type="xs:decimal"/>
-          <xs:element name="ГоризонтальноеПоложение" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Картинка" type="FileRefType"/>
-          <xs:element name="КартинкаКнопкиВыбора" type="FileRefType"/>
-          <xs:element name="КнопкаВыбора" type="xs:boolean"/>
-          <xs:element name="КнопкаОткрытия" type="xs:boolean"/>
-          <xs:element name="КнопкаОчистки" type="xs:boolean"/>
-          <xs:element name="КнопкаРегулирования" type="xs:boolean"/>
-          <xs:element name="КнопкаСпискаВыбора" type="xs:boolean"/>
-          <xs:element name="МаксимальноеЗначение" type="OpenElementType"/>
-          <xs:element name="Маска" type="xs:string"/>
-          <xs:element name="МинимальноеЗначение" type="OpenElementType"/>
-          <xs:element name="МногострочныйРежим" type="xs:boolean"/>
-          <xs:element name="ОграничениеТипа" type="OpenElementType"/>
-          <xs:element name="ОтметкаНезаполненного" type="xs:boolean"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="РасширенноеРедактирование" type="xs:boolean"/>
-          <xs:element name="РедактированиеТекста" type="xs:boolean"/>
-          <xs:element name="РежимВыбораИзСписка" type="xs:boolean"/>
-          <xs:element name="РежимВыбораНезаполненного" type="xs:string"/>
-          <xs:element name="РежимПароля" type="xs:boolean"/>
-          <xs:element name="СочетаниеКлавиш" type="OpenElementType"/>
-          <xs:element name="СписокВыбора" type="OpenElementType"/>
-          <xs:element name="ТолькоПросмотр" type="xs:boolean"/>
-          <xs:element name="Формат" type="xs:string"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаКнопки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаПоля" type="OpenElementType"/>
-          <xs:element name="ЦветФонаКнопки" type="OpenElementType"/>
-          <xs:element name="ЦветФонаПоля" type="OpenElementType"/>
-          <xs:element name="ШиринаСпискаВыбора" type="xs:decimal"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
-          <xs:element name="ЭлементСвязиПоТипу" type="OpenElementType"/>
           <xs:element name="Events" type="InputFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -635,28 +1106,14 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="Autofill" type="xs:boolean"/>
-          <xs:element name="АвтоЗаполнение" type="xs:boolean"/>
-          <xs:element name="Вспомогательная" type="xs:boolean"/>
-          <xs:element name="ВыравниваниеКнопок" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Кнопки" type="xs:string"/>
-          <xs:element name="Ориентация" type="xs:string"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаКнопки" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="ЦветФонаКнопки" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -674,30 +1131,15 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
           <xs:element name="TextPosition" type="xs:string"/>
-          <xs:element name="ВертикальноеПоложение" type="xs:string"/>
-          <xs:element name="ГоризонтальноеПоложение" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Заголовок" type="xs:string"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПоложениеЗаголовка" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ТриСостояния" type="xs:boolean"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекста" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаПоля" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="ЦветФонаПоля" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:element name="Events" type="CheckBoxEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -716,10 +1158,10 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
@@ -728,52 +1170,6 @@
           <xs:element name="ColumnsCount" type="xs:integer"/>
           <xs:element name="RowsCount" type="xs:integer"/>
           <xs:element name="AutoMarkIncomplete" type="xs:boolean"/>
-          <xs:element name="АвтоВводНовойСтроки" type="xs:boolean"/>
-          <xs:element name="ВертикальнаяПолосаПрокрутки" type="xs:string"/>
-          <xs:element name="ВертикальныеЛинии" type="xs:boolean"/>
-          <xs:element name="Вывод" type="xs:string"/>
-          <xs:element name="ВыделенныеСтроки" type="xs:string"/>
-          <xs:element name="ВысотаПодвала" type="xs:decimal"/>
-          <xs:element name="ВысотаШапки" type="xs:decimal"/>
-          <xs:element name="ГоризонтальнаяПолосаПрокрутки" type="xs:string"/>
-          <xs:element name="ГоризонтальныеЛинии" type="xs:boolean"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="ИзменятьНастройкуКолонок" type="xs:boolean"/>
-          <xs:element name="ИзменятьПозициюКолонок" type="xs:boolean"/>
-          <xs:element name="ИзменятьСоставСтрок" type="xs:boolean"/>
-          <xs:element name="Колонки" type="xs:string"/>
-          <xs:element name="НачальноеОтображениеДерева" type="xs:string"/>
-          <xs:element name="НачальноеОтображениеСписка" type="xs:string"/>
-          <xs:element name="Подвал" type="xs:boolean"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="РазрешитьНачалоПеретаскивания" type="xs:boolean"/>
-          <xs:element name="РазрешитьПеретаскивание" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="РежимВводаСтрок" type="xs:string"/>
-          <xs:element name="РежимВыбора" type="xs:boolean"/>
-          <xs:element name="РежимВыделения" type="xs:string"/>
-          <xs:element name="РежимВыделенияСтроки" type="xs:string"/>
-          <xs:element name="ТекущаяКолонка" type="xs:string"/>
-          <xs:element name="ТекущаяСтрока" type="OpenElementType"/>
-          <xs:element name="ТекущиеДанные" type="OpenElementType"/>
-          <xs:element name="ТекущийРодитель" type="OpenElementType"/>
-          <xs:element name="ТолькоПросмотр" type="xs:boolean"/>
-          <xs:element name="ФиксацияСлева" type="xs:decimal"/>
-          <xs:element name="ФиксацияСправа" type="xs:decimal"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаВыделения" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаПодвала" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаШапки" type="OpenElementType"/>
-          <xs:element name="ЦветФонаВыделения" type="OpenElementType"/>
-          <xs:element name="ЦветФонаПодвала" type="OpenElementType"/>
-          <xs:element name="ЦветФонаПоля" type="OpenElementType"/>
-          <xs:element name="ЦветФонаЧередованияСтрок" type="OpenElementType"/>
-          <xs:element name="ЦветФонаШапки" type="OpenElementType"/>
-          <xs:element name="ЧередованиеЦветовСтрок" type="xs:boolean"/>
-          <xs:element name="Шапка" type="xs:boolean"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
-          <xs:element name="ШрифтПодвала" type="OpenElementType"/>
-          <xs:element name="ШрифтШапки" type="OpenElementType"/>
           <xs:element name="Events" type="TableEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -792,10 +1188,10 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
@@ -812,26 +1208,6 @@
           <xs:element name="EditButton" type="xs:boolean"/>
           <xs:element name="RegulationButton" type="xs:boolean"/>
           <xs:element name="ChoiceList" type="OpenElementType"/>
-          <xs:element name="ВысотаСпискаВыбора" type="xs:decimal"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Картинка" type="FileRefType"/>
-          <xs:element name="КартинкаКнопкиВыбора" type="FileRefType"/>
-          <xs:element name="КнопкаВыбора" type="xs:boolean"/>
-          <xs:element name="КнопкаОткрытия" type="xs:boolean"/>
-          <xs:element name="КнопкаОчистки" type="xs:boolean"/>
-          <xs:element name="КнопкаРегулирования" type="xs:boolean"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="СписокВыбора" type="OpenElementType"/>
-          <xs:element name="ТолькоПросмотр" type="xs:boolean"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаКнопки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаПоля" type="OpenElementType"/>
-          <xs:element name="ЦветФонаКнопки" type="OpenElementType"/>
-          <xs:element name="ЦветФонаПоля" type="OpenElementType"/>
-          <xs:element name="ШиринаСпискаВыбора" type="xs:decimal"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:element name="Events" type="ChoiceFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -850,21 +1226,13 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
-          <xs:element name="ВертикальнаяПолосаПрокрутки" type="xs:boolean"/>
-          <xs:element name="ГоризонтальнаяПолосаПрокрутки" type="xs:boolean"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="ОтображатьВыделение" type="xs:string"/>
-          <xs:element name="РазрешитьНачалоПеретаскивания" type="xs:boolean"/>
-          <xs:element name="РазрешитьПеретаскивание" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
           <xs:element name="Events" type="SpreadsheetDocumentFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -883,24 +1251,15 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ShowTitle" type="xs:boolean"/>
           <xs:element name="Representation" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Заголовок" type="xs:string"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекста" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -918,30 +1277,15 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
           <xs:element name="Items" type="OpenElementType"/>
-          <xs:element name="ВертикальноеПоложение" type="xs:string"/>
-          <xs:element name="ВыбираемоеЗначение" type="xs:string"/>
-          <xs:element name="ГоризонтальноеПоложение" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Заголовок" type="xs:string"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПоложениеЗаголовка" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекста" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаПоля" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="ЦветФонаПоля" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:element name="Events" type="RadioButtonEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -960,19 +1304,13 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Ориентация" type="xs:string"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -990,73 +1328,14 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
-          <xs:element name="АвтоМаксимальноеЗначение" type="xs:boolean"/>
-          <xs:element name="АвтоМинимальноеЗначение" type="xs:boolean"/>
-          <xs:element name="АвтоРаздвижениеСерий" type="xs:string"/>
-          <xs:element name="АвтоТранспонирование" type="xs:boolean"/>
-          <xs:element name="АвтоУстановкаТекстаСерий" type="xs:boolean"/>
-          <xs:element name="АвтоУстановкаТекстаТочек" type="xs:boolean"/>
-          <xs:element name="АктивнаяСерия" type="xs:string"/>
-          <xs:element name="АктивнаяТочка" type="xs:string"/>
-          <xs:element name="БазовоеЗначение" type="xs:decimal"/>
-          <xs:element name="ВидПодписей" type="xs:string"/>
-          <xs:element name="Градиент" type="xs:boolean"/>
-          <xs:element name="ИсточникДанных" type="OpenElementType"/>
-          <xs:element name="КоличествоСерий" type="xs:decimal"/>
-          <xs:element name="КоличествоТочек" type="xs:decimal"/>
-          <xs:element name="КонечныйУголИзмерительнойДиаграммы" type="xs:decimal"/>
-          <xs:element name="МаксимальноеЗначение" type="xs:decimal"/>
-          <xs:element name="МаксимумСерий" type="xs:string"/>
-          <xs:element name="МаксимумСерийКоличество" type="xs:decimal"/>
-          <xs:element name="МаксимумСерийПроцент" type="xs:decimal"/>
-          <xs:element name="МинимальноеЗначение" type="xs:decimal"/>
-          <xs:element name="НачальныйУголИзмерительнойДиаграммы" type="xs:decimal"/>
-          <xs:element name="ОбластьЗаголовка" type="xs:string"/>
-          <xs:element name="ОбластьЛегенды" type="xs:string"/>
-          <xs:element name="ОбластьПостроения" type="xs:string"/>
-          <xs:element name="Обновление" type="xs:boolean"/>
-          <xs:element name="Окантовка" type="xs:boolean"/>
-          <xs:element name="Ориентация" type="xs:string"/>
-          <xs:element name="ОтображатьЗаголовок" type="xs:boolean"/>
-          <xs:element name="ОтображатьЛегенду" type="xs:boolean"/>
-          <xs:element name="ОтображениеЗначенияИзмерительнойДиаграммы" type="xs:string"/>
-          <xs:element name="ПалитраЦветов" type="xs:string"/>
-          <xs:element name="ПодписиШкалыЗначенийИзмерительнойДиаграммыВдольШкалы" type="xs:boolean"/>
-          <xs:element name="ПоложениеПодписей" type="xs:string"/>
-          <xs:element name="ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы" type="xs:string"/>
-          <xs:element name="ПолосыИзмерительнойДиаграммы" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="ПрозрачныйФонПодписей" type="xs:boolean"/>
-          <xs:element name="ПропускатьБазовоеЗначение" type="xs:boolean"/>
-          <xs:element name="РазделительПодписей" type="xs:string"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="РамкаПодписей" type="OpenElementType"/>
-          <xs:element name="РежимПробелов" type="xs:string"/>
-          <xs:element name="Свет" type="xs:boolean"/>
-          <xs:element name="СводнаяСерия" type="xs:string"/>
-          <xs:element name="Серии" type="xs:string"/>
-          <xs:element name="СерииВСтроках" type="xs:boolean"/>
-          <xs:element name="ТипДиаграммы" type="xs:string"/>
-          <xs:element name="ТолщинаВтулкиИзмерительнойДиаграммы" type="xs:decimal"/>
-          <xs:element name="ТолщинаШкалыИзмерительнойДиаграммы" type="xs:decimal"/>
-          <xs:element name="Точки" type="xs:string"/>
-          <xs:element name="ФорматЗначенийВПодписях" type="xs:string"/>
-          <xs:element name="ФорматПроцентовВПодписях" type="xs:string"/>
-          <xs:element name="ЦветВтулкиИзмерительнойДиаграммы" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветРамкиПодписей" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаПодписей" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="ЦветФонаПодписей" type="OpenElementType"/>
-          <xs:element name="ШрифтПодписей" type="OpenElementType"/>
           <xs:element name="Events" type="ChartEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1075,26 +1354,16 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
           <xs:element name="Items" type="OpenElementType"/>
           <xs:element name="MultiLine" type="xs:boolean"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="ОтображатьКартинку" type="xs:boolean"/>
-          <xs:element name="ОтображатьПометку" type="xs:boolean"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ТекущаяСтрока" type="xs:string"/>
-          <xs:element name="ТолькоПросмотр" type="xs:boolean"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаПоля" type="OpenElementType"/>
-          <xs:element name="ЦветФонаПоля" type="OpenElementType"/>
           <xs:element name="Events" type="ListBoxEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1113,17 +1382,13 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
-          <xs:element name="Вывод" type="xs:string"/>
-          <xs:element name="Документ" type="xs:string"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
           <xs:element name="Events" type="HTMLDocumentFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1142,27 +1407,15 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="MinWidth" type="xs:integer"/>
           <xs:element name="MaxWidth" type="xs:integer"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="МаксимальноеЗначение" type="xs:decimal"/>
-          <xs:element name="МинимальноеЗначение" type="xs:decimal"/>
-          <xs:element name="Ориентация" type="xs:string"/>
-          <xs:element name="ОтображатьПроценты" type="xs:boolean"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="СтильОтображения" type="xs:string"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="Шаг" type="xs:decimal"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -1180,31 +1433,16 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="Orientation" type="xs:string"/>
           <xs:element name="MinWidth" type="xs:integer"/>
           <xs:element name="MaxWidth" type="xs:integer"/>
-          <xs:element name="БольшойШаг" type="xs:decimal"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="МаксимальноеЗначение" type="xs:decimal"/>
-          <xs:element name="МинимальноеЗначение" type="xs:decimal"/>
-          <xs:element name="Ориентация" type="xs:string"/>
-          <xs:element name="ОтображениеРазметки" type="xs:string"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="ПрозрачныйФон" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекста" type="OpenElementType"/>
-          <xs:element name="ЦветФона" type="OpenElementType"/>
-          <xs:element name="ЦветФонаКнопки" type="OpenElementType"/>
-          <xs:element name="Шаг" type="xs:decimal"/>
-          <xs:element name="ШагРазметки" type="xs:decimal"/>
           <xs:element name="Events" type="TrackBarEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1223,35 +1461,14 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
-          <xs:element name="ВыделенныеДаты" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="КонецПериодаОтображения" type="OpenElementType"/>
-          <xs:element name="НачалоПериодаОтображения" type="OpenElementType"/>
-          <xs:element name="ОтображатьТекущуюДату" type="xs:boolean"/>
-          <xs:element name="ПеремещениеПоКалендарю" type="xs:boolean"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="РазрешитьНачалоПеретаскивания" type="xs:boolean"/>
-          <xs:element name="РазрешитьПеретаскивание" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="РежимВыделения" type="xs:string"/>
-          <xs:element name="ТекущаяДата" type="xs:dateTime"/>
-          <xs:element name="ЦветВыходныхДней" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаВыделения" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаКнопки" type="OpenElementType"/>
-          <xs:element name="ЦветТекстаПоля" type="OpenElementType"/>
-          <xs:element name="ЦветФонаВыделения" type="OpenElementType"/>
-          <xs:element name="ЦветФонаКнопки" type="OpenElementType"/>
-          <xs:element name="ЦветФонаПоля" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:element name="Events" type="CalendarFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1270,21 +1487,16 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="OpenElementType"/>
-          <xs:element name="TextColor" type="xs:string"/>
-          <xs:element name="BackColor" type="xs:string"/>
-          <xs:element name="BorderColor" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="Border" type="xs:string"/>
           <xs:element name="HorizontalStretch" type="xs:boolean"/>
           <xs:element name="VerticalStretch" type="xs:boolean"/>
-          <xs:element name="ВыделенныйТекст" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="Рамка" type="OpenElementType"/>
-          <xs:element name="ЦветРамки" type="OpenElementType"/>
-          <xs:element name="Шрифт" type="OpenElementType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -1299,21 +1511,6 @@
           <xs:element name="Picture" type="FileRefType"/>
           <xs:element name="Action" type="OpenElementType"/>
           <xs:element name="CommandName" type="xs:string"/>
-          <xs:element name="Действие" type="xs:string"/>
-          <xs:element name="Доступность" type="xs:boolean"/>
-          <xs:element name="ИзменяетДанные" type="xs:boolean"/>
-          <xs:element name="Имя" type="xs:string"/>
-          <xs:element name="Картинка" type="FileRefType"/>
-          <xs:element name="КнопкаПоУмолчанию" type="xs:boolean"/>
-          <xs:element name="Кнопки" type="xs:string"/>
-          <xs:element name="Отображение" type="xs:string"/>
-          <xs:element name="Подсказка" type="xs:string"/>
-          <xs:element name="Пометка" type="xs:boolean"/>
-          <xs:element name="ПорядокКнопок" type="xs:string"/>
-          <xs:element name="Пояснение" type="xs:string"/>
-          <xs:element name="СочетаниеКлавиш" type="OpenElementType"/>
-          <xs:element name="Текст" type="xs:string"/>
-          <xs:element name="ТипКнопки" type="xs:string"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -1347,519 +1544,33 @@
       <xs:enumeration value="TrackBar"/>
     </xs:restriction>
   </xs:simpleType>
-  <xs:simpleType name="PlatformControlNameType">
-    <xs:annotation>
-      <xs:documentation>1C platform ordinary-form control names from structured 8.2.19 help.</xs:documentation>
-    </xs:annotation>
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="Диаграмма"/>
-      <xs:enumeration value="Индикатор"/>
-      <xs:enumeration value="Кнопка"/>
-      <xs:enumeration value="КнопкаКоманднойПанели"/>
-      <xs:enumeration value="КоманднаяПанель"/>
-      <xs:enumeration value="Надпись"/>
-      <xs:enumeration value="Панель"/>
-      <xs:enumeration value="Переключатель"/>
-      <xs:enumeration value="ПолеHTMLДокумента"/>
-      <xs:enumeration value="ПолеВвода"/>
-      <xs:enumeration value="ПолеВыбора"/>
-      <xs:enumeration value="ПолеКалендаря"/>
-      <xs:enumeration value="ПолеКартинки"/>
-      <xs:enumeration value="ПолеСписка"/>
-      <xs:enumeration value="ПолеТабличногоДокумента"/>
-      <xs:enumeration value="ПолеТекстовогоДокумента"/>
-      <xs:enumeration value="ПолосаРегулирования"/>
-      <xs:enumeration value="Разделитель"/>
-      <xs:enumeration value="РамкаГруппы"/>
-      <xs:enumeration value="ТабличноеПоле"/>
-      <xs:enumeration value="Флажок"/>
-    </xs:restriction>
-  </xs:simpleType>
-  <xs:simpleType name="PlatformPropertyNameType">
-    <xs:annotation>
-      <xs:documentation>Platform property names collected from ordinary-form control help members; used as implementation vocabulary, not a raw stream dump.</xs:documentation>
-    </xs:annotation>
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="АвтоВводНовойСтроки"/>
-      <xs:enumeration value="АвтоВыборНезаполненного"/>
-      <xs:enumeration value="АвтоЗаполнение"/>
-      <xs:enumeration value="АвтоМаксимальноеЗначение"/>
-      <xs:enumeration value="АвтоМинимальноеЗначение"/>
-      <xs:enumeration value="АвтоОтметкаНезаполненного"/>
-      <xs:enumeration value="АвтоПереносСтрок"/>
-      <xs:enumeration value="АвтоПорядокОбхода"/>
-      <xs:enumeration value="АвтоРаздвижениеСерий"/>
-      <xs:enumeration value="АвтоТранспонирование"/>
-      <xs:enumeration value="АвтоУстановкаТекстаСерий"/>
-      <xs:enumeration value="АвтоУстановкаТекстаТочек"/>
-      <xs:enumeration value="АктивнаяСерия"/>
-      <xs:enumeration value="АктивнаяТочка"/>
-      <xs:enumeration value="БазовоеЗначение"/>
-      <xs:enumeration value="БегущаяСтрока"/>
-      <xs:enumeration value="БольшойШаг"/>
-      <xs:enumeration value="ВертикальнаяПолосаПрокрутки"/>
-      <xs:enumeration value="ВертикальноеПоложение"/>
-      <xs:enumeration value="ВертикальныеЛинии"/>
-      <xs:enumeration value="ВидПодписей"/>
-      <xs:enumeration value="Вспомогательная"/>
-      <xs:enumeration value="ВыбираемоеЗначение"/>
-      <xs:enumeration value="ВыбиратьТип"/>
-      <xs:enumeration value="ВыборНезаполненного"/>
-      <xs:enumeration value="Вывод"/>
-      <xs:enumeration value="ВыделенныеДаты"/>
-      <xs:enumeration value="ВыделенныеСтроки"/>
-      <xs:enumeration value="ВыделенныйТекст"/>
-      <xs:enumeration value="ВыделятьОтрицательные"/>
-      <xs:enumeration value="ВыравниваниеКнопок"/>
-      <xs:enumeration value="ВысотаПодвала"/>
-      <xs:enumeration value="ВысотаСпискаВыбора"/>
-      <xs:enumeration value="ВысотаШапки"/>
-      <xs:enumeration value="Гиперссылка"/>
-      <xs:enumeration value="ГоризонтальнаяПолосаПрокрутки"/>
-      <xs:enumeration value="ГоризонтальноеПоложение"/>
-      <xs:enumeration value="ГоризонтальныеЛинии"/>
-      <xs:enumeration value="Градиент"/>
-      <xs:enumeration value="Действие"/>
-      <xs:enumeration value="Документ"/>
-      <xs:enumeration value="Доступность"/>
-      <xs:enumeration value="Заголовок"/>
-      <xs:enumeration value="ИзменяетДанные"/>
-      <xs:enumeration value="ИзменятьНастройкуКолонок"/>
-      <xs:enumeration value="ИзменятьПозициюКолонок"/>
-      <xs:enumeration value="ИзменятьСоставСтрок"/>
-      <xs:enumeration value="Имя"/>
-      <xs:enumeration value="ИспользоватьКонтекстноеМеню"/>
-      <xs:enumeration value="ИсточникДанных"/>
-      <xs:enumeration value="Картинка"/>
-      <xs:enumeration value="КартинкаКнопкиВыбора"/>
-      <xs:enumeration value="КнопкаВыбора"/>
-      <xs:enumeration value="КнопкаОткрытия"/>
-      <xs:enumeration value="КнопкаОчистки"/>
-      <xs:enumeration value="КнопкаПоУмолчанию"/>
-      <xs:enumeration value="КнопкаРегулирования"/>
-      <xs:enumeration value="КнопкаСпискаВыбора"/>
-      <xs:enumeration value="Кнопки"/>
-      <xs:enumeration value="КоличествоСерий"/>
-      <xs:enumeration value="КоличествоТочек"/>
-      <xs:enumeration value="Колонки"/>
-      <xs:enumeration value="КонецПериодаОтображения"/>
-      <xs:enumeration value="КонечныйУголИзмерительнойДиаграммы"/>
-      <xs:enumeration value="МаксимальноеЗначение"/>
-      <xs:enumeration value="МаксимумСерий"/>
-      <xs:enumeration value="МаксимумСерийКоличество"/>
-      <xs:enumeration value="МаксимумСерийПроцент"/>
-      <xs:enumeration value="Маска"/>
-      <xs:enumeration value="Масштабировать"/>
-      <xs:enumeration value="МинимальноеЗначение"/>
-      <xs:enumeration value="МногострочныйРежим"/>
-      <xs:enumeration value="НачалоПериодаОтображения"/>
-      <xs:enumeration value="НачальноеОтображениеДерева"/>
-      <xs:enumeration value="НачальноеОтображениеСписка"/>
-      <xs:enumeration value="НачальныйУголИзмерительнойДиаграммы"/>
-      <xs:enumeration value="ОбластьЗаголовка"/>
-      <xs:enumeration value="ОбластьЛегенды"/>
-      <xs:enumeration value="ОбластьПостроения"/>
-      <xs:enumeration value="Обновление"/>
-      <xs:enumeration value="ОграничениеТипа"/>
-      <xs:enumeration value="Окантовка"/>
-      <xs:enumeration value="Ориентация"/>
-      <xs:enumeration value="ОтметкаНезаполненного"/>
-      <xs:enumeration value="ОтображатьВыделение"/>
-      <xs:enumeration value="ОтображатьЗаголовок"/>
-      <xs:enumeration value="ОтображатьКартинку"/>
-      <xs:enumeration value="ОтображатьЛегенду"/>
-      <xs:enumeration value="ОтображатьПометку"/>
-      <xs:enumeration value="ОтображатьПроценты"/>
-      <xs:enumeration value="ОтображатьТекущуюДату"/>
-      <xs:enumeration value="Отображение"/>
-      <xs:enumeration value="ОтображениеЗакладок"/>
-      <xs:enumeration value="ОтображениеЗначенияИзмерительнойДиаграммы"/>
-      <xs:enumeration value="ОтображениеРазметки"/>
-      <xs:enumeration value="ПалитраЦветов"/>
-      <xs:enumeration value="ПеремещениеПоКалендарю"/>
-      <xs:enumeration value="Подвал"/>
-      <xs:enumeration value="ПодписиШкалыЗначенийИзмерительнойДиаграммыВдольШкалы"/>
-      <xs:enumeration value="Подсказка"/>
-      <xs:enumeration value="ПоложениеЗаголовка"/>
-      <xs:enumeration value="ПоложениеКартинки"/>
-      <xs:enumeration value="ПоложениеКартинкиНадписи"/>
-      <xs:enumeration value="ПоложениеКартинкиПанели"/>
-      <xs:enumeration value="ПоложениеПодписей"/>
-      <xs:enumeration value="ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы"/>
-      <xs:enumeration value="ПолосыИзмерительнойДиаграммы"/>
-      <xs:enumeration value="Пометка"/>
-      <xs:enumeration value="ПорядокКнопок"/>
-      <xs:enumeration value="ПорядокОбхода"/>
-      <xs:enumeration value="Пояснение"/>
-      <xs:enumeration value="ПрозрачныйФон"/>
-      <xs:enumeration value="ПрозрачныйФонПодписей"/>
-      <xs:enumeration value="ПропускатьБазовоеЗначение"/>
-      <xs:enumeration value="РазделительПодписей"/>
-      <xs:enumeration value="РазмерКартинки"/>
-      <xs:enumeration value="РазрешитьНачалоПеретаскивания"/>
-      <xs:enumeration value="РазрешитьПеретаскивание"/>
-      <xs:enumeration value="Рамка"/>
-      <xs:enumeration value="РамкаПодписей"/>
-      <xs:enumeration value="РаспределятьПоСтраницам"/>
-      <xs:enumeration value="РасширенноеРедактирование"/>
-      <xs:enumeration value="РедактированиеТекста"/>
-      <xs:enumeration value="РежимВводаСтрок"/>
-      <xs:enumeration value="РежимВыбора"/>
-      <xs:enumeration value="РежимВыбораИзСписка"/>
-      <xs:enumeration value="РежимВыбораНезаполненного"/>
-      <xs:enumeration value="РежимВыделения"/>
-      <xs:enumeration value="РежимВыделенияСтроки"/>
-      <xs:enumeration value="РежимМеню"/>
-      <xs:enumeration value="РежимПароля"/>
-      <xs:enumeration value="РежимПробелов"/>
-      <xs:enumeration value="РежимПрокручиваемыхСтраниц"/>
-      <xs:enumeration value="Свет"/>
-      <xs:enumeration value="СводнаяСерия"/>
-      <xs:enumeration value="Серии"/>
-      <xs:enumeration value="СерииВСтроках"/>
-      <xs:enumeration value="СочетаниеКлавиш"/>
-      <xs:enumeration value="СписокВыбора"/>
-      <xs:enumeration value="СтильОтображения"/>
-      <xs:enumeration value="Страницы"/>
-      <xs:enumeration value="Текст"/>
-      <xs:enumeration value="ТекстНевыбраннойКартинки"/>
-      <xs:enumeration value="ТекущаяДата"/>
-      <xs:enumeration value="ТекущаяКолонка"/>
-      <xs:enumeration value="ТекущаяСтраница"/>
-      <xs:enumeration value="ТекущаяСтрока"/>
-      <xs:enumeration value="ТекущиеДанные"/>
-      <xs:enumeration value="ТекущийРодитель"/>
-      <xs:enumeration value="ТипДиаграммы"/>
-      <xs:enumeration value="ТипКнопки"/>
-      <xs:enumeration value="ТолщинаВтулкиИзмерительнойДиаграммы"/>
-      <xs:enumeration value="ТолщинаШкалыИзмерительнойДиаграммы"/>
-      <xs:enumeration value="ТолькоПросмотр"/>
-      <xs:enumeration value="Точки"/>
-      <xs:enumeration value="ТриСостояния"/>
-      <xs:enumeration value="ФиксацияСлева"/>
-      <xs:enumeration value="ФиксацияСправа"/>
-      <xs:enumeration value="Формат"/>
-      <xs:enumeration value="ФорматЗначенийВПодписях"/>
-      <xs:enumeration value="ФорматПроцентовВПодписях"/>
-      <xs:enumeration value="ЦветВтулкиИзмерительнойДиаграммы"/>
-      <xs:enumeration value="ЦветВыходныхДней"/>
-      <xs:enumeration value="ЦветРамки"/>
-      <xs:enumeration value="ЦветРамкиПодписей"/>
-      <xs:enumeration value="ЦветТекста"/>
-      <xs:enumeration value="ЦветТекстаВыделения"/>
-      <xs:enumeration value="ЦветТекстаКнопки"/>
-      <xs:enumeration value="ЦветТекстаПодвала"/>
-      <xs:enumeration value="ЦветТекстаПодписей"/>
-      <xs:enumeration value="ЦветТекстаПоля"/>
-      <xs:enumeration value="ЦветТекстаШапки"/>
-      <xs:enumeration value="ЦветФона"/>
-      <xs:enumeration value="ЦветФонаВыделения"/>
-      <xs:enumeration value="ЦветФонаКнопки"/>
-      <xs:enumeration value="ЦветФонаПодвала"/>
-      <xs:enumeration value="ЦветФонаПодписей"/>
-      <xs:enumeration value="ЦветФонаПоля"/>
-      <xs:enumeration value="ЦветФонаЧередованияСтрок"/>
-      <xs:enumeration value="ЦветФонаШапки"/>
-      <xs:enumeration value="ЧередованиеЦветовСтрок"/>
-      <xs:enumeration value="Шаг"/>
-      <xs:enumeration value="ШагРазметки"/>
-      <xs:enumeration value="Шапка"/>
-      <xs:enumeration value="ШиринаСпискаВыбора"/>
-      <xs:enumeration value="Шрифт"/>
-      <xs:enumeration value="ШрифтПодвала"/>
-      <xs:enumeration value="ШрифтПодписей"/>
-      <xs:enumeration value="ШрифтШапки"/>
-      <xs:enumeration value="ЭлементСвязиПоТипу"/>
-    </xs:restriction>
-  </xs:simpleType>
-  <xs:simpleType name="PlatformEventNameType">
-    <xs:annotation>
-      <xs:documentation>Platform event names collected from ordinary-form control help members.</xs:documentation>
-    </xs:annotation>
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="АвтоПодборТекста"/>
-      <xs:enumeration value="Выбор"/>
-      <xs:enumeration value="ВыборЗначения"/>
-      <xs:enumeration value="ДокументСформирован"/>
-      <xs:enumeration value="Нажатие"/>
-      <xs:enumeration value="НачалоВыбора"/>
-      <xs:enumeration value="НачалоВыбораИзСписка"/>
-      <xs:enumeration value="НачалоПеретаскивания"/>
-      <xs:enumeration value="ОбработкаВыбора"/>
-      <xs:enumeration value="ОбработкаЗаписиНовогоОбъекта"/>
-      <xs:enumeration value="ОбработкаРасшифровки"/>
-      <xs:enumeration value="ОкончаниеВводаТекста"/>
-      <xs:enumeration value="ОкончаниеПеретаскивания"/>
-      <xs:enumeration value="Открытие"/>
-      <xs:enumeration value="Очистка"/>
-      <xs:enumeration value="ПередНачаломДобавления"/>
-      <xs:enumeration value="ПередНачаломИзменения"/>
-      <xs:enumeration value="ПередОкончаниемРедактирования"/>
-      <xs:enumeration value="ПередУдалением"/>
-      <xs:enumeration value="Перетаскивание"/>
-      <xs:enumeration value="ПослеУдаления"/>
-      <xs:enumeration value="ПриАктивизацииДаты"/>
-      <xs:enumeration value="ПриАктивизацииКолонки"/>
-      <xs:enumeration value="ПриАктивизацииОбласти"/>
-      <xs:enumeration value="ПриАктивизацииСтроки"/>
-      <xs:enumeration value="ПриАктивизацииЯчейки"/>
-      <xs:enumeration value="ПриВыводеПериода"/>
-      <xs:enumeration value="ПриВыводеСтроки"/>
-      <xs:enumeration value="ПриИзменении"/>
-      <xs:enumeration value="ПриИзмененииСодержимогоОбласти"/>
-      <xs:enumeration value="ПриИзмененииФлажка"/>
-      <xs:enumeration value="ПриНачалеРедактирования"/>
-      <xs:enumeration value="ПриОкончанииРедактирования"/>
-      <xs:enumeration value="ПриПолученииДанных"/>
-      <xs:enumeration value="ПриСменеСтраницы"/>
-      <xs:enumeration value="ПриСменеТекущегоРодителя"/>
-      <xs:enumeration value="ПроверкаПеретаскивания"/>
-      <xs:enumeration value="Регулирование"/>
-    </xs:restriction>
-  </xs:simpleType>
-  <xs:simpleType name="PlatformValueTypeNameType">
-    <xs:annotation>
-      <xs:documentation>Value type names referenced by ordinary-form property and event members.</xs:documentation>
-    </xs:annotation>
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="COMОбъект"/>
-      <xs:enumeration value="АвтоРаздвижениеСерий"/>
-      <xs:enumeration value="Булево"/>
-      <xs:enumeration value="ВертикальноеПоложение"/>
-      <xs:enumeration value="ВидПодписейКДиаграмме"/>
-      <xs:enumeration value="ВыделенныеСтрокиТабличногоПоля"/>
-      <xs:enumeration value="ВыравниваниеКнопокКоманднойПанели"/>
-      <xs:enumeration value="ГоризонтальноеПоложение"/>
-      <xs:enumeration value="Дата"/>
-      <xs:enumeration value="Действие"/>
-      <xs:enumeration value="ИспользованиеВывода"/>
-      <xs:enumeration value="ИспользованиеПолосыПрокрутки"/>
-      <xs:enumeration value="ИспользованиеРежимаМеню"/>
-      <xs:enumeration value="Картинка"/>
-      <xs:enumeration value="КнопкиКоманднойПанели"/>
-      <xs:enumeration value="КоллекцияВыделенныхДат"/>
-      <xs:enumeration value="КолонкаТабличногоПоля"/>
-      <xs:enumeration value="КолонкиТабличногоПоля"/>
-      <xs:enumeration value="МаксимумСерий"/>
-      <xs:enumeration value="НачальноеОтображениеДерева"/>
-      <xs:enumeration value="НачальноеОтображениеСписка"/>
-      <xs:enumeration value="Неопределено"/>
-      <xs:enumeration value="ОбластьЗаголовкаДиаграммы"/>
-      <xs:enumeration value="ОбластьЛегендыДиаграммы"/>
-      <xs:enumeration value="ОбластьПостроенияДиаграммы"/>
-      <xs:enumeration value="ОбластьЯчеекТабличногоДокумента"/>
-      <xs:enumeration value="ОписаниеТипов"/>
-      <xs:enumeration value="Ориентация"/>
-      <xs:enumeration value="ОриентацияДиаграммы"/>
-      <xs:enumeration value="ОтображениеЗакладок"/>
-      <xs:enumeration value="ОтображениеЗначенияИзмерительнойДиаграммы"/>
-      <xs:enumeration value="ОтображениеКнопкиКоманднойПанели"/>
-      <xs:enumeration value="ОтображениеРазметкиПолосыРегулирования"/>
-      <xs:enumeration value="ПалитраЦветовДиаграммы"/>
-      <xs:enumeration value="ПоложениеЗаголовка"/>
-      <xs:enumeration value="ПоложениеКартинкиКнопки"/>
-      <xs:enumeration value="ПоложениеКартинкиНадписи"/>
-      <xs:enumeration value="ПоложениеКартинкиПанели"/>
-      <xs:enumeration value="ПоложениеПодписейКДиаграмме"/>
-      <xs:enumeration value="ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы"/>
-      <xs:enumeration value="ПолосыИзмерительнойДиаграммы"/>
-      <xs:enumeration value="ПорядокКнопокКоманднойПанели"/>
-      <xs:enumeration value="Произвольный"/>
-      <xs:enumeration value="РазмерКартинки"/>
-      <xs:enumeration value="Рамка"/>
-      <xs:enumeration value="РежимБегущейСтроки"/>
-      <xs:enumeration value="РежимВводаСтрокТабличногоПоля"/>
-      <xs:enumeration value="РежимВыбораНезаполненного"/>
-      <xs:enumeration value="РежимВыделенияДаты"/>
-      <xs:enumeration value="РежимВыделенияСтрокиТабличногоПоля"/>
-      <xs:enumeration value="РежимВыделенияТабличногоПоля"/>
-      <xs:enumeration value="РежимПробеловДиаграммы"/>
-      <xs:enumeration value="РежимСглаживанияИндикатора"/>
-      <xs:enumeration value="СерииДиаграммы"/>
-      <xs:enumeration value="СерияДиаграммы"/>
-      <xs:enumeration value="Совпадает с описанием типа первого в группе переключателя"/>
-      <xs:enumeration value="СочетаниеКлавиш"/>
-      <xs:enumeration value="СписокЗначений"/>
-      <xs:enumeration value="СтраницаПанели"/>
-      <xs:enumeration value="СтраницыПанели"/>
-      <xs:enumeration value="Строка"/>
-      <xs:enumeration value="ТаблицаЗначений"/>
-      <xs:enumeration value="ТипДиаграммы"/>
-      <xs:enumeration value="ТипКнопкиКоманднойПанели"/>
-      <xs:enumeration value="ТипОтображенияВыделенияТабличногоДокумента"/>
-      <xs:enumeration value="ТочкаДиаграммы"/>
-      <xs:enumeration value="ТочкиДиаграммы"/>
-      <xs:enumeration value="Цвет"/>
-      <xs:enumeration value="Число"/>
-      <xs:enumeration value="Шрифт"/>
-      <xs:enumeration value="ЭлементСпискаЗначений"/>
-    </xs:restriction>
-  </xs:simpleType>
-  <xs:simpleType name="MetadataObjectNameType">
-    <xs:annotation>
-      <xs:documentation>Metadata object vocabulary relevant to configuration/type binding.</xs:documentation>
-    </xs:annotation>
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="ОбъектМетаданных: WSСсылка"/>
-      <xs:enumeration value="ОбъектМетаданных: WebСервис"/>
-      <xs:enumeration value="ОбъектМетаданных: БизнесПроцесс"/>
-      <xs:enumeration value="ОбъектМетаданных: ВнешнийИсточникДанных"/>
-      <xs:enumeration value="ОбъектМетаданных: Графа"/>
-      <xs:enumeration value="ОбъектМетаданных: ГруппаКоманд"/>
-      <xs:enumeration value="ОбъектМетаданных: Документ"/>
-      <xs:enumeration value="ОбъектМетаданных: ЖурналДокументов"/>
-      <xs:enumeration value="ОбъектМетаданных: Задача"/>
-      <xs:enumeration value="ОбъектМетаданных: ЗначениеПеречисления"/>
-      <xs:enumeration value="ОбъектМетаданных: Измерение"/>
-      <xs:enumeration value="ОбъектМетаданных: Интерфейс"/>
-      <xs:enumeration value="ОбъектМетаданных: Команда"/>
-      <xs:enumeration value="ОбъектМетаданных: Константа"/>
-      <xs:enumeration value="ОбъектМетаданных: КритерийОтбора"/>
-      <xs:enumeration value="ОбъектМетаданных: Макет"/>
-      <xs:enumeration value="ОбъектМетаданных: Нумератор"/>
-      <xs:enumeration value="ОбъектМетаданных: Обработка"/>
-      <xs:enumeration value="ОбъектМетаданных: ОбщаяКартинка"/>
-      <xs:enumeration value="ОбъектМетаданных: ОбщаяКоманда"/>
-      <xs:enumeration value="ОбъектМетаданных: ОбщийМодуль"/>
-      <xs:enumeration value="ОбъектМетаданных: ОбщийРеквизит"/>
-      <xs:enumeration value="ОбъектМетаданных: ОперацияWebСервиса"/>
-      <xs:enumeration value="ОбъектМетаданных: Отчет"/>
-      <xs:enumeration value="ОбъектМетаданных: ПакетXDTO"/>
-      <xs:enumeration value="ОбъектМетаданных: ПараметрWebСервиса"/>
-      <xs:enumeration value="ОбъектМетаданных: ПараметрСеанса"/>
-      <xs:enumeration value="ОбъектМетаданных: ПараметрФункциональныхОпций"/>
-      <xs:enumeration value="ОбъектМетаданных: Перерасчет"/>
-      <xs:enumeration value="ОбъектМетаданных: Перечисление"/>
-      <xs:enumeration value="ОбъектМетаданных: ПланВидовРасчета"/>
-      <xs:enumeration value="ОбъектМетаданных: ПланВидовХарактеристик"/>
-      <xs:enumeration value="ОбъектМетаданных: ПланОбмена"/>
-      <xs:enumeration value="ОбъектМетаданных: ПланСчетов"/>
-      <xs:enumeration value="ОбъектМетаданных: ПодпискаНаСобытие"/>
-      <xs:enumeration value="ОбъектМетаданных: Подсистема"/>
-      <xs:enumeration value="ОбъектМетаданных: Поле"/>
-      <xs:enumeration value="ОбъектМетаданных: Последовательность"/>
-      <xs:enumeration value="ОбъектМетаданных: ПризнакУчетаПланаСчетов"/>
-      <xs:enumeration value="ОбъектМетаданных: ПризнакУчетаСубконтоПланаСчетов"/>
-      <xs:enumeration value="ОбъектМетаданных: РегистрБухгалтерии"/>
-      <xs:enumeration value="ОбъектМетаданных: РегистрНакопления"/>
-      <xs:enumeration value="ОбъектМетаданных: РегистрРасчета"/>
-      <xs:enumeration value="ОбъектМетаданных: РегистрСведений"/>
-      <xs:enumeration value="ОбъектМетаданных: РегламентноеЗадание"/>
-      <xs:enumeration value="ОбъектМетаданных: Реквизит"/>
-      <xs:enumeration value="ОбъектМетаданных: РеквизитАдресации"/>
-      <xs:enumeration value="ОбъектМетаданных: Ресурс"/>
-      <xs:enumeration value="ОбъектМетаданных: Роль"/>
-      <xs:enumeration value="ОбъектМетаданных: Справочник"/>
-      <xs:enumeration value="ОбъектМетаданных: Стиль"/>
-      <xs:enumeration value="ОбъектМетаданных: Таблица"/>
-      <xs:enumeration value="ОбъектМетаданных: ТабличнаяЧасть"/>
-      <xs:enumeration value="ОбъектМетаданных: Форма"/>
-      <xs:enumeration value="ОбъектМетаданных: ФункциональнаяОпция"/>
-      <xs:enumeration value="ОбъектМетаданных: ХранилищеНастроек"/>
-      <xs:enumeration value="ОбъектМетаданных: ЭлементСтиля"/>
-      <xs:enumeration value="ОбъектМетаданных: Язык"/>
-      <xs:enumeration value="ОбъектМетаданныхКонфигурация"/>
-      <xs:enumeration value="ОписаниеТипов"/>
-    </xs:restriction>
-  </xs:simpleType>
-  <xs:simpleType name="ConfigurationMetadataPropertyNameType">
-    <xs:annotation>
-      <xs:documentation>Properties of ОбъектМетаданныхКонфигурация from structured help.</xs:documentation>
-    </xs:annotation>
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="WSСсылки"/>
-      <xs:enumeration value="WebСервисы"/>
-      <xs:enumeration value="АвторскиеПрава"/>
-      <xs:enumeration value="АдресИнформацииОКонфигурации"/>
-      <xs:enumeration value="АдресИнформацииОПоставщике"/>
-      <xs:enumeration value="АдресКаталогаОбновлений"/>
-      <xs:enumeration value="БизнесПроцессы"/>
-      <xs:enumeration value="ВариантВстроенногоЯзыка"/>
-      <xs:enumeration value="Версия"/>
-      <xs:enumeration value="ВключатьСправкуВСодержание"/>
-      <xs:enumeration value="ВнешниеИсточникиДанных"/>
-      <xs:enumeration value="Документы"/>
-      <xs:enumeration value="ДополнительнаяФормаКонстант"/>
-      <xs:enumeration value="ДополнительныеСловариПолнотекстовогоПоиска"/>
-      <xs:enumeration value="ЖурналыДокументов"/>
-      <xs:enumeration value="Задачи"/>
-      <xs:enumeration value="Заставка"/>
-      <xs:enumeration value="Имя"/>
-      <xs:enumeration value="Интерфейсы"/>
-      <xs:enumeration value="ИспользоватьОбычныеФормыВУправляемомПриложении"/>
-      <xs:enumeration value="ИспользоватьУправляемыеФормыВОбычномПриложении"/>
-      <xs:enumeration value="КомандныйИнтерфейс"/>
-      <xs:enumeration value="КомандныйИнтерфейсРабочегоСтола"/>
-      <xs:enumeration value="Комментарий"/>
-      <xs:enumeration value="Константы"/>
-      <xs:enumeration value="КраткаяИнформация"/>
-      <xs:enumeration value="КритерииОтбора"/>
-      <xs:enumeration value="Логотип"/>
-      <xs:enumeration value="МодульВнешнегоСоединения"/>
-      <xs:enumeration value="МодульОбычногоПриложения"/>
-      <xs:enumeration value="МодульСеанса"/>
-      <xs:enumeration value="МодульУправляемогоПриложения"/>
-      <xs:enumeration value="НайтиПоПолномуИмени"/>
-      <xs:enumeration value="НайтиПоТипу"/>
-      <xs:enumeration value="НумераторыДокументов"/>
-      <xs:enumeration value="Обработки"/>
-      <xs:enumeration value="ОбщиеКартинки"/>
-      <xs:enumeration value="ОбщиеКоманды"/>
-      <xs:enumeration value="ОбщиеМакеты"/>
-      <xs:enumeration value="ОбщиеМодули"/>
-      <xs:enumeration value="ОбщиеРеквизиты"/>
-      <xs:enumeration value="ОбщиеФормы"/>
-      <xs:enumeration value="ОсновнаяРоль"/>
-      <xs:enumeration value="ОсновнаяФормаВариантаОтчета"/>
-      <xs:enumeration value="ОсновнаяФормаКонстант"/>
-      <xs:enumeration value="ОсновнаяФормаНастроекОтчета"/>
-      <xs:enumeration value="ОсновнаяФормаОтчета"/>
-      <xs:enumeration value="ОсновнойИнтерфейс"/>
-      <xs:enumeration value="ОсновнойРежимЗапуска"/>
-      <xs:enumeration value="ОсновнойСтиль"/>
-      <xs:enumeration value="ОсновнойЯзык"/>
-      <xs:enumeration value="Отчеты"/>
-      <xs:enumeration value="ПакетыXDTO"/>
-      <xs:enumeration value="ПараметрыСеанса"/>
-      <xs:enumeration value="Перечисления"/>
-      <xs:enumeration value="ПланыВидовРасчета"/>
-      <xs:enumeration value="ПланыВидовХарактеристик"/>
-      <xs:enumeration value="ПланыОбмена"/>
-      <xs:enumeration value="ПланыСчетов"/>
-      <xs:enumeration value="ПодпискиНаСобытия"/>
-      <xs:enumeration value="ПодробнаяИнформация"/>
-      <xs:enumeration value="Подсистемы"/>
-      <xs:enumeration value="Последовательности"/>
-      <xs:enumeration value="Поставщик"/>
-      <xs:enumeration value="РабочаяОбластьРабочегоСтола"/>
-      <xs:enumeration value="РегистрыБухгалтерии"/>
-      <xs:enumeration value="РегистрыНакопления"/>
-      <xs:enumeration value="РегистрыРасчета"/>
-      <xs:enumeration value="РегистрыСведений"/>
-      <xs:enumeration value="РегламентныеЗадания"/>
-      <xs:enumeration value="РежимАвтонумерацииОбъектов"/>
-      <xs:enumeration value="РежимСовместимости"/>
-      <xs:enumeration value="РежимУправленияБлокировкойДанных"/>
-      <xs:enumeration value="РодительскиеКонфигурации"/>
-      <xs:enumeration value="Роли"/>
-      <xs:enumeration value="СвойстваОбъектов"/>
-      <xs:enumeration value="Синоним"/>
-      <xs:enumeration value="Справка"/>
-      <xs:enumeration value="Справочники"/>
-      <xs:enumeration value="Стили"/>
-      <xs:enumeration value="ФрагментКомандногоИнтерфейса"/>
-      <xs:enumeration value="ФункциональныеОпции"/>
-      <xs:enumeration value="ХранилищеВариантовОтчетов"/>
-      <xs:enumeration value="ХранилищеНастроекДанныхФорм"/>
-      <xs:enumeration value="ХранилищеОбщихНастроек"/>
-      <xs:enumeration value="ХранилищеПользовательскихНастроекОтчетов"/>
-      <xs:enumeration value="ЭлементыСтиля"/>
-      <xs:enumeration value="Языки"/>
-    </xs:restriction>
-  </xs:simpleType>
   <xs:complexType name="NamedRefType">
     <xs:attribute name="name" type="xs:string"/>
     <xs:attribute name="id" type="xs:integer"/>
+    <xs:anyAttribute processContents="lax"/>
+  </xs:complexType>
+  <xs:complexType name="ColorType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="kind" type="xs:string"/>
+        <xs:attribute name="value" type="xs:string"/>
+        <xs:attribute name="name" type="xs:string"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:complexType name="FontType">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="Delta" type="xs:string"/>
+      <xs:element name="Value" type="IndexedValueType"/>
+    </xs:choice>
+    <xs:attribute name="kind" type="xs:string"/>
+    <xs:attribute name="family" type="xs:string"/>
+    <xs:attribute name="style" type="xs:string"/>
+    <xs:attribute name="name" type="xs:string"/>
+    <xs:attribute name="size" type="xs:string"/>
+    <xs:attribute name="bold" type="xs:boolean"/>
+    <xs:attribute name="italic" type="xs:boolean"/>
+    <xs:attribute name="underline" type="xs:boolean"/>
     <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
   <xs:complexType name="EventsType">

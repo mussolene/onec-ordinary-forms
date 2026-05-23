@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -31,14 +30,18 @@ def test_descriptors_have_platform_palette_members() -> None:
     assert sum(len(descriptor.platform_events) for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()) == 71
 
 
-def test_palette_json_contains_required_controls() -> None:
-    palette_path = ROOT / "src" / "onec_ordinary_forms" / "data" / "ordinary-form-palette-8.2.19.json"
-    palette = json.loads(palette_path.read_text(encoding="utf-8"))
+def test_single_xsd_appinfo_contains_platform_palette() -> None:
+    root = ET.parse(XSD).getroot()
+    controls = {control.get("name", ""): control for control in root.findall(".//PlatformPalette/Control")}
 
-    assert palette["Button"]["platformName"] == "Кнопка"
-    assert {event["name"] for event in palette["Button"]["events"]} == {"Нажатие"}
-    assert "ПриИзменении" in {event["name"] for event in palette["InputField"]["events"]}
-    assert "ПриВыводеСтроки" in {event["name"] for event in palette["Table"]["events"]}
+    assert controls["Button"].get("platformName") == "Кнопка"
+    assert {event.get("platformName") for event in controls["Button"].findall("./Events/Event")} == {"Нажатие"}
+    assert "ПриИзменении" in {
+        event.get("platformName") for event in controls["InputField"].findall("./Events/Event")
+    }
+    assert "ПриВыводеСтроки" in {
+        event.get("platformName") for event in controls["Table"].findall("./Events/Event")
+    }
 
 
 def test_single_xsd_contains_platform_vocabulary() -> None:
@@ -51,10 +54,22 @@ def test_single_xsd_contains_platform_vocabulary() -> None:
         return {element.get("value", "") for element in restriction.findall("xs:enumeration", ns)}
 
     assert enum_values("ControlElementNameType") == set(PLATFORM_PALETTE)
-    assert len(enum_values("PlatformPropertyNameType")) == 190
-    assert len(enum_values("PlatformEventNameType")) == 38
-    assert "ОбъектМетаданныхКонфигурация" in enum_values("MetadataObjectNameType")
-    assert "Документы" in enum_values("ConfigurationMetadataPropertyNameType")
+    platform_properties = {
+        prop.get("platformName", "")
+        for prop in root.findall(".//PlatformPalette/Control/Properties/Property")
+    }
+    platform_events = {
+        event.get("platformName", "")
+        for event in root.findall(".//PlatformPalette/Control/Events/Event")
+    }
+    platform_types = {
+        prop.get("platformType", "")
+        for prop in root.findall(".//PlatformPalette/Control/Properties/Property")
+    }
+    assert len(platform_properties) == 190
+    assert len(platform_events) == 38
+    assert "Цвет" in " ; ".join(platform_types)
+    assert "Шрифт" in " ; ".join(platform_types)
 
 
 def test_control_types_are_type_specific() -> None:
@@ -71,12 +86,20 @@ def test_control_types_are_type_specific() -> None:
 
     assert "Нажатие" not in child_names("ButtonType")
     assert "Events" in child_names("ButtonType")
-    assert "КнопкаВыбора" in child_names("InputFieldType")
+    assert "КнопкаВыбора" not in child_names("InputFieldType")
     assert "ПриВыводеСтроки" not in child_names("InputFieldType")
     assert "ПриВыводеСтроки" in {
-        element.get("value", "")
-        for element in root.findall(
-            "xs:simpleType[@name='TableEventNameType']/xs:restriction/xs:enumeration",
-            ns,
-        )
+        event.get("platformName", "") for event in root.findall(".//PlatformPalette/Control[@name='Table']/Events/Event")
     }
+
+
+def test_public_xsd_control_elements_use_english_vocabulary() -> None:
+    ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
+    root = ET.parse(XSD).getroot()
+    public_element_names = {
+        element.get("name", "")
+        for element in root.findall(".//xs:complexType/xs:complexContent/xs:extension/xs:choice/xs:element", ns)
+    }
+
+    assert public_element_names
+    assert not any(any("А" <= char <= "я" or char == "Ё" or char == "ё" for char in name) for name in public_element_names)

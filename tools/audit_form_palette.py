@@ -41,7 +41,26 @@ def xsd_control_properties(path: Path, controls: set[str]) -> set[str]:
 
 
 def load_palette(path: Path) -> dict[str, object]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    root = ET.parse(path).getroot()
+    result: dict[str, object] = {}
+    for control in root.findall(".//PlatformPalette/Control"):
+        name = control.get("name")
+        if not name:
+            continue
+        result[name] = {
+            "platformName": control.get("platformName", ""),
+            "properties": [
+                {"name": prop.get("platformName", ""), "type": prop.get("platformType", "")}
+                for prop in control.findall("./Properties/Property")
+                if prop.get("platformName")
+            ],
+            "events": [
+                {"name": event.get("platformName", "")}
+                for event in control.findall("./Events/Event")
+                if event.get("platformName")
+            ],
+        }
+    return result
 
 
 def platform_member_names(palette: dict[str, object], section: str) -> set[str]:
@@ -135,7 +154,7 @@ def help_summary(db_path: Path, palette: dict[str, object]) -> dict[str, object]
 def audit(args: argparse.Namespace) -> dict[str, object]:
     xsd_control_set = xsd_controls(Path(args.xsd))
     xsd_property_set = xsd_control_properties(Path(args.xsd), xsd_control_set)
-    palette = load_palette(Path(args.palette))
+    palette = load_palette(Path(args.xsd))
     palette_controls = set(palette)
     platform_properties = platform_member_names(palette, "properties")
     platform_events = platform_member_names(palette, "events")
@@ -158,7 +177,6 @@ def audit(args: argparse.Namespace) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--xsd", default="src/onec_ordinary_forms/schemas/ordinary-form.xsd")
-    parser.add_argument("--palette", default="src/onec_ordinary_forms/data/ordinary-form-palette-8.2.19.json")
     parser.add_argument("--help-db", help="Structured 1C platform help SQLite database")
     parser.add_argument("--out", help="Write JSON report")
     args = parser.parse_args()

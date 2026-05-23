@@ -199,9 +199,11 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 </Form>
 ```
 
-Свойства и события контролов зависят от типа контрола и берутся из
-платформенной палитры обычных элементов. В XML должны попадать только явно
-заданные значения; дефолты платформы остаются неявными.
+Публичный XML использует единый английский словарь элементов и свойств.
+Платформенные русские имена свойств, событий и типов обычной формы хранятся в
+`ordinary-form.xsd` как `xs:annotation/xs:appinfo`, а не отдельным mapping
+файлом и не публичными XML-тегами. В XML должны попадать только явно заданные
+значения; дефолты платформы остаются неявными.
 
 Схема еще расширяется, но направление фиксированное: публичный XML должен быть
 похож на XML управляемой формы, быть именованным и понятным разработчику 1С.
@@ -286,7 +288,7 @@ Current implementation status:
 - read ordinary `Form.bin` containers;
 - dump readable object-model `Form.xml`;
 - extract `Module.bsl` and picture sidecars;
-- validate `Form.xml` against bundled XSD schemas;
+- validate `Form.xml` against the bundled `ordinary-form.xsd`;
 - build ordinary `Form.bin` back from the named object XML package without
   template `Form.bin`;
 - scan local EPF/ERF corpora without committing private processors or exports.
