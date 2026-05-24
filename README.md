@@ -367,7 +367,7 @@ python3 tools/vendor_platform_schemas.py \
 
 ## Status / Статус
 
-Current release: `0.4.0`.
+Current release: `0.4.1`.
 
 Current implementation status:
 
@@ -395,6 +395,9 @@ Current implementation status:
 
 Validation status:
 
+- `v0.4.1` preserves the `v0.4.0` no-op rebuild baseline and adds a strict
+  platform-validated XML add-control path for a paged `LabelDecoration` with
+  `id=max(existing)+1`.
 - `v0.4.0` has one UT ordinary list-form no-op dump/build byte-identical for
   the full `Form.bin` container, form payload, and module payload.
 - The first-50 UT corpus smoke currently has no exceptions and keeps module
@@ -403,6 +406,9 @@ Validation status:
 
 Статус проверок:
 
+- `v0.4.1` сохраняет baseline обратной сборки `v0.4.0` и добавляет строгую
+  платформенную проверку добавления paged `LabelDecoration` из XML с
+  `id=max(existing)+1`.
 - в `v0.4.0` один UT-сценарий обратной сборки обычной list-form без изменений
   совпадает побайтно по всему контейнеру `Form.bin`, данным формы и данным
   модуля;
