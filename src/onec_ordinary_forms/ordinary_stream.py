@@ -464,6 +464,16 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
         return radio_button_control_info(element, title_record, actions)
     if control_type == "InputField":
         return input_field_control_info(element, actions)
+    if control_type == "GroupBox":
+        return group_box_control_info(element, title_record)
+    if control_type == "Splitter":
+        return splitter_control_info(element)
+    if control_type == "Chart":
+        return chart_control_info()
+    if control_type == "HTMLDocumentField":
+        return html_document_field_control_info()
+    if control_type == "ListBox":
+        return list_box_control_info(element)
     return label_control_info(element, title_record, actions)
 
 
@@ -752,6 +762,91 @@ def image_control_info(element: ET.Element, title_record: list[object], picture_
             ["1", "0"],
         ],
         ["0"],
+    ]
+
+
+def group_box_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
+    return [
+        "0",
+        [
+            base_info_record_from_xml(element),
+            "7",
+            title_record,
+            ["3", "0", ["0"], "4", "1", "0", "cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2"],
+        ],
+    ]
+
+
+def splitter_control_info(element: ET.Element) -> list[object]:
+    return [
+        "0",
+        [
+            base_info_record_from_xml(element),
+            "2",
+            "2",
+            "0",
+        ],
+    ]
+
+
+def chart_control_info() -> list[object]:
+    return ["11"]
+
+
+def html_document_field_control_info() -> list[object]:
+    return [
+        "5",
+        "0",
+        ["0"],
+        ["3", "3", ["-22"]],
+        ["3", "1", ["-18"], "0", "0", "0"],
+        "1",
+        "0",
+    ]
+
+
+def list_box_control_info(element: ET.Element) -> list[object]:
+    return [
+        "1",
+        [
+            base_info_record_from_xml(element),
+            list_box_view_record_from_xml(element),
+            "6",
+            "0",
+            "0",
+            "0",
+            "0",
+        ],
+        ["0"],
+    ]
+
+
+def list_box_view_record_from_xml(element: ET.Element) -> list[object]:
+    return [
+        "12",
+        "100743712",
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "3", ["-14"]],
+        ["3", "3", ["-15"]],
+        ["3", "3", ["-13"]],
+        "2",
+        "2",
+        "0",
+        "0",
+        "0",
+        "1",
+        "0",
+        "1",
+        "1",
+        ["6", "2", "0", ["-20"], "1"],
+        ["6", "2", "0", ["-20"], "1"],
+        "0",
+        "0",
+        bool_record_from_xml(element, "MultiLine", default=True),
+        "0",
     ]
 
 

@@ -848,6 +848,51 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(radio_info[2][2], ['"ru"', '"Use rules"'])
         self.assertEqual(radio_info[0][12][2], ['"ru"', '"Use rules tooltip"'])
 
+    def test_build_bin_uses_simple_remaining_control_info_kinds(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <GroupBox name="Group" id="51">
+                    <Title><Item lang="ru">Group title</Item></Title>
+                    <ToolTip><Item lang="ru">Group tooltip</Item></ToolTip>
+                  </GroupBox>
+                  <Splitter name="Split" id="52"/>
+                  <Chart name="Chart" id="53"/>
+                  <HTMLDocumentField name="Html" id="54"/>
+                  <ListBox name="Values" id="55">
+                    <ToolTip><Item lang="ru">Values tooltip</Item></ToolTip>
+                    <MultiLine>false</MultiLine>
+                  </ListBox>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        group = self._find_control(stream, "90db814a-c75f-4b54-bc96-df62e554d67d")
+        splitter = self._find_control(stream, "36e52348-5d60-4770-8e89-a16ed50a2006")
+        chart = self._find_control(stream, "a8b97779-1a4b-4059-b09c-807f86d2a461")
+        html = self._find_control(stream, "d92a805c-98ae-4750-9158-d9ce7cec2f20")
+        list_box = self._find_control(stream, "19f8b798-314e-4b4e-8121-905b2a7a03f5")
+
+        self.assertIsNotNone(group)
+        self.assertEqual(group[2][0], "0")
+        self.assertEqual(group[2][1][2][2], ['"ru"', '"Group title"'])
+        self.assertEqual(group[2][1][0][12][2], ['"ru"', '"Group tooltip"'])
+        self.assertIsNotNone(splitter)
+        self.assertEqual(splitter[2][0], "0")
+        self.assertIsNotNone(chart)
+        self.assertEqual(chart[2], ["11"])
+        self.assertIsNotNone(html)
+        self.assertEqual(html[2][0], "5")
+        self.assertIsNotNone(list_box)
+        self.assertEqual(list_box[2][0], "1")
+        self.assertEqual(list_box[2][1][0][12][2], ['"ru"', '"Values tooltip"'])
+        self.assertEqual(list_box[2][1][1][22], "0")
+
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):
             if value and value[0] == class_id:
