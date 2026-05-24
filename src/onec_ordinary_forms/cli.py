@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import importlib.resources
 import re
@@ -1436,6 +1437,7 @@ def form_root_layout_metadata(form_root: object) -> dict[str, str] | None:
     root_panel = record[2]
     if isinstance(root_panel, list) and len(root_panel) > 1 and isinstance(root_panel[1], list):
         info = root_panel[1]
+        result["rootPanelInfo"] = copy.deepcopy(info)
         result["rootPanelInfoKind"] = clean_token(info[0]) if info else ""
         if len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 1:
             result["rootPanelInfoProfile"] = clean_token(info[1][1])
@@ -1520,7 +1522,7 @@ def control_template_metadata(control_index: dict) -> list[dict[str, object]]:
                     "name": str(item.get("name", "")),
                     "type": control_type,
                 }
-                if control_type in {"CommandBar", "Table"}:
+                if isinstance(raw[2], list):
                     template["info"] = raw[2]
                 if geometry is not None:
                     template["geometry"] = geometry

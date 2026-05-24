@@ -24,7 +24,7 @@ from onec_ordinary_forms.ordinary_platform import (
     ORDINARY_CONTROL_GUID_BY_TYPE,
 )
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
-from onec_ordinary_forms.value_codec import is_integer_atom, localized_text_record, quote_atom
+from onec_ordinary_forms.value_codec import clean_atom, is_integer_atom, localized_text_record, quote_atom
 
 
 PLATFORM_CONTROL_FORMAT_IDS = {
@@ -309,9 +309,14 @@ def form_root_record(
 ) -> list[object]:
     width, height, explicit_size = form_size
     compact_root = root_layout is not None and root_layout.get("recordKind") == "16" and root_layout.get("rootPanelInfoProfile") == "21"
+    root_panel_info_template = (root_layout or {}).get("rootPanelInfo")
+    if isinstance(root_panel_info_template, list):
+        root_panel_info_record = copy.deepcopy(root_panel_info_template)
+    else:
+        root_panel_info_record = compact_root_panel_info(title, width, height) if compact_root else root_panel_info(title, width, height)
     root_panel = [
         ORDINARY_CONTROL_GUID_BY_TYPE["Panel"],
-        compact_root_panel_info(title, width, height) if compact_root else root_panel_info(title, width, height),
+        root_panel_info_record,
         ["1", *controls] if len(controls) == 1 else [str(len(controls)), *controls],
     ]
     if compact_root:
@@ -701,11 +706,11 @@ def form_sidecar_metadata(asset_root: Path | None) -> dict[str, object]:
     return metadata if isinstance(metadata, dict) else {}
 
 
-def form_root_layout_from_metadata(metadata: dict[str, object]) -> dict[str, str] | None:
+def form_root_layout_from_metadata(metadata: dict[str, object]) -> dict[str, object] | None:
     root_layout = metadata.get("formRoot")
     if not isinstance(root_layout, dict):
         return None
-    return {str(key): str(value) for key, value in root_layout.items()}
+    return {str(key): copy.deepcopy(value) if isinstance(value, list) else str(value) for key, value in root_layout.items()}
 
 
 def form_attributes_layout_from_metadata(metadata: dict[str, object]) -> dict[str, object] | None:
@@ -753,6 +758,27 @@ def control_templates_from_metadata(metadata: dict[str, object]) -> dict[tuple[s
         if control_type and control_name:
             result[(control_type, control_name)] = item
     return result
+
+
+def replace_first_localized_text_record(value: object, replacement: list[object]) -> bool:
+    if not isinstance(value, list):
+        return False
+    if is_localized_text_record(value):
+        value[:] = copy.deepcopy(replacement)
+        return True
+    for item in value:
+        if replace_first_localized_text_record(item, replacement):
+            return True
+    return False
+
+
+def is_localized_text_record(value: list[object]) -> bool:
+    if len(value) != 3:
+        return False
+    if clean_atom(value[0]) != "1" or clean_atom(value[1]) != "1":
+        return False
+    items = value[2]
+    return isinstance(items, list) and len(items) >= 2 and clean_atom(items[0]) == "ru" and isinstance(items[1], str)
 
 
 def top_level_pages(root: ET.Element) -> list[ET.Element]:
@@ -949,7 +975,9 @@ def control_info_from_xml(
     actions = control_actions_from_xml(element)
     template_info = (control_template or {}).get("info")
     if isinstance(template_info, list):
-        return copy.deepcopy(template_info)
+        info = copy.deepcopy(template_info)
+        replace_first_localized_text_record(info, title_record)
+        return info
     if control_type == "Panel":
         return panel_control_info_from_xml(element, title_record)
     if control_type == "Button":

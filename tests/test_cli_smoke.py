@@ -11,6 +11,7 @@ from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_fo
 from onec_ordinary_forms.cli import (
     add_chart_properties,
     add_pivot_chart_properties,
+    control_template_metadata,
     format_xml_file,
     pretty_xml_bytes,
     schema_path,
@@ -393,6 +394,73 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("{2,772,1,1,3,0,0,8,0}", text)
         self.assertIn("{2,308,0,1,4,0,0,0,0}", text)
         self.assertNotIn("{19,1,", text)
+
+    def test_form_stream_preserves_root_panel_info_template_from_sidecar(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            xml = root / "Form.xml"
+            asset_root = root / "Form"
+            asset_root.mkdir()
+            xml.write_text(
+                """<?xml version='1.0' encoding='utf-8'?>
+<Form version="0.1">
+  <Title><Item lang="ru">List form</Item></Title>
+  <Pages><Page name="List form"/></Pages>
+</Form>
+""",
+                encoding="utf-8",
+            )
+            root_panel_info = ["1", [["10", "1"], "21", "0", "0", "sentinel-root-panel-info"], ["0"]]
+            (asset_root / "Form.bin.container.json").write_text(
+                json.dumps(
+                    {
+                        "formRoot": {
+                            "recordKind": "16",
+                            "titleMarker": "2",
+                            "titleScope": "4294967295",
+                            "width": "780",
+                            "height": "308",
+                            "slot5": "1",
+                            "slot6": "1",
+                            "slot7": "1",
+                            "slot8": "4",
+                            "slot9": "4",
+                            "slot10": "38",
+                            "rootPanelInfoProfile": "21",
+                            "rootPanelInfo": root_panel_info,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            text = form_stream_from_object_xml(ET.parse(xml).getroot(), asset_root).decode("utf-8-sig")
+
+        self.assertIn("sentinel-root-panel-info", text)
+
+    def test_control_template_metadata_preserves_info_for_regular_controls(self) -> None:
+        control_index = {
+            "data": {},
+            "tree": [
+                {
+                    "id": "20",
+                    "name": "Caption",
+                    "type": "Label",
+                    "raw": [
+                        "0fc7e20d-f241-460c-bdf4-5ad88e5474a5",
+                        "20",
+                        ["3", [["10", "1"], "7", ["1", "1", ['"ru"', '"Caption"']]], ["0"]],
+                        ["8", "1", "2", "3", "4"],
+                        ["14", '"Caption"', "4294967295", "0", "0", "0"],
+                        ["0"],
+                    ],
+                }
+            ],
+        }
+
+        templates = control_template_metadata(control_index)
+
+        self.assertEqual(templates[0]["info"], control_index["tree"][0]["raw"][2])
 
     def test_form_bin_unpack_assembles_descriptor_split_streams(self) -> None:
         with TemporaryDirectory() as temp_dir:
