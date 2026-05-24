@@ -31,12 +31,18 @@ CONTROL_CANDIDATES = {
     "RadioButton": ("Переключатель", "LogFormRadioButton"),
     "Splitter": ("Разделитель",),
     "Chart": ("ПолеДиаграммы", "LogFormChart"),
+    "PivotChart": ("СводнаяДиаграмма",),
+    "GeographicalSchemaField": ("ПолеГеографическойСхемы",),
+    "GraphicalSchemaField": ("ПолеГрафическойСхемы",),
     "ListBox": ("ПолеСписка",),
     "HTMLDocumentField": ("ПолеHTMLДокумента", "LogFormHTMLControl"),
     "ProgressBar": ("Индикатор", "LogFormProgressBar"),
     "TrackBar": ("ПолосаРегулирования", "LogFormTrackBar"),
     "CalendarField": ("ПолеКалендаря", "LogFormCalendarWnd"),
+    "PeriodChooser": ("ПолеПериода",),
     "TextDocumentField": ("ПолеТекстовогоДокумента", "LogFormTxtEdt"),
+    "GanttChart": ("ДиаграммаГанта",),
+    "Dendrogram": ("Дендрограмма",),
     "CommandBarButton": ("КнопкаКоманднойПанели",),
 }
 
@@ -109,6 +115,8 @@ def ascii_strings(path: Path) -> list[str]:
 def platform_libraries(root: Path) -> list[Path]:
     names = {
         "dsgnfrm.dll",
+        "dsgnfrm.so",
+        "wbase82.dll",
         "mngui.dll",
         "mngcore.dll",
         "core82.dll",
@@ -145,6 +153,15 @@ def xsd_palette(path: Path) -> set[str]:
     return {element.get("name", "") for element in choice.findall("xs:element", ns)}
 
 
+def appinfo_insertable_palette(path: Path) -> set[str]:
+    root = ET.parse(path).getroot()
+    return {
+        control.get("name", "")
+        for control in root.findall(".//PlatformPalette/Control")
+        if control.get("name") and control.get("insertable") != "false"
+    }
+
+
 def summarize_candidates(candidates: dict[str, tuple[str, ...]], hits: dict[str, list[Hit]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for xml_name, tokens in candidates.items():
@@ -168,15 +185,18 @@ def main() -> None:
     tokens.update(token for values in PROPERTY_CANDIDATES.values() for token in values)
     hits = scan_tokens(libraries, tokens)
     xsd = xsd_palette(Path(args.xsd))
+    appinfo_insertable = appinfo_insertable_palette(Path(args.xsd))
     controls = summarize_candidates(CONTROL_CANDIDATES, hits)
     properties = summarize_candidates(PROPERTY_CANDIDATES, hits)
     platform_controls = {name for name, data in controls.items() if data["present"]}
     report = {
         "libraries": [str(path) for path in libraries],
         "xsd_controls": sorted(xsd),
+        "xsd_appinfo_insertable_controls": sorted(appinfo_insertable),
         "platform_controls": sorted(platform_controls),
         "missing_in_xsd": sorted(platform_controls - xsd),
         "xsd_without_platform_evidence": sorted(xsd - platform_controls),
+        "xsd_group_appinfo_mismatch": sorted(xsd ^ appinfo_insertable),
         "controls": controls,
         "properties": properties,
     }

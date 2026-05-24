@@ -26,8 +26,8 @@ def test_descriptors_have_platform_palette_members() -> None:
     descriptor_tags = {descriptor.xml_tag for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()}
 
     assert descriptor_tags == set(PLATFORM_PALETTE)
-    assert sum(len(descriptor.platform_properties) for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()) == 390
-    assert sum(len(descriptor.platform_events) for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()) == 71
+    assert sum(len(descriptor.platform_properties) for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()) == 416
+    assert sum(len(descriptor.platform_events) for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()) == 79
 
 
 def test_single_xsd_appinfo_contains_platform_palette() -> None:
@@ -54,20 +54,19 @@ def test_single_xsd_contains_platform_vocabulary() -> None:
         return {element.get("value", "") for element in restriction.findall("xs:enumeration", ns)}
 
     assert enum_values("ControlElementNameType") == set(PLATFORM_PALETTE)
-    platform_properties = {
-        prop.get("platformName", "")
-        for prop in root.findall(".//PlatformPalette/Control/Properties/Property")
-    }
-    platform_events = {
-        event.get("platformName", "")
-        for event in root.findall(".//PlatformPalette/Control/Events/Event")
-    }
-    platform_types = {
-        prop.get("platformType", "")
-        for prop in root.findall(".//PlatformPalette/Control/Properties/Property")
-    }
-    assert len(platform_properties) == 190
-    assert len(platform_events) == 38
+    platform_properties = set()
+    platform_events = set()
+    platform_types = set()
+    for control in root.findall(".//PlatformPalette/Control"):
+        if control.get("insertable") == "false":
+            continue
+        for prop in control.findall("./Properties/Property"):
+            platform_properties.add(prop.get("platformName", ""))
+            platform_types.add(prop.get("platformType", ""))
+        for event in control.findall("./Events/Event"):
+            platform_events.add(event.get("platformName", ""))
+    assert len(platform_properties) == 197
+    assert len(platform_events) == 40
     assert "Цвет" in " ; ".join(platform_types)
     assert "Шрифт" in " ; ".join(platform_types)
 

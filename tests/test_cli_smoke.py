@@ -31,7 +31,7 @@ from onec_ordinary_forms.ordinary_platform import (
     pack_platform_transfer_records,
     unpack_platform_transfer_records,
 )
-from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
+from onec_ordinary_forms.ordinary_properties import COMMAND_BAR_BUTTON_DESCRIPTOR, ORDINARY_CONTROL_DESCRIPTORS
 from onec_ordinary_forms.ordinary_stream import PLATFORM_CONTROL_FORMAT_IDS, apply_geometry_bindings_to_raw, form_stream_from_object_xml
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
@@ -59,14 +59,15 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn(b"Main", rebuilt_files["form"])
 
     def test_ordinary_palette_describes_all_known_controls(self) -> None:
-        self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 21)
+        self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 26)
         self.assertIn("Title", ORDINARY_CONTROL_DESCRIPTORS["Label"].properties)
         self.assertIn("ChoiceButton", ORDINARY_CONTROL_DESCRIPTORS["InputField"].properties)
         self.assertIn("RegulationButton", ORDINARY_CONTROL_DESCRIPTORS["InputField"].properties)
         self.assertIn("ChoiceList", ORDINARY_CONTROL_DESCRIPTORS["ChoiceField"].properties)
         self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["Image"].xml_tag, "PictureDecoration")
         self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["ProgressBar"].platform_name, "Индикатор")
-        self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["CommandBarButton"].platform_name, "КнопкаКоманднойПанели")
+        self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["Dendrogram"].platform_name, "Дендрограмма")
+        self.assertEqual(COMMAND_BAR_BUTTON_DESCRIPTOR.platform_name, "КнопкаКоманднойПанели")
 
     def test_ordinary_palette_uses_platform_members_from_82_help(self) -> None:
         button = ORDINARY_CONTROL_DESCRIPTORS["Button"]
@@ -88,6 +89,15 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(ordinary_control_type("381ed624-9217-4e63-85db-c4c3cb87daae"), "InputField")
         self.assertEqual(ordinary_control_type("e69bf21d-97b2-4f37-86db-675aea9ec2cb"), "CommandBar")
         self.assertEqual(ordinary_control_type("35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26"), "CheckBox")
+        self.assertEqual(ordinary_control_type("6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef"), "TrackBar")
+        self.assertEqual(ordinary_control_type("e3c063d8-ef92-41be-9c89-b70290b5368b"), "CalendarField")
+        self.assertEqual(ordinary_control_type("14c4a229-bfc3-42fe-9ce1-2da049fd0109"), "TextDocumentField")
+        self.assertEqual(ordinary_control_type("a26da99e-184a-4823-b0d6-62816d38dc4e"), "PivotChart")
+        self.assertEqual(ordinary_control_type("ad37194e-555e-4305-b718-5dca84baf145"), "GeographicalSchemaField")
+        self.assertEqual(ordinary_control_type("b1db1f86-abbb-4cf0-8852-fe6ae21650c2"), "ProgressBar")
+        self.assertEqual(ordinary_control_type("42248403-7748-49da-b782-e4438fd7bff3"), "GraphicalSchemaField")
+        self.assertEqual(ordinary_control_type("e5fdc112-5c84-4a16-9728-72b85692b6e2"), "GanttChart")
+        self.assertEqual(ordinary_control_type("984981b1-622d-4ebc-94f7-885f0cdfb59a"), "Dendrogram")
 
     def test_platform_transfer_records_use_confirmed_16_byte_layout(self) -> None:
         records = [
@@ -892,6 +902,50 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(list_box[2][0], "1")
         self.assertEqual(list_box[2][1][0][12][2], ['"ru"', '"Values tooltip"'])
         self.assertEqual(list_box[2][1][1][22], "0")
+
+    def test_build_bin_uses_heavy_control_info_kinds(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <CommandBar name="Commands" id="61">
+                    <Autofill>false</Autofill>
+                  </CommandBar>
+                  <Table name="Rows" id="62">
+                    <DataPath>Rows</DataPath>
+                    <ReadOnly>true</ReadOnly>
+                    <ColumnsCount>3</ColumnsCount>
+                    <RowsCount>2</RowsCount>
+                    <AutoMarkIncomplete>false</AutoMarkIncomplete>
+                  </Table>
+                  <SpreadsheetDocumentField name="Sheet" id="63">
+                    <Position left="0" top="0" right="200" bottom="100" width="200" height="100"/>
+                  </SpreadsheetDocumentField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        command_bar = self._find_control(stream, "e69bf21d-97b2-4f37-86db-675aea9ec2cb")
+        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+        spreadsheet = self._find_control(stream, "236a17b3-7f44-46d9-a907-75f9cdc61ab5")
+
+        self.assertIsNotNone(command_bar)
+        self.assertEqual(command_bar[2][0], "2")
+        self.assertEqual(command_bar[2][1][6], "0")
+        self.assertIsNotNone(table)
+        self.assertEqual(table[2][0], "5")
+        self.assertEqual(table[2][2][1][14], "1")
+        self.assertEqual(table[2][2][1][20], "2")
+        self.assertEqual(table[2][2][1][21], "3")
+        self.assertEqual(table[2][2][1][22], "0")
+        self.assertIsNotNone(spreadsheet)
+        self.assertEqual(spreadsheet[2][0], "14")
+        self.assertEqual(spreadsheet[2][3], "200")
+        self.assertEqual(spreadsheet[2][4], "100")
 
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):

@@ -27,7 +27,7 @@ class OrdinaryControlDescriptor:
     platform_events: tuple[PlatformMember, ...] = ()
 
 
-def load_platform_palette() -> dict[str, dict[str, object]]:
+def load_platform_palette(*, include_nested: bool = False) -> dict[str, dict[str, object]]:
     path = importlib.resources.files("onec_ordinary_forms") / "schemas" / "ordinary-form.xsd"
     root = ET.fromstring(path.read_text(encoding="utf-8"))
     palette = root.find(".//PlatformPalette")
@@ -37,6 +37,8 @@ def load_platform_palette() -> dict[str, dict[str, object]]:
     for control in palette.findall("Control"):
         name = control.get("name")
         if not name:
+            continue
+        if not include_nested and control.get("insertable") == "false":
             continue
         properties = [
             {"name": prop.get("platformName", ""), "type": prop.get("platformType", "")}
@@ -57,7 +59,7 @@ def load_platform_palette() -> dict[str, dict[str, object]]:
 
 
 def platform_members(control: str, key: str) -> tuple[PlatformMember, ...]:
-    raw_palette = PLATFORM_PALETTE.get(control, {})
+    raw_palette = PLATFORM_MEMBER_PALETTE.get(control, {})
     raw_members = raw_palette.get(key, [])
     if not isinstance(raw_members, list):
         return ()
@@ -69,6 +71,7 @@ def platform_members(control: str, key: str) -> tuple[PlatformMember, ...]:
     return tuple(result)
 
 
+PLATFORM_MEMBER_PALETTE = load_platform_palette(include_nested=True)
 PLATFORM_PALETTE = load_platform_palette()
 
 
@@ -114,6 +117,17 @@ INPUT_CONTROL_PROPERTIES = (
     "CreateButton",
     "EditButton",
     "RegulationButton",
+)
+
+DIAGRAM_CONTROL_PROPERTIES = COMMON_CONTROL_PROPERTIES + (
+    "ValueType",
+    "AutoMaxWidth",
+    "AutoMaxHeight",
+    "MaxWidth",
+    "MaxHeight",
+    "HorizontalStretch",
+    "VerticalStretch",
+    "Output",
 )
 
 
@@ -167,6 +181,19 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
     "RadioButton": OrdinaryControlDescriptor("RadioButton", "Переключатель", "RadioButton", COMMON_CONTROL_PROPERTIES + ("ValueType", "Items")),
     "Splitter": OrdinaryControlDescriptor("Splitter", "Разделитель", "Splitter", COMMON_CONTROL_PROPERTIES),
     "Chart": OrdinaryControlDescriptor("Chart", "Диаграмма", "ChartField", COMMON_CONTROL_PROPERTIES + ("ValueType",)),
+    "PivotChart": OrdinaryControlDescriptor("PivotChart", "СводнаяДиаграмма", "PivotChartField", DIAGRAM_CONTROL_PROPERTIES),
+    "GeographicalSchemaField": OrdinaryControlDescriptor(
+        "GeographicalSchemaField",
+        "ПолеГеографическойСхемы",
+        "GeographicalSchemaField",
+        DIAGRAM_CONTROL_PROPERTIES + ("Scale", "ScaleSupport", "DisplayedArea"),
+    ),
+    "GraphicalSchemaField": OrdinaryControlDescriptor(
+        "GraphicalSchemaField",
+        "ПолеГрафическойСхемы",
+        "GraphicalSchemaField",
+        DIAGRAM_CONTROL_PROPERTIES + ("CurrentItem", "Editing"),
+    ),
     "ListBox": OrdinaryControlDescriptor("ListBox", "Список", "ListBox", COMMON_CONTROL_PROPERTIES + ("ValueType", "Items", "MultiLine")),
     "HTMLDocumentField": OrdinaryControlDescriptor(
         "HTMLDocumentField",
@@ -182,19 +209,30 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         COMMON_CONTROL_PROPERTIES + ("Orientation", "MinWidth", "MaxWidth"),
     ),
     "CalendarField": OrdinaryControlDescriptor("CalendarField", "ПолеКалендаря", "CalendarField", COMMON_CONTROL_PROPERTIES + ("ValueType",)),
+    "PeriodChooser": OrdinaryControlDescriptor("PeriodChooser", "ПолеПериода", "PeriodChooser", DIAGRAM_CONTROL_PROPERTIES),
     "TextDocumentField": OrdinaryControlDescriptor(
         "TextDocumentField",
         "ПолеТекстовогоДокумента",
         "TextDocumentField",
         COMMON_CONTROL_PROPERTIES + ("Border", "HorizontalStretch", "VerticalStretch"),
     ),
-    "CommandBarButton": OrdinaryControlDescriptor(
-        "CommandBarButton",
-        "КнопкаКоманднойПанели",
-        "CommandBarButton",
-        ("Title", "ToolTip", "Picture", "Action", "CommandName"),
+    "GanttChart": OrdinaryControlDescriptor("GanttChart", "ДиаграммаГанта", "GanttChartField", DIAGRAM_CONTROL_PROPERTIES),
+    "Dendrogram": OrdinaryControlDescriptor(
+        "Dendrogram",
+        "Дендрограмма",
+        "DendrogramField",
+        DIAGRAM_CONTROL_PROPERTIES,
     ),
 }
+
+COMMAND_BAR_BUTTON_DESCRIPTOR = OrdinaryControlDescriptor(
+    "CommandBarButton",
+    "КнопкаКоманднойПанели",
+    "CommandBarButton",
+    ("Title", "ToolTip", "Picture", "Action", "CommandName"),
+    platform_properties=platform_members("CommandBarButton", "properties"),
+    platform_events=platform_members("CommandBarButton", "events"),
+)
 
 
 def control_descriptor(control_type: object) -> OrdinaryControlDescriptor | None:

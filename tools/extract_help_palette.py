@@ -25,12 +25,18 @@ ORDINARY_CONTROLS = {
     "RadioButton": "Переключатель",
     "Splitter": "Разделитель",
     "Chart": "Диаграмма",
+    "PivotChart": "СводнаяДиаграмма",
+    "GeographicalSchemaField": "ПолеГеографическойСхемы",
+    "GraphicalSchemaField": "ПолеГрафическойСхемы",
     "ListBox": "ПолеСписка",
     "HTMLDocumentField": "ПолеHTMLДокумента",
     "ProgressBar": "Индикатор",
     "TrackBar": "ПолосаРегулирования",
     "CalendarField": "ПолеКалендаря",
+    "PeriodChooser": "ПолеПериода",
     "TextDocumentField": "ПолеТекстовогоДокумента",
+    "GanttChart": "ДиаграммаГанта",
+    "Dendrogram": "Дендрограмма",
     "CommandBarButton": "КнопкаКоманднойПанели",
 }
 

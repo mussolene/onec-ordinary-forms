@@ -40,12 +40,14 @@ def xsd_control_properties(path: Path, controls: set[str]) -> set[str]:
     return result
 
 
-def load_palette(path: Path) -> dict[str, object]:
+def load_palette(path: Path, *, include_nested: bool = False) -> dict[str, object]:
     root = ET.parse(path).getroot()
     result: dict[str, object] = {}
     for control in root.findall(".//PlatformPalette/Control"):
         name = control.get("name")
         if not name:
+            continue
+        if not include_nested and control.get("insertable") == "false":
             continue
         result[name] = {
             "platformName": control.get("platformName", ""),

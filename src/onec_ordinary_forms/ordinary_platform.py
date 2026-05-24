@@ -51,6 +51,15 @@ ORDINARY_CONTROL_CLASS_BY_GUID = {
     "a8b97779-1a4b-4059-b09c-807f86d2a461": "Chart",
     "19f8b798-314e-4b4e-8121-905b2a7a03f5": "ListBox",
     "d92a805c-98ae-4750-9158-d9ce7cec2f20": "HTMLDocumentField",
+    "6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef": "TrackBar",
+    "e3c063d8-ef92-41be-9c89-b70290b5368b": "CalendarField",
+    "14c4a229-bfc3-42fe-9ce1-2da049fd0109": "TextDocumentField",
+    "a26da99e-184a-4823-b0d6-62816d38dc4e": "PivotChart",
+    "ad37194e-555e-4305-b718-5dca84baf145": "GeographicalSchemaField",
+    "b1db1f86-abbb-4cf0-8852-fe6ae21650c2": "ProgressBar",
+    "42248403-7748-49da-b782-e4438fd7bff3": "GraphicalSchemaField",
+    "e5fdc112-5c84-4a16-9728-72b85692b6e2": "GanttChart",
+    "984981b1-622d-4ebc-94f7-885f0cdfb59a": "Dendrogram",
 }
 
 ORDINARY_CONTROL_GUID_BY_TYPE = {value: key for key, value in ORDINARY_CONTROL_CLASS_BY_GUID.items()}

@@ -414,6 +414,24 @@ def geometry_from_raw(raw: object) -> dict[str, str]:
     }
 
 
+def control_geometry_record(raw: object) -> list[object] | None:
+    if not isinstance(raw, list):
+        return None
+    for child in reversed(raw):
+        if isinstance(child, list) and geometry_from_raw(child):
+            return child
+    return None
+
+
+def control_metadata_record(raw: object) -> list[object] | None:
+    if not isinstance(raw, list):
+        return None
+    for child in reversed(raw):
+        if isinstance(child, list) and len(child) >= 2 and clean_token(child[0]) == "14":
+            return child
+    return None
+
+
 def int_attr(node: ET.Element, name: str, value: object) -> None:
     try:
         node.set(name, str(int(value)))
@@ -605,9 +623,11 @@ def add_geometry(
     if not isinstance(item_data, dict):
         return
     raw = item_data.get("raw") or []
-    if not isinstance(raw, list) or len(raw) < 4:
+    if not isinstance(raw, list):
         return
-    geometry_raw = raw[3]
+    geometry_raw = control_geometry_record(raw)
+    if geometry_raw is None:
+        return
     geometry = geometry_from_raw(geometry_raw)
     if not geometry:
         return
@@ -676,9 +696,11 @@ def add_semantic_item(
     node.set("name", str(item.get("name", "")))
     children = item.get("child") or []
     item_data = data.get(raw_key)
+    if not isinstance(item_data, dict) and isinstance(item.get("raw"), list):
+        item_data = item
     if isinstance(item_data, dict) and item_data.get("id") is not None:
         node.set("id", str(item_data["id"]))
-    title = item_title(data.get(raw_key), str(item.get("type", "")))
+    title = item_title(item_data, str(item.get("type", "")))
     if title:
         add_multilang_text(node, "Title", title)
     add_tooltip(node, item_data)
@@ -752,12 +774,18 @@ DATA_BOUND_CONTROL_TYPES = {
     "SpreadsheetDocumentField",
     "RadioButton",
     "Chart",
+    "PivotChart",
+    "GeographicalSchemaField",
+    "GraphicalSchemaField",
     "ListBox",
     "HTMLDocumentField",
     "ProgressBar",
     "TrackBar",
     "CalendarField",
+    "PeriodChooser",
     "TextDocumentField",
+    "GanttChart",
+    "Dendrogram",
 }
 
 
@@ -767,9 +795,11 @@ def add_data_path(parent: ET.Element, item: dict, item_data: object) -> None:
     if not isinstance(item_data, dict):
         return
     raw = item_data.get("raw")
-    if not isinstance(raw, list) or len(raw) <= 4 or not isinstance(raw[4], list):
+    if not isinstance(raw, list):
         return
-    metadata = raw[4]
+    metadata = control_metadata_record(raw)
+    if metadata is None:
+        return
     if len(metadata) < 2:
         return
     data_path = clean_token(metadata[1])
@@ -908,7 +938,11 @@ def panel_pages_from_raw(raw: object) -> list[dict[str, str]]:
             count = int(clean_token(child[1]))
         except ValueError:
             continue
-        states = [state for state in child[2:] if isinstance(state, list) and state and clean_token(state[0]) == "3"]
+        states = [
+            state
+            for state in child[2:]
+            if isinstance(state, list) and state and clean_token(state[0]) in {"3", "6"}
+        ]
         if count != len(states) or not states:
             continue
         result: list[dict[str, str]] = []
@@ -937,16 +971,20 @@ def first_localized_text(value: object) -> str:
 def child_page_index(data: dict, parent_raw_key: str, child: dict) -> int | None:
     child_key = str(child.get("rawKey") or f"{parent_raw_key}/{child.get('name', '')}")
     child_data = data.get(child_key)
+    if not isinstance(child_data, dict) and isinstance(child.get("raw"), list):
+        child_data = child
     if not isinstance(child_data, dict):
         return None
     raw = child_data.get("raw")
-    if not isinstance(raw, list) or len(raw) <= 3 or not isinstance(raw[3], list):
+    if not isinstance(raw, list):
         return None
-    geometry = raw[3]
-    if len(geometry) < 25:
+    geometry = control_geometry_record(raw)
+    if geometry is None:
+        return None
+    if len(geometry) <= 18:
         return None
     try:
-        return int(clean_token(geometry[-5]))
+        return int(clean_token(geometry[18]))
     except ValueError:
         return None
 

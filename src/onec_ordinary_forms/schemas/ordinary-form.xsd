@@ -129,6 +129,18 @@
             <Event platformName="ОбработкаРасшифровки"/>
           </Events>
         </Control>
+        <Control name="PivotChart" platformName="СводнаяДиаграмма">
+          <Properties>
+            <Property platformName="ИсточникДанных" platformType="РезультатЗапроса ; ПостроительОтчета"/>
+            <Property platformName="Поля" platformType="КоллекцияПолейСводнойДиаграммы"/>
+            <Property platformName="ТипСводнойДиаграммы" platformType="ТипСводнойДиаграммы"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+          </Properties>
+          <Events>
+            <Event platformName="Выбор"/>
+            <Event platformName="ОбработкаРасшифровки"/>
+          </Events>
+        </Control>
         <Control name="CheckBox" platformName="Флажок">
           <Properties>
             <Property platformName="ВертикальноеПоложение" platformType="ВертикальноеПоложение"/>
@@ -204,7 +216,7 @@
           </Properties>
           <Events/>
         </Control>
-        <Control name="CommandBarButton" platformName="КнопкаКоманднойПанели">
+        <Control name="CommandBarButton" platformName="КнопкаКоманднойПанели" insertable="false">
           <Properties>
             <Property platformName="Действие" platformType="Действие"/>
             <Property platformName="Доступность" platformType="Булево"/>
@@ -223,6 +235,59 @@
             <Property platformName="ТипКнопки" platformType="ТипКнопкиКоманднойПанели"/>
           </Properties>
           <Events/>
+        </Control>
+        <Control name="Dendrogram" platformName="Дендрограмма">
+          <Properties>
+            <Property platformName="АвтоМаксимальнаяВысота" platformType="Булево"/>
+            <Property platformName="АвтоМаксимальнаяШирина" platformType="Булево"/>
+            <Property platformName="Высота" platformType="Число"/>
+            <Property platformName="МаксимальнаяВысота" platformType="Число"/>
+            <Property platformName="МаксимальнаяШирина" platformType="Число"/>
+            <Property platformName="РастягиватьПоВертикали" platformType="Булево"/>
+            <Property platformName="РастягиватьПоГоризонтали" platformType="Булево"/>
+            <Property platformName="Ширина" platformType="Число"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+          </Properties>
+          <Events>
+            <Event platformName="Выбор"/>
+            <Event platformName="ОбработкаРасшифровки"/>
+          </Events>
+        </Control>
+        <Control name="GeographicalSchemaField" platformName="ПолеГеографическойСхемы">
+          <Properties>
+            <Property platformName="АвтоМаксимальнаяВысота" platformType="Булево"/>
+            <Property platformName="АвтоМаксимальнаяШирина" platformType="Булево"/>
+            <Property platformName="Высота" platformType="Число"/>
+            <Property platformName="Вывод" platformType="ИспользованиеВывода"/>
+            <Property platformName="МаксимальнаяВысота" platformType="Число"/>
+            <Property platformName="МаксимальнаяШирина" platformType="Число"/>
+            <Property platformName="Масштаб" platformType="Число"/>
+            <Property platformName="ОтображаемаяОбласть" platformType="ПоказываемаяОбластьГеографическойСхемы"/>
+            <Property platformName="ПоддержкаМасштаба" platformType="РежимОтображенияГеографическойСхемы"/>
+            <Property platformName="РастягиватьПоВертикали" platformType="Булево"/>
+            <Property platformName="РастягиватьПоГоризонтали" platformType="Булево"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="Ширина" platformType="Число"/>
+          </Properties>
+          <Events>
+            <Event platformName="Выбор"/>
+          </Events>
+        </Control>
+        <Control name="GraphicalSchemaField" platformName="ПолеГрафическойСхемы">
+          <Properties>
+            <Property platformName="Высота" platformType="Число"/>
+            <Property platformName="Вывод" platformType="ИспользованиеВывода"/>
+            <Property platformName="Редактирование" platformType="Булево"/>
+            <Property platformName="РастягиватьПоВертикали" platformType="Булево"/>
+            <Property platformName="РастягиватьПоГоризонтали" platformType="Булево"/>
+            <Property platformName="ТекущийЭлемент" platformType="ЭлементГрафическойСхемы"/>
+            <Property platformName="ЦветРамки" platformType="Цвет"/>
+            <Property platformName="Ширина" platformType="Число"/>
+          </Properties>
+          <Events>
+            <Event platformName="Выбор"/>
+            <Event platformName="ПриАктивизации"/>
+          </Events>
         </Control>
         <Control name="GroupBox" platformName="РамкаГруппы">
           <Properties>
@@ -407,6 +472,13 @@
             <Event platformName="ПроверкаПеретаскивания"/>
           </Events>
         </Control>
+        <Control name="PeriodChooser" platformName="ПолеПериода">
+          <Properties>
+            <Property platformName="АвтоМаксимальнаяШирина" platformType="Булево"/>
+            <Property platformName="МаксимальнаяШирина" platformType="Число"/>
+          </Properties>
+          <Events/>
+        </Control>
         <Control name="ProgressBar" platformName="Индикатор">
           <Properties>
             <Property platformName="Доступность" platformType="Булево"/>
@@ -563,6 +635,18 @@
           </Properties>
           <Events/>
         </Control>
+        <Control name="GanttChart" platformName="ДиаграммаГанта">
+          <Properties>
+            <Property platformName="АвтоМаксимальнаяШирина" platformType="Булево"/>
+            <Property platformName="ЕдиницаПериодическогоВарианта" platformType="ТипЕдиницыШкалыВремени"/>
+            <Property platformName="КратностьПериодическогоВарианта" platformType="Число"/>
+            <Property platformName="МаксимальнаяШирина" platformType="Число"/>
+            <Property platformName="ЦветФона" platformType="Цвет"/>
+          </Properties>
+          <Events>
+            <Event platformName="ПриОкончанииРедактированияИнтервала"/>
+          </Events>
+        </Control>
         <Control name="TrackBar" platformName="ПолосаРегулирования">
           <Properties>
             <Property platformName="БольшойШаг" platformType="Число"/>
@@ -672,13 +756,18 @@
       <xs:element name="RadioButton" type="RadioButtonType"/>
       <xs:element name="Splitter" type="SplitterType"/>
       <xs:element name="Chart" type="ChartType"/>
+      <xs:element name="PivotChart" type="PivotChartType"/>
+      <xs:element name="GeographicalSchemaField" type="GeographicalSchemaFieldType"/>
+      <xs:element name="GraphicalSchemaField" type="GraphicalSchemaFieldType"/>
       <xs:element name="ListBox" type="ListBoxType"/>
       <xs:element name="HTMLDocumentField" type="HTMLDocumentFieldType"/>
       <xs:element name="ProgressBar" type="ProgressBarType"/>
       <xs:element name="TrackBar" type="TrackBarType"/>
       <xs:element name="CalendarField" type="CalendarFieldType"/>
+      <xs:element name="PeriodChooser" type="PeriodChooserType"/>
       <xs:element name="TextDocumentField" type="TextDocumentFieldType"/>
-      <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
+      <xs:element name="GanttChart" type="GanttChartType"/>
+      <xs:element name="Dendrogram" type="DendrogramType"/>
     </xs:choice>
   </xs:group>
   <xs:complexType name="ControlIdentityType">
@@ -875,6 +964,47 @@
       <xs:element name="Event" type="ChartEventType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
+  <xs:simpleType name="PivotChartEventNameType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Выбор"/>
+      <xs:enumeration value="ОбработкаРасшифровки"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="PivotChartEventType" mixed="true">
+    <xs:attribute name="name" type="PivotChartEventNameType" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="PivotChartEventsType">
+    <xs:sequence>
+      <xs:element name="Event" type="PivotChartEventType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:simpleType name="GeographicalSchemaFieldEventNameType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Выбор"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="GeographicalSchemaFieldEventType" mixed="true">
+    <xs:attribute name="name" type="GeographicalSchemaFieldEventNameType" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="GeographicalSchemaFieldEventsType">
+    <xs:sequence>
+      <xs:element name="Event" type="GeographicalSchemaFieldEventType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:simpleType name="GraphicalSchemaFieldEventNameType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Выбор"/>
+      <xs:enumeration value="ПриАктивизации"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="GraphicalSchemaFieldEventType" mixed="true">
+    <xs:attribute name="name" type="GraphicalSchemaFieldEventNameType" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="GraphicalSchemaFieldEventsType">
+    <xs:sequence>
+      <xs:element name="Event" type="GraphicalSchemaFieldEventType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
   <xs:simpleType name="ListBoxEventNameType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="Выбор"/>
@@ -934,6 +1064,33 @@
   <xs:complexType name="CalendarFieldEventsType">
     <xs:sequence>
       <xs:element name="Event" type="CalendarFieldEventType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:simpleType name="GanttChartEventNameType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="ПриОкончанииРедактированияИнтервала"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="GanttChartEventType" mixed="true">
+    <xs:attribute name="name" type="GanttChartEventNameType" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="GanttChartEventsType">
+    <xs:sequence>
+      <xs:element name="Event" type="GanttChartEventType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:simpleType name="DendrogramEventNameType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Выбор"/>
+      <xs:enumeration value="ОбработкаРасшифровки"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="DendrogramEventType" mixed="true">
+    <xs:attribute name="name" type="DendrogramEventNameType" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="DendrogramEventsType">
+    <xs:sequence>
+      <xs:element name="Event" type="DendrogramEventType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
   <xs:complexType name="PanelType">
@@ -1342,6 +1499,99 @@
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
+  <xs:complexType name="PivotChartType">
+    <xs:complexContent>
+      <xs:extension base="ControlIdentityType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="Title" type="LocalizedTextType"/>
+          <xs:element name="ToolTip" type="LocalizedTextType"/>
+          <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Visible" type="xs:boolean"/>
+          <xs:element name="Enabled" type="xs:boolean"/>
+          <xs:element name="ReadOnly" type="xs:boolean"/>
+          <xs:element name="SkipOnInput" type="xs:boolean"/>
+          <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
+          <xs:element name="ContextMenu" type="NamedRefType"/>
+          <xs:element name="AutoContextMenu" type="xs:boolean"/>
+          <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="SourceData" type="OpenElementType"/>
+          <xs:element name="Fields" type="OpenElementType"/>
+          <xs:element name="PivotChartKind" type="xs:string"/>
+          <xs:element name="Events" type="PivotChartEventsType"/>
+          <xs:group ref="ControlElementGroup"/>
+        </xs:choice>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="GeographicalSchemaFieldType">
+    <xs:complexContent>
+      <xs:extension base="ControlIdentityType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="Title" type="LocalizedTextType"/>
+          <xs:element name="ToolTip" type="LocalizedTextType"/>
+          <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Visible" type="xs:boolean"/>
+          <xs:element name="Enabled" type="xs:boolean"/>
+          <xs:element name="ReadOnly" type="xs:boolean"/>
+          <xs:element name="SkipOnInput" type="xs:boolean"/>
+          <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
+          <xs:element name="ContextMenu" type="NamedRefType"/>
+          <xs:element name="AutoContextMenu" type="xs:boolean"/>
+          <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="AutoMaxWidth" type="xs:boolean"/>
+          <xs:element name="AutoMaxHeight" type="xs:boolean"/>
+          <xs:element name="MaxWidth" type="xs:integer"/>
+          <xs:element name="MaxHeight" type="xs:integer"/>
+          <xs:element name="HorizontalStretch" type="xs:boolean"/>
+          <xs:element name="VerticalStretch" type="xs:boolean"/>
+          <xs:element name="Output" type="xs:string"/>
+          <xs:element name="Scale" type="xs:decimal"/>
+          <xs:element name="ScaleSupport" type="xs:string"/>
+          <xs:element name="DisplayedArea" type="OpenElementType"/>
+          <xs:element name="Events" type="GeographicalSchemaFieldEventsType"/>
+          <xs:group ref="ControlElementGroup"/>
+        </xs:choice>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="GraphicalSchemaFieldType">
+    <xs:complexContent>
+      <xs:extension base="ControlIdentityType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="Title" type="LocalizedTextType"/>
+          <xs:element name="ToolTip" type="LocalizedTextType"/>
+          <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Visible" type="xs:boolean"/>
+          <xs:element name="Enabled" type="xs:boolean"/>
+          <xs:element name="ReadOnly" type="xs:boolean"/>
+          <xs:element name="SkipOnInput" type="xs:boolean"/>
+          <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
+          <xs:element name="ContextMenu" type="NamedRefType"/>
+          <xs:element name="AutoContextMenu" type="xs:boolean"/>
+          <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="HorizontalStretch" type="xs:boolean"/>
+          <xs:element name="VerticalStretch" type="xs:boolean"/>
+          <xs:element name="Output" type="xs:string"/>
+          <xs:element name="CurrentItem" type="OpenElementType"/>
+          <xs:element name="Editing" type="xs:boolean"/>
+          <xs:element name="Events" type="GraphicalSchemaFieldEventsType"/>
+          <xs:group ref="ControlElementGroup"/>
+        </xs:choice>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
   <xs:complexType name="ListBoxType">
     <xs:complexContent>
       <xs:extension base="ControlIdentityType">
@@ -1502,6 +1752,92 @@
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
+  <xs:complexType name="PeriodChooserType">
+    <xs:complexContent>
+      <xs:extension base="ControlIdentityType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="Title" type="LocalizedTextType"/>
+          <xs:element name="ToolTip" type="LocalizedTextType"/>
+          <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Visible" type="xs:boolean"/>
+          <xs:element name="Enabled" type="xs:boolean"/>
+          <xs:element name="ReadOnly" type="xs:boolean"/>
+          <xs:element name="SkipOnInput" type="xs:boolean"/>
+          <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
+          <xs:element name="ContextMenu" type="NamedRefType"/>
+          <xs:element name="AutoContextMenu" type="xs:boolean"/>
+          <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="AutoMaxWidth" type="xs:boolean"/>
+          <xs:element name="MaxWidth" type="xs:integer"/>
+          <xs:group ref="ControlElementGroup"/>
+        </xs:choice>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="GanttChartType">
+    <xs:complexContent>
+      <xs:extension base="ControlIdentityType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="Title" type="LocalizedTextType"/>
+          <xs:element name="ToolTip" type="LocalizedTextType"/>
+          <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Visible" type="xs:boolean"/>
+          <xs:element name="Enabled" type="xs:boolean"/>
+          <xs:element name="ReadOnly" type="xs:boolean"/>
+          <xs:element name="SkipOnInput" type="xs:boolean"/>
+          <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
+          <xs:element name="ContextMenu" type="NamedRefType"/>
+          <xs:element name="AutoContextMenu" type="xs:boolean"/>
+          <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="AutoMaxWidth" type="xs:boolean"/>
+          <xs:element name="MaxWidth" type="xs:integer"/>
+          <xs:element name="PeriodicVariantUnit" type="xs:string"/>
+          <xs:element name="PeriodicVariantMultiplicity" type="xs:integer"/>
+          <xs:element name="Events" type="GanttChartEventsType"/>
+          <xs:group ref="ControlElementGroup"/>
+        </xs:choice>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="DendrogramType">
+    <xs:complexContent>
+      <xs:extension base="ControlIdentityType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="Title" type="LocalizedTextType"/>
+          <xs:element name="ToolTip" type="LocalizedTextType"/>
+          <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Visible" type="xs:boolean"/>
+          <xs:element name="Enabled" type="xs:boolean"/>
+          <xs:element name="ReadOnly" type="xs:boolean"/>
+          <xs:element name="SkipOnInput" type="xs:boolean"/>
+          <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
+          <xs:element name="ContextMenu" type="NamedRefType"/>
+          <xs:element name="AutoContextMenu" type="xs:boolean"/>
+          <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="AutoMaxWidth" type="xs:boolean"/>
+          <xs:element name="AutoMaxHeight" type="xs:boolean"/>
+          <xs:element name="MaxWidth" type="xs:integer"/>
+          <xs:element name="MaxHeight" type="xs:integer"/>
+          <xs:element name="HorizontalStretch" type="xs:boolean"/>
+          <xs:element name="VerticalStretch" type="xs:boolean"/>
+          <xs:element name="Events" type="DendrogramEventsType"/>
+          <xs:group ref="ControlElementGroup"/>
+        </xs:choice>
+      </xs:extension>
+    </xs:complexContent>
+  </xs:complexType>
   <xs:complexType name="CommandBarButtonType">
     <xs:complexContent>
       <xs:extension base="ControlIdentityType">
@@ -1527,14 +1863,19 @@
       <xs:enumeration value="CheckBox"/>
       <xs:enumeration value="ChoiceField"/>
       <xs:enumeration value="CommandBar"/>
-      <xs:enumeration value="CommandBarButton"/>
+      <xs:enumeration value="Dendrogram"/>
+      <xs:enumeration value="GanttChart"/>
+      <xs:enumeration value="GeographicalSchemaField"/>
+      <xs:enumeration value="GraphicalSchemaField"/>
       <xs:enumeration value="GroupBox"/>
       <xs:enumeration value="HTMLDocumentField"/>
       <xs:enumeration value="InputField"/>
       <xs:enumeration value="LabelDecoration"/>
       <xs:enumeration value="ListBox"/>
       <xs:enumeration value="Panel"/>
+      <xs:enumeration value="PeriodChooser"/>
       <xs:enumeration value="PictureDecoration"/>
+      <xs:enumeration value="PivotChart"/>
       <xs:enumeration value="ProgressBar"/>
       <xs:enumeration value="RadioButton"/>
       <xs:enumeration value="Splitter"/>

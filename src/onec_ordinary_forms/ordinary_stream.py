@@ -404,12 +404,18 @@ DATA_BOUND_CONTROL_TYPES = {
     "SpreadsheetDocumentField",
     "RadioButton",
     "Chart",
+    "PivotChart",
+    "GeographicalSchemaField",
+    "GraphicalSchemaField",
     "ListBox",
     "HTMLDocumentField",
     "ProgressBar",
     "TrackBar",
     "CalendarField",
+    "PeriodChooser",
     "TextDocumentField",
+    "GanttChart",
+    "Dendrogram",
 }
 
 
@@ -474,7 +480,15 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
         return html_document_field_control_info()
     if control_type == "ListBox":
         return list_box_control_info(element)
-    return label_control_info(element, title_record, actions)
+    if control_type == "CommandBar":
+        return command_bar_control_info(element)
+    if control_type == "Table":
+        return table_control_info(element, actions)
+    if control_type == "SpreadsheetDocumentField":
+        return spreadsheet_document_field_control_info(element, actions)
+    if control_type == "Label":
+        return label_control_info(element, title_record, actions)
+    raise ValueError(f"Unsupported ordinary form control type for stream writer: {control_type}")
 
 
 def panel_control_info_from_xml(element: ET.Element, title_record: list[object]) -> list[object]:
@@ -818,6 +832,169 @@ def list_box_control_info(element: ET.Element) -> list[object]:
             "0",
         ],
         ["0"],
+    ]
+
+
+def command_bar_control_info(element: ET.Element) -> list[object]:
+    return [
+        "2",
+        [
+            base_info_record_from_xml(element),
+            "8",
+            "2",
+            "0",
+            "0",
+            "0",
+            bool_record_from_xml(element, "Autofill", default=True),
+            ["0"],
+            "0",
+            "0",
+            "0",
+            "0",
+        ],
+    ]
+
+
+def table_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    return [
+        "5",
+        [quoted_atom("Pattern"), [quoted_atom("#"), "00000000-0000-0000-0000-000000000000"]],
+        [
+            base_info_record_from_xml(element),
+            table_view_record_from_xml(element),
+        ],
+        ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]],
+        ["1", *actions] if actions else ["0"],
+    ]
+
+
+def table_view_record_from_xml(element: ET.Element) -> list[object]:
+    columns_count = element.findtext("ColumnsCount") or "0"
+    rows_count = element.findtext("RowsCount") or "0"
+    return [
+        "12",
+        "100801549",
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "3", ["-14"]],
+        ["3", "3", ["-15"]],
+        ["3", "3", ["-13"]],
+        "2",
+        "2",
+        "0",
+        "0",
+        "0",
+        bool_record_from_xml(element, "ReadOnly", default=False),
+        "0",
+        "1",
+        "1",
+        ["6", "2", "0", ["-20"], "1"],
+        ["6", "2", "0", ["-20"], "1"],
+        rows_count.strip() or "0",
+        columns_count.strip() or "0",
+        bool_record_from_xml(element, "AutoMarkIncomplete", default=True),
+        ["0"],
+    ]
+
+
+def spreadsheet_document_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    position = element.find("Position")
+    width = position.get("width", "100") if position is not None else "100"
+    height = position.get("height", "100") if position is not None else "100"
+    return [
+        "14",
+        "8",
+        "0",
+        width,
+        height,
+        "5",
+        "5",
+        "1",
+        "1",
+        color_record_from_xml(element, "BackColor"),
+        ["3", "1", ["-18"], "0", "0", "0"],
+        spreadsheet_settings_record(),
+        "1",
+        "1",
+        ["1", "6", "0", "100", "0", "0", "0", "1", "1", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", quoted_atom("ru"), "0", "1", ["3", "6", "4", "6", "4", "00000000-0000-0000-0000-000000000000"], "0"],
+        "1",
+        "1",
+        ["1", *actions] if actions else ["0"],
+        "1",
+        "0",
+        "1",
+        "0",
+        "0",
+        "1",
+        "0",
+        "1",
+        "1",
+        "0",
+        "0",
+    ]
+
+
+def spreadsheet_settings_record() -> list[object]:
+    return [
+        "8",
+        "1",
+        "1",
+        [quoted_atom("ru"), quoted_atom("ru"), "1", "1", quoted_atom("ru"), quoted_atom("Русский"), quoted_atom("Русский")],
+        ["128", "72"],
+        ["0"],
+        "0",
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "0"],
+        "0",
+        "2",
+        "1",
+        "1",
+        "0",
+        "0",
+        ["0", "0", "00000000-0000-0000-0000-000000000000", "0"],
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        ["0"],
+        ["0"],
+        ["0"],
+        ["0"],
+        '""',
+        [["0"]],
+        ["0", "-1", "-1", "-1", "-1", "00000000-0000-0000-0000-000000000000"],
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+        "0",
+        "1",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "2",
+        ["3", "3", ["-1"]],
+        ["3", "3", ["-3"]],
+        "0",
+        "0",
+        "0",
     ]
 
 
