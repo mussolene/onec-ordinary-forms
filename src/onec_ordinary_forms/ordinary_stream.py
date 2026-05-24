@@ -66,8 +66,8 @@ CORE_CONTROL_INFO_DESCRIPTORS = {
         info_kind="1",
         slots=(
             InfoSlotDescriptor("BaseInfo", 0),
-            InfoSlotDescriptor("PageStates", 11),
-            InfoSlotDescriptor("PagePositions", 15),
+            InfoSlotDescriptor("PageStates", 42),
+            InfoSlotDescriptor("PagePositions", 46),
         ),
     ),
     "CommandBar": ControlInfoDescriptor(
@@ -147,7 +147,8 @@ CONTROL_METADATA_SCOPE = {
 GEOMETRY_TRAILER_PROFILE = {
     "default": ["0", "0", "0", "1", "0", "0"],
     "CommandBar": ["0", "0", "0", "0", "1", "1", "0"],
-    "Panel": ["0", "0", "0", "0", "2", "2", "0", "0"],
+    "Label": ["0", "0", "0", "1", "0", "1", "0", "0"],
+    "Panel": ["0", "0", "2", "2", "0", "0"],
     "paged": ["0", "0", "0"],
 }
 
@@ -165,16 +166,19 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
 
     attributes = []
+    attribute_type_patterns: dict[str, list[object]] = {}
     for attribute in root.findall("./Attributes/Attribute"):
         name = attribute.get("name", "")
         if not name:
             continue
+        type_pattern = type_pattern_from_xml(attribute)
+        attribute_type_patterns[name] = type_pattern
         attributes.append(attribute_record_from_xml(attribute))
 
     controls: list[object] = []
     for page in top_level_pages(root):
         for child in page:
-            control = control_stream_from_xml(child, asset_root)
+            control = control_stream_from_xml(child, asset_root, attribute_type_patterns)
             if control:
                 controls.append(control)
 
@@ -279,10 +283,10 @@ def root_panel_info(title: str, form_width: str, form_height: str) -> list[objec
             ["0", "4", "3"],
             "0",
             "0",
-            ["10", "1", empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "0", "0", "0", "0", "0"],
+            page_style_group_record("1"),
             "0",
             "1",
-            ["1", "1", ["6", page_title, ["10", "0", empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "0", "0", "0", "0", "0"], "-1", "1", "1", quoted_atom("Страница1"), "1", default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"]],
+            ["1", "1", ["6", page_title, page_style_group_record("0"), "-1", "1", "1", quoted_atom("Страница1"), "1", default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"]],
             "1",
             "1",
             "0",
@@ -340,6 +344,10 @@ def default_color_record() -> list[object]:
 
 def empty_page_style_record() -> list[object]:
     return ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""']
+
+
+def page_style_group_record(active: str) -> list[object]:
+    return ["10", active, empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "0", "0", "0", "0", "0"]
 
 
 def panel_extent_value(value: str, offset: int) -> str:
@@ -449,7 +457,7 @@ def event_descriptor(name: str, title: str | None = None) -> list[object]:
         localized_text_record(title),
         localized_text_record(title),
         localized_text_record(title),
-        ["3", "0", ["0"], '""', "-1", "-1", "1", "0"],
+        empty_page_style_record(),
         ["0", "0", "0"],
     ]
 
@@ -497,13 +505,14 @@ def type_pattern_from_xml(attribute: ET.Element) -> list[object]:
     return result
 
 
-def control_stream_from_xml(element: ET.Element, asset_root: Path | None) -> list[object] | None:
-    return control_stream_from_xml_with_page(element, asset_root, None, None)
+def control_stream_from_xml(element: ET.Element, asset_root: Path | None, attribute_type_patterns: dict[str, list[object]] | None = None) -> list[object] | None:
+    return control_stream_from_xml_with_page(element, asset_root, attribute_type_patterns or {}, None, None)
 
 
 def control_stream_from_xml_with_page(
     element: ET.Element,
     asset_root: Path | None,
+    attribute_type_patterns: dict[str, list[object]],
     page_index: int | None,
     page_order: int | None,
 ) -> list[object] | None:
@@ -515,14 +524,17 @@ def control_stream_from_xml_with_page(
         raise ValueError(f"Unsupported ordinary form control type for stream writer: {element.tag}")
     object_id = required_control_id(element)
     name = required_control_name(element)
-    info = control_info_from_xml(element, name, control_type, asset_root)
+    info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns)
     geometry = geometry_stream_from_xml(control_type, element.find("Position"), page_index, page_order)
     metadata_name = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else name
-    metadata_scope = CONTROL_METADATA_SCOPE.get(control_type, CONTROL_METADATA_SCOPE["default"])
+    if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "ОсновныеДействияФормы"}:
+        metadata_scope = "8"
+    else:
+        metadata_scope = CONTROL_METADATA_SCOPE.get(control_type, CONTROL_METADATA_SCOPE["default"])
     metadata = ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
     children: list[object] = []
     for child in element:
-        child_stream = control_stream_from_xml_with_page(child, asset_root, None, None)
+        child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, None, None)
         if child_stream:
             children.append(child_stream)
     pages = element.find("Pages")
@@ -533,7 +545,7 @@ def control_stream_from_xml_with_page(
             for child in page:
                 if not control_type_from_xml_tag(child.tag):
                     continue
-                child_stream = control_stream_from_xml_with_page(child, asset_root, page_number, page_child_order)
+                child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, page_number, page_child_order)
                 if child_stream:
                     page_children.append((int(child_stream[1]), child_stream))
                     page_child_order += 1
@@ -597,10 +609,16 @@ def required_control_name(element: ET.Element) -> str:
     return name
 
 
-def control_info_from_xml(element: ET.Element, name: str, control_type: str, asset_root: Path | None) -> list[object]:
+def control_info_from_xml(
+    element: ET.Element,
+    name: str,
+    control_type: str,
+    asset_root: Path | None,
+    attribute_type_patterns: dict[str, list[object]],
+) -> list[object]:
     title = get_multilang_text(element, "Title")
     title_record = localized_text_record(title or name)
-    actions = action_table_from_xml(element.find("Action")) + event_table_from_xml(element.find("Events"))
+    actions = control_actions_from_xml(element)
     if control_type == "Panel":
         return panel_control_info_from_xml(element, title_record)
     if control_type == "Button":
@@ -647,7 +665,8 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
     if control_type == "CommandBar":
         return command_bar_control_info(element)
     if control_type == "Table":
-        return table_control_info(element, actions)
+        data_path = data_path_from_xml(element)
+        return table_control_info(element, actions, attribute_type_patterns.get(data_path, []))
     if control_type == "SpreadsheetDocumentField":
         return spreadsheet_document_field_control_info(element, actions)
     if control_type == "Label":
@@ -655,30 +674,35 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
     raise ValueError(f"Unsupported ordinary form control type for stream writer: {control_type}")
 
 
+def control_actions_from_xml(element: ET.Element) -> list[object]:
+    actions = action_table_from_xml(element.find("Action"))
+    if actions:
+        return actions
+    return event_table_from_xml(element.find("Events"))
+
+
 def panel_control_info_from_xml(element: ET.Element, title_record: list[object]) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["Panel"]
-    child_count = len([child for child in element if control_type_from_xml_tag(child.tag)])
     pages = element.find("Pages")
     page_nodes = pages.findall("Page") if pages is not None else []
     page_count = len(page_nodes) or 1
-    right = element.find("Position").get("right", "877") if element.find("Position") is not None else "877"
-    bottom = element.find("Position").get("bottom", "236") if element.find("Position") is not None else "236"
-    width = str(max(int(right) - 12, 0)) if right.isdigit() else right
-    height = str(max(int(bottom) - 30, 0)) if bottom.isdigit() else bottom
-    state_table = panel_state_table(element, title_record)
-    position_records = panel_position_records(page_count, width, height)
+    position = element.find("Position")
+    raw_width = position.get("width", "1228") if position is not None else "1228"
+    raw_height = position.get("height", "1054") if position is not None else "1054"
+    width = panel_extent_value(raw_width, 8)
+    height = panel_extent_value(raw_height, 26)
+    state_table = panel_state_table(element, title_record, extended=True)
+    position_records = panel_position_records(page_count, width, height, mode="6")
     return [
         descriptor.info_kind,
         [
-            base_info_record_from_xml(element),
-            "21",
+            root_panel_base_info_record(),
+            "26",
+            "0",
+            *panel_control_slot_profile(),
             "0",
             "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            ["3", "1", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
+            page_style_group_record("1"),
             "1",
             "1",
             state_table,
@@ -693,47 +717,119 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object])
             "4294967295",
             "4294967295",
             "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
+            "4294967295",
             "5",
             "64",
+            "0",
+            default_color_record(),
+            "0",
+            "0",
+            "57",
+            "0",
             "0",
         ],
         ["0"],
     ]
 
 
-def panel_state_table(element: ET.Element, fallback_title: list[object]) -> list[object]:
+def panel_control_slot_profile() -> list[object]:
+    return [
+        "12",
+        ["0", "8", "1"],
+        ["0", "19", "1"],
+        ["0", "25", "1"],
+        ["0", "26", "1"],
+        ["0", "28", "1"],
+        ["0", "29", "1"],
+        ["0", "30", "1"],
+        ["0", "31", "1"],
+        ["0", "33", "1"],
+        ["0", "39", "1"],
+        ["0", "40", "1"],
+        ["0", "41", "1"],
+        "1",
+        ["0", "25", "3"],
+        "18",
+        ["0", "7", "3"],
+        ["0", "8", "3"],
+        ["0", "10", "3"],
+        ["0", "19", "3"],
+        ["0", "21", "3"],
+        ["0", "23", "3"],
+        ["0", "25", "3"],
+        ["0", "26", "3"],
+        ["0", "27", "3"],
+        ["0", "28", "3"],
+        ["0", "29", "3"],
+        ["0", "30", "3"],
+        ["0", "31", "3"],
+        ["0", "32", "3"],
+        ["0", "33", "3"],
+        ["0", "39", "3"],
+        ["0", "40", "3"],
+        ["0", "41", "3"],
+    ]
+
+
+def panel_state_table(element: ET.Element, fallback_title: list[object], *, extended: bool = False) -> list[object]:
     pages = element.find("Pages")
     page_nodes = pages.findall("Page") if pages is not None else []
     if not page_nodes:
         name = element.get("name", "Страница1")
-        return ["1", "1", ["3", fallback_title, ["3", "0", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]], "-1", "1", "1", quoted_atom(name), "1"]]
+        if extended:
+            return ["1", "1", panel_state_record("6", fallback_title, name)]
+        return ["1", "1", panel_state_record("3", fallback_title, name)]
     states: list[object] = []
     for page in page_nodes:
         name = page.get("name", "Страница1")
         title = get_multilang_text(page, "Title") or name
-        states.append(
-            [
-                "3",
-                localized_text_record(title),
-                ["3", "0", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
-                "-1",
-                "1",
-                "1",
-                quoted_atom(name),
-                "1",
-            ]
-        )
+        states.append(panel_state_record("6" if extended else "3", localized_text_record(title), name))
     return ["1", str(len(states)), *states]
 
 
-def panel_position_records(page_count: int, width: str, height: str) -> list[list[object]]:
+def panel_state_record(record_kind: str, title: list[object], name: str) -> list[object]:
+    record = [
+        record_kind,
+        title,
+        ["3", "0", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
+        "-1",
+        "1",
+        "1",
+        quoted_atom(name),
+        "1",
+    ]
+    if record_kind == "6":
+        record[2] = page_style_group_record("0")
+        record.extend([default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"])
+    return record
+
+
+def panel_position_records(page_count: int, width: str, height: str, *, mode: str = "2") -> list[list[object]]:
     records: list[list[object]] = []
     for page_index in range(page_count):
         page_width = width
         page_height = height
-        horizontal_mode = "2"
-        vertical_mode = "2"
-        if page_count > 1 and page_index == page_count - 1 and width.isdigit() and height.isdigit():
+        horizontal_mode = mode
+        vertical_mode = mode
+        if mode == "2" and page_count > 1 and page_index == page_count - 1 and width.isdigit() and height.isdigit():
             page_width = str(max(int(width) - 2, 0))
             page_height = str(max(int(height) - 2, 0))
             horizontal_mode = "4"
@@ -750,13 +846,14 @@ def panel_position_records(page_count: int, width: str, height: str) -> list[lis
 
 
 def label_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
+    label_mode = "4"
     return [
         "3",
         [
-            base_info_record_from_xml(element),
-            "7",
+            extended_base_info_record_from_xml(element),
+            "11",
             title_record,
-            "4",
+            label_mode,
             "1",
             "1" if actions else "0",
             "0",
@@ -765,8 +862,15 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
             "0",
             ["1", "0"],
             "1",
-            ["3", "4", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
+            ["10", label_mode, empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "2", "0", "0", "1", "2"],
             "4",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
         ],
         ["1", *actions] if actions else ["0"],
     ]
@@ -808,17 +912,21 @@ def button_control_info(element: ET.Element, title_record: list[object], actions
         "1",
         [
             button_base_info_record(element),
-            "10",
+            "14",
             title_record,
             "1",
             "1",
             "0",
             "0",
             "0",
-            ["3", "0", ["0"], '""', "-1", "-1", "1", "0"],
+            empty_page_style_record(),
             ["0", "0", "0"],
             "0",
             "0",
+            "0",
+            "0",
+            "0",
+            "1",
         ],
         ["1", *actions] if actions else ["0"],
     ]
@@ -1298,10 +1406,12 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
 
 def command_bar_items_record(element: ET.Element, title: str) -> list[object]:
     if element.get("name") != "ОсновныеДействияФормы" and not title:
+        palette_uuid = "6013c551-1c48-4ef4-a466-6fbe824675ca" if element.get("name") == "КоманднаяПанель1" else "32be4565-4169-4cb1-bbb8-775fc630a82d"
+        palette_kind = "9" if element.get("name") == "КоманднаяПанель1" else "11"
         return [
             "5",
-            "6013c551-1c48-4ef4-a466-6fbe824675ca",
-            "9",
+            palette_uuid,
+            palette_kind,
             "1",
             "0",
             "1",
@@ -1371,7 +1481,12 @@ def command_bar_action_descriptor(name: str, title: str) -> list[object]:
 
 def command_bar_base_info_record(element: ET.Element) -> list[object]:
     tooltip = tooltip_record_from_xml(element)
-    command_scope = "7" if element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None else "4"
+    if element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None:
+        command_scope = "7"
+    elif element.get("name") == "КоманднаяПанель1":
+        command_scope = "4"
+    else:
+        command_scope = "0"
     return [
         "19",
         visible_record_from_xml(element),
@@ -1384,7 +1499,15 @@ def command_bar_base_info_record(element: ET.Element) -> list[object]:
         default_color_record(),
         default_color_record(),
         ["4", "3", ["-21"], "3"],
-        ["3", "0", ["0"], command_scope, "1", "0", "00000000-0000-0000-0000-000000000000"],
+        [
+            "3",
+            "0",
+            ["0"],
+            command_scope,
+            "0" if command_scope == "0" else "1",
+            "0",
+            "48312c09-257f-4b29-b280-284dd89efc1e" if command_scope == "0" else "00000000-0000-0000-0000-000000000000",
+        ],
         tooltip,
         "0",
         "0",
@@ -1397,13 +1520,16 @@ def command_bar_base_info_record(element: ET.Element) -> list[object]:
     ]
 
 
-def table_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+def table_control_info(element: ET.Element, actions: list[object], type_pattern: list[object]) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["Table"]
+    pattern = type_pattern or [quoted_atom("#"), "00000000-0000-0000-0000-000000000000"]
+    base = extended_base_info_record_from_xml(element)
+    base[11] = ["3", "1", ["-18"], "0", "0", "0"]
     return [
         descriptor.info_kind,
-        [quoted_atom("Pattern"), [quoted_atom("#"), "00000000-0000-0000-0000-000000000000"]],
+        [quoted_atom("Pattern"), pattern],
         [
-            base_info_record_from_xml(element),
+            base,
             table_view_record_from_xml(element),
         ],
         ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]],
@@ -1580,8 +1706,19 @@ def list_box_view_record_from_xml(element: ET.Element) -> list[object]:
 
 
 def button_base_info_record(element: ET.Element) -> list[object]:
-    base = base_info_record_from_xml(element)
+    base = extended_base_info_record_from_xml(element)
     base[5] = "1"
+    return base
+
+
+def extended_base_info_record_from_xml(element: ET.Element) -> list[object]:
+    base = root_panel_base_info_record()
+    base[1] = visible_record_from_xml(element)
+    base[12] = tooltip_record_from_xml(element)
+    base[16] = "0"
+    base[17] = "0"
+    base[18] = "0"
+    base[19] = "0"
     return base
 
 
@@ -1680,6 +1817,7 @@ def geometry_stream_from_xml(
             trailer = ["0", "0", "0", "0", "1", "3", "1", "1"]
         dimension_flag = "1" if any(dimension != "0" for dimension in dimensions) else "0"
         return ["8", left, top, right, bottom, "1", *bindings, dimension_flag, *dimensions, *trailer]
+    paged_trailer = ["0", "0"] if control_type == "CommandBar" else GEOMETRY_TRAILER_PROFILE["paged"]
     return [
         "8",
         left,
@@ -1690,10 +1828,10 @@ def geometry_stream_from_xml(
         *bindings,
         "1",
         *dimensions,
-        *GEOMETRY_TRAILER_PROFILE["paged"],
-        str(page_index),
+        *paged_trailer,
         str(page_order),
-        str(page_order + 1),
+        str(page_index),
+        str(page_index + 1),
         "0",
         "0",
     ]

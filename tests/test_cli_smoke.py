@@ -740,8 +740,8 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_core_control_info_descriptors_record_platform_slots(self) -> None:
         self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["FormRootPanel"].info_kind, "1")
-        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Panel"].slot_index("PageStates"), 11)
-        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Panel"].slot_index("PagePositions"), 15)
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Panel"].slot_index("PageStates"), 42)
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Panel"].slot_index("PagePositions"), 46)
         self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["CommandBar"].info_kind, "2")
         self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["CommandBar"].slot_index("Autofill"), 6)
         self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["InputField"].slot_index("ReadOnly"), 12)
@@ -749,6 +749,41 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Table"].slot_index("RowsCount"), 20)
         self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Table"].slot_index("ColumnsCount"), 21)
         self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Table"].slot_index("AutoMarkIncomplete"), 22)
+
+    def test_build_bin_uses_extended_panel_page_slot_map(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Panel name="Панель1" id="4">
+                    <Position left="8" top="33" right="1236" bottom="1087" width="1228" height="1054"/>
+                    <Pages>
+                      <Page name="Страница1"><Title><Item lang="ru">Страница1</Item></Title></Page>
+                      <Page name="Страница2"><Title><Item lang="ru">Страница2</Item></Title></Page>
+                    </Pages>
+                  </Panel>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        panels = self._find_controls(stream, "09ccdc77-ea1a-4a6d-ab1c-3435eada2433")
+        panel = panels[-1]
+        descriptor = CORE_CONTROL_INFO_DESCRIPTORS["Panel"]
+        body = panel[2][1]
+
+        self.assertEqual(panel[2][0], descriptor.info_kind)
+        self.assertEqual(body[1], "26")
+        self.assertEqual(body[3], "12")
+        self.assertEqual(body[descriptor.slot_index("PageStates")][0:2], ["1", "2"])
+        self.assertEqual(body[descriptor.slot_index("PageStates")][2][0], "6")
+        self.assertEqual(body[descriptor.slot_index("PagePositions")], "8")
+        self.assertEqual(body[47], ["2", "6", "1", "1", "1", "0", "0", "0", "0"])
+        self.assertEqual(body[49], ["2", "1220", "1", "1", "3", "0", "0", "6", "0"])
+        self.assertEqual(body[50], ["2", "1028", "0", "1", "4", "0", "0", "6", "0"])
 
     def test_add_read_only_uses_input_field_info_slot(self) -> None:
         from onec_ordinary_forms.cli import add_read_only
@@ -783,6 +818,7 @@ class CliSmokeTest(unittest.TestCase):
         base = button[2][1][0]
         self.assertEqual(button[2][0], "1")
         self.assertEqual(base[1], "0")
+        self.assertEqual(button[2][1][1], "14")
         self.assertEqual(base[12][2], ['"ru"', '"Run tooltip"'])
 
     def test_build_bin_uses_checkbox_info_kind_and_named_title(self) -> None:
@@ -1037,6 +1073,15 @@ class CliSmokeTest(unittest.TestCase):
                 if found is not None:
                     return found
         return None
+
+    def _find_controls(self, value: object, class_id: str) -> list[list[object]]:
+        result: list[list[object]] = []
+        if isinstance(value, list):
+            if value and value[0] == class_id:
+                result.append(value)
+            for child in value:
+                result.extend(self._find_controls(child, class_id))
+        return result
 
     def test_format_xml_file_pretty_prints_schema_like_xml(self) -> None:
         with TemporaryDirectory() as temp_dir:
