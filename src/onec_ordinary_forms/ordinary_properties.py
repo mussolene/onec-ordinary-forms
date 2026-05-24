@@ -178,7 +178,12 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         COMMON_CONTROL_PROPERTIES,
     ),
     "GroupBox": OrdinaryControlDescriptor("GroupBox", "РамкаГруппы", "UsualGroup", COMMON_CONTROL_PROPERTIES + ("ShowTitle", "Representation")),
-    "RadioButton": OrdinaryControlDescriptor("RadioButton", "Переключатель", "RadioButton", COMMON_CONTROL_PROPERTIES + ("ValueType", "Items")),
+    "RadioButton": OrdinaryControlDescriptor(
+        "RadioButton",
+        "Переключатель",
+        "RadioButton",
+        COMMON_CONTROL_PROPERTIES + ("FirstInGroup", "ValueType", "Items"),
+    ),
     "Splitter": OrdinaryControlDescriptor("Splitter", "Разделитель", "Splitter", COMMON_CONTROL_PROPERTIES),
     "Chart": OrdinaryControlDescriptor("Chart", "Диаграмма", "ChartField", COMMON_CONTROL_PROPERTIES + ("ValueType",)),
     "PivotChart": OrdinaryControlDescriptor("PivotChart", "СводнаяДиаграмма", "PivotChartField", DIAGRAM_CONTROL_PROPERTIES),

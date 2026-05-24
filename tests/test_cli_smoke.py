@@ -907,6 +907,56 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(radio_info[2][2], ['"ru"', '"Use rules"'])
         self.assertEqual(radio_info[0][12][2], ['"ru"', '"Use rules tooltip"'])
 
+    def test_build_bin_uses_first_radio_button_attribute_for_group(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Attributes>
+                <Attribute name="Mode1" slot="5">
+                  <Type source="TypeDomainPattern">
+                    <Pattern encoding="TypeDomainPattern" itemCount="4">
+                      <PatternItem code="N" typeName="xs:decimal"/>
+                      <PatternItem code="1" typeName="unknown:1"/>
+                      <PatternItem code="0" typeName="unknown:0"/>
+                      <PatternItem code="1" typeName="unknown:1"/>
+                    </Pattern>
+                  </Type>
+                </Attribute>
+              </Attributes>
+              <Pages>
+                <Page name="Main">
+                  <Panel name="Panel" id="44">
+                    <Pages>
+                      <Page name="Group">
+                        <RadioButton name="Mode1" id="45">
+                          <DataPath>Mode1</DataPath>
+                          <FirstInGroup>true</FirstInGroup>
+                          <Title><Item lang="ru">One</Item></Title>
+                        </RadioButton>
+                        <RadioButton name="Mode2" id="46">
+                          <DataPath>Mode2</DataPath>
+                          <FirstInGroup>false</FirstInGroup>
+                          <Title><Item lang="ru">Two</Item></Title>
+                        </RadioButton>
+                      </Page>
+                    </Pages>
+                  </Panel>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        radios = self._find_controls(stream, "782e569a-79a7-4a4f-a936-b48d013936ec")
+
+        self.assertEqual(len(radios), 2)
+        self.assertEqual(radios[0][3][-5:], ["5", "0", "1", "0", "0"])
+        self.assertEqual(radios[1][3][-5:], ["5", "1", "2", "0", "0"])
+        self.assertEqual(radios[0][4][5], "1")
+        self.assertEqual(radios[1][4][5], "0")
+        self.assertEqual(radios[1][2][1], ['"Pattern"', ['"N"', "1", "0", "1"]])
+
     def test_build_bin_uses_simple_remaining_control_info_kinds(self) -> None:
         root = ET.fromstring(
             """<Form>

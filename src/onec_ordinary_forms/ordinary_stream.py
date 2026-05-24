@@ -8,6 +8,7 @@ Public XML must never expose this stream directly.
 from __future__ import annotations
 
 import base64
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -544,7 +545,17 @@ def control_stream_from_xml_with_page(
     info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns)
     data_path = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else ""
     data_slot = attribute_slots.get(data_path, "")
-    geometry = geometry_stream_from_xml(control_type, element.find("Position"), page_index, page_order, data_slot)
+    if not data_slot and control_type == "RadioButton":
+        data_slot = attribute_slots.get(radio_group_data_path(data_path), "")
+    radio_ordinal = radio_group_ordinal(data_path) if control_type == "RadioButton" else 0
+    geometry = geometry_stream_from_xml(
+        control_type,
+        element.find("Position"),
+        page_index,
+        page_order,
+        data_slot,
+        radio_ordinal,
+    )
     metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
     if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "ОсновныеДействияФормы"}:
         metadata_scope = "8"
@@ -552,7 +563,7 @@ def control_stream_from_xml_with_page(
         metadata_scope = CONTROL_METADATA_SCOPE.get(control_type, CONTROL_METADATA_SCOPE["default"])
     metadata = ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
     if control_type == "RadioButton":
-        metadata[5] = "1"
+        metadata[5] = bool_record_from_xml(element, "FirstInGroup", default=False)
     children: list[object] = []
     for child in element:
         child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, None, None)
@@ -630,6 +641,17 @@ def required_control_name(element: ET.Element) -> str:
     return name
 
 
+def radio_group_data_path(data_path: str) -> str:
+    return re.sub(r"\d+$", "1", data_path)
+
+
+def radio_group_ordinal(data_path: str) -> int:
+    match = re.search(r"(\d+)$", data_path)
+    if not match:
+        return 0
+    return max(int(match.group(1)) - 1, 0)
+
+
 def control_info_from_xml(
     element: ET.Element,
     name: str,
@@ -653,7 +675,12 @@ def control_info_from_xml(
         return choice_field_control_info(element, actions)
     if control_type == "RadioButton":
         data_path = data_path_from_xml(element)
-        return radio_button_control_info(element, title_record, actions, attribute_type_patterns.get(data_path, []))
+        return radio_button_control_info(
+            element,
+            title_record,
+            actions,
+            attribute_type_patterns.get(data_path, []) or attribute_type_patterns.get(radio_group_data_path(data_path), []),
+        )
     if control_type == "InputField":
         data_path = data_path_from_xml(element)
         return input_field_control_info(element, actions, attribute_type_patterns.get(data_path, []))
@@ -1994,6 +2021,7 @@ def geometry_stream_from_xml(
     page_index: int | None = None,
     page_order: int | None = None,
     data_slot: str = "",
+    radio_ordinal: int = 0,
 ) -> list[object]:
     left = position.get("left", "0") if position is not None else "0"
     top = position.get("top", "0") if position is not None else "0"
@@ -2056,6 +2084,11 @@ def geometry_stream_from_xml(
             "0",
         ]
     if control_type in {"CheckBox", "RadioButton"} and data_slot:
+        group_offsets = (
+            [str(radio_ordinal), str(radio_ordinal + 1)]
+            if control_type == "RadioButton"
+            else ["0", "1"]
+        )
         return [
             "8",
             left,
@@ -2070,8 +2103,7 @@ def geometry_stream_from_xml(
             "0",
             "0",
             data_slot,
-            "0",
-            "1",
+            *group_offsets,
             "0",
             "0",
         ]

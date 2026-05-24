@@ -676,6 +676,7 @@ def add_semantic_item(
         add_multilang_text(node, "Title", title)
     add_tooltip(node, item_data)
     add_data_path(node, item, item_data)
+    add_first_in_group(node, item, item_data)
     add_visible(node, item_data)
     add_read_only(node, item, item_data)
     add_table_columns(node, item, item_data)
@@ -778,6 +779,21 @@ def add_data_path(parent: ET.Element, item: dict, item_data: object) -> None:
     if not data_path:
         return
     set_text(parent, "DataPath", data_path)
+
+
+def add_first_in_group(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "RadioButton":
+        return
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list):
+        return
+    metadata = control_metadata_record(raw)
+    if metadata is None or len(metadata) <= 5:
+        return
+    if clean_token(metadata[5]) == "1":
+        set_text(parent, "FirstInGroup", "true")
 
 
 def add_visible(parent: ET.Element, item_data: object) -> None:

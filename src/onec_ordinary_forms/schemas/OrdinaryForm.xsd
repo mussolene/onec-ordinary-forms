@@ -504,6 +504,7 @@
             <Property platformName="Доступность" platformType="Булево"/>
             <Property platformName="Заголовок" platformType="Строка"/>
             <Property platformName="Подсказка" platformType="Строка"/>
+            <Property platformName="ПервыйВГруппе" platformType="Булево"/>
             <Property platformName="ПоложениеЗаголовка" platformType="ПоложениеЗаголовка"/>
             <Property platformName="ПрозрачныйФон" platformType="Булево"/>
             <Property platformName="Рамка" platformType="Рамка"/>
@@ -1434,6 +1435,7 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="FirstInGroup" type="xs:boolean"/>
           <xs:element name="Font" type="FontType"/>
           <xs:element name="TextColor" type="ColorType"/>
           <xs:element name="BackColor" type="ColorType"/>
