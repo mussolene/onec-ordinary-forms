@@ -1191,12 +1191,19 @@ def group_box_control_info(element: ET.Element, title_record: list[object]) -> l
     return [
         "0",
         [
-            base_info_record_from_xml(element),
-            "7",
+            group_box_base_info_record_from_xml(element),
+            "8",
             title_record,
-            ["3", "0", ["0"], "4", "1", "0", "cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2"],
+            ["3", "0", ["0"], "6", "1", "0", "cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2"],
+            "0",
         ],
     ]
+
+
+def group_box_base_info_record_from_xml(element: ET.Element) -> list[object]:
+    base = extended_base_info_record_from_xml(element)
+    base[4] = ["8", "3", "4", "700", "1", "100"]
+    return base
 
 
 def splitter_control_info(element: ET.Element) -> list[object]:

@@ -991,6 +991,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(group[2][0], "0")
         self.assertEqual(group[2][1][2][2], ['"ru"', '"Group title"'])
         self.assertEqual(group[2][1][0][12][2], ['"ru"', '"Group tooltip"'])
+        self.assertEqual(group[2][1][1], "8")
         self.assertIsNotNone(splitter)
         self.assertEqual(splitter[2][0], "0")
         self.assertIsNotNone(chart)
