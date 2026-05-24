@@ -159,6 +159,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(field)
         self.assertEqual(field.get("role"), "dimension")
         self.assertEqual(field.get("title"), "Dimension")
+        self.assertEqual(field.get("enabled"), "true")
         self.assertEqual(field.get("color"), "10053120")
         point = node.find("SourceData/Point")
         self.assertIsNotNone(point)

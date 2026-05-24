@@ -1287,7 +1287,42 @@ def chart_control_info() -> list[object]:
 
 def pivot_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
     body = DIAGRAM_BODY_DESCRIPTOR.build({2: diagram_presentation_record(element, title_record, kind="pivot")})
-    return PIVOT_CHART_INFO_DESCRIPTOR.build({1: body})
+    return PIVOT_CHART_INFO_DESCRIPTOR.build({1: body, 2: pivot_chart_info_secondary_record()})
+
+
+def pivot_chart_info_secondary_record() -> list[object]:
+    return [
+        "0",
+        [
+            "0",
+            [
+                "3",
+                "0",
+                "1",
+                "0",
+                ["1", ["8", "0", "0", "0", "0", "0", [quoted_atom("U")], ["1", "0"], [quoted_atom("U")], "0", "4294967281"], "4294967295"],
+                ["0", "1", ["0", ["4", "0", ["0"], "0"], ["4", "0", ["0"], "0"]]],
+                "1",
+                "0",
+            ],
+        ],
+        [
+            "0",
+            [
+                "3",
+                "0",
+                "1",
+                "0",
+                ["1", ["8", "0", "0", "0", "0", "0", [quoted_atom("U")], ["1", "0"], [quoted_atom("U")], "0", "4294911569"], "232515672"],
+                ["0", "1", ["0", ["4", "0", ["0"], "0"], ["4", "0", ["0"], "0"]]],
+                "1",
+                "0",
+            ],
+        ],
+        ["0", "0"],
+        "1",
+        "1",
+    ]
 
 
 def gantt_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
@@ -1424,9 +1459,120 @@ def diagram_presentation_record(element: ET.Element, title_record: list[object],
         "0",
     ]
     if kind == "pivot":
+        apply_pivot_chart_default_presentation_settings(record, title_record)
         apply_pivot_chart_fields(record, element, kind_code)
         apply_pivot_chart_source_data(record, element)
     return record
+
+
+def apply_pivot_chart_default_presentation_settings(record: list[object], title_record: list[object]) -> None:
+    ensure_list_size(record, 206, "0")
+    record[106:206] = pivot_chart_default_presentation_settings(title_record)
+
+
+def pivot_chart_default_presentation_settings(title_record: list[object]) -> list[object]:
+    return [
+        "3",
+        "3",
+        "6",
+        "0",
+        quoted_atom(", "),
+        "0",
+        ["1", "0"],
+        ["1", "0"],
+        ["4", "3", ["-3"], "3"],
+        "0",
+        "0",
+        title_record,
+        "1",
+        "1",
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["4", "3", ["-22"], "3"],
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["4", "3", ["-22"], "3"],
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["4", "3", ["-22"], "3"],
+        "0",
+        ["4", "3", ["-1"], "3"],
+        "1",
+        ["4", "3", ["-1"], "3"],
+        "1",
+        ["4", "3", ["-1"], "3"],
+        "0",
+        ["4", "0", ["16777215"], "0"],
+        ["4", "3", ["-3"], "3"],
+        ["4", "3", ["-3"], "3"],
+        ["4", "3", ["-3"], "3"],
+        ["8", "2", "0", ["-20"], "1", "100"],
+        ["8", "2", "0", ["-20"], "1", "100"],
+        ["8", "2", "0", ["-20"], "1", "100"],
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        ["1", "0"],
+        "0",
+        ["4", "0", ["0"], "1", "1", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
+        ["4", "4", ["0"], "4"],
+        "1",
+        "1",
+        "0",
+        "4",
+        "30",
+        "1",
+        "0",
+        "1",
+        "0",
+        "0",
+        "1",
+        "0",
+        "0",
+        "1",
+        "0",
+        "1",
+        "1",
+        "2",
+        ["1", "0"],
+        "1",
+        "0",
+        "0",
+        "1",
+        ["4", "0", ["169"], "0"],
+        "0",
+        "0",
+        ["1", "0", "0", "0"],
+        "0",
+        "180",
+        "5",
+        "1",
+        "0",
+        "4",
+        ["4", "0", ["11119017"], "0"],
+        "1",
+        "0",
+        "1",
+        "0",
+        "1",
+        "0",
+        "0",
+        "1.666666666666667e-1",
+        "0",
+        "8.333333333333334e-1",
+        "5.277777777777777e-2",
+        "0",
+        "0",
+        "8.333333333333334e-1",
+        "0",
+        "0",
+        "9.472222222222221e-1",
+        "0",
+        ["4", "3", ["-22"], "3"],
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        '""',
+        "0",
+        "0",
+    ]
 
 
 def apply_pivot_chart_fields(record: list[object], element: ET.Element, kind_code: str) -> None:
@@ -1439,6 +1585,9 @@ def apply_pivot_chart_fields(record: list[object], element: ET.Element, kind_cod
     if dimension_fields:
         record[1] = str(len(dimension_fields))
         write_pivot_chart_field_records(record, dimension_fields, start_index=2, kind_code=kind_code, dimension=True)
+        after_dimensions = 2 + len(dimension_fields) * 11
+        ensure_list_size(record, after_dimensions + 3, "0")
+        record[after_dimensions : after_dimensions + 3] = [[quoted_atom("U")], [quoted_atom("U")], "0"]
     if measure_fields:
         ensure_list_size(record, 62, "0")
         record[60] = "1"
@@ -1465,7 +1614,7 @@ def write_pivot_chart_field_records(
                 ["4", "0", ["0"], "1", "2", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
                 field.get("axis", "0") or "0",
                 localized_text_record(field.get("title", "")),
-                "1",
+                bool_attribute_record_from_xml(field, "enabled", default=True),
                 "0",
                 "0",
                 field.get("value", "0") or "0",
@@ -1473,8 +1622,8 @@ def write_pivot_chart_field_records(
         else:
             values = [
                 localized_text_record(field.get("title", "")),
+                bool_attribute_record_from_xml(field, "enabled", default=True),
                 field.get("value", "0") or "0",
-                "1",
                 color_record_from_xml_value(field.get("color", "")),
                 ["4", "0", ["0"], "1", "2", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
                 field.get("axis", "0") or "0",
@@ -1496,7 +1645,211 @@ def apply_pivot_chart_source_data(record: list[object], element: ET.Element) -> 
     for point in points:
         record.append([quoted_atom(point.get("valueType", "N") or "N"), point.get("value", "0") or "0"])
         record.append([quoted_atom(point.get("unit", "U") or "U")])
-        record.append(quoted_atom(point.text or ""))
+        record.append(quoted_atom(platform_multiline_text(point.text or "")))
+    record.extend(pivot_chart_final_trailer(element))
+
+
+def platform_multiline_text(value: str) -> str:
+    return value.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r\n")
+
+
+def pivot_chart_final_trailer(element: ET.Element) -> list[object]:
+    fields = sorted(
+        element.findall("Fields/Field"),
+        key=lambda node: (node.get("role", ""), int(node.get("order", "0") or "0")),
+    )
+    dimension_fields = [field for field in fields if field.get("role") == "dimension"]
+    measure_fields = [field for field in fields if field.get("role") == "measure"]
+    points = element.findall("SourceData/Point")
+    return [
+        *pivot_chart_final_trailer_head(),
+        *[[color_record_from_xml_value(field.get("color", ""))] for field in measure_fields],
+        *[pivot_chart_dimension_style_record(field) for field in dimension_fields],
+        *pivot_chart_final_trailer_middle(),
+        *[pivot_chart_point_label_record(point) for point in points],
+        *pivot_chart_final_trailer_tail(),
+    ]
+
+
+def pivot_chart_dimension_style_record(field: ET.Element) -> list[object]:
+    return [
+        color_record_from_xml_value(field.get("color", "")),
+        field.get("axis", "0") or "0",
+        "0",
+        "0",
+        "0",
+        '""',
+        ["1", "0"],
+        ["1", "0"],
+        ["1", "0"],
+        "0",
+    ]
+
+
+def pivot_chart_point_label_record(point: ET.Element) -> list[object]:
+    return [["1", ["1", "1", [quoted_atom("#"), quoted_atom(platform_multiline_text(point.text or ""))]], "0"], "0"]
+
+
+def pivot_chart_axis_layout_record() -> list[object]:
+    return [
+        "2",
+        "0",
+        "0",
+        "2",
+        ["1", "0"],
+        [
+            "1",
+            "4",
+            "0.5",
+            "0.5",
+            ["8", "3", "0", "1", "100"],
+            ["4", "4", ["0"], "4"],
+            ["4", "4", ["0"], "4"],
+            "1",
+            ["3", "0", ["0"], "0", "1", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+            ["4", "4", ["0"], "4"],
+            "4",
+            "2",
+            "0",
+        ],
+        "2",
+        "0",
+        "0",
+        ["4", "4", ["0"], "4"],
+        ["8", "3", "0", "1", "100"],
+        ["4", "4", ["0"], "4"],
+        "2",
+        ["1", "0"],
+        "0",
+        ["4", "4", ["0"], "4"],
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+    ]
+
+
+def pivot_chart_final_trailer_head() -> list[object]:
+    return [
+        "14",
+        "2",
+        ["8", "3", "0", "1", "100"],
+        "1",
+        ["4", "4", ["0"], "4"],
+        ["3", "0", ["0"], "1", "1", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["4", "4", ["0"], "4"],
+        "1",
+        "1",
+        "1",
+        "0",
+        "0",
+        "95",
+        "1e-1",
+        "1e-1",
+        "3e-2",
+        ["4", "0", ["0"], "1", "1", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
+        ["4", "0", ["0"], "0"],
+        "2",
+        "255",
+        "0",
+        "8392496",
+        "00000000-0000-0000-0000-000000000000",
+        "0",
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "0"],
+        "0",
+        ["0", "0", ["0", "1", "0", "1", "0"], "0", "0"],
+        ["0", "0", ["0", "1", "0", "1", "0"], "0", "0"],
+        "0",
+        "0",
+        "2",
+        "-2",
+        "1",
+        "10",
+        "1",
+        "20",
+        "0",
+        "0",
+        pivot_chart_axis_layout_record(),
+        pivot_chart_axis_layout_record(),
+        pivot_chart_axis_layout_record(),
+        "0",
+        "0",
+        ["4", "4", ["0"], "4"],
+        ["4", "4", ["0"], "4"],
+        "0",
+    ]
+
+
+def pivot_chart_final_trailer_middle() -> list[object]:
+    return [
+        "0",
+        "0",
+        "0.166666666666666666666666667",
+        "0",
+        "0.833333333333333333333333333",
+        "0.052777777777777777777777778",
+        "0",
+        "0",
+        "0.833333333333333333333333333",
+        "0",
+        "0",
+        "0.947222222222222222222222222",
+        "1",
+        "5",
+        "1",
+        "0",
+        "0",
+        "0.167330677290837",
+        "0",
+        "0.832669322709163",
+        "0.0535211267605633",
+        "0",
+        "0",
+        "0.832669322709163",
+        "0",
+        "0",
+        "0.946478873239436",
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "0"],
+        ["0", "14", ["4", "4", ["0"], "4"], ["4", "4", ["0"], "4"], "0", "0"],
+        ["0", "14", ["4", "4", ["0"], "4"], ["4", "4", ["0"], "4"], "0", "0"],
+        "0",
+        "0",
+        ["0", "0", "0", "0", "0"],
+        ["0", "0", "0", "0"],
+        "0",
+    ]
+
+
+def pivot_chart_final_trailer_tail() -> list[object]:
+    return [
+        "60",
+        pivot_chart_axis_layout_record(),
+        ["0", "0", ["0", "1", "0", "1", "0"], "0", "0"],
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        ["4", "4", ["0"], "4"],
+        ["4", "4", ["0"], "4"],
+        ["4", "4", ["0"], "4"],
+        ["4", "4", ["0"], "4"],
+        ["4", "4", ["0"], "4"],
+        ["4", "4", ["0"], "4"],
+        ["4", "4", ["0"], "4"],
+        ["4", "4", ["0"], "4"],
+    ]
 
 
 def ensure_list_size(record: list[object], size: int, fill: object) -> None:
@@ -1506,6 +1859,15 @@ def ensure_list_size(record: list[object], size: int, fill: object) -> None:
 
 def color_record_from_xml_value(value: str | None) -> list[object]:
     return ["4", "0", [value or "0"], "0"]
+
+
+def bool_attribute_record_from_xml(element: ET.Element, name: str, *, default: bool) -> str:
+    value = (element.get(name) or "").strip().lower()
+    if value in {"true", "1"}:
+        return "1"
+    if value in {"false", "0"}:
+        return "0"
+    return "1" if default else "0"
 
 
 def html_document_field_control_info() -> list[object]:

@@ -933,6 +933,7 @@ def add_pivot_chart_fields(parent: ET.Element, presentation: list[object]) -> No
         axis_offset=5,
         value_offset=10,
         color_offset=3,
+        enabled_offset=7,
     )
     added += add_pivot_chart_field_group(
         fields_node,
@@ -942,8 +943,9 @@ def add_pivot_chart_fields(parent: ET.Element, presentation: list[object]) -> No
         start_index=62,
         title_offset=0,
         axis_offset=5,
-        value_offset=1,
+        value_offset=2,
         color_offset=3,
+        enabled_offset=1,
     )
     if added == 0:
         parent.remove(fields_node)
@@ -960,6 +962,7 @@ def add_pivot_chart_field_group(
     axis_offset: int,
     value_offset: int,
     color_offset: int,
+    enabled_offset: int,
 ) -> int:
     if len(presentation) <= count_index:
         return 0
@@ -982,6 +985,7 @@ def add_pivot_chart_field_group(
         node.set("title", title)
         node.set("axis", clean_token(record[axis_offset]))
         node.set("value", clean_token(record[value_offset]))
+        node.set("enabled", bool_text_from_record(record[enabled_offset], default=True))
         color = color_value_from_record(record[color_offset])
         if color:
             node.set("color", color)
@@ -1020,6 +1024,15 @@ def color_value_from_record(value: object) -> str:
     if isinstance(value, list) and len(value) >= 3 and isinstance(value[2], list) and value[2]:
         return clean_token(value[2][0])
     return ""
+
+
+def bool_text_from_record(value: object, *, default: bool) -> str:
+    text = clean_token(value)
+    if text in {"0", "false"}:
+        return "false"
+    if text in {"1", "true"}:
+        return "true"
+    return "true" if default else "false"
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:
