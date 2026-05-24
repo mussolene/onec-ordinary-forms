@@ -903,7 +903,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(radio)
         info = radio[2]
         self.assertEqual(info[0], "4")
-        radio_info = info[2][0][0]
+        radio_info = info[2][0]
         self.assertEqual(radio_info[2][2], ['"ru"', '"Use rules"'])
         self.assertEqual(radio_info[0][12][2], ['"ru"', '"Use rules tooltip"'])
 

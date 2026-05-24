@@ -551,6 +551,8 @@ def control_stream_from_xml_with_page(
     else:
         metadata_scope = CONTROL_METADATA_SCOPE.get(control_type, CONTROL_METADATA_SCOPE["default"])
     metadata = ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
+    if control_type == "RadioButton":
+        metadata[5] = "1"
     children: list[object] = []
     for child in element:
         child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, None, None)
@@ -650,7 +652,8 @@ def control_info_from_xml(
     if control_type == "ChoiceField":
         return choice_field_control_info(element, actions)
     if control_type == "RadioButton":
-        return radio_button_control_info(element, title_record, actions)
+        data_path = data_path_from_xml(element)
+        return radio_button_control_info(element, title_record, actions, attribute_type_patterns.get(data_path, []))
     if control_type == "InputField":
         data_path = data_path_from_xml(element)
         return input_field_control_info(element, actions, attribute_type_patterns.get(data_path, []))
@@ -1089,29 +1092,36 @@ def radio_button_control_info(
     element: ET.Element,
     title_record: list[object],
     actions: list[object],
+    type_pattern: list[object] | None = None,
 ) -> list[object]:
+    pattern = type_pattern or [quoted_atom("B")]
     return [
         "4",
-        [quoted_atom("Pattern"), [quoted_atom("B")]],
+        [quoted_atom("Pattern"), pattern],
         [
-            [
-                checkbox_control_inner_info(element, title_record),
-                "1",
-            ],
+            checkbox_control_inner_info(element, title_record),
+            "4",
             "0",
-            [quoted_atom("B"), "1"],
-            ["1", *actions] if actions else ["0"],
+            "0",
+            "0",
+            "0",
         ],
+        "0",
+        [pattern[0], "0"] if pattern else [quoted_atom("B"), "0"],
+        ["1", *actions] if actions else ["0"],
     ]
 
 
 def checkbox_control_inner_info(element: ET.Element, title_record: list[object]) -> list[object]:
     return [
-        base_info_record_from_xml(element),
-        "4",
+        extended_base_info_record_from_xml(element),
+        "7",
         title_record,
         "1",
         "0",
+        "1",
+        "0",
+        "100",
         "1",
     ]
 
@@ -2045,7 +2055,7 @@ def geometry_stream_from_xml(
             "0",
             "0",
         ]
-    if control_type == "CheckBox" and data_slot:
+    if control_type in {"CheckBox", "RadioButton"} and data_slot:
         return [
             "8",
             left,
