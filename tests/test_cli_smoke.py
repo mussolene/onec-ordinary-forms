@@ -702,6 +702,32 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn('"DateOnChange"', form_text)
         self.assertIn("e1692cc2-605b-4535-84dd-28440238746c", form_text)
 
+    def test_build_bin_uses_input_field_info_kind_and_read_only_slot(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <InputField name="Number" id="159">
+                    <ReadOnly>true</ReadOnly>
+                    <ToolTip><Item lang="ru">Номер документа</Item></ToolTip>
+                  </InputField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        input_field = self._find_control(stream, "381ed624-9217-4e63-85db-c4c3cb87daae")
+
+        self.assertIsNotNone(input_field)
+        info = input_field[2]
+        self.assertEqual(info[0], "9")
+        input_info = info[2][0]
+        self.assertEqual(input_info[12], "1")
+        self.assertEqual(input_info[0][12][2], ['"ru"', '"Номер документа"'])
+
     def test_add_read_only_uses_input_field_info_slot(self) -> None:
         from onec_ordinary_forms.cli import add_read_only
 
@@ -710,6 +736,16 @@ class CliSmokeTest(unittest.TestCase):
         item_data = {"raw": ["381ed624-9217-4e63-85db-c4c3cb87daae", "159", ["9", [], [input_info]]]}
         add_read_only(node, {"type": "InputField"}, item_data)
         self.assertEqual(node.findtext("ReadOnly"), "true")
+
+    def _find_control(self, value: object, class_id: str) -> list[object] | None:
+        if isinstance(value, list):
+            if value and value[0] == class_id:
+                return value
+            for child in value:
+                found = self._find_control(child, class_id)
+                if found is not None:
+                    return found
+        return None
 
     def test_format_xml_file_pretty_prints_schema_like_xml(self) -> None:
         with TemporaryDirectory() as temp_dir:

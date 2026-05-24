@@ -456,6 +456,8 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
     if control_type == "Image":
         picture_payload = picture_payload_from_xml(element.find("Picture"), asset_root)
         return image_control_info(title_record, picture_payload)
+    if control_type == "InputField":
+        return input_field_control_info(element, actions)
     return label_control_info(element, title_record, actions)
 
 
@@ -575,6 +577,33 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
     ]
 
 
+def input_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    return [
+        "9",
+        [quoted_atom("Pattern"), [quoted_atom("S")]],
+        [input_field_info_record_from_xml(element)],
+        ["1", *actions] if actions else ["0"],
+    ]
+
+
+def input_field_info_record_from_xml(element: ET.Element) -> list[object]:
+    return [
+        base_info_record_from_xml(element),
+        "21",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+        bool_record_from_xml(element, "ReadOnly", default=False),
+    ]
+
+
 def button_control_info(title_record: list[object], actions: list[object]) -> list[object]:
     return [
         "1",
@@ -621,6 +650,17 @@ def button_base_info_record() -> list[object]:
     base = base_info_record_from_xml(None)
     base[5] = "1"
     return base
+
+
+def bool_record_from_xml(element: ET.Element | None, tag: str, *, default: bool) -> str:
+    if element is None:
+        return "1" if default else "0"
+    value = (element.findtext(tag) or "").strip().lower()
+    if value in {"true", "1"}:
+        return "1"
+    if value in {"false", "0"}:
+        return "0"
+    return "1" if default else "0"
 
 
 def action_table_from_xml(action: ET.Element | None) -> list[object]:
