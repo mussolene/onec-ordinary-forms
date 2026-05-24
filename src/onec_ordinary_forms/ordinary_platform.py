@@ -12,6 +12,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from struct import pack, unpack_from
 
+from onec_ordinary_forms.liststream import parse_list_stream
+from onec_ordinary_forms.value_codec import clean_atom, parse_composite_id
+
 
 CF_FORM_CONTROLS8_FORMAT_ID = 0x2500
 CF_FORM_CONTROLS_POSITION8_FORMAT_ID = 0x5500
@@ -32,6 +35,14 @@ class PlatformTransferRecord:
 
     def as_tuple(self) -> tuple[int, int, int, int]:
         return (self.word0, self.word1, self.word2, self.word3)
+
+
+@dataclass(frozen=True)
+class PlatformCompositeFlagRecord:
+    """One ListOut/ListIn ``CompositeID + bool`` registry entry."""
+
+    composite_id: str
+    enabled: bool
 
 
 ORDINARY_CONTROL_CLASS_BY_GUID = {
@@ -99,3 +110,45 @@ def pack_platform_transfer_records(records: list[PlatformTransferRecord]) -> byt
     for record in records:
         result.extend(pack("<IIII", *record.as_tuple()))
     return bytes(result)
+
+
+def platform_composite_flag_registry(records: list[PlatformCompositeFlagRecord], *, version: str = "0") -> list[object]:
+    """Build the list-stream registry shape written by ``FUN_145a11f0``.
+
+    The decompiled platform path writes a root list, an integer version slot,
+    the record count, then one nested list per record containing CompositeID
+    and bool. It is used by the designer's generic persistence/copy path; keep
+    it internal and map public XML through typed descriptors above it.
+    """
+
+    return [
+        version,
+        str(len(records)),
+        *[[record.composite_id, "1" if record.enabled else "0"] for record in records],
+    ]
+
+
+def parse_platform_composite_flag_registry(value: object) -> tuple[str, list[PlatformCompositeFlagRecord]]:
+    """Parse the ``CompositeID + bool`` registry shape read by ``FUN_145a1410``."""
+
+    if isinstance(value, str):
+        value = parse_list_stream(value)
+    if not isinstance(value, list) or len(value) < 2:
+        raise ValueError("Platform CompositeID registry must be a list with version and count")
+    version = clean_atom(value[0])
+    try:
+        count = int(clean_atom(value[1]))
+    except ValueError as exc:
+        raise ValueError(f"Invalid platform CompositeID registry count: {value[1]}") from exc
+    raw_records = value[2:]
+    if len(raw_records) != count:
+        raise ValueError(f"Platform CompositeID registry has {len(raw_records)} records, expected {count}")
+    records: list[PlatformCompositeFlagRecord] = []
+    for raw in raw_records:
+        if not isinstance(raw, list) or len(raw) != 2:
+            raise ValueError(f"Invalid platform CompositeID registry record: {raw!r}")
+        flag = clean_atom(raw[1])
+        if flag not in {"0", "1"}:
+            raise ValueError(f"Invalid platform CompositeID registry bool: {raw[1]}")
+        records.append(PlatformCompositeFlagRecord(parse_composite_id(raw[0]), flag == "1"))
+    return version, records

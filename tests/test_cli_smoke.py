@@ -27,8 +27,11 @@ from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
 from onec_ordinary_forms.ordinary_platform import (
     PLATFORM_TRANSFER_RECORD_SIZE,
+    PlatformCompositeFlagRecord,
     PlatformTransferRecord,
     pack_platform_transfer_records,
+    parse_platform_composite_flag_registry,
+    platform_composite_flag_registry,
     unpack_platform_transfer_records,
 )
 from onec_ordinary_forms.ordinary_properties import COMMAND_BAR_BUTTON_DESCRIPTOR, ORDINARY_CONTROL_DESCRIPTORS
@@ -120,6 +123,20 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(unpack_platform_transfer_records(payload), records)
         with self.assertRaises(ValueError):
             unpack_platform_transfer_records(payload + b"\x00")
+
+    def test_platform_composite_flag_registry_matches_list_stream_shape(self) -> None:
+        records = [
+            PlatformCompositeFlagRecord("1:48312c09-257f-4b29-b280-284dd89efc1e", True),
+            PlatformCompositeFlagRecord("2:e5cabe59-d992-4d31-8086-3116931aff81", False),
+        ]
+
+        registry = platform_composite_flag_registry(records)
+
+        self.assertEqual(registry, ["0", "2", ["1:48312c09-257f-4b29-b280-284dd89efc1e", "1"], ["2:e5cabe59-d992-4d31-8086-3116931aff81", "0"]])
+        self.assertEqual(parse_platform_composite_flag_registry(registry), ("0", records))
+        self.assertEqual(parse_platform_composite_flag_registry(dumps_list_out_stream(registry)), ("0", records))
+        with self.assertRaises(ValueError):
+            parse_platform_composite_flag_registry(["0", "2", [records[0].composite_id, "1"]])
 
     def test_ordinary_model_keeps_control_tables_together(self) -> None:
         form = [
