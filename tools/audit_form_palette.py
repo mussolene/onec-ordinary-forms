@@ -158,15 +158,19 @@ def audit(args: argparse.Namespace) -> dict[str, object]:
     palette_controls = set(palette)
     platform_properties = platform_member_names(palette, "properties")
     platform_events = platform_member_names(palette, "events")
+    public_vocabulary = ET.parse(Path(args.xsd)).getroot().find(".//PlatformPalette")
+    public_vocabulary_name = public_vocabulary.get("publicVocabulary", "") if public_vocabulary is not None else ""
     report: dict[str, object] = {
         "xsd_controls": sorted(xsd_control_set),
         "palette_controls": sorted(palette_controls),
         "missing_controls_in_xsd": sorted(palette_controls - xsd_control_set),
         "extra_controls_in_xsd": sorted(xsd_control_set - palette_controls),
+        "public_vocabulary": public_vocabulary_name,
         "xsd_control_property_count": len(xsd_property_set),
         "platform_property_name_count": len(platform_properties),
         "platform_event_name_count": len(platform_events),
-        "platform_properties_not_named_in_xsd": sorted(platform_properties - xsd_property_set),
+        "platform_palette_embedded_in_xsd": bool(palette_controls and platform_properties),
+        "public_xml_property_names": sorted(xsd_property_set),
         "platform_events": sorted(platform_events),
     }
     if args.help_db:
