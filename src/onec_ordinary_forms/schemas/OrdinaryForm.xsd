@@ -1520,14 +1520,44 @@
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
-          <xs:element name="SourceData" type="OpenElementType"/>
-          <xs:element name="Fields" type="OpenElementType"/>
+          <xs:element name="SourceData" type="PivotChartSourceDataType"/>
+          <xs:element name="Fields" type="PivotChartFieldsType"/>
           <xs:element name="PivotChartKind" type="xs:string"/>
           <xs:element name="Events" type="PivotChartEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
     </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="PivotChartFieldType">
+    <xs:attribute name="role" use="required">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="dimension"/>
+          <xs:enumeration value="measure"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="order" type="xs:nonNegativeInteger" use="required"/>
+    <xs:attribute name="title" type="xs:string" use="required"/>
+    <xs:attribute name="axis" type="xs:string"/>
+    <xs:attribute name="value" type="xs:string"/>
+    <xs:attribute name="color" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="PivotChartFieldsType">
+    <xs:sequence>
+      <xs:element name="Field" type="PivotChartFieldType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="PivotChartSourcePointType" mixed="true">
+    <xs:attribute name="valueType" type="xs:string"/>
+    <xs:attribute name="value" type="xs:string"/>
+    <xs:attribute name="unit" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="PivotChartSourceDataType">
+    <xs:sequence>
+      <xs:element name="Point" type="PivotChartSourcePointType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
   </xs:complexType>
   <xs:complexType name="GeographicalSchemaFieldType">
     <xs:complexContent>

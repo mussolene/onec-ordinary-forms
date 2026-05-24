@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
 from onec_ordinary_forms.cli import (
+    add_pivot_chart_properties,
     format_xml_file,
     pretty_xml_bytes,
     schema_path,
@@ -137,6 +138,33 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(parse_platform_composite_flag_registry(dumps_list_out_stream(registry)), ("0", records))
         with self.assertRaises(ValueError):
             parse_platform_composite_flag_registry(["0", "2", [records[0].composite_id, "1"]])
+
+    def test_pivot_chart_dump_uses_typed_field_and_source_wrappers(self) -> None:
+        presentation = ["75", "1", "4", "1", "4", ["4", "0", ["10053120"], "0"], ["4", "0", ["0"], "1", "2", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"], "3", ["1", "1", ['"ru"', '"Dimension"']], "1", "0", "0", "2"]
+        presentation.extend(["0"] * (206 - len(presentation)))
+        presentation.extend([['"N"', "2"], ['"U"'], '"A\r\nB\r\n2"'])
+        item_data = {
+            "raw": [
+                "a26da99e-184a-4823-b0d6-62816d38dc4e",
+                "70",
+                ["3", ["0", ["11"], presentation]],
+            ],
+        }
+        node = ET.Element("PivotChart")
+
+        add_pivot_chart_properties(node, {"type": "PivotChart"}, item_data)
+
+        self.assertEqual(node.findtext("PivotChartKind"), "4")
+        field = node.find("Fields/Field")
+        self.assertIsNotNone(field)
+        self.assertEqual(field.get("role"), "dimension")
+        self.assertEqual(field.get("title"), "Dimension")
+        self.assertEqual(field.get("color"), "10053120")
+        point = node.find("SourceData/Point")
+        self.assertIsNotNone(point)
+        self.assertEqual(point.get("valueType"), "N")
+        self.assertEqual(point.get("value"), "2")
+        self.assertEqual(point.text, "A\r\nB\r\n2")
 
     def test_ordinary_model_keeps_control_tables_together(self) -> None:
         form = [

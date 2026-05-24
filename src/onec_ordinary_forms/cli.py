@@ -898,6 +898,8 @@ def add_pivot_chart_properties(parent: ET.Element, item: dict, item_data: object
     kind = clean_token(presentation[4])
     if kind:
         set_text(parent, "PivotChartKind", kind)
+    add_pivot_chart_fields(parent, presentation)
+    add_pivot_chart_source_data(parent, presentation)
 
 
 def pivot_chart_presentation_record(item_data: object) -> list[object] | None:
@@ -916,6 +918,108 @@ def pivot_chart_presentation_record(item_data: object) -> list[object] | None:
     if presentation and str(presentation[0]) == "75":
         return presentation
     return None
+
+
+def add_pivot_chart_fields(parent: ET.Element, presentation: list[object]) -> None:
+    fields_node = ET.SubElement(parent, "Fields")
+    added = 0
+    added += add_pivot_chart_field_group(
+        fields_node,
+        presentation,
+        role="dimension",
+        count_index=1,
+        start_index=2,
+        title_offset=6,
+        axis_offset=5,
+        value_offset=10,
+        color_offset=3,
+    )
+    added += add_pivot_chart_field_group(
+        fields_node,
+        presentation,
+        role="measure",
+        count_index=61,
+        start_index=62,
+        title_offset=0,
+        axis_offset=5,
+        value_offset=1,
+        color_offset=3,
+    )
+    if added == 0:
+        parent.remove(fields_node)
+
+
+def add_pivot_chart_field_group(
+    parent: ET.Element,
+    presentation: list[object],
+    *,
+    role: str,
+    count_index: int,
+    start_index: int,
+    title_offset: int,
+    axis_offset: int,
+    value_offset: int,
+    color_offset: int,
+) -> int:
+    if len(presentation) <= count_index:
+        return 0
+    try:
+        count = int(clean_token(presentation[count_index]))
+    except ValueError:
+        return 0
+    added = 0
+    for order in range(count):
+        offset = start_index + order * 11
+        record = presentation[offset : offset + 11]
+        if len(record) < 11:
+            break
+        title = localized_text_from_record(record[title_offset])
+        if not title:
+            continue
+        node = ET.SubElement(parent, "Field")
+        node.set("role", role)
+        node.set("order", str(order))
+        node.set("title", title)
+        node.set("axis", clean_token(record[axis_offset]))
+        node.set("value", clean_token(record[value_offset]))
+        color = color_value_from_record(record[color_offset])
+        if color:
+            node.set("color", color)
+        added += 1
+    return added
+
+
+def add_pivot_chart_source_data(parent: ET.Element, presentation: list[object]) -> None:
+    source_node = ET.SubElement(parent, "SourceData")
+    added = 0
+    for index in range(len(presentation) - 2):
+        value = presentation[index]
+        unit = presentation[index + 1]
+        label = presentation[index + 2]
+        label_text = clean_token(label)
+        if not (
+            isinstance(value, list)
+            and len(value) >= 2
+            and isinstance(unit, list)
+            and len(unit) == 1
+            and isinstance(label, str)
+            and "\n" in label_text
+        ):
+            continue
+        point = ET.SubElement(source_node, "Point")
+        point.set("valueType", clean_token(value[0]))
+        point.set("value", clean_token(value[1]))
+        point.set("unit", clean_token(unit[0]))
+        point.text = label_text
+        added += 1
+    if added == 0:
+        parent.remove(source_node)
+
+
+def color_value_from_record(value: object) -> str:
+    if isinstance(value, list) and len(value) >= 3 and isinstance(value[2], list) and value[2]:
+        return clean_token(value[2][0])
+    return ""
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:

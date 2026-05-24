@@ -1362,7 +1362,7 @@ def diagram_presentation_record(element: ET.Element, title_record: list[object],
     kind_code = (element.findtext("PivotChartKind") or "").strip() if kind == "pivot" else ""
     if not kind_code:
         kind_code = {"pivot": "4", "gantt": "1", "dendrogram": "1"}.get(kind, "1")
-    return [
+    record = [
         "75",
         "1",
         "0",
@@ -1423,6 +1423,89 @@ def diagram_presentation_record(element: ET.Element, title_record: list[object],
         ["1", "0"],
         "0",
     ]
+    if kind == "pivot":
+        apply_pivot_chart_fields(record, element, kind_code)
+        apply_pivot_chart_source_data(record, element)
+    return record
+
+
+def apply_pivot_chart_fields(record: list[object], element: ET.Element, kind_code: str) -> None:
+    fields = sorted(
+        element.findall("Fields/Field"),
+        key=lambda node: (node.get("role", ""), int(node.get("order", "0") or "0")),
+    )
+    dimension_fields = [field for field in fields if field.get("role") == "dimension"]
+    measure_fields = [field for field in fields if field.get("role") == "measure"]
+    if dimension_fields:
+        record[1] = str(len(dimension_fields))
+        write_pivot_chart_field_records(record, dimension_fields, start_index=2, kind_code=kind_code, dimension=True)
+    if measure_fields:
+        ensure_list_size(record, 62, "0")
+        record[60] = "1"
+        record[61] = str(len(measure_fields))
+        write_pivot_chart_field_records(record, measure_fields, start_index=62, kind_code=kind_code, dimension=False)
+
+
+def write_pivot_chart_field_records(
+    record: list[object],
+    fields: list[ET.Element],
+    *,
+    start_index: int,
+    kind_code: str,
+    dimension: bool,
+) -> None:
+    ensure_list_size(record, start_index + len(fields) * 11, "0")
+    for order, field in enumerate(fields):
+        offset = start_index + order * 11
+        if dimension:
+            prefix: list[object] = ["4", "1", kind_code] if order == 0 else [[quoted_atom("U")], [quoted_atom("U")], "0"]
+            values = [
+                *prefix,
+                color_record_from_xml_value(field.get("color", "")),
+                ["4", "0", ["0"], "1", "2", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
+                field.get("axis", "0") or "0",
+                localized_text_record(field.get("title", "")),
+                "1",
+                "0",
+                "0",
+                field.get("value", "0") or "0",
+            ]
+        else:
+            values = [
+                localized_text_record(field.get("title", "")),
+                field.get("value", "0") or "0",
+                "1",
+                color_record_from_xml_value(field.get("color", "")),
+                ["4", "0", ["0"], "1", "2", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
+                field.get("axis", "0") or "0",
+                "0",
+                "0",
+                [quoted_atom("U")],
+                [quoted_atom("U")],
+                "0",
+            ]
+        record[offset : offset + 11] = values
+
+
+def apply_pivot_chart_source_data(record: list[object], element: ET.Element) -> None:
+    points = element.findall("SourceData/Point")
+    if not points:
+        return
+    ensure_list_size(record, 206, "0")
+    del record[206:]
+    for point in points:
+        record.append([quoted_atom(point.get("valueType", "N") or "N"), point.get("value", "0") or "0"])
+        record.append([quoted_atom(point.get("unit", "U") or "U")])
+        record.append(quoted_atom(point.text or ""))
+
+
+def ensure_list_size(record: list[object], size: int, fill: object) -> None:
+    while len(record) < size:
+        record.append(copy.deepcopy(fill))
+
+
+def color_record_from_xml_value(value: str | None) -> list[object]:
+    return ["4", "0", [value or "0"], "0"]
 
 
 def html_document_field_control_info() -> list[object]:
