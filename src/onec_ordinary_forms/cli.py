@@ -24,21 +24,24 @@ from onec_ordinary_forms.liststream import parse_list_stream_document
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
 from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
+from onec_ordinary_forms.value_codec import (
+    TYPE_CODE_NAMES,
+    clean_atom,
+    localized_text_from_record as decode_localized_text_record,
+    parse_type_domain_pattern,
+)
 
 
 SCHEMA_VERSION = "0.1"
 XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
 ORDINARY_FORM_SCHEMA = "ordinary-form.xsd"
+METADATA_CONFIGURATION_SCHEMA = "metadata-configuration.xsd"
+KNOWN_SCHEMAS = (ORDINARY_FORM_SCHEMA, METADATA_CONFIGURATION_SCHEMA)
 
 ET.register_namespace("xsi", XSI_NS)
 
 
-TYPE_CODE_MAP = {
-    "S": "xs:string",
-    "N": "xs:decimal",
-    "B": "xs:boolean",
-    "D": "xs:dateTime",
-}
+TYPE_CODE_MAP = {key: value for key, value in TYPE_CODE_NAMES.items() if key != "U"}
 
 ANCHOR_KIND_MAP = {
     "0": "none",
@@ -111,10 +114,7 @@ def raw_to_text(value: object) -> str:
 
 
 def clean_token(value: object) -> str:
-    text = str(value)
-    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
-        return text[1:-1].replace('""', '"').replace('\\"', '"')
-    return text
+    return clean_atom(value)
 
 
 def scalar_kind(value: object) -> str:
@@ -176,33 +176,15 @@ def metadata_object_type_map(metadata: dict | None) -> dict[str, str]:
 
 
 def decoded_pattern_types(pattern: list | None, object_types: dict[str, str]) -> list[dict[str, str]]:
-    if pattern is None or len(pattern) == 0:
-        return []
-    result: list[dict[str, str]] = []
-    index = 0
-    while index < len(pattern):
-        code = clean_token(pattern[index])
-        if code == "#":
-            uuid = clean_token(pattern[index + 1]) if index + 1 < len(pattern) else ""
-            result.append(
-                {
-                    "code": code,
-                    "name": object_types.get(uuid, f"cfg:uuid.{uuid}" if uuid else "cfg:unknown"),
-                    "uuid": uuid,
-                    "kind": "reference",
-                }
-            )
-            index += 2
-            continue
-        result.append(
-            {
-                "code": code,
-                "name": TYPE_CODE_MAP.get(code, f"unknown:{code}"),
-                "kind": "primitive" if code in TYPE_CODE_MAP else "unknown",
-            }
-        )
-        index += 1
-    return result
+    return [
+        {
+            "code": item.code,
+            "name": item.type_name,
+            "kind": item.kind,
+            **({"uuid": item.uuid} if item.uuid else {}),
+        }
+        for item in parse_type_domain_pattern(pattern, object_types)
+    ]
 
 
 def add_type(parent: ET.Element, pattern: list | None, object_types: dict[str, str]) -> None:
@@ -282,17 +264,7 @@ def page_title(page_data: dict | None) -> str:
 
 
 def localized_text_from_record(value: object) -> str:
-    if (
-        isinstance(value, list)
-        and len(value) >= 3
-        and clean_token(value[0]) == "1"
-        and clean_token(value[1]) == "1"
-        and isinstance(value[2], list)
-        and len(value[2]) >= 2
-        and clean_token(value[2][0]) == "ru"
-    ):
-        return clean_token(value[2][1])
-    return ""
+    return decode_localized_text_record(value)
 
 
 def item_title(item_data: dict | None, control_type: str) -> str:
@@ -1270,8 +1242,10 @@ def normalize_xml_text_for_hash(value: str) -> str:
     return value.replace("\r\r\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def schema_path() -> Path:
-    return Path(str(importlib.resources.files("onec_ordinary_forms") / "schemas" / ORDINARY_FORM_SCHEMA))
+def schema_path(name: str = ORDINARY_FORM_SCHEMA) -> Path:
+    if name not in KNOWN_SCHEMAS:
+        raise ValueError(f"Unknown bundled schema: {name}")
+    return Path(str(importlib.resources.files("onec_ordinary_forms") / "schemas" / name))
 
 
 def validate_xml_file(xml_path: Path, xsd_path: Path | None = None) -> None:
@@ -1288,6 +1262,11 @@ def validate_xml_file(xml_path: Path, xsd_path: Path | None = None) -> None:
 def validate_xml(args: argparse.Namespace) -> None:
     validate_xml_file(Path(args.xml), Path(args.schema) if args.schema else None)
     print("OK")
+
+
+def list_schemas(args: argparse.Namespace) -> None:
+    for name in KNOWN_SCHEMAS:
+        print(schema_path(name))
 
 
 def format_xml_file(path: Path) -> None:
@@ -1411,6 +1390,9 @@ def main() -> None:
     validate_parser.add_argument("--xml", required=True, help="Form.xml to validate")
     validate_parser.add_argument("--schema", help="Override ordinary-form XSD path")
     validate_parser.set_defaults(func=validate_xml)
+
+    schemas_parser = subparsers.add_parser("schemas")
+    schemas_parser.set_defaults(func=list_schemas)
 
     format_parser = subparsers.add_parser("format-xml")
     format_parser.add_argument("--xml", required=True, help="XML or XSD file to rewrite with stable pretty formatting")

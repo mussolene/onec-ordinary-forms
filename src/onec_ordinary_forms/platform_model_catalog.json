@@ -1,0 +1,7413 @@
+{
+  "source": "1C 8.2 platform binaries/resources",
+  "schemaResources": [
+    {
+      "source": "dcscore_root.res",
+      "schema": "dcscore_root-01-http_v8.1c.ru_8.1_data-composition-system_core.xsd",
+      "sha256": "eb2664d34c6b0c98b978f1df699500d1a002ab5dbb7201a90fd267b79308f67e"
+    },
+    {
+      "source": "dcscore_root.res",
+      "schema": "dcscore_root-02-http_v8.1c.ru_8.1_data-composition-system_details.xsd",
+      "sha256": "7343c7869403a7d9f7dcda2ed5618be4168a6d47cbd11a39d66b74846fd5faac"
+    },
+    {
+      "source": "dcscore_root.res",
+      "schema": "dcscore_root-03-http_v8.1c.ru_8.1_data-composition-system_settings.xsd",
+      "sha256": "d553a7e752daa941c995c0055925f78f8c1ac93e3ef515cf6e8e0a3814cf1fe5"
+    },
+    {
+      "source": "map_root.res",
+      "schema": "map_root-01-http_v8.1c.ru_8.2_data_geo.xsd",
+      "sha256": "38cc8ce5172aec1dbce4020f9343c35dabb07a166e620d50062b5fcebae23851"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-01-http_v8.1c.ru_8.2_managed-application_cmi.xsd",
+      "sha256": "aa00648d52132ad1796c1903ccf170d4125653d79c3c2b75c43b167ce6a9cd7f"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-02-http_v8.1c.ru_8.2_managed-application_dynamic-list.xsd",
+      "sha256": "5e8cc1137031459cb256637482996e3699c2240ee81c59d55fdfe59bcb845bff"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-03-http_v8.1c.ru_8.2_managed-application_logform.xsd",
+      "sha256": "a05688341945223c0bbb0e0820d25bd61b99fde284a2263fd0dc31c311f26a5f"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-04-http_v8.1c.ru_8.2_managed-application_logform_layouter.xsd",
+      "sha256": "6e650f1bf24dbf2b0e0fb231a74aebca31d382ab06c7acf826bc504a129ee79e"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-05-http_v8.1c.ru_8.2_managed-application_core.xsd",
+      "sha256": "c9d73033e3dd3c12c5f1b96a87e8294463b00a9cf242866573f994de21073bf1"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-06-http_v8.1c.ru_8.2_mngsrv_ws.xsd",
+      "sha256": "5653d4be99e7f6d66bed9b7a36eeb6eaf5805a996192829103b436bed37009ef"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-07-http_v8.1c.ru_8.2_uobjects.xsd",
+      "sha256": "d42bb4c6518628397a893b2167e818145567af07dfaa801b1548f8b314dc1c8f"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-08-http_v8.1c.ru_8.2_managed-application_user-settings.xsd",
+      "sha256": "63c1717ad3ba560b2cbebd4f3a3b8452cb67bff70a92b3d6a9bd0ef4b2929f95"
+    },
+    {
+      "source": "scheme_root.res",
+      "schema": "scheme_root-01-http_v8.1c.ru_8.2_data_graphscheme.xsd",
+      "sha256": "ad03a2bce9a91c35251ee521c44b18a085a594750a6ce38373b3d979486ebb93"
+    },
+    {
+      "source": "txtedt_root.res",
+      "schema": "txtedt_root-01-http_v8.1c.ru_8.1_data_txtedt.xsd",
+      "sha256": "8a6a34b019ec1bd0ba912220625037a4542306b6a8eca1519f10e90ef37511ca"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-01-http_v8.1c.ru_8.2_managed-application_edbexception.xsd",
+      "sha256": "0de65ecf293957129acc362588268f406509d2abc75ef6a9d75022636ff47dc9"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-02-http_v8.1c.ru_8.2_managed-application_logformexception.xsd",
+      "sha256": "f3483655b47ec2dc4f4ed5b40711c4c30fbbd5fe3e31bea6d6ce6a5d50afb865"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-03-http_v8.1c.ru_8.2_managed-application_logformexception.xsd",
+      "sha256": "e85a2e2218e210818999aea78e9d90b583c2ef25ac96707068e5a207c2641078"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-04-http_v8.1c.ru_8.2_managed-application_logformexception.xsd",
+      "sha256": "261f16858fe25aaef3ee41a265ce3baa51910457717da0ed8d728fcf3367e137"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-05-http_v8.1c.ru_8.2_managed-application_logformexception.xsd",
+      "sha256": "bcb3f8596571ba1b39ac87d4100c82522fb61b8f989be2bd0700fee2ae67b02d"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-06-http_v8.1c.ru_8.2_managed-application_seancecontextexception.xsd",
+      "sha256": "642a5ba64528a07c792eebb43fccb8d5c13b5184e941f6a015f492a7915d0761"
+    },
+    {
+      "source": "xdto_root.res",
+      "schema": "xdto_root-03-http_v8.1c.ru_8.1_data_core.xsd",
+      "sha256": "c87a1a3c8dd52eebcfd03313d0f61f05cf8fcfc18b28853b35050412a9448bd9"
+    },
+    {
+      "source": "xdto_root.res",
+      "schema": "xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd",
+      "sha256": "c61c91cbba9b42daaf5d31ff433b690889706f76d347efb2b079b0282fb81a73"
+    }
+  ],
+  "serializers": [
+    {
+      "name": "ListInStream",
+      "direction": "read",
+      "role": "platform bracket/list-stream reader"
+    },
+    {
+      "name": "ListOutStream",
+      "direction": "write",
+      "role": "platform bracket/list-stream writer"
+    },
+    {
+      "name": "CompositeID::deserialize",
+      "direction": "read",
+      "role": "platform metadata object id reader"
+    },
+    {
+      "name": "CompositeID::serialize",
+      "direction": "write",
+      "role": "platform metadata object id writer"
+    },
+    {
+      "name": "TypeDomainPattern::deserialize",
+      "direction": "read",
+      "role": "platform type-domain reader"
+    },
+    {
+      "name": "TypeDomainPattern::serialize",
+      "direction": "write",
+      "role": "platform type-domain writer"
+    },
+    {
+      "name": "ValueFromStringInternal",
+      "direction": "read",
+      "role": "typed scalar value reader"
+    },
+    {
+      "name": "ValueToStringInternal",
+      "direction": "write",
+      "role": "typed scalar value writer"
+    }
+  ],
+  "metadataObjectKinds": [
+    {
+      "name": "Configuration",
+      "tokens": [
+        "Configuration"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "1cv8_bg.hbk",
+        "1cv8_de.hbk",
+        "1cv8_ka.hbk",
+        "1cv8_kk.hbk",
+        "1cv8_lt.hbk",
+        "1cv8_lv.hbk",
+        "1cv8_pl.hbk",
+        "1cv8_ro.hbk",
+        "1cv8_root.hbk",
+        "1cv8_root.res",
+        "1cv8_ru.hbk",
+        "1cv8_tr.hbk",
+        "1cv8_uk.hbk",
+        "1cv8_vi.hbk",
+        "1cv8c.exe"
+      ],
+      "sourceCount": 109
+    },
+    {
+      "name": "Common",
+      "tokens": [
+        "Общие"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "accntui_ru.res",
+        "backbas.dll",
+        "backend.dll",
+        "backend_bg.res",
+        "backend_pl.res",
+        "backend_ru.res",
+        "basic.dll",
+        "basic_ru.res",
+        "basicui.dll",
+        "basicui_ru.res",
+        "bp.dll",
+        "bpui.dll",
+        "bpui_ru.res"
+      ],
+      "sourceCount": 60
+    },
+    {
+      "name": "Constant",
+      "tokens": [
+        "Константы"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basic_bg.res",
+        "basic_lt.res",
+        "basic_ru.res",
+        "basic_vi.res",
+        "basicui.dll",
+        "basicui_ru.res",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll"
+      ],
+      "sourceCount": 27
+    },
+    {
+      "name": "Catalog",
+      "tokens": [
+        "Справочники",
+        "CatalogRef",
+        "Справочник"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "accntui_bg.res",
+        "accntui_ru.res",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basic_bg.res",
+        "basic_ru.res",
+        "basicui.dll",
+        "basicui_bg.res",
+        "basicui_ru.res",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll"
+      ],
+      "sourceCount": 27
+    },
+    {
+      "name": "Document",
+      "tokens": [
+        "Документы",
+        "DocumentRef",
+        "Документ"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "backend_bg.res",
+        "backend_ru.res",
+        "backend_uk.res",
+        "basic.dll",
+        "basic_bg.res",
+        "basic_ru.res",
+        "basic_uk.res",
+        "basicui.dll",
+        "basicui_bg.res",
+        "basicui_ru.res",
+        "basicui_uk.res"
+      ],
+      "sourceCount": 107
+    },
+    {
+      "name": "DocumentJournal",
+      "tokens": [
+        "Журналы документов"
+      ],
+      "sources": [
+        "basic_ru.res",
+        "basicui_ru.res",
+        "mngbase_ru.res"
+      ],
+      "sourceCount": 3
+    },
+    {
+      "name": "Enumeration",
+      "tokens": [
+        "Перечисления",
+        "EnumRef"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basic_ru.res",
+        "basicui.dll",
+        "basicui_ru.res",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "edbui.dll"
+      ],
+      "sourceCount": 25
+    },
+    {
+      "name": "Report",
+      "tokens": [
+        "Отчеты"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "backend_ru.res",
+        "basic.dll",
+        "basic_ru.res",
+        "basicui.dll",
+        "basicui_ru.res",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll"
+      ],
+      "sourceCount": 29
+    },
+    {
+      "name": "DataProcessor",
+      "tokens": [
+        "Обработки"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basic_bg.res",
+        "basic_ru.res",
+        "basicui.dll",
+        "basicui_ru.res",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll"
+      ],
+      "sourceCount": 34
+    },
+    {
+      "name": "ChartOfCharacteristicTypes",
+      "tokens": [
+        "Планы видов характеристик",
+        "ChartOfCharacteristicTypes"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basic_ru.res",
+        "basicui.dll",
+        "basicui_ru.res",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "edbui.dll"
+      ],
+      "sourceCount": 37
+    },
+    {
+      "name": "ChartOfAccounts",
+      "tokens": [
+        "Планы счетов"
+      ],
+      "sources": [
+        "accnt_ru.res",
+        "accntui_ru.res",
+        "mngbase_ru.res"
+      ],
+      "sourceCount": 3
+    },
+    {
+      "name": "ChartOfCalculationTypes",
+      "tokens": [
+        "Планы видов расчета"
+      ],
+      "sources": [
+        "calc_ru.res",
+        "mngbase_ru.res"
+      ],
+      "sourceCount": 2
+    },
+    {
+      "name": "InformationRegister",
+      "tokens": [
+        "Регистры сведений"
+      ],
+      "sources": [
+        "basic_ru.res",
+        "basicui_ru.res",
+        "mngbase_ru.res"
+      ],
+      "sourceCount": 3
+    },
+    {
+      "name": "AccumulationRegister",
+      "tokens": [
+        "Регистры накопления"
+      ],
+      "sources": [
+        "basic_ru.res",
+        "basicui_ru.res",
+        "mngbase_ru.res"
+      ],
+      "sourceCount": 3
+    },
+    {
+      "name": "AccountingRegister",
+      "tokens": [
+        "Регистры бухгалтерии"
+      ],
+      "sources": [
+        "accnt_ru.res",
+        "mngbase_ru.res"
+      ],
+      "sourceCount": 2
+    },
+    {
+      "name": "CalculationRegister",
+      "tokens": [
+        "Регистры расчета"
+      ],
+      "sources": [
+        "calc_ru.res",
+        "mngbase_ru.res"
+      ],
+      "sourceCount": 2
+    },
+    {
+      "name": "BusinessProcess",
+      "tokens": [
+        "Бизнес-процессы"
+      ],
+      "sources": [
+        "bp_ru.res",
+        "bpui_ru.res",
+        "scheme_ru.res",
+        "schemui_ru.res"
+      ],
+      "sourceCount": 4
+    },
+    {
+      "name": "Task",
+      "tokens": [
+        "Задачи"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "backbas.dll",
+        "backend.dll",
+        "bp.dll",
+        "bp_bg.res",
+        "bp_ru.res",
+        "bpui.dll",
+        "bpui_bg.res",
+        "bpui_ru.res",
+        "enums.dll",
+        "frntend.dll",
+        "mngbase.dll",
+        "mngbase_bg.res",
+        "mngbase_ru.res",
+        "mngdsgn.dll",
+        "mngsrv.dll"
+      ],
+      "sourceCount": 23
+    },
+    {
+      "name": "ExternalDataSource",
+      "tokens": [
+        "Внешние источники данных",
+        "ExternalDataSource",
+        "ВнешнийИсточникДанных"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "1cv8c.exe",
+        "accnt.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "calc.dll",
+        "devtool.dll",
+        "edb.dll",
+        "edb_root.res",
+        "edb_ru.res",
+        "edb_tr.res",
+        "edbui.dll",
+        "frntend.dll"
+      ],
+      "sourceCount": 40
+    },
+    {
+      "name": "ExternalDataProcessorObject",
+      "tokens": [
+        "ExternalDataProcessorObject"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "edbui.dll",
+        "frntend.dll",
+        "mngbase.dll"
+      ],
+      "sourceCount": 33
+    },
+    {
+      "name": "ExchangePlan",
+      "tokens": [
+        "Планы обмена"
+      ],
+      "sources": [
+        "backend_ru.res",
+        "frntend_ru.res",
+        "mngbase_ru.res"
+      ],
+      "sourceCount": 3
+    },
+    {
+      "name": "FilterCriterion",
+      "tokens": [
+        "Критерии отбора"
+      ],
+      "sources": [
+        "backend_ru.res"
+      ],
+      "sourceCount": 1
+    },
+    {
+      "name": "CommonModule",
+      "tokens": [
+        "Общие модули"
+      ],
+      "sources": [
+        "backend_ru.res"
+      ],
+      "sourceCount": 1
+    },
+    {
+      "name": "CommonForm",
+      "tokens": [
+        "Общие формы"
+      ],
+      "sources": [
+        "basic_ru.res"
+      ],
+      "sourceCount": 1
+    }
+  ],
+  "typeTreeKinds": [
+    {
+      "name": "Number",
+      "tokens": [
+        "Число"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accnt_ru.res",
+        "accnt_uk.res",
+        "accntui.dll",
+        "backbas.dll",
+        "backbas_bg.res",
+        "backbas_ru.res",
+        "backbas_uk.res",
+        "backend.dll",
+        "backend_bg.res",
+        "backend_ru.res",
+        "backend_uk.res",
+        "basic.dll",
+        "basic_bg.res",
+        "basic_ru.res"
+      ],
+      "sourceCount": 106
+    },
+    {
+      "name": "String",
+      "tokens": [
+        "Строка"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "addin.dll",
+        "backbas.dll",
+        "backbas_ru.res",
+        "backbas_uk.res",
+        "backend.dll",
+        "backend_ru.res",
+        "basic.dll",
+        "basic_ru.res",
+        "basicui.dll",
+        "basicui_ru.res",
+        "bp.dll",
+        "bp_ru.res",
+        "bpui.dll"
+      ],
+      "sourceCount": 133
+    },
+    {
+      "name": "Date",
+      "tokens": [
+        "Дата"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backbas_bg.res",
+        "backbas_ru.res",
+        "backbas_uk.res",
+        "backend.dll",
+        "backend_bg.res",
+        "backend_ru.res",
+        "backend_uk.res",
+        "basic.dll",
+        "basic_bg.res",
+        "basic_ru.res",
+        "basic_uk.res",
+        "basicui.dll"
+      ],
+      "sourceCount": 144
+    },
+    {
+      "name": "Boolean",
+      "tokens": [
+        "Булево"
+      ],
+      "sources": [
+        "backend.dll",
+        "bsl.dll",
+        "bsl_bg.res",
+        "bsl_root.res",
+        "bsl_ru.res",
+        "bsl_uk.res",
+        "core82.dll",
+        "core82_bg.res",
+        "core82_kk.res",
+        "core82_ru.res",
+        "core82_uk.res",
+        "dcs.dll",
+        "dcs_root.res",
+        "dcscore_root.res",
+        "dcsui.dll",
+        "enums.dll"
+      ],
+      "sourceCount": 33
+    },
+    {
+      "name": "ValueList",
+      "tokens": [
+        "СписокЗначений"
+      ],
+      "sources": [
+        "accnt.dll",
+        "backend.dll",
+        "basic.dll",
+        "core82.dll",
+        "dcs.dll",
+        "dcscore.dll",
+        "dcsui.dll",
+        "dcsui_ru.res",
+        "edb.dll",
+        "frntend.dll",
+        "frntend_bg.res",
+        "frntend_ka.res",
+        "frntend_kk.res",
+        "frntend_lt.res",
+        "frntend_lv.res",
+        "frntend_pl.res"
+      ],
+      "sourceCount": 23
+    },
+    {
+      "name": "CatalogRef",
+      "tokens": [
+        "СправочникСсылка",
+        "CatalogRef"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "edbui.dll",
+        "frntend.dll",
+        "mngbase.dll"
+      ],
+      "sourceCount": 20
+    },
+    {
+      "name": "DocumentRef",
+      "tokens": [
+        "ДокументСсылка",
+        "DocumentRef"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "edbui.dll",
+        "frntend.dll",
+        "mngbase.dll"
+      ],
+      "sourceCount": 20
+    },
+    {
+      "name": "EnumerationRef",
+      "tokens": [
+        "ПеречислениеСсылка",
+        "EnumRef"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "edbui.dll",
+        "frntend.dll",
+        "mngbase.dll"
+      ],
+      "sourceCount": 21
+    },
+    {
+      "name": "ChartOfCharacteristicTypesRef",
+      "tokens": [
+        "ПланВидовХарактеристикСсылка"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "edbui.dll",
+        "frntend.dll",
+        "mngbase.dll"
+      ],
+      "sourceCount": 20
+    },
+    {
+      "name": "ChartOfAccountsRef",
+      "tokens": [
+        "ПланСчетовСсылка"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "config.dll",
+        "frntend.dll",
+        "mngbase.dll",
+        "mngdsgn.dll",
+        "mngsrv.dll",
+        "vrsbase.dll"
+      ],
+      "sourceCount": 11
+    },
+    {
+      "name": "ChartOfCalculationTypesRef",
+      "tokens": [
+        "ПланВидовРасчетаСсылка"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "backbas.dll",
+        "backend.dll",
+        "calc.dll",
+        "calcui.dll",
+        "frntend.dll",
+        "mngbase.dll",
+        "mngdsgn.dll",
+        "mngsrv.dll",
+        "vrsbase.dll"
+      ],
+      "sourceCount": 10
+    },
+    {
+      "name": "BusinessProcessRef",
+      "tokens": [
+        "БизнесПроцессСсылка"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "backbas.dll",
+        "backend.dll",
+        "bp.dll",
+        "bpui.dll",
+        "frntend.dll",
+        "mngbase.dll",
+        "mngdsgn.dll",
+        "mngsrv.dll",
+        "schemui.dll",
+        "vrsbase.dll"
+      ],
+      "sourceCount": 11
+    },
+    {
+      "name": "BusinessProcessRoutePointRef",
+      "tokens": [
+        "ТочкаМаршрутаБизнесПроцессаСсылка"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "backbas.dll",
+        "backend.dll",
+        "bp.dll",
+        "bpui.dll",
+        "frntend.dll",
+        "mngbase.dll",
+        "mngdsgn.dll",
+        "mngsrv.dll",
+        "schemui.dll",
+        "vrsbase.dll"
+      ],
+      "sourceCount": 11
+    },
+    {
+      "name": "TaskRef",
+      "tokens": [
+        "ЗадачаСсылка"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "backbas.dll",
+        "backend.dll",
+        "bp.dll",
+        "bpui.dll",
+        "frntend.dll",
+        "mngbase.dll",
+        "mngdsgn.dll",
+        "mngsrv.dll",
+        "schemui.dll",
+        "vrsbase.dll"
+      ],
+      "sourceCount": 11
+    },
+    {
+      "name": "ExchangePlanRef",
+      "tokens": [
+        "ПланОбменаСсылка"
+      ],
+      "sources": [
+        "accnt.dll",
+        "accntui.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "dcs.dll",
+        "dcsui.dll",
+        "devtool.dll",
+        "frntend.dll",
+        "mngbase.dll"
+      ],
+      "sourceCount": 21
+    },
+    {
+      "name": "Characteristic",
+      "tokens": [
+        "Характеристика"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "edbui.dll",
+        "frntend.dll",
+        "mngbase.dll"
+      ],
+      "sourceCount": 20
+    },
+    {
+      "name": "AnyRef",
+      "tokens": [
+        "ЛюбаяСсылка"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll",
+        "config.dll",
+        "dcs.dll",
+        "dcsui.dll",
+        "debug.dll"
+      ],
+      "sourceCount": 30
+    },
+    {
+      "name": "TypeDescription",
+      "tokens": [
+        "ОписаниеТипов",
+        "TypeDescription"
+      ],
+      "sources": [
+        "backbas.dll",
+        "backend.dll",
+        "core82.dll",
+        "dcs_root.res",
+        "fmtd.dll",
+        "frntend.dll",
+        "mngbase.dll",
+        "mngbase_bg.res",
+        "mngbase_de.res",
+        "mngbase_ka.res",
+        "mngbase_kk.res",
+        "mngbase_lt.res",
+        "mngbase_lv.res",
+        "mngbase_pl.res",
+        "mngbase_ro.res",
+        "mngbase_root.res"
+      ],
+      "sourceCount": 31
+    },
+    {
+      "name": "Color",
+      "tokens": [
+        "Цвет"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "backend_ru.res",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "bpui_ru.res",
+        "calc.dll",
+        "calcui.dll",
+        "chart.dll",
+        "chart_bg.res",
+        "chart_ru.res"
+      ],
+      "sourceCount": 76
+    },
+    {
+      "name": "Font",
+      "tokens": [
+        "Шрифт"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "backend_bg.res",
+        "backend_ru.res",
+        "backend_uk.res",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "bpui.dll",
+        "bpui_bg.res",
+        "bpui_ru.res",
+        "bpui_uk.res",
+        "calc.dll"
+      ],
+      "sourceCount": 117
+    },
+    {
+      "name": "StandardBeginningDate",
+      "tokens": [
+        "СтандартнаяДатаНачала",
+        "StandardBeginningDate"
+      ],
+      "sources": [
+        "backend.dll",
+        "core82.dll",
+        "fmtd.dll",
+        "mngbase.dll",
+        "mngcore.dll",
+        "mngsrv_root.res",
+        "mngui.dll",
+        "shcntx_root.hbk",
+        "shcntx_ru.hbk",
+        "vrsbase.dll",
+        "xdto.dll",
+        "xdto_root.res"
+      ],
+      "sourceCount": 12
+    },
+    {
+      "name": "StandardPeriod",
+      "tokens": [
+        "СтандартныйПериод",
+        "StandardPeriod"
+      ],
+      "sources": [
+        "backend.dll",
+        "bpui.dll",
+        "core82.dll",
+        "dcs.dll",
+        "fmtd.dll",
+        "frame.dll",
+        "frntend.dll",
+        "mngbase.dll",
+        "mngbase_bg.hbk",
+        "mngbase_bg.res",
+        "mngbase_de.hbk",
+        "mngbase_de.res",
+        "mngbase_ka.hbk",
+        "mngbase_ka.res",
+        "mngbase_kk.hbk",
+        "mngbase_kk.res"
+      ],
+      "sourceCount": 44
+    },
+    {
+      "name": "Filter",
+      "tokens": [
+        "Отбор"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "1cv8s.exe",
+        "accnt.dll",
+        "accntui.dll",
+        "backbas.dll",
+        "backend.dll",
+        "backend_ru.res",
+        "basic.dll",
+        "basic_ru.res",
+        "basicui.dll",
+        "basicui_ru.res",
+        "bp.dll",
+        "bpui.dll",
+        "calc.dll",
+        "calcui.dll",
+        "comcntr.dll"
+      ],
+      "sourceCount": 71
+    },
+    {
+      "name": "Order",
+      "tokens": [
+        "Порядок"
+      ],
+      "sources": [
+        "1cv8.exe",
+        "accnt.dll",
+        "accnt_ru.res",
+        "accnt_uk.res",
+        "accntui.dll",
+        "accntui_ru.res",
+        "accntui_uk.res",
+        "backbas.dll",
+        "backend.dll",
+        "backend_ru.res",
+        "backend_uk.res",
+        "basic.dll",
+        "basic_ru.res",
+        "basic_uk.res",
+        "basicui.dll",
+        "bp.dll"
+      ],
+      "sourceCount": 100
+    },
+    {
+      "name": "ConditionalAppearance",
+      "tokens": [
+        "УсловноеОформление"
+      ],
+      "sources": [
+        "accnt.dll",
+        "backend.dll",
+        "basic.dll",
+        "basicui.dll",
+        "bp.dll",
+        "calc.dll",
+        "dcs.dll",
+        "dcscore.dll",
+        "dcsui.dll",
+        "dcsui_bg.res",
+        "dcsui_de.res",
+        "dcsui_ka.res",
+        "dcsui_kk.res",
+        "dcsui_lt.res",
+        "dcsui_lv.res",
+        "dcsui_pl.res"
+      ],
+      "sourceCount": 33
+    },
+    {
+      "name": "AppearanceSettings",
+      "tokens": [
+        "НастройкаОформления"
+      ],
+      "sources": [
+        "backend.dll",
+        "frntend.dll"
+      ],
+      "sourceCount": 2
+    },
+    {
+      "name": "FormattingField",
+      "tokens": [
+        "ОбластьОформления"
+      ],
+      "sources": [
+        "backend.dll",
+        "frntend.dll"
+      ],
+      "sourceCount": 2
+    },
+    {
+      "name": "SystemEnumeration",
+      "tokens": [
+        "Системные перечисления"
+      ],
+      "sources": [
+        "accnt.dll",
+        "backend.dll",
+        "basic.dll",
+        "chart.dll",
+        "core82.dll",
+        "dcscore.dll",
+        "edbui.dll",
+        "enums.dll",
+        "frntend.dll",
+        "richui.dll"
+      ],
+      "sourceCount": 10
+    }
+  ],
+  "typeDomainCodes": [
+    {
+      "code": "S",
+      "typeName": "xs:string",
+      "kind": "primitive",
+      "source": "TypeDomainPattern"
+    },
+    {
+      "code": "N",
+      "typeName": "xs:decimal",
+      "kind": "primitive",
+      "source": "TypeDomainPattern"
+    },
+    {
+      "code": "B",
+      "typeName": "xs:boolean",
+      "kind": "primitive",
+      "source": "TypeDomainPattern"
+    },
+    {
+      "code": "D",
+      "typeName": "xs:dateTime",
+      "kind": "primitive",
+      "source": "TypeDomainPattern"
+    },
+    {
+      "code": "U",
+      "typeName": "xs:anyType",
+      "kind": "primitive",
+      "source": "TypeDomainPattern"
+    },
+    {
+      "code": "#",
+      "typeName": "cfg:uuid",
+      "kind": "reference",
+      "source": "TypeDomainPattern"
+    }
+  ],
+  "edtModel": {
+    "source": "1C EDT EMF model jars",
+    "plugins": [
+      {
+        "id": "com._1c.g5.v8.dt.metadata_18.0.100.v202605050943.jar",
+        "model": "metadata.mdclass",
+        "createdTypes": [
+          "AdjustableBoolean",
+          "ForRoleType",
+          "StandardCommand",
+          "CharacteristicsDescription",
+          "StandardAttribute",
+          "StandardTabularSectionDescription",
+          "CommonAttributeContentItem",
+          "AbstractCommandInterface",
+          "AbstractMobileClientSign",
+          "AbstractStandaloneContent",
+          "BasicMobileClientSign",
+          "MobileClientSign",
+          "MobileClientDigestData",
+          "MobileClientDigestTypes",
+          "ConvertedMobileClientSign",
+          "AbstractClientApplicationInterface",
+          "AbstractFlowchart",
+          "AbstractForm",
+          "MdPicture",
+          "Template",
+          "TabularSectionAttribute",
+          "CommonCommand",
+          "AbstractRoleDescription",
+          "Role",
+          "Language",
+          "SessionParameter",
+          "CommonTemplate",
+          "CommonModule",
+          "CommonAttribute",
+          "CommonForm",
+          "CommonPicture",
+          "CommandGroup",
+          "Catalog",
+          "CatalogAttribute",
+          "CatalogTabularSection",
+          "CatalogForm",
+          "CatalogCommand",
+          "CatalogPredefinedItem",
+          "CatalogPredefined",
+          "Document",
+          "DocumentAttribute",
+          "DocumentForm",
+          "DocumentTabularSection",
+          "DocumentCommand",
+          "DocumentNumerator",
+          "ChartOfCharacteristicTypes",
+          "ChartOfCharacteristicTypesAttribute",
+          "ChartOfCharacteristicTypesTabularSection",
+          "ChartOfCharacteristicTypesForm",
+          "ChartOfCharacteristicTypesCommand",
+          "ChartOfCharacteristicTypesPredefinedItem",
+          "ChartOfCharacteristicTypesPredefined",
+          "Enum",
+          "EnumValue",
+          "EnumForm",
+          "EnumCommand",
+          "InformationRegister",
+          "InformationRegisterResource",
+          "InformationRegisterAttribute",
+          "InformationRegisterDimension",
+          "InformationRegisterForm",
+          "InformationRegisterCommand",
+          "Interface",
+          "Style",
+          "Configuration",
+          "ContainedObject",
+          "AbstractWorkArea",
+          "StyleItem",
+          "ExchangePlan",
+          "ExchangePlanContentItem",
+          "ExchangePlanAttribute",
+          "ExchangePlanTabularSection",
+          "ExchangePlanForm",
+          "ExchangePlanCommand",
+          "Subsystem",
+          "WSReference",
+          "EventSubscription",
+          "DefinedType",
+          "Constant",
+          "Sequence",
+          "SequenceDimension",
+          "DocumentJournal",
+          "DocumentJournalForm",
+          "Column",
+          "DocumentJournalCommand",
+          "Report",
+          "ReportAttribute",
+          "ReportTabularSection",
+          "ReportTabularSectionAttribute",
+          "ReportForm",
+          "ReportCommand",
+          "ExternalReport",
+          "DataProcessor",
+          "DataProcessorAttribute",
+          "DataProcessorTabularSection",
+          "DataProcessorTabularSectionAttribute",
+          "DataProcessorForm",
+          "DataProcessorCommand",
+          "ExternalDataProcessor",
+          "AccumulationRegister",
+          "AccumulationRegisterResource",
+          "AccumulationRegisterAttribute",
+          "AccumulationRegisterDimension",
+          "AccumulationRegisterForm",
+          "AccumulationRegisterCommand",
+          "FunctionalOption",
+          "BusinessProcess",
+          "BusinessProcessForm",
+          "BusinessProcessCommand",
+          "BusinessProcessAttribute",
+          "BusinessProcessTabularSection",
+          "Task",
+          "TaskCommand",
+          "TaskForm",
+          "TaskAttribute",
+          "TaskTabularSection",
+          "AddressingAttribute",
+          "ScheduledJob",
+          "FunctionalOptionsParameter",
+          "FilterCriterion",
+          "FilterCriterionCommand",
+          "FilterCriterionForm",
+          "SettingsStorage",
+          "SettingsStorageForm",
+          "XDTOPackage",
+          "WebService",
+          "Operation",
+          "Parameter",
+          "HTTPService",
+          "URLTemplate",
+          "Method",
+          "ExternalDataSource",
+          "Table",
+          "TableForm",
+          "TableCommand",
+          "Field",
+          "Cube",
+          "DimensionTable",
+          "DimensionTableForm",
+          "DimensionTableCommand",
+          "Dimension",
+          "Resource",
+          "CubeForm",
+          "CubeCommand",
+          "Function",
+          "ChartOfAccounts",
+          "ChartOfAccountsPredefinedItem",
+          "ExtDimensionType",
+          "ChartOfAccountsPredefined",
+          "ChartOfAccountsAttribute",
+          "ChartOfAccountsTabularSection",
+          "AccountingFlag",
+          "ExtDimensionAccountingFlag",
+          "ChartOfAccountsCommand",
+          "ChartOfAccountsForm",
+          "ChartOfCalculationTypes",
+          "ChartOfCalculationTypesPredefinedItem",
+          "ChartOfCalculationTypesPredefined",
+          "ChartOfCalculationTypesAttribute",
+          "ChartOfCalculationTypesTabularSection",
+          "ChartOfCalculationTypesForm",
+          "ChartOfCalculationTypesCommand",
+          "AccountingRegister",
+          "AccountingRegisterDimension",
+          "AccountingRegisterResource",
+          "AccountingRegisterAttribute",
+          "AccountingRegisterForm",
+          "AccountingRegisterCommand",
+          "CalculationRegister",
+          "CalculationRegisterResource",
+          "RecalculationDimension",
+          "CalculationRegisterAttribute",
+          "CalculationRegisterDimension",
+          "Recalculation",
+          "CalculationRegisterForm",
+          "CalculationRegisterCommand",
+          "AbstractGeographicalSchema",
+          "AbstractStyle",
+          "IntegrationService",
+          "IntegrationServiceChannel",
+          "Bot",
+          "WebSocketClient",
+          "AbstractDistributionSupport",
+          "SourceReferenceTypeDescription",
+          "MdObjectReferenceTypeDescription",
+          "SourceReferenceTypeContainer",
+          "PaletteColor"
+        ]
+      },
+      {
+        "id": "com._1c.g5.v8.dt.mcore_8.6.0.v202605050943.jar",
+        "model": "mcore",
+        "createdTypes": [
+          "StringKeyAndValue",
+          "Type",
+          "PromiseType",
+          "EmptyContextDef",
+          "Ctor",
+          "FakeCtor",
+          "FakeParameter",
+          "TypeSet",
+          "NumberQualifiers",
+          "StringQualifiers",
+          "DateQualifiers",
+          "BinaryQualifiers",
+          "TypeDescription",
+          "TypeValue",
+          "TypeDescriptionValue",
+          "UndefinedValue",
+          "NullValue",
+          "NumberValue",
+          "BooleanValue",
+          "StringValue",
+          "DateValue",
+          "BinaryValue",
+          "ReferenceValue",
+          "EnumValue",
+          "SysEnumValue",
+          "ColorValue",
+          "FontValue",
+          "LineValue",
+          "BorderValue",
+          "IrresolvableReferenceValue",
+          "ValueList",
+          "FixedArrayValue",
+          "TypedValueListItem",
+          "TypedValueList",
+          "StructureProperty",
+          "Structure",
+          "UuidValue",
+          "RuntimeValue",
+          "StandardBeginningDate",
+          "StandardBeginningDateValue",
+          "StandardPeriod",
+          "StandardPeriodValue",
+          "ContextDef",
+          "ContextDefWithRefItem",
+          "Property",
+          "TypeContainerRef",
+          "TypeContainerDef",
+          "DerivedProperty",
+          "ContainingSourceDerivedProperty",
+          "Method",
+          "Event",
+          "ParamSet",
+          "Parameter",
+          "GeneralContextDef",
+          "Field",
+          "DerivedField",
+          "StandardTabularPart",
+          "CommandRef",
+          "StandardCommandGroup",
+          "Point",
+          "PictureRef",
+          "ColorDef",
+          "ColorRef",
+          "StyleColor",
+          "StyleBorder",
+          "StyleFont",
+          "BorderDef",
+          "BorderRef",
+          "FontDef",
+          "AutoFont",
+          "FontRef",
+          "Line",
+          "Help",
+          "HelpPage",
+          "RefContextDelegatingContextDef",
+          "QName",
+          "AutoColor",
+          "PaletteColor"
+        ]
+      }
+    ],
+    "metadataClassFeatures": {
+      "ADJUSTABLE_BOOLEAN": [
+        "COMMON",
+        "FOR"
+      ],
+      "FOR_ROLE_TYPE": [
+        "VALUE",
+        "ROLE"
+      ],
+      "STANDARD_COMMAND": [
+        "NAME",
+        "NAME_RU",
+        "GROUP",
+        "VISIBLE",
+        "COMMAND_PARAMETER_TYPE"
+      ],
+      "STANDARD_COMMAND_SOURCE": [
+        "STANDARD_COMMANDS"
+      ],
+      "SUPPORT_FILTER_CRITERION_": [
+        "SELECT_CRITERION_TYPE_REF"
+      ],
+      "DATA_HISTORY_SUPPORT": [
+        "DATA_HISTORY"
+      ],
+      "CHARACTERISTICS_DESCRIPTION": [
+        "CHARACTERISTIC_TYPES",
+        "KEY_FIELD",
+        "TYPES_FILTER_FIELD",
+        "TYPES_FILTER_VALUE",
+        "DATA_PATH_FIELD",
+        "MULTIPLE_VALUES_USE_FIELD",
+        "CHARACTERISTIC_VALUES",
+        "OBJECT_FIELD",
+        "TYPE_FIELD",
+        "VALUE_FIELD",
+        "MULTIPLE_VALUES_KEY_FIELD",
+        "MULTIPLE_VALUES_ORDER_FIELD"
+      ],
+      "CHARACTERISTICS_DESCRIPTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "STANDARD_ATTRIBUTE": [
+        "DATA_HISTORY",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "TOOL_TIP",
+        "QUICK_CHOICE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "LINK_BY_TYPE",
+        "FULL_TEXT_SEARCH",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "MARK_NEGATIVES",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "CHOICE_HISTORY_ON_INPUT",
+        "TYPE_REDUCTION_MODE"
+      ],
+      "STANDARD_TABULAR_SECTION_DESCRIPTION": [
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES"
+      ],
+      "COMMON_ATTRIBUTE_CONTENT_ITEM": [
+        "METADATA",
+        "USE",
+        "CONDITIONAL_SEPARATION"
+      ],
+      "BASIC_MOBILE_CLIENT_SIGN": [
+        "DIGEST",
+        "PUBLIC_KEY"
+      ],
+      "MOBILE_CLIENT_SIGN": [
+        "DIGEST",
+        "PUBLIC_KEY",
+        "DIGEST_TYPES"
+      ],
+      "MOBILE_CLIENT_DIGEST_DATA": [
+        "UUID",
+        "NAME"
+      ],
+      "MOBILE_CLIENT_DIGEST_TYPES": [
+        "MCD_ENUMS",
+        "MCD_REFS",
+        "MCD_REG_KEYS",
+        "MCD_INFO_REG_KEYS"
+      ],
+      "CONVERTED_MOBILE_CLIENT_SIGN": [
+        "DIGEST",
+        "PUBLIC_KEY",
+        "DIGEST_TYPES",
+        "CONVERTED"
+      ],
+      "ABSTRACT_FORM": [
+        "FORM_CONTEXT",
+        "MODULE",
+        "FORM_EVENTS",
+        "MD_FORM"
+      ],
+      "MD_PICTURE": [
+        "GLYPH",
+        "TRANSPARENT_PIXEL"
+      ],
+      "TYPE_DESCRIPTION_PROVIDER_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "MD_OBJECT": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION"
+      ],
+      "BASIC_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "BASIC_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "BASIC_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "BASIC_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "BASIC_FEATURE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE"
+      ],
+      "BASIC_FEATURE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "BASIC_FEATURE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "BASIC_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES"
+      ],
+      "BASIC_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "BASIC_TEMPLATE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TEMPLATE_TYPE",
+        "TEMPLATE",
+        "SUPPRESS_OBJECT"
+      ],
+      "BASIC_DB_OBJECT": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT"
+      ],
+      "DB_OBJECT_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD"
+      ],
+      "DB_OBJECT_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "DB_OBJECT_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "HIERARCHICAL_DB_OBJECT_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "USE"
+      ],
+      "HIERARCHICAL_DB_OBJECT_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "HIERARCHICAL_DB_OBJECT_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DB_OBJECT_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH"
+      ],
+      "DB_OBJECT_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "HIERARCHICAL_DB_OBJECT_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH",
+        "USE"
+      ],
+      "HIERARCHICAL_DB_OBJECT_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "BASIC_REGISTER": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "SUPPRESS_OBJECT"
+      ],
+      "REGISTER_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD"
+      ],
+      "REGISTER_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "REGISTER_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "REGISTER_DIMENSION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "DENY_INCOMPLETE_VALUES",
+        "INDEXING",
+        "FULL_TEXT_SEARCH"
+      ],
+      "REGISTER_DIMENSION_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "REGISTER_DIMENSION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "REGISTER_RESOURCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FULL_TEXT_SEARCH"
+      ],
+      "REGISTER_RESOURCE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "REGISTER_RESOURCE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CATALOG_OWNER": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT"
+      ],
+      "FULL_TEXT_SEARCH_DICTIONARY_SOURCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION"
+      ],
+      "TEMPLATE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TEMPLATE_TYPE",
+        "TEMPLATE",
+        "SUPPRESS_OBJECT"
+      ],
+      "TABULAR_SECTION_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "DATA_HISTORY",
+        "CHOICE_HISTORY_ON_INPUT",
+        "INDEXING",
+        "FULL_TEXT_SEARCH"
+      ],
+      "TABULAR_SECTION_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "TABULAR_SECTION_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "COMMON_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "SUPPRESS_OBJECT"
+      ],
+      "COMMON_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "COMMON_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ROLE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "RIGHTS",
+        "SUPPRESS_OBJECT"
+      ],
+      "LANGUAGE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "LANGUAGE_CODE"
+      ],
+      "LANGUAGE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "SESSION_PARAMETER": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "SUPPRESS_OBJECT"
+      ],
+      "SESSION_PARAMETER_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "SESSION_PARAMETER___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "COMMON_TEMPLATE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TEMPLATE_TYPE",
+        "TEMPLATE",
+        "SUPPRESS_OBJECT"
+      ],
+      "COMMON_MODULE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "CONTEXT_DEF",
+        "MODULE",
+        "GLOBAL",
+        "CLIENT_MANAGED_APPLICATION",
+        "SERVER",
+        "EXTERNAL_CONNECTION",
+        "CLIENT_ORDINARY_APPLICATION",
+        "SERVER_CALL",
+        "PRIVILEGED",
+        "RETURN_VALUES_REUSE",
+        "SUPPRESS_OBJECT"
+      ],
+      "COMMON_MODULE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "COMMON_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "DATA_HISTORY",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "CHOICE_HISTORY_ON_INPUT",
+        "CONTENT",
+        "AUTO_USE",
+        "DATA_SEPARATION",
+        "SEPARATED_DATA_USE",
+        "DATA_SEPARATION_VALUE",
+        "DATA_SEPARATION_USE",
+        "CONDITIONAL_SEPARATION",
+        "USERS_SEPARATION",
+        "AUTHENTICATION_SEPARATION",
+        "CONFIGURATION_EXTENSIONS_SEPARATION",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "SUPPRESS_OBJECT"
+      ],
+      "COMMON_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "COMMON_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "COMMON_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "EXTENDED_PRESENTATION",
+        "EXPLANATION"
+      ],
+      "COMMON_PICTURE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GLYPH",
+        "TRANSPARENT_PIXEL",
+        "PICTURE",
+        "AVAILABILITY_FOR_CHOICE",
+        "AVAILABILITY_FOR_APPEARANCE",
+        "SUPPRESS_OBJECT"
+      ],
+      "COMMAND_GROUP": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "CATEGORY",
+        "SUPPRESS_OBJECT"
+      ],
+      "PREDEFINED_ITEM": [
+        "ID",
+        "NAME",
+        "DESCRIPTION",
+        "EXTENSION"
+      ],
+      "PREDEFINED_ITEM___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "PREDEFINED_": [
+        "PREDEFINED_ITEMS"
+      ],
+      "CATALOG": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT",
+        "DATA_HISTORY",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "HIERARCHICAL",
+        "HIERARCHY_TYPE",
+        "LIMIT_LEVEL_COUNT",
+        "LEVEL_COUNT",
+        "FOLDERS_ON_TOP",
+        "OWNERS",
+        "SUBORDINATION_USE",
+        "CODE_LENGTH",
+        "DESCRIPTION_LENGTH",
+        "CODE_TYPE",
+        "CODE_ALLOWED_LENGTH",
+        "CODE_SERIES",
+        "CHECK_UNIQUE",
+        "AUTONUMBERING",
+        "DEFAULT_PRESENTATION",
+        "PREDEFINED",
+        "PREDEFINED_DATA_UPDATE",
+        "EDIT_TYPE",
+        "QUICK_CHOICE",
+        "CHOICE_MODE",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_FOLDER_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "DEFAULT_FOLDER_CHOICE_FORM",
+        "AUXILIARY_OBJECT_FORM",
+        "AUXILIARY_FOLDER_FORM",
+        "AUXILIARY_LIST_FORM",
+        "AUXILIARY_CHOICE_FORM",
+        "AUXILIARY_FOLDER_CHOICE_FORM",
+        "CHOICE_HISTORY_ON_INPUT",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "CATALOG___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CATALOG_": [
+        "SELECT_CRITERION_TYPE_REF"
+      ],
+      "CATALOG_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "USE",
+        "DATA_HISTORY",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "CATALOG_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CATALOG_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CATALOG_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH",
+        "USE"
+      ],
+      "CATALOG_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CATALOG_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "CATALOG_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "CATALOG_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CATALOG_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CATALOG_PREDEFINED_ITEM": [
+        "ID",
+        "NAME",
+        "DESCRIPTION",
+        "EXTENSION",
+        "CODE",
+        "IS_FOLDER",
+        "CONTENT"
+      ],
+      "CATALOG_PREDEFINED_ITEM___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CATALOG_PREDEFINED": [
+        "ITEMS"
+      ],
+      "CATALOG_PREDEFINED_": [
+        "PREDEFINED_ITEMS"
+      ],
+      "DOCUMENT": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT",
+        "DATA_HISTORY",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "NUMERATOR",
+        "NUMBER_TYPE",
+        "NUMBER_LENGTH",
+        "NUMBER_ALLOWED_LENGTH",
+        "NUMBER_PERIODICITY",
+        "CHECK_UNIQUE",
+        "AUTONUMBERING",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "AUXILIARY_OBJECT_FORM",
+        "AUXILIARY_LIST_FORM",
+        "AUXILIARY_CHOICE_FORM",
+        "POSTING",
+        "REAL_TIME_POSTING",
+        "REGISTER_RECORDS_DELETION",
+        "REGISTER_RECORDS_WRITING_ON_POST",
+        "SEQUENCE_FILLING",
+        "REGISTER_RECORDS",
+        "POST_IN_PRIVILEGED_MODE",
+        "UNPOST_IN_PRIVILEGED_MODE",
+        "CHOICE_HISTORY_ON_INPUT",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "ATTRIBUTES",
+        "FORMS",
+        "TABULAR_SECTIONS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "DOCUMENT___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DOCUMENT_": [
+        "SELECT_CRITERION_TYPE_REF"
+      ],
+      "DOCUMENT_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "DATA_HISTORY",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "DOCUMENT_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "DOCUMENT_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DOCUMENT_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "DOCUMENT_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH"
+      ],
+      "DOCUMENT_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DOCUMENT_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "DOCUMENT_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "DOCUMENT_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DOCUMENT_NUMERATOR": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "NUMBER_TYPE",
+        "NUMBER_LENGTH",
+        "NUMBER_ALLOWED_LENGTH",
+        "NUMBER_PERIODICITY",
+        "CHECK_UNIQUE",
+        "SUPPRESS_OBJECT"
+      ],
+      "DOCUMENT_NUMERATOR___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT",
+        "DATA_HISTORY",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "CHARACTERISTIC_EXT_VALUES",
+        "TYPE",
+        "HIERARCHICAL",
+        "FOLDERS_ON_TOP",
+        "CODE_LENGTH",
+        "CODE_ALLOWED_LENGTH",
+        "DESCRIPTION_LENGTH",
+        "CODE_SERIES",
+        "CHECK_UNIQUE",
+        "AUTONUMBERING",
+        "DEFAULT_PRESENTATION",
+        "PREDEFINED",
+        "PREDEFINED_DATA_UPDATE",
+        "EDIT_TYPE",
+        "QUICK_CHOICE",
+        "CHOICE_MODE",
+        "CHOICE_HISTORY_ON_INPUT",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_FOLDER_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "DEFAULT_FOLDER_CHOICE_FORM",
+        "AUXILIARY_OBJECT_FORM",
+        "AUXILIARY_FOLDER_FORM",
+        "AUXILIARY_LIST_FORM",
+        "AUXILIARY_CHOICE_FORM",
+        "AUXILIARY_FOLDER_CHOICE_FORM",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_": [
+        "GET_TYPE_DESCRIPTION",
+        "SELECT_CRITERION_TYPE_REF"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "USE",
+        "DATA_HISTORY",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH",
+        "USE"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_PREDEFINED_ITEM": [
+        "ID",
+        "NAME",
+        "DESCRIPTION",
+        "EXTENSION",
+        "IS_FOLDER",
+        "CODE",
+        "TYPE",
+        "CONTENT"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_PREDEFINED_ITEM___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_PREDEFINED": [
+        "ITEMS"
+      ],
+      "CHART_OF_CHARACTERISTIC_TYPES_PREDEFINED_": [
+        "PREDEFINED_ITEMS"
+      ],
+      "ENUM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "USE_STANDARD_COMMANDS",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "QUICK_CHOICE",
+        "CHOICE_MODE",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "AUXILIARY_LIST_FORM",
+        "AUXILIARY_CHOICE_FORM",
+        "MANAGER_MODULE",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "CHOICE_HISTORY_ON_INPUT",
+        "ENUM_VALUES",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS",
+        "SUPPRESS_OBJECT"
+      ],
+      "ENUM_VALUE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "COLOR"
+      ],
+      "ENUM_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "ENUM_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "ENUM_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ENUM_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "INFORMATION_REGISTER": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "SUPPRESS_OBJECT",
+        "DATA_HISTORY",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "USE_STANDARD_COMMANDS",
+        "EDIT_TYPE",
+        "DEFAULT_RECORD_FORM",
+        "DEFAULT_LIST_FORM",
+        "AUXILIARY_RECORD_FORM",
+        "AUXILIARY_LIST_FORM",
+        "STANDARD_ATTRIBUTES",
+        "INFORMATION_REGISTER_PERIODICITY",
+        "WRITE_MODE",
+        "MAIN_FILTER_ON_PERIOD",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "RECORD_SET_MODULE",
+        "MANAGER_MODULE",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "ENABLE_TOTALS_SLICE_FIRST",
+        "ENABLE_TOTALS_SLICE_LAST",
+        "RECORD_PRESENTATION",
+        "EXTENDED_RECORD_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "RESOURCES",
+        "ATTRIBUTES",
+        "DIMENSIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "INFORMATION_REGISTER___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "INFORMATION_REGISTER_RESOURCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FULL_TEXT_SEARCH",
+        "DATA_HISTORY",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "CHOICE_HISTORY_ON_INPUT",
+        "INDEXING",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD"
+      ],
+      "INFORMATION_REGISTER_RESOURCE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "INFORMATION_REGISTER_RESOURCE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "INFORMATION_REGISTER_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "DATA_HISTORY",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "INFORMATION_REGISTER_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "INFORMATION_REGISTER_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "INFORMATION_REGISTER_DIMENSION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "DENY_INCOMPLETE_VALUES",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "DATA_HISTORY",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "CHOICE_HISTORY_ON_INPUT",
+        "MASTER",
+        "MAIN_FILTER",
+        "TYPE_REDUCTION_MODE"
+      ],
+      "INFORMATION_REGISTER_DIMENSION_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "INFORMATION_REGISTER_DIMENSION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "INFORMATION_REGISTER_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "INFORMATION_REGISTER_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "INFORMATION_REGISTER_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "INFORMATION_REGISTER_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "INTERFACE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "INTERFACE",
+        "SWITCHABLE"
+      ],
+      "STYLE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "STYLE",
+        "SUPPRESS_OBJECT"
+      ],
+      "CONFIGURATION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "CONTAINED_OBJECTS",
+        "DB_VIEW_DEFS",
+        "KEEP_MAPPING_TO_EXTENDED_CONFIGURATION_OBJECTS_BY_IDS",
+        "NAME_PREFIX",
+        "CONFIGURATION_EXTENSION_COMPATIBILITY_MODE",
+        "CONFIGURATION_EXTENSION_PURPOSE",
+        "DEFAULT_RUN_MODE",
+        "USE_PURPOSES",
+        "SCRIPT_VARIANT",
+        "DEFAULT_ROLE",
+        "DEFAULT_ROLES",
+        "VENDOR",
+        "VERSION",
+        "UPDATE_CATALOG_ADDRESS",
+        "MANAGED_APPLICATION_MODULE",
+        "SESSION_MODULE",
+        "EXTERNAL_CONNECTION_MODULE",
+        "ORDINARY_APPLICATION_MODULE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_MANAGED_FORM_IN_ORDINARY_APPLICATION",
+        "USE_ORDINARY_FORM_IN_MANAGED_APPLICATION",
+        "ADDITIONAL_FULL_TEXT_SEARCH_DICTIONARIES",
+        "COMMON_SETTINGS_STORAGE",
+        "REPORTS_USER_SETTINGS_STORAGE",
+        "REPORTS_VARIANTS_STORAGE",
+        "FORM_DATA_SETTINGS_STORAGE",
+        "DYNAMIC_LISTS_USER_SETTINGS_STORAGE",
+        "URL_EXTERNAL_DATA_STORAGE",
+        "CONTENT",
+        "DEFAULT_REPORT_FORM",
+        "DEFAULT_REPORT_VARIANT_FORM",
+        "DEFAULT_REPORT_SETTINGS_FORM",
+        "DEFAULT_DYNAMIC_LIST_SETTINGS_FORM",
+        "DEFAULT_SEARCH_FORM",
+        "DEFAULT_DATA_HISTORY_CHANGE_HISTORY_FORM",
+        "DEFAULT_DATA_HISTORY_VERSION_DATA_FORM",
+        "DEFAULT_DATA_HISTORY_VERSION_DIFFERENCES_FORM",
+        "DEFAULT_COLLABORATION_SYSTEM_USERS_CHOICE_FORM",
+        "AUXILIARY_REPORT_FORM",
+        "AUXILIARY_REPORT_VARIANT_FORM",
+        "AUXILIARY_REPORT_SETTINGS_FORM",
+        "AUXILIARY_DYNAMIC_LIST_SETTINGS_FORM",
+        "AUXILIARY_DATA_HISTORY_CHANGE_HISTORY_FORM",
+        "AUXILIARY_DATA_HISTORY_VERSION_DATA_FORM",
+        "AUXILIARY_DATA_HISTORY_VERSION_DIFFERENCES_FORM",
+        "AUXILIARY_COLLABORATION_SYSTEM_USERS_CHOICE_FORM",
+        "REQUIRED_MOBILE_APPLICATION_PERMISSIONS",
+        "REQUIRED_MOBILE_APPLICATION_PERMISSIONS8315",
+        "USED_MOBILE_APPLICATION_FUNCTIONALITIES",
+        "MOBILE_APPLICATION_URLS",
+        "MOBILE_CLIENT_SIGN",
+        "MOBILE_APPLICATION_CONTENT",
+        "STANDALONE_CONFIGURATION_RESTRICTION_ROLES",
+        "COMMAND_INTERFACE",
+        "START_PAGE_WORKING_AREA",
+        "HOME_PAGE_WORK_AREA",
+        "MAIN_SECTION_COMMAND_INTERFACE",
+        "ALLOWED_INCOMING_SHARE_REQUEST_TYPES",
+        "CLIENT_APPLICATION_THEME",
+        "MAIN_CLIENT_APPLICATION_WINDOW_INTERFACE_VARIANT",
+        "CLIENT_APPLICATION_WINDOWS_OPEN_VARIANT",
+        "MAIN_SECTION_PICTURE",
+        "DEFAULT_INTERFACE",
+        "CAPTION",
+        "SHORT_CAPTION",
+        "DEFAULT_STYLE",
+        "DEFAULT_LANGUAGE",
+        "BRIEF_INFORMATION",
+        "DETAILED_INFORMATION",
+        "LOGO",
+        "SPLASH",
+        "COPYRIGHT",
+        "VENDOR_INFORMATION_ADDRESS",
+        "CONFIGURATION_INFORMATION_ADDRESS",
+        "CLIENT_APPLICATION_INTERFACE",
+        "MAIN_CLIENT_APPLICATION_WINDOW_MODE",
+        "DATA_LOCK_CONTROL_MODE",
+        "BINARY_DATA_STORAGE_MODE",
+        "BINARY_DATA_BLOCK_STORAGE_USE_MODE",
+        "OBJECT_AUTONUMERATION_MODE",
+        "MODALITY_USE_MODE",
+        "SYNCHRONOUS_EXTENSION_AND_ADD_IN_CALL_USE_MODE",
+        "SYNCHRONOUS_PLATFORM_EXTENSION_AND_ADD_IN_CALL_USE_MODE",
+        "INTERFACE_COMPATIBILITY_MODE",
+        "VERSION85_INTERFACE_MIGRATION_MODE",
+        "DATABASE_TABLESPACES_USE_MODE",
+        "COMPATIBILITY_MODE",
+        "DEFAULT_CONSTANTS_FORM",
+        "DEFAULT_REPORT_APPEARANCE_TEMPLATE",
+        "PARENT_CONFIGURATIONS",
+        "DISTRIBUTION_SETTINGS",
+        "LANGUAGES",
+        "SUBSYSTEMS",
+        "STYLE_ITEMS",
+        "STYLES",
+        "COMMON_PICTURES",
+        "INTERFACES",
+        "SESSION_PARAMETERS",
+        "ROLES",
+        "COMMON_TEMPLATES",
+        "FILTER_CRITERIA",
+        "COMMON_MODULES",
+        "COMMON_ATTRIBUTES",
+        "EXCHANGE_PLANS",
+        "XDTO_PACKAGES",
+        "WEB_SERVICES",
+        "HTTP_SERVICES",
+        "WS_REFERENCES",
+        "EVENT_SUBSCRIPTIONS",
+        "SCHEDULED_JOBS",
+        "SETTINGS_STORAGES",
+        "FUNCTIONAL_OPTIONS",
+        "FUNCTIONAL_OPTIONS_PARAMETERS",
+        "DEFINED_TYPES",
+        "COMMON_COMMANDS",
+        "COMMAND_GROUPS",
+        "CONSTANTS",
+        "COMMON_FORMS",
+        "CATALOGS",
+        "DOCUMENTS",
+        "DOCUMENT_NUMERATORS",
+        "SEQUENCES",
+        "DOCUMENT_JOURNALS",
+        "ENUMS",
+        "REPORTS",
+        "DATA_PROCESSORS",
+        "INFORMATION_REGISTERS",
+        "ACCUMULATION_REGISTERS",
+        "CHARTS_OF_CHARACTERISTIC_TYPES",
+        "CHARTS_OF_ACCOUNTS",
+        "ACCOUNTING_REGISTERS",
+        "CHARTS_OF_CALCULATION_TYPES",
+        "CALCULATION_REGISTERS",
+        "BUSINESS_PROCESSES",
+        "TASKS",
+        "EXTERNAL_DATA_SOURCES",
+        "INTEGRATION_SERVICES",
+        "BOTS",
+        "WEB_SOCKET_CLIENTS",
+        "PALETTE_COLORS",
+        "SUPPRESS_OBJECT"
+      ],
+      "CONFIGURATION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CONTAINED_OBJECT": [
+        "CLASS_ID",
+        "OBJECT_ID"
+      ],
+      "STYLE_ITEM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "APPEARANCE_ITEM",
+        "TYPE",
+        "VALUE",
+        "SUPPRESS_OBJECT"
+      ],
+      "STYLE_ITEM___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXCHANGE_PLAN": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT",
+        "DATA_HISTORY",
+        "ADDITIONAL_INDEXES",
+        "THIS_NODE",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "CODE_LENGTH",
+        "CODE_ALLOWED_LENGTH",
+        "DESCRIPTION_LENGTH",
+        "CONTENT",
+        "DEFAULT_PRESENTATION",
+        "EDIT_TYPE",
+        "QUICK_CHOICE",
+        "CHOICE_MODE",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "AUXILIARY_OBJECT_FORM",
+        "AUXILIARY_LIST_FORM",
+        "AUXILIARY_CHOICE_FORM",
+        "DISTRIBUTED_INFO_BASE",
+        "INCLUDE_CONFIGURATION_EXTENSIONS",
+        "CHOICE_HISTORY_ON_INPUT",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "EXCHANGE_PLAN___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXCHANGE_PLAN_": [
+        "SELECT_CRITERION_TYPE_REF"
+      ],
+      "EXCHANGE_PLAN_CONTENT_ITEM": [
+        "MD_OBJECT",
+        "AUTO_RECORD",
+        "EXTENSION"
+      ],
+      "EXCHANGE_PLAN_CONTENT_ITEM___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXCHANGE_PLAN_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "DATA_HISTORY",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "EXCHANGE_PLAN_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "EXCHANGE_PLAN_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXCHANGE_PLAN_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH"
+      ],
+      "EXCHANGE_PLAN_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXCHANGE_PLAN_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "EXCHANGE_PLAN_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "EXCHANGE_PLAN_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "EXCHANGE_PLAN_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "SUBSYSTEM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "INCLUDE_IN_COMMAND_INTERFACE",
+        "USE_ONE_COMMAND",
+        "COMMAND_INTERFACE",
+        "EXPLANATION",
+        "PICTURE",
+        "CONTENT",
+        "SUBSYSTEMS",
+        "PARENT_SUBSYSTEM",
+        "SUPPRESS_OBJECT"
+      ],
+      "WS_REFERENCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "PRODUCED_TYPES",
+        "LOCATION_URL",
+        "WS_DEFINITIONS",
+        "SUPPRESS_OBJECT"
+      ],
+      "WS_REFERENCE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EVENT_SUBSCRIPTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "SOURCE",
+        "EVENT",
+        "HANDLER",
+        "SUPPRESS_OBJECT"
+      ],
+      "EVENT_SUBSCRIPTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DEFINED_TYPE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "PRODUCED_TYPES",
+        "TYPE",
+        "SUPPRESS_OBJECT"
+      ],
+      "DEFINED_TYPE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "DEFINED_TYPE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CONSTANT": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "STANDARD_COMMANDS",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "DATA_HISTORY",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "TYPE",
+        "USE_STANDARD_COMMANDS",
+        "DEFAULT_FORM",
+        "EXTENDED_PRESENTATION",
+        "EXPLANATION",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "CHOICE_HISTORY_ON_INPUT",
+        "VALUE_MANAGER_MODULE",
+        "MANAGER_MODULE",
+        "DATA_LOCK_CONTROL_MODE",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "SUPPRESS_OBJECT"
+      ],
+      "CONSTANT_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CONSTANT___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "SEQUENCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "MOVE_BOUNDARY_ON_POSTING",
+        "DOCUMENTS",
+        "REGISTER_RECORDS",
+        "RECORD_SET_MODULE",
+        "DATA_LOCK_CONTROL_MODE",
+        "DIMENSIONS",
+        "SUPPRESS_OBJECT"
+      ],
+      "SEQUENCE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "SEQUENCE_DIMENSION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "DOCUMENT_MAP",
+        "REGISTER_RECORDS_MAP"
+      ],
+      "SEQUENCE_DIMENSION_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "SEQUENCE_DIMENSION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DOCUMENT_JOURNAL": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "DEFAULT_FORM",
+        "AUXILIARY_FORM",
+        "USE_STANDARD_COMMANDS",
+        "REGISTERED_DOCUMENTS",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "COLUMNS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS",
+        "SUPPRESS_OBJECT"
+      ],
+      "DOCUMENT_JOURNAL___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DOCUMENT_JOURNAL_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "COLUMN": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "INDEXING",
+        "REFERENCES"
+      ],
+      "COLUMN___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DOCUMENT_JOURNAL_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "DOCUMENT_JOURNAL_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "DOCUMENT_JOURNAL_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "REPORT": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "PRODUCED_TYPES",
+        "USE_STANDARD_COMMANDS",
+        "DEFAULT_FORM",
+        "AUXILIARY_FORM",
+        "MAIN_DATA_COMPOSITION_SCHEMA",
+        "DEFAULT_SETTINGS_FORM",
+        "AUXILIARY_SETTINGS_FORM",
+        "DEFAULT_VARIANT_FORM",
+        "AUXILIARY_VARIANT_FORM",
+        "VARIANTS_STORAGE",
+        "SETTINGS_STORAGE",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "EXTENDED_PRESENTATION",
+        "EXPLANATION",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS",
+        "SUPPRESS_OBJECT"
+      ],
+      "REPORT___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "REPORT_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "REPORT_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "REPORT_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "REPORT_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES"
+      ],
+      "REPORT_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "REPORT_TABULAR_SECTION_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "REPORT_TABULAR_SECTION_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "REPORT_TABULAR_SECTION_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "REPORT_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT",
+        "EXTENDED_PRESENTATION"
+      ],
+      "REPORT_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "REPORT_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "REPORT_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXTERNAL_REPORT": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "CONTAINED_OBJECTS",
+        "PRODUCED_TYPES",
+        "DEFAULT_FORM",
+        "AUXILIARY_FORM",
+        "MAIN_DATA_COMPOSITION_SCHEMA",
+        "DEFAULT_SETTINGS_FORM",
+        "AUXILIARY_SETTINGS_FORM",
+        "DEFAULT_VARIANT_FORM",
+        "AUXILIARY_VARIANT_FORM",
+        "VARIANTS_STORAGE",
+        "SETTINGS_STORAGE",
+        "OBJECT_MODULE",
+        "HELP",
+        "EXTENDED_PRESENTATION",
+        "EXPLANATION",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "SUPPRESS_OBJECT"
+      ],
+      "EXTERNAL_REPORT___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DATA_PROCESSOR": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "PRODUCED_TYPES",
+        "USE_STANDARD_COMMANDS",
+        "DEFAULT_FORM",
+        "AUXILIARY_FORM",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "EXTENDED_PRESENTATION",
+        "EXPLANATION",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS",
+        "SUPPRESS_OBJECT"
+      ],
+      "DATA_PROCESSOR___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DATA_PROCESSOR_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "DATA_PROCESSOR_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "DATA_PROCESSOR_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DATA_PROCESSOR_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES"
+      ],
+      "DATA_PROCESSOR_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DATA_PROCESSOR_TABULAR_SECTION_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "DATA_PROCESSOR_TABULAR_SECTION_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "DATA_PROCESSOR_TABULAR_SECTION_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DATA_PROCESSOR_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT",
+        "EXTENDED_PRESENTATION"
+      ],
+      "DATA_PROCESSOR_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "DATA_PROCESSOR_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "DATA_PROCESSOR_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXTERNAL_DATA_PROCESSOR": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "CONTAINED_OBJECTS",
+        "PRODUCED_TYPES",
+        "DEFAULT_FORM",
+        "AUXILIARY_FORM",
+        "OBJECT_MODULE",
+        "HELP",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "SUPPRESS_OBJECT"
+      ],
+      "EXTERNAL_DATA_PROCESSOR___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCUMULATION_REGISTER": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "SUPPRESS_OBJECT",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "USE_STANDARD_COMMANDS",
+        "DEFAULT_LIST_FORM",
+        "AUXILIARY_LIST_FORM",
+        "REGISTER_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "RECORD_SET_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "ENABLE_TOTALS_SPLITTING",
+        "AGGREGATES",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "RESOURCES",
+        "ATTRIBUTES",
+        "DIMENSIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "ACCUMULATION_REGISTER___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCUMULATION_REGISTER_RESOURCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FULL_TEXT_SEARCH",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "ACCUMULATION_REGISTER_RESOURCE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ACCUMULATION_REGISTER_RESOURCE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCUMULATION_REGISTER_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "ACCUMULATION_REGISTER_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ACCUMULATION_REGISTER_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCUMULATION_REGISTER_DIMENSION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "DENY_INCOMPLETE_VALUES",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "CHOICE_HISTORY_ON_INPUT",
+        "USE_IN_TOTALS"
+      ],
+      "ACCUMULATION_REGISTER_DIMENSION_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ACCUMULATION_REGISTER_DIMENSION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCUMULATION_REGISTER_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "ACCUMULATION_REGISTER_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "ACCUMULATION_REGISTER_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ACCUMULATION_REGISTER_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "FUNCTIONAL_OPTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "LOCATION",
+        "PRIVILEGED_GET_MODE",
+        "CONTENT",
+        "SUPPRESS_OBJECT"
+      ],
+      "FUNCTIONAL_OPTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "BUSINESS_PROCESS": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT",
+        "DATA_HISTORY",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "FLOWCHART",
+        "EDIT_TYPE",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "AUXILIARY_OBJECT_FORM",
+        "AUXILIARY_LIST_FORM",
+        "AUXILIARY_CHOICE_FORM",
+        "CHOICE_HISTORY_ON_INPUT",
+        "NUMBER_TYPE",
+        "NUMBER_LENGTH",
+        "NUMBER_ALLOWED_LENGTH",
+        "CHECK_UNIQUE",
+        "AUTONUMBERING",
+        "NUMBER_PERIODICITY",
+        "TASK",
+        "CREATE_TASK_IN_PRIVILEGED_MODE",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "BUSINESS_PROCESS___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "BUSINESS_PROCESS_": [
+        "SELECT_CRITERION_TYPE_REF"
+      ],
+      "BUSINESS_PROCESS_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "BUSINESS_PROCESS_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "BUSINESS_PROCESS_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "BUSINESS_PROCESS_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "BUSINESS_PROCESS_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "DATA_HISTORY",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "BUSINESS_PROCESS_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "BUSINESS_PROCESS_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "BUSINESS_PROCESS_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH"
+      ],
+      "BUSINESS_PROCESS_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "TASK": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT",
+        "DATA_HISTORY",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "NUMBER_TYPE",
+        "NUMBER_LENGTH",
+        "NUMBER_ALLOWED_LENGTH",
+        "CHECK_UNIQUE",
+        "AUTONUMBERING",
+        "TASK_NUMBER_AUTO_PREFIX",
+        "DESCRIPTION_LENGTH",
+        "ADDRESSING",
+        "MAIN_ADDRESSING_ATTRIBUTE",
+        "CURRENT_PERFORMER",
+        "DEFAULT_PRESENTATION",
+        "EDIT_TYPE",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "AUXILIARY_OBJECT_FORM",
+        "AUXILIARY_LIST_FORM",
+        "AUXILIARY_CHOICE_FORM",
+        "CHOICE_HISTORY_ON_INPUT",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "ADDRESSING_ATTRIBUTES",
+        "COMMANDS"
+      ],
+      "TASK___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "TASK_": [
+        "SELECT_CRITERION_TYPE_REF"
+      ],
+      "TASK_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "TASK_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "TASK_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "TASK_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "TASK_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "DATA_HISTORY",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "TASK_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "TASK_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "TASK_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH"
+      ],
+      "TASK_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ADDRESSING_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "DATA_HISTORY",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "CHOICE_HISTORY_ON_INPUT",
+        "INDEXING",
+        "ADDRESSING_DIMENSION",
+        "FULL_TEXT_SEARCH"
+      ],
+      "ADDRESSING_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ADDRESSING_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "SCHEDULED_JOB": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "METHOD_NAME",
+        "DESCRIPTION",
+        "KEY",
+        "SCHEDULE",
+        "USE",
+        "PREDEFINED",
+        "RESTART_COUNT_ON_FAILURE",
+        "RESTART_INTERVAL_ON_FAILURE",
+        "SUPPRESS_OBJECT"
+      ],
+      "SCHEDULED_JOB___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "FUNCTIONAL_OPTIONS_PARAMETER": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "USE",
+        "SUPPRESS_OBJECT"
+      ],
+      "FUNCTIONAL_OPTIONS_PARAMETER___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "FILTER_CRITERION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "STANDARD_COMMANDS",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "TYPE",
+        "USE_STANDARD_COMMANDS",
+        "CONTENT",
+        "DEFAULT_FORM",
+        "AUXILIARY_FORM",
+        "MANAGER_MODULE",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "FORMS",
+        "COMMANDS",
+        "SUPPRESS_OBJECT"
+      ],
+      "FILTER_CRITERION_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "FILTER_CRITERION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "FILTER_CRITERION_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "FILTER_CRITERION_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "FILTER_CRITERION_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "FILTER_CRITERION_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "SETTINGS_STORAGE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "PRODUCED_TYPES",
+        "DEFAULT_SAVE_FORM",
+        "DEFAULT_LOAD_FORM",
+        "AUXILIARY_SAVE_FORM",
+        "AUXILIARY_LOAD_FORM",
+        "MANAGER_MODULE",
+        "FORMS",
+        "TEMPLATES",
+        "SUPPRESS_OBJECT"
+      ],
+      "SETTINGS_STORAGE_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "XDTO_PACKAGE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "NAMESPACE",
+        "PACKAGE",
+        "SUPPRESS_OBJECT"
+      ],
+      "XDTO_PACKAGE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "WEB_SERVICE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "NAMESPACE",
+        "MODULE",
+        "XDTO_PACKAGES",
+        "DESCRIPTOR_FILE_NAME",
+        "REUSE_SESSIONS",
+        "SESSION_MAX_AGE",
+        "OPERATIONS",
+        "SUPPRESS_OBJECT"
+      ],
+      "WEB_SERVICE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "OPERATION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "XDTO_RETURNING_VALUE_TYPE",
+        "NILLABLE",
+        "TRANSACTIONED",
+        "PROCEDURE_NAME",
+        "DATA_LOCK_CONTROL_MODE",
+        "PARAMETERS"
+      ],
+      "OPERATION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "PARAMETER": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "XDTO_VALUE_TYPE",
+        "NILLABLE",
+        "TRANSFER_DIRECTION"
+      ],
+      "HTTP_SERVICE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "ROOT_URL",
+        "MODULE",
+        "REUSE_SESSIONS",
+        "SESSION_MAX_AGE",
+        "URL_TEMPLATES",
+        "SUPPRESS_OBJECT"
+      ],
+      "HTTP_SERVICE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "URL_TEMPLATE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TEMPLATE",
+        "METHODS"
+      ],
+      "URL_TEMPLATE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "METHOD": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "HTTP_METHOD",
+        "HANDLER"
+      ],
+      "METHOD___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXTERNAL_DATA_SOURCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "PRODUCED_TYPES",
+        "DATA_LOCK_CONTROL_MODE",
+        "TABLES",
+        "CUBES",
+        "FUNCTIONS",
+        "SUPPRESS_OBJECT"
+      ],
+      "TABLE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "STANDARD_COMMANDS",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "PARENT_DATA_SOURCE",
+        "TABLE_TYPE",
+        "NAME_IN_DATA_SOURCE",
+        "EXPRESSION_IN_DATA_SOURCE",
+        "TABLE_DATA_TYPE",
+        "KEY_FIELDS",
+        "PRESENTATION_FIELD",
+        "PARENT_FIELD",
+        "UNFILLED_PARENT_VALUE",
+        "CHARACTERISTICS",
+        "USE_STANDARD_COMMANDS",
+        "QUICK_CHOICE",
+        "INPUT_BY_STRING",
+        "CREATE_ON_INPUT",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "CHOICE_HISTORY_ON_INPUT",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_RECORD_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "RECORD_PRESENTATION",
+        "EXTENDED_RECORD_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "OBJECT_MODULE",
+        "RECORD_SET_MODULE",
+        "MANAGER_MODULE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "READ_ONLY",
+        "TRANSACTIONS_ISOLATION_LEVEL",
+        "DATA_VERSION_FIELD",
+        "EDIT_TYPE",
+        "BASED_ON",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "TABLE_FIELDS",
+        "FORMS",
+        "COMMANDS",
+        "TEMPLATES",
+        "SUPPRESS_OBJECT"
+      ],
+      "TABLE_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "TABLE_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "TABLE_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "TABLE_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "FIELD": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_HISTORY_ON_INPUT",
+        "CHOICE_FORM",
+        "NAME_IN_DATA_SOURCE",
+        "READ_ONLY",
+        "ALLOW_NULL"
+      ],
+      "FIELD_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CUBE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "STANDARD_COMMANDS",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "PARENT_DATA_SOURCE",
+        "NAME_IN_DATA_SOURCE",
+        "CHARACTERISTICS",
+        "USE_STANDARD_COMMANDS",
+        "DEFAULT_RECORD_FORM",
+        "DEFAULT_LIST_FORM",
+        "RECORD_PRESENTATION",
+        "EXTENDED_RECORD_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "RECORD_SET_MODULE",
+        "MANAGER_MODULE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DIMENSION_TABLES",
+        "DIMENSIONS",
+        "RESOURCES",
+        "FORMS",
+        "COMMANDS",
+        "TEMPLATES",
+        "SUPPRESS_OBJECT"
+      ],
+      "DIMENSION_TABLE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "STANDARD_COMMANDS",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "PARENT_CUBE",
+        "NAME_IN_DATA_SOURCE",
+        "PRESENTATION_FIELD",
+        "HIERARCHY_NAME_IN_DATA_SOURCE",
+        "LEVEL_NUMBER",
+        "HIERARCHICAL",
+        "UNFILLED_PARENT_VALUE",
+        "USE_STANDARD_COMMANDS",
+        "QUICK_CHOICE",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "FIELDS",
+        "FORMS",
+        "COMMANDS",
+        "TEMPLATES",
+        "SUPPRESS_OBJECT"
+      ],
+      "DIMENSION_TABLE_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "DIMENSION_TABLE_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "DIMENSION_TABLE_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "DIMENSION_TABLE_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "DIMENSION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "DIMENSION_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "RESOURCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CHOICE_FORM",
+        "EXTENDED_EDIT",
+        "NAME_IN_DATA_SOURCE"
+      ],
+      "RESOURCE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CUBE_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "CUBE_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "CUBE_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CUBE_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "FUNCTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "RETURN_VALUE",
+        "TYPE",
+        "EXPRESSION_IN_DATA_SOURCE"
+      ],
+      "FUNCTION_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CHART_OF_ACCOUNTS": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT",
+        "TABULAR_PARTS",
+        "DATA_HISTORY",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "EXT_DIMENSION_TYPES",
+        "MAX_EXT_DIMENSION_COUNT",
+        "CODE_MASK",
+        "CODE_LENGTH",
+        "DESCRIPTION_LENGTH",
+        "CODE_SERIES",
+        "CHECK_UNIQUE",
+        "DEFAULT_PRESENTATION",
+        "STANDARD_TABULAR_SECTIONS",
+        "PREDEFINED",
+        "PREDEFINED_DATA_UPDATE",
+        "EDIT_TYPE",
+        "QUICK_CHOICE",
+        "CHOICE_MODE",
+        "CHOICE_HISTORY_ON_INPUT",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "AUXILIARY_OBJECT_FORM",
+        "AUXILIARY_LIST_FORM",
+        "AUXILIARY_CHOICE_FORM",
+        "AUTO_ORDER_BY_CODE",
+        "ORDER_LENGTH",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "ACCOUNTING_FLAGS",
+        "EXT_DIMENSION_ACCOUNTING_FLAGS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "CHART_OF_ACCOUNTS___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_ACCOUNTS_": [
+        "SELECT_CRITERION_TYPE_REF"
+      ],
+      "CHART_OF_ACCOUNTS_PREDEFINED_ITEM": [
+        "ID",
+        "NAME",
+        "DESCRIPTION",
+        "EXTENSION",
+        "CODE",
+        "ACCOUNT_TYPE",
+        "OFF_BALANCE",
+        "ORDER",
+        "ACCOUNTING_FLAGS",
+        "EXT_DIMENSION_TYPES",
+        "CHILD_ITEMS"
+      ],
+      "CHART_OF_ACCOUNTS_PREDEFINED_ITEM___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXT_DIMENSION_TYPE": [
+        "CHARACTERISTIC_TYPE",
+        "TURNOVER",
+        "EXT_DIMENSION_ACCOUNTING_FLAGS"
+      ],
+      "CHART_OF_ACCOUNTS_PREDEFINED": [
+        "ITEMS"
+      ],
+      "CHART_OF_ACCOUNTS_PREDEFINED_": [
+        "PREDEFINED_ITEMS"
+      ],
+      "CHART_OF_ACCOUNTS_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "DATA_HISTORY",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "CHART_OF_ACCOUNTS_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CHART_OF_ACCOUNTS_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_ACCOUNTS_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH"
+      ],
+      "CHART_OF_ACCOUNTS_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCOUNTING_FLAG": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "DATA_HISTORY",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "ACCOUNTING_FLAG_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ACCOUNTING_FLAG___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "EXT_DIMENSION_ACCOUNTING_FLAG": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "DATA_HISTORY",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "EXT_DIMENSION_ACCOUNTING_FLAG_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "EXT_DIMENSION_ACCOUNTING_FLAG___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_ACCOUNTS_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "CHART_OF_ACCOUNTS_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CHART_OF_ACCOUNTS_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_ACCOUNTS_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "CHART_OF_CALCULATION_TYPES": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "USE_STANDARD_COMMANDS",
+        "INPUT_BY_STRING",
+        "SEARCH_STRING_MODE_ON_INPUT_BY_STRING",
+        "FULL_TEXT_SEARCH_ON_INPUT_BY_STRING",
+        "CHOICE_DATA_GET_MODE_ON_INPUT_BY_STRING",
+        "OBJECT_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "CHARACTERISTICS",
+        "BASED_ON",
+        "CREATE_ON_INPUT",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "DATA_LOCK_FIELDS",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "OBJECT_PRESENTATION",
+        "EXTENDED_OBJECT_PRESENTATION",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "SUPPRESS_OBJECT",
+        "TABULAR_PARTS",
+        "DATA_HISTORY",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "CODE_LENGTH",
+        "DESCRIPTION_LENGTH",
+        "CODE_TYPE",
+        "CODE_ALLOWED_LENGTH",
+        "DEFAULT_PRESENTATION",
+        "EDIT_TYPE",
+        "QUICK_CHOICE",
+        "CHOICE_MODE",
+        "CHOICE_HISTORY_ON_INPUT",
+        "DEFAULT_OBJECT_FORM",
+        "DEFAULT_LIST_FORM",
+        "DEFAULT_CHOICE_FORM",
+        "AUXILIARY_OBJECT_FORM",
+        "AUXILIARY_LIST_FORM",
+        "AUXILIARY_CHOICE_FORM",
+        "DEPENDENCE_ON_CALCULATION_TYPES",
+        "BASE_CALCULATION_TYPES",
+        "ACTION_PERIOD_USE",
+        "STANDARD_TABULAR_SECTIONS",
+        "PREDEFINED",
+        "PREDEFINED_DATA_UPDATE",
+        "UPDATE_DATA_HISTORY_IMMEDIATELY_AFTER_WRITE",
+        "EXECUTE_AFTER_WRITE_DATA_HISTORY_VERSION_PROCESSING",
+        "ATTRIBUTES",
+        "TABULAR_SECTIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "CHART_OF_CALCULATION_TYPES___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CALCULATION_TYPES_": [
+        "SELECT_CRITERION_TYPE_REF"
+      ],
+      "CHART_OF_CALCULATION_TYPES_PREDEFINED_ITEM": [
+        "ID",
+        "NAME",
+        "DESCRIPTION",
+        "EXTENSION",
+        "CODE",
+        "ACTION_PERIOD_IS_BASE",
+        "DISPLACED",
+        "BASE",
+        "LEADING"
+      ],
+      "CHART_OF_CALCULATION_TYPES_PREDEFINED_ITEM___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CALCULATION_TYPES_PREDEFINED": [
+        "ITEMS"
+      ],
+      "CHART_OF_CALCULATION_TYPES_PREDEFINED_": [
+        "PREDEFINED_ITEMS"
+      ],
+      "CHART_OF_CALCULATION_TYPES_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FILL_FROM_FILLING_VALUE",
+        "FILL_VALUE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "DATA_HISTORY",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "CHART_OF_CALCULATION_TYPES_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CHART_OF_CALCULATION_TYPES_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CALCULATION_TYPES_TABULAR_SECTION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "TOOL_TIP",
+        "FILL_CHECKING",
+        "STANDARD_ATTRIBUTES",
+        "PRODUCED_TYPES",
+        "ATTRIBUTES",
+        "LINE_NUMBER_LENGTH"
+      ],
+      "CHART_OF_CALCULATION_TYPES_TABULAR_SECTION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CHART_OF_CALCULATION_TYPES_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "CHART_OF_CALCULATION_TYPES_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "CHART_OF_CALCULATION_TYPES_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CHART_OF_CALCULATION_TYPES_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCOUNTING_REGISTER": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "SUPPRESS_OBJECT",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "USE_STANDARD_COMMANDS",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "CHART_OF_ACCOUNTS",
+        "CORRESPONDENCE",
+        "PERIOD_ADJUSTMENT_LENGTH",
+        "DEFAULT_LIST_FORM",
+        "AUXILIARY_LIST_FORM",
+        "RECORD_SET_MODULE",
+        "MANAGER_MODULE",
+        "STANDARD_ATTRIBUTES",
+        "DATA_LOCK_CONTROL_MODE",
+        "ENABLE_TOTALS_SPLITTING",
+        "FULL_TEXT_SEARCH",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "DIMENSIONS",
+        "RESOURCES",
+        "ATTRIBUTES",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "ACCOUNTING_REGISTER___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCOUNTING_REGISTER_DIMENSION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "DENY_INCOMPLETE_VALUES",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "CHOICE_HISTORY_ON_INPUT",
+        "BALANCE",
+        "ACCOUNTING_FLAG"
+      ],
+      "ACCOUNTING_REGISTER_DIMENSION_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ACCOUNTING_REGISTER_DIMENSION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCOUNTING_REGISTER_RESOURCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FULL_TEXT_SEARCH",
+        "CHOICE_HISTORY_ON_INPUT",
+        "BALANCE",
+        "ACCOUNTING_FLAG",
+        "EXT_DIMENSION_ACCOUNTING_FLAG"
+      ],
+      "ACCOUNTING_REGISTER_RESOURCE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ACCOUNTING_REGISTER_RESOURCE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCOUNTING_REGISTER_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "ACCOUNTING_REGISTER_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ACCOUNTING_REGISTER_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ACCOUNTING_REGISTER_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "ACCOUNTING_REGISTER_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "ACCOUNTING_REGISTER_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "ACCOUNTING_REGISTER_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CALCULATION_REGISTER": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "STANDARD_COMMANDS",
+        "SUPPRESS_OBJECT",
+        "ADDITIONAL_INDEXES",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "USE_STANDARD_COMMANDS",
+        "DEFAULT_LIST_FORM",
+        "AUXILIARY_LIST_FORM",
+        "PERIODICITY",
+        "ACTION_PERIOD",
+        "BASE_PERIOD",
+        "SCHEDULE",
+        "SCHEDULE_VALUE",
+        "SCHEDULE_DATE",
+        "CHART_OF_CALCULATION_TYPES",
+        "RECORD_SET_MODULE",
+        "MANAGER_MODULE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "STANDARD_ATTRIBUTES",
+        "DATA_LOCK_CONTROL_MODE",
+        "FULL_TEXT_SEARCH",
+        "LIST_PRESENTATION",
+        "EXTENDED_LIST_PRESENTATION",
+        "EXPLANATION",
+        "RESOURCES",
+        "ATTRIBUTES",
+        "DIMENSIONS",
+        "RECALCULATIONS",
+        "FORMS",
+        "TEMPLATES",
+        "COMMANDS"
+      ],
+      "CALCULATION_REGISTER___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CALCULATION_REGISTER_RESOURCE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "FULL_TEXT_SEARCH",
+        "CHOICE_HISTORY_ON_INPUT"
+      ],
+      "CALCULATION_REGISTER_RESOURCE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CALCULATION_REGISTER_RESOURCE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "RECALCULATION_DIMENSION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "REGISTER_DIMENSION",
+        "LEADING_REGISTER_DATA"
+      ],
+      "CALCULATION_REGISTER_ATTRIBUTE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "BINARY_DATA_STORAGE_LOCATION_USE",
+        "BINARY_DATA_STORAGE_LOCATION_USE_FIELD",
+        "CHOICE_HISTORY_ON_INPUT",
+        "SCHEDULE_LINK"
+      ],
+      "CALCULATION_REGISTER_ATTRIBUTE_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CALCULATION_REGISTER_ATTRIBUTE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "CALCULATION_REGISTER_DIMENSION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "TYPE",
+        "PASSWORD_MODE",
+        "FORMAT",
+        "EDIT_FORMAT",
+        "TOOL_TIP",
+        "MARK_NEGATIVES",
+        "MASK",
+        "MULTI_LINE",
+        "EXTENDED_EDIT",
+        "MIN_VALUE",
+        "MAX_VALUE",
+        "FILL_CHECKING",
+        "CHOICE_FOLDERS_AND_ITEMS",
+        "CHOICE_PARAMETER_LINKS",
+        "CHOICE_PARAMETERS",
+        "QUICK_CHOICE",
+        "CREATE_ON_INPUT",
+        "CHOICE_FORM",
+        "LINK_BY_TYPE",
+        "DENY_INCOMPLETE_VALUES",
+        "INDEXING",
+        "FULL_TEXT_SEARCH",
+        "CHOICE_HISTORY_ON_INPUT",
+        "BASE_DIMENSION",
+        "SCHEDULE_LINK"
+      ],
+      "CALCULATION_REGISTER_DIMENSION_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CALCULATION_REGISTER_DIMENSION___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "RECALCULATION": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "PRODUCED_TYPES",
+        "DB_VIEW_DEFS",
+        "RECORD_SET_MODULE",
+        "DATA_LOCK_CONTROL_MODE",
+        "DIMENSIONS"
+      ],
+      "CALCULATION_REGISTER_FORM": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "FORM",
+        "FORM_TYPE",
+        "INCLUDE_HELP_IN_CONTENTS",
+        "HELP",
+        "USE_PURPOSES",
+        "USE_IN_INTERFACE_COMPATIBILITY_MODE",
+        "SUPPRESS_OBJECT"
+      ],
+      "CALCULATION_REGISTER_COMMAND": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "GROUP",
+        "COMMAND_PARAMETER_TYPE",
+        "PARAMETER_USE_MODE",
+        "MODIFIES_DATA",
+        "REPRESENTATION",
+        "TOOL_TIP",
+        "PICTURE",
+        "SHORTCUT",
+        "ON_MAIN_SERVER_UNAVALABLE_BEHAVIOR",
+        "COMMAND_MODULE"
+      ],
+      "CALCULATION_REGISTER_COMMAND_": [
+        "GET_TYPE_DESCRIPTION"
+      ],
+      "CALCULATION_REGISTER_COMMAND___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "ABSTRACT_STYLE": [
+        "MD_STYLE"
+      ],
+      "INTEGRATION_SERVICE": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "PRODUCED_TYPES",
+        "EXTERNAL_INTEGRATION_SERVICE_ADDRESS",
+        "MODULE",
+        "INTEGRATION_SERVICE_CHANNELS",
+        "SUPPRESS_OBJECT"
+      ],
+      "INTEGRATION_SERVICE_CHANNEL": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "PRODUCED_TYPES",
+        "EXTERNAL_INTEGRATION_SERVICE_CHANNEL_NAME",
+        "MESSAGE_DIRECTION",
+        "RECEIVE_MESSAGE_PROCESSING",
+        "TRANSACTIONED"
+      ],
+      "BOT": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "PREDEFINED",
+        "MODULE",
+        "PICTURE",
+        "SUPPRESS_OBJECT"
+      ],
+      "WEB_SOCKET_CLIENT": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "PREDEFINED",
+        "AUTO_CONNECT",
+        "SERVER_URL",
+        "USER",
+        "PASSWORD",
+        "HEADERS",
+        "USE_OS_PROXY",
+        "USE_OS_AUTHENTICATION",
+        "TIMEOUT",
+        "MODULE",
+        "SUPPRESS_OBJECT"
+      ],
+      "SOURCE_REFERENCE_TYPE_DESCRIPTION": [
+        "TYPES",
+        "NUMBER_QUALIFIERS",
+        "STRING_QUALIFIERS",
+        "DATE_QUALIFIERS",
+        "BINARY_QUALIFIERS"
+      ],
+      "SOURCE_REFERENCE_TYPE_DESCRIPTION_": [
+        "GET_TYPES",
+        "GET_NUMBER_QUALIFIERS",
+        "GET_STRING_QUALIFIERS",
+        "GET_DATE_QUALIFIERS",
+        "GET_BINARY_QUALIFIERS"
+      ],
+      "MD_OBJECT_REFERENCE_TYPE_DESCRIPTION": [
+        "TYPES",
+        "NUMBER_QUALIFIERS",
+        "STRING_QUALIFIERS",
+        "DATE_QUALIFIERS",
+        "BINARY_QUALIFIERS",
+        "MD_OBJECT"
+      ],
+      "MD_OBJECT_REFERENCE_TYPE_DESCRIPTION_": [
+        "GET_TYPES",
+        "GET_NUMBER_QUALIFIERS",
+        "GET_STRING_QUALIFIERS",
+        "GET_DATE_QUALIFIERS",
+        "GET_BINARY_QUALIFIERS"
+      ],
+      "SOURCE_REFERENCE_TYPE_CONTAINER": [
+        "TYPES"
+      ],
+      "SOURCE_REFERENCE_TYPE_CONTAINER_": [
+        "ALL_TYPES",
+        "GET_TYPES"
+      ],
+      "PALETTE_COLOR": [
+        "UUID",
+        "NAME",
+        "SYNONYM",
+        "COMMENT",
+        "OBJECT_BELONGING",
+        "EXTENDED_CONFIGURATION_OBJECT",
+        "EXTENSION",
+        "APPEARANCE_ITEM",
+        "COLOR",
+        "SUPPRESS_OBJECT"
+      ]
+    },
+    "mcoreClassFeatures": {
+      "ENVIRONMENTAL": [
+        "ENVIRONMENTS"
+      ],
+      "ENVIRONMENTAL_": [
+        "ENVIRONMENTS"
+      ],
+      "LOCAL_STRING_MAP_ENTRY": [
+        "KEY",
+        "VALUE"
+      ],
+      "STRING_KEY_AND_VALUE": [
+        "KEY",
+        "VALUE"
+      ],
+      "NAMED_ELEMENT": [
+        "NAME"
+      ],
+      "CONTEXTS_ITEM": [
+        "CODE"
+      ],
+      "DUALLY_NAMED_ELEMENT": [
+        "NAME",
+        "NAME_RU"
+      ],
+      "VERSIONED_ITEM": [
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY"
+      ],
+      "INTERFACE_DEPENDENT_ITEM": [
+        "INTERFACE_TYPE"
+      ],
+      "TYPE_ITEM": [
+        "NAME",
+        "NAME_RU",
+        "ENVIRONMENTS",
+        "COMPOSITE_ID"
+      ],
+      "TYPE_ITEM_": [
+        "ENVIRONMENTS"
+      ],
+      "TYPE": [
+        "NAME",
+        "NAME_RU",
+        "ENVIRONMENTS",
+        "COMPOSITE_ID",
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "INTERFACE_TYPE",
+        "CTORS",
+        "CONTEXT_DEF",
+        "EVENTS",
+        "SYS_ENUM",
+        "CREATED_BY_NEW_OPERATOR",
+        "PARENT_TYPE",
+        "ITERABLE",
+        "INDEX_ACCESSIBLE",
+        "EXCHANGE_WITH_SERVER",
+        "COLLECTION_ELEMENT_TYPES"
+      ],
+      "TYPE_": [
+        "ENVIRONMENTS",
+        "ALL_EVENTS"
+      ],
+      "PROMISE_TYPE": [
+        "NAME",
+        "NAME_RU",
+        "ENVIRONMENTS",
+        "COMPOSITE_ID",
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "INTERFACE_TYPE",
+        "CTORS",
+        "CONTEXT_DEF",
+        "EVENTS",
+        "SYS_ENUM",
+        "CREATED_BY_NEW_OPERATOR",
+        "PARENT_TYPE",
+        "ITERABLE",
+        "INDEX_ACCESSIBLE",
+        "EXCHANGE_WITH_SERVER",
+        "COLLECTION_ELEMENT_TYPES",
+        "WRAP_TYPES"
+      ],
+      "PROMISE_TYPE_": [
+        "ENVIRONMENTS",
+        "ALL_EVENTS",
+        "GET_NAME",
+        "GET_NAME_RU",
+        "IS_SYS_ENUM",
+        "IS_CREATED_BY_NEW_OPERATOR",
+        "IS_ITERABLE",
+        "IS_INDEX_ACCESSIBLE",
+        "IS_EXCHANGE_WITH_SERVER",
+        "GET_ENVIRONMENTS",
+        "GET_CONTEXT_DEF"
+      ],
+      "CONTEXT_DEF": [
+        "ENVIRONMENTS",
+        "PROPERTIES",
+        "METHODS",
+        "REF_CONTEXT_DEFS"
+      ],
+      "CONTEXT_DEF_": [
+        "ENVIRONMENTS",
+        "ALL_PROPERTIES",
+        "ALL_METHODS",
+        "ALL_REF_CONTEXT_DEFS"
+      ],
+      "EMPTY_CONTEXT_DEF": [
+        "ENVIRONMENTS",
+        "PROPERTIES",
+        "METHODS",
+        "REF_CONTEXT_DEFS"
+      ],
+      "EMPTY_CONTEXT_DEF_": [
+        "ENVIRONMENTS",
+        "GET_PROPERTIES",
+        "GET_METHODS",
+        "GET_REF_CONTEXT_DEFS",
+        "ALL_PROPERTIES",
+        "ALL_METHODS",
+        "ALL_REF_CONTEXT_DEFS"
+      ],
+      "CTOR": [
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "INTERFACE_TYPE",
+        "MIN_PARAMS",
+        "MAX_PARAMS",
+        "PARAMS"
+      ],
+      "FAKE_CTOR": [
+        "CODE",
+        "PARAMS",
+        "TYPE_NAME",
+        "TYPE_CODE",
+        "VERSION"
+      ],
+      "FAKE_PARAMETER": [
+        "CODE",
+        "NAME",
+        "TYPES"
+      ],
+      "TYPE_SET": [
+        "NAME",
+        "NAME_RU",
+        "ENVIRONMENTS",
+        "COMPOSITE_ID",
+        "BASE_TYPES",
+        "TYPES"
+      ],
+      "TYPE_SET_": [
+        "ENVIRONMENTS"
+      ],
+      "TYPE_SET___TYPES": [
+        "EOBJECT"
+      ],
+      "NUMBER_QUALIFIERS": [
+        "PRECISION",
+        "SCALE",
+        "NON_NEGATIVE"
+      ],
+      "STRING_QUALIFIERS": [
+        "LENGTH",
+        "FIXED"
+      ],
+      "DATE_QUALIFIERS": [
+        "DATE_FRACTIONS"
+      ],
+      "BINARY_QUALIFIERS": [
+        "LENGTH",
+        "FIXED"
+      ],
+      "TYPE_DESCRIPTION": [
+        "TYPES",
+        "NUMBER_QUALIFIERS",
+        "STRING_QUALIFIERS",
+        "DATE_QUALIFIERS",
+        "BINARY_QUALIFIERS"
+      ],
+      "TYPE_VALUE": [
+        "VALUE"
+      ],
+      "TYPE_DESCRIPTION_VALUE": [
+        "VALUE"
+      ],
+      "NUMBER_VALUE": [
+        "VALUE"
+      ],
+      "BOOLEAN_VALUE": [
+        "VALUE"
+      ],
+      "STRING_VALUE": [
+        "VALUE"
+      ],
+      "DATE_VALUE": [
+        "VALUE"
+      ],
+      "BINARY_VALUE": [
+        "VALUE"
+      ],
+      "REFERENCE_VALUE": [
+        "VALUE"
+      ],
+      "ENUM_VALUE": [
+        "VALUE"
+      ],
+      "SYS_ENUM_VALUE": [
+        "VALUE"
+      ],
+      "COLOR_VALUE": [
+        "VALUE"
+      ],
+      "FONT_VALUE": [
+        "VALUE"
+      ],
+      "LINE_VALUE": [
+        "VALUE"
+      ],
+      "BORDER_VALUE": [
+        "VALUE"
+      ],
+      "IRRESOLVABLE_REFERENCE_VALUE": [
+        "REF_TYPE_ID",
+        "INSTANCE_ID"
+      ],
+      "IRRESOLVABLE_REFERENCE_VALUE___VALIDATE": [
+        "DIAGNOSTICCHAIN_MAP"
+      ],
+      "VALUE_LIST": [
+        "VALUES"
+      ],
+      "FIXED_ARRAY_VALUE": [
+        "VALUES"
+      ],
+      "TYPED_VALUE_LIST_ITEM": [
+        "VALUE",
+        "PRESENTATION",
+        "CHECK_STATE",
+        "PICTURE",
+        "ID",
+        "FORMAT_PRESENTATION_SPECIFIED",
+        "FORMAT_PRESENTATION"
+      ],
+      "TYPED_VALUE_LIST": [
+        "VALUE_TYPE",
+        "AVAILABLE_VALUES",
+        "LAST_ID",
+        "ITEMS"
+      ],
+      "STRUCTURE_PROPERTY": [
+        "NAME",
+        "VALUE"
+      ],
+      "STRUCTURE": [
+        "PROPERTY"
+      ],
+      "UUID_VALUE": [
+        "VALUE"
+      ],
+      "RUNTIME_VALUE": [
+        "NS_URI",
+        "PREFIX",
+        "TYPE_NAME",
+        "CONTENT",
+        "ATTRIBUTES"
+      ],
+      "STANDARD_BEGINNING_DATE": [
+        "VARIANT",
+        "DATE"
+      ],
+      "STANDARD_BEGINNING_DATE_VALUE": [
+        "VALUE"
+      ],
+      "STANDARD_PERIOD": [
+        "VARIANT",
+        "START_DATE",
+        "END_DATE"
+      ],
+      "STANDARD_PERIOD_VALUE": [
+        "VALUE"
+      ],
+      "CONTEXT_DEF_WITH_REF_ITEM": [
+        "ENVIRONMENTS",
+        "PROPERTIES",
+        "METHODS",
+        "REF_CONTEXT_DEFS",
+        "REF_PROPERTIES",
+        "REF_METHODS"
+      ],
+      "CONTEXT_DEF_WITH_REF_ITEM_": [
+        "ENVIRONMENTS",
+        "ALL_REF_CONTEXT_DEFS",
+        "ALL_PROPERTIES",
+        "ALL_METHODS"
+      ],
+      "PROPERTY": [
+        "NAME",
+        "NAME_RU",
+        "ENVIRONMENTS",
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "INTERFACE_TYPE",
+        "READABLE",
+        "WRITABLE",
+        "DEPENDS_ON_METADATA",
+        "TYPE_CONTAINER",
+        "SERVER_REQUEST"
+      ],
+      "PROPERTY_": [
+        "ENVIRONMENTS",
+        "GET_TYPES"
+      ],
+      "TYPE_CONTAINER_": [
+        "ALL_TYPES"
+      ],
+      "TYPE_CONTAINER_REF": [
+        "TYPES"
+      ],
+      "TYPE_CONTAINER_REF_": [
+        "ALL_TYPES"
+      ],
+      "TYPE_CONTAINER_DEF": [
+        "TYPES"
+      ],
+      "TYPE_CONTAINER_DEF_": [
+        "ALL_TYPES"
+      ],
+      "DERIVED_PROPERTY": [
+        "NAME",
+        "NAME_RU",
+        "ENVIRONMENTS",
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "INTERFACE_TYPE",
+        "READABLE",
+        "WRITABLE",
+        "DEPENDS_ON_METADATA",
+        "TYPE_CONTAINER",
+        "SERVER_REQUEST",
+        "SOURCE"
+      ],
+      "DERIVED_PROPERTY_": [
+        "ENVIRONMENTS",
+        "GET_TYPES"
+      ],
+      "CONTAINING_SOURCE_DERIVED_PROPERTY": [
+        "NAME",
+        "NAME_RU",
+        "ENVIRONMENTS",
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "INTERFACE_TYPE",
+        "READABLE",
+        "WRITABLE",
+        "DEPENDS_ON_METADATA",
+        "TYPE_CONTAINER",
+        "SERVER_REQUEST",
+        "SOURCE",
+        "CONTAINING_SOURCE"
+      ],
+      "CONTAINING_SOURCE_DERIVED_PROPERTY_": [
+        "ENVIRONMENTS",
+        "GET_TYPES",
+        "GET_SOURCE"
+      ],
+      "ABSTRACT_METHOD": [
+        "NAME",
+        "NAME_RU",
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "INTERFACE_TYPE",
+        "PARAM_SET",
+        "RET_VAL",
+        "RET_VAL_TYPE"
+      ],
+      "ABSTRACT_METHOD___ACTUAL_PARAM_SET": [
+        "INT"
+      ],
+      "METHOD": [
+        "NAME",
+        "NAME_RU",
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "INTERFACE_TYPE",
+        "PARAM_SET",
+        "RET_VAL",
+        "RET_VAL_TYPE",
+        "ENVIRONMENTS"
+      ],
+      "METHOD___ACTUAL_PARAM_SET": [
+        "INT"
+      ],
+      "METHOD_": [
+        "ENVIRONMENTS"
+      ],
+      "EVENT": [
+        "NAME",
+        "NAME_RU",
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "INTERFACE_TYPE",
+        "PARAM_SET",
+        "RET_VAL",
+        "RET_VAL_TYPE",
+        "ENVIRONMENTS",
+        "SERVER_CALL_WITH_CONTEXT_NOT_ALLOWED",
+        "ORDER",
+        "UUID"
+      ],
+      "EVENT___ACTUAL_PARAM_SET": [
+        "INT"
+      ],
+      "EVENT_": [
+        "ENVIRONMENTS"
+      ],
+      "PARAM_SET": [
+        "CODE",
+        "MIN_PARAMS",
+        "MAX_PARAMS",
+        "PARAMS",
+        "SERVER_REQUEST"
+      ],
+      "PARAMETER": [
+        "NAME",
+        "NAME_RU",
+        "DEPRECATED_SINCE",
+        "COMPATIBILITY_MODE",
+        "REPLACED_BY",
+        "CODE",
+        "TYPE",
+        "OUT",
+        "DEFAULT_VALUE"
+      ],
+      "GENERAL_CONTEXT_DEF": [
+        "ENVIRONMENTS",
+        "PROPERTIES",
+        "METHODS",
+        "REF_CONTEXT_DEFS",
+        "CODE"
+      ],
+      "GENERAL_CONTEXT_DEF_": [
+        "ENVIRONMENTS",
+        "ALL_PROPERTIES",
+        "ALL_METHODS",
+        "ALL_REF_CONTEXT_DEFS"
+      ],
+      "FIELD": [
+        "NAME",
+        "NAME_RU",
+        "TYPE",
+        "READ_ONLY",
+        "SOURCE_TYPES",
+        "FIELD_ID_PREFIX",
+        "FIELD_ID",
+        "ID"
+      ],
+      "DERIVED_FIELD": [
+        "NAME",
+        "NAME_RU",
+        "TYPE",
+        "READ_ONLY",
+        "SOURCE_TYPES",
+        "FIELD_ID_PREFIX",
+        "FIELD_ID",
+        "ID",
+        "SOURCE"
+      ],
+      "FIELD_SOURCE": [
+        "FIELDS",
+        "REF_FIELD_SOURCES"
+      ],
+      "STANDARD_TABULAR_PART_SOURCE": [
+        "TABULAR_PARTS"
+      ],
+      "STANDARD_TABULAR_PART": [
+        "NAME",
+        "NAME_RU",
+        "FIELDS",
+        "REF_FIELD_SOURCES",
+        "READ_ONLY",
+        "ID"
+      ],
+      "COMMAND_REF": [
+        "COMMAND"
+      ],
+      "STANDARD_COMMAND_GROUP": [
+        "NAME",
+        "NAME_RU",
+        "CATEGORY",
+        "PRIORITY"
+      ],
+      "PICTURE_REF": [
+        "PICTURE"
+      ],
+      "PICTURE_DEF": [
+        "GLYPH",
+        "TRANSPARENT_PIXEL"
+      ],
+      "COLOR_": [
+        "RED",
+        "GREEN",
+        "BLUE",
+        "COMPOSITE_ID"
+      ],
+      "COLOR_DEF": [
+        "RED",
+        "GREEN",
+        "BLUE"
+      ],
+      "COLOR_DEF_": [
+        "RED",
+        "GREEN",
+        "BLUE",
+        "COMPOSITE_ID"
+      ],
+      "COLOR_REF": [
+        "COLOR"
+      ],
+      "COLOR_REF_": [
+        "RED",
+        "GREEN",
+        "BLUE",
+        "COMPOSITE_ID"
+      ],
+      "STYLE_APPEARANCE_ITEM": [
+        "NAME"
+      ],
+      "STYLE_COLOR": [
+        "NAME",
+        "COLOR",
+        "COMPOSITE_ID"
+      ],
+      "STYLE_COLOR_": [
+        "RED",
+        "GREEN",
+        "BLUE",
+        "COMPOSITE_ID"
+      ],
+      "STYLE_BORDER": [
+        "NAME",
+        "BORDER"
+      ],
+      "STYLE_BORDER_": [
+        "STYLE",
+        "WIDTH",
+        "COMPOSITE_ID"
+      ],
+      "STYLE_FONT": [
+        "NAME",
+        "FONT",
+        "FACE_NAME",
+        "HEIGHT",
+        "BOLD",
+        "ITALIC",
+        "UNDERLINE",
+        "STRIKEOUT",
+        "SCALE",
+        "COMPOSITE_ID"
+      ],
+      "STYLE_FONT___SET_FACE_NAME": [
+        "STRING"
+      ],
+      "STYLE_FONT___SET_HEIGHT": [
+        "FLOAT"
+      ],
+      "STYLE_FONT___SET_BOLD": [
+        "BOOLEAN"
+      ],
+      "STYLE_FONT___SET_ITALIC": [
+        "BOOLEAN"
+      ],
+      "STYLE_FONT___SET_UNDERLINE": [
+        "BOOLEAN"
+      ],
+      "STYLE_FONT___SET_STRIKEOUT": [
+        "BOOLEAN"
+      ],
+      "STYLE_FONT___SET_SCALE": [
+        "INT"
+      ],
+      "STYLE_FONT_": [
+        "FACE_NAME",
+        "HEIGHT",
+        "HEIGHT_F",
+        "BOLD",
+        "ITALIC",
+        "UNDERLINE",
+        "STRIKEOUT",
+        "SCALE",
+        "COMPOSITE_ID"
+      ],
+      "BORDER_": [
+        "STYLE",
+        "WIDTH",
+        "COMPOSITE_ID"
+      ],
+      "BORDER_DEF": [
+        "STYLE",
+        "WIDTH"
+      ],
+      "BORDER_DEF_": [
+        "STYLE",
+        "WIDTH",
+        "COMPOSITE_ID"
+      ],
+      "BORDER_REF": [
+        "BORDER"
+      ],
+      "BORDER_REF_": [
+        "STYLE",
+        "WIDTH",
+        "COMPOSITE_ID"
+      ],
+      "FONT_": [
+        "FACE_NAME",
+        "HEIGHT",
+        "HEIGHT_F",
+        "BOLD",
+        "ITALIC",
+        "UNDERLINE",
+        "STRIKEOUT",
+        "SCALE",
+        "COMPOSITE_ID"
+      ],
+      "MUTABLE_FONT___SET_FACE_NAME": [
+        "STRING"
+      ],
+      "MUTABLE_FONT___SET_HEIGHT": [
+        "FLOAT"
+      ],
+      "MUTABLE_FONT___SET_BOLD": [
+        "BOOLEAN"
+      ],
+      "MUTABLE_FONT___SET_ITALIC": [
+        "BOOLEAN"
+      ],
+      "MUTABLE_FONT___SET_UNDERLINE": [
+        "BOOLEAN"
+      ],
+      "MUTABLE_FONT___SET_STRIKEOUT": [
+        "BOOLEAN"
+      ],
+      "MUTABLE_FONT___SET_SCALE": [
+        "INT"
+      ],
+      "FONT_DEF": [
+        "FACE_NAME",
+        "HEIGHT",
+        "BOLD",
+        "ITALIC",
+        "UNDERLINE",
+        "STRIKEOUT",
+        "SCALE"
+      ],
+      "FONT_DEF___SET_FACE_NAME": [
+        "STRING"
+      ],
+      "FONT_DEF___SET_HEIGHT": [
+        "FLOAT",
+        "INT"
+      ],
+      "FONT_DEF___SET_BOLD": [
+        "BOOLEAN"
+      ],
+      "FONT_DEF___SET_ITALIC": [
+        "BOOLEAN"
+      ],
+      "FONT_DEF___SET_UNDERLINE": [
+        "BOOLEAN"
+      ],
+      "FONT_DEF___SET_STRIKEOUT": [
+        "BOOLEAN"
+      ],
+      "FONT_DEF___SET_SCALE": [
+        "INT"
+      ],
+      "FONT_DEF_": [
+        "FACE_NAME",
+        "HEIGHT",
+        "HEIGHT_F",
+        "BOLD",
+        "ITALIC",
+        "UNDERLINE",
+        "STRIKEOUT",
+        "SCALE",
+        "COMPOSITE_ID"
+      ],
+      "AUTO_FONT": [
+        "FACE_NAME",
+        "HEIGHT",
+        "BOLD",
+        "ITALIC",
+        "UNDERLINE",
+        "STRIKEOUT",
+        "SCALE"
+      ],
+      "AUTO_FONT___SET_FACE_NAME": [
+        "STRING"
+      ],
+      "AUTO_FONT___SET_HEIGHT": [
+        "FLOAT",
+        "INT"
+      ],
+      "AUTO_FONT___SET_BOLD": [
+        "BOOLEAN"
+      ],
+      "AUTO_FONT___SET_ITALIC": [
+        "BOOLEAN"
+      ],
+      "AUTO_FONT___SET_UNDERLINE": [
+        "BOOLEAN"
+      ],
+      "AUTO_FONT___SET_STRIKEOUT": [
+        "BOOLEAN"
+      ],
+      "AUTO_FONT___SET_SCALE": [
+        "INT"
+      ],
+      "AUTO_FONT_": [
+        "FACE_NAME",
+        "HEIGHT",
+        "HEIGHT_F",
+        "BOLD",
+        "ITALIC",
+        "UNDERLINE",
+        "STRIKEOUT",
+        "SCALE",
+        "COMPOSITE_ID"
+      ],
+      "FONT_REF": [
+        "FONT",
+        "FACE_NAME",
+        "HEIGHT",
+        "BOLD",
+        "ITALIC",
+        "UNDERLINE",
+        "STRIKEOUT",
+        "SCALE"
+      ],
+      "FONT_REF___SET_FACE_NAME": [
+        "STRING"
+      ],
+      "FONT_REF___SET_HEIGHT": [
+        "FLOAT"
+      ],
+      "FONT_REF___SET_BOLD": [
+        "BOOLEAN"
+      ],
+      "FONT_REF___SET_ITALIC": [
+        "BOOLEAN"
+      ],
+      "FONT_REF___SET_UNDERLINE": [
+        "BOOLEAN"
+      ],
+      "FONT_REF___SET_STRIKEOUT": [
+        "BOOLEAN"
+      ],
+      "FONT_REF___SET_SCALE": [
+        "INT"
+      ],
+      "FONT_REF_": [
+        "FACE_NAME",
+        "HEIGHT",
+        "HEIGHT_F",
+        "BOLD",
+        "ITALIC",
+        "UNDERLINE",
+        "STRIKEOUT",
+        "SCALE",
+        "COMPOSITE_ID"
+      ],
+      "ABSTRACT_LINE": [
+        "WIDTH",
+        "GAP"
+      ],
+      "LINE": [
+        "WIDTH",
+        "GAP",
+        "STYLE"
+      ],
+      "HELP": [
+        "PAGES"
+      ],
+      "HELP_PAGE": [
+        "LANG"
+      ],
+      "REF_CONTEXT_DELEGATING_CONTEXT_DEF": [
+        "ENVIRONMENTS",
+        "PROPERTIES",
+        "METHODS",
+        "REF_CONTEXT_DEFS"
+      ],
+      "REF_CONTEXT_DELEGATING_CONTEXT_DEF_": [
+        "ENVIRONMENTS",
+        "ALL_PROPERTIES",
+        "ALL_METHODS",
+        "ALL_REF_CONTEXT_DEFS"
+      ],
+      "QNAME": [
+        "NAME",
+        "NS_URI"
+      ],
+      "AUTO_COLOR": [
+        "RED",
+        "GREEN",
+        "BLUE"
+      ],
+      "AUTO_COLOR_": [
+        "RED",
+        "GREEN",
+        "BLUE",
+        "COMPOSITE_ID"
+      ],
+      "PALETTE_COLOR": [
+        "NAME",
+        "COLOR",
+        "COMPOSITE_ID"
+      ],
+      "PALETTE_COLOR_": [
+        "RED",
+        "GREEN",
+        "BLUE",
+        "COMPOSITE_ID"
+      ]
+    },
+    "entryCounts": {
+      "metadata.mdclass": 579,
+      "mcore": 248
+    }
+  }
+}

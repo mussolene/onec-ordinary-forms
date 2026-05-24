@@ -19,6 +19,7 @@ from onec_ordinary_forms.ordinary_platform import (
     ORDINARY_CONTROL_GUID_BY_TYPE,
 )
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
+from onec_ordinary_forms.value_codec import is_integer_atom, localized_text_record, quote_atom
 
 
 PLATFORM_CONTROL_FORMAT_IDS = {
@@ -311,10 +312,6 @@ def top_level_pages(root: ET.Element) -> list[ET.Element]:
     return root.findall("./Pages/Page")
 
 
-def localized_text_record(text: str) -> list[object]:
-    return ["1", "1", [quoted_atom("ru"), quoted_atom(text)]]
-
-
 def get_multilang_text(parent: ET.Element | None, tag: str) -> str:
     if parent is None:
         return ""
@@ -337,19 +334,11 @@ def type_pattern_from_xml(attribute: ET.Element) -> list[object]:
         code = item.get("code", "")
         if not code:
             continue
-        result.append(quoted_atom(code) if not is_numeric_atom(code) else code)
+        result.append(quote_atom(code) if not is_integer_atom(code) else code)
         uuid = item.get("uuid")
         if code == "#" and uuid:
             result.append(uuid)
     return result
-
-
-def is_numeric_atom(value: str) -> bool:
-    try:
-        int(value)
-        return True
-    except ValueError:
-        return False
 
 
 def control_stream_from_xml(element: ET.Element, asset_root: Path | None) -> list[object] | None:
@@ -1245,4 +1234,4 @@ def anchor_target_id(node: ET.Element) -> str:
 
 
 def quoted_atom(value: str) -> str:
-    return '"' + value.replace('"', '""') + '"'
+    return quote_atom(value)

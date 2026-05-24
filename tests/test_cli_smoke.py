@@ -11,6 +11,7 @@ from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_fo
 from onec_ordinary_forms.cli import (
     format_xml_file,
     pretty_xml_bytes,
+    schema_path,
     validate_xml_file,
 )
 from onec_ordinary_forms.formbin import (
@@ -39,6 +40,10 @@ from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 class CliSmokeTest(unittest.TestCase):
     def test_version_is_present(self) -> None:
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
+
+    def test_bundled_schema_paths_include_metadata_configuration(self) -> None:
+        self.assertTrue(schema_path("ordinary-form.xsd").is_file())
+        self.assertTrue(schema_path("metadata-configuration.xsd").is_file())
 
     def test_public_import_wrappers_dump_validate_and_build(self) -> None:
         with TemporaryDirectory() as temp_dir:

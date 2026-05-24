@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
+  <xs:annotation>
+    <xs:documentation>Platform-derived metadata and value schema used by the ordinary-form codec layer. This schema describes typed concepts used internally by ListInStream/ListOutStream mapping; it is not a public raw stream dump format.</xs:documentation>
+    <xs:appinfo>
+      <PlatformSchemaResources source="1C 8.2 platform embedded XML/XSD resources">
+        <Resource source="mngcore_root.res" schema="logform.xsd" namespace="http://v8.1c.ru/8.2/managed-application/logform"/>
+        <Resource source="mngcore_root.res" schema="logform_layouter.xsd" namespace="http://v8.1c.ru/8.2/managed-application/logform/layouter"/>
+        <Resource source="mngcore_root.res" schema="uobjects.xsd" namespace="http://v8.1c.ru/8.2/uobjects"/>
+        <Resource source="xdto_root.res" schema="core.xsd" namespace="http://v8.1c.ru/8.1/data/core"/>
+        <Resource source="xdto_root.res" schema="ui.xsd" namespace="http://v8.1c.ru/8.1/data/ui"/>
+        <Resource source="map_root.res" schema="geo.xsd" namespace="http://v8.1c.ru/8.2/data/geo"/>
+        <Resource source="scheme_root.res" schema="graphscheme.xsd" namespace="http://v8.1c.ru/8.2/data/graphscheme"/>
+        <Resource source="txtedt_root.res" schema="txtedt.xsd" namespace="http://v8.1c.ru/8.1/data/txtedt"/>
+      </PlatformSchemaResources>
+      <PlatformSerializers>
+        <Serializer name="ListInStream" direction="read" role="platform bracket/list-stream reader"/>
+        <Serializer name="ListOutStream" direction="write" role="platform bracket/list-stream writer"/>
+        <Serializer name="ValueFromStringInternal" direction="read" role="typed scalar value reader"/>
+        <Serializer name="ValueToStringInternal" direction="write" role="typed scalar value writer"/>
+        <Serializer name="CompositeID::serialize" direction="write" role="platform metadata object id writer"/>
+        <Serializer name="CompositeID::deserialize" direction="read" role="platform metadata object id reader"/>
+        <Serializer name="TypeDomainPattern::serialize" direction="write" role="platform type-domain writer"/>
+        <Serializer name="TypeDomainPattern::deserialize" direction="read" role="platform type-domain reader"/>
+      </PlatformSerializers>
+    </xs:appinfo>
+  </xs:annotation>
+
+  <xs:simpleType name="UUID">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="CompositeID">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="-?[0-9]+(:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="TypeDomainCode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="S"/>
+      <xs:enumeration value="N"/>
+      <xs:enumeration value="B"/>
+      <xs:enumeration value="D"/>
+      <xs:enumeration value="U"/>
+      <xs:enumeration value="#"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="TypeDomainPatternItem">
+    <xs:attribute name="code" type="TypeDomainCode" use="required"/>
+    <xs:attribute name="uuid" type="UUID"/>
+    <xs:attribute name="typeName" type="xs:string" use="required"/>
+    <xs:attribute name="kind" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="TypeDomainPattern">
+    <xs:sequence>
+      <xs:element name="PatternItem" type="TypeDomainPatternItem" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="encoding" fixed="TypeDomainPattern"/>
+  </xs:complexType>
+
+  <xs:simpleType name="ValueStringInternalKind">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="null"/>
+      <xs:enumeration value="boolean"/>
+      <xs:enumeration value="integer"/>
+      <xs:enumeration value="number"/>
+      <xs:enumeration value="string"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="ValueStringInternal">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="kind" type="ValueStringInternalKind" use="required"/>
+        <xs:attribute name="encoding" fixed="ValueToStringInternal"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataAttribute">
+    <xs:sequence>
+      <xs:element name="Type" type="TypeDomainPattern" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="id" type="CompositeID"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataObject">
+    <xs:sequence>
+      <xs:element name="Attribute" type="MetadataAttribute" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Form" type="MetadataForm" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="TablePart" type="MetadataObject" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="type" type="MetadataObjectKind" use="required"/>
+    <xs:attribute name="uuid" type="UUID"/>
+  </xs:complexType>
+
+  <xs:simpleType name="MetadataObjectKind">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Configuration"/>
+      <xs:enumeration value="Common"/>
+      <xs:enumeration value="Constant"/>
+      <xs:enumeration value="Catalog"/>
+      <xs:enumeration value="Document"/>
+      <xs:enumeration value="DocumentJournal"/>
+      <xs:enumeration value="Enumeration"/>
+      <xs:enumeration value="Report"/>
+      <xs:enumeration value="DataProcessor"/>
+      <xs:enumeration value="ChartOfCharacteristicTypes"/>
+      <xs:enumeration value="ChartOfAccounts"/>
+      <xs:enumeration value="ChartOfCalculationTypes"/>
+      <xs:enumeration value="InformationRegister"/>
+      <xs:enumeration value="AccumulationRegister"/>
+      <xs:enumeration value="AccountingRegister"/>
+      <xs:enumeration value="CalculationRegister"/>
+      <xs:enumeration value="BusinessProcess"/>
+      <xs:enumeration value="Task"/>
+      <xs:enumeration value="ExternalDataSource"/>
+      <xs:enumeration value="ExternalDataProcessorObject"/>
+      <xs:enumeration value="ExchangePlan"/>
+      <xs:enumeration value="FilterCriterion"/>
+      <xs:enumeration value="CommonModule"/>
+      <xs:enumeration value="CommonForm"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="TypeTreeKind">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Number"/>
+      <xs:enumeration value="String"/>
+      <xs:enumeration value="Date"/>
+      <xs:enumeration value="Boolean"/>
+      <xs:enumeration value="ValueList"/>
+      <xs:enumeration value="CatalogRef"/>
+      <xs:enumeration value="DocumentRef"/>
+      <xs:enumeration value="EnumerationRef"/>
+      <xs:enumeration value="ChartOfCharacteristicTypesRef"/>
+      <xs:enumeration value="ChartOfAccountsRef"/>
+      <xs:enumeration value="ChartOfCalculationTypesRef"/>
+      <xs:enumeration value="BusinessProcessRef"/>
+      <xs:enumeration value="BusinessProcessRoutePointRef"/>
+      <xs:enumeration value="TaskRef"/>
+      <xs:enumeration value="ExchangePlanRef"/>
+      <xs:enumeration value="Characteristic"/>
+      <xs:enumeration value="AnyRef"/>
+      <xs:enumeration value="TypeDescription"/>
+      <xs:enumeration value="Color"/>
+      <xs:enumeration value="Font"/>
+      <xs:enumeration value="StandardBeginningDate"/>
+      <xs:enumeration value="StandardPeriod"/>
+      <xs:enumeration value="Filter"/>
+      <xs:enumeration value="Order"/>
+      <xs:enumeration value="ConditionalAppearance"/>
+      <xs:enumeration value="AppearanceSettings"/>
+      <xs:enumeration value="FormattingField"/>
+      <xs:enumeration value="SystemEnumeration"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="TypeTreeNode">
+    <xs:sequence>
+      <xs:element name="Type" type="TypeTreeNode" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="kind" type="TypeTreeKind" use="required"/>
+    <xs:attribute name="uuid" type="UUID"/>
+    <xs:attribute name="typeName" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataForm">
+    <xs:sequence>
+      <xs:element name="Attribute" type="MetadataAttribute" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Command" type="MetadataCommand" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Event" type="MetadataEvent" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="kind" type="xs:string"/>
+    <xs:attribute name="uuid" type="UUID"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataCommand">
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="id" type="CompositeID"/>
+    <xs:attribute name="handler" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataEvent">
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="id" type="UUID"/>
+    <xs:attribute name="handler" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataConfiguration">
+    <xs:sequence>
+      <xs:element name="TypeDomain" type="TypeDomainPattern" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="TypeTree" type="TypeTreeNode" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Object" type="MetadataObject" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN"/>
+    <xs:attribute name="uuid" type="UUID"/>
+  </xs:complexType>
+
+  <xs:element name="MetadataConfiguration" type="MetadataConfiguration"/>
+</xs:schema>

@@ -109,6 +109,25 @@ platform list-stream representation and then packs `form` and `module` into
 `Form.bin`. That container layer is internal; users edit `Form.xml`,
 `Module.bsl`, and sidecar files.
 
+### Internal Platform Pipeline
+
+The target internal pipeline is symmetric:
+
+```text
+Form.bin -> form raw stream -> ListInStream -> platform object model -> XSD-backed Form.xml
+Form.xml -> platform object model -> ListOutStream -> form raw stream -> Form.bin
+```
+
+`ordinary-form.xsd` describes the public ordinary-form XML. The separate
+`metadata-configuration.xsd` describes platform-derived metadata/value concepts
+used by the codec layer, including `CompositeID`, `TypeDomainPattern`,
+`ValueToStringInternal`/`ValueFromStringInternal`, and the platform schema
+resources extracted from 8.2 resource files. The bundled
+`platform_model_catalog.json` is generated from platform resources and EDT EMF
+model jars; it records metadata classes, mcore type/value classes, and
+serializer evidence without shipping platform binaries. These codec concepts
+are not a public raw-stream dump.
+
 ### What Must Not Be In Public XML
 
 Public `Form.xml` must not contain raw or renamed platform dumps. The following
@@ -325,6 +344,12 @@ Validate and format the XML:
 ```bash
 onec-ordinary-forms validate --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml
 onec-ordinary-forms format-xml --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml
+```
+
+Show bundled schemas:
+
+```bash
+onec-ordinary-forms schemas
 ```
 
 Build `Form.bin` back from the object XML package:

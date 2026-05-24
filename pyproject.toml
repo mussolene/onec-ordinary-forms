@@ -35,7 +35,7 @@ onec-ordinary-forms = "onec_ordinary_forms.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-onec_ordinary_forms = ["schemas/*.xsd"]
+onec_ordinary_forms = ["schemas/*.xsd", "platform_model_catalog.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
