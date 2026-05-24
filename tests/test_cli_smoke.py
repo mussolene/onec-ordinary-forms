@@ -1058,6 +1058,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(splitter[2][0], "0")
         self.assertIsNotNone(chart)
         self.assertEqual(chart[2], ["11"])
+        self.assertEqual(len(chart[3]), 221)
         self.assertEqual(chart[3][0], "75")
         self.assertEqual(chart[3][20], "6")
         self.assertEqual(chart[4][0], "8")
