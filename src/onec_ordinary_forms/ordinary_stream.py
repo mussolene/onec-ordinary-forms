@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import base64
 import copy
+import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
+from onec_ordinary_forms.formbin import CONTAINER_INFO_NAME
 from onec_ordinary_forms.liststream import dumps_list_out_stream
 from onec_ordinary_forms.ordinary_platform import (
     CF_FORM_CONTROLS8_FORMAT_ID,
@@ -240,12 +242,14 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
             if control:
                 controls.append(control)
 
+    root_layout = form_root_layout_from_asset_root(asset_root)
     stream = ordinary_form_stream(
         title or "Main",
         attributes,
         controls,
         events_from_xml(root),
-        form_size_from_xml(root),
+        form_size_from_xml(root, root_layout),
+        root_layout,
     )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
 
@@ -256,10 +260,11 @@ def ordinary_form_stream(
     controls: list[object],
     events: list[object],
     form_size: tuple[str, str, bool],
+    root_layout: dict[str, str] | None = None,
 ) -> list[object]:
     return [
         "27",
-        form_root_record(title, controls, form_size),
+        form_root_record(title, controls, form_size, root_layout),
         attributes_table(attributes, controls),
         form_object_info_record(),
         ["1", *events] if events else ["0"],
@@ -281,13 +286,33 @@ def ordinary_form_stream(
     ]
 
 
-def form_root_record(title: str, controls: list[object], form_size: tuple[str, str, bool]) -> list[object]:
+def form_root_record(
+    title: str,
+    controls: list[object],
+    form_size: tuple[str, str, bool],
+    root_layout: dict[str, str] | None = None,
+) -> list[object]:
     width, height, explicit_size = form_size
+    compact_root = root_layout is not None and root_layout.get("recordKind") == "16" and root_layout.get("rootPanelInfoProfile") == "21"
     root_panel = [
         ORDINARY_CONTROL_GUID_BY_TYPE["Panel"],
-        root_panel_info(title, width, height),
+        compact_root_panel_info(title, width, height) if compact_root else root_panel_info(title, width, height),
         ["1", *controls] if len(controls) == 1 else [str(len(controls)), *controls],
     ]
+    if compact_root:
+        return [
+            "16",
+            [localized_text_record(title), root_layout.get("titleMarker", "2"), root_layout.get("titleScope", "4294967295")],
+            root_panel,
+            width,
+            height,
+            root_layout.get("slot5", "1"),
+            root_layout.get("slot6", "1"),
+            root_layout.get("slot7", "1"),
+            root_layout.get("slot8", "4"),
+            root_layout.get("slot9", "4"),
+            root_layout.get("slot10", "38"),
+        ]
     record = [
         "16",
         [localized_text_record(title), "52", "4294967295"],
@@ -308,6 +333,52 @@ def form_root_record(title: str, controls: list[object], form_size: tuple[str, s
         record[-1] = "3"
         record.extend([width, height, "96"])
     return record
+
+
+def compact_root_panel_info(title: str, form_width: str, form_height: str) -> list[object]:
+    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["FormRootPanel"]
+    margin_left = "8"
+    margin_top = "33"
+    page_width = panel_extent_value(form_width, 8)
+    page_title = localized_text_record("Страница1")
+    position_records = [
+        ["2", margin_left, "1", "1", "1", "0", "0", "0", "0"],
+        ["2", margin_top, "0", "1", "2", "0", "0", "0", "0"],
+        ["2", page_width, "1", "1", "3", "0", "0", margin_left, "0"],
+        ["2", form_height, "0", "1", "4", "0", "0", "0", "0"],
+    ]
+    return [
+        descriptor.info_kind,
+        [
+            compact_root_panel_base_info_record(),
+            "21",
+            "0",
+            "1",
+            ["0", "1", "1"],
+            "1",
+            ["0", "2", "2"],
+            "2",
+            ["0", "1", "3"],
+            ["0", "2", "3"],
+            "0",
+            "0",
+            ["3", "1", compact_empty_page_style_record()],
+            "0",
+            "1",
+            ["1", "1", ["3", page_title, ["3", "0", compact_empty_page_style_record()], "-1", "1", "1", quoted_atom("Страница1"), "1"]],
+            "1",
+            "1",
+            "0",
+            "4",
+            *position_records,
+            "0",
+            "4294967295",
+            "5",
+            "64",
+            "0",
+        ],
+        ["0"],
+    ]
 
 
 def root_panel_info(title: str, form_width: str, form_height: str) -> list[object]:
@@ -396,8 +467,30 @@ def root_panel_base_info_record() -> list[object]:
     ]
 
 
+def compact_root_panel_base_info_record() -> list[object]:
+    return [
+        "10",
+        "1",
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["6", "3", "0", "1"],
+        "0",
+        ["3", "3", ["-22"]],
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "3", ["-7"]],
+        ["3", "3", ["-21"]],
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["1", "0"],
+    ]
+
+
 def default_color_record() -> list[object]:
     return ["4", "4", ["0"], "4"]
+
+
+def compact_empty_page_style_record() -> list[object]:
+    return ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]
 
 
 def empty_page_style_record() -> list[object]:
@@ -563,10 +656,30 @@ def form_title_from_xml(root: ET.Element) -> str:
     return get_multilang_text(root, "Title")
 
 
-def form_size_from_xml(root: ET.Element) -> tuple[str, str, bool]:
+def form_size_from_xml(root: ET.Element, root_layout: dict[str, str] | None = None) -> tuple[str, str, bool]:
     width = (root.findtext("Width") or "").strip()
     height = (root.findtext("Height") or "").strip()
+    if root_layout is not None and not (width and height):
+        width = width or root_layout.get("width", "")
+        height = height or root_layout.get("height", "")
+        return width or "885", height or "244", False
     return width or "885", height or "244", bool(width and height)
+
+
+def form_root_layout_from_asset_root(asset_root: Path | None) -> dict[str, str] | None:
+    if asset_root is None:
+        return None
+    metadata_path = asset_root / CONTAINER_INFO_NAME
+    if not metadata_path.exists():
+        return None
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return None
+    root_layout = metadata.get("formRoot")
+    if not isinstance(root_layout, dict):
+        return None
+    return {str(key): str(value) for key, value in root_layout.items()}
 
 
 def top_level_pages(root: ET.Element) -> list[ET.Element]:

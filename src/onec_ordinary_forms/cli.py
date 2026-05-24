@@ -1353,7 +1353,11 @@ def dump_xml_from_paths(
     container_info = form_path.parent / CONTAINER_INFO_NAME
     if container_info.exists():
         asset_root.mkdir(parents=True, exist_ok=True)
-        (asset_root / CONTAINER_INFO_NAME).write_bytes(container_info.read_bytes())
+        metadata = json.loads(container_info.read_text(encoding="utf-8"))
+        root_layout = form_root_layout_metadata(form_root)
+        if root_layout:
+            metadata["formRoot"] = root_layout
+        (asset_root / CONTAINER_INFO_NAME).write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     add_form_events(root, form_root)
 
@@ -1391,6 +1395,39 @@ def add_form_properties(parent: ET.Element, form_root: object) -> None:
         set_text(parent, "Width", width)
     if height.isdigit():
         set_text(parent, "Height", height)
+
+
+def form_root_layout_metadata(form_root: object) -> dict[str, str] | None:
+    if not isinstance(form_root, list) or len(form_root) <= 1 or not isinstance(form_root[1], list):
+        return None
+    record = form_root[1]
+    if len(record) < 11:
+        return None
+    if not isinstance(record[1], list) or len(record[1]) < 3:
+        return None
+    result = {
+        "recordKind": clean_token(record[0]),
+        "titleMarker": clean_token(record[1][1]),
+        "titleScope": clean_token(record[1][2]),
+        "width": clean_token(record[3]),
+        "height": clean_token(record[4]),
+        "slot5": clean_token(record[5]),
+        "slot6": clean_token(record[6]),
+        "slot7": clean_token(record[7]),
+        "slot8": clean_token(record[8]),
+        "slot9": clean_token(record[9]),
+        "slot10": clean_token(record[10]),
+    }
+    root_panel = record[2]
+    if isinstance(root_panel, list) and len(root_panel) > 1 and isinstance(root_panel[1], list):
+        info = root_panel[1]
+        result["rootPanelInfoKind"] = clean_token(info[0]) if info else ""
+        if len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 1:
+            result["rootPanelInfoProfile"] = clean_token(info[1][1])
+            base = info[1][0]
+            if isinstance(base, list) and base:
+                result["rootPanelBaseKind"] = clean_token(base[0])
+    return result
 
 
 def add_form_events(parent: ET.Element, form_root: object) -> None:
