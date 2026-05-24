@@ -1000,6 +1000,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(list_box)
         self.assertEqual(list_box[2][0], "1")
         self.assertEqual(list_box[2][1][0][12][2], ['"ru"', '"Values tooltip"'])
+        self.assertEqual(list_box[2][1][1][0], "23")
         self.assertEqual(list_box[2][1][1][22], "0")
 
     def test_build_bin_uses_heavy_control_info_kinds(self) -> None:

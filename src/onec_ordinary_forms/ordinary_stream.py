@@ -1476,16 +1476,22 @@ def list_box_control_info(element: ET.Element) -> list[object]:
     return [
         "1",
         [
-            base_info_record_from_xml(element),
-            list_box_view_record_from_xml(element),
+            list_box_base_info_record_from_xml(element),
+            extended_list_box_view_record_from_xml(element),
             "6",
             "0",
             "0",
-            "0",
+            "1",
             "0",
         ],
         ["0"],
     ]
+
+
+def list_box_base_info_record_from_xml(element: ET.Element) -> list[object]:
+    base = extended_base_info_record_from_xml(element)
+    base[11] = ["3", "1", ["-18"], "0", "0", "0"]
+    return base
 
 
 def command_bar_control_info(element: ET.Element) -> list[object]:
@@ -1945,6 +1951,49 @@ def list_box_view_record_from_xml(element: ET.Element) -> list[object]:
         "0",
         bool_record_from_xml(element, "MultiLine", default=True),
         "0",
+    ]
+
+
+def extended_list_box_view_record_from_xml(element: ET.Element) -> list[object]:
+    return [
+        "23",
+        "100743712",
+        default_color_record(),
+        default_color_record(),
+        default_color_record(),
+        default_color_record(),
+        ["4", "3", ["-14"], "3"],
+        ["4", "3", ["-15"], "3"],
+        ["4", "3", ["-13"], "3"],
+        "2",
+        "2",
+        "0",
+        "0",
+        "0",
+        "1",
+        "0",
+        "1",
+        "1",
+        ["8", "2", "0", ["-20"], "1", "100"],
+        ["8", "2", "0", ["-20"], "1", "100"],
+        "2",
+        "0",
+        bool_record_from_xml(element, "MultiLine", default=True),
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "100",
+        "1",
+        "2",
+        "2",
+        "2",
+        "0",
+        "0",
+        "2",
     ]
 
 
