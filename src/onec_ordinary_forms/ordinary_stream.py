@@ -8,6 +8,7 @@ Public XML must never expose this stream directly.
 from __future__ import annotations
 
 import base64
+import copy
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -50,6 +51,23 @@ class ControlInfoDescriptor:
             if slot.name == name:
                 return slot.index
         raise KeyError(f"Unknown {self.control_type} info slot: {name}")
+
+
+@dataclass(frozen=True)
+class PlatformListRecordDescriptor:
+    name: str
+    length: int
+    defaults: tuple[tuple[int, object], ...] = ()
+
+    def build(self, overrides: dict[int, object] | None = None) -> list[object]:
+        record: list[object] = ["0"] * self.length
+        for index, value in self.defaults:
+            record[index] = copy.deepcopy(value)
+        for index, value in (overrides or {}).items():
+            if index < 0 or index >= self.length:
+                raise IndexError(f"{self.name} slot index out of range: {index}")
+            record[index] = value
+        return record
 
 
 CORE_CONTROL_INFO_DESCRIPTORS = {
@@ -99,6 +117,34 @@ CORE_CONTROL_INFO_DESCRIPTORS = {
         ),
     ),
 }
+
+DIAGRAM_BODY_DESCRIPTOR = PlatformListRecordDescriptor(
+    name="DiagramBody",
+    length=3,
+    defaults=(
+        (0, "0"),
+        (1, ["11"]),
+    ),
+)
+
+PIVOT_CHART_INFO_DESCRIPTOR = PlatformListRecordDescriptor(
+    name="PivotChartInfo",
+    length=13,
+    defaults=(
+        (0, "3"),
+        (2, ["0"]),
+        (3, "1"),
+        (4, "6"),
+        (5, "12"),
+        (6, "1"),
+        (7, "2"),
+        (8, "1"),
+        (9, "0"),
+        (10, ["4", "3", ["-7"], "3"]),
+        (11, ["4", "3", ["-3"], "3"]),
+        (12, "1"),
+    ),
+)
 
 TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN = {
     ('"S"',): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVFLCgIxDBWXwiy9QNYpJG3HNrcQxAOMOlsX4k56\r\r\nMhceySvYNqOOOmBTSF8+Ly90OZ/Vc7/eLoLN4gLr7nzuT0eoYAOpWaTy1MuCXJBH\r\r\nXxwl9GkKR3RIuZQph0grXHHG2oRusucXa0d4NwwU/Iw4VWM4linZapSRFObp+LSv\r\r\nAWUrx1qFNLIx8toHW0gvD/BRVGlpoM05w+WWPED6k30xTEgfCVqFECy3aGvV8B11\r\r\nb+nCyruDNSy9GN/21sQozthIu72wtJ0E1fC9BekelW5grINZBamM9AA=",
@@ -1240,24 +1286,8 @@ def chart_control_info() -> list[object]:
 
 
 def pivot_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
-    return [
-        "3",
-        [
-            "0",
-            chart_control_info(),
-            diagram_presentation_record(element, title_record, kind="pivot"),
-            "0",
-            "0",
-            "0",
-            "0",
-            ["0"],
-            "0",
-            "0",
-            "0",
-            "0",
-        ],
-        ["0"],
-    ]
+    body = DIAGRAM_BODY_DESCRIPTOR.build({2: diagram_presentation_record(element, title_record, kind="pivot")})
+    return PIVOT_CHART_INFO_DESCRIPTOR.build({1: body})
 
 
 def gantt_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
@@ -1329,7 +1359,9 @@ def dendrogram_control_info(element: ET.Element, title_record: list[object]) -> 
 
 
 def diagram_presentation_record(element: ET.Element, title_record: list[object], *, kind: str) -> list[object]:
-    kind_code = {"pivot": "4", "gantt": "1", "dendrogram": "1"}.get(kind, "1")
+    kind_code = (element.findtext("PivotChartKind") or "").strip() if kind == "pivot" else ""
+    if not kind_code:
+        kind_code = {"pivot": "4", "gantt": "1", "dendrogram": "1"}.get(kind, "1")
     return [
         "75",
         "1",
@@ -2197,7 +2229,7 @@ def geometry_stream_from_xml(
             "0",
             *layout_group_tail(layout_group, layout_order, default_group, default_order),
         ]
-    if control_type in {"SpreadsheetDocumentField", "TextDocumentField"} and page_index is not None and page_order is not None:
+    if control_type in {"SpreadsheetDocumentField", "TextDocumentField", "PivotChart"} and page_index is not None and page_order is not None:
         return [
             "8",
             left,

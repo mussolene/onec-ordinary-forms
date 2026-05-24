@@ -1048,6 +1048,7 @@ class CliSmokeTest(unittest.TestCase):
                   <GraphicalSchemaField name="Graph" id="69"/>
                   <PivotChart name="Pivot" id="70">
                     <Title><Item lang="ru">Pivot title</Item></Title>
+                    <PivotChartKind>5</PivotChartKind>
                   </PivotChart>
                   <GanttChart name="Gantt" id="71">
                     <Title><Item lang="ru">Gantt title</Item></Title>
@@ -1105,7 +1106,10 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(graph[2][1], "5")
         self.assertIsNotNone(pivot)
         self.assertEqual(pivot[2][0], "3")
+        self.assertEqual(len(pivot[2]), 13)
+        self.assertEqual(len(pivot[2][1]), 3)
         self.assertEqual(pivot[2][1][2][0], "75")
+        self.assertEqual(pivot[2][1][2][20], "5")
         self.assertEqual(pivot[2][1][2][8][2], ['"ru"', '"Pivot title"'])
         self.assertIsNotNone(gantt)
         self.assertEqual(gantt[2][0], "19")

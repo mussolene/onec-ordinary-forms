@@ -696,6 +696,7 @@ def add_semantic_item(
     add_visible(node, item_data)
     add_read_only(node, item, item_data)
     add_table_columns(node, item, item_data)
+    add_pivot_chart_properties(node, item, item_data)
     add_text_color(node, item_data)
     add_back_color(node, item_data)
     add_border_color(node, item_data)
@@ -886,6 +887,35 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
         if title:
             result.append({"name": name or title, "title": title, "order": order, "pattern": pattern})
     return result
+
+
+def add_pivot_chart_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "PivotChart":
+        return
+    presentation = pivot_chart_presentation_record(item_data)
+    if presentation is None or len(presentation) <= 4:
+        return
+    kind = clean_token(presentation[4])
+    if kind:
+        set_text(parent, "PivotChartKind", kind)
+
+
+def pivot_chart_presentation_record(item_data: object) -> list[object] | None:
+    if not isinstance(item_data, dict):
+        return None
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return None
+    info = raw[2]
+    if len(info) <= 1 or not isinstance(info[1], list):
+        return None
+    body = info[1]
+    if len(body) <= 2 or not isinstance(body[2], list):
+        return None
+    presentation = body[2]
+    if presentation and str(presentation[0]) == "75":
+        return presentation
+    return None
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:
