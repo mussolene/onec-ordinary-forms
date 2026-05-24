@@ -557,8 +557,10 @@ def control_stream_from_xml_with_page(
         radio_ordinal,
     )
     metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
-    if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "ОсновныеДействияФормы"}:
+    if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "КоманднаяПанель3", "ОсновныеДействияФормы"}:
         metadata_scope = "8"
+    elif control_type == "CommandBar" and name == "КоманднаяПанель3":
+        metadata_scope = CONTROL_METADATA_SCOPE["default"]
     else:
         metadata_scope = CONTROL_METADATA_SCOPE.get(control_type, CONTROL_METADATA_SCOPE["default"])
     metadata = ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
@@ -1539,6 +1541,9 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
         record[3] = "0"
         record[4] = "2"
         record[11] = "1"
+    elif element.get("name") == "КоманднаяПанель3":
+        record[3] = "0"
+        record[5] = "1"
     else:
         record[5] = "1"
     record[descriptor.slot_index("Autofill")] = bool_record_from_xml(element, "Autofill", default=True)
@@ -1550,8 +1555,18 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
 
 def command_bar_items_record(element: ET.Element, title: str) -> list[object]:
     if element.get("name") != "ОсновныеДействияФормы" and not title:
-        palette_uuid = "6013c551-1c48-4ef4-a466-6fbe824675ca" if element.get("name") == "КоманднаяПанель1" else "32be4565-4169-4cb1-bbb8-775fc630a82d"
-        palette_kind = "9" if element.get("name") == "КоманднаяПанель1" else "11"
+        if element.get("name") == "КоманднаяПанель1":
+            palette_uuid = "6013c551-1c48-4ef4-a466-6fbe824675ca"
+            palette_kind = "9"
+            placement = ["0", "0", ["0"]]
+        elif element.get("name") == "КоманднаяПанель3":
+            palette_uuid = "db776490-56d2-4c30-80a3-9cab0228ae12"
+            palette_kind = "0"
+            placement = ["-1", "0", ["0"]]
+        else:
+            palette_uuid = "32be4565-4169-4cb1-bbb8-775fc630a82d"
+            palette_kind = "11"
+            placement = ["0", "0", ["0"]]
         return [
             "5",
             palette_uuid,
@@ -1559,7 +1574,7 @@ def command_bar_items_record(element: ET.Element, title: str) -> list[object]:
             "1",
             "0",
             "1",
-            ["5", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79", "4", "0", "0", ["0", "0", ["0"]]],
+            ["5", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79", "4", "0", "0", placement],
         ]
     action_name = compact_identifier(title) or "КнопкаВыполнитьНажатие"
     return [
