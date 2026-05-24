@@ -170,6 +170,13 @@ descriptor.
 Passing 1C Designer validation is required, but not sufficient by itself: the
 public XML must also remain a clean object model, not a renamed raw stream.
 
+Current strict 1C validation uses `build-bin` without a public
+template/fallback `Form.bin`: the ordinary `Form.bin` is built from object
+`Form.xml`, `Module.bsl`, and sidecar files. Before platform import, validation
+uses a copy of the source tree where the public ordinary `Ext/Form.xml` and
+`Ext/Form/` sidecar directory are removed; for an ordinary form, the platform
+source layout keeps only `Ext/Form.bin`.
+
 ## Русский
 
 ### Что делает проект
@@ -279,6 +286,44 @@ list-stream/скобкоформат платформы и затем упако
 `module` в `Form.bin`. Этот контейнерный слой внутренний; пользователь
 редактирует `Form.xml`, `Module.bsl` и файлы рядом.
 
+### Внутренний платформенный конвейер
+
+Целевой внутренний конвейер симметричный:
+
+```text
+Form.bin -> raw-поток form -> ListInStream -> объектная модель платформы -> Form.xml по XSD
+Form.xml -> объектная модель платформы -> ListOutStream -> raw-поток form -> Form.bin
+```
+
+Слой схем специально небольшой и сфокусирован на обычных формах:
+
+- `OrdinaryForm.xsd` описывает публичный корень `Form.xml`, элементы обычной
+  формы, переиспользуемые типы значений/раскладки, словарь свойств/событий и
+  аннотации платформенной палитры;
+- `PlatformConfigStructure.xsd` фиксирует платформенные сведения о структуре
+  конфигурации, дереве метаданных, type-domain, `CompositeID`,
+  `ValueToStringInternal`/`ValueFromStringInternal` и сведения о
+  сериализаторах, используемые слоем кодека.
+
+Эти понятия кодека не являются публичным дампом сырого потока. Полные извлечения
+платформенных XSD хранятся как воспроизводимые исследовательские артефакты в
+игнорируемом `scan-output/`, а не поставляются внутри пакета.
+
+Обновить платформенные сведения для схем из локального зеркала платформы можно
+так:
+
+```bash
+python3 tools/extract_platform_xml_resources.py \
+  --root <platform-bin-dir> \
+  --out-dir scan-output/platform85/xml-clean \
+  --schemas-only
+python3 tools/vendor_platform_schemas.py \
+  --resources-json scan-output/platform85/xml-clean/resources.json \
+  --source-dir scan-output/platform85/xml-clean \
+  --out-dir scan-output/platform85/vendor-check \
+  --platform-version 8.5
+```
+
 ### Чего не должно быть в публичном XML
 
 Публичный `Form.xml` не должен содержать сырые или переименованные дампы
@@ -293,11 +338,12 @@ list-stream/скобкоформат платформы и затем упако
 - `PlatformRecords`
 - индексные деревья вроде `Field kind="list"` или `Field kind="atom"`
 - встроенные base64-потоки исходного файла
-- binary placeholders и другие lossless/fallback копии stream-структур
+- бинарные заглушки и другие побайтно-сохраняющие или резервные копии
+  потоковых структур
 
 Парсер и writer могут использовать list-stream/скобкоформат платформы внутри.
 Платформенные символы `cf_form_controls8`, `cf_form_controls_position8`,
-`cf_form_controls_info8` являются идентификаторами форматов payload обычных
+`cf_form_controls_info8` являются идентификаторами форматов данных обычных
 контролов в типовом механизме платформы. Это внутренняя реализация, а не
 публичные XML-узлы. Если значение нужно для обратной сборки, его нужно поднять
 в именованное понятие XML: контрол, свойство, событие, команда, привязка,
@@ -307,13 +353,14 @@ list-stream/скобкоформат платформы и затем упако
 публичный XML все равно должен оставаться чистой объектной моделью, а не
 переименованным сырым потоком.
 
-Текущая строгая проверка 1C выполняется без template/fallback: `build-bin`
-собирает ordinary `Form.bin` из чистого объектного `Form.xml`, `Module.bsl` и
-картинок. Перед импортом платформой используется копия source-раскладки, где
-публичный ordinary `Ext/Form.xml` и каталог `Ext/Form/` удалены; для обычной
-формы в платформенной раскладке остается только `Ext/Form.bin`.
+Текущая строгая проверка 1C выполняется без публичного шаблонного или
+резервного `Form.bin`: `build-bin` собирает обычный `Form.bin` из объектного
+`Form.xml`, `Module.bsl` и файлов рядом. Перед импортом платформой используется
+копия исходной раскладки, где публичный `Ext/Form.xml` обычной формы и каталог
+`Ext/Form/` удалены; для обычной формы в платформенной раскладке остается
+только `Ext/Form.bin`.
 
-## Status
+## Status / Статус
 
 Current release: `0.4.0`.
 
@@ -322,12 +369,24 @@ Current implementation status:
 - read ordinary `Form.bin` containers;
 - dump readable object-model `Form.xml`;
 - extract `Module.bsl` and picture sidecars;
-- validate `Form.xml` against the bundled ordinary-form schemas;
-- build ordinary `Form.bin` back from the named object XML package without
-  a source `Form.bin` fallback in the public package;
-- preserve compact platform profile metadata in sidecars for no-op ordinary
-  form byte round-trips while keeping the public `Form.xml` object-only;
-- scan local EPF/ERF corpora without committing private processors or exports.
+- validate `Form.xml` against bundled schemas;
+- build ordinary `Form.bin` from the named XML package without a source
+  `Form.bin` fallback in the public package;
+- preserve compact platform profile metadata in sidecars for no-op byte
+  round-trips while keeping public `Form.xml` object-only;
+- scan local EPF/ERF corpora without committing private artifacts.
+
+Текущий статус реализации:
+
+- чтение контейнеров обычных `Form.bin`;
+- выгрузка читаемого объектного `Form.xml`;
+- извлечение `Module.bsl` и файлов картинок рядом;
+- проверка `Form.xml` по встроенным схемам обычных форм;
+- сборка обычного `Form.bin` из именованного XML-пакета без исходного
+  `Form.bin` как публичного резервного источника;
+- сохранение компактных платформенных профилей в файлах рядом для обратной
+  сборки без изменений, при этом публичный `Form.xml` остается объектным;
+- сканирование локальных EPF/ERF-корпусов без коммита приватных артефактов.
 
 Validation status:
 
@@ -337,6 +396,16 @@ Validation status:
   payloads stable, but only 1/50 forms are full byte-identical.
 - The next known mismatch class is a root format/profile length variant.
 
+Статус проверок:
+
+- в `v0.4.0` один UT-сценарий обратной сборки обычной list-form без изменений
+  совпадает побайтно по всему контейнеру `Form.bin`, данным формы и данным
+  модуля;
+- first-50 UT smoke сейчас проходит без исключений и сохраняет данные модулей,
+  но полное побайтное совпадение есть только у 1/50 форм;
+- следующий известный класс расхождений - вариант длины корневого
+  format/profile.
+
 Automation:
 
 - CI runs on GitHub Actions for pushes, pull requests, and manual dispatch on
@@ -344,6 +413,14 @@ Automation:
 - CI executes tests, CLI smoke, package build, and package metadata checks.
 - Release workflow runs for `v*` tags or manual dispatch with a tag input,
   rebuilds the package, rechecks it, and publishes GitHub Release assets.
+
+Автоматизация:
+
+- CI запускается в GitHub Actions для push, pull request и manual dispatch на
+  Python 3.10, 3.11 и 3.12;
+- CI выполняет тесты, CLI smoke, сборку пакета и проверку package metadata;
+- релизный workflow запускается для тегов `v*` или вручную с указанием тега,
+  пересобирает пакет, проверяет его и публикует артефакты в GitHub Release.
 
 ## Install
 
