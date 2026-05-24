@@ -19,7 +19,6 @@ from onec_ordinary_forms.formbin import (
     pack_form_bin,
     unpack_form_bin,
 )
-from onec_ordinary_forms.bracket import write_elem_json_from_bracket
 from onec_ordinary_forms.liststream import parse_list_stream_document
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
 from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
@@ -307,8 +306,8 @@ def first_localized_text_without_base_tooltip(value: object, control_type: str =
     return ""
 
 
-def build_element_index(elem: dict) -> dict[str, dict[str, str]]:
-    data = elem.get("data", {})
+def build_element_index(control_index: dict) -> dict[str, dict[str, str]]:
+    data = control_index.get("data", {})
     result: dict[str, dict[str, str]] = {}
     for path, value in data.items():
         if not isinstance(value, dict) or value.get("id") is None:
@@ -1029,11 +1028,11 @@ def find_base_info_record(value: object) -> list[object] | None:
 
 def add_semantic_pages(
     parent: ET.Element,
-    elem: dict,
+    control_index: dict,
     element_index: dict[str, dict[str, str]],
     asset_root: Path,
 ) -> None:
-    data = elem.get("data", {})
+    data = control_index.get("data", {})
     pages = ET.SubElement(parent, "Pages")
     for page_name in data.get("-pages-", []):
         page_path = str(page_name)
@@ -1042,29 +1041,17 @@ def add_semantic_pages(
         title = page_title(data.get(page_path))
         if title:
             add_multilang_text(page, "Title", title)
-        for item in elem.get("tree", []):
+        for item in control_index.get("tree", []):
             if str(item.get("page", "")) != page_path:
                 continue
             raw_key = str(item.get("rawKey") or f"{page_path}/{item.get('name', '')}")
             add_semantic_item(page, item, data, raw_key, element_index, asset_root)
 
 
-def dump_xml(args: argparse.Namespace) -> None:
-    form_path = Path(args.form)
-    bin_path = Path(args.bin)
-    module_path = Path(args.module) if args.module else None
-    elem_path = Path(args.elem_json)
-    out_path = Path(args.out)
-    metadata_path = Path(args.metadata_json) if args.metadata_json else None
-
-    dump_xml_from_paths(form_path, bin_path, module_path, elem_path, metadata_path, out_path)
-
-
 def dump_xml_from_paths(
     form_path: Path,
-    bin_path: Path,
     module_path: Path | None,
-    elem_path: Path,
+    control_index: dict,
     metadata_path: Path | None,
     out_path: Path,
 ) -> None:
@@ -1072,11 +1059,10 @@ def dump_xml_from_paths(
 
     module_bytes = module_path.read_bytes() if module_path and module_path.exists() else b""
     form_root = parse_list_stream_document(form_path.read_text(encoding="utf-8-sig"), allow_trailing=True).value
-    elem = json.loads(elem_path.read_text(encoding="utf-8"))
     metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path else None
     object_types = metadata_object_type_map(metadata)
-    element_index = build_element_index(elem)
-    root_title = str((elem.get("data", {}).get("-pages-") or [""])[0])
+    element_index = build_element_index(control_index)
+    root_title = str((control_index.get("data", {}).get("-pages-") or [""])[0])
 
     root = ET.Element("Form")
     root.set("version", SCHEMA_VERSION)
@@ -1094,7 +1080,7 @@ def dump_xml_from_paths(
 
     attrs = ET.SubElement(root, "Attributes")
     attribute_slots = attribute_slots_from_form_root(form_root)
-    for prop in elem.get("props", []):
+    for prop in control_index.get("props", []):
         prop_name = str(prop.get("name", ""))
         if re.fullmatch(r"Attribute\d+", prop_name):
             continue
@@ -1106,7 +1092,7 @@ def dump_xml_from_paths(
         pattern_node = pattern_node_from_prop(prop)
         add_type(attr, pattern_node, object_types)
 
-    add_semantic_pages(root, elem, element_index, asset_root)
+    add_semantic_pages(root, control_index, element_index, asset_root)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     write_pretty_xml(root, out_path)
@@ -1350,10 +1336,6 @@ def pack_bin(args: argparse.Namespace) -> None:
     pack_form_bin(Path(args.parts_dir), Path(args.out_bin))
 
 
-def extract_elem_json(args: argparse.Namespace) -> None:
-    write_elem_json_from_bracket(Path(args.form), Path(args.out))
-
-
 def dump_bin(args: argparse.Namespace) -> None:
     dump_form_bin_to_xml(
         Path(args.bin),
@@ -1366,19 +1348,6 @@ def dump_bin(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    dump_parser = subparsers.add_parser("dump")
-    dump_parser.add_argument("--form", required=True)
-    dump_parser.add_argument("--bin", required=True)
-    dump_parser.add_argument("--module")
-    dump_parser.add_argument(
-        "--elem-json",
-        required=True,
-        help="Legacy semantic element index; see docs/elem-json.md",
-    )
-    dump_parser.add_argument("--metadata-json")
-    dump_parser.add_argument("--out", required=True)
-    dump_parser.set_defaults(func=dump_xml)
 
     build_bin_parser = subparsers.add_parser("build-bin")
     build_bin_parser.add_argument("--xml", required=True, help="Form.xml produced by dump-bin")
@@ -1415,11 +1384,6 @@ def main() -> None:
     pack_bin_parser.add_argument("--parts-dir", required=True, help="Directory created by unpack-bin")
     pack_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
     pack_bin_parser.set_defaults(func=pack_bin)
-
-    extract_elem_parser = subparsers.add_parser("extract-elem-json")
-    extract_elem_parser.add_argument("--form", required=True, help="Ordinary form bracket stream, often unpack-bin Form.xml")
-    extract_elem_parser.add_argument("--out", required=True, help="elem-json output path")
-    extract_elem_parser.set_defaults(func=extract_elem_json)
 
     dump_bin_parser = subparsers.add_parser("dump-bin")
     dump_bin_parser.add_argument("--bin", required=True, help="Ordinary form Form.bin")

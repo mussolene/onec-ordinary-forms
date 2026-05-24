@@ -469,6 +469,18 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
         return html_document_field_control_info()
     if control_type == "ListBox":
         return list_box_control_info(element)
+    if control_type == "ProgressBar":
+        return progress_bar_control_info(element)
+    if control_type == "TrackBar":
+        return track_bar_control_info(element)
+    if control_type == "CalendarField":
+        return calendar_field_control_info(element)
+    if control_type == "TextDocumentField":
+        return text_document_field_control_info(element)
+    if control_type == "GeographicalSchemaField":
+        return geographical_schema_field_control_info(element)
+    if control_type == "GraphicalSchemaField":
+        return graphical_schema_field_control_info(element)
     if control_type == "CommandBar":
         return command_bar_control_info(element)
     if control_type == "Table":
@@ -804,6 +816,110 @@ def html_document_field_control_info() -> list[object]:
         ["3", "3", ["-22"]],
         ["3", "1", ["-18"], "0", "0", "0"],
         "1",
+        "0",
+    ]
+
+
+def progress_bar_control_info(element: ET.Element) -> list[object]:
+    return [
+        "0",
+        [
+            base_info_record_from_xml(element),
+            "3",
+            element.findtext("MinimumValue") or "0",
+            element.findtext("MaximumValue") or "100",
+            element.findtext("Step") or "1",
+            element.findtext("BigStep") or "1",
+            "0",
+            "2",
+        ],
+    ]
+
+
+def track_bar_control_info(element: ET.Element) -> list[object]:
+    return [
+        "1",
+        [
+            base_info_record_from_xml(element),
+            "5",
+            element.findtext("MinimumValue") or "0",
+            element.findtext("MaximumValue") or "100",
+            element.findtext("Step") or "1",
+            element.findtext("BigStep") or "10",
+            element.findtext("Orientation") or "2",
+            "2",
+            element.findtext("MarkStep") or "5",
+            element.findtext("CurrentValue") or "100",
+        ],
+        ["0"],
+    ]
+
+
+def calendar_field_control_info(element: ET.Element) -> list[object]:
+    return [
+        "1",
+        [
+            base_info_record_from_xml(element),
+            "9",
+            ["3", "3", ["-16"]],
+            ["3", "3", ["-14"]],
+            ["3", "3", ["-15"]],
+            element.findtext("PeriodStart") or "00010101000000",
+            element.findtext("PeriodEnd") or "00010101000000",
+            "1",
+            "1",
+            "0",
+            "0",
+            "0",
+            "0",
+            "1",
+        ],
+        ["0"],
+    ]
+
+
+def text_document_field_control_info(element: ET.Element) -> list[object]:
+    return [
+        base_info_record_from_xml(element),
+        "6",
+        "1",
+        "00000000-0000-0000-0000-000000000000",
+        ["0"],
+        "0",
+        "0",
+    ]
+
+
+def geographical_schema_field_control_info(element: ET.Element) -> list[object]:
+    return base_info_record_from_xml(element)
+
+
+def graphical_schema_field_control_info(element: ET.Element) -> list[object]:
+    return [
+        base_info_record_from_xml(element),
+        "5",
+        [
+            [
+                "5",
+                [
+                    [
+                        "1",
+                        ["3", "3", ["-10"]],
+                        "1",
+                        "20",
+                        "20",
+                        "3",
+                        "6",
+                        "6",
+                        [quoted_atom("N"), "10"],
+                    ]
+                ],
+                "0",
+                "0",
+            ]
+        ],
+        ["0"],
+        "0",
         "0",
     ]
 

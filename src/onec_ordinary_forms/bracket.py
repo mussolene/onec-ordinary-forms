@@ -1,9 +1,8 @@
-"""Parse ordinary 1C bracket streams and extract a legacy elem-json index."""
+"""Parse ordinary 1C list-stream text and build the internal control index."""
 
 from __future__ import annotations
 
 from pathlib import Path
-import json
 import re
 
 from onec_ordinary_forms.liststream import ListStreamParseError, parse_list_stream
@@ -46,7 +45,7 @@ def read_bracket_text(path: Path) -> str:
     return data.decode("utf-8", errors="replace")
 
 
-def extract_elem_json_from_bracket(text: str) -> dict[str, object]:
+def extract_control_index_from_bracket(text: str) -> dict[str, object]:
     root = parse_bracket_text(text, allow_trailing=True)
     pages = _extract_pages(root)
     props = _extract_props(root)
@@ -111,12 +110,6 @@ def _items_from_model(model: object, default_page: str) -> list[dict[str, object
     for control in getattr(model, "controls"):
         add(control)
     return items
-
-
-def write_elem_json_from_bracket(form_path: Path, out_path: Path) -> None:
-    elem = extract_elem_json_from_bracket(read_bracket_text(form_path))
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(elem, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _walk_lists(value: object) -> list[list[object]]:

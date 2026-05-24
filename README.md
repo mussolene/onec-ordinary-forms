@@ -395,12 +395,12 @@ Diagnostic commands:
 ```bash
 onec-ordinary-forms unpack-bin --bin Form.bin --out-dir scan-output/form-parts
 onec-ordinary-forms pack-bin --parts-dir scan-output/form-parts --out-bin Form.bin
-onec-ordinary-forms extract-elem-json --form scan-output/form-parts/Form.xml --out scan-output/form-parts/elem.json
 onec-ordinary-forms scan-corpus --root "<private-processors-dir>" --out-json scan-output/corpus.json
 ```
 
-`unpack-bin`, `pack-bin`, and `extract-elem-json` are diagnostics for format
-research. They are not the target public source layout.
+`unpack-bin` and `pack-bin` are diagnostics for `Form.bin` container research.
+They are not the target public source layout and should not be used as the
+editable representation of a form.
 
 ## Python API
 
@@ -439,7 +439,6 @@ or `/tmp`.
 - [Architecture](docs/architecture.md)
 - [Development](docs/development.md)
 - [Container validation](docs/containers.md)
-- [Legacy elem-json input](docs/elem-json.md)
 - [Research notes](docs/research-map.md)
 
 ## Fixture Policy

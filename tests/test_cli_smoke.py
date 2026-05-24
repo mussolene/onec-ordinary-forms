@@ -1,6 +1,5 @@
 import unittest
 import base64
-import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from struct import unpack
@@ -22,7 +21,7 @@ from onec_ordinary_forms.formbin import (
     parse_form_bin_container,
     unpack_form_bin,
 )
-from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
+from onec_ordinary_forms.bracket import extract_control_index_from_bracket
 from onec_ordinary_forms.liststream import dumps, dumps_list_out_stream, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
@@ -309,16 +308,6 @@ class CliSmokeTest(unittest.TestCase):
             self.assertEqual((parts / "Form.xml").read_bytes(), form)
             self.assertEqual((parts / "Module.bsl").read_bytes(), module)
 
-    def test_committed_elem_json_fixture_documents_legacy_shape(self) -> None:
-        fixture = Path(__file__).parents[1] / "examples" / "elem-json" / "minimal.json"
-        data = json.loads(fixture.read_text(encoding="utf-8"))
-
-        self.assertIn("props", data)
-        self.assertIn("commands", data)
-        self.assertIn("data", data)
-        self.assertIn("tree", data)
-        self.assertIn("-pages-", data["data"])
-
     def test_list_stream_parser_preserves_trailing_text_boundary(self) -> None:
         document = parse_list_stream_document('{1,{"ru","Main"}}\n// module tail', allow_trailing=True)
 
@@ -411,7 +400,7 @@ class CliSmokeTest(unittest.TestCase):
             self.assertIn('"RunCommand"', rebuilt_form)
             self.assertIn("e1692cc2-605b-4535-84dd-28440238746c", rebuilt_form)
 
-    def test_extract_elem_json_from_bracket_stream(self) -> None:
+    def test_extract_control_index_from_bracket_stream(self) -> None:
         bracket = """
         {
           {"InputValue","Pattern",{"S"}},
@@ -420,15 +409,15 @@ class CliSmokeTest(unittest.TestCase):
         }
         """
 
-        elem = extract_elem_json_from_bracket(bracket)
+        control_index = extract_control_index_from_bracket(bracket)
 
-        self.assertEqual(elem["props"][0]["name"], "InputValue")
-        self.assertEqual(elem["data"]["-pages-"], ["Main"])
-        self.assertEqual(elem["tree"][0]["name"], "InputValue")
-        self.assertEqual(elem["tree"][0]["type"], "InputField")
-        self.assertIn("Main/InputValue", elem["data"])
+        self.assertEqual(control_index["props"][0]["name"], "InputValue")
+        self.assertEqual(control_index["data"]["-pages-"], ["Main"])
+        self.assertEqual(control_index["tree"][0]["name"], "InputValue")
+        self.assertEqual(control_index["tree"][0]["type"], "InputField")
+        self.assertIn("Main/InputValue", control_index["data"])
 
-    def test_extract_elem_json_keeps_only_root_page_until_page_groups_are_decoded(self) -> None:
+    def test_extract_control_index_keeps_only_root_page_until_page_groups_are_decoded(self) -> None:
         bracket = """
         {
           {1,1,{"ru","Document title"}},
@@ -437,11 +426,11 @@ class CliSmokeTest(unittest.TestCase):
         }
         """
 
-        elem = extract_elem_json_from_bracket(bracket)
+        control_index = extract_control_index_from_bracket(bracket)
 
-        self.assertEqual(elem["data"]["-pages-"], ["Document title"])
+        self.assertEqual(control_index["data"]["-pages-"], ["Document title"])
 
-    def test_extract_elem_json_ignores_trailing_module_text(self) -> None:
+    def test_extract_control_index_ignores_trailing_module_text(self) -> None:
         bracket = """
         {
           {1,1,{"ru","Main"}}
@@ -451,11 +440,11 @@ class CliSmokeTest(unittest.TestCase):
         EndProcedure
         """
 
-        elem = extract_elem_json_from_bracket(bracket)
+        control_index = extract_control_index_from_bracket(bracket)
 
-        self.assertEqual(elem["data"]["-pages-"], ["Main"])
+        self.assertEqual(control_index["data"]["-pages-"], ["Main"])
 
-    def test_extract_elem_json_prefers_metadata_name_and_detects_images(self) -> None:
+    def test_extract_control_index_prefers_metadata_name_and_detects_images(self) -> None:
         bracket = """
         {
           {1,1,{"ru","Main"}},
@@ -467,11 +456,11 @@ class CliSmokeTest(unittest.TestCase):
         }
         """
 
-        elem = extract_elem_json_from_bracket(bracket)
+        control_index = extract_control_index_from_bracket(bracket)
 
-        self.assertEqual(elem["tree"][0]["name"], "КартинкаДлительнаяОперация")
-        self.assertEqual(elem["tree"][0]["type"], "Image")
-        self.assertIn("Main/КартинкаДлительнаяОперация", elem["data"])
+        self.assertEqual(control_index["tree"][0]["name"], "КартинкаДлительнаяОперация")
+        self.assertEqual(control_index["tree"][0]["type"], "Image")
+        self.assertIn("Main/КартинкаДлительнаяОперация", control_index["data"])
 
     def test_dump_bin_creates_object_xml(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -927,6 +916,12 @@ class CliSmokeTest(unittest.TestCase):
                   <SpreadsheetDocumentField name="Sheet" id="63">
                     <Position left="0" top="0" right="200" bottom="100" width="200" height="100"/>
                   </SpreadsheetDocumentField>
+                  <TrackBar name="Track" id="64"/>
+                  <ProgressBar name="Progress" id="65"/>
+                  <CalendarField name="Calendar" id="66"/>
+                  <TextDocumentField name="Text" id="67"/>
+                  <GeographicalSchemaField name="Geo" id="68"/>
+                  <GraphicalSchemaField name="Graph" id="69"/>
                 </Page>
               </Pages>
             </Form>"""
@@ -937,6 +932,12 @@ class CliSmokeTest(unittest.TestCase):
         command_bar = self._find_control(stream, "e69bf21d-97b2-4f37-86db-675aea9ec2cb")
         table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
         spreadsheet = self._find_control(stream, "236a17b3-7f44-46d9-a907-75f9cdc61ab5")
+        track = self._find_control(stream, "6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef")
+        progress = self._find_control(stream, "b1db1f86-abbb-4cf0-8852-fe6ae21650c2")
+        calendar = self._find_control(stream, "e3c063d8-ef92-41be-9c89-b70290b5368b")
+        text = self._find_control(stream, "14c4a229-bfc3-42fe-9ce1-2da049fd0109")
+        geo = self._find_control(stream, "ad37194e-555e-4305-b718-5dca84baf145")
+        graph = self._find_control(stream, "42248403-7748-49da-b782-e4438fd7bff3")
 
         self.assertIsNotNone(command_bar)
         self.assertEqual(command_bar[2][0], "2")
@@ -951,6 +952,21 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(spreadsheet[2][0], "14")
         self.assertEqual(spreadsheet[2][3], "200")
         self.assertEqual(spreadsheet[2][4], "100")
+        self.assertIsNotNone(track)
+        self.assertEqual(track[2][0], "1")
+        self.assertEqual(track[2][1][1], "5")
+        self.assertIsNotNone(progress)
+        self.assertEqual(progress[2][0], "0")
+        self.assertEqual(progress[2][1][1], "3")
+        self.assertIsNotNone(calendar)
+        self.assertEqual(calendar[2][0], "1")
+        self.assertEqual(calendar[2][1][1], "9")
+        self.assertIsNotNone(text)
+        self.assertEqual(text[2][1], "6")
+        self.assertIsNotNone(geo)
+        self.assertEqual(geo[2][0], "10")
+        self.assertIsNotNone(graph)
+        self.assertEqual(graph[2][1], "5")
 
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):
@@ -1122,10 +1138,10 @@ class CliSmokeTest(unittest.TestCase):
             calls = []
             observed = {}
 
-            def writer(form_path, bin_path, module_path, elem_path, metadata_path, out_path):
-                calls.append((form_path, bin_path, module_path, elem_path, metadata_path, out_path))
+            def writer(form_path, module_path, control_index, metadata_path, out_path):
+                calls.append((form_path, module_path, control_index, metadata_path, out_path))
                 observed["module"] = module_path.read_bytes()
-                observed["elem_exists"] = elem_path.exists()
+                observed["control_index_pages"] = control_index["data"]["-pages-"]
                 out_path.write_text("ok", encoding="utf-8")
 
             out = root / "Form.xml"
@@ -1133,9 +1149,8 @@ class CliSmokeTest(unittest.TestCase):
 
             self.assertEqual(out.read_text(encoding="utf-8"), "ok")
             self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0][1], source)
             self.assertEqual(observed["module"], module)
-            self.assertTrue(observed["elem_exists"])
+            self.assertEqual(observed["control_index_pages"], ["Main"])
 
 
 if __name__ == "__main__":
