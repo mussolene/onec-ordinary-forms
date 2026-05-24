@@ -27,5 +27,11 @@ control-info writer records with platform-derived codec descriptors. After
 that, `cli.py` should contain only thin command wrappers.
 
 Behavioral changes should stay separate from these moves. A pure architecture
-cleanup must keep CLI arguments stable and pass logical round-trip checks. The
-canonical writer is not required to produce byte-identical containers.
+cleanup must keep CLI arguments stable and pass the existing round-trip checks.
+
+Byte identity is now a targeted correctness oracle, not a blanket claim for the
+whole corpus. The current writer preserves physical `Form.bin` container details
+and compact platform profile metadata where the platform baseline has been
+observed, while the public XML remains object-model-only. Verified oracle cases
+should stay byte-identical; broader UT/UPP corpus work should expand profile
+coverage incrementally and record the next mismatch class in OACS.

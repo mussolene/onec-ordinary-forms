@@ -324,18 +324,26 @@ Current implementation status:
 - extract `Module.bsl` and picture sidecars;
 - validate `Form.xml` against the bundled ordinary-form schemas;
 - build ordinary `Form.bin` back from the named object XML package without
-  template `Form.bin`;
+  a source `Form.bin` fallback in the public package;
 - preserve compact platform profile metadata in sidecars for no-op ordinary
   form byte round-trips while keeping the public `Form.xml` object-only;
 - scan local EPF/ERF corpora without committing private processors or exports.
 
-Validation status for this release:
+Validation status:
 
-- one UT ordinary list-form no-op dump/build is byte-identical for the full
-  `Form.bin` container, form payload, and module payload;
-- first-50 UT corpus smoke currently has no exceptions and keeps module
-  payloads stable, but only 1/50 forms are full byte-identical;
-- the next known mismatch class is a root format/profile length variant.
+- `v0.4.0` has one UT ordinary list-form no-op dump/build byte-identical for
+  the full `Form.bin` container, form payload, and module payload.
+- The first-50 UT corpus smoke currently has no exceptions and keeps module
+  payloads stable, but only 1/50 forms are full byte-identical.
+- The next known mismatch class is a root format/profile length variant.
+
+Automation:
+
+- CI runs on GitHub Actions for pushes, pull requests, and manual dispatch on
+  Python 3.10, 3.11, and 3.12.
+- CI executes tests, CLI smoke, package build, and package metadata checks.
+- Release workflow runs for `v*` tags or manual dispatch with a tag input,
+  rebuilds the package, rechecks it, and publishes GitHub Release assets.
 
 ## Install
 
@@ -344,6 +352,15 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e '.[dev]'
 make test
+```
+
+For the same checks used in CI:
+
+```bash
+PYTHONPATH=src pytest -q
+make smoke
+python -m build
+python -m twine check dist/*
 ```
 
 ## CLI

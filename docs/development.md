@@ -46,6 +46,31 @@ The script runs 1C 8.5 in the amd64 container and executes
 deserializes ordinary `Form.bin` deeply enough to reject malformed bracket/list
 streams. Logs and generated dumps stay under ignored `scan-output/`.
 
+## GitHub Automation
+
+The repository has two GitHub Actions workflows:
+
+- `CI` runs on pushes to `main`, pull requests, and manual dispatch. It tests
+  Python 3.10, 3.11, and 3.12, then runs CLI smoke, builds the package, checks
+  the built artifacts with `twine`, and uploads the Python 3.12 artifacts.
+- `Release` runs on `v*` tags and manual dispatch with a tag input. It checks
+  out the requested tag, installs release dependencies, runs tests and smoke,
+  builds the package, checks artifacts, and publishes them to the GitHub
+  release for that tag.
+
+For a normal release:
+
+1. Bump `pyproject.toml`, `src/onec_ordinary_forms/__init__.py`, and README
+   status.
+2. Run local tests, smoke, package build, `twine check`, and leak scan.
+3. Commit the release bump.
+4. Create and push an annotated `vX.Y.Z` tag.
+5. Let the `Release` workflow publish wheel and sdist assets.
+
+The workflow publishes only package artifacts from `dist/`. It does not use
+private EPF/ERF fixtures, platform containers, license files, or local corpus
+exports.
+
 ## Next Refactor
 
 Split `src/onec_ordinary_forms/cli.py` into:
