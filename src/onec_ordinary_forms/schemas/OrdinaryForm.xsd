@@ -1111,10 +1111,20 @@
           <xs:element name="TextColor" type="ColorType"/>
           <xs:element name="BackColor" type="ColorType"/>
           <xs:element name="BorderColor" type="ColorType"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="AutoTraversalOrder" type="xs:boolean"/>
+          <xs:element name="TraversalOrder" type="xs:integer"/>
+          <xs:element name="Picture" type="FileRefType"/>
+          <xs:element name="PanelPicturePosition" type="xs:string"/>
+          <xs:element name="PictureSize" type="xs:string"/>
+          <xs:element name="DistributeByPages" type="xs:boolean"/>
+          <xs:element name="ScrollablePagesMode" type="xs:boolean"/>
           <xs:element name="Pages" type="PagesType"/>
+          <xs:element name="CurrentPage" type="NamedRefType"/>
           <xs:element name="PagesRepresentation" type="xs:string"/>
           <xs:element name="Events" type="PanelEventsType"/>
           <xs:group ref="ControlElementGroup"/>
@@ -1235,17 +1245,50 @@
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
+          <xs:element name="TypeRestriction" type="OpenElementType"/>
           <xs:element name="EditMode" type="xs:string"/>
           <xs:element name="ChoiceMode" type="xs:string"/>
           <xs:element name="MaxLength" type="xs:integer"/>
+          <xs:element name="Format" type="xs:string"/>
+          <xs:element name="Mask" type="xs:string"/>
+          <xs:element name="MinValue" type="OpenElementType"/>
+          <xs:element name="MaxValue" type="OpenElementType"/>
+          <xs:element name="SelectedText" type="xs:string"/>
+          <xs:element name="HorizontalAlign" type="xs:string"/>
+          <xs:element name="VerticalAlign" type="xs:string"/>
           <xs:element name="MultiLine" type="xs:boolean"/>
+          <xs:element name="WordWrap" type="xs:boolean"/>
           <xs:element name="PasswordMode" type="xs:boolean"/>
+          <xs:element name="TextEditing" type="xs:boolean"/>
+          <xs:element name="ExtendedEdit" type="xs:boolean"/>
+          <xs:element name="TypeChoice" type="xs:boolean"/>
+          <xs:element name="IncompleteChoice" type="xs:boolean"/>
+          <xs:element name="IncompleteChoiceMode" type="xs:string"/>
+          <xs:element name="AutoSelectIncomplete" type="xs:boolean"/>
+          <xs:element name="AutoMarkIncomplete" type="xs:boolean"/>
+          <xs:element name="IncompleteMark" type="xs:boolean"/>
+          <xs:element name="HighlightNegative" type="xs:boolean"/>
+          <xs:element name="Picture" type="FileRefType"/>
           <xs:element name="ChoiceButton" type="xs:boolean"/>
+          <xs:element name="ChoiceButtonPicture" type="FileRefType"/>
+          <xs:element name="ChoiceListButton" type="xs:boolean"/>
           <xs:element name="ClearButton" type="xs:boolean"/>
           <xs:element name="OpenButton" type="xs:boolean"/>
           <xs:element name="CreateButton" type="xs:boolean"/>
           <xs:element name="EditButton" type="xs:boolean"/>
           <xs:element name="RegulationButton" type="xs:boolean"/>
+          <xs:element name="ChoiceList" type="OpenElementType"/>
+          <xs:element name="ChoiceListMode" type="xs:boolean"/>
+          <xs:element name="ChoiceListHeight" type="xs:integer"/>
+          <xs:element name="ChoiceListWidth" type="xs:integer"/>
+          <xs:element name="Shortcut" type="xs:string"/>
+          <xs:element name="TypeLinkElement" type="NamedRefType"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="FieldTextColor" type="ColorType"/>
+          <xs:element name="FieldBackColor" type="ColorType"/>
+          <xs:element name="ButtonTextColor" type="ColorType"/>
+          <xs:element name="ButtonBackColor" type="ColorType"/>
           <xs:element name="Events" type="InputFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1271,7 +1314,15 @@
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="Auxiliary" type="xs:boolean"/>
           <xs:element name="Autofill" type="xs:boolean"/>
+          <xs:element name="ButtonAlignment" type="xs:string"/>
+          <xs:element name="Buttons" type="OpenElementType"/>
+          <xs:element name="Orientation" type="xs:string"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="ButtonTextColor" type="ColorType"/>
+          <xs:element name="ButtonBackColor" type="ColorType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -1328,6 +1379,46 @@
           <xs:element name="ColumnsCount" type="xs:integer"/>
           <xs:element name="RowsCount" type="xs:integer"/>
           <xs:element name="AutoMarkIncomplete" type="xs:boolean"/>
+          <xs:element name="AutoInsertNewRow" type="xs:boolean"/>
+          <xs:element name="Output" type="xs:string"/>
+          <xs:element name="SelectedRows" type="OpenElementType"/>
+          <xs:element name="CurrentColumn" type="NamedRefType"/>
+          <xs:element name="CurrentRow" type="OpenElementType"/>
+          <xs:element name="CurrentData" type="OpenElementType"/>
+          <xs:element name="CurrentParent" type="OpenElementType"/>
+          <xs:element name="Header" type="xs:boolean"/>
+          <xs:element name="Footer" type="xs:boolean"/>
+          <xs:element name="HeaderHeight" type="xs:integer"/>
+          <xs:element name="FooterHeight" type="xs:integer"/>
+          <xs:element name="HeaderFont" type="FontType"/>
+          <xs:element name="FooterFont" type="FontType"/>
+          <xs:element name="HeaderTextColor" type="ColorType"/>
+          <xs:element name="FooterTextColor" type="ColorType"/>
+          <xs:element name="HeaderBackColor" type="ColorType"/>
+          <xs:element name="FooterBackColor" type="ColorType"/>
+          <xs:element name="SelectionTextColor" type="ColorType"/>
+          <xs:element name="SelectionBackColor" type="ColorType"/>
+          <xs:element name="FieldBackColor" type="ColorType"/>
+          <xs:element name="AlternatingRowBackColor" type="ColorType"/>
+          <xs:element name="AlternateRowColors" type="xs:boolean"/>
+          <xs:element name="HorizontalLines" type="xs:boolean"/>
+          <xs:element name="VerticalLines" type="xs:boolean"/>
+          <xs:element name="HorizontalScrollBar" type="xs:string"/>
+          <xs:element name="VerticalScrollBar" type="xs:string"/>
+          <xs:element name="InputRowsMode" type="xs:string"/>
+          <xs:element name="SelectionMode" type="xs:string"/>
+          <xs:element name="RowSelectionMode" type="xs:string"/>
+          <xs:element name="ChoiceMode" type="xs:boolean"/>
+          <xs:element name="InitialTreeView" type="xs:string"/>
+          <xs:element name="InitialListView" type="xs:string"/>
+          <xs:element name="LeftFixedColumns" type="xs:integer"/>
+          <xs:element name="RightFixedColumns" type="xs:integer"/>
+          <xs:element name="AllowDrag" type="xs:boolean"/>
+          <xs:element name="AllowDragStart" type="xs:boolean"/>
+          <xs:element name="AllowChangeRows" type="xs:boolean"/>
+          <xs:element name="AllowChangeColumnOrder" type="xs:boolean"/>
+          <xs:element name="AllowColumnSetup" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
           <xs:element name="Events" type="TableEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>

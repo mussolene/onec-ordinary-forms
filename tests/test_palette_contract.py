@@ -92,6 +92,86 @@ def test_control_types_are_type_specific() -> None:
     }
 
 
+def test_core_control_types_cover_platform_property_surface() -> None:
+    ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+
+    def child_names(type_name: str) -> set[str]:
+        choice = root.find(
+            f"xs:complexType[@name='{type_name}']/xs:complexContent/xs:extension/xs:choice",
+            ns,
+        )
+        assert choice is not None
+        return {element.get("name", "") for element in choice.findall("xs:element", ns)}
+
+    expected = {
+        "PanelType": {
+            "AutoTraversalOrder",
+            "TraversalOrder",
+            "Picture",
+            "PanelPicturePosition",
+            "PictureSize",
+            "DistributeByPages",
+            "ScrollablePagesMode",
+            "CurrentPage",
+            "TransparentBackColor",
+            "Border",
+        },
+        "InputFieldType": {
+            "AutoSelectIncomplete",
+            "AutoMarkIncomplete",
+            "WordWrap",
+            "TypeChoice",
+            "IncompleteChoice",
+            "HighlightNegative",
+            "ChoiceListHeight",
+            "ChoiceListWidth",
+            "Mask",
+            "Format",
+            "TypeRestriction",
+            "ChoiceList",
+            "FieldTextColor",
+            "FieldBackColor",
+            "ButtonTextColor",
+            "ButtonBackColor",
+        },
+        "CommandBarType": {
+            "Auxiliary",
+            "ButtonAlignment",
+            "Buttons",
+            "Orientation",
+            "TransparentBackColor",
+            "Border",
+            "ButtonTextColor",
+            "ButtonBackColor",
+        },
+        "TableType": {
+            "AutoInsertNewRow",
+            "Output",
+            "SelectedRows",
+            "CurrentColumn",
+            "Header",
+            "Footer",
+            "HorizontalLines",
+            "VerticalLines",
+            "HorizontalScrollBar",
+            "VerticalScrollBar",
+            "InputRowsMode",
+            "SelectionMode",
+            "AllowChangeRows",
+            "AllowChangeColumnOrder",
+            "AllowColumnSetup",
+            "LeftFixedColumns",
+            "RightFixedColumns",
+            "AlternatingRowBackColor",
+            "AlternateRowColors",
+        },
+    }
+
+    for type_name, names in expected.items():
+        assert names <= child_names(type_name)
+
+
 def test_public_xsd_control_elements_use_english_vocabulary() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     root = ET.parse(ORDINARY_FORM_XSD).getroot()
