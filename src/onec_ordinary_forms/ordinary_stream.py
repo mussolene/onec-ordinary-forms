@@ -947,7 +947,8 @@ def panel_position_records(page_count: int, width: str, height: str, *, mode: st
 
 def label_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
     title = get_multilang_text(element, "Title") or element.get("name", "")
-    label_mode = "0" if title.endswith(":") else "4"
+    label_mode = element.findtext("TextPosition") or ("0" if title.endswith(":") else "4")
+    label_style_mode = "0" if title.endswith(":") else label_mode
     return [
         "3",
         [
@@ -963,7 +964,7 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
             "0",
             ["1", "0"],
             "1",
-            ["10", label_mode, empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "2", "0", "0", "1", "2"],
+            ["10", label_style_mode, empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "2", "0", "0", "1", "2"],
             "4",
             "0",
             "0",
@@ -1888,16 +1889,29 @@ def progress_bar_control_info(element: ET.Element) -> list[object]:
     return [
         "0",
         [
-            base_info_record_from_xml(element),
-            "3",
+            progress_bar_base_info_record(element),
+            element.findtext("Orientation") or "3",
             element.findtext("MinimumValue") or "0",
             element.findtext("MaximumValue") or "100",
             element.findtext("Step") or "1",
             element.findtext("BigStep") or "1",
-            "0",
-            "2",
+            bool_record_from_xml(element, "ShowPercent", default=False),
+            element.findtext("DisplayStyle") or "2",
         ],
     ]
+
+
+def progress_bar_base_info_record(element: ET.Element) -> list[object]:
+    base = extended_base_info_record_from_xml(element)
+    base[0] = "19"
+    base[2] = ["4", "4", ["0"], "4"]
+    base[3] = ["4", "4", ["0"], "4"]
+    base[5] = "0"
+    base[6] = ["4", "3", ["-22"], "3"]
+    base[7] = ["4", "4", ["0"], "4"]
+    base[8] = ["4", "4", ["0"], "4"]
+    base[11] = ["3", "1", ["-18"], "0", "0", "0"]
+    return base
 
 
 def track_bar_control_info(element: ET.Element) -> list[object]:
@@ -2037,7 +2051,7 @@ def geographical_schema_settings_record(element: ET.Element) -> list[object]:
 
 def graphical_schema_field_control_info(element: ET.Element) -> list[object]:
     return [
-        base_info_record_from_xml(element),
+        graphical_schema_base_info_record(element),
         "5",
         [
             [
@@ -2045,7 +2059,7 @@ def graphical_schema_field_control_info(element: ET.Element) -> list[object]:
                 [
                     [
                         "1",
-                        ["3", "3", ["-10"]],
+                        ["4", "3", ["-10"], "3"],
                         "1",
                         "20",
                         "20",
@@ -2053,6 +2067,16 @@ def graphical_schema_field_control_info(element: ET.Element) -> list[object]:
                         "6",
                         "6",
                         [quoted_atom("N"), "10"],
+                        "7",
+                        [quoted_atom("N"), "10"],
+                        "8",
+                        [quoted_atom("N"), "10"],
+                        "9",
+                        [quoted_atom("N"), "10"],
+                        "13",
+                        [quoted_atom("N"), "0"],
+                        "16",
+                        [quoted_atom("N"), "0"],
                     ]
                 ],
                 "0",
@@ -2063,6 +2087,12 @@ def graphical_schema_field_control_info(element: ET.Element) -> list[object]:
         "0",
         "0",
     ]
+
+
+def graphical_schema_base_info_record(element: ET.Element) -> list[object]:
+    base = progress_bar_base_info_record(element)
+    base[2] = ["4", "3", ["-10"], "3"]
+    return base
 
 
 def list_box_control_info(element: ET.Element) -> list[object]:
@@ -2818,7 +2848,7 @@ def geometry_stream_from_xml(
             "0",
             "0",
         ]
-    if control_type == "GeographicalSchemaField" and data_slot:
+    if control_type in {"GeographicalSchemaField", "GraphicalSchemaField"} and data_slot:
         group_tail = layout_group_tail(layout_group, layout_order, data_slot, "0")
         return [
             "8",
@@ -2863,7 +2893,7 @@ def geometry_stream_from_xml(
             "0",
             "0",
         ]
-    if control_type == "GeographicalSchemaField":
+    if control_type in {"GeographicalSchemaField", "GraphicalSchemaField"}:
         group_tail = layout_group_tail(
             layout_group,
             layout_order,

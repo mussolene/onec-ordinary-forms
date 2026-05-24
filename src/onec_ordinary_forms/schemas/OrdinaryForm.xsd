@@ -1788,6 +1788,13 @@
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="MinimumValue" type="xs:decimal"/>
+          <xs:element name="MaximumValue" type="xs:decimal"/>
+          <xs:element name="Step" type="xs:decimal"/>
+          <xs:element name="Orientation" type="xs:string"/>
+          <xs:element name="ShowPercent" type="xs:boolean"/>
+          <xs:element name="DisplayStyle" type="xs:string"/>
           <xs:element name="MinWidth" type="xs:integer"/>
           <xs:element name="MaxWidth" type="xs:integer"/>
           <xs:group ref="ControlElementGroup"/>

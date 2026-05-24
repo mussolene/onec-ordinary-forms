@@ -698,6 +698,7 @@ def add_semantic_item(
     add_table_columns(node, item, item_data)
     add_pivot_chart_properties(node, item, item_data)
     add_geographical_schema_properties(node, item, item_data)
+    add_label_properties(node, item, item_data)
     add_text_color(node, item_data)
     add_back_color(node, item_data)
     add_border_color(node, item_data)
@@ -1051,6 +1052,19 @@ def add_geographical_schema_properties(parent: ET.Element, item: dict, item_data
     settings = raw[3]
     if isinstance(settings, list) and len(settings) > 1 and clean_token(settings[0]) == "2":
         set_text(parent, "ScaleSupport", clean_token(settings[1]))
+
+
+def add_label_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "Label":
+        return
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    if len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 3:
+        set_text(parent, "TextPosition", clean_token(info[1][3]))
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:

@@ -1123,6 +1123,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(track[2][1][1], "5")
         self.assertIsNotNone(progress)
         self.assertEqual(progress[2][0], "0")
+        self.assertEqual(progress[2][1][0][0], "19")
         self.assertEqual(progress[2][1][1], "3")
         self.assertIsNotNone(calendar)
         self.assertEqual(calendar[2][0], "1")
