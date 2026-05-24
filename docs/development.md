@@ -46,6 +46,11 @@ The script runs 1C 8.5 in the amd64 container and executes
 deserializes ordinary `Form.bin` deeply enough to reject malformed bracket/list
 streams. Logs and generated dumps stay under ignored `scan-output/`.
 
+For documentation-only changes, run at least the unit tests that protect the
+public XML contract and the CLI smoke checks. Full platform validation is not
+required unless the change affects parser, writer, schema, or packaging
+behavior.
+
 ## GitHub Automation
 
 The repository has two GitHub Actions workflows:

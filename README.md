@@ -68,6 +68,11 @@ Control properties and events are type-specific and come from the platform help
 palette for ordinary controls. The XML should contain only values explicitly
 set on the form; platform defaults should stay implicit.
 
+Public XML uses one English vocabulary for element and attribute names. Russian
+platform names for ordinary-form controls, properties, events, and value types
+belong in `OrdinaryForm.xsd` as `xs:annotation/xs:appinfo` metadata, not in a
+separate mapping file and not as public XML tag names.
+
 The exact schema is still being expanded, but the target direction is fixed:
 public XML must be managed-form-like, named, and understandable to a 1C
 developer.
@@ -298,8 +303,8 @@ Form.xml -> объектная модель платформы -> ListOutStream 
 Слой схем специально небольшой и сфокусирован на обычных формах:
 
 - `OrdinaryForm.xsd` описывает публичный корень `Form.xml`, элементы обычной
-  формы, переиспользуемые типы значений/раскладки, словарь свойств/событий и
-  аннотации платформенной палитры;
+  формы, переиспользуемые типы значений/раскладки, единый английский словарь
+  свойств/событий и аннотации платформенной палитры;
 - `PlatformConfigStructure.xsd` фиксирует платформенные сведения о структуре
   конфигурации, дереве метаданных, type-domain, `CompositeID`,
   `ValueToStringInternal`/`ValueFromStringInternal` и сведения о

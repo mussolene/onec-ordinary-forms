@@ -35,3 +35,18 @@ and compact platform profile metadata where the platform baseline has been
 observed, while the public XML remains object-model-only. Verified oracle cases
 should stay byte-identical; broader UT/UPP corpus work should expand profile
 coverage incrementally and record the next mismatch class in OACS.
+
+## Schema Boundary
+
+The public schema boundary is intentionally narrow:
+
+- `OrdinaryForm.xsd` is the editable ordinary-form object model: form root,
+  controls, named properties, events, reusable value/layout types, and platform
+  palette annotations.
+- `PlatformConfigStructure.xsd` is codec evidence for configuration metadata,
+  type-domain patterns, `CompositeID`, and platform serializer concepts.
+
+Public `Form.xml` element and attribute names use the English vocabulary from
+`OrdinaryForm.xsd`. Russian platform names are schema annotations used by tools
+and documentation. They are not separate mapping files and not alternate public
+XML tag names.
