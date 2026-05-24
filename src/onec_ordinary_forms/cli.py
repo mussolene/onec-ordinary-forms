@@ -606,6 +606,7 @@ def add_geometry(
     node = ET.SubElement(parent, "Position")
     for key, value in geometry.items():
         node.set(key, value)
+    add_layout_group(node, geometry_raw)
     node.set("unit", "form")
 
     anchors = ET.SubElement(node, "Bindings")
@@ -614,6 +615,21 @@ def add_geometry(
             add_binding(anchors, "Binding", index, binding, current_id, element_index)
         for index, binding in enumerate(geometry_raw[13:17], start=1):
             add_binding(anchors, "DimensionBinding", index, binding, current_id, element_index)
+
+
+def add_layout_group(node: ET.Element, geometry_raw: list[object]) -> None:
+    if len(geometry_raw) < 5:
+        return
+    group, order, next_order, flag1, flag2 = [clean_token(value) for value in geometry_raw[-5:]]
+    if flag1 != "0" or flag2 != "0":
+        return
+    try:
+        if int(next_order) != int(order) + 1:
+            return
+    except ValueError:
+        return
+    node.set("layoutGroup", group)
+    node.set("layoutOrder", order)
 
 
 def find_base64_payload(value: object) -> str:

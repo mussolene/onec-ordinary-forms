@@ -2027,6 +2027,8 @@ def geometry_stream_from_xml(
     top = position.get("top", "0") if position is not None else "0"
     right = position.get("right", "0") if position is not None else "0"
     bottom = position.get("bottom", "0") if position is not None else "0"
+    layout_group = position.get("layoutGroup") if position is not None else None
+    layout_order = position.get("layoutOrder") if position is not None else None
     bindings: list[object] = ["0"] * 6
     dimensions: list[object] = ["0"] * 4
     if position is not None:
@@ -2084,8 +2086,10 @@ def geometry_stream_from_xml(
             "0",
         ]
     if control_type in {"CheckBox", "RadioButton"} and data_slot:
+        default_order = str(radio_ordinal) if control_type == "RadioButton" else "0"
+        group_tail = layout_group_tail(layout_group, layout_order, data_slot, default_order)
         group_offsets = (
-            [str(radio_ordinal), str(radio_ordinal + 1)]
+            group_tail[1:3]
             if control_type == "RadioButton"
             else ["0", "1"]
         )
@@ -2102,12 +2106,13 @@ def geometry_stream_from_xml(
             "0",
             "0",
             "0",
-            data_slot,
+            group_tail[0],
             *group_offsets,
             "0",
             "0",
         ]
     if data_slot:
+        group_tail = layout_group_tail(layout_group, layout_order, data_slot, "1")
         dimension_flag = "1" if dimensions[0] != "0" else "0"
         dimension_part = [dimensions[0]] if dimension_flag == "1" else []
         return [
@@ -2125,13 +2130,12 @@ def geometry_stream_from_xml(
             "0",
             "0",
             "0",
-            data_slot,
-            "1",
-            "2",
+            *group_tail[:3],
             "0",
             "0",
         ]
     paged_trailer = ["0", "0"] if control_type == "CommandBar" else GEOMETRY_TRAILER_PROFILE["paged"]
+    group_tail = layout_group_tail(layout_group, layout_order, str(page_order), str(page_index))
     return [
         "8",
         left,
@@ -2143,12 +2147,25 @@ def geometry_stream_from_xml(
         "1",
         *dimensions,
         *paged_trailer,
-        str(page_order),
-        str(page_index),
-        str(page_index + 1),
+        *group_tail[:3],
         "0",
         "0",
     ]
+
+
+def layout_group_tail(
+    layout_group: str | None,
+    layout_order: str | None,
+    default_group: str,
+    default_order: str,
+) -> list[str]:
+    group = layout_group if layout_group is not None else default_group
+    order = layout_order if layout_order is not None else default_order
+    try:
+        next_order = str(int(order) + 1)
+    except ValueError:
+        next_order = "0"
+    return [group, order, next_order, "0", "0"]
 
 
 def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[object]) -> None:

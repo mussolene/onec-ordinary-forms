@@ -1935,6 +1935,8 @@
     <xs:attribute name="bottom" type="xs:integer"/>
     <xs:attribute name="width" type="xs:integer"/>
     <xs:attribute name="height" type="xs:integer"/>
+    <xs:attribute name="layoutGroup" type="xs:integer"/>
+    <xs:attribute name="layoutOrder" type="xs:integer"/>
     <xs:attribute name="unit" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="BindingsType">
