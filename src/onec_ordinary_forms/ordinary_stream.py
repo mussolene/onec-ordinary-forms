@@ -631,6 +631,8 @@ def control_stream_from_xml_with_page(
                     page_child_order += 1
         children.extend(child for _, child in sorted(page_children, key=lambda item: item[0]))
     child_table: list[object] = [str(len(children)), *children]
+    if control_type == "GeographicalSchemaField":
+        return [class_id, object_id, info, geographical_schema_settings_record(element), geometry, metadata, child_table]
     return [class_id, object_id, info, geometry, metadata, child_table]
 
 
@@ -1955,7 +1957,82 @@ def text_document_field_control_info(element: ET.Element) -> list[object]:
 
 
 def geographical_schema_field_control_info(element: ET.Element) -> list[object]:
-    return base_info_record_from_xml(element)
+    return [
+        "19",
+        element.findtext("Output") or "1",
+        ["4", "3", ["-10"], "3"],
+        ["4", "4", ["0"], "4"],
+        ["8", "3", "0", "1", "100"],
+        "0",
+        ["4", "3", ["-22"], "3"],
+        ["4", "4", ["0"], "4"],
+        ["4", "4", ["0"], "4"],
+        ["4", "3", ["-7"], "3"],
+        ["4", "3", ["-21"], "3"],
+        ["3", "0", ["0"], "0", visible_record_from_xml(element), "3", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        tooltip_record_from_xml(element),
+        "0",
+        "0",
+        element.findtext("Scale") or "100",
+        "0",
+        "0",
+        "0",
+        "0",
+        ["4", "4", ["0"], "4"],
+    ]
+
+
+def geographical_schema_settings_record(element: ET.Element) -> list[object]:
+    scale_support = element.findtext("ScaleSupport") or "2"
+    return [
+        "2",
+        scale_support,
+        [
+            ["1", "0", "0", "0"],
+            ["0", "0", "0", "0", "0", []],
+            [
+                "1",
+                ["1", "0"],
+                ["8", "2", "0", ["-20"], "1", "100"],
+                ["4", "3", ["-3"], "3"],
+                "1",
+                ["3", "0", ["0"], "0", "1", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+                ["4", "3", ["-22"], "3"],
+                "1",
+                ["4", "3", ["-10"], "3"],
+                "0",
+                "0",
+                "0",
+                "95",
+            ],
+            [
+                "1",
+                ["8", "2", "0", ["-20"], "1", "100"],
+                ["4", "3", ["-3"], "3"],
+                ["3", "0", ["0"], "0", "1", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+                ["4", "3", ["-22"], "3"],
+                "1",
+                ["4", "3", ["-10"], "3"],
+                "0",
+                [],
+                "75",
+                "0",
+                "5",
+                "0",
+                "1",
+            ],
+            [["3", "0", ["0"], "0", "1", "0", "48312c09-257f-4b29-b280-284dd89efc1e"], ["4", "3", ["-22"], "3"], "1", ["4", "3", ["-10"], "3"], "0", "25", "5", "0"],
+            ["0", []],
+            "0",
+            "1",
+            "0",
+            "0",
+            "0",
+            "0",
+        ],
+        ["0"],
+        "0",
+    ]
 
 
 def graphical_schema_field_control_info(element: ET.Element) -> list[object]:
@@ -2741,6 +2818,28 @@ def geometry_stream_from_xml(
             "0",
             "0",
         ]
+    if control_type == "GeographicalSchemaField" and data_slot:
+        group_tail = layout_group_tail(layout_group, layout_order, data_slot, "0")
+        return [
+            "8",
+            left,
+            top,
+            right,
+            bottom,
+            "1",
+            *bindings,
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            group_tail[0],
+            group_tail[1],
+            "1",
+            "0",
+            "0",
+        ]
     if data_slot:
         group_tail = layout_group_tail(layout_group, layout_order, data_slot, "1")
         dimension_flag = "1" if dimensions[0] != "0" else "0"
@@ -2761,6 +2860,33 @@ def geometry_stream_from_xml(
             "0",
             "0",
             *group_tail[:3],
+            "0",
+            "0",
+        ]
+    if control_type == "GeographicalSchemaField":
+        group_tail = layout_group_tail(
+            layout_group,
+            layout_order,
+            str(page_order) if page_order is not None else "0",
+            "0",
+        )
+        return [
+            "8",
+            left,
+            top,
+            right,
+            bottom,
+            "1",
+            *bindings,
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            group_tail[0],
+            group_tail[1],
+            "1",
             "0",
             "0",
         ]

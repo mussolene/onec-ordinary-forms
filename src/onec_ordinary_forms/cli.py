@@ -697,6 +697,7 @@ def add_semantic_item(
     add_read_only(node, item, item_data)
     add_table_columns(node, item, item_data)
     add_pivot_chart_properties(node, item, item_data)
+    add_geographical_schema_properties(node, item, item_data)
     add_text_color(node, item_data)
     add_back_color(node, item_data)
     add_border_color(node, item_data)
@@ -1033,6 +1034,23 @@ def bool_text_from_record(value: object, *, default: bool) -> str:
     if text in {"1", "true"}:
         return "true"
     return "true" if default else "false"
+
+
+def add_geographical_schema_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "GeographicalSchemaField":
+        return
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 3:
+        return
+    info = raw[2]
+    if isinstance(info, list) and len(info) > 15 and clean_token(info[0]) == "19":
+        set_text(parent, "Output", clean_token(info[1]))
+        set_text(parent, "Scale", clean_token(info[15]))
+    settings = raw[3]
+    if isinstance(settings, list) and len(settings) > 1 and clean_token(settings[0]) == "2":
+        set_text(parent, "ScaleSupport", clean_token(settings[1]))
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:
