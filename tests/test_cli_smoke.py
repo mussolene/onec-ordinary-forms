@@ -789,6 +789,65 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(checkbox_info[2][2], ['"ru"', '"Use color"'])
         self.assertEqual(checkbox_info[0][12][2], ['"ru"', '"Use color tooltip"'])
 
+    def test_build_bin_uses_choice_field_info_kind_and_buttons(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <ChoiceField name="Mode" id="44">
+                    <DataPath>Mode</DataPath>
+                    <ReadOnly>true</ReadOnly>
+                    <ChoiceButton>false</ChoiceButton>
+                    <ClearButton>false</ClearButton>
+                    <OpenButton>true</OpenButton>
+                    <ToolTip><Item lang="ru">Mode tooltip</Item></ToolTip>
+                  </ChoiceField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        choice = self._find_control(stream, "64483e7f-3833-48e2-8c75-2c31aac49f6e")
+
+        self.assertIsNotNone(choice)
+        info = choice[2]
+        self.assertEqual(info[0], "2")
+        choice_info = info[1][0]
+        self.assertEqual(choice_info[0][12][2], ['"ru"', '"Mode tooltip"'])
+        self.assertEqual(choice_info[12], "1")
+        self.assertEqual(choice_info[23], "0")
+        self.assertEqual(choice_info[24], "0")
+        self.assertEqual(choice_info[25], "1")
+
+    def test_build_bin_uses_radio_button_info_kind_and_named_title(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <RadioButton name="UseRules" id="45">
+                    <Title><Item lang="ru">Use rules</Item></Title>
+                    <ToolTip><Item lang="ru">Use rules tooltip</Item></ToolTip>
+                  </RadioButton>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        radio = self._find_control(stream, "782e569a-79a7-4a4f-a936-b48d013936ec")
+
+        self.assertIsNotNone(radio)
+        info = radio[2]
+        self.assertEqual(info[0], "4")
+        radio_info = info[2][0][0]
+        self.assertEqual(radio_info[2][2], ['"ru"', '"Use rules"'])
+        self.assertEqual(radio_info[0][12][2], ['"ru"', '"Use rules tooltip"'])
+
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):
             if value and value[0] == class_id:

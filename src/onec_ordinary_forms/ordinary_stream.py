@@ -458,6 +458,10 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
         return image_control_info(element, title_record, picture_payload)
     if control_type == "CheckBox":
         return checkbox_control_info(element, title_record, actions)
+    if control_type == "ChoiceField":
+        return choice_field_control_info(element, actions)
+    if control_type == "RadioButton":
+        return radio_button_control_info(element, title_record, actions)
     if control_type == "InputField":
         return input_field_control_info(element, actions)
     return label_control_info(element, title_record, actions)
@@ -644,6 +648,89 @@ def checkbox_control_info(element: ET.Element, title_record: list[object], actio
             "0",
         ],
         ["1", *actions] if actions else ["0"],
+    ]
+
+
+def choice_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    return [
+        "2",
+        [choice_field_info_record_from_xml(element)],
+        ["1", *actions] if actions else ["0"],
+    ]
+
+
+def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
+    return [
+        base_info_record_from_xml(element),
+        "21",
+        "0",
+        "0",
+        "1",
+        "0",
+        "1",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+        bool_record_from_xml(element, "ReadOnly", default=False),
+        "0",
+        "255",
+        "0",
+        "0",
+        "4",
+        "0",
+        [quoted_atom("U")],
+        [quoted_atom("U")],
+        '""',
+        "0",
+        bool_record_from_xml(element, "ChoiceButton", default=True),
+        bool_record_from_xml(element, "ClearButton", default=True),
+        bool_record_from_xml(element, "OpenButton", default=False),
+        bool_record_from_xml(element, "CreateButton", default=False),
+        bool_record_from_xml(element, "EditButton", default=False),
+        ["3", "0", ["0"], '""', "-1", "-1", "1", "0"],
+        ["3", "0", ["0"], '""', "-1", "-1", "1", "0"],
+        "0",
+        "0",
+        "0",
+        ["0", "0", "0"],
+        ["1", "0"],
+        "0",
+        "0",
+        "0",
+        "0",
+    ]
+
+
+def radio_button_control_info(
+    element: ET.Element,
+    title_record: list[object],
+    actions: list[object],
+) -> list[object]:
+    return [
+        "4",
+        [quoted_atom("Pattern"), [quoted_atom("B")]],
+        [
+            [
+                checkbox_control_inner_info(element, title_record),
+                "1",
+            ],
+            "0",
+            [quoted_atom("B"), "1"],
+            ["1", *actions] if actions else ["0"],
+        ],
+    ]
+
+
+def checkbox_control_inner_info(element: ET.Element, title_record: list[object]) -> list[object]:
+    return [
+        base_info_record_from_xml(element),
+        "4",
+        title_record,
+        "1",
+        "0",
+        "1",
     ]
 
 
