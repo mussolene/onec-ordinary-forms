@@ -984,7 +984,7 @@ def input_field_control_info(element: ET.Element, actions: list[object], type_pa
     return [
         descriptor.info_kind,
         [quoted_atom("Pattern"), pattern],
-        [input_field_info_record_from_xml(element)],
+        [input_field_info_record_from_xml(element, pattern)],
         input_field_data_source_record(element),
         ["1", *actions] if actions else ["0"],
         "0",
@@ -1007,7 +1007,7 @@ def input_field_data_source_record(element: ET.Element) -> list[object]:
     return ["0"]
 
 
-def input_field_info_record_from_xml(element: ET.Element) -> list[object]:
+def input_field_info_record_from_xml(element: ET.Element, type_pattern: list[object]) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
     base = extended_base_info_record_from_xml(element)
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
@@ -1059,6 +1059,9 @@ def input_field_info_record_from_xml(element: ET.Element) -> list[object]:
         "0",
         "0",
     ]
+    if type_pattern == [quoted_atom("D"), quoted_atom("D")]:
+        record[4] = "0"
+        record[7] = "1"
     record[descriptor.slot_index("ReadOnly")] = bool_record_from_xml(element, "ReadOnly", default=False)
     return record
 
@@ -2872,8 +2875,10 @@ def geometry_stream_from_xml(
         ]
     if data_slot:
         group_tail = layout_group_tail(layout_group, layout_order, data_slot, "1")
-        dimension_flag = "1" if dimensions[0] != "0" else "0"
-        dimension_part = [dimensions[0]] if dimension_flag == "1" else []
+        height_dimension_flag = "1" if dimensions[0] != "0" else "0"
+        width_dimension_flag = "1" if dimensions[3] != "0" else "0"
+        height_dimension_part = [dimensions[0]] if height_dimension_flag == "1" else []
+        width_dimension_part = [dimensions[3]] if width_dimension_flag == "1" else []
         return [
             "8",
             left,
@@ -2882,10 +2887,11 @@ def geometry_stream_from_xml(
             bottom,
             "1",
             *bindings,
-            dimension_flag,
-            *dimension_part,
+            height_dimension_flag,
+            *height_dimension_part,
             "0",
-            "0",
+            width_dimension_flag,
+            *width_dimension_part,
             "0",
             "0",
             "0",

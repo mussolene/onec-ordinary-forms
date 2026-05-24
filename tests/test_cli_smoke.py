@@ -1054,6 +1054,16 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
+              <Attributes>
+                <Attribute name="DateRange">
+                  <Type source="TypeDomainPattern">
+                    <Pattern encoding="TypeDomainPattern" itemCount="2">
+                      <PatternItem code="D" typeName="xs:dateTime"/>
+                      <PatternItem code="D" typeName="xs:dateTime"/>
+                    </Pattern>
+                  </Type>
+                </Attribute>
+              </Attributes>
               <Pages>
                 <Page name="Main">
                   <CommandBar name="Commands" id="61">
@@ -1073,6 +1083,9 @@ class CliSmokeTest(unittest.TestCase):
                   <ProgressBar name="Progress" id="65"/>
                   <CalendarField name="Calendar" id="66"/>
                   <TextDocumentField name="Text" id="67"/>
+                  <InputField name="DateRange" id="73">
+                    <DataPath>DateRange</DataPath>
+                  </InputField>
                   <GeographicalSchemaField name="Geo" id="68"/>
                   <GraphicalSchemaField name="Graph" id="69"/>
                   <PivotChart name="Pivot" id="70">
@@ -1099,6 +1112,10 @@ class CliSmokeTest(unittest.TestCase):
         progress = self._find_control(stream, "b1db1f86-abbb-4cf0-8852-fe6ae21650c2")
         calendar = self._find_control(stream, "e3c063d8-ef92-41be-9c89-b70290b5368b")
         text = self._find_control(stream, "14c4a229-bfc3-42fe-9ce1-2da049fd0109")
+        date_range = next(
+            (control for control in self._find_controls(stream, "381ed624-9217-4e63-85db-c4c3cb87daae") if control[1] == "73"),
+            None,
+        )
         geo = self._find_control(stream, "ad37194e-555e-4305-b718-5dca84baf145")
         graph = self._find_control(stream, "42248403-7748-49da-b782-e4438fd7bff3")
         pivot = self._find_control(stream, "a26da99e-184a-4823-b0d6-62816d38dc4e")
@@ -1130,6 +1147,9 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(calendar[2][1][1], "9")
         self.assertIsNotNone(text)
         self.assertEqual(text[2][1], "6")
+        self.assertIsNotNone(date_range)
+        self.assertEqual(date_range[2][2][0][4], "0")
+        self.assertEqual(date_range[2][2][0][7], "1")
         self.assertIsNotNone(geo)
         self.assertEqual(geo[2][0], "19")
         self.assertEqual(geo[2][15], "100")
