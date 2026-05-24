@@ -7,12 +7,12 @@ from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
 
 
 ROOT = Path(__file__).resolve().parents[1]
-XSD = ROOT / "src" / "onec_ordinary_forms" / "schemas" / "ordinary-form.xsd"
+ORDINARY_FORM_XSD = ROOT / "src" / "onec_ordinary_forms" / "schemas" / "OrdinaryForm.xsd"
 
 
 def test_xsd_control_group_matches_platform_palette() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-    root = ET.parse(XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
     choice = root.find("xs:group[@name='ControlElementGroup']/xs:choice", ns)
     assert choice is not None
 
@@ -30,8 +30,8 @@ def test_descriptors_have_platform_palette_members() -> None:
     assert sum(len(descriptor.platform_events) for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()) == 79
 
 
-def test_single_xsd_appinfo_contains_platform_palette() -> None:
-    root = ET.parse(XSD).getroot()
+def test_elements_xsd_appinfo_contains_platform_palette() -> None:
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
     controls = {control.get("name", ""): control for control in root.findall(".//PlatformPalette/Control")}
 
     assert controls["Button"].get("platformName") == "Кнопка"
@@ -44,9 +44,9 @@ def test_single_xsd_appinfo_contains_platform_palette() -> None:
     }
 
 
-def test_single_xsd_contains_platform_vocabulary() -> None:
+def test_elements_xsd_contains_platform_vocabulary() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-    root = ET.parse(XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
 
     def enum_values(type_name: str) -> set[str]:
         restriction = root.find(f"xs:simpleType[@name='{type_name}']/xs:restriction", ns)
@@ -73,7 +73,7 @@ def test_single_xsd_contains_platform_vocabulary() -> None:
 
 def test_control_types_are_type_specific() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-    root = ET.parse(XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
 
     def child_names(type_name: str) -> set[str]:
         choice = root.find(
@@ -94,7 +94,7 @@ def test_control_types_are_type_specific() -> None:
 
 def test_public_xsd_control_elements_use_english_vocabulary() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-    root = ET.parse(XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
     public_element_names = {
         element.get("name", "")
         for element in root.findall(".//xs:complexType/xs:complexContent/xs:extension/xs:choice/xs:element", ns)
@@ -102,3 +102,21 @@ def test_public_xsd_control_elements_use_english_vocabulary() -> None:
 
     assert public_element_names
     assert not any(any("А" <= char <= "я" or char == "Ё" or char == "ё" for char in name) for name in public_element_names)
+
+
+def test_public_xsd_has_no_raw_or_extension_pockets() -> None:
+    forbidden = {
+        "ObjectModel",
+        "ListStream",
+        "BracketStream",
+        "FormBin",
+        "LogicalStream",
+        "RawBracket",
+        "PlatformRecords",
+        "Extensions",
+        "ExtensionProperty",
+    }
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    names = {node.get("name", "") for node in root.iter() if node.get("name")}
+
+    assert forbidden.isdisjoint(names)

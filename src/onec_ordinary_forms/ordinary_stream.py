@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
 
 from onec_ordinary_forms.liststream import dumps_list_out_stream
@@ -29,6 +30,74 @@ PLATFORM_CONTROL_FORMAT_IDS = {
 }
 
 DEFAULT_CONTROL_EVENT_UUID = "e1692cc2-605b-4535-84dd-28440238746c"
+
+
+@dataclass(frozen=True)
+class InfoSlotDescriptor:
+    name: str
+    index: int
+
+
+@dataclass(frozen=True)
+class ControlInfoDescriptor:
+    control_type: str
+    info_kind: str
+    slots: tuple[InfoSlotDescriptor, ...] = ()
+
+    def slot_index(self, name: str) -> int:
+        for slot in self.slots:
+            if slot.name == name:
+                return slot.index
+        raise KeyError(f"Unknown {self.control_type} info slot: {name}")
+
+
+CORE_CONTROL_INFO_DESCRIPTORS = {
+    "FormRootPanel": ControlInfoDescriptor(
+        control_type="FormRootPanel",
+        info_kind="1",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("PageStates", 17),
+            InfoSlotDescriptor("PagePositions", 21),
+        ),
+    ),
+    "Panel": ControlInfoDescriptor(
+        control_type="Panel",
+        info_kind="1",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("PageStates", 11),
+            InfoSlotDescriptor("PagePositions", 15),
+        ),
+    ),
+    "CommandBar": ControlInfoDescriptor(
+        control_type="CommandBar",
+        info_kind="2",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("Autofill", 6),
+        ),
+    ),
+    "InputField": ControlInfoDescriptor(
+        control_type="InputField",
+        info_kind="9",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("ReadOnly", 12),
+        ),
+    ),
+    "Table": ControlInfoDescriptor(
+        control_type="Table",
+        info_kind="5",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("View", 1),
+            InfoSlotDescriptor("RowsCount", 20),
+            InfoSlotDescriptor("ColumnsCount", 21),
+            InfoSlotDescriptor("AutoMarkIncomplete", 22),
+        ),
+    ),
+}
 
 
 BINDING_COORDINATE_SLOT = {
@@ -68,6 +137,20 @@ EDGE_NAME_MAP = {
     "6": "none",
 }
 
+CONTROL_METADATA_SCOPE = {
+    "default": "4294967295",
+    "CommandBar": "0",
+}
+
+# Platform-shaped geometry trailers by control family.
+# The serializer writes a common header and then appends a trailer profile.
+GEOMETRY_TRAILER_PROFILE = {
+    "default": ["0", "0", "0", "1", "0", "0"],
+    "CommandBar": ["0", "0", "0", "0", "1", "1", "0"],
+    "Panel": ["0", "0", "0", "0", "2", "2", "0", "0"],
+    "paged": ["0", "0", "0"],
+}
+
 
 def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None) -> bytes:
     """Serialize public ordinary ``Form.xml`` into platform list-stream bytes."""
@@ -95,7 +178,13 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
             if control:
                 controls.append(control)
 
-    stream = ordinary_form_stream(title or "Main", attributes, controls, events_from_xml(root), form_size_from_xml(root))
+    stream = ordinary_form_stream(
+        title or "Main",
+        attributes,
+        controls,
+        events_from_xml(root),
+        form_size_from_xml(root),
+    )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
 
 
@@ -104,7 +193,7 @@ def ordinary_form_stream(
     attributes: list[object],
     controls: list[object],
     events: list[object],
-    form_size: tuple[str, str],
+    form_size: tuple[str, str, bool],
 ) -> list[object]:
     return [
         "27",
@@ -130,14 +219,14 @@ def ordinary_form_stream(
     ]
 
 
-def form_root_record(title: str, controls: list[object], form_size: tuple[str, str]) -> list[object]:
-    width, height = form_size
+def form_root_record(title: str, controls: list[object], form_size: tuple[str, str, bool]) -> list[object]:
+    width, height, explicit_size = form_size
     root_panel = [
         ORDINARY_CONTROL_GUID_BY_TYPE["Panel"],
-        root_panel_info(title),
+        root_panel_info(title, width, height),
         ["1", *controls] if len(controls) == 1 else [str(len(controls)), *controls],
     ]
-    return [
+    record = [
         "16",
         [localized_text_record(title), "52", "4294967295"],
         root_panel,
@@ -150,38 +239,65 @@ def form_root_record(title: str, controls: list[object], form_size: tuple[str, s
         "4",
         "6",
     ]
+    if explicit_size:
+        record[0] = "18"
+        record[1][1] = "41"
+        record[1][2] = "3"
+        record[-1] = "3"
+        record.extend([width, height, "96"])
+    return record
 
 
-def root_panel_info(title: str) -> list[object]:
+def root_panel_info(title: str, form_width: str, form_height: str) -> list[object]:
+    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["FormRootPanel"]
+    margin_left = "8"
+    margin_top = "33"
+    page_width = panel_extent_value(form_width, 8)
+    page_height = panel_extent_value(form_height, 33)
+    page_title = localized_text_record("Страница1")
+    position_records = [
+        ["2", margin_left, "1", "1", "1", "0", "0", "0", "0"],
+        ["2", margin_top, "0", "1", "2", "0", "0", "0", "0"],
+        ["2", page_width, "1", "1", "3", "0", "0", margin_left, "0"],
+        ["2", page_height, "0", "1", "4", "0", "0", margin_top, "0"],
+    ]
     return [
-        "1",
+        descriptor.info_kind,
         [
-            panel_base_info_record(),
-            "21",
+            root_panel_base_info_record(),
+            "26",
+            "0",
+            "2",
+            ["0", "3", "1"],
+            ["0", "4", "1"],
+            "2",
+            ["0", "2", "2"],
+            ["0", "3", "2"],
+            "3",
+            ["0", "2", "3"],
+            ["0", "3", "3"],
+            ["0", "4", "3"],
+            "0",
+            "0",
+            ["10", "1", empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "0", "0", "0", "0", "0"],
             "0",
             "1",
-            ["0", "19", "1"],
-            "0",
-            "1",
-            ["0", "19", "3"],
-            "0",
-            "0",
-            ["3", "1", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
-            "0",
-            "1",
-            ["1", "1", ["3", localized_text_record("Страница1"), ["3", "0", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]], "-1", "1", "1", quoted_atom("Страница1"), "1"]],
+            ["1", "1", ["6", page_title, ["10", "0", empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "0", "0", "0", "0", "0"], "-1", "1", "1", quoted_atom("Страница1"), "1", default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"]],
             "1",
             "1",
             "0",
             "4",
-            ["2", "8", "1", "1", "1", "0", "0", "0", "0"],
-            ["2", "8", "0", "1", "2", "0", "0", "0", "0"],
-            ["2", "877", "1", "1", "3", "0", "0", "8", "0"],
-            ["2", "236", "0", "1", "4", "0", "0", "8", "0"],
+            *position_records,
             "0",
             "4294967295",
             "5",
             "64",
+            "0",
+            default_color_record(),
+            "0",
+            "0",
+            "57",
+            "0",
             "0",
         ],
         ["0"],
@@ -190,6 +306,46 @@ def root_panel_info(title: str) -> list[object]:
 
 def panel_base_info_record() -> list[object]:
     return base_info_record_from_xml(None)
+
+
+def root_panel_base_info_record() -> list[object]:
+    return [
+        "19",
+        "1",
+        default_color_record(),
+        default_color_record(),
+        ["8", "3", "0", "1", "100"],
+        "0",
+        ["4", "3", ["-22"], "3"],
+        default_color_record(),
+        default_color_record(),
+        ["4", "3", ["-7"], "3"],
+        ["4", "3", ["-21"], "3"],
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["1", "0"],
+        "0",
+        "0",
+        "100",
+        "2",
+        "2",
+        "1",
+        "2",
+        default_color_record(),
+    ]
+
+
+def default_color_record() -> list[object]:
+    return ["4", "4", ["0"], "4"]
+
+
+def empty_page_style_record() -> list[object]:
+    return ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""']
+
+
+def panel_extent_value(value: str, offset: int) -> str:
+    if value.isdigit():
+        return str(max(int(value) - offset, 0))
+    return value
 
 
 def base_info_record_from_xml(element: ET.Element | None) -> list[object]:
@@ -302,10 +458,10 @@ def form_title_from_xml(root: ET.Element) -> str:
     return get_multilang_text(root, "Title")
 
 
-def form_size_from_xml(root: ET.Element) -> tuple[str, str]:
+def form_size_from_xml(root: ET.Element) -> tuple[str, str, bool]:
     width = (root.findtext("Width") or "").strip()
     height = (root.findtext("Height") or "").strip()
-    return width or "885", height or "244"
+    return width or "885", height or "244", bool(width and height)
 
 
 def top_level_pages(root: ET.Element) -> list[ET.Element]:
@@ -360,9 +516,10 @@ def control_stream_from_xml_with_page(
     object_id = required_control_id(element)
     name = required_control_name(element)
     info = control_info_from_xml(element, name, control_type, asset_root)
-    geometry = geometry_stream_from_xml(element.find("Position"), page_index, page_order)
+    geometry = geometry_stream_from_xml(control_type, element.find("Position"), page_index, page_order)
     metadata_name = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else name
-    metadata = ["14", quoted_atom(metadata_name), "4294967295", "0", "0", "0"]
+    metadata_scope = CONTROL_METADATA_SCOPE.get(control_type, CONTROL_METADATA_SCOPE["default"])
+    metadata = ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
     children: list[object] = []
     for child in element:
         child_stream = control_stream_from_xml_with_page(child, asset_root, None, None)
@@ -499,6 +656,7 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
 
 
 def panel_control_info_from_xml(element: ET.Element, title_record: list[object]) -> list[object]:
+    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["Panel"]
     child_count = len([child for child in element if control_type_from_xml_tag(child.tag)])
     pages = element.find("Pages")
     page_nodes = pages.findall("Page") if pages is not None else []
@@ -510,7 +668,7 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object])
     state_table = panel_state_table(element, title_record)
     position_records = panel_position_records(page_count, width, height)
     return [
-        "1",
+        descriptor.info_kind,
         [
             base_info_record_from_xml(element),
             "21",
@@ -615,8 +773,9 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
 
 
 def input_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
     return [
-        "9",
+        descriptor.info_kind,
         [quoted_atom("Pattern"), [quoted_atom("S")]],
         [input_field_info_record_from_xml(element)],
         ["1", *actions] if actions else ["0"],
@@ -624,7 +783,8 @@ def input_field_control_info(element: ET.Element, actions: list[object]) -> list
 
 
 def input_field_info_record_from_xml(element: ET.Element) -> list[object]:
-    return [
+    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
+    record = [
         base_info_record_from_xml(element),
         "21",
         "0",
@@ -637,8 +797,10 @@ def input_field_info_record_from_xml(element: ET.Element) -> list[object]:
         "0",
         "0",
         "1",
-        bool_record_from_xml(element, "ReadOnly", default=False),
+        "0",
     ]
+    record[descriptor.slot_index("ReadOnly")] = bool_record_from_xml(element, "ReadOnly", default=False)
+    return record
 
 
 def button_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
@@ -1101,28 +1263,144 @@ def list_box_control_info(element: ET.Element) -> list[object]:
 
 
 def command_bar_control_info(element: ET.Element) -> list[object]:
-    return [
+    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["CommandBar"]
+    title = get_multilang_text(element, "Title")
+    record = [
+        command_bar_base_info_record(element),
+        "9",
         "2",
+        "1",
+        "0",
+        "0",
+        "1",
+        command_bar_items_record(element, title),
+        "b78f2e80-ec68-11d4-9dcf-0050bae2bc79",
+        "4",
+        "ccbe7ec8-cb04-45b3-9722-2a58bf1ae4ed"
+        if element.get("name") == "ОсновныеДействияФормы" or title
+        else "9d0a2e40-b978-11d4-84b6-008048da06df",
+        "0",
+        "0",
+        "0",
+    ]
+    if element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None:
+        record[3] = "0"
+        record[4] = "2"
+        record[11] = "1"
+    else:
+        record[5] = "1"
+    record[descriptor.slot_index("Autofill")] = bool_record_from_xml(element, "Autofill", default=True)
+    return [
+        descriptor.info_kind,
+        record,
+    ]
+
+
+def command_bar_items_record(element: ET.Element, title: str) -> list[object]:
+    if element.get("name") != "ОсновныеДействияФормы" and not title:
+        return [
+            "5",
+            "6013c551-1c48-4ef4-a466-6fbe824675ca",
+            "9",
+            "1",
+            "0",
+            "1",
+            ["5", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79", "4", "0", "0", ["0", "0", ["0"]]],
+        ]
+    action_name = compact_identifier(title) or "КнопкаВыполнитьНажатие"
+    return [
+        "5",
+        "b0931d44-c134-43ba-9852-f9690e20b460",
+        "3",
+        "1",
+        "3",
         [
-            base_info_record_from_xml(element),
             "8",
+            "04ccea6f-37da-4ac5-9cb1-6965c01cd2d3",
+            "1",
+            "fbe38877-b914-4fd5-8540-07dde06ba2e1",
+            ["6", "2", "00000000-0000-0000-0000-000000000000", "142", ["1", "0", "357c6a54-357d-425d-a2bd-22f4f6e86c87", "2147483647", "0"], "0", "1"],
+            "0",
             "2",
+            "1",
+        ],
+        ["8", "70d8a1ee-a609-43ad-9f3e-2e573ca60a7a", "1", "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6", ["1", "9d0a2e40-b978-11d4-84b6-008048da06df", "0"], "0", "2", "1"],
+        [
+            "8",
+            "e4ede41c-fdd1-4120-a053-d6044264d385",
+            "1",
+            DEFAULT_CONTROL_EVENT_UUID,
+            ["3", quoted_atom(action_name), command_bar_action_descriptor(action_name, title or action_name)],
             "0",
+            "2",
+            "1",
+        ],
+        "1",
+        [
+            "5",
+            "b78f2e80-ec68-11d4-9dcf-0050bae2bc79",
+            "4",
             "0",
-            "0",
-            bool_record_from_xml(element, "Autofill", default=True),
-            ["0"],
-            "0",
-            "0",
-            "0",
-            "0",
+            "3",
+            "e4ede41c-fdd1-4120-a053-d6044264d385",
+            ["8", quoted_atom("ОсновныеДействияФормыВыполнить"), "0", "1", localized_text_record("Выполнить"), "1", "b0931d44-c134-43ba-9852-f9690e20b460", "1", "1e2", "0", "1", "1", "0", "1", "0", "0"],
+            "70d8a1ee-a609-43ad-9f3e-2e573ca60a7a",
+            ["8", quoted_atom("Разделитель"), "0", "1", ["1", "0"], "0", "b0931d44-c134-43ba-9852-f9690e20b460", "2", "1e2", "2", "1", "1", "0", "1", "0", "0"],
+            "04ccea6f-37da-4ac5-9cb1-6965c01cd2d3",
+            ["8", quoted_atom("ОсновныеДействияФормыЗакрыть"), "0", "1", localized_text_record("Закрыть"), "1", "b0931d44-c134-43ba-9852-f9690e20b460", "3", "1e2", "0", "1", "1", "0", "1", "0", "0"],
+            ["-1", "0", ["0"]],
         ],
     ]
 
 
-def table_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+def compact_identifier(value: str) -> str:
+    return "".join(part[:1].upper() + part[1:] for part in value.split())
+
+
+def command_bar_action_descriptor(name: str, title: str) -> list[object]:
     return [
-        "5",
+        "1",
+        quoted_atom(name),
+        localized_text_record(title),
+        localized_text_record(title),
+        localized_text_record(title),
+        ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'],
+        ["0", "0", "0"],
+    ]
+
+
+def command_bar_base_info_record(element: ET.Element) -> list[object]:
+    tooltip = tooltip_record_from_xml(element)
+    command_scope = "7" if element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None else "4"
+    return [
+        "19",
+        visible_record_from_xml(element),
+        default_color_record(),
+        default_color_record(),
+        ["8", "3", "0", "1", "100"],
+        "0",
+        ["4", "3", ["-22"], "3"],
+        default_color_record(),
+        default_color_record(),
+        default_color_record(),
+        ["4", "3", ["-21"], "3"],
+        ["3", "0", ["0"], command_scope, "1", "0", "00000000-0000-0000-0000-000000000000"],
+        tooltip,
+        "0",
+        "0",
+        "100",
+        "0",
+        "0",
+        "0",
+        "0",
+        default_color_record(),
+    ]
+
+
+def table_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["Table"]
+    return [
+        descriptor.info_kind,
         [quoted_atom("Pattern"), [quoted_atom("#"), "00000000-0000-0000-0000-000000000000"]],
         [
             base_info_record_from_xml(element),
@@ -1134,9 +1412,10 @@ def table_control_info(element: ET.Element, actions: list[object]) -> list[objec
 
 
 def table_view_record_from_xml(element: ET.Element) -> list[object]:
+    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["Table"]
     columns_count = element.findtext("ColumnsCount") or "0"
     rows_count = element.findtext("RowsCount") or "0"
-    return [
+    record = [
         "12",
         "100801549",
         ["3", "4", ["0"]],
@@ -1157,11 +1436,19 @@ def table_view_record_from_xml(element: ET.Element) -> list[object]:
         "1",
         ["6", "2", "0", ["-20"], "1"],
         ["6", "2", "0", ["-20"], "1"],
-        rows_count.strip() or "0",
-        columns_count.strip() or "0",
-        bool_record_from_xml(element, "AutoMarkIncomplete", default=True),
+        "0",
+        "0",
+        "1",
         ["0"],
     ]
+    record[descriptor.slot_index("RowsCount")] = rows_count.strip() or "0"
+    record[descriptor.slot_index("ColumnsCount")] = columns_count.strip() or "0"
+    record[descriptor.slot_index("AutoMarkIncomplete")] = bool_record_from_xml(
+        element,
+        "AutoMarkIncomplete",
+        default=True,
+    )
+    return record
 
 
 def spreadsheet_document_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
@@ -1349,6 +1636,7 @@ def wrap_base64_payload(payload: str) -> str:
 
 
 def geometry_stream_from_xml(
+    control_type: str,
     position: ET.Element | None,
     page_index: int | None = None,
     page_order: int | None = None,
@@ -1387,7 +1675,11 @@ def geometry_stream_from_xml(
                     if 0 <= index < len(dimensions):
                         dimensions[index] = dimension_binding_to_raw(binding)
     if page_index is None or page_order is None:
-        return ["8", left, top, right, bottom, "1", *bindings, "0", *dimensions, "0", "0", "0", "1", "0", "0"]
+        trailer = GEOMETRY_TRAILER_PROFILE.get(control_type, GEOMETRY_TRAILER_PROFILE["default"])
+        if control_type == "CommandBar" and dimensions[2] != "0":
+            trailer = ["0", "0", "0", "0", "1", "3", "1", "1"]
+        dimension_flag = "1" if any(dimension != "0" for dimension in dimensions) else "0"
+        return ["8", left, top, right, bottom, "1", *bindings, dimension_flag, *dimensions, *trailer]
     return [
         "8",
         left,
@@ -1398,9 +1690,7 @@ def geometry_stream_from_xml(
         *bindings,
         "1",
         *dimensions,
-        "0",
-        "0",
-        "0",
+        *GEOMETRY_TRAILER_PROFILE["paged"],
         str(page_index),
         str(page_order),
         str(page_order + 1),

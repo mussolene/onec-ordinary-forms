@@ -1,6 +1,6 @@
 """Platform object-model vocabulary used by the ordinary-form codec.
 
-``schemas/Configuration.xsd`` is the single bundled source for configuration
+``schemas/PlatformConfigStructure.xsd`` is the bundled source for configuration
 metadata, type tree, value-domain codes, and platform serializer evidence. This
 module only reads that schema into Python tuples for codec code and tests.
 """
@@ -39,7 +39,7 @@ XS_NS = {"xs": "http://www.w3.org/2001/XMLSchema"}
 
 
 def configuration_schema_root() -> ET.Element:
-    data = resources.files(__package__).joinpath("schemas/Configuration.xsd").read_text(encoding="utf-8")
+    data = resources.files(__package__).joinpath("schemas/PlatformConfigStructure.xsd").read_text(encoding="utf-8")
     return ET.fromstring(data)
 
 

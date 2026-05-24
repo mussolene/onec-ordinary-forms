@@ -34,6 +34,12 @@ Required sequence:
    `acs tool ingest-result ...`.
 7. Promote verified reusable conclusions with `acs memory propose`,
    `acs memory commit`, and `acs memory sharpen`.
+   Evidence refs must be attached to the memory record with
+   `acs memory sharpen <mem_...> --evidence <ev_...> --json`; writing
+   `Evidence: ev_...` only inside the memory text is not enough. Standalone
+   tool-result evidence and text-only evidence mentions do not enter future
+   `ContextCapsule.evidence_refs`, so later agents may lose proof and repeat
+   already-settled investigations.
 8. Record a checkpoint for each completed, partial, or blocked iteration with
    outcome, PASS/FAIL/PARTIAL acceptance criteria, evidence refs, remaining
    risk, and next step:
@@ -60,6 +66,11 @@ Hard rules:
 - Parser, serializer, XSD, and platform-library claims must cite current
   evidence from OACS or a command run in the current iteration. If evidence is
   stale, rerun the check or downgrade the claim.
+- Durable project memory that should guide future work must have non-empty
+  `evidence_refs` when it is evidence-backed. After sharpening important
+  memory, verify it with `acs memory query ... --json` or
+  `acs evidence inspect <ev_...> --json`; do not rely on evidence ids embedded
+  only in prose.
 - Keep secrets out of OACS: no customer file paths, EPF payloads, ITS
   credentials, license data, `nethasp.ini` contents, platform archives, full
   help dumps, or local host paths.
@@ -145,13 +156,15 @@ Forms/<ИмяФормы>/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 `Pages`, `Page`, `Panel`, `Button`, `LabelDecoration`, `PictureDecoration`,
 `InputField`, `Position`, `Bindings` и другие имена контролов/свойств. Публичный
 XML использует единый английский словарь; русские платформенные имена свойств,
-событий, типов и контролов хранятся только в `ordinary-form.xsd` через
-`xs:annotation/xs:appinfo`. Отдельные mapping/schema файлы для этого слоя не
-нужны. Верхнеуровневый `Commands` и общий контейнер
+событий, типов и контролов хранятся в схемном слое элементов формы через
+`xs:annotation/xs:appinfo`. Отдельные mapping-файлы для этого слоя не нужны.
+Верхнеуровневый `Commands` и общий контейнер
 `ChildItems` не входят в публичный контракт обычной формы, пока платформенные
 данные не доказывают реальный объект обычной формы с таким именем.
 События/действия должны лежать на форме или конкретном контроле, где их
-показывает платформа. Такой XML должен быть понятен разработчику 1С примерно
+показывает платформа. Публичный XML и служебные знания валидируются отдельными
+схемными слоями: форма, элементы формы, типы/значения и структура
+конфигурации платформы. Такой XML должен быть понятен разработчику 1С примерно
 так же, как понятен XML управляемой формы.
 
 Внутренности обычной `Form.bin` - это деталь реализации. Парсер и writer могут

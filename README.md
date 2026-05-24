@@ -118,20 +118,18 @@ Form.bin -> form raw stream -> ListInStream -> platform object model -> XSD-back
 Form.xml -> platform object model -> ListOutStream -> form raw stream -> Form.bin
 ```
 
-`ordinary-form.xsd` describes the public ordinary-form XML. The separate
-`Configuration.xsd` is the single bundled schema for platform-derived
-configuration metadata and value concepts used by the codec layer, including
-`CompositeID`, `TypeDomainPattern`, `ValueToStringInternal`/
-`ValueFromStringInternal`, metadata object kinds, type-tree kinds, EDT EMF
-metadata classes, mcore type/value classes, and platform serializer evidence.
-It records this object-model vocabulary without shipping platform binaries.
-These codec concepts are not a public raw-stream dump.
+The schema layer is intentionally small and focused on ordinary forms:
 
-The vendored platform schema layer lives under
-`src/onec_ordinary_forms/schemas/platform/`. The current baseline is the
-full extracted 8.5 schema set referenced from `Configuration.xsd`; the 8.2
-extraction is kept as a compatibility reference. Regenerate this layer from a
-local platform mirror with:
+- `OrdinaryForm.xsd` describes the public `Form.xml` root, ordinary-form controls, reusable value/layout types, property/event vocabulary, and platform palette annotations;
+- `PlatformConfigStructure.xsd` records platform-derived configuration,
+  metadata tree, type-domain, `CompositeID`, `ValueToStringInternal`/
+  `ValueFromStringInternal`, and serializer evidence used by the codec layer.
+
+These codec concepts are not a public raw-stream dump. Full platform XSD
+extractions are kept as reproducible research artifacts under ignored
+`scan-output/`, not vendored into the package.
+
+Regenerate platform schema evidence from a local platform mirror with:
 
 ```bash
 python3 tools/extract_platform_xml_resources.py \
@@ -141,7 +139,7 @@ python3 tools/extract_platform_xml_resources.py \
 python3 tools/vendor_platform_schemas.py \
   --resources-json scan-output/platform85/xml-clean/resources.json \
   --source-dir scan-output/platform85/xml-clean \
-  --out-dir src/onec_ordinary_forms/schemas/platform \
+  --out-dir scan-output/platform85/vendor-check \
   --platform-version 8.5
 ```
 
@@ -237,9 +235,9 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 
 Публичный XML использует единый английский словарь элементов и свойств.
 Платформенные русские имена свойств, событий и типов обычной формы хранятся в
-`ordinary-form.xsd` как `xs:annotation/xs:appinfo`, а не отдельным mapping
-файлом и не публичными XML-тегами. В XML должны попадать только явно заданные
-значения; дефолты платформы остаются неявными.
+`OrdinaryForm.xsd` как `xs:annotation/xs:appinfo`, а не отдельным mapping файлом и
+не публичными XML-тегами. В XML должны попадать только явно заданные значения;
+дефолты платформы остаются неявными.
 
 Схема еще расширяется, но направление фиксированное: публичный XML должен быть
 похож на XML управляемой формы, быть именованным и понятным разработчику 1С.
@@ -324,7 +322,7 @@ Current implementation status:
 - read ordinary `Form.bin` containers;
 - dump readable object-model `Form.xml`;
 - extract `Module.bsl` and picture sidecars;
-- validate `Form.xml` against the bundled `ordinary-form.xsd`;
+- validate `Form.xml` against the bundled ordinary-form schemas;
 - build ordinary `Form.bin` back from the named object XML package without
   template `Form.bin`;
 - scan local EPF/ERF corpora without committing private processors or exports.

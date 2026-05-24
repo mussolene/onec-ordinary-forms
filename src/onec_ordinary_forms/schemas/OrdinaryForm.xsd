@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
   <xs:annotation>
-    <xs:documentation>Ordinary Form.xml public object model schema. Public XML element and type names use one English vocabulary; 1C platform Russian names, property names, event names, and value types are stored as schema appinfo metadata.</xs:documentation>
+    <xs:documentation>Ordinary Form.xml public object model schema. This single schema contains the form root, ordinary controls, reusable XML value types, and platform palette annotations. Public XML element and type names use one English vocabulary; 1C platform Russian names, property names, event names, and value types are stored as schema appinfo metadata.</xs:documentation>
     <xs:appinfo>
       <PlatformPalette source="1C 8.2.19 ordinary-form help" language="ru" publicVocabulary="en">
         <Control name="Button" platformName="Кнопка">

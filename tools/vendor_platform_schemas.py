@@ -52,7 +52,10 @@ def main() -> None:
     parser.add_argument("--source-dir", required=True)
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--platform-version", default="8.2")
-    parser.add_argument("--configuration-xsd", help="Optional Configuration.xsd to sync PlatformSchemaResources appinfo")
+    parser.add_argument(
+        "--configuration-xsd",
+        help="Optional PlatformConfigStructure.xsd to sync PlatformSchemaResources appinfo",
+    )
     args = parser.parse_args()
 
     source_dir = Path(args.source_dir)

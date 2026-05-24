@@ -13,7 +13,7 @@ from onec_ordinary_forms.platform_model import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIGURATION_XSD = ROOT / "src" / "onec_ordinary_forms" / "schemas" / "Configuration.xsd"
+CONFIGURATION_XSD = ROOT / "src" / "onec_ordinary_forms" / "schemas" / "PlatformConfigStructure.xsd"
 SCHEMAS_ROOT = ROOT / "src" / "onec_ordinary_forms" / "schemas"
 
 
@@ -38,21 +38,14 @@ def test_configuration_schema_is_valid_xsd() -> None:
     etree.XMLSchema(etree.parse(str(CONFIGURATION_XSD)))
 
 
-def test_configuration_schema_vendors_full_platform_xsd_set() -> None:
+def test_configuration_schema_records_platform_schema_source_without_vendored_corpus() -> None:
     root = ET.parse(CONFIGURATION_XSD).getroot()
     resources = root.findall(".//PlatformSchemaResources/Resource")
-    assert len(resources) == 81
+    marker = root.find(".//PlatformSchemaResources")
 
-    namespaces = {node.get("namespace") for node in resources}
-    assert "http://v8.1c.ru/8.2/managed-application/logform" in namespaces
-    assert "http://v8.1c.ru/8.1/data/core" in namespaces
-    assert "http://v8.1c.ru/8.1/data/ui" in namespaces
-    assert "http://v8.1c.ru/8.3/mobile-application/form" in namespaces
-
-    for node in resources:
-        path = SCHEMAS_ROOT / str(node.get("path"))
-        assert path.is_file(), path
-        assert ET.parse(path).getroot().tag.rsplit("}", 1)[-1] == "schema"
+    assert resources == []
+    assert marker is not None
+    assert marker.get("storage") == "external-reference"
 
 
 def test_platform_model_contains_confirmed_value_and_metadata_vocabulary() -> None:

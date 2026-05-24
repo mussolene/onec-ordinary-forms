@@ -7,16 +7,15 @@ test:
 
 smoke:
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli dump --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli build-bin --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli unpack-bin --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli pack-bin --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli extract-elem-json --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli dump-bin --help
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli scan-corpus --help
 
 format-xml:
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/ordinary-form.xsd
+	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/OrdinaryForm.xsd
+	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/PlatformConfigStructure.xsd
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

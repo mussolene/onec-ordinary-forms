@@ -33,9 +33,9 @@ from onec_ordinary_forms.value_codec import (
 
 SCHEMA_VERSION = "0.1"
 XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
-ORDINARY_FORM_SCHEMA = "ordinary-form.xsd"
-CONFIGURATION_SCHEMA = "Configuration.xsd"
-KNOWN_SCHEMAS = (ORDINARY_FORM_SCHEMA, CONFIGURATION_SCHEMA)
+ORDINARY_FORM_SCHEMA = "OrdinaryForm.xsd"
+PLATFORM_CONFIG_SCHEMA = "PlatformConfigStructure.xsd"
+KNOWN_SCHEMAS = (ORDINARY_FORM_SCHEMA, PLATFORM_CONFIG_SCHEMA)
 
 ET.register_namespace("xsi", XSI_NS)
 
@@ -1103,6 +1103,8 @@ def add_form_properties(parent: ET.Element, form_root: object) -> None:
         return
     form_record = form_root[1]
     if len(form_record) <= 4:
+        return
+    if clean_token(form_record[0]) != "18":
         return
     width = clean_token(form_record[3])
     height = clean_token(form_record[4])

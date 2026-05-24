@@ -32,7 +32,12 @@ from onec_ordinary_forms.ordinary_platform import (
     unpack_platform_transfer_records,
 )
 from onec_ordinary_forms.ordinary_properties import COMMAND_BAR_BUTTON_DESCRIPTOR, ORDINARY_CONTROL_DESCRIPTORS
-from onec_ordinary_forms.ordinary_stream import PLATFORM_CONTROL_FORMAT_IDS, apply_geometry_bindings_to_raw, form_stream_from_object_xml
+from onec_ordinary_forms.ordinary_stream import (
+    CORE_CONTROL_INFO_DESCRIPTORS,
+    PLATFORM_CONTROL_FORMAT_IDS,
+    apply_geometry_bindings_to_raw,
+    form_stream_from_object_xml,
+)
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
 
@@ -41,8 +46,8 @@ class CliSmokeTest(unittest.TestCase):
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
 
     def test_bundled_schema_paths_include_configuration(self) -> None:
-        self.assertTrue(schema_path("ordinary-form.xsd").is_file())
-        self.assertTrue(schema_path("Configuration.xsd").is_file())
+        self.assertTrue(schema_path("OrdinaryForm.xsd").is_file())
+        self.assertTrue(schema_path("PlatformConfigStructure.xsd").is_file())
 
     def test_public_import_wrappers_dump_validate_and_build(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -727,10 +732,23 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertIsNotNone(input_field)
         info = input_field[2]
-        self.assertEqual(info[0], "9")
+        descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
+        self.assertEqual(info[0], descriptor.info_kind)
         input_info = info[2][0]
-        self.assertEqual(input_info[12], "1")
+        self.assertEqual(input_info[descriptor.slot_index("ReadOnly")], "1")
         self.assertEqual(input_info[0][12][2], ['"ru"', '"Номер документа"'])
+
+    def test_core_control_info_descriptors_record_platform_slots(self) -> None:
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["FormRootPanel"].info_kind, "1")
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Panel"].slot_index("PageStates"), 11)
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Panel"].slot_index("PagePositions"), 15)
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["CommandBar"].info_kind, "2")
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["CommandBar"].slot_index("Autofill"), 6)
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["InputField"].slot_index("ReadOnly"), 12)
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Table"].info_kind, "5")
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Table"].slot_index("RowsCount"), 20)
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Table"].slot_index("ColumnsCount"), 21)
+        self.assertEqual(CORE_CONTROL_INFO_DESCRIPTORS["Table"].slot_index("AutoMarkIncomplete"), 22)
 
     def test_add_read_only_uses_input_field_info_slot(self) -> None:
         from onec_ordinary_forms.cli import add_read_only
@@ -991,6 +1009,24 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(dendrogram[2][0], "0")
         self.assertEqual(dendrogram[2][1][2][0], "75")
         self.assertEqual(dendrogram[2][1][2][8][2], ['"ru"', '"Dendrogram title"'])
+
+    def test_build_bin_uses_platform_extended_root_record_for_sized_forms(self) -> None:
+        root = ET.fromstring(
+            """<Form version="0.1">
+              <Title><Item lang="ru">Main</Item></Title>
+              <Width>1244</Width>
+              <Height>1120</Height>
+              <Pages><Page name="Main"/></Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        root_record = stream[1]
+
+        self.assertEqual(root_record[0], "18")
+        self.assertEqual(len(root_record) - 1, 13)
+        self.assertEqual(root_record[10:], ["3", "1244", "1120", "96"])
 
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):

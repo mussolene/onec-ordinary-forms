@@ -28,7 +28,7 @@ class OrdinaryControlDescriptor:
 
 
 def load_platform_palette(*, include_nested: bool = False) -> dict[str, dict[str, object]]:
-    path = importlib.resources.files("onec_ordinary_forms") / "schemas" / "ordinary-form.xsd"
+    path = importlib.resources.files("onec_ordinary_forms") / "schemas" / "OrdinaryForm.xsd"
     root = ET.fromstring(path.read_text(encoding="utf-8"))
     palette = root.find(".//PlatformPalette")
     if palette is None:
