@@ -1,0 +1,467 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.3/debugger/dbgtgtRemoteRequestResponse"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           xmlns:dbgbase="http://v8.1c.ru/8.3/debugger/debugBaseData"
+           xmlns:dbgcalc="http://v8.1c.ru/8.3/debugger/debugCalculations"
+           xmlns:dbgtgtData="http://v8.1c.ru/8.3/debugger/dbgtgtData"
+           xmlns:dbgtgtBP="http://v8.1c.ru/8.3/debugger/dbgtgtBP"
+           xmlns:debugBreakpoints="http://v8.1c.ru/8.3/debugger/debugBreakpoints"
+           xmlns:debugRTEFilter="http://v8.1c.ru/8.3/debugger/debugRTEFilter"
+           xmlns:debugRTEInfo="http://v8.1c.ru/8.3/debugger/debugRTEInfo"
+           xmlns:dbgrr="http://v8.1c.ru/8.3/debugger/debugRDBGRequestResponse"
+           xmlns:dbgtgtErrorInfo="http://v8.1c.ru/8.3/debugger/dbgtgtErrorInfo"
+           xmlns:debugMeasure="http://v8.1c.ru/8.3/debugger/debugMeasure"
+           xmlns:dbgtgtCommands="http://v8.1c.ru/8.3/debugger/dbgtgtCommands"
+           xmlns:debugForegroundData="http://v8.1c.ru/8.3/debugger/debugForegroundData"
+           targetNamespace="http://v8.1c.ru/8.3/debugger/dbgtgtRemoteRequestResponse"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugBaseData" schemaLocation="../../../dbgbase/src/res/debugBaseData.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugCalculations" schemaLocation="../../../dbgbase/src/res/debugCalculations.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/dbgtgtData" schemaLocation="dbgtgtData.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/dbgtgtBP" schemaLocation="dbgtgtBP.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugBreakpoints" schemaLocation="../../../dbgbase/src/res/debugBreakpoints.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugRTEFilter" schemaLocation="../../../dbgbase/src/res/debugRTEFilter.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugRTEInfo" schemaLocation="../../../dbgbase/src/res/debugRTEInfo.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugMeasure" schemaLocation="../../../dbgbase/src/res/debugMeasure.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugRDBGRequestResponse" schemaLocation="../../../dbgbase/src/res/debugRDBGRequestResponse.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugForegroundData" schemaLocation="../../../dbgbase/src/res/debugForegroundData.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/dbgtgtErrorInfo" schemaLocation="dbgtgtErrorInfo.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/dbgtgtCommands" schemaLocation="dbgtgtCommands.xsd"/>
+
+    <xs:element name="request"/>
+    <xs:element name="response"/>
+    
+   
+    <!-- ======================================================= -->
+    <!-- Описание информации о состоянии окружения ЦУПа отладки  -->
+    <!-- ======================================================= -->
+    <xs:complexType name="DebugControlCenterHTTPState">
+        <xs:sequence>
+            <!-- Версия -->
+            <xs:element name="envStateVersion" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+            <!-- Состояние признака останова на следующей строке -->
+            <xs:element name="breakOnNextLine" type="xs:boolean" default="false"/>
+            <!-- Состояние флага замера производительности -->
+            <xs:element name="measureMode" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+            <!-- Версия точек останова -->
+            <xs:element name="bpVersion" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+            <!-- Версия настройки обработки ран-тайм - ошибок -->
+            <xs:element name="rteProcVersion" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+            <!-- Версия состава недоступных модулей -->
+            <xs:element name="inacessibleModuleVersion" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+            <!-- Версия данных пошаговой отладки -->
+            <xs:element name="stepDebuggingDataVersion" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- =================================================== -->
+    <!--  Информация о параметрах запросов удаленной отладки -->
+    <!-- =================================================== -->
+    
+    <!-- Базовый тип для запроса -->
+    <xs:complexType name="DBGTGTRemoteRequestTypeBase">
+        <xs:sequence>
+            <!-- Имя информационной базы -->
+            <xs:element name="infoBaseAlias" type="xs:string" minOccurs="1" maxOccurs="1" />
+            <!-- Идентификатор предмета отладки в виде строки -->
+            <xs:element name="targetIDStr" type="dbgbase:DebugTargetIdStr"/>
+            <!-- Информация о текущем состоянии окружения ЦУПа предметра отладки -->
+            <xs:element name="envState" type="tns:DebugControlCenterHTTPState" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Базовый тип для ответа -->
+    <xs:complexType name="DBGTGTRemoteResponseTypeBase">
+        <xs:sequence>
+            <!-- Описание состояния окружения ЦУПа отладчика в виде строки -->
+            <xs:element name="envInfoStr" type="xs:string" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Тип параметра для ответа о нотификации о выполнении строки кода -->
+    <xs:complexType name="DBGTGTRemoteCallDebuggerResponseType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteResponseTypeBase">
+                <xs:sequence>
+                    <xs:choice>
+                        <!-- Данные с ответом, упакованным в виде строки -->
+                        <xs:element name="resultStr" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+                        <!-- Данные с ответом -->
+                        <xs:element name="result" type="dbgtgtData:NextLineResultHTTP" minOccurs="0" maxOccurs="1"/>
+                   </xs:choice>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса идентификатора подключенной UI+ - части отладчика -->
+    <xs:complexType name="DBGTGTRemoteGetIDOfDebuggerUIRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Тип ответа на запрос о идентификаторе подключенной UI+ - части отладчика -->
+    <xs:complexType name="DBGTGTRemoteGetIDOfDebuggerUIResponseType">
+        <xs:sequence>
+            <!-- Идентификатор подключенной UI+ - части отладчика -->
+            <xs:element name="idOfDebuggerUI" type="core:UUID" minOccurs="1" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о наличии процесса обновления ИБ в UI+ - части отладчика -->
+    <xs:complexType name="DBGTGTRemoteIsUpdateIBProcessingRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для ответа о наличии процесса обновления ИБ в UI+ - части отладчика -->
+    <xs:complexType name="DBGTGTRemoteIsUpdateIBProcessingResponseType">
+        <xs:sequence>
+            <!-- Идентификатор подключенной UI+ - части отладчика -->
+            <xs:element name="inUpdate" type="xs:boolean" default="false" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о регистрации предмета отладки -->
+    <xs:complexType name="DBGTGTRemoteRegisterTargetRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Признак необходимости назначения отладчика, подключенного   -->
+                    <!-- к информационной базе, дефолтным для всех предметов отладки -->
+                    <!-- текущего сеанса                                             -->
+                    <xs:element name="setDefDbgToThisSeance" type="xs:boolean" default="false" />
+                    <!-- Информация о состоянии разделителя -->
+                    <xs:element name="dsInfo" type="dbgtgtData:DebugDataSeparatorInfo" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип для ответа на запрос о регистрации предмета отладки -->
+    <xs:complexType name="DBGTGTRemoteRegisterTargetResponseType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteResponseTypeBase">
+                <xs:sequence>
+                    <!-- Версия API сервера отладки, формата D.D.D где D - число -->
+                    <xs:element name="version" type="xs:string"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о регистрации предмета отладки -->
+    <xs:complexType name="DBGTGTRemoteGetUserRestrictionsRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип описания зоны -->
+    <xs:complexType name="DBGTGTZoneInfo">
+        <xs:sequence>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="value" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Тип для ответа на запрос об ограничениях пользователя сервера отладки -->
+    <xs:complexType name="DBGTGTRemoteGetUserRestrictionsResponseType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteResponseTypeBase">
+                <xs:sequence>
+                    <xs:element name="username" type="xs:string"/>
+                    <xs:element name="allowPrivilegedModeDebugging" type="xs:boolean"/>
+                    <xs:element name="allowMainConfigurationDebugging" type="xs:boolean"/>
+                    <xs:element name="allowExpressionsEvaluation" type="xs:boolean"/>
+                    <xs:element name="allowedConfigurationExtension" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+                    <xs:element name="zone" type="tns:DBGTGTZoneInfo" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+
+    <!-- Тип параметра для запроса о разрегистрации предмета отладки -->
+    <xs:complexType name="DBGTGTRemoteUnregisterTargetRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Причина передачи управления в отладчик -->
+    <xs:simpleType name="CallDebuggerReason">
+        <xs:restriction base="xs:string">
+            <!-- Сработала точка останова -->
+            <xs:enumeration value="breakpoint" />
+            <!-- Ошибка при проверке условия срабатывания точки останова -->
+            <xs:enumeration value="breakpointError" />
+            <!-- Выполнен шаг -->
+            <xs:enumeration value="step" />
+            <!-- Сработал останов на следующей стркое кода -->
+            <xs:enumeration value="breakOnNextLine" />
+            <!-- Ран-тайм - ошибка -->
+            <xs:enumeration value="runTimeError" />
+            <!-- Повторный вызов для ожидания дальнейших действий -->
+            <xs:enumeration value="reCall" />
+            <!-- Остановка модуля из-за срабатывания точки останова в другом модуле -->
+            <xs:enumeration value="suspendByOtherModule" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <!-- Данные, описывающие причину передачи управления в отладчик и информацию для отладчика -->
+    <xs:complexType name="DBGTGTRemoteCallDebuggerData">
+        <xs:sequence>
+            <!-- Причина передачи управления -->
+            <xs:element name="reason" type="tns:CallDebuggerReason"/>
+            <!-- Номер строки -->
+            <xs:element name="lineNo" type="xs:decimal"/>
+            <!-- Стек вызова в виде строки -->
+            <xs:element name="callStackStr" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+            <!-- Стек вызова -->
+            <xs:element name="callStack" type="dbgtgtData:CallStackInfo" minOccurs="0" maxOccurs="1"/>
+            <!-- Условие точки останова, при проверке кторого возникла ошибка -->
+            <xs:element name="bpCondition" type="xs:string" minOccurs="0" maxOccurs="1"/>
+            <!-- Исключение, возникшее при проверке услвоия срабатывания точки останова -->
+            <xs:element name="bpCondException" type="core:GenericException" minOccurs="0" maxOccurs="1"/>
+            <!-- Исключение, вызвавшее обработку ран-тайм ошибки -->
+            <xs:element name="runTimeException" type="core:GenericException" minOccurs="0" maxOccurs="1"/>
+            <!-- Показ стека -->
+            <xs:element name="showStack" type="xs:boolean" default="false" minOccurs="0" maxOccurs="1"/>
+            <!-- Наличие сообщения -->
+            <xs:element name="hasMessage" type="xs:boolean" default="false" minOccurs="0" maxOccurs="1"/>
+            <!-- Сообщение -->
+            <xs:element name="message" type="xs:string" minOccurs="0" maxOccurs="1"/>
+            <!-- Счетчик попаданий -->
+            <xs:element name="hitCounter" type="xs:decimal" default="0" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о нотификации о передаче управления в отладчик -->
+    <xs:complexType name="DBGTGTRemoteCallDebuggerRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Данные, описывающие причину передачи управления в отладчик и информацию для отладчика -->
+                    <xs:element name="data" type="xs:string"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с результатами вычисления выражения или локальных переменных в процессе останова на строке кода -->
+    <xs:complexType name="DBGTGTRemoteCallDebuggerEvalProcessedRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Идентификатор события -->
+                    <xs:element name="requestQueueID" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+                    <!-- Результат вычисления выражения -->
+                    <xs:element name="evalExprResBaseData" type="dbgcalc:CalculationResultBaseData" minOccurs="0" maxOccurs="unbounded"/>
+                    <!-- Результат вычисления выражения, закодированный в виде строки -->
+                    <xs:element name="evalExprResBaseDataStr" type="xs:base64Binary" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Тип параметра для запроса с нотификацией о начале/завершении вычисления выражения -->
+    <xs:complexType name="DBGTGTRemoteCallDebuggerEvalStartStopProcessedRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Признак начала/завершения вычисления -->
+                    <xs:element name="start" type="xs:boolean" default="true"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+   
+
+    <!-- Тип параметра для запроса с результатами изменения значения локальной переменной или свойства контекста -->
+    <xs:complexType name="DBGTGTRemoteCallDebuggerModifyValueRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Идентификатор события -->
+                    <xs:element name="requestQueueID" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+                    <!-- Признак удачного изменения значения локальной переменной или свойства -->
+                    <xs:element name="processed" type="xs:boolean" default="false"/>
+                    <!-- Описание нового состояния измененного значения локальной переменной или свойства контекста -->
+                    <xs:element name="newValueState" type="dbgcalc:CalculationResultBaseData" minOccurs="0" maxOccurs="1"/>
+                    <!-- Текст ошибки в случае неудачного изменения локальной переменной или свойства контекста -->
+                    <xs:element name="errorStr" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с результатами изменения значения локальной переменной или свойства контекста -->
+    <xs:complexType name="DBGTGTRemoteCallDebuggerMeasureResultsRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Результаты замера производительности, закодированные в виде строки -->
+                    <xs:element name="measureStr" type="xs:base64Binary"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с передачей времени работы на сервере с серверного предмета отладки в клиентский предмет отладки-->
+    <xs:complexType name="DBGTGTRemoteCallDebuggerMeasureServerTimeRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Идентификатор сессии замера производительности -->
+                    <xs:element name="measureSessionID" type="core:UUID" minOccurs="1" maxOccurs="1"/>
+                    <!-- Время выполнения кода на сервере -->
+                    <xs:element name="serverCallFullTime" type="xs:decimal" minOccurs="1" maxOccurs="1"/>
+                    <!-- Время простоя в отладчике -->
+                    <xs:element name="serverCallTimeInDebugger" type="xs:decimal" minOccurs="1" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с результатами проверки условия срабатывания точки останова -->
+    <xs:complexType name="DBGTGTRemoteCallDebuggerCheckBPRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Результат проверки условия срабатывания точки останова -->
+                    <xs:element name="checkState" type="dbgtgtBP:CheckBPConditionResult"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- RequestConnectAndTransmitErrors -->
+    <xs:complexType name="DBGTGTRemoteCallRCTERequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Признак необходимости подключения предмета отладки в отладчике -->
+                    <xs:element name="requestConnection" type="xs:boolean" default="false"/>
+                    <!-- Дополнительный идентификатор предмета отладки, связанного с ошибкой -->
+                    <xs:element name="addTargetIDStr" type="dbgbase:DebugTargetIdStr" minOccurs="0" maxOccurs="unbounded"/>
+                    <!-- Информация об ошибке -->
+                    <xs:element name="errorInfo" type="debugRTEInfo:ErrorViewInfoData" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- RequestShowMetadataObject -->
+    <xs:complexType name="DBGTGTRemoteCallSMORequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Информация об ошибке -->
+                    <xs:element name="metadataObjectName" type="xs:string" minOccurs="1" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    
+    <!-- Передача информации о состоянии разделителей -->
+    <xs:complexType name="DBGTGTRemoteCallDSInfoRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                    <!-- Информация об изменении значения разделителей для сеанса в ИБ -->
+                    <xs:element name="seanceDSState" type="dbgtgtData:DBGTGTRemoteCallDSInfoItem" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Ответ на передачу инфомрации о состоянии разделителей -->
+    <xs:complexType name="DBGTGTRemoteCallDSInfoResponseType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteResponseTypeBase">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Запрос для получения данных для активизации окна отладчика -->
+    <xs:complexType name="DBGTGTRemoteGetDbgForegroundWndRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип для ответа на запрос для получения данных для активизации окна отладчика -->
+    <xs:complexType name="DBGTGTRemoteGetDbgForegroundWndResponseType">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGTGTRemoteResponseTypeBase">
+                <xs:sequence>
+                    <!-- Данные для активации окна -->
+                    <xs:element name="data" type="debugForegroundData:ForegroundWindowData" minOccurs="0" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- ======================================================== -->
+    <!--  Пингование сервера отладки со стороны предмета отладки  -->
+    <!-- ======================================================== -->
+
+    <!-- Инфорация о данных отладки -->
+    <xs:complexType name="DBGTGTRemotePingData">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugControlCenterHTTPState">
+                <xs:sequence>
+                    <!-- Имя информационной базы -->
+                    <xs:element name="infoBaseAlias" type="xs:string" minOccurs="1" maxOccurs="1"/>
+                    <!-- Идентификатор сеанса -->
+                    <xs:element name="seanceID" type="core:UUID" minOccurs="1" maxOccurs="1"/>
+                    <!-- Уникальный идентификатор предмета отладки -->
+                    <xs:element name="targetID" type="core:UUID" minOccurs="1" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип для запроса на пингование -->
+    <xs:complexType name="DBGTGTRemotePingRequest">
+        <xs:sequence>
+            <!-- Данные для верификации состояния процессора окружения отладчика на стороне предмета отладки-->
+            <xs:element name="data" type="tns:DBGTGTRemotePingData" minOccurs="1" maxOccurs="1"/>
+            <!-- Команды, передаваемые со стороны предмета отладки на сервер отладки: тут будут сидеть типы, расширяющие тип DBGTGTExtCmdBase -->
+            <xs:element name="commandToDbgServer" type="dbgtgtCommands:DBGTGTExtCmdBase" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Тип для ответа с результатами пингования -->
+    <xs:complexType name="DBGTGTRemotePingResponse">
+        <xs:sequence>
+            <!-- Результат выполнения пингования: тут будут сидеть типы, расширяющие тип DBGTGTExtCmdBase -->
+            <xs:element name="commandFromDbgServer" type="dbgtgtCommands:DBGTGTExtCmdBase" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

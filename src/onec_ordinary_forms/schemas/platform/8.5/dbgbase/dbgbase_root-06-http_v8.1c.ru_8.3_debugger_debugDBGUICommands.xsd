@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.3/debugger/debugDBGUICommands"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           xmlns:dbgbase="http://v8.1c.ru/8.3/debugger/debugBaseData"
+           xmlns:dbgcalc="http://v8.1c.ru/8.3/debugger/debugCalculations"
+           xmlns:debugRTEInfo="http://v8.1c.ru/8.3/debugger/debugRTEInfo"
+           xmlns:debugMeasure="http://v8.1c.ru/8.3/debugger/debugMeasure"
+           xmlns:dbgbp="http://v8.1c.ru/8.3/debugger/debugBreakpoints"
+           xmlns:debugForegroundData="http://v8.1c.ru/8.3/debugger/debugForegroundData"
+           targetNamespace="http://v8.1c.ru/8.3/debugger/debugDBGUICommands"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugBaseData" schemaLocation="debugBaseData.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugCalculations" schemaLocation="debugCalculations.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugRTEInfo" schemaLocation="debugRTEInfo.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugMeasure" schemaLocation="debugMeasure.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugBreakpoints" schemaLocation="debugBreakpoints.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugForegroundData" schemaLocation="debugForegroundData.xsd"/>
+
+    <!-- ====================================================== -->
+    <!-- Команды и данные, поступающие в UI+ - часть отладчика  -->
+    <!-- ====================================================== -->
+
+    <!-- Команды, поступающие в UI+ - часть отладчика -->
+    <xs:simpleType name="DBGUIExtCmds">
+        <xs:restriction base="xs:string">
+            <!-- Неизвестное состояние -->
+            <xs:enumeration value="unknown" />
+            <!-- Начинает работу предмет отладки -->
+            <xs:enumeration value="targetStarted" />
+            <!-- Завершает работу предмет отладки -->
+            <xs:enumeration value="targetQuit" />
+            <!-- Скорректированы точки останова для модуля см eDebugConnectionCommandsSetBreakpointsCorrected -->
+            <xs:enumeration value="correctedBP" />            
+            <!-- Произошла рантайм-ошибка -->
+            <xs:enumeration value="rteProcessing" />
+            <!-- Произошла рантайм-ошибка при вычислении условия срабатывания точки останова -->
+            <xs:enumeration value="rteOnBPConditionProcessing" />
+            <!-- Готовы результаты замера производительности -->
+            <xs:enumeration value="measureResultProcessing" />
+            <!-- Сформирован стек вызова для предмета отладки -->
+            <xs:enumeration value="callStackFormed" />
+            <!-- Выполнено вычисление выражения -->
+            <xs:enumeration value="exprEvaluated" />
+            <!-- Выполнено изменение значения локальной переменной или свойства контекста -->
+            <xs:enumeration value="valueModified" />
+            <!-- Передача списка ошибок в конфигуратор -->
+            <xs:enumeration value="errorViewInfo" />
+            
+            <!-- Установить помогальник для активизации окна партнера по соединению -->
+            <xs:enumeration value="ForegroundHelperSet" />
+            <!-- Запросить помогальник для активизации окна партнера по соединению -->
+            <xs:enumeration value="ForegroundHelperRequest" />
+            <!-- Выполнить активизацию окна партнера по соединению переданным помогальником -->
+            <xs:enumeration value="ForegroundHelperProcess" />
+
+            <!-- Передача в конфигуратор имени объекта метаданных для показа-->
+            <xs:enumeration value="showMetadataObject" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Базовый тип для описания информации о команде -->
+    <xs:complexType name="DBGUIExtCmdInfoBase">
+        <xs:sequence>
+            <!-- Идентификатор команды для UI+ части отладчика (для тех, кто его в виде числа понять может) -->
+            <xs:element name="cmdIDNum" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+            <!-- Идентификатор команды для UI+ части отладчика (для тех, кто его в виде числа понять не может) -->
+            <xs:element name="cmdID" type="tns:DBGUIExtCmds" minOccurs="0" maxOccurs="1"/>
+            <!-- Идентификатор предмета отладки в виде строки -->
+            <xs:element name="targetIDStr" type="dbgbase:DebugTargetIdStr" minOccurs="0" maxOccurs="1"/>
+            <!-- Идентификатор предмета отладки -->
+            <xs:element name="targetID" type="dbgbase:DebugTargetId" minOccurs="0" maxOccurs="1"/>
+            <!-- Идентификатор события, ответом на которое является данное событие -->
+            <xs:element name="requestQueueID" type="xs:string" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Описание информации для нотификации о начале работы предмета отладки -->
+    <xs:complexType name="DBGUIExtCmdInfoStarted">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+   
+    <!-- Описание информации для нотификации о завершении работы предмета отладки -->
+    <xs:complexType name="DBGUIExtCmdInfoQuit">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Описание информации для нотификации о скорректированных точках останова для модуля см eDebugConnectionCommandsSetBreakpointsCorrected -->
+    <xs:complexType name="DBGUIExtCmdInfoCorrectedBP">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Пространство точек останова -->
+                    <xs:element name="bpWorkspace" type="dbgbp:BPWorkspaceInternal"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Описание информации для нотификации о произошедшей ран-тайм - ошибке -->
+    <xs:complexType name="DBGUIExtCmdInfoRte">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Информация об ошибке -->
+                    <xs:element name="exception" type="core:GenericException"/>
+                    <!-- Стек вызовов -->
+                    <xs:element name="callStack" type="dbgbase:StackItemViewInfoData" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Описание информации для нотификации о произошедшей ран-тайм - ошибке -->
+    <xs:complexType name="DBGUIExtCmdInfoRteBPCondition">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Информация об ошибке -->
+                    <xs:element name="errorInfo" type="debugRTEInfo:CheckBPCondErrorInfo"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Описание информации для нотификации с информацией о результатах замера производительности -->
+    <xs:complexType name="DBGUIExtCmdInfoMeasure">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Результаты замера производительности, закодированные в виде строки -->
+                    <xs:element name="measureStr" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+                    <!-- Результаты замера производительности -->
+                    <xs:element name="measure" type="debugMeasure:PerformanceInfoMain" minOccurs="0" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Описание информации с доставляемым стеком вызовов -->
+    <xs:complexType name="DBGUIExtCmdInfoCallStackFormed">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Признак того, что приложение остановлено по точке останова -->
+                    <!-- Признак будет иметь состояние Истина, в одном из следующих случаев: -->
+                    <!--   сработала точка останова; -->
+                    <!--   выполнен шаг при пошаговой отладке (для того предмета отладки, в котором был инициирован шаг); -->
+                    <!--   отрабатывается останов по команде "отладка - остановить" (для всех останавливаемых предметов отладки)-->
+                    <xs:element name="stopByBP" type="xs:boolean"/>
+                    <xs:element name="suspendedByOther" type="xs:boolean"/>
+                    <xs:element name="sendMessageOnly" type="xs:boolean" default="false" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="sendHitCounterOnly" type="xs:boolean" default="false" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="showStack" type="xs:boolean" default="false" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="hasMessage" type="xs:boolean" default="false" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="message" type="xs:string" minOccurs="0" maxOccurs="1"/>
+                    <xs:element name="hitCounter" type="xs:decimal" default="0" minOccurs="0" maxOccurs="1"/>
+                    <!-- Стек вызовов -->
+                    <xs:element name="callStack" type="dbgbase:StackItemViewInfoData" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Описание информации для нотификации с информацией о результатах замера производительности -->
+    <xs:complexType name="DBGUIExtCmdInfoExprEvaluated">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Результат вычисления -->
+                    <xs:element name="evalExprResBaseData" type="dbgcalc:CalculationResultBaseData"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Описание информации для нотификации о результате изменения значения -->
+    <!-- локальной переменной или свойства контекста -->
+    <xs:complexType name="DBGUIExtCmdInfoValueModifyResult">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Признак успешного изменения значения-->
+                    <xs:element name="processed" type="xs:boolean" default="true"/>
+                    <!-- Описание состояния измененной локальной переменной или свойства контекста -->
+                    <xs:element name="newValState" type="dbgcalc:CalculationResultBaseData" minOccurs="0" maxOccurs="1"/>
+                    <!-- Текст ошибки, если изменение значения не выполнено -->
+                    <xs:element name="errorStr" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Описаниее информации об ошибках -->
+    <xs:complexType name="DBGUIExtCmdInfoErrorViewInfo">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Признак необходимости подключения предмета отладки в отладчике -->
+                    <xs:element name="requestConnection" type="xs:boolean" default="false"/>
+                    <!-- Дополнительный идентификатор предмета отладки, связанного с ошибкой (для тех, кто его понимает)-->
+                    <xs:element name="addTargetIDStr" type="dbgbase:DebugTargetIdStr" minOccurs="0" maxOccurs="unbounded"/>
+                    <!-- Дополнительный идентификатор предмета отладки, связанного с ошибкой -->
+                    <xs:element name="addTargetID" type="dbgbase:DebugTargetId" minOccurs="0" maxOccurs="unbounded"/>
+                    <!-- Информация об ошибке -->
+                    <xs:element name="errorInfo" type="debugRTEInfo:ErrorViewInfoData" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Описаниее объекта метаданных для показа -->
+    <xs:complexType name="DBGUIExtCmdShowMetadataObject">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Информация об объекте -->
+                    <xs:element name="metadataObjectName" type="xs:string" minOccurs="1" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Установить помогальник для активизации окна партнера по соединению -->
+    <xs:complexType name="DBGUIExtCmdInfoForegroundHelperSet">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Данные для активации окна -->
+                    <xs:element name="data" type="debugForegroundData:ForegroundWindowData" minOccurs="0" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Запросить помогальник для активизации окна партнера по соединению -->
+    <xs:complexType name="DBGUIExtCmdInfoForegroundHelperRequest">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Идентификатор отправителя -->
+                    <xs:element name="senderID" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Выполнить активизацию окна партнера по соединению переданным помогальником -->
+    <xs:complexType name="DBGUIExtCmdInfoForegroundHelperProcess">
+        <xs:complexContent>
+            <xs:extension base="tns:DBGUIExtCmdInfoBase">
+                <xs:sequence>
+                    <!-- Данные для активации окна -->
+                    <xs:element name="data" type="debugForegroundData:ForegroundWindowData" minOccurs="0" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+</xs:schema>

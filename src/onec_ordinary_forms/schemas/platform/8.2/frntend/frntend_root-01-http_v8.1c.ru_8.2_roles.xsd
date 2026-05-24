@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.2/roles"
+           targetNamespace="http://v8.1c.ru/8.2/roles"
+           elementFormDefault="qualified"
+           version="1.0">
+
+  <!-- Описание ограничения доступа к данным для права -->
+  <xs:complexType name="RlsType">
+    <xs:sequence>
+      <xs:element name="field" type="xs:string" minOccurs="0" maxOccurs="unbounded" nillable="true"/>
+      <xs:element name="condition" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Пара из значения права и его имени-->
+  <xs:complexType name="RightType">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+      <xs:element name="value" type="xs:boolean"/>
+      <xs:element name="restrictionByCondition" type="tns:RlsType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Описание прав объекта -->
+  <xs:complexType name="ObjectType">
+    <!-- Список прав и значений -->
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+      <xs:element name="right" type="tns:RightType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Шаблон ограничения доступа -->
+  <xs:complexType name="RestrictionTemplateType">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string" />
+      <xs:element name="condition" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="Rights">
+    <xs:sequence>
+      <xs:element name="object" type="tns:ObjectType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="restrictionTemplate" type="tns:RestrictionTemplateType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="setForNewObjects" type="xs:boolean"/>
+      <xs:element name="setForAttributesByDefault" type="xs:boolean"/>
+      <xs:element name="independentRightsOfChildObjects" type="xs:boolean"/>
+     </xs:sequence>
+  </xs:complexType>
+
+</xs:schema>

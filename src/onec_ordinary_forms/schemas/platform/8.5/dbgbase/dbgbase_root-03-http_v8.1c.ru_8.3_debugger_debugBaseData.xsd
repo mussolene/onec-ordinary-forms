@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.3/debugger/debugBaseData"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           targetNamespace="http://v8.1c.ru/8.3/debugger/debugBaseData"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+
+    <xs:element name="request"/>
+    <xs:element name="response"/>
+
+    <!-- =================================================== -->
+    <!-- Описание состояний результата регистрации отладчика -->
+    <!-- =================================================== -->
+    <xs:simpleType name="AttachDebugUIResult">
+        <xs:restriction base="xs:string">
+            <!-- Состояние не инициализировано -->
+            <xs:enumeration value="unknown" />
+            <!-- Отладчик зарегистрирован -->
+            <xs:enumeration value="registered" />
+            <!-- Отказано в регистрации - отсутствует или неправильно указан пароль сервера отладки -->
+            <xs:enumeration value="credentialsRequired" />
+            <!-- Отказано в регистрации - информационная база уже отлаживается другим отладчиком -->
+            <xs:enumeration value="ibInDebug" />
+            <!-- Отказано в регистрации - прочие ошибки  -->
+            <xs:enumeration value="notRegistered" />
+            <!-- Отказано в регистрации - отсутствует или неправильно указан пароль сервера отладки -->
+            <xs:enumeration value="fullCredentialsRequired" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- =========================== -->
+    <!-- Описание пошаговых действий -->
+    <!-- =========================== -->
+    <xs:simpleType name="DebugStepAction">
+        <xs:restriction base="xs:string">
+            <!-- Неизвестное состояние -->
+            <xs:enumeration value="Unknown" />
+            <!-- Выполнить шаг -->
+            <xs:enumeration value="Step" />
+            <!-- Выполнить шаг внутрь -->
+            <xs:enumeration value="StepIn" />
+            <!-- Выполнить шаг наружу -->
+            <xs:enumeration value="StepOut" />
+            <!-- Продолжить выполнение -->
+            <xs:enumeration value="Continue" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Тип модуля: см BSLModuleId - enum ModuleType -->
+    <xs:simpleType name="BSLModuleType">
+        <xs:restriction base="xs:string">
+            <!-- модуль конфигурации -->
+            <xs:enumeration value="ConfigModule" />
+            <!-- модуль системной формы -->
+            <xs:enumeration value="SystemFormModule" />
+            <!-- системный модуль -->
+            <xs:enumeration value="SystemModule" />
+            <!-- модуль внешней обработки/отчета -->
+            <xs:enumeration value="ExtMDModule" />
+            <!-- модуль расширения -->
+            <xs:enumeration value="ExtensionModule" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- ===================================== -->
+    <!-- Внутненний идентификатор модуля       -->
+    <!-- ===================================== -->
+    <xs:complexType name="BSLModuleIdInternal">
+        <xs:sequence>
+            <!-- Тип модуля -->
+            <xs:element name="type" type="tns:BSLModuleType" default="ConfigModule"/>
+            <!-- URL местоположения внешних метаданных -->
+            <xs:element name="URL" type="xs:string" default="" />
+            <!-- имя расширения конфигурации -->
+            <xs:element name="extensionName" type="xs:string" default="" />
+            <!-- идентификатор модуля -->
+            <xs:element name="objectID" type="core:UUID" minOccurs="0"/>
+            <!-- идентификатор свойства модуля -->
+            <xs:element name="propertyID" type="core:UUID" minOccurs="0"/>
+            <!-- расширенный идентификатор модуля -->
+            <xs:element name="extId" type="xs:decimal" default="0" />
+            <!-- версия объекта метаданных модуля -->
+            <xs:element name="version" type="core:ObjectVersion" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- ============================================= -->
+    <!-- Внутненний идентификатор модуля в виде строки -->
+    <!-- ============================================= -->
+    <xs:simpleType name="BSLModuleIdInternalStr">
+        <xs:restriction base="xs:base64Binary"/>
+    </xs:simpleType>
+
+    <!-- ===================================== -->
+    <!-- Внешний идентификатор модуля          -->
+    <!-- ===================================== -->
+    <xs:complexType name="BSLModuleIdUser">
+        <xs:sequence>
+            <!-- Тип модуля -->
+            <xs:element name="type" type="tns:BSLModuleType" />
+            <!-- URL местоположения внешних метаданных -->
+            <xs:element name="URL" type="xs:string" default="" />
+            <!-- имя расширения конфигурации -->
+            <xs:element name="extensionName" type="xs:string" default="" />
+            <!-- Идентификатор объекта МД, к которому относится модуль -->
+            <xs:element name="MDObject" type="xs:string" />
+            <!-- Идентификатор свойства объекта МД, в котором хранится модуль-->
+            <xs:element name="MDProperty" type="xs:string" />
+            <!-- расширенный идентификатор модуля -->
+            <xs:element name="ExtId" type="xs:decimal" default="0" />
+            <!-- версия объекта метаданных модуля -->
+            <xs:element name="Version" type="core:ObjectVersion" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- ========================================================= -->
+    <!-- Типы предметов отладки -->
+    <!-- ========================================================= -->
+
+    <!-- Результаты вычисления условия срабатывания точки останова -->
+    <xs:simpleType name="DebugTargetType">
+        <xs:restriction base="xs:string">
+            <!-- Неизвестный тип предмета отладки -->
+            <xs:enumeration value="Unknown" />
+
+            <!-- Предмет отладки работает на клиенте -->
+            <xs:enumeration value="Client" />
+            <!-- Предмет отладки работает в рамках управляемого приложения -->
+            <xs:enumeration value="ManagedClient" />
+            <!-- Предмет отладки работает на веб-клиенте -->
+            <xs:enumeration value="WEBClient" />
+            <!-- Предмет отладки работает на клиенте в COM-соединении -->
+            <xs:enumeration value="COMConnector" />
+
+            <!-- Предмет отладки работает на сервере -->
+            <xs:enumeration value="Server" />
+            <!-- Предмет отладки работает на сервере (файловый вариант) -->
+            <xs:enumeration value="ServerEmulation" />
+
+            <!-- Предмет отладки работает на сервере в WEB-сервисе -->
+            <xs:enumeration value="WEBService" />
+            <!-- Предмет отладки работает на сервере в HTTP-сервисе -->
+            <xs:enumeration value="HTTPService" />
+            <!-- Предмет отладки работает на сервере в стандартном интерфейсе OData -->
+            <xs:enumeration value="OData" />
+
+            <!-- Предмет отладки работает на сервере как задание -->
+            <xs:enumeration value="JOB" />
+            <!-- Предмет отладки работает на сервере (файловый вариант) как задание -->
+            <xs:enumeration value="JobFileMode" />
+
+            <!-- Предмет отладки работает как клиент мобильного приложения -->
+            <xs:enumeration value="MobileClient" />
+            <!-- Предмет отладки работает как сервер мобильного приложения -->
+            <xs:enumeration value="MobileServer" />
+            <!-- Предмет отладки работает как задание мобильного приложения -->
+            <xs:enumeration value="MobileJobFileMode" />
+
+            <!-- Предмет оталки работате как мобильный клиент -->
+            <xs:enumeration value="MobileManagedClient" />
+            <!-- Предмет отладки работает как сервер мобильного приложения -->
+            <xs:enumeration value="MobileManagedServer" />
+
+            <!-- Предмет отладки работает как WebSocket -->
+            <xs:enumeration value="WebSocket" />
+            <xs:enumeration value="WebSocketFileMode" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- ===================================== -->
+    <!-- Состояние предмета отладки            -->
+    <!-- ===================================== -->
+    <xs:simpleType name="DbgTargetState">
+        <xs:restriction base="xs:string">
+            <!-- Состояние не определено -->
+            <xs:enumeration value="Undefined" />
+            <!-- Предмет отладки не зарегистрирован -->
+            <xs:enumeration value="NotRegistered" />
+            <!-- Предмет отладки зарегистрирован -->
+            <xs:enumeration value="Registered" />
+            <!-- Предмет отладки ожидает подключения отладчика -->
+            <xs:enumeration value="WaitDebugger" />
+            <!-- Предмет отладки работает -->
+            <xs:enumeration value="Worked" />
+            <!-- Предмет отладки остановлен на строке кода -->
+            <xs:enumeration value="StopOnNextLine" />
+            <!-- Предмет отладки занимается вычислением выражений или изменением значений переменных -->
+            <xs:enumeration value="Evaluating" />
+            <!-- Предмет отладки завершает своб работу по просьбе отладчика -->
+            <xs:enumeration value="Terminating" />
+            <xs:enumeration value="Last" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- ======================================== -->
+    <!-- Определение типа ИБ для предмета отладки -->
+    <!-- ======================================== -->
+    <xs:simpleType name="IsServerInfoBase">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="undefined" />
+            <xs:enumeration value="true" />
+            <xs:enumeration value="false" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- =========================================== -->
+    <!-- Облегченный идентификатор предмета отладки  -->
+    <!-- =========================================== -->
+    <xs:complexType name="DebugTargetIdLight">
+        <xs:sequence>
+            <!-- Уникальный идентификатор предмета отладки -->
+            <xs:element name="id" type="core:UUID" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- ======================================================= -->
+    <!-- Идентификатор предмета отладки и описание его состояния -->
+    <!-- ======================================================= -->
+    <xs:complexType name="DbgTargetStateInfo">
+        <xs:sequence>
+            <!-- Идентификатор предмета отладки в виде строки (для тех кто его сможет понять) -->
+            <xs:element name="targetIDStr" type="tns:DebugTargetIdStr" minOccurs="0" maxOccurs="1"/>
+            <!-- Идентификатор предмета отладки -->
+            <xs:element name="targetID" type="tns:DebugTargetId" minOccurs="0" maxOccurs="1"/>
+            <!-- Состояние работы предмета отладки в виде числа (для тех кто его сможет понять)-->
+            <xs:element name="stateNum" type="xs:decimal" minOccurs="0" maxOccurs="1" />
+            <!-- Состояние работы предмета отладки (для тех кто не сможет понять кодировку в виде числа)-->
+            <xs:element name="state" type="tns:DbgTargetState" minOccurs="0" maxOccurs="1" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- ===================================== -->
+    <!-- Идентификатор предмета отладки        -->
+    <!-- ===================================== -->
+    <xs:complexType name="DebugTargetId">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetIdLight">
+                <xs:sequence>
+                    <!-- Идентификатор сеанса  -->
+                    <xs:element name="seanceId" type="core:UUID" />
+                    <!-- Номер сеанса  -->
+                    <xs:element name="seanceNo" type="xs:decimal"/>
+                    <!-- Уникальный идентификатор экземпляра информационной базы, с которой работает предмет отладки -->
+                    <xs:element name="infoBaseInstanceID" type="core:UUID" minOccurs="1" maxOccurs="1"/>
+                    <!-- Имя информационной базы -->
+                    <xs:element name="infoBaseAlias" type="xs:string" minOccurs="1" maxOccurs="1"/>
+                    <!-- Указание того, является ли ИБ файловой или клиент/серверной  -->
+                    <xs:element name="isServerInfoBase" type="tns:IsServerInfoBase" />
+                    <!-- Имя пользователя -->
+                    <xs:element name="userName" type="xs:string" default=""/>
+                    <!-- Версия конфигурации -->
+                    <xs:element name="configVersion" type="core:ObjectVersion" />
+                    <!-- Тип предмета отладки  -->
+                    <xs:element name="targetType" type="tns:DebugTargetType" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- ============================================ -->
+    <!-- Идентификатор предмета отладки в виде строки -->
+    <!-- ============================================ -->
+    <xs:simpleType name="DebugTargetIdStr">
+        <xs:restriction base="xs:base64Binary"/>
+    </xs:simpleType>
+
+    <!-- ====================================================================== -->
+    <!-- Описание информации для свези элемента стека вызовов с местом в модуле -->
+    <!-- См. метод StackItemViewInfo::IPersistableObject_serialize              -->
+    <!-- ====================================================================== -->
+    <xs:complexType name="StackItemViewInfoData">
+        <xs:sequence>
+            <!-- Идентификатор модуля (в виде строки) -->
+            <xs:element name="moduleIDStr" type="tns:BSLModuleIdInternalStr" minOccurs="0" />
+            <!-- Идентификатор модуля -->
+            <xs:element name="moduleID" type="tns:BSLModuleIdInternal" minOccurs="0" />
+            <!-- Номер строки -->
+            <xs:element name="lineNo" type="xs:decimal" />
+            <!-- Презентация для окна стека вызовов -->
+            <xs:element name="presentation" type="xs:base64Binary" />
+            <!-- "Призрачный" фрейм -->
+            <xs:element name="isFantom" type="xs:boolean" />
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:v8="http://v8.1c.ru/8.1/data/core"
+           xmlns:tns="http://v8.1c.ru/8.3/TestAndRepairExchangePlanIntegrityReport"
+           targetNamespace="http://v8.1c.ru/8.3/TestAndRepairExchangePlanIntegrityReport"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+
+    <!-- Варианты ошибок для узла данной информационной базы -->
+    <xs:simpleType name="ExchangePlanIntegrityErrorType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="NoErrors">
+                <xs:annotation>
+                    <xs:documentation>Ошибок нет</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="WrongReferenceField">
+                <xs:annotation>
+                    <xs:documentation>Неверное значение поля Ссылка узла данной информационной базы</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="WrongThisNodeField">
+                <xs:annotation>
+                    <xs:documentation>Неверное значение поля хранения узла данной информационной базы</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Варианты исправления ошибок для узла данной информационной базы -->
+    <xs:simpleType name="ExchangePlanIntegrityRepairOperationType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="TestedOnly">
+                <xs:annotation>
+                    <xs:documentation>Ошибка не исправлена</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="ThisNodeFieldRepaired">
+                <xs:annotation>
+                    <xs:documentation>Значение поля хранения в записи для узла данной информационной базы восстановлено</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="WrongThisNodeRecordMarkedToDelete">
+                <xs:annotation>
+                    <xs:documentation>Ошибочная запись для узла данной информационной базы помечена на удаление</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+            <xs:enumeration value="NewThisNodeRecordCreated">
+                <xs:annotation>
+                    <xs:documentation>Новая запись для узла данной информационной базы создана</xs:documentation>
+                </xs:annotation>
+            </xs:enumeration>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Информация о корректируемой записи ЭтотУзел из таблицы узлов плана обмена -->
+    <xs:complexType name="TestAndRepairExchangePlanIntegrityNodeInfo">
+        <xs:sequence>
+            <xs:element name="Ref" type="v8:UUID" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Ссылка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="Code" type="xs:string" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Код</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="Description" type="xs:string" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Наименование</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ErrorType" type="tns:ExchangePlanIntegrityErrorType" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Вид ошибки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="RepairType" type="tns:ExchangePlanIntegrityRepairOperationType" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Способ исправления ошибки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Узлы ЭтотУзел с ошибками -->
+    <xs:complexType name="TestAndRepairExchangePlanIntegrityNodes">
+        <xs:sequence>
+            <xs:element name="ExchangePlanIntegrityNode" type="tns:TestAndRepairExchangePlanIntegrityNodeInfo" minOccurs="1" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Список узлов ЭтотУзел с ошибками</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Информация о корректируемых записях таблицы узлов плана обмена -->
+    <xs:complexType name="TestAndRepairExchangePlanIntegrity">
+        <xs:sequence>
+            <xs:element name="Name" type="xs:string" minOccurs="1" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Имя плана обмена</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="ExchangePlanIntegrityNodes" type="tns:TestAndRepairExchangePlanIntegrityNodes" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Информация об узлах ЭтотУзел с ошибками</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Информация о тестировании таблиц узлов планов обмена -->
+    <xs:complexType name="TestAndRepairExchangePlanIntegrityReport">
+        <xs:sequence>
+            <xs:element name="IntegrityData" type="tns:TestAndRepairExchangePlanIntegrity" minOccurs="0" maxOccurs="1">
+                <xs:annotation>
+                    <xs:documentation>Информация о корректируемых записях таблицы узлов плана обмена</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

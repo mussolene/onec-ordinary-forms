@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://v8.1c.ru/8.1/data-composition-system/common" xmlns:dcscore="http://v8.1c.ru/8.1/data-composition-system/core" targetNamespace="http://v8.1c.ru/8.1/data-composition-system/common" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/core" schemaLocation="../../../dcscore/src/res/core.xsd"/>
+	<xs:complexType name="DataSetFieldRole">
+		<xs:annotation>
+			<xs:documentation>Роль поля набора данных</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="periodNumber" type="xs:integer" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Номер периода</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="periodType" type="tns:DataCompositionPeriodType" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Тип периода</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="dimension" type="xs:boolean" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Поле является измерением</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="parentDimension" type="xs:string" maxOccurs="1" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Родительское измерение
+</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="account" type="xs:boolean" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Поле является полем счета</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="accountTypeExpression" type="xs:string" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Выражение для расчета типа счета (активный/пассивный/активно пассивный) (0/1/2 соответственно)</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="balance" type="xs:boolean" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Поле является полем баланса</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="balanceGroupName" type="xs:string" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Имя группы балансовых полей. Например, Сумма или Количество</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="balanceType" type="tns:DataCompositionBalanceType" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Тип балансового поля (начальный или конечный баланс)</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="accountingBalanceType" type="tns:DataCompositionAccountingBalanceType" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Тип бухгалтерского баланса (Дебит или Кредит)</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="accountField" type="xs:string" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Поле счета</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="ignoreNullValues" type="xs:boolean" maxOccurs="1" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Игнорировать значения NULL</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="required" type="xs:boolean" maxOccurs="1" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Обязательное поле</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+      <xs:element name="dimensionAttribute" type="xs:boolean" maxOccurs="1" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Реквизит измерения</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="isMain" type="xs:boolean" maxOccurs="1" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Поле является основным</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+	</xs:complexType>
+	<xs:simpleType name="DataCompositionBalanceType">
+		<xs:annotation>
+			<xs:documentation>Тип остатка</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="None"/>
+			<xs:enumeration value="OpeningBalance"/>
+			<xs:enumeration value="ClosingBalance"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="DataCompositionAccountingBalanceType">
+		<xs:annotation>
+			<xs:documentation>Тип бухгалтерского остатка</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="None"/>
+			<xs:enumeration value="Debit"/>
+			<xs:enumeration value="Credit"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="Expression">
+		<xs:annotation>
+			<xs:documentation>Выражение компоновки данных</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string"/>
+	</xs:simpleType>
+	<xs:complexType name="OrderExpression">
+		<xs:annotation>
+			<xs:documentation>Выражение упорядочивания</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="expression" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Выражение для упорядочивания.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="orderType" type="dcscore:DataCompositionSortDirection" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Тип упорядочивания.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="autoOrder" type="xs:boolean" default="false" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Необходимость автоупорядочивания.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:simpleType name="DataCompositionPeriodType">
+        <xs:annotation>
+        	<xs:documentation>Тип периода</xs:documentation>
+        </xs:annotation>
+        <xs:restriction base="xs:string">
+			<xs:enumeration value="Main"></xs:enumeration>
+			<xs:enumeration value="Specify"></xs:enumeration>
+			<xs:enumeration value="Additional"></xs:enumeration>
+		</xs:restriction>
+	</xs:simpleType>
+
+	<xs:simpleType name="DataCompositionAreaTemplateType">
+		<xs:annotation>
+			<xs:documentation>Тип области макета</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="Header"/>
+			<xs:enumeration value="Footer"/>
+			<xs:enumeration value="HierarchicalHeader"/>
+			<xs:enumeration value="HierarchicalFooter"/>
+			<xs:enumeration value="OverallHeader"/>
+			<xs:enumeration value="OverallFooter"></xs:enumeration>
+		</xs:restriction>
+	</xs:simpleType>
+
+</xs:schema>

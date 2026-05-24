@@ -1,0 +1,2745 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           xmlns:ent="http://v8.1c.ru/8.1/data/enterprise"
+           xmlns:ui="http://v8.1c.ru/8.1/data/ui"
+           xmlns:bsl="http://v8.1c.ru/8.2/data/bsl"
+           xmlns:ma="http://v8.1c.ru/8.2/managed-application/core"
+           xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform"
+           xmlns:cmi="http://v8.1c.ru/8.2/managed-application/cmi"
+           xmlns:mxl="http://v8.1c.ru/8.2/data/spreadsheet"
+           xmlns:tns="http://v8.1c.ru/8.3/mobile-application/app"
+           xmlns:form="http://v8.1c.ru/8.3/mobile-application/form"
+           xmlns:xen="http://v8.1c.ru/8.3/xcf/enums"
+           xmlns:xep="http://v8.1c.ru/8.3/xcf/extrnprops"
+           xmlns:role="http://v8.1c.ru/8.2/roles"
+           xmlns:xer="http://v8.1c.ru/8.3/xcf/readable"
+           xmlns:dcssm="http://v8.1c.ru/8.1/data-composition-system/schema"
+           targetNamespace="http://v8.1c.ru/8.3/mobile-application/app"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/data/bsl" schemaLocation="../../../bsl/src/res/bsl.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data/ui" schemaLocation="../../../xdto/src/res/uiobjects.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/mobile-application/form" schemaLocation="MobileForm.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/data/spreadsheet" schemaLocation="../../../moxel/src/res/spreadsheetDocument.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/managed-application/core" schemaLocation="../../../mngcore/src/res/mngapp.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/managed-application/logform" schemaLocation="../../../mngcore/src/res/logform.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/managed-application/cmi" schemaLocation="../../../mngcore/src/res/cmi.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/xcf/enums" schemaLocation="../../../backend/src/res/xcf_enums.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/xcf/extrnprops" schemaLocation="../../../backend/src/res/xcf_extprops.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data/enterprise" schemaLocation="../../../enums/src/res/enums.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/roles" schemaLocation="../../../backend/src/res/role.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/xcf/readable" schemaLocation="../../../backend/src/res/xcf_readable.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/schema" schemaLocation="../../../dcs/src/res/scheme.xsd"/>
+
+    <xs:complexType name="MDBaseObj" abstract="true">
+        <xs:sequence>
+            <xs:element name="synonym" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Синонимы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="comment" type="xs:string" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Комментарий </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="generatedType" type="xer:GeneratedType" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Типы порождаемые на основании этого объекта </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="id" type="core:UUID" use="required">
+            <xs:annotation>
+                <xs:documentation>Идентификатор</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="MobileApp">
+        <xs:annotation>
+            <xs:documentation>Мобильное приложение</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="language" type="tns:Language" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список языков мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="vendor" type="xs:string" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Поставщик конфигурации.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="briefInformation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Краткая информация о конфигурации.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="detailedInformation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Подробная информация о конфигурации.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="logo" type="ui:Picture" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Логотип конфигурации.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="copyright" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Авторские права на конфигурацию.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="vendorInformationAddress" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Адрес информации о поставщике конфигурации.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="configurationInformationAddress" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Адрес информации о конфигурации.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="objectAutonumerationMode" type="xen:ObjectAutonumerationMode"  default= "NotAutoFree" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Режим автонумерации объектов.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="mainModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="sessionModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль сеанса</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="startPageWorkingArea" type="tns:StartPageWorkingArea" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Рабочая область начальной страницы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="commandInterface" type="tns:CommandInterfaceFragment" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Командный интерфейс</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultRole" type="tns:MDObjReference" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основные роли.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultReportForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма отчета</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultReportSettingsForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма настроек отчета</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultReportVariantForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма варианта отчета</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="subsystem" type="tns:Subsystem" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Подсистемы мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="commonModule" type="tns:CommonModule" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список общих модулей мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="commonForm" type="tns:CommonForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список общих форм мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="commonTemplate" type="tns:CommonTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список общих макетов мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="sessionParam" type="tns:SessionParam" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список параметров сессии мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>            
+                    <xs:element name="exchangePlan" type="tns:ExchangePlan" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список планов обмена мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="eventSubscription" type="tns:EventSubscription" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список подписок на события мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="commonCommand" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список общих команд мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="commandGroup" type="tns:CommandGroup" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список групп команд мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="commonPicture" type="tns:CommonPicture" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список общих картинок мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="role" type="role:Rights" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список ролей мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="functionalOption" type="tns:FunctionalOption" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список функциональных опций мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="functionalOptionsParameter" type="tns:FunctionalOptionsParameter" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список параметров функциональных опций мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="WSReference" type="tns:WSReference" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список WS-Ссылок мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="constant" type="tns:Constant" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список констант мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="catalog" type="tns:Catalog" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список справочников мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="document" type="tns:Document" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список документов мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="documentNumerator" type="tns:DocumentNumerator" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список нумераторов мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="sequence" type="tns:Sequence" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список последовательностей мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="documentJournal" type="tns:DocumentJournal" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список журналов документов мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="informationRegister" type="tns:InformationRegister" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список регистров сведений мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="accumulationRegister" type="tns:AccumulationRegister" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список регистров накопления мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="enum" type="tns:Enum" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список перечислений мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="dataProcessor" type="tns:DataProcessor" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список обработок мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="requiredPermission" type="ma:RequiredPermission" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Требуемые разрешения мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="applicationURL" type="ma:MobileApplicationURL" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Навигационные ссылки мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="allowedIncomingShareRequestType" type="ma:AllowedIncomingShareRequestType" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Допустимые типы входящих запросов "Поделиться"</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="desktopCommandInterface" type="tns:CommandInterfaceFragment" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Командный интерфейс основного раздела</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="report" type="tns:Report" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список отчетов мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="DBNames" type="tns:DBNames" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Имена базы данных</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="FarRef" type="tns:FarRef" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Внешние ссылки</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+                <xs:attribute name="containerID" type="core:UUID" use="required">
+                    <xs:annotation>
+                        <xs:documentation>Идентификатор контейнера</xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+                <xs:attribute name="defaultLanguage" type="tns:MDObjReference" use="required">
+                    <xs:annotation>
+                        <xs:documentation>Основной язык конфигурации</xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+                <xs:attribute name="version" type="xs:string">
+                    <xs:annotation>
+                        <xs:documentation>Версия конфигурации</xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+              <xs:attribute name="platformVersion" type="xs:string">
+                <xs:annotation>
+                  <xs:documentation>Версия платформы</xs:documentation>
+                </xs:annotation>
+              </xs:attribute>
+              <xs:attribute name="scriptVariant" type="xen:ScriptVariant">
+                    <xs:annotation>
+                        <xs:documentation>Вариант встроенного языка</xs:documentation>
+                    </xs:annotation>
+              </xs:attribute>
+              <xs:attribute name="compatibilityMode" type="xs:string">
+                    <xs:annotation>
+                        <xs:documentation>Режим совместимости конфигурации</xs:documentation>
+                    </xs:annotation>
+              </xs:attribute>
+                <xs:attribute name="formatVersion" type="xs:decimal">
+                    <xs:annotation>
+                        <xs:documentation>Версия формата выгрузки</xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:simpleType name="MDObjReference">
+        <xs:annotation>
+            <xs:documentation>
+                Ссылка на объект метаданных. Аналог результата вызова метода ПолноеИмя.
+            </xs:documentation>
+        </xs:annotation>
+        <xs:restriction base="xs:Name" />
+    </xs:simpleType>
+
+    <xs:complexType name="MDTypedObj" abstract="true">
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="type" type="core:TypeDescription">
+                        <xs:annotation>
+                            <xs:documentation>Тип</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Constant">
+        <xs:annotation>
+            <xs:documentation>Константа мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDPropertyObj">
+                <xs:sequence>
+                    <xs:element name="valueManagerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера значения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Catalog">
+        <xs:annotation>
+            <xs:documentation>Справочник мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="managerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="objectModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="hierarchical" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Иерархический</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="hierarchyType" type="xen:HierarchyType" default= "HierarchyFoldersAndItems" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Вид иерархии</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="limitLevelCount" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ограничивать количество уровней</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="levelCount" type="xs:decimal" default= "2" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Количество уровней</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="foldersOnTop" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Группы сверху</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="owner" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список имен владельцев</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="subordinationUse" type="xen:SubordinationUse" default= "ToItems" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использование подчинения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="codeLength" type="xs:decimal" default= "9" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Длина кода</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="descriptionLength" type="xs:decimal" default= "25" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Длина наменования</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="codeType" type="xen:CatalogCodeType" default= "String" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Тип кода</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="codeAllowedLength" type="core:AllowedLength" default= "Variable" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Допустимая длина кода</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="codeSeries" type="xen:CatalogCodesSeries" default= "WholeCatalog" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Серии кодов</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="checkUnique" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Контроль уникальности</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="autoNumbering" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Автонумерация</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="standardAttribute" type="tns:StandardAttributeDescription" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Стандартные реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Характеристики-->
+                    <xs:element name="predefined" type="tns:ReferencePredefined" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Предопределенные</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="basedOn" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Вводится на основании</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fullTextSearch" type="xen:FullTextSearchUsing" default= "Use" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Определяет, использовать или нет данные этого объекта метаданных в полнотекстовом поиске</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fullTextSearchOnInputByString" type="lf:FullTextSearchOnInputByString"  default= "DontUse" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Указывает, нужно ли использовать полнотекстовый поиск при вводе по строке.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="command" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultPresentation" type="xen:CatalogMainPresentation" default= "AsDescription" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основное представление</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="quickChoice" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Быстрый выбор</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceMode" type="xen:ChoiceMode" default= "BothWays" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Способ выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="inputByString" type="xs:Name" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ввод по строке</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultFolderForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма группы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultChoiceForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма для выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultFolderChoiceForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма для выбора группы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultObjectForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultListForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="objectPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedObjectPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="listPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedListPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="predefinedDataUpdate" type="xen:PredefinedDataUpdate"  default= "Auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Обновление предопределенных данных</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceHistoryOnInput" type="lf:ChoiceHistoryOnInput"  default= "Auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ведение истории выбора при вводе</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                    <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="tabularSection" type="tns:TabularSection" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Табличные части</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="form" type="tns:MDForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="template" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Макеты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="dataLockFields" type="xs:Name" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Поля, по которым возможна блокировка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Document">
+        <xs:annotation>
+            <xs:documentation>Документ мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="managerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="objectModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="posting" type="xen:Posting" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Проведение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="realTimePosting" type="xen:RealTimePosting" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ОперативноеПроведение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--ПривилегированныйРежимПриОтменеПроведения-->
+                    <!--ПривилегированныйРежимПриПроведении-->
+                    <xs:element name="registerRecord" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Движения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="registerWritingOnPost" type="xen:RegisterRecordsWritingOnPost" default= "WriteSelected" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ЗаписьДвиженийПриПроведении</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="registerRecordsDeletion" type="xen:RegisterRecordsDeletion" default= "AutoDeleteOnUnpost" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>УдалениеДвижений</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="sequenceFilling" type="xen:SequenceFilling" default= "AutoFill" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ЗаполнениеПоследовательностей</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="numerator" type="tns:MDObjReference">
+                        <xs:annotation>
+                            <xs:documentation>Нумератор</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="numberLength" type="xs:decimal" default= "9" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Длина номера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="numberType" type="xen:DocumentNumberType" default= "String" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Тип номера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="numberAllowedLength" type="core:AllowedLength" default= "Variable" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Допустимая длина номера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="checkUnique" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Контроль уникальности</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="autoNumbering" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Автонумерация</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="numberPeriodicity" type="xen:DocumentNumberPeriodicity"  default= "Nonperiodical" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Периодичность номера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="standardAttribute" type="tns:StandardAttributeDescription" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Стандартные реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Характеристики-->
+                    <xs:element name="basedOn" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Вводится на основании</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fullTextSearch" type="xen:FullTextSearchUsing" default= "Use" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Определяет, использовать или нет данные этого объекта метаданных в полнотекстовом поиске</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fullTextSearchOnInputByString" type="lf:FullTextSearchOnInputByString"  default= "DontUse" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Указывает, нужно ли использовать полнотекстовый поиск при вводе по строке.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="command" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="inputByString" type="xs:Name" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ввод по строке</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultChoiceForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма для выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultObjectForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultListForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="objectPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedObjectPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="listPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedListPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceHistoryOnInput" type="lf:ChoiceHistoryOnInput"  default= "Auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ведение истории выбора при вводе</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                    <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="tabularSection" type="tns:TabularSection" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Табличные части</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="form" type="tns:MDForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="template" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Макеты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="dataLockFields" type="xs:Name" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Поля, по которым возможна блокировка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="DocumentNumerator">
+        <xs:annotation>
+            <xs:documentation>Нумератор</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="numberLength" type="xs:decimal" default= "9" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Длина номера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="numberType" type="xen:DocumentNumberType" default= "String" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Тип номера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="numberAllowedLength" type="core:AllowedLength" default= "Variable" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Допустимая длина номера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="checkUnique" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Контроль уникальности</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="numberPeriodicity" type="xen:DocumentNumberPeriodicity"  default= "Nonperiodical" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Периодичность номера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Sequence">
+        <xs:annotation>
+            <xs:documentation>Последовательность</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="recordSetModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль набора записей</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="registerRecord" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Движения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="document" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Документы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="moveBoundaryOnPosting" type="xen:MoveBoundaryOnPosting" default= "Move" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ПеремещениеГраницыПриПроведении </xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="dimension" type="tns:SequenceDimension" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Измерения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="DocumentJournal">
+        <xs:annotation>
+            <xs:documentation>Журнал документов мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="managerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="registeredDocument" type="tns:Document" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Регистрируемые документы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="column" type="tns:DocumentJournalColumn" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Графы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="standardAttribute" type="tns:StandardAttributeDescription" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Стандартные реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="command" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="listPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedListPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                    <xs:element name="form" type="tns:MDForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="template" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Макеты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="DocumentJournalColumn">
+        <xs:annotation>
+            <xs:documentation>Графа журнала документов мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="indexing" type="xen:Indexing" default= "DontIndex" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Индексирование</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="reference" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ссылки</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="MDPropertyObj" abstract="true">
+        <xs:complexContent>
+            <xs:extension base="tns:MDTypedObj">
+                <xs:sequence>
+                    <xs:element name="use" type="xen:AttributeUse" default= "ForItem" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использование</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="indexing" type="xen:Indexing" default= "DontIndex" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Индексирование</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fullTextSearch" type="xen:FullTextSearchUsing" default= "Use" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Определяет, использовать или нет данные этого объекта метаданных в полнотекстовом поиске</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="passwordMode" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Режим пароля</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="format" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формат</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="editFormat" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ФорматРедактирования</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Подсказка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="markNegatives" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Выделять отрицательные</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="minValue" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Максимальное значение (если не Value())</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="maxValue" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Минимальное значение (если не Value())</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="mask" type="xs:string" default= "" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Маска</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="multiLine" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Многострочный режим</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Расширенное редактирование-->
+                    <xs:element name="fillFromFillingValue" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Заполнять из данных заполнения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fillingValue" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Значение заполнения (если не Value())</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fillChecking" type="core:FillChecking" default= "DontCheck" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Проверка заполнения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceFoldersAndItems" type="ent:FoldersAndItemsUse" default= "Items" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Выбор групп и элементов</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceParamLinks" type="ma:ChoiceParameterLinks" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Связи параметров выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceParams" type="ma:ChoiceParameters" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Параметры выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="quickChoice" type="lf:BWAValue" default= "auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Быстрый выбор</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceForm" type="tns:MDObjReference">
+                        <xs:annotation>
+                            <xs:documentation>Форма выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="linkByType" type="ma:TypeLink" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Связь по типу</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceHistoryOnInput" type="lf:ChoiceHistoryOnInput"  default= "Auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ведение истории выбора при вводе</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Attribute">
+        <xs:annotation>
+            <xs:documentation>Реквизит мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDPropertyObj">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="TabularSection">
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="standardAttribute" type="tns:StandardAttributeDescription" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Стандартные реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="use" type="xen:AttributeUse" default= "ForItem" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использование</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Подсказка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fillChecking" type="core:FillChecking" default= "DontCheck" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Проверка заполнения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="InformationRegister">
+        <xs:annotation>
+            <xs:documentation>Регистр сведений</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="managerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="recordSetModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль набора записей</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="writeMode" type="xen:RegisterWriteMode" default="Independent"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>РежимЗаписи</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="periodicity" type="xen:InformationRegisterPeriodicity" default="Nonperiodical"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ПериодичностьРегистраСведений</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="mainFilterOnPeriod" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ОсновнойОтборПоПериоду</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="standardAttribute" type="tns:StandardAttributeDescription" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Стандартные реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fullTextSearch" type="xen:FullTextSearchUsing" default= "DontUse" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Определяет, использовать или нет данные этого объекта метаданных в полнотекстовом поиске</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="command" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultRecordForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма записи</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultListForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="recordPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление записи</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedRecordPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление записи</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="listPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedListPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                    <xs:element name="dimension" type="tns:InformationRegisterDimension" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Измерения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="resource" type="tns:Resource" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ресурсы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="form" type="tns:MDForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="template" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Макеты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="AccumulationRegister">
+        <xs:annotation>
+            <xs:documentation>Регистр накопления</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="managerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="recordSetModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль набора записей</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Агрегаты-->
+                    <xs:element name="registerType" type="xen:AccumulationRegisterType" default="Balance"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ВидРегистра</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="enableTotalsSplitting" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>РазрешитьРазделениеИтогов</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="standardAttribute" type="tns:StandardAttributeDescription" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Стандартные реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fullTextSearch" type="xen:FullTextSearchUsing" default= "DontUse" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Определяет, использовать или нет данные этого объекта метаданных в полнотекстовом поиске</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="command" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultListForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="listPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedListPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                    <xs:element name="dimension" type="tns:AccumulationRegisterDimension" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Измерения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="resource" type="tns:Resource" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ресурсы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="form" type="tns:MDForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="template" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Макеты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Resource">
+        <xs:annotation>
+            <xs:documentation>Ресурс мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDPropertyObj">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="InformationRegisterDimension">
+        <xs:annotation>
+            <xs:documentation>Измерение регистра сведений мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDPropertyObj">
+                <xs:sequence>
+                    <xs:element name="master" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ведущее</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="denyIncompleteValues" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ЗапрещатьНезаполненныеЗначения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="mainFilter" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ОсновнойОтбор</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="AccumulationRegisterDimension">
+        <xs:annotation>
+            <xs:documentation>Измерение регистра накоплений мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDPropertyObj">
+                <xs:sequence>
+                    <xs:element name="denyIncompleteValues" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ЗапрещатьНезаполненныеЗначения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useInTotals" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>ИспользованиеВИтогах</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="SequenceDimension">
+        <xs:annotation>
+            <xs:documentation>Измерение последовательности мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDTypedObj">
+                <xs:sequence>
+                    <xs:element name="registerRecord" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>СоответствиеДвижениям</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="document" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>СоответствиеДокументам</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="EnumValue">
+        <xs:annotation>
+            <xs:documentation>Значение перечисления мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Enum">
+        <xs:annotation>
+            <xs:documentation>Перечисление мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="managerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--
+                    <xs:element name="standardAttribute" type="tns:StandardAttributeDescription" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Стандартные реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    -->
+                    <!--Характеристики-->
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="command" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="quickChoice" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Быстрый выбор</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceMode" type="xen:ChoiceMode" default= "BothWays" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Способ выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultChoiceForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма для выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultListForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="listPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedListPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceHistoryOnInput" type="lf:ChoiceHistoryOnInput"  default= "Auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ведение истории выбора при вводе</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="value" type="tns:EnumValue" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Значения перечисления</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="form" type="tns:MDForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="template" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Макеты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="DataProcessor">
+        <xs:annotation>
+            <xs:documentation>Обработка мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="managerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="objectModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="command" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+
+                    <xs:element name="defaultForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                    <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="tabularSection" type="tns:TabularSection" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Табличные части</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="form" type="tns:MDForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="template" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Макеты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Report">
+        <xs:annotation>
+            <xs:documentation>Отчет мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="managerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="objectModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="mainDataCompositionSchema" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная схема компоновки данных</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultSettingsForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма настроек</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultVariantForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма варианта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="variantsStorage" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Хранилище вариантов</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="settingsStorage" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Хранилище настроек</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                    <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="tabularSection" type="tns:TabularSection" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Табличные части</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="form" type="tns:MDForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="template" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Макеты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="command" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="Subsystem">
+        <xs:annotation>
+            <xs:documentation>Подсистема мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                    <xs:element name="includeInCommandInterface" type="xs:boolean"  default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Включать в командный интерфейс</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="commandInterface" type="tns:CommandInterfaceFragment" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Командный интерфейс</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="picture" type="ui:Picture" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Картинка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="content" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Состав</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="subsystem" type="tns:Subsystem" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Подсистемы мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="CommonModule">
+        <xs:annotation>
+            <xs:documentation>Общий модуль мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="clientModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль на клиенте</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="serverModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль на сервере</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="global" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Глобальный</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="serverCall" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Вызов сервера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="returnValuesReuse" type="xen:ReturnValuesReuse" default= "DontUse" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Повторное использование возвращаемых значений</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="MDForm">
+        <xs:annotation>
+            <xs:documentation>Форма мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="form" type="form:MobileForm" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Форма</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="CommonForm">
+        <xs:annotation>
+            <xs:documentation>Общая форма мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDForm">
+                <xs:sequence>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="MDTemplate">
+        <xs:annotation>
+            <xs:documentation>Макет мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:choice minOccurs="0" maxOccurs="1" >
+                        <xs:annotation>
+                            <xs:documentation>Макет</xs:documentation>
+                        </xs:annotation>
+                        <xs:element name="binaryTemplate" type="xs:base64Binary" />
+                        <xs:element name="tableTemplate" type="mxl:SpreadsheetDocument" />
+                        <xs:element name="dcsTemplate" type="dcssm:DataCompositionSchema" />
+                        <xs:element name="addInTemplate" type="tns:AddInTemplate" />
+                    </xs:choice>
+                    <xs:element name="templateType" type="xen:TemplateType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Тип макета</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="AddInTemplate">
+        <xs:annotation>
+            <xs:documentation>Макет внешней компоненты для мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+        </xs:sequence>
+        <xs:attribute name="uniqueName" type="xs:string" use="required">
+                <xs:annotation>
+                    <xs:documentation>Уникальное имя компоненты</xs:documentation>
+                </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="digest" type="xs:string" use="required">
+                <xs:annotation>
+                    <xs:documentation>Дайджест внешней компоненты (MD5 Хеш)</xs:documentation>
+                </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+        
+    <xs:complexType name="CommonTemplate">
+        <xs:annotation>
+            <xs:documentation>Общий макет мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDTemplate">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="StandardAttributeDescription">
+        <xs:annotation>
+            <xs:documentation>Перечень свойств для описания одного стандартного реквизита объекта метаданных, например, кода, наименования и др</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="synonym" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Синонимы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="comment" type="xs:string" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Комментарий </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="passwordMode" type="xs:boolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим пароля</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="format" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Формат</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="editFormat" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ФорматРедактирования</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="markNegatives" type="xs:boolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Выделять отрицательные</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальное значение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальное значение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="mask" type="xs:string" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Маска</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="multiLine" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Многострочный режим</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--РасширенноеРедактирование (ExtendedEdit)-->
+            <xs:element name="fillFromFillingValue" type="xs:boolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Заполнять из данных заполнения</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="fillingValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Значение заполнения (если не Value())</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="fillChecking" type="core:FillChecking" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Проверка заполнения</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceParamLinks" type="ma:ChoiceParameterLinks" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Связи параметров выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceParams" type="ma:ChoiceParameters" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Параметры выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="quickChoice" type="lf:BWAValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Быстрый выбор</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceForm" type="tns:MDObjReference" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Форма выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="linkByType" type="ma:TypeLink" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Связь по типу</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="ExchangePlan">
+        <xs:annotation>
+            <xs:documentation>План обмена мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="managerModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль менеджера</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="objectModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="content" type="tns:ExchangePlanContentItem" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Состав плана обмена</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--РаспределеннаяИнформационнаяБаза-->
+                    <xs:element name="codeLength" type="xs:decimal" default= "9" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Длина кода</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="descriptionLength" type="xs:decimal" default= "25" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Длина наменования</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="codeAllowedLength" type="core:AllowedLength" default= "Variable" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Допустимая длина кода</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="standardAttribute" type="tns:StandardAttributeDescription" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Стандартные реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Характеристики-->
+                    <xs:element name="basedOn" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Вводится на основании</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fullTextSearch" type="xen:FullTextSearchUsing" default= "Use" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Определяет, использовать или нет данные этого объекта метаданных в полнотекстовом поиске</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="fullTextSearchOnInputByString" type="lf:FullTextSearchOnInputByString"  default= "DontUse" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Указывает, нужно ли использовать полнотекстовый поиск при вводе по строке.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="useStandardCommands" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использовать стандартные команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="command" type="tns:CustomCommand" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Команды</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultPresentation" type="xen:DataExchangeMainPresentation" default= "AsDescription" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основное представление</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="quickChoice" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Быстрый выбор</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceMode" type="xen:ChoiceMode" default= "BothWays" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Способ выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="inputByString" type="xs:Name" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ввод по строке</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultObjectForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultListForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="defaultChoiceForm" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная форма для выбора</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="explanation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Пояснение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="objectPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedObjectPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление объекта</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="listPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="extendedListPresentation" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Расширенное представление списка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="choiceHistoryOnInput" type="lf:ChoiceHistoryOnInput"  default= "Auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Ведение истории выбора при вводе</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                    <xs:element name="thisNode" type="core:UUID">
+                        <xs:annotation>
+                            <xs:documentation>Идентификатор предопределенного значения адресата этого узла</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Реквизиты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="tabularSection" type="tns:TabularSection" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Табличные части</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="form" type="tns:MDForm" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Формы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="template" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Макеты</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="dataLockFields" type="xs:Name" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Поля, по которым возможна блокировка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="ExchangePlanContentItem">
+        <xs:annotation>
+            <xs:documentation>Элемент состава плана обмена</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="autoRecord" type="xep:AutoChangeRecord" default= "Allow"  minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>АвтоРегистрация </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="metadata" type="tns:MDObjReference" use="required">
+            <xs:annotation>
+                <xs:documentation>Метаданное</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    
+    <xs:complexType name="CustomCommand">
+        <xs:annotation>
+            <xs:documentation>Общая команда мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="clientModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль на клиенте</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="serverModule" type="bsl:BSLModuleImage" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Модуль на сервере</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="group" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Группа</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="parameterType" type="core:TypeDescription">
+                        <xs:annotation>
+                            <xs:documentation>Тип параметра</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="parameterUsageMode" type="cmi:CommandParameterUseMode" default= "Single" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Режим использования параметра</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="modifiesData" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Изменяет данные</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="representation" type="lf:ButtonRepresentation" default= "Auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Отображение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="picture" type="ui:Picture" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Картинка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Подсказка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="MSIB" type="lf:OnMainServerUnavalableBehavior" default="Auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Поведение при недоступности основного сервера </xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Сочетание клавиш -->
+                    <!--Включать в справку-->
+                    <!--Справка-->
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="CommandGroup">
+        <xs:annotation>
+            <xs:documentation>Группа команд мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="category" type="tns:CommandGroupCategory" default= "NavigationPanel" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Категория</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="representation" type="lf:ButtonRepresentation" default= "Auto" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Отображение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="picture" type="ui:Picture" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Картинка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Подсказка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="CommonPicture">
+        <xs:annotation>
+            <xs:documentation>Общая картинка мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="picture" type="xs:base64Binary">
+                        <xs:annotation>
+                            <xs:documentation>Картинка</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="transparent" type="xs:boolean" default= "false"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Прозрачность</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="transparentX" type="xs:decimal" default= "-1"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>X координата точки прозрачности</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="transparentY" type="xs:decimal" default= "-1"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Y координата точки прозрачности</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="Role">
+        <xs:annotation>
+            <xs:documentation>Роль мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="rights" type="tns:MDObjReference" >
+                        <xs:annotation>
+                            <xs:documentation>Права</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="FunctionalOption">
+        <xs:annotation>
+            <xs:documentation>Функциональная опция мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="location" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Хранение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="content" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Состав</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="FunctionalOptionsParameter">
+        <xs:annotation>
+            <xs:documentation>Параметр функциональной опции мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="use" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Использование параметра ФО</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <xs:complexType name="WSReference">
+        <xs:annotation>
+            <xs:documentation>WS Ссылка мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <!--type="wsdl:tDefinitions" не указано по тех. причинам-->
+                    <xs:element name="WSDefinition">
+                        <xs:annotation>
+                            <xs:documentation>WSОпределение</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+                <xs:attribute name="locationURL" type="xs:string" use="required">
+                    <xs:annotation>
+                        <xs:documentation>Уникальный идентификатор ресурса </xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="EventSubscription">
+        <xs:annotation>
+            <xs:documentation>Подписки на события мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="source" type="core:TypeDescription">
+                        <xs:annotation>
+                            <xs:documentation>Источник</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+                <xs:attribute name="event" type="xs:string" use="required">
+                    <xs:annotation>
+                        <xs:documentation>Событие</xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+                <xs:attribute name="handler" type="xs:string" use="required">
+                    <xs:annotation>
+                        <xs:documentation>Обработчик</xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+                <xs:attribute name="handlerModule" type="xs:string" use="required">
+                    <xs:annotation>
+                        <xs:documentation>Модуль обработчика</xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="SessionParam">
+        <xs:annotation>
+            <xs:documentation>Параметр сеанса мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDTypedObj">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Language">
+        <xs:annotation>
+            <xs:documentation>Язык конфигурации</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:attribute name="languageCode" type="xs:string" use="required">
+                    <xs:annotation>
+                        <xs:documentation>Код языка</xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="DBName">
+        <xs:sequence>
+        </xs:sequence>
+        <xs:attribute name="uuid" type="core:UUID"/>
+        <xs:attribute name="prefix" type="xs:string"/>
+        <xs:attribute name="code" type="xs:decimal"/>
+    </xs:complexType>
+
+    <xs:complexType name="DBNames">
+        <xs:annotation>
+            <xs:documentation>Имена базы данных</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="DBName" type="tns:DBName" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="maxCode" type="xs:decimal" use="required">
+            <xs:annotation>
+                <xs:documentation>Максимальный код таблицы</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="FarRef">
+        <xs:annotation>
+            <xs:documentation>Внешняя ссылка</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="StartPageWorkingAreaColumnItem">
+        <xs:sequence>
+            <xs:element name="form" type="tns:MDObjReference"/>
+            <xs:element name="height" type="xs:decimal"/>
+            <xs:element name="visibility" type="form:AdjustableBoolean"/>
+        </xs:sequence>
+    </xs:complexType>
+
+   
+    <xs:complexType name="StartPageWorkingArea">
+        <xs:sequence>
+            <xs:element name="workingAreaTemplate" type="xep:WorkingAreaTemplate"/>
+            <xs:choice>
+                <xs:element name="column" type="tns:StartPageWorkingAreaColumnItem" minOccurs="0" maxOccurs="unbounded"/>
+                <xs:sequence>
+                    <xs:element name="leftColumn" type="tns:StartPageWorkingAreaColumnItem" minOccurs="0" maxOccurs="unbounded"/>
+                    <xs:element name="rightColumn" type="tns:StartPageWorkingAreaColumnItem" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:choice>
+            <xs:element name="commandInterfaceDisplays" type="xep:MACommandInterfaceDisplays"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--Фрагменты командного интерфейса-->
+    
+    <xs:complexType name="CMISubsystemVisibilityItem">
+        <xs:sequence>
+            <xs:element name="Visibility2" type="form:AdjustableBoolean"/> <!-- Visibility2 что бы сохранить совместимость на МП--> 
+        </xs:sequence>
+        <xs:attribute name="name" type="tns:MDObjReference"/>
+    </xs:complexType>
+
+    <xs:complexType name="CMICommandVisibilityItem">
+        <xs:sequence>
+            <xs:element name="Visibility2" type="form:AdjustableBoolean"/> <!-- Visibility2 что бы сохранить совместимость на МП--> 
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:string"/>
+    </xs:complexType>
+
+
+
+    <xs:complexType name="CMDPalcement">
+        <xs:sequence>
+            <xs:element name="Command" type="xs:string"/>
+            <xs:element name="CommandGroup" type="xs:string"/>
+            <xs:element name="Palcement" type="xep:CommandPlacement"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="CMDOrder">
+        <xs:sequence>
+            <xs:element name="CommandGroup" type="xs:string"/>
+            <xs:element name="Command" type="xs:string"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="CommandInterfaceFragment">
+        <xs:sequence>
+            <xs:element name="CommandVisibility" type="tns:CMICommandVisibilityItem" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="CommandPlacement" type="tns:CMDPalcement" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="CommandOrder" type="tns:CMDOrder" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="SubsystemsVisibility" type="tns:CMISubsystemVisibilityItem" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="SubsystemsOrder" type="tns:MDObjReference" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="ManualOrderEditGroup" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!--предопределенные справочника-->
+
+    <xs:complexType name="ReferencePredefined">
+        <xs:sequence>
+            <xs:element name="isFolder" type="xs:boolean" default= "false" minOccurs="0"/>
+            <xs:element name="code" type="xs:anyType"/>
+            <xs:element name="description" type="xs:string"/>
+            <xs:element name="content" type="tns:ReferencePredefined" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:string"/>
+        <xs:attribute name="id" type="core:UUID"/>
+    </xs:complexType>
+    
+    <xs:simpleType name="DesTimeDBObjRefType">
+        <xs:annotation>
+            <xs:documentation>
+                Ссылка на предопределенное значение.
+            </xs:documentation>
+        </xs:annotation>
+        <xs:restriction base="tns:MDObjReference" />
+    </xs:simpleType>
+
+    <xs:complexType name="LogFormChoiceListDesTimeValue">
+        <xs:sequence>
+            <xs:element name="Presentation" type="core:LocalStringType"/>
+            <xs:element name="Value" type="xs:anyType"/>
+            <xs:element name="Picture" type="ui:Picture" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:simpleType name="CommandGroupCategory">
+        <xs:annotation>
+            <xs:documentation>Перечисление "ЗаполнениеПоследовательностей"</xs:documentation>
+        </xs:annotation>
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="NavigationPanel" />
+            <xs:enumeration value="ActionsPanel" />
+            <xs:enumeration value="FormNavigationPanel" />
+            <xs:enumeration value="FormCommandBar" />
+        </xs:restriction>
+    </xs:simpleType>
+  
+    <xs:complexType name="BaseMobileApp">
+        <xs:complexContent>
+            <xs:extension base="tns:MDBaseObj">
+                <xs:sequence>
+                    <xs:element name="language" type="tns:Language" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Список языков мобильного приложения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                  <xs:element name="requiredPermission" type="ma:RequiredPermission" maxOccurs="unbounded"  minOccurs="0">
+                    <xs:annotation>
+                      <xs:documentation>Требуемые разрешения мобильного приложения</xs:documentation>
+                    </xs:annotation>
+                  </xs:element>
+                  <xs:element name="requiredPlatformModule" type="tns:RequiredPlatformModule" maxOccurs="unbounded"  minOccurs="0">
+                      <xs:annotation>
+                          <xs:documentation>Используемые модули мобильного приложения</xs:documentation>
+                      </xs:annotation>
+                  </xs:element>
+                  <xs:element name="requiredFunctionality" type="ma:UsedFunctionalityFlag" maxOccurs="unbounded"  minOccurs="0">
+                      <xs:annotation>
+                          <xs:documentation>Используемая функциональность мобильного приложения</xs:documentation>
+                      </xs:annotation>
+                  </xs:element>
+                  <xs:element name="mdtemplate" type="tns:MDTemplate" maxOccurs="unbounded"  minOccurs="0">
+                    <xs:annotation>
+                      <xs:documentation>Макеты внешних компонент</xs:documentation>
+                    </xs:annotation>
+                  </xs:element>
+                  <xs:element name="applicationURL" type="ma:MobileApplicationURL" maxOccurs="unbounded"  minOccurs="0">
+                    <xs:annotation>
+                      <xs:documentation>Навигационные ссылки мобильного приложения</xs:documentation>
+                    </xs:annotation>
+                  </xs:element>
+                    <xs:element name="allowedIncomingShareRequestType" type="ma:AllowedIncomingShareRequestType" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Допустимые типы входящих запросов "Поделиться"</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+                <xs:attribute name="defaultLanguage" type="tns:MDObjReference" use="required">
+                  <xs:annotation>
+                    <xs:documentation>Основной язык конфигурации</xs:documentation>
+                  </xs:annotation>
+                </xs:attribute>
+                <xs:attribute name="version" type="xs:string">
+                  <xs:annotation>
+                    <xs:documentation>Версия конфигурации</xs:documentation>
+                  </xs:annotation>
+                </xs:attribute>
+                <xs:attribute name="compatibilityMode" type="xs:string">
+                  <xs:annotation>
+                    <xs:documentation>Режим совместимости конфигурации</xs:documentation>
+                  </xs:annotation>
+                </xs:attribute>
+                <xs:attribute name="formatVersion" type="xs:decimal">
+                  <xs:annotation>
+                    <xs:documentation>Версия формата выгрузки</xs:documentation>
+                  </xs:annotation>
+                </xs:attribute>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+  
+    <xs:complexType name="MobileClient">
+      <xs:annotation>
+          <xs:documentation>Мобильный клиент</xs:documentation>
+      </xs:annotation>
+      <xs:complexContent>
+          <xs:extension base="tns:BaseMobileApp">
+              <xs:sequence>
+                <xs:element name="DSAKey" type="xs:string" minOccurs="0">
+                  <xs:annotation>
+                    <xs:documentation>Открытый ключ</xs:documentation>
+                  </xs:annotation>
+                </xs:element>
+              </xs:sequence>
+          </xs:extension>
+      </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="MobileAppInfo">
+        <xs:annotation>
+            <xs:documentation>Информация о мобильном приложении</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:BaseMobileApp">
+                <xs:attribute name="lastUpdateUUID" type="xs:string">
+                  <xs:annotation>
+                    <xs:documentation>Идентификатор последнего обновления</xs:documentation>
+                  </xs:annotation>
+                </xs:attribute>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+  
+    <xs:simpleType name="MobileApplicationPlatformModule">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="ads"/>
+            <xs:enumeration value="inappbilling"/>
+			<xs:enumeration value="videoconferences"/>
+            <xs:enumeration value="NFC"/>
+            <xs:enumeration value="recogn"/>
+			<xs:enumeration value="speechtotext"/>
+            <xs:enumeration value="fileshare"/>
+		</xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="RequiredPlatformModule">
+      <xs:sequence>
+        <xs:element name="platformModule" type="tns:MobileApplicationPlatformModule"/>
+        <xs:element name="use" type="xs:boolean"/>
+      </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

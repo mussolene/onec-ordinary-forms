@@ -14,12 +14,13 @@ from onec_ordinary_forms.platform_model import (
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIGURATION_XSD = ROOT / "src" / "onec_ordinary_forms" / "schemas" / "Configuration.xsd"
+SCHEMAS_ROOT = ROOT / "src" / "onec_ordinary_forms" / "schemas"
 
 
 def test_platform_model_matches_configuration_schema_appinfo() -> None:
     root = ET.parse(CONFIGURATION_XSD).getroot()
     resources = {
-        (node.get("source"), node.get("schema"), node.get("namespace"))
+        (node.get("source"), node.get("schema"), node.get("namespace"), node.get("path"), node.get("sha256"))
         for node in root.findall(".//PlatformSchemaResources/Resource")
     }
     serializers = {
@@ -27,7 +28,7 @@ def test_platform_model_matches_configuration_schema_appinfo() -> None:
         for node in root.findall(".//PlatformSerializers/Serializer")
     }
 
-    assert resources == {(item.source, item.schema, item.namespace) for item in PLATFORM_SCHEMA_RESOURCES}
+    assert resources == {(item.source, item.schema, item.namespace, item.path, item.sha256) for item in PLATFORM_SCHEMA_RESOURCES}
     assert serializers == {(item.name, item.direction, item.role) for item in PLATFORM_SERIALIZERS}
 
 
@@ -35,6 +36,23 @@ def test_configuration_schema_is_valid_xsd() -> None:
     from lxml import etree
 
     etree.XMLSchema(etree.parse(str(CONFIGURATION_XSD)))
+
+
+def test_configuration_schema_vendors_full_platform_xsd_set() -> None:
+    root = ET.parse(CONFIGURATION_XSD).getroot()
+    resources = root.findall(".//PlatformSchemaResources/Resource")
+    assert len(resources) == 81
+
+    namespaces = {node.get("namespace") for node in resources}
+    assert "http://v8.1c.ru/8.2/managed-application/logform" in namespaces
+    assert "http://v8.1c.ru/8.1/data/core" in namespaces
+    assert "http://v8.1c.ru/8.1/data/ui" in namespaces
+    assert "http://v8.1c.ru/8.3/mobile-application/form" in namespaces
+
+    for node in resources:
+        path = SCHEMAS_ROOT / str(node.get("path"))
+        assert path.is_file(), path
+        assert ET.parse(path).getroot().tag.rsplit("}", 1)[-1] == "schema"
 
 
 def test_platform_model_contains_confirmed_value_and_metadata_vocabulary() -> None:

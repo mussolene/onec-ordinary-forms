@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://v8.1c.ru/8.1/data-composition-system/result" xmlns:dcsct="http://v8.1c.ru/8.1/data-composition-system/composition-template" targetNamespace="http://v8.1c.ru/8.1/data-composition-system/result" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/composition-template" schemaLocation="compositionTemplate.xsd"/>
+	<xs:element name="dataCompositionResultItem">
+		<xs:annotation>
+			<xs:documentation>Элемент результата компоновки данных</xs:documentation>
+		</xs:annotation>
+	</xs:element>
+	<xs:complexType name="DataCompositionResultItem">
+		<xs:annotation>
+			<xs:documentation>Элемент результата компоновки данных</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="itemType" type="tns:DataCompositionResultItemType">
+				<xs:annotation>
+					<xs:documentation>Тип элемента</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="templateName" type="xs:string" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Имя макета</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="template" type="dcsct:TemplateDefinition" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Макет</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="parameterValue" type="dcsct:ParameterValue" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Значение параметра</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="nestedItemLayout" type="tns:DataCompositionResultNestedItemsLayout" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Расположение вложенных элементов</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="outputPercent" type="xs:decimal" maxOccurs="1" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Процент выведенного результата</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:simpleType name="DataCompositionResultItemType">
+		<xs:annotation>
+			<xs:documentation>Тип элемента результата компоновки данных</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="Begin"/>
+			<xs:enumeration value="End"/>
+			<xs:enumeration value="BeginAndEnd"/>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:simpleType name="DataCompositionResultNestedItemsLayout">
+		<xs:annotation>
+			<xs:documentation>Тип расположения вложенных элементов результата</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="Vertically"/>
+			<xs:enumeration value="Horizontally"/>
+		</xs:restriction>
+	</xs:simpleType>
+</xs:schema>

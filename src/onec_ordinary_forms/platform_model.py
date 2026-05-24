@@ -17,6 +17,8 @@ class PlatformSchemaResource:
     source: str
     schema: str
     namespace: str
+    path: str
+    sha256: str
 
 
 @dataclass(frozen=True)
@@ -45,7 +47,13 @@ _SCHEMA_ROOT = configuration_schema_root()
 
 
 PLATFORM_SCHEMA_RESOURCES = tuple(
-    PlatformSchemaResource(str(node.get("source")), str(node.get("schema")), str(node.get("namespace")))
+    PlatformSchemaResource(
+        str(node.get("source")),
+        str(node.get("schema")),
+        str(node.get("namespace")),
+        str(node.get("path")),
+        str(node.get("sha256")),
+    )
     for node in _SCHEMA_ROOT.findall(".//PlatformSchemaResources/Resource")
 )
 

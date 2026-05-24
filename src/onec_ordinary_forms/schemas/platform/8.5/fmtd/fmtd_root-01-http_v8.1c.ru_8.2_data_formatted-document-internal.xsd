@@ -1,0 +1,646 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:ui="http://v8.1c.ru/8.1/data/ui"
+           xmlns:v81="http://v8.1c.ru/8.1/data/core"
+           xmlns:tns="http://v8.1c.ru/8.2/data/formatted-document-internal"
+           targetNamespace="http://v8.1c.ru/8.2/data/formatted-document-internal"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data/ui" schemaLocation="../../../xdto/src/res/uiobjects.xsd"/>
+
+    <!-- Горизонтальное выравнивание -->
+    <xs:simpleType name="TextAlign">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Inherit" />
+            <xs:enumeration value="Left" />
+            <xs:enumeration value="Center" />
+            <xs:enumeration value="Right" />
+            <xs:enumeration value="Justify" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <!-- Жирность шрифта -->
+    <xs:simpleType name="FontWeight">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Inherit" />
+            <xs:enumeration value="Normal" />
+            <xs:enumeration value="Bold" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <!-- Стиль шрифта -->
+    <xs:simpleType name="FontStyle">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Inherit" />
+            <xs:enumeration value="Normal" />
+            <xs:enumeration value="Italic" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <!-- Оформление текста -->
+    <xs:simpleType name="TextDecoration">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Inherit" />
+            <xs:enumeration value="None" />
+            <xs:enumeration value="Underline" />
+            <xs:enumeration value="LineThrough" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Тип файла -->
+    <xs:simpleType name="FormattedDocumentFileType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="TXT" />
+            <xs:enumeration value="ANSITXT" />
+            <xs:enumeration value="HTML" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Дельта -->
+    <xs:complexType name="FormattedDocumentDelta">
+        <xs:sequence>
+            <!-- m_delta по умолчанию FDOMDelta() -->
+            <xs:element name="delta" type="tns:FDOMDelta"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Закладка -->
+    <xs:complexType name="FormattedDocumentBookmark">
+    <xs:sequence>
+    </xs:sequence>
+    <!-- m_partId по умолчанию kFormattedDocumentMainPartId -->
+    <xs:attribute name="part" type="xs:decimal" />
+    <!-- m_paragraphId по умолчанию 0 -->
+    <xs:attribute name="prgrph" type="xs:decimal" />
+    <!-- m_pos по умолчанию 0 -->
+    <xs:attribute name="pos" type="xs:decimal" />
+    </xs:complexType>
+
+    <!-- Область -->
+    <xs:complexType name="FormattedDocumentRange">
+        <xs:sequence>
+            <xs:element minOccurs="1" maxOccurs="1" name="beginbmk" type="tns:FormattedDocumentBookmark" />
+            <xs:element minOccurs="1" maxOccurs="1" name="endbmk" type="tns:FormattedDocumentBookmark" />
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Позиция в документе -->
+    <xs:complexType name="FDOMAbsPos">
+        <xs:sequence>
+            <xs:element name="posArr" type="xs:integer"  minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Текстовая позиция в документе -->
+    <xs:complexType name="FDOMAbsTextPos">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMAbsPos">
+                <xs:attribute name="offset" type="xs:integer"/>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Границы участка в документе -->
+    <xs:complexType name="FDOMAbsRange">
+        <xs:sequence>
+            <xs:element minOccurs="1" maxOccurs="1" name="startPos" type="tns:FDOMAbsPos" />
+            <xs:element minOccurs="1" maxOccurs="1" name="endPos" type="tns:FDOMAbsPos" />
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMCommand">
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMSetPicture">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                    <xs:element name="picture" type="tns:FDOMPicture"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMAddClass">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="cls" type="tns:FDOMClass" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMAddClassName">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+                <xs:attribute name="className" type="xs:string" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+        
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMAddStyle">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                    <xs:element name="styl" type="tns:FDOMStyle" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMAppendChild">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="parentPos" type="tns:FDOMAbsPos" />
+                    <xs:element name="node" type="tns:FDOMNode" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMInsertChildAt">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="parentPos" type="tns:FDOMAbsPos" />
+                    <xs:element name="node" type="tns:FDOMNode" />
+                </xs:sequence>
+                <xs:attribute name="index" type="xs:integer" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMInsertSiblingAfter">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="sibling" type="tns:FDOMNode" />
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMInsertSiblingBefore">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="sibling" type="tns:FDOMNode" />
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMInsertStringInText">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsTextPos" />
+                </xs:sequence>
+                <xs:attribute name="str" type="xs:string" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMMergeSubTree">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMMergeTextNode">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMMoveAppendChild">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="parentPos" type="tns:FDOMAbsPos" />
+                    <xs:element name="nodePos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMMoveInsertChildAt">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="parentPos" type="tns:FDOMAbsPos" />
+                    <xs:element name="nodePos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+                <xs:attribute name="index" type="xs:integer" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMMoveInsertSiblingAfter">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="siblingPos" type="tns:FDOMAbsPos" />
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMMoveInsertSiblingBefore">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="siblingPos" type="tns:FDOMAbsPos" />
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMRemoveClassName">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+                <xs:attribute name="className" type="xs:string" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMRemoveNode">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMRemoveStringFromText">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsTextPos" />
+                </xs:sequence>
+                <xs:attribute name="count" type="xs:integer" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMSetImageSize">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+                <xs:attribute name="width" type="xs:integer" />
+                <xs:attribute name="height" type="xs:integer" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMSetLink">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                    <xs:element name="link" type="xs:string" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMSetStyle">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                    <xs:element name="styl" type="tns:FDOMStyle" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMSetTextContent">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+                <xs:attribute name="content" type="xs:string" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMSplitSubTree">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+                <xs:attribute name="offset" type="xs:integer" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMSplitTextNode">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMCommand">
+                <xs:sequence>
+                    <xs:element name="pos" type="tns:FDOMAbsPos" />
+                </xs:sequence>
+                <xs:attribute name="offset" type="xs:integer" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMDelta">
+        <xs:sequence>
+            <!-- m_commands -->
+            <xs:element name="commands" type="tns:FDOMCommand" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMPicture">
+        <!-- url картинки -->
+        <xs:attribute name="pictureURL" type="xs:string" />
+    </xs:complexType>
+
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMClass">
+        <!-- m_className -->
+        <xs:attribute name="name" type="xs:string" />
+    </xs:complexType>
+
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMFontClass">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMClass">
+                <xs:sequence>
+                    <!-- m_style TODO: 20001542:Q: проверить корректность-->
+                    <xs:element name="styl" type="tns:FDOMStyle" minOccurs="0"/>
+                    <!-- m_font -->
+                    <xs:element name="font" type="ui:Font" minOccurs="0"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Оформление текста -->
+    <xs:complexType name="FDOMColorClass">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMClass">
+                <xs:sequence>
+                    <!-- m_style TODO: 20001542:Q: проверить корректность-->
+                    <xs:element name="styl" type="tns:FDOMStyle" minOccurs="0"/>
+                    <!-- m_color -->
+                    <xs:element name="clr" type="ui:Color" minOccurs="0"/>
+                    <!-- m_isBackground-->
+                    <xs:element name="isBk" type="xs:boolean"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+            
+    <!-- Оформление элементов -->
+    <xs:complexType name="FDOMStyle">
+        <xs:sequence>
+            <!-- m_classNameList - список стилевых классов -->
+            <xs:element name="clsNmLst" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+            <!-- m_color по умолчанию пусто -->
+            <xs:element name="clr" type="xs:string" minOccurs="0" />            
+            <!-- m_backgroundColor по умолчанию пусто -->    
+            <xs:element name="bkClr" type="xs:string" minOccurs="0" />
+            <!-- m_textAlign по умолчанию пусто -->
+            <xs:element name="txtAlign" type="xs:string" minOccurs="0" />
+            <!-- m_txtIndent по умолчанию пусто -->
+            <xs:element name="txtIndent" type="xs:string" minOccurs="0" />
+            <!-- m_lineHeight по умолчанию пусто -->
+            <xs:element name="lineHeight" type="xs:string" minOccurs="0" />
+            <!-- m_fontFamily по умолчанию пусто -->
+            <xs:element name="fontFamily" type="xs:string" minOccurs="0" />
+            <!-- m_fontSize по умолчанию пусто -->
+            <xs:element name="fontSize" type="xs:string" minOccurs="0" />
+            <!-- m_fontScale по умолчанию пусто -->
+            <xs:element name="fontScale" type="xs:decimal" minOccurs="0" />
+            <!-- m_fontWeight по умолчанию пусто -->
+            <xs:element name="fontWeight" type="xs:string" minOccurs="0" />
+            <!-- m_fontStyle по умолчанию пусто -->
+            <xs:element name="fontStyle" type="xs:string" minOccurs="0" />
+            <!-- m_textDecorations - список оформления текста -->
+            <xs:element name="textDecorations" type="tns:TextDecoration" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Элемент содержимого документа -->
+    <xs:complexType name="FDOMNode">
+    </xs:complexType>
+
+    <!-- Элемент содержимого документа - "Мягкий" перевод строки -->
+    <xs:complexType name="FDOMBreak">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMNode">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Элемент содержимого документа - текст с одинаковым оформлением -->
+    <xs:complexType name="FDOMText">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMNode">
+                <xs:sequence>
+                    <xs:element name="textContent" type="xs:string"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Поддерево документа. Внутреннее представление. -->
+    <xs:complexType name="FDOMElement">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMNode">
+                <xs:sequence>
+                    <xs:element name="styl" type="tns:FDOMStyle" minOccurs="0"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Элемент содержимого документа - картинка -->
+    <xs:complexType name="FDOMImage">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMElement">
+                <xs:sequence>
+                  <!-- m_picture по умолчанию FDOMPicture() -->
+                  <xs:element name="picture" type="tns:FDOMPicture"/>
+                  <!-- m_width по умолчанию kFormattedDocumentFDOMImageDefWidth -->
+                  <xs:element name="width" type="xs:decimal" minOccurs="0" />
+                  <!-- m_height по умолчанию kFormattedDocumentFDOMImageDefHeight -->
+                  <xs:element name="height" type="xs:decimal" minOccurs="0" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Поддерево документа. Внутреннее представление. -->
+    <xs:complexType name="FDOMSubTree">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMElement">
+                <xs:sequence>
+                    <xs:element name="childNodes" type="tns:FDOMNode" minOccurs="0" maxOccurs="unbounded" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Тело документа. Внутреннее представление. -->
+    <xs:complexType name="FDOMBody">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMSubTree">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Блок со стилем. Внутреннее представление. -->
+    <xs:complexType name="FDOMFormattedBlock">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMSubTree">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    
+    <!-- Ссылка. Внутреннее представление. -->
+    <xs:complexType name="FDOMLink">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMSubTree">
+                <xs:sequence>
+                    <!-- m_link по умолчанию пустой -->
+                    <xs:element name="link" type="xs:string" />
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Ссылка. Внутреннее представление. -->
+    <xs:complexType name="FDOMListNode">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMSubTree">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Параграф. Внутреннее представление. -->
+    <xs:complexType name="FDOMParagraph">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMSubTree">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Список. Внутреннее представление. -->
+    <xs:complexType name="FDOMList">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMSubTree">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Маркированый список. Внутреннее представление. -->
+    <xs:complexType name="FDOMBulletedList">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMList">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Нумерованый список. Внутреннее представление. -->
+    <xs:complexType name="FDOMNumberedList">
+        <xs:complexContent>
+            <xs:extension base="tns:FDOMList">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Содержимое документа -->
+    <xs:complexType name="FDOMDocument">
+        <!-- m_curFreePictureId по умолчанию 0 -->
+        <xs:sequence>
+            <xs:element name="body" type="tns:FDOMBody"/>
+            <xs:element name="delta" type="tns:FDOMDelta"/>
+            <xs:element name="clsLst" type="tns:FDOMClass" minOccurs="0" maxOccurs="unbounded" />
+            <!-- m_curFreePictureId по умолчанию 0 -->
+            <xs:element name="fpid" type="xs:decimal" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Документ -->
+    <xs:complexType name="DefaultAppearance">
+        <xs:sequence>
+            <xs:element name="styl" type="tns:FDOMStyle"/>
+            <xs:element name="fontClass" type="tns:FDOMFontClass" minOccurs="0"/>
+            <xs:element name="backgroundColorClass" type="tns:FDOMColorClass" minOccurs="0"/>
+            <xs:element name="colorClass" type="tns:FDOMColorClass" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Документ -->
+    <xs:complexType name="FormattedDocument">
+        <xs:sequence>
+            <!-- instanceId -->
+            <xs:element name="id" type="v81:UUID"/>
+            <xs:element name="document" type="tns:FDOMDocument"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+</xs:schema>

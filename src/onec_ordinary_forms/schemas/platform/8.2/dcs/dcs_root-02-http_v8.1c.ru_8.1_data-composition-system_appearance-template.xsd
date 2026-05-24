@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://v8.1c.ru/8.1/data-composition-system/appearance-template" xmlns:dcscore="http://v8.1c.ru/8.1/data-composition-system/core" targetNamespace="http://v8.1c.ru/8.1/data-composition-system/appearance-template" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/core" schemaLocation="../../../dcscore/src/res/core.xsd"/>
+	<xs:element name="appearanceTemplate" type="tns:AppearanceTemplate">
+		<xs:annotation>
+			<xs:documentation>Макет оформления системы компоновки данных. Доступны следующие параметры:
+Header - Заголовок
+Footer - Подвал
+GroupHeader - Заголовок группировки
+GroupFooter - Подвал группировки
+HierarchicalGroupHeader - Заголовок иерархической группировки
+HierarchicalGroupFooter - Подвал иерархической группировки
+ColumnGroupHeader - Заголовок группировки колонки
+ColumnGroupFooter - Подвал группировки колонки
+ColumnHierarchicalGroupHeader - Заголовок иерархической группировки колонки
+ColumnHierarchicalGroupFooter - Подвал иерархической группировки колонки
+Detail - Детальные записи
+Overall - Общие итоги
+ResourcesGroupHeader - Ресурсы заголовка группировки
+ResourcesGroupFooter - Ресурсы подвала группировки
+ResourcesHierarchicalGroupHeader - Ресурсы заголовка иерархической группировки
+ResourcesHierarchicalGroupFooter - Ресурсы подвала иерархической группировки
+ResourcesDetail - Ресурсы детальных записей
+ResourcesOverall - Ресурсы общих итогов
+ResourcesTotalGroupHeader - Итог по ресурсам заголовка группировки
+ResourcesTotalGroupFooter - Итог по ресурсам подвала группировки
+ResourcesTotalHierarchicalGroupHeader - Итог по ресурсам заголовка иерархической группировки
+ResourcesTotalHierarchicalGroupFooter - Итог по ресурсам подвала иерархической группировки
+ResourcesTotalColumnGroupHeader - Итог по ресурсам заголовка колонки
+ResourcesTotalColumnGroupFooter - Итог по русурсам подвала колонки
+ResourcesTotalHierarchicalColumnGroupHeader - Итог по ресурсам заголовка иерархической колонки
+ResourcesTotalHierarchicalColumnGroupFooter - Итог по ресурсам подвала иерархической колонки
+ResourcesTotalDetail - Итог по ресурсам детальных записей
+ResourcesTotalOverall - Итог по ресурсам общих итогов
+TableHeader - Заголовок таблицы
+Default - Оформление по умолчанию
+</xs:documentation>
+		</xs:annotation>
+	</xs:element>
+	<xs:complexType name="AppearanceTemplate">
+		<xs:annotation>
+			<xs:documentation>Макет оформления системы компоновки данных</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="dcscore:ParameterValues"/>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="AppearanceTemplateArea">
+		<xs:annotation>
+			<xs:documentation>Область макета офрормления. Используется как значение для параметров в AppearanceTemplate.</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="item" type="tns:AppearanceTemplateAreaItem" minOccurs="0" maxOccurs="unbounded"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="AppearanceTemplateAreaItem">
+		<xs:annotation>
+			<xs:documentation>Элемент области макета оформления</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="level" type="xs:integer" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Уровень</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="appearance" type="tns:AppearanceTemplateAppearance">
+				<xs:annotation>
+					<xs:documentation>Оформление</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="AppearanceTemplateAppearance">
+		<xs:annotation>
+			<xs:documentation>Оформление макета оформления. Доступны следующие параметры:
+BackgroundColor
+TextColor
+BorderColor
+BorderColor.Left
+BorderColor.Top
+BorderColor.Right
+BorderColor.Bottom
+BorderStyle
+BorderStyle.Left
+BorderStyle.Top
+BorderStyle.Right
+BorderStyle.Bottom
+Font
+Indent
+AutoIndent
+HorizontalAlign
+VerticalAlign
+TextOrientation
+Format
+MarkNegatives
+MinWidth
+MinHeight
+MaxWidth
+MaxHeigth</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="dcscore:ParameterValues"/>
+		</xs:complexContent>
+	</xs:complexType>
+</xs:schema>

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.2/managed-application/user-settings"
+           xmlns:core="http://v8.1c.ru/8.1/data/core" 
+           xmlns:ui="http://v8.1c.ru/8.1/data/ui"
+           targetNamespace="http://v8.1c.ru/8.2/managed-application/user-settings"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data/ui" schemaLocation="../../../xdto/src/res/uiobjects.xsd"/>
+
+  <!-- Настройки размеров окна формы -->
+    <xs:complexType name="WindowSettings">
+        <xs:sequence>
+              <xs:element name="formId" type="xs:string" minOccurs="0" />
+              <xs:element name="viewKey" type="xs:string" minOccurs="0"/>
+              <xs:element name="viewElement" type="xs:string" minOccurs="0" />
+        </xs:sequence>
+    </xs:complexType>
+
+  <!-- Настройки клиентского приложения -->
+  <xs:complexType name="ClientSettings">
+    <xs:sequence>
+      <xs:element name="flags" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="debugServerHTTP" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="mainStyle" type="xs:string" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Настройки системы справочной информации -->
+  <xs:complexType name="HelpSettings">
+    <xs:sequence>
+      <!-- index history -->
+      <xs:element name="ih" type="core:ValueListType" minOccurs="0" maxOccurs="1"/>
+      <!-- search history -->
+      <xs:element name="sh" type="core:ValueListType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Настройки сравнения -->
+  <xs:complexType name="ComparisonSettings">
+    <xs:sequence>
+      <!-- txtDiffColorBackground -->
+      <xs:element name="tdcb" type="ui:Color" minOccurs="0" maxOccurs="1"/>
+      <!-- txtDiffColorDeleted -->
+      <xs:element name="tdcd" type="ui:Color" minOccurs="0" maxOccurs="1"/>
+      <!-- txtDiffColorChanged -->
+      <xs:element name="tdcc" type="ui:Color" minOccurs="0" maxOccurs="1"/>
+      <!-- txtDiffColorInserted -->
+      <xs:element name="tdci" type="ui:Color" minOccurs="0" maxOccurs="1"/>
+      <!-- mxlDiffColors -->
+      <xs:element name="mdc" type="core:ValueListType" minOccurs="0" maxOccurs="1"/>
+      <!-- mxlDiffColorSchemes -->
+      <xs:element name="mdcs" type="core:ValueListType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AddInSettingsItem">
+    <xs:sequence>
+      <xs:element name="key" type="xs:string"  minOccurs="0"/>
+      <xs:element name="val"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="AddInSettings">
+    <xs:sequence>
+        <xs:element name="item" type="tns:AddInSettingsItem" minOccurs="0" maxOccurs="unbounded" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Настройки печати -->
+  <xs:complexType name="PrintSettings">
+    <xs:sequence>
+      <xs:element name="pageSize" type="xs:string" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+</xs:schema>

@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -60,6 +61,14 @@ def safe_stem(path: Path, index: int, text: str) -> str:
     return f"{path.stem}-{index:02d}"
 
 
+def is_schema_document(text: str) -> bool:
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return False
+    return root.tag.rsplit("}", 1)[-1] == "schema"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True, help="1C platform bin/resource directory")
@@ -81,10 +90,10 @@ def main() -> None:
             continue
         for index, (offset, payload) in enumerate(embedded_xml_fragments(data), start=1):
             text = decode_xml(payload)
-            if args.schemas_only and "<xs:schema" not in text:
+            if args.schemas_only and not is_schema_document(text):
                 continue
             stem = safe_stem(path, index, text)
-            extension = ".xsd" if "<xs:schema" in text else ".xml"
+            extension = ".xsd" if is_schema_document(text) else ".xml"
             target = out_dir / f"{stem}{extension}"
             target.write_text(text + "\n", encoding="utf-8")
             report.append(
@@ -94,7 +103,7 @@ def main() -> None:
                     "file": target.name,
                     "sha256": hashlib.sha256(payload).hexdigest(),
                     "bytes": len(payload),
-                    "schema": "<xs:schema" in text,
+                    "schema": is_schema_document(text),
                 }
             )
 

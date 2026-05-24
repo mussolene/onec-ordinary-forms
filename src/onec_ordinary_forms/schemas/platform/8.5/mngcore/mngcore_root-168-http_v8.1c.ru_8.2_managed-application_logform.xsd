@@ -1,0 +1,3656 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:ui="http://v8.1c.ru/8.1/data/ui"
+           xmlns:v81="http://v8.1c.ru/8.1/data/core"
+           xmlns:ma="http://v8.1c.ru/8.2/managed-application/core"
+           xmlns:ent="http://v8.1c.ru/8.1/data/enterprise"
+           targetNamespace="http://v8.1c.ru/8.2/managed-application/logform"
+           xmlns:tns="http://v8.1c.ru/8.2/managed-application/logform"
+           xmlns:uobj="http://v8.1c.ru/8.2/uobjects"
+           xmlns:spreadsheet="http://v8.1c.ru/8.2/data/spreadsheet"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data/ui" schemaLocation="../../../xdto/src/res/uiobjects.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/managed-application/core" schemaLocation="mngapp.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/uobjects" schemaLocation="uobjects.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data/enterprise" schemaLocation="../../../enums/src/res/enums.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/data/spreadsheet" schemaLocation="../../../moxel/src/res/spreadsheetDocument.xsd"/>
+
+  <xs:simpleType name="ItemHorizontalAlignment">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Left" />
+            <xs:enumeration value="Center" />
+            <xs:enumeration value="Right" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ItemVerticalAlignment">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Top" />
+            <xs:enumeration value="Center" />
+            <xs:enumeration value="Bottom" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ColumnsGroup">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Horizontal" />
+            <xs:enumeration value="Vertical" />
+            <xs:enumeration value="InCell" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormChildrenGroup">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Horizontal" />
+            <xs:enumeration value="Vertical" />
+            <xs:enumeration value="HorizontalIfPossible" />
+            <xs:enumeration value="AlwaysHorizontal" />
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="AutoScreenTypeSensitive" />
+        </xs:restriction>
+    </xs:simpleType>
+
+  <xs:simpleType name="FormChildrenAlign">
+    <!-- В языке есть -->
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Auto" />
+      <xs:enumeration value="None" />
+      <xs:enumeration value="ItemsLeftTitlesLeft" />
+      <xs:enumeration value="ItemsRightTitlesLeft" />
+      <xs:enumeration value="ItemsLeftTitlesRight" />
+      <xs:enumeration value="ItemsRightTitlesRight" />
+      <!-- Старые значения для совместимости -->
+      <xs:enumeration value="TitlesLeftDataLeft" />
+      <xs:enumeration value="TitlesLeftDataRight" />
+      <xs:enumeration value="TitlesRightDataLeft" />
+      <xs:enumeration value="TitlesRightDataRight" />
+      <xs:enumeration value="TitlesLeftDataAuto" />
+    </xs:restriction>
+  </xs:simpleType>
+
+    <xs:simpleType name="ChildrenTitleLocation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Left" />
+            <xs:enumeration value="LeftIfPossible" />
+            <xs:enumeration value="Top" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormItemSpacing">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None" />
+            <xs:enumeration value="Half" />
+            <xs:enumeration value="Single" />
+            <xs:enumeration value="OneAndHalf" />
+            <xs:enumeration value="Double" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormFixedInTable">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="None" />
+            <xs:enumeration value="Left" />
+            <xs:enumeration value="Right" />
+        </xs:restriction>
+    </xs:simpleType>
+  
+    <xs:simpleType name="HeightControlVariant">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="UseHeightInFormRows" />
+            <xs:enumeration value="UseContentHeight" />
+        </xs:restriction>
+    </xs:simpleType>
+  
+    <xs:simpleType name="TableHeightControlVariant">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="UseHeightInFormRows" />
+            <xs:enumeration value="UseHeightInTableRows" />
+            <xs:enumeration value="UseContentHeight" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormChildrenWidth">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Equal" />
+            <xs:enumeration value="LeftWide" />
+            <xs:enumeration value="LeftWidest" />
+            <xs:enumeration value="LeftNarrow" />
+            <xs:enumeration value="LeftNarrowest" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormBaseFontVariant">
+      <xs:restriction base="xs:string">
+        <xs:enumeration value="Auto" />
+        <xs:enumeration value="Normal" />
+        <xs:enumeration value="Compact" />
+      </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormPagesRepresentation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="None" />
+            <xs:enumeration value="TabsOnTop" />
+            <xs:enumeration value="TabsOnBottom" />
+            <xs:enumeration value="TabsOnLeftHorizontal" />
+            <xs:enumeration value="TabsOnRightHorizontal" />
+            <xs:enumeration value="Swipe" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormPagesState">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="TitlesAndCurrentPage" />
+            <xs:enumeration value="Titles" />
+            <xs:enumeration value="CurrentPage" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="UsualGroupRepresentation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None" />
+            <xs:enumeration value="StrongSeparation" />
+            <xs:enumeration value="WeakSeparation" />
+            <xs:enumeration value="NormalSeparation" />
+            <!-- Старые значения для совместимости -->
+            <xs:enumeration value="GroupBox" />
+            <xs:enumeration value="Line" />
+            <xs:enumeration value="Margin" />
+        </xs:restriction>
+    </xs:simpleType>
+  
+  <xs:simpleType name="UsualGroupBehavior">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Usual" />
+            <xs:enumeration value="Collapsible" />
+            <xs:enumeration value="PopUp" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="UsualGroupControlRepresentation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="TitleHyperlink" />
+            <xs:enumeration value="Picture" />
+            <xs:enumeration value="Button" />
+            <xs:enumeration value="ButtonInParentElement" />
+        </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="UsualGroupThroughAlign">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Use" />
+            <xs:enumeration value="DontUse" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+  </xs:simpleType>
+
+    <xs:simpleType name="PictureRepresentationEffect">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None" />
+            <xs:enumeration value="Semitransparency" />
+            <xs:enumeration value="SemitransparencyAndBlur" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="PictureBackgroundShowMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="DontShow" />
+            <xs:enumeration value="ShowAndIncreaseSize" />
+            <xs:enumeration value="ShowAndDontIncreaseSize" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CardRepresentationType">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Usual" />
+            <xs:enumeration value="Group" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormCommandBarAppearanceMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="CommandBar" />
+            <xs:enumeration value="UsualGroup" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TumblerRepresentation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Text" />
+            <xs:enumeration value="Picture" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ButtonRepresentation">
+    <!-- В языке есть -->
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Text" />
+      <xs:enumeration value="Picture" />
+      <xs:enumeration value="PictureAndText" />
+      <xs:enumeration value="Auto" />
+    </xs:restriction>
+  </xs:simpleType>
+
+    <xs:simpleType name="ButtonShape">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Usual" />
+            <xs:enumeration value="Oval" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="ButtonShapeRepresentation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Always" />
+            <xs:enumeration value="WhenActive" />
+            <xs:enumeration value="None" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="FormButtonPictureLocation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Left" />
+            <xs:enumeration value="Right" />
+            <xs:enumeration value="Top" />
+            <xs:enumeration value="Bottom" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="ButtonLocationInCommandBar">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="InAdditionalSubmenu" />
+            <xs:enumeration value="InCommandBar" />
+            <xs:enumeration value="InCommandBarAndInAdditionalSubmenu" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TextSize">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Enlarged" />
+            <xs:enumeration value="Normal" />
+            <xs:enumeration value="Reduced" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ReportFormType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Main"/>
+            <xs:enumeration value="Settings"/>
+            <xs:enumeration value="Variant"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FoldersAndItems">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Items" />
+            <xs:enumeration value="Folders" />
+            <xs:enumeration value="FoldersAndItems" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="IncompleteItemChoiceMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="OnEnterPressed" />
+            <xs:enumeration value="OnActivate" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="AutoShowClearButtonMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Always" />
+            <xs:enumeration value="FilledOnly" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="AutoShowOpenButtonMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Always" />
+            <xs:enumeration value="FilledOnly" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="AutoCorrectionOnTextInput">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Use" />
+            <xs:enumeration value="DontUse" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SpellCheckingOnTextInput">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Use" />
+            <xs:enumeration value="DontUse" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="AutoCapitalizationOnTextInput">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None" />
+            <xs:enumeration value="Words" />
+            <xs:enumeration value="Sentences" />
+            <xs:enumeration value="AllCharacters" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="AutofillHint">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="DontUse" />
+            <xs:enumeration value="FullName" />
+            <xs:enumeration value="GivenName" />
+            <xs:enumeration value="FamilyName" />
+            <xs:enumeration value="MiddleName" />
+            <xs:enumeration value="NamePrefix" />
+            <xs:enumeration value="NameSuffix" />
+            <xs:enumeration value="Street" />
+            <xs:enumeration value="City" />
+            <xs:enumeration value="Region" />
+            <xs:enumeration value="Country" />
+            <xs:enumeration value="PostalCode" />
+            <xs:enumeration value="UserName" />
+            <xs:enumeration value="Password" />
+            <xs:enumeration value="NewPassword" />
+            <xs:enumeration value="OneTimeCode" />
+            <xs:enumeration value="Email" />
+            <xs:enumeration value="PhoneNumber" />
+            <xs:enumeration value="CreditCardNumber" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SpecialTextInputMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None" />
+            <xs:enumeration value="DigitsAndPunctuation" />
+            <xs:enumeration value="URL" />
+            <xs:enumeration value="Email" />
+            <xs:enumeration value="PhoneNumber" />
+            <xs:enumeration value="Digits" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="OnScreenKeyboardReturnKeyText">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Return" />
+            <xs:enumeration value="Go" />
+            <xs:enumeration value="Join" />
+            <xs:enumeration value="Next" />
+            <xs:enumeration value="Search" />
+            <xs:enumeration value="Send" />
+            <xs:enumeration value="Done" />
+            <xs:enumeration value="Continue" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="EditTextUpdate">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="DontUse" />
+            <xs:enumeration value="OnValueChange" />
+            <xs:enumeration value="Always" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="BWAValue">
+        <!-- В языке нет -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="true" />
+            <xs:enumeration value="false" />
+            <xs:enumeration value="auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="MenuElementPlacementArea">
+        <!-- В языке нет -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="mainCmdsLeft"/>
+            <xs:enumeration value="autoCmds"/>
+            <xs:enumeration value="userCmds"/>
+            <xs:enumeration value="mainCmdsRight"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="LogFormScrollMode">
+      <!-- В языке есть -->
+      <xs:restriction base="xs:string">
+        <xs:enumeration value="auto"/>
+        <xs:enumeration value="use"/>
+        <xs:enumeration value="useIfNecessary"/>
+        <xs:enumeration value="useWithoutStretch"/>
+      </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="LogFormShowConversations">
+      <!-- В языке есть -->
+      <xs:restriction base="xs:string">
+        <xs:enumeration value="Auto"/>
+        <xs:enumeration value="Show"/>
+        <xs:enumeration value="DontShow"/>
+      </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="LogFormElementAdditionKind">
+      <!-- В языке есть -->
+      <xs:restriction base="xs:string">
+        <xs:enumeration value="SearchStringRepresentation"/>
+        <xs:enumeration value="ViewStatusRepresentation"/>
+        <xs:enumeration value="SearchControl"/>
+      </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SelectionShowMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="WhenActive" />
+            <xs:enumeration value="Always" />
+            <xs:enumeration value="DontShow" />
+            <xs:enumeration value="WhenMultipleCellsSelected" />
+            <xs:enumeration value="WhenMultipleCellsSelectedWhenActive" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="DrawingSelectionShowMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Show" />
+            <xs:enumeration value="DontShow" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CellActionsButtonViewMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="DontShow" />
+            <xs:enumeration value="ShowOnHover" />
+        </xs:restriction>
+    </xs:simpleType>
+  
+    <xs:simpleType name="SpreadsheetDocumentMultipleSelectionPanelViewMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="DontShow" />
+            <xs:enumeration value="ShowOnMultipleSelection" />
+            <xs:enumeration value="ShowAlways" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ViewScalingMode">
+      <!-- В языке есть -->
+      <xs:restriction base="xs:string">
+        <xs:enumeration value="Auto" />
+        <xs:enumeration value="Normal" />
+        <xs:enumeration value="Large" />
+      </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormDateSelectionMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Single" />
+            <xs:enumeration value="Multiple" />
+            <xs:enumeration value="Interval" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="FormTimeChoiceMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="DontChoose" />
+            <xs:enumeration value="CustomTime" />
+            <xs:enumeration value="Interval1Minute" />
+            <xs:enumeration value="Interval5Minutes" />
+            <xs:enumeration value="Interval10Minutes" />
+            <xs:enumeration value="Interval15Minutes" />
+            <xs:enumeration value="Interval15And20Minutes" />
+            <xs:enumeration value="Interval20Minutes" />
+            <xs:enumeration value="Interval30Minutes" />
+            <xs:enumeration value="Interval60Minutes" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormElementOrientation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Horizontal" />
+            <xs:enumeration value="Vertical" />
+            <xs:enumeration value="HorizontalIfPossible" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormProgressBarRepresentation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Smooth" />
+            <xs:enumeration value="Broken" />
+            <xs:enumeration value="BrokenTilt" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="MarkingStyle">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="DontShow" />
+            <xs:enumeration value="TopLeft" />
+            <xs:enumeration value="BottomRight" />
+            <xs:enumeration value="BothSides" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ManagedFormButtonType">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="CommandBarButton" />
+            <xs:enumeration value="UsualButton" />
+            <xs:enumeration value="Hyperlink" />
+            <xs:enumeration value="CommandBarHyperlink" />
+        </xs:restriction>
+    </xs:simpleType>
+
+  <xs:simpleType name="CheckBoxType">
+    <!-- В языке есть -->
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Auto" />
+      <xs:enumeration value="CheckBox" />
+      <xs:enumeration value="Tumbler" />
+      <xs:enumeration value="Switcher" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="RadioButtonType">
+    <!-- В языке есть -->
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Auto" />
+      <xs:enumeration value="RadioButtons" />
+      <xs:enumeration value="Tumbler" />
+    </xs:restriction>
+  </xs:simpleType>
+
+    <xs:simpleType name="TableRepresentation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="List" />
+            <xs:enumeration value="HierarchicalList" />
+            <xs:enumeration value="Tree" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormElementTitleLocation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="None" />
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Left" />
+            <xs:enumeration value="Top" />
+            <xs:enumeration value="Right" />
+            <xs:enumeration value="Bottom" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="WarningOnEditRepresentation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Show" />
+            <xs:enumeration value="DontShow" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SearchOnInput">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Use" />
+            <xs:enumeration value="DontUse" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormElementCommandBarLocation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="None" />
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Top" />
+            <xs:enumeration value="Bottom" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableRowInputMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="EndOfList" />
+            <xs:enumeration value="EndOfWindow" />
+            <xs:enumeration value="AfterCurrentRow" />
+            <xs:enumeration value="BeforeCurrentRow" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableSelectionMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="SingleRow" />
+            <xs:enumeration value="MultiRow" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableRowSelectionMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Cell" />
+            <xs:enumeration value="Row" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableScrollBarUse">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="DontUse" />
+            <xs:enumeration value="UseAlways" />
+            <xs:enumeration value="AutoUse" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableInitialListView">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Beginning" />
+            <xs:enumeration value="End" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableInitialTreeView">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="NoExpand" />
+            <xs:enumeration value="ExpandTopLevel" />
+            <xs:enumeration value="ExpandAllLevels" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableInitialRowActivation">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Activate" />
+            <xs:enumeration value="NoActivate" />
+        </xs:restriction>
+    </xs:simpleType>
+
+  <xs:simpleType name="TableRowActionsShowType">
+    <!-- В языке есть -->
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Auto" />
+      <xs:enumeration value="DontShow" />
+      <xs:enumeration value="ShowOnHover" />
+      <xs:enumeration value="ShowAlways" />
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="TableColorPaletteDescription">
+      <xs:sequence>
+        <xs:element name="customPalette" type="core:Array" maxOccurs="1" minOccurs="0" >
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+
+    <xs:simpleType name="VerticalAlign">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Top" />
+            <xs:enumeration value="Bottom" />
+            <xs:enumeration value="Center" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ManagedFormGroupType">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="CommandBar" />
+            <xs:enumeration value="Popup" />
+            <xs:enumeration value="ColumnGroup" />
+            <xs:enumeration value="Pages" />
+            <xs:enumeration value="Page" />
+            <xs:enumeration value="UsualGroup" />
+            <xs:enumeration value="ButtonGroup" />
+            <xs:enumeration value="ContextMenu" />
+            <xs:enumeration value="AutoCommandBar" />
+            <xs:enumeration value="Navigator" /> <!-- Везде переименован в External, тут оставлен для совместимости. -->
+            <xs:enumeration value="SelectedItemsActionsPanel" />
+            <xs:enumeration value="RowActionsPanel" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ManagedFormFieldType">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Default" />
+            <xs:enumeration value="LabelField" />
+            <xs:enumeration value="InputField" />
+            <xs:enumeration value="CheckBoxField" />
+            <xs:enumeration value="PictureField" />
+            <xs:enumeration value="RadioButtonField" />
+            <xs:enumeration value="SpreadsheetDocumentField" />
+            <xs:enumeration value="TextDocumentField" />
+            <xs:enumeration value="FormattedDocumentField" />
+            <xs:enumeration value="PlannerField" />
+            <xs:enumeration value="CalendarField" />
+            <xs:enumeration value="PeriodField" />
+            <xs:enumeration value="ProgressBarField" />
+            <xs:enumeration value="TrackBarField" />
+            <xs:enumeration value="ChartField" />
+            <xs:enumeration value="GanttChartField" />
+            <xs:enumeration value="DendrogramField" />
+            <xs:enumeration value="GraphicalSchemaField" />
+            <xs:enumeration value="HTMLDocumentField" />
+            <xs:enumeration value="GeographicalSchemaField" />
+            <xs:enumeration value="PDFDocumentField" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ManagedFormDecorationType">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Label" />
+            <xs:enumeration value="Picture" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableFieldEditMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Directly" />
+            <xs:enumeration value="Enter" />
+            <xs:enumeration value="EnterOnInput" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormEnterKeyBehavior">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="ControlNavigation" />
+            <xs:enumeration value="DefaultButton" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SaveFormDataInSettings">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="DontUse" />
+            <xs:enumeration value="UseList" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="AutoSaveFormDataInSettings">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="DontUse" />
+            <xs:enumeration value="Use" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="OnFormWindowOpenLockMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="DontBlock" />
+            <xs:enumeration value="LockOwner" />
+            <xs:enumeration value="LockWholeInterface" />
+            <xs:enumeration value="Independent" />
+            <xs:enumeration value="LockOwnerWindow" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormWindowViewMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="InMainWindow" />
+            <xs:enumeration value="InDialogWindow" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormWindowOpeningMode">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Independent" />
+            <xs:enumeration value="LockOwnerWindow" />
+            <xs:enumeration value="LockWholeInterface" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="PictureSize">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="RealSize" />
+            <xs:enumeration value="Stretch" />
+            <xs:enumeration value="Proportionally" />
+            <xs:enumeration value="Tile" />
+            <xs:enumeration value="AutoSize" />
+            <xs:enumeration value="RealSizeIgnoreScale" />
+            <xs:enumeration value="AutoSizeIgnoreScale" />
+            <xs:enumeration value="ByFontSize" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormElementOrigin">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Source" />
+            <xs:enumeration value="AutoGenerated" />
+            <xs:enumeration value="AddedFromContext" />
+            <xs:enumeration value="AddedFromMainConf" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TooltipRepresentation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None" />
+            <xs:enumeration value="Balloon" />
+            <xs:enumeration value="Button" />
+            <xs:enumeration value="ShowAuto" />
+            <xs:enumeration value="ShowTop" />
+            <xs:enumeration value="ShowLeft" />
+            <xs:enumeration value="ShowBottom" />
+            <xs:enumeration value="ShowRight" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="RefreshRequestMethod">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="None" />
+            <xs:enumeration value="PullFromTop" />
+            <xs:enumeration value="PullFromBottom" />
+            <xs:enumeration value="PullFromTopOrBottom" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableCurrentRowUse">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Choice" />
+            <xs:enumeration value="SelectionPresentation" />
+            <xs:enumeration value="SelectionPresentationAndChoice" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableBehaviorOnHorizontalCompression">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="HideItemsByImportance" />
+            <xs:enumeration value="MoveItemsByImportance" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CollapseFormItemsByImportance">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Use" />
+            <xs:enumeration value="DontUse" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ChoiceHistoryOnInput">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="DontUse" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ChoiceButtonRepresentation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="ShowInDropList"/>
+            <xs:enumeration value="ShowInDropListAndInInputField" />
+            <xs:enumeration value="ShowInInputField" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="InputFieldMultipleValuePictureSize">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Small"/>
+            <xs:enumeration value="Medium" />
+            <xs:enumeration value="Large" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="InputFieldMultipleValuePictureShape">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Rect"/>
+            <xs:enumeration value="Circle" />
+            <!-- Старое значение для совместимости -->
+            <xs:enumeration value="Square" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SearchStringLocation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None"/>
+            <xs:enumeration value="CommandBar" />
+            <xs:enumeration value="Top" />
+            <xs:enumeration value="Bottom" />
+            <xs:enumeration value="FormCaption" />
+            <xs:enumeration value="PullFromTop" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ViewStatusLocation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None"/>
+            <xs:enumeration value="Top" />
+            <xs:enumeration value="Bottom" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SearchControlLocation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None"/>
+            <xs:enumeration value="CommandBar" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="HierarchyPanelLocation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="None"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="TableCellMarkType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="None"/>
+            <xs:enumeration value="ShapeUnderTextOval" />
+            <xs:enumeration value="IconCircle" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="AutoWidthInTable">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto"/>
+            <xs:enumeration value="ByData" />
+            <xs:enumeration value="None" />
+            <xs:enumeration value="ByDataAndTitle" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CellHyperlinkRepresentation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto"/>
+            <xs:enumeration value="Show" />
+            <xs:enumeration value="DontShow" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CellHyperlinkDisplayVariant">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto"/>
+            <xs:enumeration value="Always" />
+            <xs:enumeration value="OnRowHover" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CellHyperlinksRepresentation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto"/>
+            <xs:enumeration value="AutoForSingle" />
+            <xs:enumeration value="ForAll" />
+            <xs:enumeration value="DontShow" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="AppearanceVariantInCard">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto"/>
+            <xs:enumeration value="Extended" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="WidthVariantInCard">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto"/>
+            <xs:enumeration value="Full" />
+            <xs:enumeration value="Half" />
+        </xs:restriction>
+    </xs:simpleType>
+  
+    <xs:simpleType name="TableColumnCheckBoxKind">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto"/>
+            <xs:enumeration value="CheckBox" />
+            <xs:enumeration value="Tumbler" />
+            <xs:enumeration value="Switcher" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SaveTableAppearance">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto"/>
+            <xs:enumeration value="ForUser" />
+            <xs:enumeration value="ByKeyForUser" />
+            <xs:enumeration value="DontUse" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ButtonGroupRepresentation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Usual" />
+            <xs:enumeration value="Compact" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CardPictureAndTitleAlignVariant">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="LeftHorizontallySidesVertically" />
+            <xs:enumeration value="CenterHorizontallySidesVertically" />
+            <xs:enumeration value="CenterHorizontallyCenterVertically" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ButtonImportance">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Main" />
+            <xs:enumeration value="Normal" />
+            <xs:enumeration value="Supplementary" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="Command">
+        <xs:sequence>
+            <xs:element name="handlers" type="tns:EventHandlers" minOccurs="1" maxOccurs="unbounded" />
+        </xs:sequence>
+            <!-- m_id -->
+        <xs:attribute name="id" type="v81:CompositeID" />
+        <!-- m_name по умолчанию пустое -->
+        <xs:attribute name="name" type="xs:string"/>
+        <!-- m_modifiesStoredData по умолчанию false -->
+        <xs:attribute name="modifiesData" type="xs:boolean"/>
+        <!-- m_currentRowUse по умолчанию DontUse -->
+        <xs:attribute name="currentRowUse" type="tns:CurrentRowUse"/>
+        <!-- m_associatedTableElementId по умолчанию 0 -->
+        <xs:attribute name="associatedTableElementId" type="xs:decimal"/>
+        <!-- m_actionPurpose по умолчанию Usual -->
+        <xs:attribute name="actionPurpose" type="tns:CommandActionPurpose"/>
+        <!-- m_selectedRowsUse по умолчанию DontUse -->
+        <xs:attribute name="selectedRowsUse" type="tns:SelectedRowsUse"/>
+    </xs:complexType>
+
+    <xs:complexType name="Property">
+        <xs:sequence>
+            <xs:element name="savingContent" type="tns:DataPath" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_id -->
+        <xs:attribute name="id" type="v81:CompositeID" />
+        <!-- m_mainProperty по умолчанию false -->
+        <xs:attribute name="main" type="xs:boolean"/>
+        <!-- m_storedData по умолчанию false -->
+        <xs:attribute name="storedData" type="xs:boolean"/>
+    </xs:complexType>
+
+    <xs:simpleType name="EventHandlerCallType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Before" />
+            <xs:enumeration value="After" />
+            <xs:enumeration value="Override" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:complexType name="EventHandler">
+        <xs:attribute name="handlerName" type="xs:string"/>
+        <xs:attribute name="callType" type="tns:EventHandlerCallType"/>
+    </xs:complexType>
+    
+    <xs:complexType name="EventHandlers">
+        <xs:sequence>
+            <xs:element name="handler" type="tns:EventHandler" minOccurs="1" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+        
+    <xs:complexType name="Event">
+        <xs:sequence>
+            <xs:element name="handlers" type="tns:EventHandlers" minOccurs="1" maxOccurs="unbounded" />
+        </xs:sequence>
+            <!-- id по умолчанию kUUIDNull -->
+        <xs:attribute name="id" type="v81:UUID"/>
+    </xs:complexType>
+
+    <xs:complexType name="DataPath">
+        <xs:sequence>
+            <xs:element name="id" type="v81:CompositeID" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="AddProp">
+        <xs:sequence>
+            <!-- id -->
+            <xs:element name="id" type="xs:decimal" />
+            <!-- value -->
+            <xs:element name="val" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="AddProps">
+        <xs:sequence>
+            <xs:element name="prop" type="tns:AddProp" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="CommandsInclusion">
+        <xs:sequence>
+            <xs:element name="uuid" type="v81:UUID" maxOccurs="unbounded"  />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="FormattedString">
+        <xs:sequence>
+            <xs:element name="str" type="xs:string" />
+            <xs:element name="formatted" type="xs:boolean" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="AdditionSource">
+        <xs:sequence>
+            <xs:element name="elementId" type="xs:decimal" />
+            <xs:element name="additionId" type="xs:decimal" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="MenuGroupData">
+        <xs:sequence>
+            <!-- m_commandsGroup по умолчанию kNullCompositeID -->
+            <xs:element name="cmdGroups" type="v81:CompositeID" />
+        </xs:sequence>
+        <!-- m_hAlign по умолчанию Left -->
+        <xs:attribute name="hAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_commandPanelAppearanceMode по умолчанию Auto -->
+        <xs:attribute name="apMode" type="tns:FormCommandBarAppearanceMode" />
+    </xs:complexType>
+
+    <xs:complexType name="AutoMenuGroupData">
+        <!-- m_hAlign по умолчанию Left -->
+        <xs:attribute name="hAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_fillStdCommands по умолчанию true -->
+        <xs:attribute name="fillStd" type="xs:boolean" />
+        <!-- m_commandPanelAppearanceMode по умолчанию Auto -->
+        <xs:attribute name="apMode" type="tns:FormCommandBarAppearanceMode" />
+    </xs:complexType>
+
+    <xs:complexType name="SubmenuGroupData">
+        <xs:sequence>
+            <!-- m_picture по умолчанию V8Picture() -->
+            <xs:element name="pic" type="ui:Picture" minOccurs="0" />
+            <!-- m_commandsGroup по умолчанию kNullCompositeID -->
+            <xs:element name="cmdGroups" type="v81:CompositeID" />
+            <!-- m_backColor по умолчанию Color(Color::eAutoColor, 0) -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor = по умолчанию Color(Color::eAutoColor, 0) -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_representation по умолчанию Auto -->
+        <xs:attribute name="repres" type="tns:ButtonRepresentation"/>
+        <!-- m_shape по умолчанию eBSHAuto -->
+        <xs:attribute name="shape" type="tns:ButtonShape" />
+        <!-- m_shapeRepresentation по умолчанию eBCRAuto -->
+        <xs:attribute name="shapeRepres" type="tns:ButtonShapeRepresentation" />
+        <!-- m_importance по умолчанию eBI_Standard -->
+        <xs:attribute name="importance" type="tns:ButtonImportance" />
+    </xs:complexType>
+
+    <xs:complexType name="ButtonsGroupData">
+        <xs:sequence>
+            <!-- m_commandsGroup по умолчанию kNullCompositeID -->
+            <xs:element name="cmdGroups" type="v81:CompositeID" />
+            <!-- m_groupRepresentation по умолчанию eBGRAuto -->
+            <xs:element name="repres" type="tns:ButtonGroupRepresentation" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ContextMenuGroupData">
+        <!-- m_fillStdCommands по умолчанию true -->
+        <xs:attribute name="fillStd" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="ColumnsGroupData">
+        <xs:sequence>
+            <!-- m_headerPicture по умолчанию V8Picture() -->
+            <xs:element name="headerPic" type="ui:Picture" minOccurs="0" />
+            <!-- m_titleBackColor по умолчанию kLogFormColumnsGroupDataDefTitleBackColor -->
+            <xs:element name="titleBkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_headerProperty по умолчанию empty() -->
+            <xs:element name="hdProp" type="tns:DataPath" minOccurs="0" />
+            <!-- m_headerPropertyName по умолчанию empty() -->
+            <xs:element name="hdPropName" type="xs:string" minOccurs="0" />
+            <!-- m_headerTypeDomainPattern по умолчанию types().empty() -->
+            <xs:element name="hdTdp" type="v81:TypeDescription" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_grouping по умолчанию kLogFormColumnsGroupDataDefGrouping -->
+        <xs:attribute name="grouping" type="tns:ColumnsGroup" />
+        <!-- m_showTitle по умолчанию kLogFormColumnsGroupDataDefShowTitle -->
+        <xs:attribute name="showTitle" type="tns:BWAValue" />
+        <!-- m_showInHeader по умолчанию kLogFormColumnsGroupDataDefShowInHeader -->
+        <xs:attribute name="showInHeader" type="xs:boolean" />
+        <!-- m_headerHAlign по умолчанию kLogFormColumnsGroupDataDefHeaderHAlign -->
+        <xs:attribute name="headerHAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_headerFormatString по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="headerFormat" type="xs:string" />
+        <!-- m_fixedInTable по умолчанию kLogFormColumnsGroupDataDefFixedInTable -->
+        <xs:attribute name="fixedInTable" type="tns:FormFixedInTable" />
+        <!-- m_showInCard по умолчанию истина  -->
+        <xs:attribute name="showInCard" type="xs:boolean" />
+        <!-- m_fixInCard по умолчанию Auto  -->
+        <xs:attribute name="fixInCard" type="tns:BWAValue" />
+        <!-- m_showTitleInCard по умолчанию auto  -->
+        <xs:attribute name="showTitleInCard" type="tns:BWAValue" />
+    </xs:complexType>
+
+    <xs:complexType name="PagesGroupData">
+        <xs:sequence>
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_representation по умолчанию Top -->
+        <xs:attribute name="repres" type="tns:FormPagesRepresentation" />
+        <!-- m_currentRowUse по умолчанию Auto -->
+        <xs:attribute name="currentRowUse" type="tns:CurrentRowUse" />
+        <!-- m_associatedTableElementId по умолчанию 0 -->
+        <xs:attribute name="associatedTableElementId" type="xs:decimal"/>
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="PageGroupData">
+        <xs:sequence>
+            <!-- m_picture по умолчанию V8Picture() -->
+            <xs:element name="pic" type="ui:Picture" minOccurs="0" />
+            <!-- m_property по умолчанию empty() -->
+            <xs:element name="prop" type="tns:DataPath" minOccurs="0" />
+            <!-- m_propertyName по умолчанию empty() -->
+            <xs:element name="propName" type="xs:string" minOccurs="0" />
+            <!-- m_tdp по умолчанию types().empty() -->
+            <xs:element name="tdp" type="v81:TypeDescription" minOccurs="0" />
+            <!-- m_backColor по умолчанию kLogFormPageGroupDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_titleColor по умолчанию kLogFormGroupDefTitleTextColor -->
+            <xs:element name="ttlClr" type="ui:Color" minOccurs="0" />
+            <!-- m_titleFont по умолчанию kLogFormGroupDefTitleFont -->
+            <xs:element name="ttlFnt" type="ui:Font" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_grouping по умолчанию Vertical -->
+        <xs:attribute name="grouping" type="tns:FormChildrenGroup" />
+        <!-- m_align по умолчанию Auto -->
+        <xs:attribute name="align" type="tns:FormChildrenAlign" />
+        <!-- m_horizontalSpacing по умолчанию Auto -->
+        <xs:attribute name="horizontalSpacing" type="tns:FormItemSpacing" />
+        <!-- m_verticalSpacing по умолчанию Auto -->
+        <xs:attribute name="verticalSpacing" type="tns:FormItemSpacing" />
+        <!-- m_hAlign по умолчанию Auto -->
+        <xs:attribute name="hAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_vAlign по умолчанию Auto -->
+        <xs:attribute name="vAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_childrenWidth по умолчанию Auto -->
+        <xs:attribute name="childrenWidth" type="tns:FormChildrenWidth" />
+        <!-- m_childrenTitleLocation по умолчанию Auto -->
+        <xs:attribute name="childrenTitleLocation" type="tns:ChildrenTitleLocation" />
+        <!-- m_formatString по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="format" type="xs:string" />
+        <!-- m_showTitle по умолчанию kLogFormPageGroupDataDefShowTitle -->
+        <xs:attribute name="showTitle" type="tns:BWAValue" />
+        <!-- m_scrollOnCompress по умолчанию auto -->
+        <xs:attribute name="scrollOnCompress" type="tns:BWAValue" />
+    </xs:complexType>
+
+    <xs:complexType name="UsualGroupData">
+        <xs:sequence>
+            <!-- m_backPicture по умолчанию V8Picture() -->
+            <xs:element name="backPic" type="ui:Picture" minOccurs="0" />
+            <!-- m_property по умолчанию empty() -->
+            <xs:element name="prop" type="tns:DataPath" minOccurs="0" />
+            <!-- m_propertyName по умолчанию empty() -->
+            <xs:element name="propName" type="xs:string" minOccurs="0" />
+            <!-- m_tdp по умолчанию types().empty() -->
+            <xs:element name="tdp" type="v81:TypeDescription" minOccurs="0" />
+            <!-- m_backColor по умолчанию kLogFormPageGroupDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_hiddenStateTitleBackColor по умолчанию kLogFormLogicGroupDataDefHiddenStateTitleBackColor -->
+            <xs:element name="hiddenStateTitleBkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_grouping по умолчанию Vertical -->
+        <xs:attribute name="grouping" type="tns:FormChildrenGroup" />
+        <!-- m_align по умолчанию Auto -->
+        <xs:attribute name="align" type="tns:FormChildrenAlign" />
+        <!-- m_horizontalSpacing по умолчанию Auto -->
+        <xs:attribute name="horizontalSpacing" type="tns:FormItemSpacing" />
+        <!-- m_verticalSpacing по умолчанию Auto -->
+        <xs:attribute name="verticalSpacing" type="tns:FormItemSpacing" />
+        <!-- m_hAlign по умолчанию Auto -->
+        <xs:attribute name="hAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_vAlign по умолчанию Auto -->
+        <xs:attribute name="vAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_childrenWidth по умолчанию Auto -->
+        <xs:attribute name="childrenWidth" type="tns:FormChildrenWidth" />
+        <!-- m_childrenTitleLocation по умолчанию Auto -->
+        <xs:attribute name="childrenTitleLocation" type="tns:ChildrenTitleLocation" />
+        <!-- m_representation по умолчанию None -->
+        <xs:attribute name="repres" type="tns:UsualGroupRepresentation" />
+        <!-- m_behavior по умолчанию Usual -->
+        <xs:attribute name="bhv" type="tns:UsualGroupBehavior" />
+        <!-- m_managementRepresentation по умолчанию TitleHyperlink -->
+        <xs:attribute name="mngRepres" type="tns:UsualGroupControlRepresentation" />
+        <!-- m_throughAlign по умолчанию Auto -->
+        <xs:attribute name="throughAlign" type="tns:UsualGroupThroughAlign" />
+        <!-- m_showTitle по умолчанию kLogFormLogicGroupDataDefShowTitle -->
+        <xs:attribute name="showTitle" type="tns:BWAValue" />
+        <!-- m_collapsed по умолчанию false -->
+        <xs:attribute name="collapsed" type="xs:boolean" />
+        <!-- m_collapsibleLeftMargin по умолчанию true -->
+        <xs:attribute name="leftMargin" type="xs:boolean" />
+        <!-- m_united по умолчанию true -->
+        <xs:attribute name="united" type="xs:boolean" />
+        <!-- m_formatString по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="format" type="xs:string" />
+        <!-- m_collapsedTitle по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="clsTitle" type="xs:string" />
+        <!-- m_collapsedRepresentationItemId по умолчанию 0 -->
+        <xs:attribute name="collapsedRepresentationItemId" type="xs:decimal"/>
+        <!-- m_currentRowUse по умолчанию Auto -->
+        <xs:attribute name="currentRowUse" type="tns:CurrentRowUse" />
+        <!-- m_associatedTableElementId по умолчанию 0 -->
+        <xs:attribute name="associatedTableElementId" type="xs:decimal"/>
+        <!-- m_showAsCard по умолчанию false -->
+        <xs:attribute name="showAsCard" type="xs:boolean" />
+        <!-- m_backPictureRepresentationEffect по умолчанию Auto -->
+        <xs:attribute name="backPictRepresEffect" type="tns:PictureRepresentationEffect" />
+        <!-- m_cardRepresentationType по умолчанию Usual -->
+        <xs:attribute name="cardRepresType" type="tns:CardRepresentationType" />
+        <!-- m_hyperlink по умолчанию false -->
+        <xs:attribute name="hyperlink" type="xs:boolean" />
+        <!-- m_scrollOnCompress по умолчанию auto -->
+        <xs:attribute name="scrollOnCompress" type="tns:BWAValue" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="TextFieldData">
+        <xs:sequence>
+            <!-- m_textColor по умолчанию kLogFormTextFieldDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_backColor по умолчанию kLogFormTextFieldDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormTextFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_border по умолчанию kLogFormTextFieldDataDefBorder -->
+            <xs:element name="brd" type="ui:Border" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormTextFieldDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 0 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_rowsCount по умолчанию 0 -->
+        <xs:attribute name="rowsCount" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию auto -->
+        <xs:attribute name="horStretch" type="tns:BWAValue" />
+        <!-- m_verStretchable по умолчанию auto -->
+        <xs:attribute name="verStretch" type="tns:BWAValue" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_markNegatives по умолчанию auto -->
+        <xs:attribute name="markNeg" type="tns:BWAValue" />
+        <!-- m_formatString по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="format" type="xs:string" />
+        <!-- m_hyperlink по умолчанию false -->
+        <xs:attribute name="hyper" type="xs:boolean" />
+        <!-- m_passwordMode по умолчанию auto -->
+        <xs:attribute name="psw" type="tns:BWAValue" />
+        <!-- m_useCopy по умолчанию auto -->
+        <xs:attribute name="useCopy" type="tns:BWAValue" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="InputFieldData">
+        <xs:sequence>
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+            <!-- m_minValue если не Value()-->
+            <xs:element name="minVal" />
+            <!-- m_maxValue если не Value()-->
+            <xs:element name="maxVal" />
+            <!-- m_choiceButtonPicture по умолчанию V8Picture() -->
+            <xs:element name="choiceBtnPic" type="ui:Picture" minOccurs="0" />
+            <!-- m_choiceFormId по умолчанию kUUIDNull -->
+            <xs:element name="choiceFormId" type="v81:UUID" />
+            <!-- m_pChoiceParamLinks если не пустые -->
+            <xs:element name="choiceParamLinks" type="ma:ChoiceParameterLinks" minOccurs="0" />
+            <!-- m_pChoiceParamLinks если не пустые -->
+            <xs:element name="choiceParams" type="ma:ChoiceParameters" minOccurs="0" />
+            <!-- m_availableTypes по умолчанию types().empty() -->
+            <xs:element name="avlTypes" type="v81:TypeDescription" minOccurs="0" />
+            <!-- m_pValueList если не пустой -->
+            <xs:element name="valList" type="v81:ValueListType" />
+            <!-- m_textColor по умолчанию kLogFormInputFieldDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_backColor по умолчанию kLogFormInputFieldDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormInputFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormInputFieldDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_linkByType если не пустой -->
+            <xs:element name="linkByType" type="ma:TypeLink" minOccurs="0" />
+            <!-- m_multipleValuesFont по умолчанию auto -->
+            <xs:element name="multipleValuesFont" type="ui:Font" minOccurs="0" />
+            <!-- m_multipleValuesPicture по умолчанию V8Picture() -->
+            <xs:element name="multipleValuesPicture" type="ui:Picture" minOccurs="0" />
+            <!-- m_multipleValueDataPath по умолчанию empty() -->
+            <xs:element name="multipleValueDataPath" type="tns:DataPath" minOccurs="0" />
+            <!-- m_multipleValueDataPathName по умолчанию empty() -->
+            <xs:element name="multipleValueDataPathName" type="xs:string" minOccurs="0" />
+            <!-- m_multipleValuePictureDataPath по умолчанию empty() -->
+            <xs:element name="multipleValuePictureDataPath" type="tns:DataPath" minOccurs="0" />
+            <!-- m_multipleValuePictureDataPathName по умолчанию empty() -->
+            <xs:element name="multipleValuePictureDataPathName" type="xs:string" minOccurs="0" />
+            <!-- m_multipleValuePresentDataPath по умолчанию empty() -->
+            <xs:element name="multipleValuePresentDataPath" type="tns:DataPath" minOccurs="0" />
+            <!-- m_multipleValuePresentDataPathName по умолчанию empty() -->
+            <xs:element name="multipleValuePresentDataPathName" type="xs:string" minOccurs="0" />
+            <!-- m_picture по умолчанию V8Picture() -->
+            <xs:element name="pict" type="ui:Picture" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 0 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_rowsCount по умолчанию 0 -->
+        <xs:attribute name="rowsCount" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию auto -->
+        <xs:attribute name="horStretch" type="tns:BWAValue" />
+        <!-- m_verStretchable по умолчанию auto -->
+        <xs:attribute name="verStretch" type="tns:BWAValue" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_wrap по умолчанию true -->
+        <xs:attribute name="wrap" type="xs:boolean" />
+        <!-- m_passwordMode по умолчанию auto -->
+        <xs:attribute name="psw" type="tns:BWAValue" />
+        <!-- m_multiLine по умолчанию auto -->
+        <xs:attribute name="mlt" type="tns:BWAValue" />
+        <!-- m_extendedEdit по умолчанию auto -->
+        <xs:attribute name="extEdit" type="tns:BWAValue" />
+        <!-- m_markNegatives по умолчанию auto -->
+        <xs:attribute name="markNeg" type="tns:BWAValue" />
+        <!-- m_choiceListButton по умолчанию auto -->
+        <xs:attribute name="choiceListBtn" type="tns:BWAValue" />
+        <!-- m_dropListButton по умолчанию auto -->
+        <xs:attribute name="dropListBtn" type="tns:BWAValue" />
+        <!-- m_choiceButton по умолчанию auto -->
+        <xs:attribute name="choiceBtn" type="tns:BWAValue" />
+        <!-- m_choiceButtonRepresentation по умолчанию auto -->
+        <xs:attribute name="choiceBtnRepresentation" type="tns:ChoiceButtonRepresentation" />
+        <!-- m_clearButton по умолчанию auto -->
+        <xs:attribute name="clearBtn" type="tns:BWAValue" />
+        <!-- m_spinButton по умолчанию auto -->
+        <xs:attribute name="spinBtn" type="tns:BWAValue" />
+        <!-- m_openButton по умолчанию auto -->
+        <xs:attribute name="openBtn" type="tns:BWAValue" />
+        <!-- m_createButton по умолчанию auto -->
+        <xs:attribute name="createBtn" type="tns:BWAValue" />
+        <!-- m_mask по умолчанию пустой -->
+        <xs:attribute name="mask" type="xs:string" />
+        <!-- m_listChoiceMode по умолчанию false -->
+        <xs:attribute name="listChoice" type="xs:boolean" />
+        <!-- m_choiceListHeight по умолчанию 0 -->
+        <xs:attribute name="choiceListHeight" type="xs:decimal" />
+        <!-- m_choiceListMinWidth по умолчанию 0 -->
+        <xs:attribute name="choiceListMinWidth" type="xs:decimal" />
+        <!-- m_multipleValuesTextColor по умолчанию auto -->
+        <xs:attribute name="multipleValuesTextColor" type="ui:Color" />
+        <!-- m_multipleValuesBackColor по умолчанию auto -->
+        <xs:attribute name="multipleValuesBackColor" type="ui:Color" />
+        <!-- m_multipleValuesHyperlink по умолчанию auto -->
+        <xs:attribute name="multipleValuesHyperlink" type="tns:BWAValue" />
+        <!-- m_allowInputEmptyMultipleValues по умолчанию false -->
+        <xs:attribute name="allowInputEmptyMultipleValues" type="xs:boolean" />
+        <!-- m_allowMultipleValuesDuplicates по умолчанию false -->
+        <xs:attribute name="allowMultipleValuesDuplicates" type="xs:boolean" />
+        <!-- m_extendedEditMultipleValues по умолчанию false -->
+        <xs:attribute name="extendedEditMultipleValues" type="xs:boolean" />
+        <!-- m_showCheckBoxesInDropList по умолчанию auto -->
+        <xs:attribute name="showCheckBoxesInDropList" type="tns:BWAValue" />
+        <!-- m_autoChoiceIncomplete по умолчанию auto -->
+        <xs:attribute name="autoChoice" type="tns:BWAValue" />
+        <!-- m_quickChoice по умолчанию auto -->
+        <xs:attribute name="quickChoice" type="tns:BWAValue" />
+        <!-- m_choiceObjects по умолчанию Auto -->
+        <xs:attribute name="choice" type="tns:FoldersAndItems" />
+        <!-- m_formatString по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="format" type="xs:string" />
+        <!-- m_inputFormatString по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="inputFormat" type="xs:string" />
+        <!-- m_autoMarkIncomplete по умолчанию auto -->
+        <xs:attribute name="autoMark" type="tns:BWAValue" />
+        <!-- m_choiceType по умолчанию true -->
+        <xs:attribute name="choiceType" type="xs:boolean" />
+        <!-- m_incompleteChoiceMode по умолчанию OnEnterPressed -->
+        <xs:attribute name="incompleteChoice" type="tns:IncompleteItemChoiceMode" />
+        <!-- m_typeDomainEnabled по умолчанию true -->
+        <xs:attribute name="typeDomainEnabled" type="xs:boolean" />
+        <!-- m_textEdit по умолчанию true -->
+        <xs:attribute name="textEdit" type="xs:boolean" />
+        <!-- m_editTextUpdateMode по умолчанию Auto -->
+        <xs:attribute name="editTextUpdateMode" type="tns:EditTextUpdate" />
+        <!-- m_inputHint по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="inputHint" type="xs:string" />
+        <!-- m_dropListTooltip по умолчанию пустая строка  -->
+        <xs:attribute name="dropListTooltip" type="xs:string" />
+        <!-- m_choiceButtonTitle по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="choiceButtonTitle" type="xs:string" />
+        <!-- m_timeChoiceMode по умолчанию Auto -->
+        <xs:attribute name="timeChoiceMode" type="tns:FormTimeChoiceMode" />
+        <!-- m_textSize по умолчанию Normal -->
+        <xs:attribute name="textSize" type="tns:TextSize" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+        <!-- m_choiceHistoryOnInput по умолчанию auto -->
+        <xs:attribute name="choiceHistory" type="tns:ChoiceHistoryOnInput" />
+        <!-- m_autoShowClearButtonMode по умолчанию auto -->
+        <xs:attribute name="autoShowClearButtonMode" type="tns:AutoShowClearButtonMode" />
+        <!-- m_autoShowOpenButtonMode по умолчанию auto -->
+        <xs:attribute name="autoShowOpenButtonMode" type="tns:AutoShowOpenButtonMode" />
+        <!-- m_autoCorrectionOnTextInput по умолчанию auto -->
+        <xs:attribute name="autoCorrectionOnTextInput" type="tns:AutoCorrectionOnTextInput" />
+        <!-- m_spellCheckingOnTextInput по умолчанию auto -->
+        <xs:attribute name="spellCheckingOnTextInput" type="tns:SpellCheckingOnTextInput" />
+        <!-- m_autoCapitalizationOnTextInput по умолчанию auto -->
+        <xs:attribute name="autoCapitalizationOnTextInput" type="tns:AutoCapitalizationOnTextInput" />
+        <!-- m_autofillHint по умолчанию dontUse -->
+        <xs:attribute name="autofillHint" type="tns:AutofillHint" />
+        <!-- m_specialTextInputMode по умолчанию auto -->
+        <xs:attribute name="specialTextInputMode" type="tns:SpecialTextInputMode" />
+        <!-- m_onScreenKeyboardReturnKeyText по умолчанию auto -->
+        <xs:attribute name="onScreenKeyboardReturnKeyText" type="tns:OnScreenKeyboardReturnKeyText" />
+        <!-- m_heightControlVariant по умолчанию auto-->
+        <xs:attribute name="heightControlVariant" type="tns:HeightControlVariant" />
+        <!-- m_multipleValuePictureSize по умолчанию eInputFieldMultipleValuePictureSizeAuto -->
+        <xs:attribute name="multipleValuePictureSize" type="tns:InputFieldMultipleValuePictureSize"/>
+        <!-- m_multipleValuePictureSize по умолчанию eInputFieldMultipleValuePictureShapeAuto -->
+        <xs:attribute name="multipleValuePictureShape" type="tns:InputFieldMultipleValuePictureShape"/>
+    </xs:complexType>
+
+    <xs:complexType name="CheckBoxFieldData">
+        <xs:sequence>
+            <!-- m_borderColor по умолчанию kLogFormInputFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_backColor по умолчанию kLogFormInputFieldDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_textColor по умолчанию kLogFormInputFieldDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormInputFieldDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_checkBoxKind по умолчанию Auto -->
+        <xs:attribute name="checkBoxType" type="tns:CheckBoxType" />
+        <!-- m_threeState по умолчанию false -->
+        <xs:attribute name="threeState" type="xs:boolean" />
+        <!-- m_formatString по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="format" type="xs:string" />
+        <!-- m_tumblerRepresentation по умолчанию Auto -->
+        <xs:attribute name="tbRepres" type="tns:TumblerRepresentation"/>
+        <!-- m_horStretchable по умолчанию auto -->
+        <xs:attribute name="horStretch" type="tns:BWAValue" />
+        <!-- m_elementTitleHeight по умолчанию 0 -->
+        <xs:attribute name="elemTitleHeight" type="xs:decimal" />
+        <!-- m_elementHeight по умолчанию 0 -->
+        <xs:attribute name="elemHeight" type="xs:decimal" />
+        <!-- m_elementWidth по умолчанию 0 -->
+        <xs:attribute name="elemWidth" type="xs:decimal" />
+        <!-- m_equalElementsWidth по умолчанию auto -->
+        <xs:attribute name="eqWidth" type="tns:BWAValue" />
+    </xs:complexType>
+
+    <xs:complexType name="ImageFieldData">
+        <xs:sequence>
+            <!-- m_pictureValues по умолчанию V8Picture() -->
+            <xs:element name="picValues" type="ui:Picture" minOccurs="0" />
+            <!-- m_textColor по умолчанию kLogFormImageFieldDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormImageFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormImageFieldDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_border по умолчанию kLogFormImageFieldDataDefBorder -->
+            <xs:element name="brd" type="ui:Border" minOccurs="0" />
+            <!-- m_pictureBackgroundShowMode по умолчанию kLogFormImageFieldDataDefPictureBackgroundShowMode -->
+            <xs:element name="backgroundShowMode" type="tns:PictureBackgroundShowMode" minOccurs="0" />
+            <!-- m_pictureColor по умолчанию kLogFormImageFieldDataDefPictureColor -->
+            <xs:element name="picClr" type="ui:Color" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 2 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 1 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_pictureSizeMode по умолчанию RealSize -->
+        <xs:attribute name="pictureSize" type="tns:PictureSize" />
+        <!-- m_zoomable по умолчанию false -->
+        <xs:attribute name="zoomable" type="xs:boolean" />
+        <!-- m_imageScale по умолчанию 100 -->
+        <xs:attribute name="imageScale" type="xs:decimal" />
+        <!-- m_hyperlink по умолчанию false -->
+        <xs:attribute name="hyper" type="xs:boolean" />
+        <!-- m_nonselectedPictureText по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="picText" type="xs:string" />
+        <!-- m_enableStartDrag по умолчанию false -->
+        <xs:attribute name="startDrag" type="xs:boolean" />
+        <!-- m_enableDrag по умолчанию false -->
+        <xs:attribute name="drag" type="xs:boolean" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+        <!-- m_fileDragMode по умолчанию AsFileRef -->
+        <xs:attribute name="fileDragMode" type="tns:FileDragMode" />
+    </xs:complexType>
+
+    <xs:complexType name="RadioButtonsData">
+        <xs:sequence>
+            <!-- m_pValueList если не пустой -->
+            <xs:element name="valList" type="v81:ValueListType" />
+            <!-- m_textColor по умолчанию kLogFormRadioButtonsFieldDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormRadioButtonsFieldDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormInputFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_backColor по умолчанию kLogFormInputFieldDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_radioButtonsKind по умолчанию Auto -->
+        <xs:attribute name="radioButtonType" type="tns:RadioButtonType" />
+        <!-- m_columnsCount по умолчанию kDefaultColumnCount -->
+        <xs:attribute name="colsCount" type="xs:decimal" />
+        <!-- m_representation по умолчанию kLogFormRadioButtonsFieldDataDefRepresentation -->
+        <xs:attribute name="tbRepres" type="tns:TumblerRepresentation"/>
+        <!-- m_horStretchable по умолчанию auto -->
+        <xs:attribute name="horStretch" type="tns:BWAValue" />
+        <!-- m_orientation по умолчанию HorizontalIfPossible -->
+        <xs:attribute name="orientation" type="tns:FormElementOrientation" />
+        <!-- m_elementTitleHeight по умолчанию kLogFormRadioButtonsFieldDataDefElementTitleHeight-->
+        <xs:attribute name="elementTitleHeight" type="xs:decimal" />
+        <!-- m_elementHeight по умолчанию kLogFormRadioButtonsFieldDataDefElementHeight-->
+        <xs:attribute name="elementHeight" type="xs:decimal" />
+        <!-- m_elementWidth по умолчанию kLogFormRadioButtonsFieldDataDefElementWidth-->
+        <xs:attribute name="elementWidth" type="xs:decimal" />
+        <!-- m_equalColumnsWidth по умолчанию auto -->
+        <xs:attribute name="eqWidth" type="tns:BWAValue" />
+    </xs:complexType>
+
+    <xs:simpleType name="SpreadSheetDocumentScrollBarUse">
+      <xs:union memberTypes="tns:TableScrollBarUse xs:boolean" />
+    </xs:simpleType>
+        
+    <xs:complexType name="SpreadsheetFieldData">
+        <xs:sequence>
+            <!-- m_borderColor по умолчанию kLogFormInputFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_showGrid по умолчанию false -->
+        <xs:attribute name="showGrid" type="xs:boolean" />
+        <!-- m_showHeaders по умолчанию false -->
+        <xs:attribute name="showHdrs" type="xs:boolean" />
+        <!-- m_showVerticalScrollBar по умолчанию true -->
+        <xs:attribute name="showVerScroll" type="tns:SpreadSheetDocumentScrollBarUse" />
+        <!-- m_showHorizontalScrollBar по умолчанию true -->
+        <xs:attribute name="showHorScroll" type="tns:SpreadSheetDocumentScrollBarUse" />
+        <!-- m_blackAndWhiteView по умолчанию false -->
+        <xs:attribute name="blackAndWhite" type="xs:boolean" />
+        <!-- m_protection по умолчанию false -->
+        <xs:attribute name="protection" type="xs:boolean" />
+        <!-- m_selectionShowMode по умолчанию Always -->
+        <xs:attribute name="selectionMode" type="tns:SelectionShowMode" />
+        <!-- m_useOutput по умолчанию Auto -->
+        <xs:attribute name="useOutput" type="ui:UseOutput" />
+        <!-- m_edit по умолчанию false -->
+        <xs:attribute name="edit" type="xs:boolean" />
+        <!-- m_showGroups по умолчанию true -->
+        <xs:attribute name="showGroups" type="xs:boolean" />
+        <!-- m_enableStartDrag по умолчанию false -->
+        <xs:attribute name="startDrag" type="xs:boolean" />
+        <!-- m_enableDrag по умолчанию false -->
+        <xs:attribute name="drag" type="xs:boolean" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+        <!-- m_selectionShowMode по умолчанию eSSMAlways -->
+        <xs:attribute name="selShow" type="tns:SelectionShowMode" />
+        <!-- m_viewScalingMode по умолчанию Auto -->
+        <xs:attribute name="viewScalingMode" type="tns:ViewScalingMode" />
+        <!-- m_showCellNames по умолчанию false -->
+        <xs:attribute name="showCellNames" type="xs:boolean" />
+        <!-- m_showRowAndColumnNames по умолчанию false -->
+        <xs:attribute name="showRowAndColumnNames" type="xs:boolean" />
+        <!-- m_cursorTypes по умолчанию Special -->
+        <xs:attribute name="pointerType" type="spreadsheet:SpreadsheetDocumentPointerType"/>
+        <!-- m_drawingSelectionShowMode по умолчанию Auto -->
+        <xs:attribute name="drawingSelectionMode" type="tns:DrawingSelectionShowMode" />
+        <!-- m_cellActionsButtonShowMode по умолчанию Auto -->
+        <xs:attribute name="cellActionsButtonShowMode" type="tns:CellActionsButtonViewMode" />
+        <!-- m_moxelActionBarShowMode по умолчанию Auto -->
+        <xs:attribute name="moxelActionBarShowMode" type="tns:SpreadsheetDocumentMultipleSelectionPanelViewMode" />
+    </xs:complexType>
+
+    <xs:complexType name="TextDocFieldData">
+        <xs:sequence>
+            <!-- m_textColor по умолчанию kLogFormTextDocFieldDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_backColor по умолчанию kLogFormTextDocFieldDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormTextDocFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormTextDocFieldDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_useOutput по умолчанию Auto -->
+        <xs:attribute name="useOutput" type="ui:UseOutput" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="FormattedDocFieldData">
+        <xs:sequence>
+            <!-- m_textColor по умолчанию kLogFormFormattedDocFieldDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_backColor по умолчанию kLogFormFormattedDocFieldDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormFormattedDocFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormFormattedDocFieldDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_useOutput по умолчанию Auto -->
+        <xs:attribute name="useOutput" type="ui:UseOutput" />
+    </xs:complexType>
+    
+    <xs:complexType name="PlannerFieldData">
+        <xs:sequence>
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_enableStartDrag по умолчанию false -->
+        <xs:attribute name="startDrag" type="xs:boolean" />
+        <!-- m_enableDrag по умолчанию false -->
+        <xs:attribute name="drag" type="xs:boolean" />
+        <!-- m_timeScaleItemHyperlink по умолчанию false -->
+        <xs:attribute name="timeScaleItemHyperlink" type="xs:boolean" />
+        <!-- m_dimensionItemHyperlink по умолчанию false -->
+        <xs:attribute name="dimensionItemHyperlink" type="xs:boolean" />
+        <!-- m_wrappedTimeScaleHeaderHyperlink по умолчанию false -->
+        <xs:attribute name="wrappedTimeScaleHeaderHyperlink" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="CalendarFieldData">
+        <xs:sequence>
+            <!-- m_font по умолчанию kLogFormCalendarFieldDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormCalendarFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_border по умолчанию kLogFormCalendarFieldDataDefBorder -->
+            <xs:element name="brd" type="ui:Border" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 16 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 9 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_dateSelection по умолчанию Single -->
+        <xs:attribute name="dateSel" type="tns:FormDateSelectionMode" />
+        <!-- m_showCurrentDate по умолчанию true -->
+        <xs:attribute name="showCurDate" type="xs:boolean" />
+        <!-- m_calendarNavigation по умолчанию true -->
+        <xs:attribute name="navigation" type="xs:boolean" />
+        <!-- m_beginOfRepresentationPeriod по умолчанию Date() -->
+        <xs:attribute name="begPeriod" type="xs:dateTime" />
+        <!-- m_endOfRepresentationPeriod по умолчанию Date() -->
+        <xs:attribute name="endPeriod" type="xs:dateTime" />
+        <!-- m_enableStartDrag по умолчанию false -->
+        <xs:attribute name="startDrag" type="xs:boolean" />
+        <!-- m_enableDrag по умолчанию false -->
+        <xs:attribute name="drag" type="xs:boolean" />
+        <!-- m_bMonthPanelVisible по умолчанию false -->
+        <xs:attribute name="monthPanelVisible" type="xs:boolean" />
+        <!-- m_widthInMonths по умолчанию 1 -->
+        <xs:attribute name="widthInMonths" type="xs:decimal" />
+        <!-- m_heightInMonths по умолчанию 1 -->
+        <xs:attribute name="heightInMonths" type="xs:decimal" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="PeriodFieldData">
+        <xs:sequence>
+            <!-- m_font по умолчанию kLogFormPeriodFieldDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormPeriodFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_border по умолчанию kLogFormPeriodFieldDataDefBorder -->
+            <xs:element name="brd" type="ui:Border" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 0 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 0 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="ProgressBarFieldData">
+        <xs:sequence>
+            <!-- m_borderColor по умолчанию kLogFormInputFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 32 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 1 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию false -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_minValue по умолчанию 0 -->
+        <xs:attribute name="minVal" type="xs:decimal" />
+        <!-- m_maxValue по умолчанию 100 -->
+        <xs:attribute name="maxVal" type="xs:decimal" />
+        <!-- m_orientation по умолчанию Horizontal -->
+        <xs:attribute name="orientation" type="tns:FormElementOrientation" />
+        <!-- m_representation по умолчанию Smooth -->
+        <xs:attribute name="repres" type="tns:FormProgressBarRepresentation" />
+        <!-- m_showPercent по умолчанию false -->
+        <xs:attribute name="showPercent" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="TrackBarFieldData">
+        <xs:sequence>
+            <!-- m_borderColor по умолчанию kLogFormInputFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 32 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 2 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию false -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_minValue по умолчанию 0 -->
+        <xs:attribute name="minVal" type="xs:decimal" />
+        <!-- m_maxValue по умолчанию 100 -->
+        <xs:attribute name="maxVal" type="xs:decimal" />
+        <!-- m_step по умолчанию 1 -->
+        <xs:attribute name="step" type="xs:decimal" />
+        <!-- m_pageSize по умолчанию 10 -->
+        <xs:attribute name="pageSize" type="xs:decimal" />
+        <!-- m_markingStep по умолчанию 5 -->
+        <xs:attribute name="markingStep" type="xs:decimal" />
+        <!-- m_orientation по умолчанию Horizontal -->
+        <xs:attribute name="orientation" type="tns:FormElementOrientation" />
+        <!-- m_marking по умолчанию BottomRight -->
+        <xs:attribute name="marking" type="tns:MarkingStyle" />
+    </xs:complexType>
+
+    <xs:complexType name="ChartFieldData">
+        <xs:sequence>
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="GanttChartFieldData">
+        <xs:sequence>
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+        <!-- m_tableLocation по умолчанию eAuto -->
+        <xs:attribute name="tableLocation" type="tns:GanttChartTableLocation" />
+        <!-- m_valuesSelectionMode по умолчанию eAuto -->
+        <xs:attribute name="valuesSelectionMode" type="tns:GanttChartValuesSelectionMode" />
+        <!-- m_intervalsSelectionMode по умолчанию eAuto -->
+        <xs:attribute name="intervalsSelectionMode" type="tns:GanttChartIntervalsSelectionMode" />
+        <!-- m_showHorizontalLinesFlag по умолчанию auto -->
+        <xs:attribute name="showHorizontalLinesFlag" type="tns:BWAValue" />
+        <!-- m_showVerticalLinesFlag по умолчанию auto -->
+        <xs:attribute name="showVerticalLinesFlag" type="tns:BWAValue" />
+    </xs:complexType>
+
+    <xs:complexType name="DendrogramFieldData">
+        <xs:sequence>
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="FlowchartFieldData">
+        <xs:sequence>
+            <!-- m_borderColor по умолчанию kLogFormInputFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_useOutput по умолчанию Auto -->
+        <xs:attribute name="useOutput" type="ui:UseOutput" />
+        <!-- m_edit по умолчанию true -->
+        <xs:attribute name="edit" type="xs:boolean" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="HTMLFieldData">
+        <xs:sequence>
+            <!-- m_borderColor по умолчанию kLogFormInputFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_border по умолчанию kLogFormHTMLFieldDataDefBorder -->
+            <xs:element name="brd" type="ui:Border" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_useOutput по умолчанию Auto -->
+        <xs:attribute name="useOutput" type="ui:UseOutput" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="GeographicalMapFieldData">
+        <xs:sequence>
+            <!-- m_borderColor по умолчанию kLogFormGeographicalMapFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию kLogFormGeographicalMapFieldDataDefWidth -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию kLogFormGeographicalMapFieldDataDefHeight -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию kLogFormGeographicalMapFieldDataDefHorStretchable -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию kLogFormGeographicalMapFieldDataDefVerStretchable -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_useOutput по умолчанию kLogFormGeographicalMapFieldDataDefUseOutput -->
+        <xs:attribute name="useOutput" type="ui:UseOutput" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="PDFDocumentFieldData">
+        <xs:sequence>
+            <!-- m_borderColor по умолчанию kLogFormInputFieldDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию 50 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 10 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_useOutput по умолчанию Auto -->
+        <xs:attribute name="useOutput" type="ui:UseOutput" />
+        <!-- m_scale по умолчанию 100 -->
+        <xs:attribute name="scale" type="xs:decimal" />
+        <!-- m_scale по умолчанию 1 -->
+        <xs:attribute name="currentPage" type="xs:decimal" />
+        <!-- m_orientation по умолчанию 00 -->
+        <xs:attribute name="orientation" type="xs:decimal" />
+        <!-- m_viewStatusLocation по умолчанию Auto -->
+        <xs:attribute name="viewStatusLocation" type="tns:ViewStatusLocation" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+  
+    <xs:complexType name="TextDecorationData">
+        <xs:sequence>
+            <!-- m_backColor по умолчанию kLogFormTextDecorationDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormTextDecorationDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_border по умолчанию kLogFormTextDecorationDataDefBorder -->
+            <xs:element name="brd" type="ui:Border" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_hyperlink по умолчанию false -->
+        <xs:attribute name="hyper" type="xs:boolean" />
+        <!-- m_hAlign по умолчанию Left -->
+        <xs:attribute name="hAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_vAlign по умолчанию Center -->
+        <xs:attribute name="vAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_titleHeight по умолчанию 0 -->
+        <xs:attribute name="titleHeight" type="xs:decimal" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="PictureDecorationData">
+        <xs:sequence>
+            <!-- m_picture по умолчанию V8Picture() -->
+            <xs:element name="pic" type="ui:Picture" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormPictureDecorationDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_border по умолчанию kLogFormPictureDecorationDataDefBorder -->
+            <xs:element name="brd" type="ui:Border" minOccurs="0" />
+            <!-- m_pictureBackgroundShowMode по умолчанию kLogFormPictureDecorationDataDefPictureBackgroundShowMode -->
+            <xs:element name="backgroundShowMode" type="tns:PictureBackgroundShowMode" minOccurs="0" />
+            <!-- m_pictureColor по умолчанию kLogFormPictureDecorationDataDefPictureColor -->
+            <xs:element name="picClr" type="ui:Color" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_hyperlink по умолчанию false -->
+        <xs:attribute name="hyper" type="xs:boolean" />
+        <!-- m_pictureSizeMode по умолчанию RealSize -->
+        <xs:attribute name="pictureSize" type="tns:PictureSize" />
+        <!-- m_zoomable по умолчанию false -->
+        <xs:attribute name="zoomable" type="xs:boolean" />
+        <!-- m_imageScale по умолчанию 100 -->
+        <xs:attribute name="imageScale" type="xs:decimal" />
+        <!-- m_nonselectedPictureText по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="picText" type="xs:string" />
+        <!-- m_enableStartDrag по умолчанию false -->
+        <xs:attribute name="startDrag" type="xs:boolean" />
+        <!-- m_enableDrag по умолчанию false -->
+        <xs:attribute name="drag" type="xs:boolean" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+        <!-- m_fileDragMode по умолчанию AsFileRef -->
+        <xs:attribute name="fileDragMode" type="tns:FileDragMode" />
+    </xs:complexType>
+  
+    <xs:complexType name="ItemRef">
+        <xs:attribute name="id" type="xs:decimal"/>
+        <xs:attribute name="name" type="xs:string"/>
+    </xs:complexType>
+
+    <xs:complexType name="Predefined">
+        <xs:sequence>
+            <xs:choice>
+                <!-- m_pContextMenu если оно не пустое и у его данных установлен fillStd
+                     иначе только его id -->
+                <xs:element name="contextMenu" type="tns:Group" />
+                <xs:element name="contextMenuRef" type="tns:ItemRef" />
+                <!-- m_pCommandBar если оно не пустое и у его данных установлен fillStd
+                     иначе только его id -->
+                <xs:element name="autoCommandBar" type="tns:Group" />
+                <xs:element name="autoCommandBarRef" type="tns:ItemRef" />
+                <!-- m_pExtTooltip если не по умолчанию там всё
+                     иначе только его id -->
+                <xs:element name="extTooltip" type="tns:Decoration" />
+                <xs:element name="extTooltipRef" type="tns:ItemRef" />
+                <!-- m_pSearchStringRepresentation если не по умолчанию там всё
+                       иначе только его id -->
+                <xs:element name="searchStringRepresentation" type="tns:Addition" />
+                <xs:element name="searchStringRepresentationRef" type="tns:ItemRef" />
+                <!-- m_pViewStatusRepresentation если не по умолчанию там всё
+                     иначе только его id -->
+                <xs:element name="viewStatusRepresentation" type="tns:Addition" />
+                <xs:element name="viewStatusRepresentationRef" type="tns:ItemRef" />
+                <!-- m_pSearchControl если не по умолчанию там всё
+                     иначе только его id -->
+                <xs:element name="searchControl" type="tns:Addition" />
+                <xs:element name="searchControlRef" type="tns:ItemRef" />
+            </xs:choice>          
+            <!-- предопределнные если не пустые-->
+            <xs:element name="predefined" type="tns:Predefined" minOccurs="0" maxOccurs="unbounded" />
+            <!-- коллекция -->
+            <xs:choice minOccurs="0" maxOccurs="unbounded" >
+                <xs:element name="field" type="tns:Field" />
+                <xs:element name="group" type="tns:Group" />
+                <xs:element name="table" type="tns:Table" />
+                <xs:element name="button" type="tns:Button" />
+                <xs:element name="decoration" type="tns:Decoration" />
+                <xs:element name="addition" type="tns:Addition" />
+            </xs:choice>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="Button">
+        <xs:sequence>
+            <!-- m_command -->
+            <xs:element name="command" type="v81:CompositeID"/>
+            <!-- m_commandParameter -->
+            <xs:element name="commandParam"/>
+            <!-- m_property по умолчанию empty() -->
+            <xs:element name="prop" type="tns:DataPath" minOccurs="0"/>
+            <!-- m_propertyName по умолчанию empty() -->
+            <xs:element name="propName" type="xs:string" minOccurs="0"/>
+            <!-- m_tdp по умолчанию types().empty() -->
+            <xs:element name="tdp" type="v81:TypeDescription" minOccurs="0"/>
+            <!-- m_backColor по умолчанию kLogFormButtonDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0"/>
+            <!-- m_textColor по умолчанию kLogFormButtonDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0"/>
+            <!-- m_borderColor по умолчанию kLogFormButtonDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0"/>
+            <!-- m_font по умолчанию kLogFormButtonDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0"/>
+            <!-- m_shortCut по умолчанию ShortCut() -->
+            <xs:element name="stcut" type="ui:ShortCutType" minOccurs="0"/>
+            <!-- m_picture по умолчанию V8Picture() -->
+            <xs:element name="pic" type="ui:Picture" minOccurs="0" />
+            <!-- m_title по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="title" type="xs:string" minOccurs="0" />
+            <!-- Отображение в контекстном меню по умолчанию kLogFormButtonDefRepresentationInContextMenu -->
+            <xs:element name="ricm" type="tns:RepresentationInContextMenu" minOccurs="0" />
+            <!-- m_backPicture по умолчанию V8Picture() -->
+            <xs:element name="backPic" type="ui:Picture" minOccurs="0" />
+            <!-- предопределнные если не пустые-->
+            <xs:element name="predefined" type="tns:Predefined" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_id Пишется только long. uuid - константа -->
+        <xs:attribute name="id" type="xs:decimal"/>
+        <!-- m_name -->
+        <xs:attribute name="name" type="xs:string"/>
+        <!-- m_origin по умолчанию eSource -->
+        <xs:attribute name="org" type="tns:FormElementOrigin"/>
+        <!-- m_kind -->
+        <xs:attribute name="kind" type="tns:ManagedFormButtonType"/>
+        <!-- m_visible по умолчанию true -->
+        <xs:attribute name="visible" type="xs:boolean"/>
+        <!-- m_pUserVisible сериализовать как bool значение брать из commonValue
+             по умолчанию true -->
+        <xs:attribute name="userVisible" type="xs:boolean"/>
+        <!-- m_titleRowsCount по умолчанию 0 -->
+        <xs:attribute name="titleRowsCount" type="xs:decimal" />
+        <!-- m_representation по умолчанию Auto -->
+        <xs:attribute name="repres" type="tns:ButtonRepresentation"/>
+        <!-- m_defaultButton по умолчанию false -->
+        <xs:attribute name="defButton" type="xs:boolean"/>
+        <!-- m_skipOnInput по умолчанию auto -->
+        <xs:attribute name="skipOnInput" type="tns:BWAValue" />
+        <!-- m_enabled по умолчанию true -->
+        <xs:attribute name="enabled" type="xs:boolean"/>
+        <!-- m_defaultElement по умолчанию false -->
+        <xs:attribute name="defItem" type="xs:boolean"/>
+        <!-- m_important по умолчанию auto -->
+        <xs:attribute name="important" type="tns:BWAValue"/>
+        <!-- m_width по умолчанию 0 -->
+        <xs:attribute name="width" type="xs:decimal"/>
+        <!-- m_height по умолчанию 0 -->
+        <xs:attribute name="height" type="xs:decimal"/>
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_placementArea по умолчанию eMEPAMainCommandsLeftArea -->
+        <xs:attribute name="plcm" type="tns:MenuElementPlacementArea"/>
+        <!-- m_check по умолчанию false -->
+        <xs:attribute name="check" type="xs:boolean"/>
+        <!-- m_tooltipRepresentation по умолчанию Auto -->
+        <xs:attribute name="tooltipRepres" type="tns:TooltipRepresentation" />
+        <!-- m_groupHAlign по умолчанию Auto -->
+        <xs:attribute name="groupHAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_groupVAlign по умолчанию Auto -->
+        <xs:attribute name="groupVAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_shape по умолчанию eBSHAuto -->
+        <xs:attribute name="shape" type="tns:ButtonShape" />
+        <!-- m_shapeRepresentation по умолчанию eBCRAuto -->
+        <xs:attribute name="shapeRepres" type="tns:ButtonShapeRepresentation" />
+        <!-- по умолчанию eBPLAuto -->
+        <xs:attribute name="picLocation" type="tns:FormButtonPictureLocation" />
+        <!-- m_importance по умолчанию Auto -->
+        <xs:attribute name="displayImportance" type="tns:DisplayImportance" />
+        <!-- m_locationInCommandBar по умолчанию Auto -->
+        <xs:attribute name="locationInCommandBar" type="tns:ButtonLocationInCommandBar" />
+        <!-- m_commandUniqueness по умолчанию true -->
+        <xs:attribute name="commandUniqueness" type="xs:boolean"/>
+        <!-- m_mainServerInaccessibilityBehavior по умолчанию Auto -->
+        <xs:attribute name="MSIB" type="tns:OnMainServerUnavalableBehavior" />
+        <!-- m_showAsCard по умолчанию false -->
+        <xs:attribute name="showAsCard" type="xs:boolean"/>
+        <!-- m_backPictureRepresentationEffect по умолчанию Auto -->
+        <xs:attribute name="backPictRepresEffect" type="tns:PictureRepresentationEffect" />
+        <!-- m_cardPictureAndTitleAlign по умолчанию Auto -->
+        <xs:attribute name="cardPictureAndTitleAlign" type="tns:CardPictureAndTitleAlignVariant" />
+        <!-- m_pictureHeight по умолчанию 0 -->
+        <xs:attribute name="pictureHeight" type="xs:decimal" />
+        <!-- m_buttonImportance по умолчанию Normal -->
+        <xs:attribute name="buttonImportance" type="tns:ButtonImportance" />
+    </xs:complexType>
+
+    <xs:complexType name="Table">
+        <xs:sequence>
+            <!-- m_property по умолчанию empty() -->
+            <xs:element name="prop" type="tns:DataPath" minOccurs="0" />
+            <!-- m_propertyName по умолчанию empty() -->
+            <xs:element name="propName" type="xs:string" minOccurs="0" />
+            <!-- m_tdp по умолчанию types().empty() -->
+            <xs:element name="tdp" type="v81:TypeDescription" minOccurs="0" />
+            <!-- m_rowsPictureProperty по умолчанию empty() -->
+            <xs:element name="rowsPicProp" type="tns:DataPath" minOccurs="0" />
+            <!-- m_rowsPicturePropertyName по умолчанию empty() -->
+            <xs:element name="rowsPicPropName" type="xs:string" minOccurs="0" />
+            <!-- m_rowsPicture по умолчанию V8Picture() -->
+            <xs:element name="rowsPic" type="ui:Picture" minOccurs="0" />
+            <!-- m_backColor по умолчанию kLogFormTableDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_textColor по умолчанию kLogFormTableDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormTableDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormTableDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_titleTextColor по умолчанию kLogFormTableDefTitleTextColor -->
+            <xs:element name="titleTxtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_titleFont по умолчанию kLogFormTableDefTitleFont -->
+            <xs:element name="titleFnt" type="ui:Font" minOccurs="0" />
+            <!-- m_shortCut по умолчанию ShortCut() -->
+            <xs:element name="stcut" type="ui:ShortCutType" minOccurs="0"/>
+            <!-- m_additionalProperties если не пустые-->
+            <xs:element name="addProps" type="tns:AddProps" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+            <!-- m_commands если не пустые-->
+            <xs:element name="commands" type="tns:CommandsInclusion" />
+            <!-- предопределнные если не пустые-->
+            <xs:element name="predefined" type="tns:Predefined" minOccurs="0" maxOccurs="unbounded" />
+            <xs:choice minOccurs="0" maxOccurs="unbounded" >
+                <xs:element name="field" type="tns:Field" />
+                <xs:element name="group" type="tns:Group" />
+            </xs:choice>
+            <!-- m_title по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="title" type="xs:string" minOccurs="0" />
+            <!-- m_tooltip по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="tooltip" type="xs:string" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_id Пишется только long. uuid - константа -->
+        <xs:attribute name="id" type="xs:decimal" />
+        <!-- m_name -->
+        <xs:attribute name="name" type="xs:string" />
+        <!-- m_origin по умолчанию eSource -->
+        <xs:attribute name="org" type="tns:FormElementOrigin" />
+        <!-- m_representation по умолчанию HierarhicList -->
+        <xs:attribute name="repres" type="tns:TableRepresentation" />
+        <!-- m_visible по умолчанию true -->
+        <xs:attribute name="visible" type="xs:boolean"/>
+        <!-- m_pUserVisible сериализовать как bool значение брать из commonValue
+             по умолчанию true -->
+        <xs:attribute name="userVisible" type="xs:boolean"/>
+        <!-- m_titleLocation по умолчанию None -->
+        <xs:attribute name="titleLocation" type="tns:FormElementTitleLocation" />
+        <!-- m_titleRowsCount по умолчанию 0 -->
+        <xs:attribute name="titleRowsCount" type="xs:decimal" />
+        <!-- m_commandBarLocation по умолчанию Auto -->
+        <xs:attribute name="commandBarLocation" type="tns:FormElementCommandBarLocation" />
+        <!-- m_autoFill по умолчанию false -->
+        <xs:attribute name="autoFill" type="xs:boolean" />
+        <!-- m_enabled по умолчанию true -->
+        <xs:attribute name="enabled" type="xs:boolean" />
+        <!-- m_readOnly по умолчанию false -->
+        <xs:attribute name="readOnly" type="xs:boolean" />
+        <!-- m_skipOnInput по умолчанию auto -->
+        <xs:attribute name="skipOnInput" type="tns:BWAValue" />
+        <!-- m_defaultElement по умолчанию false -->
+        <xs:attribute name="defItem" type="xs:boolean" />
+        <!-- m_changeRowSet по умолчанию true -->
+        <xs:attribute name="changeRowSet" type="xs:boolean" />
+        <!-- m_changeRowOrder по умолчанию true -->
+        <xs:attribute name="changeRowOrder" type="xs:boolean" />
+        <!-- m_width по умолчанию 0 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 0 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_rowsCount по умолчанию 0 -->
+        <xs:attribute name="rowsCount" type="xs:decimal" />
+        <!-- m_heightControlVariant по умолчанию auto-->
+        <xs:attribute name="heightControlVariant" type="tns:TableHeightControlVariant" />
+        <!-- m_autoMaxRowsCount по умолчанию true -->
+        <xs:attribute name="autoMaxRowsCount" type="xs:boolean" />
+        <!-- m_maxRowsCount по умолчанию 0 -->
+        <xs:attribute name="maxRowsCount" type="xs:decimal" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_choiceMode по умолчанию false -->
+        <xs:attribute name="choiceMode" type="xs:boolean" />
+        <!-- m_multipleChoice по умолчанию false -->
+        <xs:attribute name="multipleChoice" type="xs:boolean" />
+        <!-- m_rowInputMode по умолчанию EndOfList -->
+        <xs:attribute name="rowInput" type="tns:TableRowInputMode" />
+        <!-- m_rowsSelectionMode по умолчанию MultiRow -->
+        <xs:attribute name="rowsSelection" type="tns:TableSelectionMode" />
+        <!-- m_rowSelectionMode по умолчанию Cell -->
+        <xs:attribute name="rowSelection" type="tns:TableRowSelectionMode" />
+        <!-- m_showHeader по умолчанию true -->
+        <xs:attribute name="showHeader" type="xs:boolean" />
+        <!-- m_headerHeight по умолчанию 1 -->
+        <xs:attribute name="headerHeight" type="xs:decimal" />
+        <!-- m_showFooter по умолчанию false -->
+        <xs:attribute name="showFooter" type="xs:boolean" />
+        <!-- m_footerHeight по умолчанию 1 -->
+        <xs:attribute name="footerHeight" type="xs:decimal" />
+        <!-- m_horScrollBarMode по умолчанию AutoUse -->
+        <xs:attribute name="horScroll" type="tns:TableScrollBarUse" />
+        <!-- m_verScrollBarMode по умолчанию AutoUse -->
+        <xs:attribute name="verScroll" type="tns:TableScrollBarUse" />
+        <!-- m_showHorLines по умолчанию true -->
+        <xs:attribute name="showHorLines" type="xs:boolean" />
+        <!-- m_showVerLines по умолчанию true -->
+        <xs:attribute name="showVerLines" type="xs:boolean" />
+        <!-- m_showHorLines по умолчанию true -->
+        <xs:attribute name="showHorLinesBWA" type="tns:BWAValue" />
+        <!-- m_showVerLines по умолчанию true -->
+        <xs:attribute name="showVerLinesBWA" type="tns:BWAValue" />
+        <!-- m_fixedLeft по умолчанию 0 -->
+        <xs:attribute name="fixedLeft" type="xs:decimal" />
+        <!-- m_fixedRight по умолчанию 0 -->
+        <xs:attribute name="fixedRight" type="xs:decimal" />
+        <!-- m_useAlternationRowColor по умолчанию false -->
+        <xs:attribute name="useAltRowColor" type="xs:boolean" />
+        <!-- m_useAlternationRowColor по умолчанию false -->
+        <xs:attribute name="useAltRowColorBWA" type="tns:BWAValue" />
+        <!-- m_autoInsertNewRow по умолчанию false -->
+        <xs:attribute name="autoInsert" type="xs:boolean" />
+        <!-- m_bAutoInsertNotcompletedValues по умолчанию auto -->
+        <xs:attribute name="autoInsertNotcompleted" type="tns:BWAValue" />
+        <!-- m_bAutoMarkNotcompletedValues по умолчанию auto -->
+        <xs:attribute name="autoMarkNotcompleted" type="tns:BWAValue" />
+        <!-- m_bAutoMarkNotcompletedValues по умолчанию auto -->
+        <xs:attribute name="markRequiredComplete" type="tns:BWAValue" />
+        <!-- m_searchOnInput по умолчанию Auto -->
+        <xs:attribute name="searchOnInput" type="tns:SearchOnInput" />
+        <!-- m_initialListView по умолчанию Auto -->
+        <xs:attribute name="initListView" type="tns:TableInitialListView" />
+        <!-- m_initialTreeView по умолчанию NoExpand -->
+        <xs:attribute name="initTreeView" type="tns:TableInitialTreeView" />
+        <!-- m_initialRowActivation по умолчанию Auto -->
+        <xs:attribute name="initRowActivation" type="tns:TableInitialRowActivation" />
+        <!-- m_rowActionsShowType по умолчанию Auto -->
+        <xs:attribute name="rowActionsShowType" type="tns:TableRowActionsShowType" />
+        <!-- m_useOutput по умолчанию Auto -->
+        <xs:attribute name="useOutput" type="ui:UseOutput" />
+        <!-- m_horStretchable по умолчанию true -->
+        <xs:attribute name="horStretch" type="xs:boolean" />
+        <!-- m_verStretchable по умолчанию true -->
+        <xs:attribute name="verStretch" type="xs:boolean" />
+        <!-- m_enableStartDrag по умолчанию false -->
+        <xs:attribute name="startDrag" type="xs:boolean" />
+        <!-- m_enableDrag по умолчанию false -->
+        <xs:attribute name="drag" type="xs:boolean" />
+        <!-- m_tooltipRepresentation по умолчанию Auto -->
+        <xs:attribute name="tooltipRepres" type="tns:TooltipRepresentation" />
+        <!-- m_searchStringLocation по умолчанию Auto -->
+        <xs:attribute name="searchStringLocation" type="tns:SearchStringLocation" />
+        <!-- m_viewStatusLocation по умолчанию Auto -->
+        <xs:attribute name="viewStatusLocation" type="tns:ViewStatusLocation" />
+        <!-- m_searchControlLocation по умолчанию Auto -->
+        <xs:attribute name="searchControlLocation" type="tns:SearchControlLocation" />
+        <!-- m_groupHAlign по умолчанию Auto -->
+        <xs:attribute name="groupHAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_groupVAlign по умолчанию Auto -->
+        <xs:attribute name="groupVAlign" type="tns:ItemVerticalAlignment" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+        <!-- по умолчанию - None -->
+        <xs:attribute name="refreshRequest" type="tns:RefreshRequestMethod" />
+        <!-- по умолчанию - Auto -->
+        <xs:attribute name="currentRowUse" type="tns:TableCurrentRowUse" />
+        <!-- по умолчанию - Auto -->
+        <xs:attribute name="behaviorOnHorizontalCompression" type="tns:TableBehaviorOnHorizontalCompression" />
+        <!-- m_importance по умолчанию Auto -->
+        <xs:attribute name="displayImportance" type="tns:DisplayImportance" />
+        <!-- m_fileDragMode по умолчанию AsFileRef -->
+        <xs:attribute name="fileDragMode" type="tns:FileDragMode" />
+        <!-- m_mainServerInaccessibilityBehavior по умолчанию Auto -->
+        <xs:attribute name="MSIB" type="tns:OnMainServerUnavalableBehavior" />
+        <!-- m_hierarchyPanelLocation по умолчанию Auto -->
+        <xs:attribute name="hierarchyPanelLocation" type="tns:HierarchyPanelLocation" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="hierarchyPanelVisible" type="xs:boolean" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="verticalScrollPanelVisible" type="xs:boolean" />
+        <!-- по умолчанию Auto -->
+        <xs:attribute name="saveColors" type="tns:SaveTableAppearance" />
+        <!-- по умолчанию пустая строка -->
+        <xs:attribute name="iconSaveColorsKey" type="xs:string" />
+        <!-- по умолчанию пустая строка -->
+        <xs:attribute name="shapeSaveColorsKey" type="xs:string" />
+        <!-- m_showCommandBarNeedDereferenced по умолчанию true -->
+        <xs:attribute name="showCommandBarNeedDereferenced" type="xs:boolean" />
+        <!-- m_showCommandBar по умолчанию auto -->
+        <xs:attribute name="showCommandBar" type="tns:BWAValue" />
+        <!-- m_mobileDeviceTableType по умолчанию auto -->
+        <xs:attribute name="mobileDeviceTableType" type="tns:FormTableType" />
+        <!-- m_autoMaxCardHeight по умолчанию true-->
+        <xs:attribute name="autoMaxCardHeight" type="xs:boolean" />
+        <!-- m_maxCardHeight по умолчанию 0-->
+        <xs:attribute name="maxCardHeight" type="xs:decimal" />
+        <!-- m_cardBehaviorOnVerticalCompression по умолчанию eLFTCBVCAuto-->
+        <xs:attribute name="cardBehaviorOnVerticalCompression" type="tns:CardBehaviorOnVerticalCompression" />
+        <!-- m_cellHyperlinksRepresentationn по умолчанию eCHsRAuto-->
+        <xs:attribute name="cellHyperlinksRepresentation" type="tns:CellHyperlinksRepresentation" />
+    </xs:complexType>
+
+    <xs:complexType name="Group">
+        <xs:sequence>
+            <!-- m_titleTextColor по умолчанию kLogFormGroupDefTitleTextColor -->
+            <xs:element name="titleTxtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_titleFont по умолчанию kLogFormGroupDefTitleFont -->
+            <xs:element name="titleFnt" type="ui:Font" minOccurs="0" />
+            <!-- m_shortCut по умолчанию ShortCut() -->
+            <xs:element name="stcut" type="ui:ShortCutType" minOccurs="0"/>
+            <xs:choice minOccurs="0" maxOccurs="1" >
+                <xs:element name="menuData" type="tns:MenuGroupData" />
+                <xs:element name="autoMenuData" type="tns:AutoMenuGroupData" />
+                <xs:element name="subMenuData" type="tns:SubmenuGroupData" />
+                <xs:element name="buttonsData" type="tns:ButtonsGroupData" />
+                <xs:element name="contextMenuData" type="tns:ContextMenuGroupData" />
+                <xs:element name="columnsData" type="tns:ColumnsGroupData" />
+                <xs:element name="pagesData" type="tns:PagesGroupData" />
+                <xs:element name="pageData" type="tns:PageGroupData" />
+                <xs:element name="usualData" type="tns:UsualGroupData" />
+                <xs:element name="siapData" type="tns:SelectedItemsActionsPanelGroupData" />
+                <xs:element name="racbData" type="tns:RowActionsCommandBarGroupData" />
+            </xs:choice>
+            <xs:choice minOccurs="0" maxOccurs="unbounded" >
+                <xs:element name="field" type="tns:Field" />
+                <xs:element name="group" type="tns:Group" />
+                <xs:element name="table" type="tns:Table" />
+                <xs:element name="button" type="tns:Button" />
+                <xs:element name="decoration" type="tns:Decoration" />
+                <xs:element name="addition" type="tns:Addition" />
+            </xs:choice>
+            <!-- m_title по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="title" type="xs:string" minOccurs="0" />
+            <!-- m_tooltip по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="tooltip" type="xs:string" minOccurs="0" />
+            <!-- предопределнные если не пустые-->
+            <xs:element name="predefined" type="tns:Predefined" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_id Пишется только long. uuid - константа -->
+        <xs:attribute name="id" type="xs:decimal" />
+        <!-- m_name -->
+        <xs:attribute name="name" type="xs:string" />
+        <!-- m_origin по умолчанию eSource -->
+        <xs:attribute name="org" type="tns:FormElementOrigin" />
+        <!-- m_createdByUser по умолчанию false -->
+        <xs:attribute name="users" type="xs:boolean" />
+        <!-- m_kind -->
+        <xs:attribute name="kind" type="tns:ManagedFormGroupType" />
+        <!-- m_visible по умолчанию true -->
+        <xs:attribute name="visible" type="xs:boolean"/>
+        <!-- m_pUserVisible сериализовать как bool значение брать из commonValue
+             по умолчанию true -->
+        <xs:attribute name="userVisible" type="xs:boolean"/>
+        <!-- m_contentChange по умолчанию false -->
+        <xs:attribute name="contentChange" type="xs:boolean" />
+        <!-- m_enabled по умолчанию true -->
+        <xs:attribute name="enabled" type="xs:boolean" />
+        <!-- m_readOnly по умолчанию false -->
+        <xs:attribute name="readOnly" type="xs:boolean" />
+        <!-- m_width по умолчанию 0 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 0 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию auto -->
+        <xs:attribute name="horStretch" type="tns:BWAValue" />
+        <!-- m_verStretchable по умолчанию auto -->
+        <xs:attribute name="verStretch" type="tns:BWAValue" />
+        <!-- m_tooltipRepresentation по умолчанию Auto -->
+        <xs:attribute name="tooltipRepres" type="tns:TooltipRepresentation" />
+        <!-- m_groupHAlign по умолчанию Auto -->
+        <xs:attribute name="groupHAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_groupVAlign по умолчанию Auto -->
+        <xs:attribute name="groupVAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_degeneratable по умолчанию false -->
+        <xs:attribute name="degeneratable" type="xs:boolean" />
+        <!-- m_importance по умолчанию Auto -->
+        <xs:attribute name="displayImportance" type="tns:DisplayImportance" />
+    </xs:complexType>
+
+    <xs:complexType name="Field">
+        <xs:sequence>
+            <xs:choice minOccurs="0" maxOccurs="1" >
+                <xs:element name="textData" type="tns:TextFieldData" />
+                <xs:element name="inputData" type="tns:InputFieldData" />
+                <xs:element name="checkData" type="tns:CheckBoxFieldData" />
+                <xs:element name="imageData" type="tns:ImageFieldData" />
+                <xs:element name="radioData" type="tns:RadioButtonsData" />
+                <xs:element name="spereadsheetData" type="tns:SpreadsheetFieldData" />
+                <xs:element name="textDocData" type="tns:TextDocFieldData" />
+                <xs:element name="formattedDocData" type="tns:FormattedDocFieldData" />
+                <xs:element name="plannerData" type="tns:PlannerFieldData" />
+                <xs:element name="calendarData" type="tns:CalendarFieldData" />
+                <xs:element name="periodData" type="tns:PeriodFieldData" />
+                <xs:element name="progressBarData" type="tns:ProgressBarFieldData" />
+                <xs:element name="trackBarData" type="tns:TrackBarFieldData" />
+                <xs:element name="chartData" type="tns:ChartFieldData" />
+                <xs:element name="ganttChartData" type="tns:GanttChartFieldData" />
+                <xs:element name="dendrogramData" type="tns:DendrogramFieldData" />
+                <xs:element name="flowchartData" type="tns:FlowchartFieldData" />
+                <xs:element name="htmlData" type="tns:HTMLFieldData" />
+                <xs:element name="geographicalMapData" type="tns:GeographicalMapFieldData" />
+                <xs:element name="pdfDocumentData" type="tns:PDFDocumentFieldData" />
+            </xs:choice>
+            <!-- m_property по умолчанию empty() -->
+            <xs:element name="prop" type="tns:DataPath" minOccurs="0" />
+            <!-- m_propertyName по умолчанию empty() -->
+            <xs:element name="propName" type="xs:string" minOccurs="0" />
+            <!-- m_tdp по умолчанию types().empty() -->
+            <xs:element name="tdp" type="v81:TypeDescription" minOccurs="0" />
+            <!-- m_footerProperty по умолчанию empty() -->
+            <xs:element name="ftProp" type="tns:DataPath" minOccurs="0" />
+            <!-- m_footerPropertyName по умолчанию empty() -->
+            <xs:element name="ftPropName" type="xs:string" minOccurs="0" />
+            <!-- m_footerTdp по умолчанию types().empty() -->
+            <xs:element name="ftTdp" type="v81:TypeDescription" minOccurs="0" />
+            <!-- m_headerPicture по умолчанию V8Picture() -->
+            <xs:element name="headerPic" type="ui:Picture" minOccurs="0" />
+            <!-- m_footerPicture по умолчанию V8Picture() -->
+            <xs:element name="footerPic" type="ui:Picture" minOccurs="0" />
+            <!-- m_titleTextColor по умолчанию kLogFormFieldDefTitleTextColor -->
+            <xs:element name="titleTxtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_titleFont по умолчанию kLogFormFieldDefTitleFont -->
+            <xs:element name="titleFnt" type="ui:Font" minOccurs="0" />
+            <!-- m_headerBackColor по умолчанию kLogFormFieldDefHeaderBackColor -->
+            <xs:element name="titleBkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_footerTextColor по умолчанию kLogFormFieldDefFooterTextColor -->
+            <xs:element name="ftrTxtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_footerBackColor по умолчанию kLogFormFieldDefFooterBackColor -->
+            <xs:element name="ftrBkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_footerFont по умолчанию kLogFormFieldDefFooterFont -->
+            <xs:element name="ftrFnt" type="ui:Font" minOccurs="0" />
+            <!-- m_shortCut по умолчанию ShortCut() -->
+            <xs:element name="stcut" type="ui:ShortCutType" minOccurs="0"/>
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+            <!-- m_commands если не пустые-->
+            <xs:element name="commands" type="tns:CommandsInclusion" />
+            <!-- предопределнные если не пустые-->
+            <xs:element name="predefined" type="tns:Predefined" minOccurs="0" maxOccurs="unbounded" />
+            <!-- m_title по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="title" type="xs:string" minOccurs="0" />
+            <!-- m_tooltip по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="tooltip" type="xs:string" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_id Пишется только long. uuid - константа -->
+        <xs:attribute name="id" type="xs:decimal" />
+        <!-- m_name -->
+        <xs:attribute name="name" type="xs:string" />
+        <!-- m_origin по умолчанию eSource -->
+        <xs:attribute name="org" type="tns:FormElementOrigin" />
+        <!-- m_createdByUser по умолчанию false -->
+        <xs:attribute name="users" type="xs:boolean" />
+        <!-- m_kind -->
+        <xs:attribute name="kind" type="tns:ManagedFormFieldType" />
+        <!-- m_visible по умолчанию true -->
+        <xs:attribute name="visible" type="xs:boolean"/>
+        <!-- m_pUserVisible сериализовать как bool значение брать из commonValue
+             по умолчанию true -->
+        <xs:attribute name="userVisible" type="xs:boolean"/>
+        <!-- m_titleLocation по умолчанию Auto -->
+        <xs:attribute name="titleLocation" type="tns:FormElementTitleLocation" />
+        <!-- m_titleRowsCount по умолчанию 0 -->
+        <xs:attribute name="titleRowsCount" type="xs:decimal" />
+        <!-- m_enabled по умолчанию true -->
+        <xs:attribute name="enabled" type="xs:boolean" />
+        <!-- m_cellHyperlink по умолчанию true -->
+        <xs:attribute name="cellHyper" type="xs:boolean" />
+        <!-- m_readOnly по умолчанию false -->
+        <xs:attribute name="readOnly" type="xs:boolean" />
+        <!-- m_skipOnInput по умолчанию auto -->
+        <xs:attribute name="skipOnInput" type="tns:BWAValue" />
+        <!-- m_defaultElement по умолчанию false -->
+        <xs:attribute name="defItem" type="xs:boolean" />
+        <!-- m_warningOnEditRepresentation по умолчанию Auto -->
+        <xs:attribute name="warningOnEditRepresentation" type="tns:WarningOnEditRepresentation" />
+        <!-- m_warningOnEdit по умолчанию пустой -->
+        <xs:attribute name="warningOnEdit" type="xs:string" />
+        <!-- m_footerText по умолчанию пустой
+             брать только строку из языка # -->
+        <xs:attribute name="footerText" type="xs:string" />
+        <!-- m_showInHeader по умолчанию true -->
+        <xs:attribute name="showInHeader" type="xs:boolean" />
+        <!-- m_showInFooter по умолчанию true -->
+        <xs:attribute name="showInFooter" type="xs:boolean" />
+        <!-- m_hAlign по умолчанию Auto -->
+        <xs:attribute name="hAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_headerHAlign по умолчанию Left -->
+        <xs:attribute name="headerHAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_footerHAlign по умолчанию Auto -->
+        <xs:attribute name="footerHAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_vAlign по умолчанию Auto -->
+        <xs:attribute name="vAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_groupHAlign по умолчанию Auto -->
+        <xs:attribute name="groupHAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_groupVAlign по умолчанию Auto -->
+        <xs:attribute name="groupVAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_importance по умолчанию Auto -->
+        <xs:attribute name="displayImportance" type="tns:DisplayImportance" />
+        <!-- m_columnEditMode по умолчанию Enter -->
+        <xs:attribute name="columnEditMode" type="tns:TableFieldEditMode" />
+        <!-- m_autoCellHeight по умолчанию false -->
+        <xs:attribute name="autoCellHeight" type="xs:boolean" />
+        <!-- m_fixedInTable по умолчанию kLogFormFieldDefFixedInTable -->
+        <xs:attribute name="fixedInTable" type="tns:FormFixedInTable" />
+        <!-- m_tooltipRepresentation по умолчанию Auto -->
+        <xs:attribute name="tooltipRepres" type="tns:TooltipRepresentation" />
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+        <!-- m_mainServerInaccessibilityBehavior по умолчанию Auto -->
+        <xs:attribute name="MSIB" type="tns:OnMainServerUnavalableBehavior" />
+        <!-- m_markRequiredComplete по умолчанию auto -->
+        <xs:attribute name="markRequiredComplete" type="tns:BWAValue" />
+        <!-- m_cellMark по умолчанию Auto -->
+        <xs:attribute name="cellMark" type="tns:TableCellMarkType" />
+        <!-- свойство m_columnEditMode = eAutoEdit -->
+        <xs:attribute name="autoEditMode" type="xs:boolean" />
+        <!-- m_checkBoxType по умолчанию Auto -->
+        <xs:attribute name="checkBoxKind" type="tns:TableColumnCheckBoxKind" />
+        <!-- свойство m_multilineSelect по умолчанию false -->
+        <xs:attribute name="multilineSelect" type="xs:boolean" />
+        <!-- m_appearanceInCard по умолчанию Auto -->
+        <xs:attribute name="appearanceInCard" type="tns:AppearanceVariantInCard" />
+        <!-- m_showTitleInCard по умолчанию auto  -->
+        <xs:attribute name="showTitleInCard" type="tns:BWAValue" />
+        <!-- m_widthInCard по умолчанию Auto  -->
+        <xs:attribute name="widthInCard" type="tns:WidthVariantInCard" />
+        <!-- m_showInCard по умолчанию истина  -->
+        <xs:attribute name="showInCard" type="xs:boolean" />
+        <!-- m_fixInCard по умолчанию Auto  -->
+        <xs:attribute name="fixInCard" type="tns:BWAValue" />
+        <!-- m_autoWidthInTable по умолчанию Auto -->
+        <xs:attribute name="autoWidthInTable" type="tns:AutoWidthInTable" />
+        <!-- m_cellHyperlinkRepresentation по умолчанию Auto -->
+        <xs:attribute name="cellHyperlinkRepresentation" type="tns:CellHyperlinkRepresentation" />
+        <!-- m_cellHyperlinkDisplayVariant по умолчанию Auto -->
+        <xs:attribute name="cellHyperlinkDisplayVariant" type="tns:CellHyperlinkDisplayVariant" />
+    </xs:complexType>
+
+    <xs:complexType name="Decoration">
+        <xs:sequence>
+            <!-- m_textColor по умолчанию kLogFormDecorationDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormDecorationDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_shortCut по умолчанию ShortCut() -->
+            <xs:element name="stcut" type="ui:ShortCutType" minOccurs="0" />
+            <xs:choice minOccurs="0" maxOccurs="1" >
+                <xs:element name="textData" type="tns:TextDecorationData" />
+                <xs:element name="pictureData" type="tns:PictureDecorationData" />
+            </xs:choice>
+            <!-- предопределнные если не пустые-->
+            <xs:element name="predefined" type="tns:Predefined" minOccurs="0" maxOccurs="unbounded" />
+            <!-- m_title по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="title" type="tns:FormattedString" minOccurs="0" />
+            <!-- m_tooltip по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="tooltip" type="xs:string" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_id Пишется только long. uuid - константа -->
+        <xs:attribute name="id" type="xs:decimal" />
+        <!-- m_name -->
+        <xs:attribute name="name" type="xs:string" />
+        <!-- m_origin по умолчанию eSource -->
+        <xs:attribute name="org" type="tns:FormElementOrigin" />
+        <!-- m_createdByUser по умолчанию false -->
+        <xs:attribute name="users" type="xs:boolean" />
+        <!-- m_kind -->
+        <xs:attribute name="kind" type="tns:ManagedFormDecorationType" />
+        <!-- m_visible по умолчанию true -->
+        <xs:attribute name="visible" type="xs:boolean"/>
+        <!-- m_pUserVisible сериализовать как bool значение брать из commonValue
+             по умолчанию true -->
+        <xs:attribute name="userVisible" type="xs:boolean"/>
+        <!-- m_enabled по умолчанию true -->
+        <xs:attribute name="enabled" type="xs:boolean" />
+        <!-- m_width по умолчанию 0 -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_height по умолчанию 0 -->
+        <xs:attribute name="height" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию auto -->
+        <xs:attribute name="horStretch" type="tns:BWAValue" />
+        <!-- m_verStretchable по умолчанию auto -->
+        <xs:attribute name="verStretch" type="tns:BWAValue" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_autoMaxHeight по умолчанию true -->
+        <xs:attribute name="autoMaxHeight" type="xs:boolean" />
+        <!-- m_maxHeight по умолчанию 0 -->
+        <xs:attribute name="maxHeight" type="xs:decimal" />
+        <!-- m_skipOnInput по умолчанию auto -->
+        <xs:attribute name="skipOnInput" type="tns:BWAValue" />
+        <!-- m_tooltipRepresentation по умолчанию Auto -->
+        <xs:attribute name="tooltipRepres" type="tns:TooltipRepresentation" />
+        <!-- m_groupHAlign по умолчанию Auto -->
+        <xs:attribute name="groupHAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_groupVAlign по умолчанию Auto -->
+        <xs:attribute name="groupVAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_importance по умолчанию Auto -->
+        <xs:attribute name="displayImportance" type="tns:DisplayImportance" />
+        <!-- m_mainServerInaccessibilityBehavior по умолчанию Auto -->
+        <xs:attribute name="MSIB" type="tns:OnMainServerUnavalableBehavior" />
+    </xs:complexType>
+
+    <xs:complexType name="Addition">
+        <xs:sequence>
+            <xs:element name="source" type="tns:AdditionSource" />
+            <xs:choice minOccurs="0" maxOccurs="1" >
+                <xs:element name="searchStringData" type="tns:SearchStringData" />
+                <xs:element name="viewStatusData" type="tns:ViewStatusData" />
+                <xs:element name="searchControlData" type="tns:SearchControlData" />
+            </xs:choice>
+            <!-- предопределнные если не пустые-->
+            <xs:element name="predefined" type="tns:Predefined" minOccurs="0" maxOccurs="unbounded" />
+            <!-- m_title по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="title" type="xs:string" minOccurs="0" />
+            <!-- m_tooltip по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="tooltip" type="xs:string" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+            <xs:choice minOccurs="0" maxOccurs="unbounded" >
+                <xs:element name="group" type="tns:Group" />
+                <xs:element name="button" type="tns:Button" />
+            </xs:choice>
+        </xs:sequence>
+        <!-- m_id Пишется только long. uuid - константа -->
+        <xs:attribute name="id" type="xs:decimal" />
+        <!-- m_name -->
+        <xs:attribute name="name" type="xs:string" />
+        <!-- m_origin по умолчанию eSource -->
+        <xs:attribute name="org" type="tns:FormElementOrigin" />
+        <!-- m_createdByUser по умолчанию false -->
+        <xs:attribute name="users" type="xs:boolean" />
+        <!-- m_kind -->
+        <xs:attribute name="kind" type="tns:LogFormElementAdditionKind" />
+        <!-- m_visible по умолчанию true -->
+        <xs:attribute name="visible" type="xs:boolean"/>
+        <!-- m_pUserVisible сериализовать как bool значение брать из commonValue
+             по умолчанию true -->
+        <xs:attribute name="userVisible" type="xs:boolean"/>
+        <!-- m_enabled по умолчанию true -->
+        <xs:attribute name="enabled" type="xs:boolean" />
+        <!-- m_placementArea по умолчанию eMEPAMainCommandsLeftArea -->
+        <xs:attribute name="plcm" type="tns:MenuElementPlacementArea"/>
+        <!-- m_tooltipRepresentation по умолчанию Auto -->
+        <xs:attribute name="tooltipRepres" type="tns:TooltipRepresentation" />
+        <!-- m_groupHAlign по умолчанию Auto -->
+        <xs:attribute name="groupHAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_groupVAlign по умолчанию Auto -->
+        <xs:attribute name="groupVAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_importance по умолчанию Auto -->
+        <xs:attribute name="displayImportance" type="tns:DisplayImportance" />
+    </xs:complexType>
+
+    <xs:complexType name="SearchStringData">
+        <xs:sequence>
+            <!-- m_backColor по умолчанию kLogFormSearchStringRepresentationElementAdditionDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_textColor по умолчанию kLogFormSearchStringRepresentationElementAdditionDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormSearchStringRepresentationElementAdditionDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormSearchStringRepresentationElementAdditionDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию kLogFormSearchStringRepresentationElementAdditionDataDefWidth -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию kLogFormSearchStringRepresentationElementAdditionDataDefHorStretchable -->
+        <xs:attribute name="horStretch" type="tns:BWAValue" />
+    </xs:complexType>
+
+    <xs:complexType name="ViewStatusData">
+        <xs:sequence>
+            <!-- m_backColor по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_buttonBackColor по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefButtonBackColor -->
+            <xs:element name="btnClr" type="ui:Color" minOccurs="0" />
+            <!-- m_textColor по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_titleTextColor по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefTitleTextColor -->
+            <xs:element name="titleTxtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_titleFont по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefTitleFont -->
+            <xs:element name="titleFnt" type="ui:Font" minOccurs="0" />
+            <!-- m_border по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefBorder -->
+            <xs:element name="brd" type="ui:Border" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefWidth -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefHorStretchable -->
+        <xs:attribute name="horStretch" type="tns:BWAValue" />
+        <!-- m_hAlign по умолчанию kLogFormViewStatusRepresentationElementAdditionDataDefHAlign -->
+        <xs:attribute name="hAlign" type="tns:ItemHorizontalAlignment" />
+    </xs:complexType>
+
+    <xs:complexType name="SearchControlData">
+        <xs:sequence>
+            <!-- m_backColor по умолчанию kLogFormSearchControlElementAdditionDataDefBackColor -->
+            <xs:element name="bkClr" type="ui:Color" minOccurs="0" />
+            <!-- m_textColor по умолчанию kLogFormSearchControlElementAdditionDataDefTextColor -->
+            <xs:element name="txtClr" type="ui:Color" minOccurs="0" />
+            <!-- m_borderColor по умолчанию kLogFormSearchControlElementAdditionDataDefBorderColor -->
+            <xs:element name="brdClr" type="ui:Color" minOccurs="0" />
+            <!-- m_font по умолчанию kLogFormSearchControlElementAdditionDataDefFont -->
+            <xs:element name="fnt" type="ui:Font" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+        <!-- m_width по умолчанию kLogFormSearchControlElementAdditionDataDefWidth -->
+        <xs:attribute name="width" type="xs:decimal" />
+        <!-- m_autoMaxWidth по умолчанию true -->
+        <xs:attribute name="autoMaxWidth" type="xs:boolean" />
+        <!-- m_maxWidth по умолчанию 0 -->
+        <xs:attribute name="maxWidth" type="xs:decimal" />
+        <!-- m_minWidth по умолчанию 0 -->
+        <xs:attribute name="minWidth" type="xs:decimal" />
+        <!-- m_horStretchable по умолчанию kLogFormSearchControlElementAdditionDataDefHorStretchable -->
+        <xs:attribute name="horStretch" type="tns:BWAValue" />
+    </xs:complexType>
+        
+    <xs:complexType name="ElementsChangesItem">
+        <xs:sequence>
+            <xs:element name="guid" type="v81:UUID"/>
+            <xs:choice minOccurs="1" maxOccurs="1">
+                <xs:element name="main" type="tns:MainElement"/>
+                <xs:element name="field" type="tns:Field"/>
+                <xs:element name="group" type="tns:Group"/>
+                <xs:element name="table" type="tns:Table"/>
+                <xs:element name="button" type="tns:Button"/>
+                <xs:element name="decoration" type="tns:Decoration"/>
+                <xs:element name="addition" type="tns:Addition"/>
+            </xs:choice>
+        </xs:sequence>
+        <xs:attribute name="type" type="xs:decimal"/>
+        <xs:attribute name="id" type="xs:decimal"/>
+        <xs:attribute name="name" type="xs:string"/>
+        <xs:attribute name="pid" type="xs:decimal"/>
+        <xs:attribute name="aid" type="xs:decimal"/>
+    </xs:complexType>
+
+    <xs:complexType name="ElementsChanges">
+        <xs:sequence>
+            <xs:element name="elemcs" type="tns:ElementsChangesItem" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="MainElement">
+        <xs:sequence>
+            <!-- m_settingsStorage по умолчанию kUUIDNull -->
+            <xs:element name="storage" type="v81:UUID" minOccurs="0" />
+            <!-- m_additionalProperties если не пустые-->
+            <xs:element name="addProps" type="tns:AddProps" minOccurs="0" />
+            <!-- m_elementEvents если не пустые-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded" />
+            <!-- m_commands если не пустые-->
+            <xs:element name="commands" type="tns:CommandsInclusion"/>
+            <!-- m_pNavigator если m_pNavigator не пустой-->
+            <xs:element name="navigator" type="tns:Group" minOccurs="0" />
+            <!-- m_pCommandBar если m_pCommandBar пустой и у его данных установлен fillStd -->
+            <xs:element name="autoCommandBar" type="tns:Group" minOccurs="0" />
+            <xs:choice minOccurs="0" maxOccurs="unbounded">
+                <xs:element name="field" type="tns:Field"/>
+                <xs:element name="group" type="tns:Group"/>
+                <xs:element name="table" type="tns:Table"/>
+                <xs:element name="button" type="tns:Button"/>
+                <xs:element name="decoration" type="tns:Decoration" />
+                <xs:element name="addition" type="tns:Addition" />
+            </xs:choice>
+            <!-- m_title по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="title" type="xs:string" minOccurs="0" />
+            <!-- m_URL по умолчанию пустой -->
+            <xs:element name="formURL" type="xs:string" minOccurs="0" />
+            <!-- m_pMobileDeviceCommandBarContent если не пустой -->
+            <xs:element name="mdcbc" type="v81:ValueListType" />
+            <!-- m_createButtonsGroupTitle по умолчанию пустой
+                 брать только строку из языка # -->
+            <xs:element name="createButtonsGroupTitle" type="xs:string" minOccurs="0" />
+            <!-- m_createButtonsGroupPictureпо умолчанию V8Picture() -->
+            <xs:element name="createButtonsGroupPicture" type="ui:Picture" minOccurs="0" />
+        </xs:sequence>
+        <!-- m_showCloseButton по умолчанию kLogFormMainElementDefShowCloseButton -->
+        <xs:attribute name="showCloseButton" type="xs:boolean" />
+        <!-- m_showTitle по умолчанию kLogFormMainElementDefShowTitle -->
+        <xs:attribute name="showTitle" type="tns:BWAValue" />
+        <!-- m_origin по умолчанию eSource -->
+        <xs:attribute name="org" type="tns:FormElementOrigin"/>
+        <!-- m_openingMode по умолчанию Normal -->
+        <!-- Для версий до 8.5 -->
+        <xs:attribute name="openingMode" type="tns:FormWindowOpeningMode"/>
+        <!-- m_onOpenLockMode по умолчанию Auto -->
+        <xs:attribute name="lockMode" type="tns:OnFormWindowOpenLockMode"/>
+        <!-- m_width по умолчанию 0 -->
+        <xs:attribute name="width" type="xs:decimal"/>
+        <!-- m_height по умолчанию 0 -->
+        <xs:attribute name="height" type="xs:decimal"/>
+        <!-- m_scale по умолчанию 100 -->
+        <xs:attribute name="scale" type="xs:decimal"/>
+        <!-- m_enterKeyBehavior по умолчанию ControlNavigation -->
+        <xs:attribute name="enterKeyBehavior" type="tns:FormEnterKeyBehavior"/>
+        <!-- m_saveFormDataInSettings по умолчанию DontUse -->
+        <xs:attribute name="saveFormDataInSettings" type="tns:SaveFormDataInSettings" />
+        <!-- m_saveFormDataInSettings по умолчанию DontUse -->
+        <xs:attribute name="autoSaveFormDataInSettings" type="tns:AutoSaveFormDataInSettings" />
+        <!-- m_saveWindowSettings по умолчанию true -->
+        <xs:attribute name="saveWindowSettings" type="xs:boolean" />
+        <!-- m_autoTitle по умолчанию true -->
+        <xs:attribute name="autoTitle" type="xs:boolean"/>
+        <!-- m_autoURL по умолчанию true -->
+        <xs:attribute name="autoURL" type="xs:boolean"/>
+        <!-- m_grouping по умолчанию Vertical -->
+        <xs:attribute name="grouping" type="tns:FormChildrenGroup" />
+        <!-- m_align по умолчанию Auto -->
+        <xs:attribute name="align" type="tns:FormChildrenAlign" />
+        <!-- m_horizontalSpacing по умолчанию Auto -->
+        <xs:attribute name="horizontalSpacing" type="tns:FormItemSpacing" />
+        <!-- m_verticalSpacing по умолчанию Auto -->
+        <xs:attribute name="verticalSpacing" type="tns:FormItemSpacing" />
+        <!-- m_hAlign по умолчанию Auto -->
+        <xs:attribute name="hAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_vAlign по умолчанию Auto -->
+        <xs:attribute name="vAlign" type="tns:ItemVerticalAlignment" />
+        <!-- m_childrenWidth по умолчанию Auto -->
+        <xs:attribute name="childrenWidth" type="tns:FormChildrenWidth" />
+        <!-- m_childrenTitleLocation по умолчанию Auto -->
+        <xs:attribute name="childrenTitleLocation" type="tns:ChildrenTitleLocation" />
+        <!-- m_scaleVariant по умолчанию Auto -->
+        <xs:attribute name="scaleVariant" type="ent:ClientApplicationFormScaleVariant" />
+        <!-- m_baseFontVariant по умолчанию Auto -->
+        <xs:attribute name="baseFontVariant" type="tns:FormBaseFontVariant" />
+        <!-- m_scrollMode по умолчанию Auto -->
+        <xs:attribute name="scrollMode" type="tns:LogFormScrollMode" />
+        <!-- m_autoFillCheck по умолчанию true -->
+        <xs:attribute name="autoFillCheck" type="xs:boolean"/>
+        <!-- m_customizable по умолчанию true -->
+        <xs:attribute name="customizable" type="xs:boolean"/>
+        <!-- m_enabled по умолчанию true -->
+        <xs:attribute name="enabled" type="xs:boolean"/>
+        <!-- m_readOnly по умолчанию false -->
+        <xs:attribute name="readOnly" type="xs:boolean"/>
+        <!-- m_commandBarLocation по умолчанию Auto -->
+        <xs:attribute name="commandBarLocation" type="tns:FormElementCommandBarLocation" />
+        <!-- m_purposeUseKey по умолчанию пустой -->
+        <xs:attribute name="purposeUseKey" type="xs:string"/>
+        <!-- m_windowOptionsKey по умолчанию пустой -->
+        <xs:attribute name="windowOptionsKey" type="xs:string"/>
+        <!-- по умолчанию - true -->
+        <xs:attribute name="clearEvents" type="xs:boolean" />
+        <!-- m_showECSButton по умолчанию Auto -->
+        <xs:attribute name="convRepresentation" type="tns:LogFormShowConversations" />
+        <!-- по умолчанию - Auto -->
+        <xs:attribute name="currentRowUse" type="tns:TableCurrentRowUse" />
+        <!-- по умолчанию - Auto -->
+        <xs:attribute name="collapseVariant" type="tns:CollapseFormItemsByImportance" />
+        <!-- m_windowRepresentationMode по умолчанию Auto -->
+        <xs:attribute name="windowRepresentationMode" type="tns:FormWindowViewMode"/>
+        <!-- m_showCommandBar по умолчанию auto -->
+        <xs:attribute name="showCommandBar" type="tns:BWAValue" />
+    </xs:complexType>
+
+    <xs:complexType name="Form">
+        <xs:sequence>
+            <!-- m_pElements -->
+            <xs:element name="elements" type="tns:MainElement"/>
+            <!-- m_pCommands если не пустые -->
+            <xs:element name="command" type="tns:Command" minOccurs="0" maxOccurs="unbounded" />
+            <!-- m_pProperties если не пустые -->
+            <xs:element name="property" type="tns:Property" minOccurs="0" maxOccurs="unbounded" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="LFEDataPathRuntimeValue">
+        <xs:sequence>
+                <!-- m_dataPath по умолчанию kNullCompositeID -->
+            <xs:element name="dataPath" type="v81:CompositeID" minOccurs="0" maxOccurs="unbounded"/>
+                <!-- m_stringDataPath по умолчанию - пустая строка -->
+            <xs:element name="stringDataPath" type="xs:string" minOccurs="0" />
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="LogFormUserAddedElement">
+        <xs:sequence>
+            <xs:choice>
+                <xs:element name="fld" type="tns:Field" />
+                <xs:element name="gr" type="tns:Group" />
+                <xs:element name="tbl" type="tns:Table" />
+                <xs:element name="btn" type="tns:Button" />
+                <xs:element name="decor" type="tns:Decoration" />
+                <xs:element name="addition" type="tns:Addition" />
+            </xs:choice>
+        </xs:sequence>
+        <xs:attribute name="pId" type="xs:decimal"/>
+    </xs:complexType>
+
+    <xs:complexType name="LogFormUserMovedElement">
+        <xs:attribute name="pId" type="xs:decimal"/>
+        <xs:attribute name="eId" type="xs:decimal"/>
+        <xs:attribute name="aId" type="xs:decimal"/>
+    </xs:complexType>
+
+    <xs:complexType name="LogFormUserTableChange">
+        <xs:sequence>
+            <xs:element name="autoRef" type="xs:anyType" minOccurs="0" />
+            <xs:element name="autoRefInt" type="xs:anyType" minOccurs="0" />
+            <xs:element name="updOnDtCng" type="xs:anyType" minOccurs="0" />
+            <xs:element name="rstCurLn" type="xs:anyType" minOccurs="0" />
+            <xs:element name="showRoot" type="xs:anyType" minOccurs="0" />
+            <xs:element name="allowRootCh" type="xs:anyType" minOccurs="0" />
+        </xs:sequence>        
+        <xs:attribute name="tId" type="xs:decimal" />
+        <xs:attribute name="lstView" type="tns:TableInitialListView" />
+    </xs:complexType>    
+    
+    <xs:complexType name="LogFormUserFieldChange">
+        <xs:attribute name="fId" type="xs:decimal"/>
+        <xs:attribute name="spin" type="tns:BWAValue"/>
+    </xs:complexType>
+
+    <xs:complexType name="LogFormUserButtonChange">
+        <xs:attribute name="bId" type="xs:decimal"/>
+        <xs:attribute name="def" type="xs:boolean"/>
+        <xs:attribute name="ttlChg" type="xs:boolean"/>
+    </xs:complexType>
+
+    <xs:complexType name="LogFormUserChangesDescription">
+        <xs:sequence>
+            <xs:element name="addEl" type="tns:LogFormUserAddedElement" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="movEl" type="tns:LogFormUserMovedElement" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="tblChg" type="tns:LogFormUserTableChange" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="fldChg" type="tns:LogFormUserFieldChange" minOccurs="0" maxOccurs="unbounded"/>
+            <xs:element name="btnChg" type="tns:LogFormUserButtonChange" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:simpleType name="SearchStringModeOnInputByString">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Begin"/>
+            <xs:enumeration value="AnyPart"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="ChoiceDataGetModeOnInputByString">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Directly"/>
+            <xs:enumeration value="Background"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="FullTextSearchOnInputByString">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Use"/>
+            <xs:enumeration value="DontUse"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="CurrentRowUse">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Use" />
+            <xs:enumeration value="DontUse" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="SelectedRowsUse">
+      <!-- В языке есть -->
+      <xs:restriction base="xs:string">
+          <xs:enumeration value="Use" />
+          <xs:enumeration value="DontUse" />
+          <xs:enumeration value="Auto" />
+      </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CommandActionPurpose">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Usual" />
+            <xs:enumeration value="Create" />
+            <xs:enumeration value="Finish" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="RepresentationInContextMenu">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="None" />
+            <xs:enumeration value="AdditionalInContextMenu" />
+            <xs:enumeration value="OnlyInContextMenu" />
+            <xs:enumeration value="Auto" />
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <xs:simpleType name="FileDragMode">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="AsFile"/>
+            <xs:enumeration value="AsFileRef"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="DisplayImportance">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="VeryHigh" />
+            <xs:enumeration value="High" />
+            <xs:enumeration value="Usual" />
+            <xs:enumeration value="Low" />
+            <xs:enumeration value="VeryLow" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="OnMainServerUnavalableBehavior">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="MakeDisable" />
+            <xs:enumeration value="DontChangeBehavior" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormTableType">
+        <!-- В языке есть -->
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="List" />
+            <xs:enumeration value="Cards" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="CardBehaviorOnVerticalCompression">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="MoveItemsToSwipeablePages" />
+            <xs:enumeration value="HideItems" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="LFTableListEditingMode">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="None"/>
+            <xs:enumeration value="MultipleSelection"/>
+            <xs:enumeration value="LinesRearrangement"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="UsedServer">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Standalone"/>
+            <xs:enumeration value="Main"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="FormStandardURLVariant">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Object"/>
+            <xs:enumeration value="Record"/>
+            <xs:enumeration value="Report"/>
+            <xs:enumeration value="ReportVariant"/>
+            <xs:enumeration value="ReportWithCurrentSettings"/>
+            <xs:enumeration value="List"/>
+            <xs:enumeration value="ListWithCurrentSettings"/>
+            <xs:enumeration value="ListWithCurrentSettingsAndRow"/>
+            <xs:enumeration value="ListCurrentRowObject"/>
+            <xs:enumeration value="ListCurrentRowRecord"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="GanttChartTableLocation">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Left" />
+            <xs:enumeration value="Right" />
+            <xs:enumeration value="None" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="GanttChartValuesSelectionMode">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Multiple" />
+            <xs:enumeration value="Single" />
+            <xs:enumeration value="None" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="GanttChartIntervalsSelectionMode">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto" />
+            <xs:enumeration value="Multiple" />
+            <xs:enumeration value="Single" />
+            <xs:enumeration value="None" />
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="SelectedItemsActionsPanelGroupData">
+        <!-- m_fillStdCommands по умолчанию true -->
+        <xs:attribute name="fillStdCommands" type="xs:boolean" />
+        <!-- m_hAlign по умолчанию Left -->
+        <xs:attribute name="hAlign" type="tns:ItemHorizontalAlignment" />
+        <!-- m_appearanceMode по умолчанию CommandBar -->
+        <xs:attribute name="appearanceMode" type="tns:FormCommandBarAppearanceMode" />
+    </xs:complexType>
+
+    <xs:complexType name="RowActionsCommandBarGroupData">
+        <!-- m_fillStdCommands по умолчанию true -->
+        <xs:attribute name="fillStdCommands" type="xs:boolean" />
+    </xs:complexType>
+
+    <xs:complexType name="HierarchyPanelMenuGroupData">
+        <!-- m_fillStdCommands по умолчанию true -->
+        <xs:attribute name="fillStdCommands" type="xs:boolean" />
+    </xs:complexType>
+  
+</xs:schema>

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://v8.1c.ru/8.2/bsl" xmlns:tns="http://v8.1c.ru/8.2/bsl" xmlns:core="http://v8.1c.ru/8.2/data/core" attributeFormDefault="unqualified" elementFormDefault="qualified" version="1.0">
+
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="core.xsd"/>
+
+    <xs:complexType name="CompileError">
+        <xs:sequence>
+            <xs:element name="moduleId" type="xs:base64Binary" />
+            <xs:element name="source" type="xs:string" />
+            <xs:element name="message" type="xs:string" />
+            <xs:element name="descr" type="xs:string" />
+        </xs:sequence>
+        <xs:attribute name="reason" type="xs:decimal" />
+        <xs:attribute name="module" type="xs:string" />
+        <xs:attribute name="line" type="xs:decimal" />
+        <xs:attribute name="pos" type="xs:decimal" />
+    </xs:complexType>
+
+    <xs:complexType name="CompileException">
+        <xs:complexContent>
+            <xs:extension base="core:GenericException">
+                <xs:sequence>
+                    <xs:element name="error" type="tns:CompileError" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="RuntimeException">
+        <xs:complexContent>
+            <xs:extension base="core:GenericException">
+                <xs:sequence>
+                    <xs:element name="moduleId" type="xs:base64Binary" />
+                    <xs:element name="source" type="xs:string" />
+                    <xs:element name="message" type="xs:string" />
+                </xs:sequence>
+                <xs:attribute name="reason" type="xs:decimal" />
+                <xs:attribute name="module" type="xs:string" />
+                <xs:attribute name="line" type="xs:decimal" />
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+</xs:schema>

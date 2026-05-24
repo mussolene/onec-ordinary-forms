@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" 
+           xmlns:tns="http://v8.1c.ru/8.1/data-composition-system/area-template" 
+           xmlns:dcscore="http://v8.1c.ru/8.1/data-composition-system/core" 
+           xmlns:dcss="http://v8.1c.ru/8.1/data-composition-system/settings"
+           xmlns:v8ui="http://v8.1c.ru/8.1/data/ui" 
+           xmlns:core="http://v8.1c.ru/8.1/data/core" 
+           xmlns:dcsdet="http://v8.1c.ru/8.1/data-composition-system/details"
+           targetNamespace="http://v8.1c.ru/8.1/data-composition-system/area-template" 
+           elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/core" schemaLocation="../../../dcscore/src/res/core.xsd"/>
+	<xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/settings" schemaLocation="../../../dcscore/src/res/settings.xsd"/>
+  <xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/details" schemaLocation="../../../dcscore/src/res/details.xsd"/>
+  <xs:import namespace="http://v8.1c.ru/8.1/data/ui" schemaLocation="../../../xdto/src/res/uiobjects.xsd"/>
+	<xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+	<xs:complexType name="AreaTemplate">
+		<xs:annotation>
+			<xs:documentation>Макет области комоновки данных</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="item" type="tns:AreaTemplateItem" minOccurs="0" maxOccurs="unbounded"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="AreaTemplateItem" abstract="true">
+		<xs:annotation>
+			<xs:documentation>Элемент макета области компоновки данных</xs:documentation>
+		</xs:annotation>
+	</xs:complexType>
+	<xs:complexType name="TableRow">
+		<xs:annotation>
+			<xs:documentation>Строка таблицы</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="tns:AreaTemplateItem">
+				<xs:sequence>
+					<xs:element name="tableCell" type="tns:TableCell" maxOccurs="unbounded">
+						<xs:annotation>
+							<xs:documentation>Ячейка макета</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="tableID" type="xs:string" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Идентификатор таблицы</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+				</xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="TableCell">
+		<xs:annotation>
+			<xs:documentation>Ячейка таблицы</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="item" type="tns:TemplateItem" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Элементы</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="appearance" type="tns:TableCellAppearance" minOccurs="0">
+                <xs:annotation>
+					<xs:documentation>Оформление ячейки</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+            <xs:element name="appIndex" type="xs:decimal" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Индекс оформления ячейки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="TableCellAppearance">
+		<xs:annotation>
+			<xs:documentation>Оформление ячейки. Доступны следующие параметры:
+BackColor
+TextColor
+BorderColor
+BorderStyle
+BorderStyle.Left
+BorderStyle.Top
+BorderStyle.Right
+BorderStyle.Bottom
+Font
+Indent
+HorizontalAlign
+VerticalAlign
+TextOrientation
+MarkNegatives
+MinWidth
+MinHeight
+MaxHeight
+HorizontalMerge - объединение по горизонтали
+VerticalMerge - объединение по вертикали
+HorizontalLevel - уровень по горизонтали
+VerticalLevel - уровень по вертикали
+Detail - расшифровка</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="dcscore:ParameterValues"/>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="ChartGroupAppearance">
+		<xs:annotation>
+			<xs:documentation>Оформление группировки диаграммы. Доступны следующие параметры:
+Detail - расшифровка
+Format - формат данных
+ColorInChart - цвет в диаграмме</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="dcscore:ParameterValues"/>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="ChartResourceAppearance">
+		<xs:annotation>
+			<xs:documentation>Оформление ресурса диаграммы. Доступны следующие параметры:
+Detail - расшифровка</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="dcscore:ParameterValues"/>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="ChartAppearance">
+		<xs:annotation>
+			<xs:documentation>Оформление диаграммы. Доступны следующие параметры:
+ChartType (ТипДиаграммы) - тип диаграммы. Перечисление ТипДиаграммы.
+ChartType.BaseValue (БазовоеЗначение)– базовое значение. Число.
+ChartType.HideBaseValue (ПропускатьБазовоеЗначение) - Пропускать точки с базовым значением. Булево.
+ChartType.LabelType (ВидПодписей) - Состав подписей к диаграммам. Перечисление ВидПодписейКДиаграмме (ChartLabelType).
+ChartType.AutoSeriesSeparation (АвтоРаздвижениеСерий) Режим раздвижения секторов круговых диаграмм. Перечисление АвтоРаздвижениеСерий (AutoSeriesSeparation).
+ChartType.VerticalLabels (ВертикальныеМетки) Вертикальные метки. Булево
+ChartType.ShowDataTable (ОтображатьТаблицуДанных)- Отображать таблицу данных в области. Булево.
+ChartType.VerticalLinesDataTable (ВертикальныеЛинииВТаблицеДанных) - Показывать вертикальные линии в таблице данных. Булево.
+ChartType.HorizontalLinesInDataTable (ГоризонтальныеЛинииВТаблицеДанных) - Показывать горизонтальные линии в таблице данных. Булево.
+ChartType.AlignDataTable (ВыравниваниеВТаблицеДанных) - Выравнивние значений в таблице данных. Перечисление Выравнивание. 
+ChartType.FormatDataTable (ФорматВТаблицеДанных) - Формат значений в таблице данных. Строка.
+ChartType.MaxValue (МаксимальноеЗначение) - Максимальное значение. Число.
+ChartType.MinValue (МинимальноеЗначение) - Минимальное значение. Число.
+ChartType.ValueLabelFormat (ФорматЗначенийВПодписях) - Формат представления значений в подписях к диаграмме. 
+ChartType.Outline (Окантовка) – Окантовка. Булево.
+ChartType.Gradient (Градиент) – Градиент. Булево.
+ChartType.Font(Шрифт) - Шрифт диаграммы. Шрифт
+ChartType.BackColor(ЦветФона) - Цвет фона диаграммы. Цвет.
+ChartType.BorderStyle(СтильЛинии) - стиль линии вокруг диаграммы. Линия.
+ChartType.LegendPlacement(РасположениеЛегенды) - расположение легенды в диаграммы. РасположениеЛегендыДиаграммыСистемыКомпоновкиДанных.
+ChartType.GaugeChartQualityBands(ПолосыИзмерительнойДиаграммы) - полосы для измерительной диаграммы. ПолосыИзмерительнойДиаграммы.
+</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="dcscore:ParameterValues"/>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="TemplateItem" abstract="true">
+		<xs:annotation>
+			<xs:documentation>Элемент макета</xs:documentation>
+		</xs:annotation>
+	</xs:complexType>
+	<xs:complexType name="Field">
+		<xs:annotation>
+			<xs:documentation>Поле</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="tns:TemplateItem">
+				<xs:sequence>
+					<xs:element name="value" type="xs:anyType" nillable="true" maxOccurs="1" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Значение</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="appearance" type="tns:FieldAppearance" maxOccurs="1" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Оформление поля</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+				</xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="FieldAppearance">
+		<xs:annotation>
+			<xs:documentation>Оформление поля. Доступны следующие параметры:
+Format</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="dcscore:ParameterValues"/>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="ChartGroupTemplate">
+		<xs:annotation>
+			<xs:documentation>Макет для вывода группировки диаграммы</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="value" type="xs:anyType" nillable="true">
+				<xs:annotation>
+					<xs:documentation>Групповое значение</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="appearance" type="tns:ChartGroupAppearance"></xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="ChartResourceTemplate">
+		<xs:annotation>
+			<xs:documentation>Макет для вывода ресурса диаграммы</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="resourceValue" type="xs:anyType" maxOccurs="unbounded" nillable="true">
+				<xs:annotation>
+					<xs:documentation>Значение ресурса</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="appearance" type="tns:ChartResourceAppearance"></xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="ChartTemplate">
+		<xs:annotation>
+			<xs:documentation>Макет диаграммы</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="appearance" type="tns:ChartAppearance">
+				<xs:annotation>
+					<xs:documentation>
+						Оформление диаграммы
+					</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	
+	<xs:complexType name="AreaTemplateParameter" abstract="true">
+		<xs:annotation>
+			<xs:documentation>Параметр макета</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="name" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Имя параметра.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="ExpressionAreaTemplateParameter">
+		<xs:complexContent>
+			<xs:extension base="tns:AreaTemplateParameter">
+				<xs:sequence>
+			<xs:element name="expression" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Выражение, по которому вычисляется параметр макета.</xs:documentation>
+				</xs:annotation>
+			</xs:element></xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+
+	<xs:complexType name="DetailsAreaTemplateParameter">
+		<xs:complexContent>
+			<xs:extension base="tns:AreaTemplateParameter">
+				<xs:sequence>
+					<xs:element name="fieldExpression" type="tns:DetailsAreaTemplateParameterFieldExpression" maxOccurs="unbounded" minOccurs="0"></xs:element>
+          <xs:element name="mainAction" type="dcsdet:DataCompositionDetailsProcessingAction" maxOccurs="1" minOccurs="0"></xs:element>
+        </xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+
+	<xs:complexType name="DetailsAreaTemplateParameterFieldExpression">
+		<xs:sequence>
+			<xs:element name="field" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Имя поля</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="expression" type="xs:string" maxOccurs="1" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Выражение, по которому вычисляется значение поля</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+
+	<xs:complexType name="ValueCollectionHeaderCell">
+		<xs:annotation>
+			<xs:documentation>
+				Ячейка заголовка коллекции значений
+			</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="name" type="xs:anyType" maxOccurs="1"
+				minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Имя колонки</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="title" type="xs:anyType" maxOccurs="1"
+				minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>
+						Заголовок колонки
+					</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="valueType" type="core:TypeDescription"
+				maxOccurs="1" minOccurs="0">
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+
+	<xs:complexType name="ValueCollectionCell">
+		<xs:annotation>
+			<xs:documentation>
+				Ячейка макета коллекции значений
+			</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="value" type="xs:anyType" maxOccurs="1"
+				minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Значение</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+
+	<xs:complexType name="ValueCollectionTemplate">
+		<xs:annotation>
+			<xs:documentation>
+				Макет коллекции значений
+			</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="cell" type="tns:ValueCollectionCell"
+				maxOccurs="unbounded" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Ячейка макета</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+
+	<xs:complexType name="ValueCollectionHeaderTemplate">
+		<xs:sequence>
+			<xs:element name="cell" type="tns:ValueCollectionHeaderCell"
+				maxOccurs="unbounded" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Ячейка</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+
+</xs:schema>

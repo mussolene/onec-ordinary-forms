@@ -1,0 +1,3608 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           xmlns:bsl="http://v8.1c.ru/8.2/data/bsl"
+           xmlns:ui="http://v8.1c.ru/8.1/data/ui"
+           xmlns:ma="http://v8.1c.ru/8.2/managed-application/core"
+           xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform"
+           xmlns:dscs="http://v8.1c.ru/8.1/data-composition-system/settings"
+           xmlns:tns="http://v8.1c.ru/8.3/mobile-application/form"
+           xmlns:ent="http://v8.1c.ru/8.1/data/enterprise"
+           xmlns:mxl="http://v8.1c.ru/8.2/data/spreadsheet"
+           xmlns:chrt="http://v8.1c.ru/8.2/data/chart"
+           xmlns:pln="http://v8.1c.ru/8.3/data/planner"
+           targetNamespace="http://v8.1c.ru/8.3/mobile-application/form"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/data/bsl" schemaLocation="../../../bsl/src/res/bsl.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data/ui" schemaLocation="../../../xdto/src/res/uiobjects.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/managed-application/core" schemaLocation="../../../mngcore/src/res/mngapp.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/managed-application/logform" schemaLocation="../../../mngcore/src/res/logform.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/settings" schemaLocation="../../../dcscore/src/res/settings.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.1/data/enterprise" schemaLocation="../../../enums/src/res/enums.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/data/spreadsheet" schemaLocation="../../../moxel/src/res/spreadsheetDocument.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.2/data/chart" schemaLocation="../../../chart/src/res/chart.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/data/planner" schemaLocation="../../../plnnr/src/res/plnnr.xsd"/>
+
+    <xs:simpleType name="MDObjReference">
+        <!--TODO копия из  MobileApp, нужно поместить в одну из корневых схем -->
+        <xs:annotation>
+            <xs:documentation>
+                Ссылка на объект метаданных. Аналог результата вызова метода ПолноеИмя
+            </xs:documentation>
+        </xs:annotation>
+        <xs:restriction base="xs:Name" />
+    </xs:simpleType>
+    
+    <!--TODO реализация AdjustableBoolean содрана из xcf/readable с незначительными изменениями -->
+    <xs:complexType name="AdjustableBooleanItemType">
+        <xs:simpleContent>
+            <xs:extension base="xs:boolean">
+                <xs:attribute name="name" type="tns:MDObjReference"/>
+            </xs:extension>
+        </xs:simpleContent>
+    </xs:complexType>
+
+    <xs:complexType name="AdjustableBoolean">
+        <xs:sequence>
+            <xs:element name="common" type="xs:boolean"  minOccurs="0" />
+            <xs:element name="value" type="tns:AdjustableBooleanItemType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="MobileForm">
+        <xs:annotation>
+            <xs:documentation>Форма мобильного приложения</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="serverModule" type="bsl:BSLModuleImage" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Модуль на сервере</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="clientModule" type="bsl:BSLModuleImage" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Модуль на клиенте</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="serverWOContextModule" type="bsl:BSLModuleImage" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Модуль на сервере без контекста</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="clientServerWOContextModule" type="bsl:BSLModuleImage" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Модуль на клиенте или на сервере без контекста</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="attributes" type="tns:Attributes" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Реквизиты</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="parameter" type="tns:Parameter" maxOccurs="unbounded"  minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Параметры</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="command" type="tns:Command" maxOccurs="unbounded"  minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Команды</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="mainElement" type="tns:MainElement">
+                <xs:annotation>
+                    <xs:documentation>Корневой элемент формы.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="navigationPanel" type="tns:CMIFragmentRecord" maxOccurs="unbounded"  minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Настройка панели навигации</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="commandPanel" type="tns:CMIFragmentRecord" maxOccurs="unbounded"  minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Настройка панели команд</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:simpleType name="FieldPath">
+        <xs:annotation>
+            <xs:documentation>Путь к данным</xs:documentation>
+        </xs:annotation>
+        <xs:restriction base="xs:Name" />
+    </xs:simpleType>
+
+    <xs:simpleType name="FieldPathList">
+        <xs:list itemType="tns:FieldPath" />
+    </xs:simpleType>
+
+    <xs:complexType name="Attributes">
+        <xs:annotation>
+            <xs:documentation>Реквизиты управляемой формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Реквизиты</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="conditionalAppearance" type="dscs:ConditionalAppearance" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Условное оформление</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="Columns">
+        <xs:annotation>
+            <xs:documentation>Колонки реквизита</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="attribute" type="tns:Attribute" maxOccurs="unbounded"  minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Колонки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="path" type="tns:FieldPath">
+            <xs:annotation>
+                <xs:documentation>Относительный путь к реквизиту владельцу от реквизита верхнего уровня</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="Column">
+        <xs:annotation>
+            <xs:documentation>Колонка табличного реквизита</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="title" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="type" type="core:TypeDescription">
+                <xs:annotation>
+                    <xs:documentation>Тип</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="extInformation" type="tns:ExtAttributeInformation" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Дополнительная информация</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="fillChecking" type="core:FillChecking" default= "DontCheck" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Проверка заполнения</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="view" type="tns:AdjustableBoolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Просмотр</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="edit" type="tns:AdjustableBoolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Редактирование</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="functionalOption" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Функциональные опции</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="Attribute">
+        <xs:annotation>
+            <xs:documentation>Реквизит управляемой формы</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:Column">
+                <xs:sequence>
+                    <xs:element name="main" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основной реквизит</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="storedData" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Сохраняемые данные</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="columns" type="tns:Columns" maxOccurs="unbounded"  minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Колонки</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <!--Сохранять данные в настройках-->
+                    <xs:element name="useAalways" type="tns:FieldPathList">
+                        <xs:annotation>
+                            <xs:documentation>Использовать всегда</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="ExtAttributeInformation" abstract="true">
+        <xs:annotation>
+            <xs:documentation>Дополнительная информация о реквизите</xs:documentation>
+        </xs:annotation>
+    </xs:complexType>
+
+    <xs:complexType name="EAI_ValueList">
+        <xs:annotation>
+            <xs:documentation>Дополнительная информация о реквизите для типа СписокЗначений</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:ExtAttributeInformation">
+                <xs:sequence>
+                    <xs:element name="valueType" type="core:TypeDescription">
+                        <xs:annotation>
+                            <xs:documentation>Тип значения</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="EAI_DynamicList">
+        <xs:annotation>
+            <xs:documentation>Дополнительная информация о реквизите для типа ДинамическийСписок</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:ExtAttributeInformation">
+                <xs:sequence>
+                    <xs:element name="customQuery" type="xs:boolean" default= "false" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Произвольный запрос</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="queryText" type="xs:string" default= "" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Текст запроса</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="dynamicDataRead" type="xs:boolean" default= "true" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Динамическое считывание данных</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="mainTable" type="tns:MDObjReference" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Основная таблица</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="mainTableCategory" type="xs:decimal" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Категория основной таблицы</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="filter" type="dscs:Filter" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Отбор</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="order" type="dscs:Order" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Порядок</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="conditionalAppearance" type="dscs:ConditionalAppearance" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Условное оформление</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="groupItems" type="dscs:GroupItems" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Поля группировки</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                    <xs:element name="requiredField" type="xs:Name" minOccurs="0" maxOccurs="unbounded">
+                        <xs:annotation>
+                            <xs:documentation>Обязательные поля</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="EAI_Chart">
+        <xs:annotation>
+            <xs:documentation>Дополнительная информация о реквизите для табличного документа</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:ExtAttributeInformation">
+                <xs:sequence>
+                    <xs:element name="value" type="chrt:Chart"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="EAI_SpreadsheetDocument">
+        <xs:annotation>
+            <xs:documentation>Дополнительная информация о реквизите для табличного документа</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:ExtAttributeInformation">
+                <xs:sequence>
+                    <xs:element name="value" type="mxl:SpreadsheetDocument"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="EAI_Planner">
+        <xs:annotation>
+            <xs:documentation>Дополнительная информация о реквизите для планировщика</xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+            <xs:extension base="tns:ExtAttributeInformation">
+                <xs:sequence>
+                    <xs:element name="value" type="pln:Planner"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="Parameter">
+        <xs:annotation>
+            <xs:documentation>Параметр формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="type" type="core:TypeDescription">
+                <xs:annotation>
+                    <xs:documentation>Тип</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="key" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ключевой параметр</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="Command">
+        <xs:annotation>
+            <xs:documentation>Команда формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="title" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="handlerName" type="xs:Name" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Имя обработчика</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="modifiesStoredData" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Изменяет сохраняемые данные</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="use" type="tns:AdjustableBoolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Использование</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="functionalOption" type="tns:MDObjReference" maxOccurs="unbounded" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Функциональные опции</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="picture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Картинка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="representation" type="lf:ButtonRepresentation" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="currentRowUse" type="lf:CurrentRowUse" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Идентификатор связанной таблицы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="associatedTableElementName" type="xs:Name" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Связь с текущими данными таблицы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--Сочетание клавиш -->
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    
+    <xs:complexType name="MainElement">
+        <xs:annotation>
+            <xs:documentation>Корневой элемент логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="title" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoTitle" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoURL" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Признак автоматического формирования навигационной ссылки формы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="enabled" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Доступность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="grouping" type="lf:FormChildrenGroup" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Группировка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="commandBarLocation" type="lf:FormElementCommandBarLocation" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Положение командной панели</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoCommandBar" type="tns:Group" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Командная панель</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="commandsContent" type="tns:CommandsContent" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Состав команд</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="windowOpeningMode" type="lf:OnFormWindowOpenLockMode" minOccurs="0" default= "DontBlock">
+                <xs:annotation>
+                    <xs:documentation>Режим блокировки при открытии окна формы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--Поведение формы при нажатии клавиши Enter-->
+            <xs:element name="width" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="slaveItemsWidth" type="lf:FormChildrenWidth" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина подчиненных элементов</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="childrenAlign" type="lf:FormChildrenAlign" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Выравнивание подчиненных элементов</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalSpacing" type="lf:FormItemSpacing" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальный интервал</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalSpacing" type="lf:FormItemSpacing" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальный интервал</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalAlign" type="lf:ItemHorizontalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalAlign" type="lf:ItemVerticalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="windowRepresentationMode" type="lf:FormWindowViewMode" minOccurs="0" default= "Auto">
+                <xs:annotation>
+                    <xs:documentation>Режим отображения окна формы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showCommandBar" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать командную панель</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+
+            <!--дополнительные свойства-->
+            <xs:element name="usage" type="ent:FoldersAndItemsUse" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Выбор для групп и элементов</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupsList" type="xs:string" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Дополнительный список групп</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoTime" type="ent:AutoTimeMode" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим автоматической установки времени</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="usePostingMode" type="ent:PostingModeUse" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Использовать режим проведения</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="repostOnWrite" type="xs:boolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Дополнительный список групп</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="reportResult" type="tns:FieldPath" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Результат отчета</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="detailsInformation" type="tns:FieldPath" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Данные расшифровки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="reportFormType" type="lf:ReportFormType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Тип формы отчета</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="customSettingsFolder" type="xs:string" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Группа пользовательских настроек</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="variantAppearance" type="tns:FieldPath" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Представление варианта</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="reportResultViewMode" type="ent:ReportResultViewMode" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим отображения результата отчета</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="viewModeApplicationOnSetReportResult" type="ent:ViewModeApplicationOnSetReportResult" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Применение режима отображения при установке результата отчета</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:choice minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Вложенные элементы</xs:documentation>
+                </xs:annotation>
+                <xs:element name="field" type="tns:Field"/>
+                <xs:element name="group" type="tns:Group"/>
+                <xs:element name="table" type="tns:Table"/>
+                <xs:element name="button" type="tns:Button"/>
+                <xs:element name="decoration" type="tns:Decoration" />
+            </xs:choice>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="Group">
+        <xs:annotation>
+            <xs:documentation>Группа логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="title" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="visible" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="userVisible" type="tns:AdjustableBoolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пользовательская видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="enabled" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Доступность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="readOnly" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Только просмотр</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--РазрешитьИзменениеСостава -->
+            <!--Сочетание клавиш -->
+            <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltipRepresentation" type="lf:TooltipRepresentation" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение подсказки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="extendedTooltip" type="tns:Decoration" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Расширенная подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleTextColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста заголовка (по умолчанию kLogFormGroupDefTitleTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleFont" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт заголовка (по умолчанию kLogFormGroupDefTitleFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="width" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="lf:BWAValue" default= "auto">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="lf:BWAValue" default= "auto">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupHorizontalAlign" type="lf:ItemHorizontalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupVerticalAlign" type="lf:ItemVerticalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="displayImportance" type="lf:DisplayImportance" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Важность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:choice minOccurs="0" maxOccurs="1" >
+                <xs:annotation>
+                    <xs:documentation>Расширения</xs:documentation>
+                </xs:annotation>
+                <xs:element name="menuData" type="tns:MenuGroupData" />
+                <xs:element name="autoMenuData" type="tns:AutoMenuGroupData" />
+                <xs:element name="subMenuData" type="tns:SubmenuGroupData" />
+                <xs:element name="buttonsData" type="tns:ButtonsGroupData" />
+                <xs:element name="contextMenuData" type="tns:ContextMenuGroupData" />
+                <xs:element name="columnsData" type="tns:ColumnsGroupData" />
+                <xs:element name="pagesData" type="tns:PagesGroupData" />
+                <xs:element name="pageData" type="tns:PageGroupData" />
+                <xs:element name="usualData" type="tns:UsualGroupData" />
+            </xs:choice>
+            <xs:choice minOccurs="0" maxOccurs="unbounded" >
+                <xs:annotation>
+                    <xs:documentation>Вложенные элементы</xs:documentation>
+                </xs:annotation>
+                <xs:element name="field" type="tns:Field" />
+                <xs:element name="group" type="tns:Group" />
+                <xs:element name="table" type="tns:Table" />
+                <xs:element name="button" type="tns:Button" />
+                <xs:element name="decoration" type="tns:Decoration" />
+            </xs:choice>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="type" type="lf:ManagedFormGroupType" use="required">
+            <xs:annotation>
+                <xs:documentation>Вид</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="Field">
+        <xs:annotation>
+            <xs:documentation>Поле логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:choice minOccurs="0" maxOccurs="1" >
+                <xs:annotation>
+                    <xs:documentation>Расширения поля</xs:documentation>
+                </xs:annotation>
+                <xs:element name="textData" type="tns:TextFieldData" />
+                <xs:element name="inputData" type="tns:InputFieldData" />
+                <xs:element name="checkData" type="tns:CheckBoxFieldData" />
+                <xs:element name="imageData" type="tns:ImageFieldData" />
+                <xs:element name="radioData" type="tns:RadioButtonsData" />
+                <xs:element name="spereadsheetData" type="tns:SpreadsheetFieldData" />
+<!--                <xs:element name="textDocData" type="tns:TextDocFieldData" />-->
+                <xs:element name="formattedDocData" type="tns:FormattedDocFieldData" />
+                <xs:element name="calendarData" type="tns:CalendarFieldData" />
+                <xs:element name="plannerData" type="tns:PlannerFieldData" />
+                <xs:element name="progressBarData" type="tns:ProgressBarFieldData" />
+                <xs:element name="trackBarData" type="tns:TrackBarFieldData" />
+                <xs:element name="chartData" type="tns:ChartFieldData" />
+<!--                <xs:element name="ganttChartData" type="tns:GanttChartFieldData" />-->
+<!--                <xs:element name="dendrogramData" type="tns:DendrogramFieldData" />-->
+<!--                <xs:element name="flowchartData" type="tns:FlowchartFieldData" />-->
+                <xs:element name="htmlData" type="tns:HTMLFieldData" />
+<!--                <xs:element name="geographicalMapData" type="tns:GeographicalMapFieldData" />-->
+            </xs:choice>
+            <xs:element name="title" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleLocation" type="lf:FormElementTitleLocation" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Положение заголовка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="visible" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="userVisible" type="tns:AdjustableBoolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пользовательская видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="enabled" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Доступность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="readOnly" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Только просмотр</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="warningOnEditRepresentation" type="lf:WarningOnEditRepresentation" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>отображение предупреждения при редактировании</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="warningOnEdit" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>предупреждение при редактировании</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltipRepresentation" type="lf:TooltipRepresentation" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение подсказки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="extendedTooltip" type="tns:Decoration" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Расширенная подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="contextMenu" type="tns:Group" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Контекстное меню</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="commandsContent" type="tns:CommandsContent" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Состав команд</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--сочетание клавиш-->
+            <xs:element name="skipOnInput" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пропускать при вводе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleHeight" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота заголовка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="footerText" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Текст подвала</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="footerDataPath" type="tns:FieldPath" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ПутьКДаннымПодвала</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showInHeader" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать в шапке</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showInFooter" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать в подвале</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalAlign" type="lf:ItemHorizontalAlignment" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="headerHorizontalAlign" type="lf:ItemHorizontalAlignment" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>горизонтальное положение в шапке</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="footerHorizontalAlign" type="lf:ItemHorizontalAlignment" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>горизонтальное положение в подвале</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalAlign" type="lf:ItemVerticalAlignment" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>вертикальное выравнивание</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupHorizontalAlign" type="lf:ItemHorizontalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupVerticalAlign" type="lf:ItemVerticalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--Режим редактирования значения в таблице-->
+            <xs:element name="autoCellHeight" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>АвтоВысотаЯчейки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="fixedInTable" type="lf:FormFixedInTable" default= "None" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Фиксация в таблице</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="cellHyper" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ГиперссылкаЯчейки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="headerPicture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>картинка шапки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="footerPicture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>картинка подвала</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleTextColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста заголовка (по умолчанию kLogFormFieldDefTitleTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleBackColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>цвет фона заголовка по умолчанию kLogFormFieldDefHeaderBackColor</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleFont" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт заголовка (по умолчанию kLogFormFieldDefTitleFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="footerTextColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>цвет текста подвала по умолчанию kLogFormFieldDefFooterTextColor</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="footerBackColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>цвет фона подвала по умолчанию kLogFormFieldDefFooterBackColor</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="footerFont" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>шрифт подвала по умолчанию kLogFormFieldDefFooterFont</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="displayImportance" type="lf:DisplayImportance" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Важность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MSIB" type="lf:OnMainServerUnavalableBehavior" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Поведение при недоступности основного сервера </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showInCard" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Должна ли колонка отображаться в карточке.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="fixInCard" type="lf:BWAValue" default="auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Должна ли колонка при сжатии карточки по вертикали остаться в той части карточки, которая не прокручивается.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="kind" type="lf:ManagedFormFieldType">
+            <xs:annotation>
+                <xs:documentation>Вид</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="dataPath" type="tns:FieldPath">
+            <xs:annotation>
+                <xs:documentation>Путь к данным</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="defaultItem" type="xs:boolean" default= "false">
+            <xs:annotation>
+                <xs:documentation>Активизировать по умолчанию</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="Table">
+        <xs:annotation>
+            <xs:documentation>Таблица логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="title" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleLocation" type="lf:FormElementTitleLocation" default= "None" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Положение заголовка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="representation" type="lf:TableRepresentation" default= "HierarchicalList" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="visible" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="userVisible" type="tns:AdjustableBoolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пользовательская видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="enabled" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Доступность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="readOnly" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Только просмотр</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltipRepresentation" type="lf:TooltipRepresentation" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение подсказки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="extendedTooltip" type="tns:Decoration" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Расширенная подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--сочетание клавиш-->
+            <!--РазрешитьНачалоПеретаскивания-->
+            <!--РазрешитьПеретаскивание-->
+            <xs:element name="multipleChoice" type="xs:boolean" default="false">
+                <xs:annotation>
+                    <xs:documentation>Режим множественного выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceMode" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="skipOnInput" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пропускать при вводе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="changeRowSet" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Изменять состав строк</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="changeRowOrder" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Изменять порядок строк</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="rowInputMode" type="lf:TableRowInputMode" default= "EndOfList" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>режим ввода строк</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="selectionMode" type="lf:TableSelectionMode" default= "MultiRow" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>режим выделения строк</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="rowSelectionMode" type="lf:TableRowSelectionMode" default= "Cell" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>режим выделения строки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoInsertNewRow" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>АвтоВводНовойСтроки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMarkIncomplete" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>АвтоОтметкаНезаполненного</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="markRequiredComplete" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ОтметкаОбязательногоЗаполнения</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoAddIncomplete" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>АвтоВводНезаполненного</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoFill" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Автозаполнение колонок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="initialListView" type="lf:TableInitialListView" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Начальное отображение списка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="initialTreeView" type="lf:TableInitialTreeView" default= "NoExpand" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Начальное отображение дерева</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="initRowActivation" type="lf:TableInitialRowActivation" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Начальная активизация строки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="rowActionShowType" type="lf:TableRowActionsShowType" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Тип отображения действий строки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="rowPictureDataPath" type="tns:FieldPath" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Данные картинки строки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="rowsPicture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Картинка строк</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="useAlternationRowColor" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>чередование цветов строк</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона (по умолчанию kLogFormTableDefBackColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="textColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста (по умолчанию kLogFormTableDefTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormTableDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleTextColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>цвет текста заголовка(по умолчанию kLogFormTableDefTitleTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="font" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт (по умолчанию kLogFormTableDefFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleFont" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>шрифт заголовка (по умолчанию kLogFormTableDefTitleFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="width" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота (Количество строк)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupHorizontalAlign" type="lf:ItemHorizontalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupVerticalAlign" type="lf:ItemVerticalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="heightInTableRows" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота в строках таблицы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="heightControlVariant" type="lf:TableHeightControlVariant" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Управление высотой </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleHeight" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота заголовка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showHeader" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шапка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="headerHeight" type="xs:decimal" default= "1" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота шапки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showFooter" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Подвал</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="footerHeight" type="xs:decimal" default= "1" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота подвала</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="commandBarLocation" type="lf:FormElementCommandBarLocation" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Положение командной панели</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoCommandBar" type="tns:Group" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Командная панель</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="contextMenu" type="tns:Group" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Контекстное меню</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="commandsContent" type="tns:CommandsContent" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Состав команд</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--ГоризонтальнаяПолосаПрокрутки-->
+            <!--ВертикальнаяПолосаПрокрутки-->
+            <xs:element name="horizontalLines" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ГоризонтальныеЛинии</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalLines" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ВертикальныеЛинии</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+
+            <!--дополнительные свойства-->
+            <!--<xs:element name="AvailableFieldUseRestriction" type="xs:anyType" minOccurs="0" />-->
+            <!--<xs:element name="AvailableParameterUseRestriction" type="xs:anyType" minOccurs="0" />-->
+            <!--<xs:element name="SettingsStructureDetailedSupport" type="xs:anyType" minOccurs="0" />-->
+            <!--<xs:element name="FilterViewMode" type="dcsset:DataCompositionSettingsViewMode" minOccurs="0" />-->
+            <!--<xs:element name="SettingsDetailedRepresentationSupport" type="xs:boolean" minOccurs="0" />-->
+            <xs:element name="autoRefresh" type="xs:boolean" minOccurs="0" >
+                <xs:annotation>
+                    <xs:documentation>Автоматическое обновление данных через заданный период</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoRefreshInterval" type="xs:decimal" minOccurs="0" >
+                <xs:annotation>
+                    <xs:documentation>Период автоматического обновления данных</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceFolderAndItem" type="ent:FoldersAndItemsUse" minOccurs="0" >
+                <xs:annotation>
+                    <xs:documentation>Выбор для групп и элементов</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="restoreCurrentLine" type="xs:boolean" minOccurs="0" >
+                <xs:annotation>
+                    <xs:documentation>Автоматическое восстановление последней выбранной строки при последующем открытии</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showRoot" type="xs:boolean" minOccurs="0" >
+                <xs:annotation>
+                    <xs:documentation>Отображать корень в режиме дерева</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="allowRootChoice" type="xs:boolean" minOccurs="0" >
+                <xs:annotation>
+                    <xs:documentation>Разрешить выбор корня в режиме дерева</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="updateOnDataChanges" type="ent:UpdateOnDataChange" minOccurs="0" >
+                <xs:annotation>
+                    <xs:documentation>Обновление при изменении</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="refreshRequest" type="lf:RefreshRequestMethod" default= "None" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Запрос обновления</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="currentRowUse" type="lf:TableCurrentRowUse" minOccurs="0"  default="Auto">
+                <xs:annotation>
+                    <xs:documentation>Использование текущей строки таблицы </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="behaviorOnHorizontalCompression" type="lf:TableBehaviorOnHorizontalCompression" minOccurs="0"  default="Auto">
+                <xs:annotation>
+                    <xs:documentation>Поведение таблицы при сжатии по горизонтали </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="searchStringLocation" type="lf:SearchStringLocation" default="Auto" minOccurs="0" >
+                <xs:annotation>
+                    <xs:documentation>Положение строки поиска</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="displayImportance" type="lf:DisplayImportance" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Важность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MSIB" type="lf:OnMainServerUnavalableBehavior" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Поведение при недоступности основного сервера </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="mobileDeviceTableType" type="lf:FormTableType" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вид таблицы, влияющий на ее внешний вид и способы взаимодействия</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxCardHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Использование автоматического ограничения максимальной высоты карточки таблицы.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxCardHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота карточки таблицы.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="cardBehaviorOnVerticalCompression" type="lf:CardBehaviorOnVerticalCompression" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Поведение при сжатии карточки по вертикали до заданной максимальной высоты.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="allowGettingCurrentRowURL" type="xs:boolean" default="true" minOccurs="0" >
+                <xs:annotation>
+                    <xs:documentation>Разрешить получение навигационной ссылки на объект/запись в текущей строке</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:choice minOccurs="0" maxOccurs="unbounded" >
+                <xs:annotation>
+                    <xs:documentation>Вложенные элементы</xs:documentation>
+                </xs:annotation>
+                <xs:element name="field" type="tns:Field" />
+                <xs:element name="group" type="tns:Group" />
+            </xs:choice>
+            <xs:element name="showCommandBar" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ОтображатьКоманднуюПанель</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="dataPath" type="tns:FieldPath">
+            <xs:annotation>
+                <xs:documentation>Путь к данным</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="defaultItem" type="xs:boolean" default= "false">
+            <xs:annotation>
+                <xs:documentation>Активизировать по умолчанию</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="Button">
+        <xs:annotation>
+            <xs:documentation>Кнопка логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="title" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="visible" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="userVisible" type="tns:AdjustableBoolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пользовательская видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="enabled" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Доступность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="check" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пометка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="representation" type="lf:ButtonRepresentation" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="picture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Картинка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="skipOnInput" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пропускать при вводе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона (по умолчанию kLogFormButtonDefBackColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="textColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста (по умолчанию kLogFormButtonDefTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormButtonDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="font" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт (по умолчанию kLogFormButtonDefFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="width" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupHorizontalAlign" type="lf:ItemHorizontalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupVerticalAlign" type="lf:ItemVerticalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleHeight" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота заголовка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="attributeProperty" type="tns:FieldPath" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Параметр команды</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltipRepresentation" type="lf:TooltipRepresentation" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение подсказки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="extendedTooltip" type="tns:Decoration" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Расширенная подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="representationInContextMenu" type="lf:RepresentationInContextMenu" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение в контекстном меню</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="shape" type="lf:ButtonShape" default="Auto">
+                <xs:annotation>
+                    <xs:documentation>Фигура</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="shapeRepresentation" type="lf:ButtonShapeRepresentation" default="Auto">
+                <xs:annotation>
+                    <xs:documentation>Отображение фигуры</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="pictureLocation" type="lf:FormButtonPictureLocation" default="Auto">
+                <xs:annotation>
+                    <xs:documentation>Положение картинки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="xs:boolean" default= "false">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="xs:boolean" default= "false">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="displayImportance" type="lf:DisplayImportance" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Важность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="locationInCommandBar" type="lf:ButtonLocationInCommandBar" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Положение в Командной панели</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="commandUniqueness" type="xs:boolean" default= "true">
+                <xs:annotation>
+                    <xs:documentation>Уникальность команды</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MSIB" type="lf:OnMainServerUnavalableBehavior" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Поведение при недоступности основного сервера </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+
+            <!--Сочетание клавиш -->
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="type" type="lf:ManagedFormButtonType" use="required">
+            <xs:annotation>
+                <xs:documentation>Вид</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="commandName" type="xs:Name">
+            <xs:annotation>
+                <xs:documentation>Имя команды</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="defaultButton" type="xs:boolean" default= "false">
+            <xs:annotation>
+                <xs:documentation>Кнопка по умолчанию</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="defaultItem" type="xs:boolean" default= "false">
+            <xs:annotation>
+                <xs:documentation>Активизировать по умолчанию</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+</xs:complexType>
+
+    <xs:complexType name="Decoration">
+        <xs:annotation>
+            <xs:documentation>Декорация логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="title" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Устарел!</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="formattedTitle" type="tns:FormattedStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Форматированный заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="visible" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="userVisible" type="tns:AdjustableBoolean" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пользовательская видимость</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="enabled" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Доступность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="textColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста (по умолчанию kLogFormDecorationDefTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="font" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт (по умолчанию kLogFormDecorationDefFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="width" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота (Количество строк)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupHorizontalAlign" type="lf:ItemHorizontalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupVerticalAlign" type="lf:ItemVerticalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltip" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="tooltipRepresentation" type="lf:TooltipRepresentation" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение подсказки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="extendedTooltip" type="tns:Decoration" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Расширенная подсказка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="contextMenu" type="tns:Group" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Контекстное меню</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--сочетание клавиш-->
+            <xs:element name="skipOnInput" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Пропускать при вводе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="displayImportance" type="lf:DisplayImportance" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Важность</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="MSIB" type="lf:OnMainServerUnavalableBehavior" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Поведение при недоступности основного сервера </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:choice minOccurs="0" maxOccurs="1" >
+                <xs:element name="textData" type="tns:TextDecorationData" />
+                <xs:element name="pictureData" type="tns:PictureDecorationData" />
+            </xs:choice>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:Name" use="required">
+            <xs:annotation>
+                <xs:documentation>Имя</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="type" type="lf:ManagedFormDecorationType" use="required">
+            <xs:annotation>
+                <xs:documentation>Вид</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    
+    <xs:complexType name="TextFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле надписи логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="passwordMode" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим пароля</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="markNegatives" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Выделять отрицательные</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="format" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Формат</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона (по умолчанию kLogFormTextFieldDataDefBackColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="textColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста (по умолчанию kLogFormTextFieldDataDefTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormTextFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="border" type="ui:Border" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Рамка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="font" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт (по умолчанию kLogFormTextFieldDataDefFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="width" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота (Количество строк)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="useCopy" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Использовать копирование</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="hyperlink" type="xs:boolean" default= "false">
+            <xs:annotation>
+                <xs:documentation>Гиперссылка</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="InputFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле ввода логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="wrap" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Автоперенос строк</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="passwordMode" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим пароля</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="multiLine" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Многострочный режим</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="textEdit" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Редактирование текста</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="markNegatives" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Выделять отрицательные</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальное значение (если не Value())</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxValue" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальное значение (если не Value())</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="mask" type="xs:string" default= "" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Маска</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="format" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Формат</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="editFormat" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ФорматРедактирования</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--Расширенное редактирование-->
+            <xs:element name="choiceListButton" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Кнопка списка выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="dropListButton" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Кнопка выпадающего списка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceButton" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Кнопка выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceButtonRepresentation" type="lf:ChoiceButtonRepresentation" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение кнопки выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="clearButton" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Кнопка очистки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="spinButton" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Кнопка регулирования</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="openButton" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Кнопка открытия</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="createButton" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Кнопка создания</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--Высота списка выбора-->
+            <!--Минимальная ширина списка выбора-->
+            <xs:element name="autoMarkIncomplete" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>АвтоОтметкаНезаполненного</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoChoiceIncomplete" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>АвтоВыборНезаполненного</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="incompleteChoiceMode" type="lf:IncompleteItemChoiceMode" default="OnEnterPressed">
+                <xs:annotation>
+                    <xs:documentation>Режим выбора незаполненного</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceType" type="xs:boolean"  default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ВыбиратьТип</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceFoldersAndItems" type="lf:FoldersAndItems" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Выбор групп и элементов</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceParamLinks" type="ma:ChoiceParameterLinks" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Связи параметров выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceParams" type="ma:ChoiceParameters" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Параметры выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="quickChoice" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Быстрый выбор</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="listChoiceMode" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим выбора из списка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceForm" type="tns:MDObjReference" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Форма выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceList" type="core:ValueListType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Список выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="linkByType" type="ma:TypeLink" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Связь по типу</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="heightControlVariant" type="lf:HeightControlVariant" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Управление высотой </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoShowClearButtonMode" type="lf:AutoShowClearButtonMode" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим авто отображения кнопки очистки </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoShowOpenButtonMode" type="lf:AutoShowOpenButtonMode" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим авто отображения кнопки открытия </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoCorrectionOnTextInput" type="lf:AutoCorrectionOnTextInput" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто исправление текста при вводе. </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="spellCheckingOnTextInput" type="lf:SpellCheckingOnTextInput" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Проверка правописания при вводе </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoCapitalizationOnTextInput" type="lf:AutoCapitalizationOnTextInput" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто изменение регистра при вводе </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="specialTextInputMode" type="lf:SpecialTextInputMode" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Тип содержимого строки </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autofillHint" type="lf:AutofillHint" default= "DontUse" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Подсказка автозаполнения </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="onScreenKeyboardReturnKeyText" type="lf:OnScreenKeyboardReturnKeyText" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Текст кнопки Ввод экранной клавиатуры. </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона (по умолчанию kLogFormInputFieldDataDefBackColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="textColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста (по умолчанию kLogFormInputFieldDataDefTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormInputFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="font" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт (по умолчанию kLogFormInputFieldDataDefFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="width" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота (Количество строк)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceButtonPicture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Картинка кнопки выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="availableTypes" type="core:TypeDescription" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Доступные типы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="typeDomainEnabled" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Разрешить составной тип</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="editTextUpdate" type="lf:EditTextUpdate" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Обновление текста редактирования</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="inputHint" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Подсказка ввода</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceHistoryOnInput" type="lf:ChoiceHistoryOnInput"  default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ведение истории выбора при вводе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="RadioButtonsData">
+        <xs:annotation>
+            <xs:documentation>Поле переключателя логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element  name="colsCount" type="xs:decimal" default ="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>КоличествоКолонок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element  name="itemHeight" type="xs:decimal" default ="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ВысотаЭлемента</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="choiceList" type="core:ValueListType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Список выбора</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="textColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста (по умолчанию kLogFormRadioButtonsFieldDataDefTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormRadioButtonsFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="font" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт (по умолчанию kLogFormRadioButtonsFieldDataDefFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="radioButtonType" type="lf:RadioButtonType" default= "Auto">
+                <xs:annotation>
+                    <xs:documentation>Вид переключателя</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="ImageFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле картинки логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="valuesPicture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Картинка значений</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="pictureSize" type="lf:PictureSize" default= "RealSize" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>РазмерКартинки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="zoomable" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Масштабировать</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="nonselectedPictureText" type="core:LocalStringType">
+                <xs:annotation>
+                    <xs:documentation>текст, отображаемый, если картинка не выбрана</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--РазрешитьНачалоПеретаскивания-->
+            <!--РазрешитьПеретаскивание-->
+            <xs:element name="border" type="ui:Border" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Рамка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="textColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста (по умолчанию kLogFormImageFieldDataDefTextColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormImageFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="font" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт (по умолчанию kLogFormImageFieldDataDefFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="width" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="heightInTableRows" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота в строках таблицы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="hyperlink" type="xs:boolean" default= "false">
+            <xs:annotation>
+                <xs:documentation>Гиперссылка</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    <xs:complexType name="CheckBoxFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле флажка логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormCheckBoxFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона (по умолчанию kLogFormCheckBoxFieldDataDefBackColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="checkBoxType" type="lf:CheckBoxType" default="Auto">
+                <xs:annotation>
+                    <xs:documentation>Вид флажка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="threeState" type="xs:boolean" default= "false">
+            <xs:annotation>
+                <xs:documentation>ТриСостояния</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    
+    <xs:complexType name="SpreadsheetFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле табличного документа логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="showGrid" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать сетку</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showHeaders" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать заголовки строк и колонок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showGroups" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать группировки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalScrollBar" type="lf:SpreadSheetDocumentScrollBarUse" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение вертикальной полосы прокрутки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalScrollBar" type="lf:SpreadSheetDocumentScrollBarUse" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение горизонтальной полосы прокрутки </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="blackAndWhiteView" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Черно-белый просмотр </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="protection" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Защита</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="edit" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Возможность изменения содержимого</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="selectionShowMode" type="lf:SelectionShowMode" default= "Always" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим отображения выделения </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--Вывод-->
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormMoxelFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="width" type="xs:decimal" default= "50" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "10" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupHorizontalAlign" type="lf:ItemHorizontalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="groupVerticalAlign" type="lf:ItemVerticalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальное положение в группе</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--РазрешитьНачалоПеретаскивания-->
+            <!--РазрешитьПеретаскивание-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="CalendarFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле календаря</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="width" type="xs:decimal" default= "16" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "9" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="selectionMode" type="lf:FormDateSelectionMode"  default="Single" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Режим выделения даты.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showCurrentDate" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Флаг отображения текущей даты.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="calendarNavigation" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Флаг навигации по календарю.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="beginOfRepresentationPeriod" type="xs:dateTime" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Дата начала периода отображаемых дат календаря.(по умолчанию Date())</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="endOfRepresentationPeriod" type="xs:dateTime" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Дата конца периода отображаемых дат календаря.(по умолчанию Date())</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showMonthsPanel" type="xs:boolean" default="false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Видимость панели месяцев.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="widthInMonths" type="xs:decimal" default="1" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина поля в месяцах.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="heightInMonths" type="xs:decimal" default="1" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота поля в месяцах.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="font" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт (по умолчанию kLogFormCalendarFieldDataDefFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="border" type="ui:Border" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Рамка (по умолчанию kLogFormCalendarFieldDataDefBorder)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormCalendarFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="FormattedDocFieldData">
+        <xs:sequence>
+            <xs:element name="textColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет текста (по умолчанию kLogFormFormattedDocFieldDataDefTextColor )</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона (по умолчанию kLogFormFormattedDocFieldDataDefBackColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormFormattedDocFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="font" type="ui:Font" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Шрифт (по умолчанию kLogFormFormattedDocFieldDataDefFont)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="width" type="xs:decimal" default= "50" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "10" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--Вывод-->
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ProgressBarFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле индикатора логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="width" type="xs:decimal" default= "32" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "1" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minValue" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальное значение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxValue" type="xs:decimal" default="100" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальное значение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="orientation" type="lf:FormElementOrientation" default="Horizontal">
+                <xs:annotation>
+                    <xs:documentation>Ориентация</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="representation" type="lf:FormProgressBarRepresentation" default="Smooth">
+                <xs:annotation>
+                    <xs:documentation>Отображение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showPercent" type="xs:boolean" default="false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать проценты</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormProgressBarFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="TrackBarFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле полосы регулирования логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="width" type="xs:decimal" default= "32" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "2" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minValue" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальное значение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxValue" type="xs:decimal" default="100" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальное значение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="orientation" type="lf:FormElementOrientation" default="Horizontal">
+                <xs:annotation>
+                    <xs:documentation>Ориентация</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="step" type="xs:decimal" default="1">
+                <xs:annotation>
+                    <xs:documentation>Шаг</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="largeStep" type="xs:decimal" default="10">
+                <xs:annotation>
+                    <xs:documentation>"большой" шаг - размер страницы при нажатии PgUp/PgDn.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="markingStep" type="xs:decimal" default="5">
+                <xs:annotation>
+                    <xs:documentation>Шаг разметки.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="markingAppearance" type="lf:MarkingStyle" default="BottomRight">
+                <xs:annotation>
+                    <xs:documentation>Разметка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormTrackBarFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+   <xs:complexType name="ChartFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле диаграммы логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="width" type="xs:decimal" default= "50" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "10" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота (Количество строк)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="HTMLFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле HTML логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="width" type="xs:decimal" default= "50" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "10" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота (Количество строк)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--Вывод-->
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormHTMLFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="border" type="ui:Border" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Рамка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="PlannerFieldData">
+        <xs:annotation>
+            <xs:documentation>Поле планировщика логической формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="width" type="xs:decimal" default= "50" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="height" type="xs:decimal" default= "10" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalStretch" type="lf:BWAValue" default= "auto">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по горизонтали </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalStretch" type="lf:BWAValue" default= "auto">
+                <xs:annotation>
+                    <xs:documentation>Растягивать по вертикали</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxWidth" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="minWidth" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Минимальная ширина</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autoMaxHeight" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Авто максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="maxHeight" type="xs:decimal" default="0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Максимальная высота</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="startDrag" type="xs:boolean" default="false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Разрешить начало перетаскивания</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="drag" type="xs:boolean" default="false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Разрешить перетаскивание</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="MenuGroupData">
+        <xs:annotation>
+            <xs:documentation>Расширение группы формы для меню</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="horizontalAlign" type="lf:ItemHorizontalAlignment" default= "Left" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="commandSource" type="xs:Name" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="AutoMenuGroupData">
+        <xs:annotation>
+            <xs:documentation>Расширение группы формы для автоматической командной панели.</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="horizontalAlign" type="lf:ItemHorizontalAlignment" default= "Left" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="autofill" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>автозаполнение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="SubmenuGroupData">
+        <xs:annotation>
+            <xs:documentation>Расширение группы формы для подменю</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="representation" type="lf:ButtonRepresentation" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="picture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Картинка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="commandSource" type="xs:Name" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="shape" type="lf:ButtonShape" default="Auto">
+                <xs:annotation>
+                    <xs:documentation>Фигура</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="shapeRepresentation" type="lf:ButtonShapeRepresentation" default="Auto">
+                <xs:annotation>
+                    <xs:documentation>Отображение фигуры</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="ButtonsGroupData">
+        <xs:annotation>
+            <xs:documentation>Расширение группы формы для группы кнопок</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="commandSource" type="xs:Name" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="representation" type="lf:ButtonGroupRepresentation" default="Auto">
+                <xs:annotation>
+                    <xs:documentation>Отображение фигуры</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="ContextMenuGroupData">
+        <xs:annotation>
+            <xs:documentation>Расширение группы формы для контекстного меню</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="autofill" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>автозаполнение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="ColumnsGroupData">
+        <xs:annotation>
+            <xs:documentation>Расширение группы формы для группы колонок</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="showTitle" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleBackColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона заголовка (по умолчанию kLogFormColumnsGroupDataDefTitleBackColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showInHeader" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать в шапке</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="headerPicture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Картинка шапки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="headerHorizontalAlign" type="lf:ItemHorizontalAlignment" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение в шапке</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="headerDataPath" type="tns:FieldPath" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ПутьКДаннымШапки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="headerFormat" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Формат шапки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showInCard" type="xs:boolean" default="true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Должна ли группа колонок отображаться в карточке.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="fixInCard" type="lf:BWAValue" default="auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Должна ли группа колонок при сжатии карточки по вертикали остаться в той части карточки, которая не прокручивается.</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="group" type="lf:ColumnsGroup" default= "Vertical">
+            <xs:annotation>
+                <xs:documentation>Группировка </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="fixedInTable" type="lf:FormFixedInTable" default= "None">
+            <xs:annotation>
+                <xs:documentation>Фиксация в таблице </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    
+    <xs:complexType name="PagesGroupData">
+        <xs:annotation>
+            <xs:documentation>Расширение группы формы для страниц</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="currentRowUse" type="lf:CurrentRowUse" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Идентификатор связанной таблицы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="associatedTableElementName" type="xs:Name" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Связь с текущими данными таблицы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="pagesRepresentation" type="lf:FormPagesRepresentation" default= "TabsOnTop">
+            <xs:annotation>
+                <xs:documentation>Отображение закладок страниц</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    
+    <xs:complexType name="PageGroupData">
+        <xs:annotation>
+            <xs:documentation>Расширение группы формы для страницы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="picture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Картинка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="showTitle" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleDataPath" type="tns:FieldPath" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ПутьКДаннымЗаголовка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="format" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Формат</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="slaveItemsWidth" type="lf:FormChildrenWidth" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина подчиненных элементов</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="childrenAlign" type="lf:FormChildrenAlign" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Выравнивание подчиненных элементов</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalSpacing" type="lf:FormItemSpacing" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальный интервал</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalSpacing" type="lf:FormItemSpacing" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальный интервал</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalAlign" type="lf:ItemHorizontalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalAlign" type="lf:ItemVerticalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="scrollOnCompress" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальная прокрутка при сжатии</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="group" type="lf:FormChildrenGroup" default= "Vertical">
+            <xs:annotation>
+                <xs:documentation>Группировка </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+
+    <xs:complexType name="UsualGroupData">
+        <xs:annotation>
+            <xs:documentation>Расширение группы формы для обычной группы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="showTitle" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Отображать заголовок</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="slaveItemsWidth" type="lf:FormChildrenWidth" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Ширина подчиненных элементов</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleDataPath" type="tns:FieldPath" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ПутьКДаннымЗаголовка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="hiddenStateTitleBackColor" type="ui:Color" minOccurs="0">
+              <xs:annotation>
+                <xs:documentation>Цвет фона заголовка скрытого отображения</xs:documentation>
+              </xs:annotation>
+            </xs:element>
+            <xs:element name="format" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Формат</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="childrenAlign" type="lf:FormChildrenAlign" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Выравнивание подчиненных элементов</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalSpacing" type="lf:FormItemSpacing" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальный интервал</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalSpacing" type="lf:FormItemSpacing" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальный интервал</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="horizontalAlign" type="lf:ItemHorizontalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalAlign" type="lf:ItemVerticalAlignment" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="throughAlign" type="lf:UsualGroupThroughAlign" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Сквозное выравнивание</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="behavior" type="lf:UsualGroupBehavior" default="Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Поведение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="collapsedTitle" type="core:LocalStringType" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>ЗаголовокСвернутогоОтображения</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="collapsed" type="xs:boolean" default= "true" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Свернута</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="currentRowUse" type="lf:CurrentRowUse" default= "Auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Идентификатор связанной таблицы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="associatedTableElementName" type="xs:Name" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Связь с текущими данными таблицы</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="scrollOnCompress" type="lf:BWAValue" default= "auto" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Вертикальная прокрутка при сжатии</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="group" type="lf:FormChildrenGroup" default= "Vertical">
+            <xs:annotation>
+                <xs:documentation>Группировка </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="representation" type="lf:UsualGroupRepresentation" default= "WeakSeparation">
+            <xs:annotation>
+                <xs:documentation>Отображение</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    <xs:complexType name="TextDecorationData">
+        <xs:annotation>
+            <xs:documentation>Расширение декорации формы для надписи</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="horizontalAlign" type="lf:ItemHorizontalAlignment" default= "Left" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>горизонтальное положение</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="verticalAlign" type="lf:ItemVerticalAlignment" default= "Center" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>вертикальное выравнивание</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="titleHeight" type="xs:decimal" default= "0" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Высота заголовка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="backColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет фона (по умолчанию kLogFormTextDecorationDataDefBackColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки (по умолчанию kLogFormTextDecorationDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="border" type="ui:Border" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Рамка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="hyperlink" type="xs:boolean" default= "false">
+            <xs:annotation>
+                <xs:documentation>Гиперссылка</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    <xs:complexType name="PictureDecorationData">
+        <xs:annotation>
+            <xs:documentation>Расширение декорации формы для картинки</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+            <xs:element name="pictureSize" type="lf:PictureSize"  default= "RealSize" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>РазмерКартинки</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="zoomable" type="xs:boolean" default= "false" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Масштабировать</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="nonselectedPictureText" type="core:LocalStringType">
+                <xs:annotation>
+                    <xs:documentation>текст, отображаемый, если картинка не выбрана</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="picture" type="ui:Picture" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Картинка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <!--РазрешитьНачалоПеретаскивания-->
+            <!--РазрешитьПеретаскивание-->
+            <xs:element name="border" type="ui:Border" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Рамка</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="borderColor" type="ui:Color" minOccurs="0">
+                <xs:annotation>
+                    <xs:documentation>Цвет рамки вокруг поля картинки (по умолчанию kLogFormImageFieldDataDefBorderColor)</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+            <xs:element name="event" type="tns:Event" minOccurs="0" maxOccurs="unbounded">
+                <xs:annotation>
+                    <xs:documentation>Обработчики событий</xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="hyperlink" type="xs:boolean" default= "false">
+            <xs:annotation>
+                <xs:documentation>Гиперссылка</xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+    </xs:complexType>
+    
+    <xs:complexType name="Event">
+        <xs:sequence>
+        </xs:sequence>
+        <xs:attribute name="handler" type="xs:string"/>
+        <xs:attribute name="name" type="xs:string" />
+    </xs:complexType>
+    
+    <xs:complexType name="CommandsContent">
+        <xs:annotation>
+            <xs:documentation>Состав команд элемента формы</xs:documentation>
+        </xs:annotation>
+        <xs:sequence>
+          <xs:element name="excluded" type="xs:string" minOccurs="0" maxOccurs="unbounded">
+              <xs:annotation>
+                  <xs:documentation>Команда исключена из состава команд</xs:documentation>
+              </xs:annotation>
+          </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+
+    <!--Тип команды фрагмента интерфейса УФ по умолчанию-->
+    <xs:simpleType name="CMIFragmentCmdKind">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Auto"/>
+            <xs:enumeration value="Added"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="CMIFragmentRecord">
+        <xs:sequence>
+            <xs:element name="Command" type="xs:string"/>
+            <xs:element name="Kind" type="tns:CMIFragmentCmdKind"/>
+            <xs:element name="Attribute" type="tns:FieldPath"/>
+            <xs:element name="CmdGroup" type="xs:string"/>
+            <xs:element name="Index" type="xs:decimal" minOccurs="0"/>
+            <xs:element name="DefVisible" type="xs:boolean" default= "true" minOccurs="0"/>
+            <!--<xs:element name="Visible" type="xs:boolean"/>--> 
+            <xs:element name="Visible2" type="tns:AdjustableBoolean"/> <!-- Visible2 что бы сохранить совместимость на МП--> 
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="FormattedStringType">
+        <xs:sequence>
+            <xs:element name="str" type="core:LocalStringType" minOccurs="0"/>
+            <xs:element name="formatted" type="xs:boolean"/>
+        </xs:sequence>
+    </xs:complexType>
+</xs:schema>

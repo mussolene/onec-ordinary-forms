@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.3/debugger/debugCalculations"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           xmlns:dbgbase="http://v8.1c.ru/8.3/debugger/debugBaseData"
+           targetNamespace="http://v8.1c.ru/8.3/debugger/debugCalculations"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugBaseData" schemaLocation="debugBaseData.xsd"/>
+    
+    <!-- Варианты вычисления выржения -->
+    <xs:simpleType name="ViewInterface">
+        <xs:restriction base="xs:string">
+            <!-- Детализировать результаты вычислений не нужно -->
+            <xs:enumeration value="none"/>
+            <!-- Рассматривать результат вычисления как контекст -->
+            <xs:enumeration value="context"/>
+            <!-- Рассматривать результат вычисления как перечисление -->
+            <xs:enumeration value="enum"/>
+            <!-- Рассматривать результат вычисления как индексируемую коллекцию -->
+            <xs:enumeration value="collection"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Описание типа элемента вычисляемого выражения -->
+    <xs:simpleType name="SourceCalculationDataItemType">
+        <xs:restriction base="xs:string">
+            <!-- Выражение для вычисления -->
+            <xs:enumeration value="expression"/>
+            <!-- Имя свойства для вычисления -->
+            <xs:enumeration value="property"/>
+            <!-- Индекс в коллекции для вычисления -->
+            <xs:enumeration value="index"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <!-- Описание элемента из вычисляемого выражения -->
+    <xs:complexType name="SourceCalculationDataItem">
+        <xs:sequence>
+            <!-- Тип элемента -->
+            <xs:element name="itemType" type="tns:SourceCalculationDataItemType"/>
+            <!-- Выражение -->
+            <xs:element name="expression" type="xs:string" default=""/>
+            <!-- Имя свойства -->
+            <xs:element name="property" type="xs:string" default=""/>
+            <!-- Индекс элемента коллекции -->
+            <xs:element name="index" type="xs:decimal" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Описание всего вычисляемого выражения -->
+    <xs:complexType name="SourceCalculationDataInfo">
+        <xs:sequence>
+            <!-- Идентификатор вычисляемого выражения -->
+            <xs:element name="expressionID" type="core:UUID" minOccurs="0"/>
+            <!-- Идентификатор результата вычисления выражения -->
+            <xs:element name="expressionResultID" type="core:UUID" minOccurs="0"/>
+            <!-- Выражение для вычисления, записанное в виде вектора -->
+            <xs:element name="calcItem" type="tns:SourceCalculationDataItem" minOccurs="0" maxOccurs="unbounded"/>
+            <!-- Варианты вычисления выражения -->
+            <xs:element name="interfaces" type="tns:ViewInterface" minOccurs="0" maxOccurs="unbounded"/>
+            <!-- Начальный индекс -->
+            <xs:element name="startIndex" type="xs:decimal" minOccurs="0"/>
+            <!-- Размер получаемой страницы данных -->
+            <xs:element name="pageSize" type="xs:decimal" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Опции формирования представления текстового значения -->
+    <xs:complexType name="DbgPresentationOptionsOfStringValue">
+        <xs:sequence>
+            <!-- Максимальная длина строки с результатом вычислений -->
+            <xs:element name="maxTextSize" type="xs:decimal" default="0"/>
+            <!-- Максимальная длина строки с результатом вычислений -->
+            <xs:element name="stopOnFirstEOL" type="xs:boolean" default="false"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <xs:complexType name="CalculationSourceDataStorage">
+        <xs:sequence>
+            <!-- Уровень стека вызовов, на котором делается вычисление -->
+            <xs:element name="stackLevel" type="xs:decimal" default="0"/>
+            <!-- Выражение для вычисления -->
+            <xs:element name="srcCalcInfo" type="tns:SourceCalculationDataInfo"/>
+            <!-- Опции формирования представления текстового значения -->
+            <xs:element name="presOptions" type="tns:DbgPresentationOptionsOfStringValue" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Описание значения, полученного каким-либо образом -->
+    <xs:complexType name="BaseValueInfoData">
+        <xs:sequence>
+            <!-- Идентификатор типа свойства -->
+            <xs:element name="typeCode" type="xs:decimal" default="0"/>
+            <!-- Текстовое представление названия типа -->
+            <xs:element name="typeName" type="xs:string" default=""/>
+            
+            <!-- Значение, если его тип Число -->
+            <xs:element name="valueDecimal" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+            <!-- Значение, если его тип Строка -->
+            <xs:element name="valueString" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+            <!-- Значение, если его тип Дата/время -->
+            <xs:element name="valueDateTime" type="xs:dateTime" minOccurs="0" maxOccurs="1"/>
+            <!-- Значение, если его тип Булево -->
+            <xs:element name="valueBoolean" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+
+            <!-- Текстовое представление значения -->
+            <xs:element name="pres" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+            <!-- Признак корерктного получения текстового представления значения свойства, по умолчанию - Истина -->
+            <xs:element name="presProcessedCorrectly" type="xs:boolean" default="true"/>
+            
+            <!-- Признак того, что свойство при просмотре можно раскрывать (поддерживается контекст и число свойств в нем > 0) -->
+            <xs:element name="isExpandable" type="xs:boolean" default="false"/>
+
+            <!-- Обладает ли значение свойства IContext -->
+            <xs:element name="isSupportIContext" type="xs:boolean" default="false"/>
+            <!-- Обладает ли значение свойства IIndexedCollectionRO -->
+            <xs:element name="isIIndexedCollectionRO" type="xs:boolean" default="false"/>
+            <!-- Обладает ли значение свойства IEnumValue -->
+            <xs:element name="isSupportIEnumValue" type="xs:boolean" default="false"/>
+
+            <!-- Размер коллекции -->
+            <xs:element name="collectionSize" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Описание свойства контекста -->
+    <xs:complexType name="ContextPropertyData">
+        <xs:sequence>
+            <!-- Имя свойства -->
+            <xs:element name="propName" type="xs:string" default=""/>
+            <!-- Признак доступности свойства для чтения -->
+            <xs:element name="isReadable" type="xs:boolean" default="true"/>
+            <!-- Признак доступности свойства для записи -->
+            <xs:element name="isWritable" type="xs:boolean" default="true"/>
+            <!-- Признак успешного прочтения значения свойства -->
+            <xs:element name="isReaded" type="xs:boolean" default="false"/>
+            <!-- Текст ошибки, возникшей при получении значения свойства -->
+            <xs:element name="errorStr" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Описание свойства контекста, предоставляемого результатом вычисления -->
+    <xs:complexType name="CalculationResultContextPropertyInfo">
+        <xs:sequence>
+            <!-- Описание свойства как части контекста -->
+            <xs:element name="propInfo" type="tns:ContextPropertyData"/>
+            <!-- Описание значения свойства -->
+            <xs:element name="valueInfo" type="tns:BaseValueInfoData" minOccurs="0"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Описание элемента коллекции -->
+    <xs:complexType name="CalculationResultEnumAndColPropertyInfo">
+        <xs:sequence>
+            <!-- Описание собственно значения элемента коллекции -->
+            <xs:element name="valueInfo" type="tns:BaseValueInfoData"/>
+            <!-- Информация о контексте -->
+            <xs:element name="valueOfContextPropInfo" type="tns:CalculationResultContextPropertyInfo" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Описание состояния результата вычисления выражения -->
+    <xs:simpleType name="CalculationResultState">
+        <xs:restriction base="xs:string">
+            <!-- Результат вычисления выражения не определен -->
+            <xs:enumeration value="undefined"/>
+            <!-- Выражение вычислено корректно -->
+            <xs:enumeration value="correctly"/>
+            <!-- Выражение вычислено с ошибками -->
+            <xs:enumeration value="withErrors"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+    <!-- Описание собственно результата вычисления выражения -->
+    <xs:complexType name="CalculationResultObjData">
+        <xs:sequence>
+            <!-- Интерфейс, приминительно к которому описывается информация о значении -->
+            <xs:element name="viewInterface" type="tns:ViewInterface"/>
+            <xs:choice>
+                <!-- Информация о контексте -->
+                <xs:element name="valueOfContextPropInfo" type="tns:CalculationResultContextPropertyInfo" minOccurs="0" maxOccurs="unbounded"/>
+                <!-- Информация об элементе коллекции -->
+                <xs:element name="valueOfCollectionInfo" type="tns:CalculationResultEnumAndColPropertyInfo" minOccurs="0" maxOccurs="unbounded"/>
+                <!-- Информация об элементе индексируемой коллекции -->
+                <xs:element name="valueOfEnumInfo" type="tns:CalculationResultEnumAndColPropertyInfo" minOccurs="0" maxOccurs="unbounded" />
+            </xs:choice>
+        </xs:sequence>
+    </xs:complexType>
+  
+    <!-- Описание выражения для вычисления и результатов вычисления -->
+    <xs:complexType name="CalculationResultBaseData">
+        <xs:sequence>
+            <!-- Признак того, что мы смогли вычислить выражение -->
+            <xs:element name="evalResultState" type="tns:CalculationResultState"/>
+            <!-- Идентификатор результата вычисления выражения -->
+            <xs:element name="expressionResultID" type="core:UUID" minOccurs="0"/>
+            <!-- Информация о значении, являющемся результатом вычисления выражения -->
+            <xs:element name="resultValueInfo" type="tns:BaseValueInfoData" minOccurs="0"/>
+            <!-- Состав поддерживаемых по результатам тестирования интерфейсов -->
+            <xs:element name="testedAndSupportedInterface" type="tns:ViewInterface" minOccurs="0" maxOccurs="unbounded"/>
+            <!-- Собственно результат вычисления выражения -->
+            <xs:element name="calculationResult" type="tns:CalculationResultObjData" minOccurs="0" maxOccurs="1"/>
+            <!-- Признак того, что при вычислении выражения возникли ошибки -->
+            <xs:element name="errorOccurred" type="xs:boolean" default="false"/>
+            <!-- Если случилась ошибка - текст ошибки -->
+            <xs:element name="exceptionStr" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+            <!-- Имя локальной переменной (сюда на стороне ран-тайма будут записываться имена локальных переменных) -->
+            <xs:element name="localVariableName" type="xs:string" default=""/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Описание хранилища результата вычисления выражения -->
+    <xs:complexType name="CalculationResultStorage">
+        <xs:sequence>
+            <!-- Результат вычисления -->
+            <xs:element name="evalExprResBaseData" type="tns:CalculationResultBaseData"/>
+        </xs:sequence>
+    </xs:complexType>
+    
+    <!-- Варианты указания нового значения -->
+    <xs:simpleType name="NewValueVariant">
+        <xs:restriction base="xs:string">
+            <!-- Вариант указания нового значения не задан -->
+            <xs:enumeration value="unknown"/>
+            <!-- Новое значение задается в виде готового значения -->
+            <xs:enumeration value="val"/>
+            <!-- Новое значение задается в виде выражения для вычисления -->
+            <xs:enumeration value="expr"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- Описание информации о новом значении локальной переменной или свойства контекста-->
+    <xs:complexType name="NewValueInfo">
+        <xs:sequence>
+            <!-- Способ указания нового значения -->
+            <xs:element name="variant" type="tns:NewValueVariant" minOccurs="1" maxOccurs="1"/>
+            <xs:choice>
+                <!-- Новое значение, указанное в виде готового значения -->
+                <xs:element name="value" type="xs:anyType" maxOccurs="1"/>
+                <!-- Новое значение, указанное в виде выражения для вычисления -->
+                <xs:element name="valueExpression" type="xs:string" maxOccurs="1"/>                        
+            </xs:choice>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>

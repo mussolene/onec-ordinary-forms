@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.2/managed-application/dynamic-list-data"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           xmlns:dcs="http://v8.1c.ru/8.1/data-composition-system/settings"
+           xmlns:dcscore="http://v8.1c.ru/8.1/data-composition-system/core"
+           targetNamespace="http://v8.1c.ru/8.2/managed-application/dynamic-list-data"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+  <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+  <xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/core" schemaLocation="../../../dcscore/src/res/core.xsd"/>
+  <xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/settings" schemaLocation="../../../dcscore/src/res/settings.xsd"/>
+  
+  <xs:complexType name="CellAppearance">
+    <xs:annotation>
+      <xs:documentation>
+        Оформление ячейки. Доступны следующие параметры:
+        BackColor
+        TextColor
+        Font
+        HorizontalAlign
+        Visible
+        Enabled
+        Show
+        Format
+        Text
+      </xs:documentation>
+    </xs:annotation>
+    <xs:complexContent>
+      <xs:extension base="dcscore:ParameterValues"/>
+    </xs:complexContent>
+  </xs:complexType>
+
+  <xs:complexType name="DataPart">
+    <xs:annotation>
+      <xs:documentation>
+        Фрагмент результа динамического  списка
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+
+      <xs:element name="rowDescription"
+                  type="tns:DataPartRowDescription">
+        <xs:annotation>
+          <xs:documentation>
+            Описание строки
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="rows"
+                  type="tns:DataPartRowsCollection">
+        <xs:annotation>
+          <xs:documentation>
+            Строки
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:group name="DataPartCell">
+    <xs:sequence>
+      <xs:element name="value"
+                  type="xs:anyType"
+                  nillable="true"
+                  minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>
+            Значение, кроме NULL
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="nullValue"
+                  type="core:Null"
+                  minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>
+            Значение NULL
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="appearance"
+                  type="xs:int"
+                  minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>
+            Индекс уникального оформления ячейки
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+
+  <xs:complexType name="DataPartRow">
+    <xs:annotation>
+      <xs:documentation>
+        Cтрока фрагмента результа динамического  списка
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+
+      <xs:group ref="tns:DataPartCell"
+             minOccurs="1"
+             maxOccurs="unbounded">
+        <xs:annotation>
+          <xs:documentation>
+            Ячейки строки
+          </xs:documentation>
+        </xs:annotation>
+      </xs:group>
+
+    </xs:sequence>
+  </xs:complexType>  
+
+  <xs:complexType name="DataPartRowsCollection">
+    <xs:annotation>
+      <xs:documentation>
+        Коллекция строк фрагмента результа динамического  списка
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+
+      <xs:element name="row"
+                  type="tns:DataPartRow"
+                  minOccurs="0"
+                  maxOccurs="unbounded">
+        <xs:annotation>
+          <xs:documentation>
+            Строка
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      
+      <xs:element name="appearance"
+                  type="tns:CellAppearance"
+                  minOccurs="0"
+                  maxOccurs="unbounded">
+        <xs:annotation>
+          <xs:documentation>
+            Уникальные оформления ячеек
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="DataPartRowDescription">
+    <xs:annotation>
+      <xs:documentation>
+        Описание строки фрагмента результа динамического списка
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+
+      <xs:element name="cellDescription"
+                  type="tns:DataPartCellDescription"
+                  minOccurs="1"
+                  maxOccurs="unbounded">
+        <xs:annotation>
+          <xs:documentation>
+            Описание ячейки
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="DataPartCellDescription">
+    <xs:annotation>
+      <xs:documentation>
+        Описание ячейки строки фрагмента результа динамического списка
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+
+      <xs:element name="nestedRowDescription"
+                  type="tns:DataPartRowDescription"
+                  minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>
+            Описание вложенной строки
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="type"
+                  type="core:Type"
+                  minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>
+            Тип колонки.
+            Указывается только если тип не составной и это не колонка вложенного результата.
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="name"
+                  type="xs:string">
+        <xs:annotation>
+          <xs:documentation>
+            Имя колонки.
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="KeyFieldValue">
+    <xs:annotation>
+      <xs:documentation>Значение одного ключевого поля.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="field"
+                  type="xs:string"/>
+      <xs:element name="value"
+                  type="xs:anyType"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RowKey">
+    <xs:annotation>
+      <xs:documentation>Ключ строки динамического списка.</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="keyValue"
+                  type="tns:KeyFieldValue"
+                  minOccurs="0"
+                  maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:simpleType name="DynamicListKeyType">
+    <!-- В языке есть -->
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Auto" />
+      <xs:enumeration value="FieldValue" />
+      <xs:enumeration value="RowKey" />
+      <xs:enumeration value="RowNumber" />
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>

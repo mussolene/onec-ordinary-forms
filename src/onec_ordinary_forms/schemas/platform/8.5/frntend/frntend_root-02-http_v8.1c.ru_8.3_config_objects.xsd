@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema
+	xmlns:cob="http://v8.1c.ru/8.3/config/objects"
+	xmlns:xs="http://www.w3.org/2001/XMLSchema"
+	targetNamespace="http://v8.1c.ru/8.3/config/objects"
+	elementFormDefault="qualified"
+    attributeFormDefault="unqualified">
+	<xs:annotation>
+		<xs:documentation>Схема XML для задания списка объектов конфигураций</xs:documentation>
+	</xs:annotation>
+	<xs:element name="Objects" type="cob:Objects">
+		<xs:annotation>
+			<xs:documentation>Корневой элемент списка объектов конфигураций</xs:documentation>
+		</xs:annotation>
+	</xs:element>
+	<xs:simpleType name="ConfigurationType">
+		<xs:annotation>
+			<xs:documentation>Идентификатор сравниваемых конфигураций</xs:documentation>
+		</xs:annotation>
+		<xs:restriction base="xs:string">
+			<xs:enumeration value="Main">
+				<xs:annotation>
+					<xs:documentation>Основная конфигурация</xs:documentation>
+				</xs:annotation>
+			</xs:enumeration>
+			<xs:enumeration value="Second">
+				<xs:annotation>
+					<xs:documentation>Вторая конфигурация</xs:documentation>
+				</xs:annotation>
+			</xs:enumeration>
+		</xs:restriction>
+	</xs:simpleType>
+	<xs:complexType name="Objects">
+		<xs:annotation>
+			<xs:documentation>Объекты конфигурации</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="Configuration" type="cob:Configuration">
+				<xs:annotation>
+					<xs:documentation>Корневой объект конфигурации</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="Object" type="cob:Object" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Объекты конфигурации</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+		<xs:attribute name="version" type="xs:string" use="required">
+			<xs:annotation>
+				<xs:documentation>Версия файла настроек</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="platformVersion" type="xs:string">
+			<xs:annotation>
+				<xs:documentation>Минимальная версия платформы</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+	</xs:complexType>
+	<xs:complexType name="Configuration">
+		<xs:annotation>
+			<xs:documentation>Корневой объект конфигурации</xs:documentation>
+		</xs:annotation>
+		<xs:attribute name="includeChildObjects" type="xs:boolean" use="required">
+			<xs:annotation>
+				<xs:documentation>Включать подчиненные объекты</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+	</xs:complexType>
+	<xs:complexType name="Object">
+		<xs:annotation>
+			<xs:documentation>Объект конфигурации</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="Subsystem" type="cob:Subsystem" minOccurs="0" maxOccurs="1"/>
+		</xs:sequence>
+		<xs:attribute name="fullName" type="xs:string">
+			<xs:annotation>
+				<xs:documentation>Полное имя объекта</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="fullNameInSecondConfiguration" type="xs:string">
+			<xs:annotation>
+				<xs:documentation>Полное имя объекта во второй конфигурации</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="includeChildObjects" type="xs:boolean" use="required">
+			<xs:annotation>
+				<xs:documentation>Включать подчиненные объекты</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+	</xs:complexType>
+	<xs:complexType name="Subsystem">
+		<xs:annotation>
+			<xs:documentation>Включение объектов, входящих в состав подсистемы</xs:documentation>
+		</xs:annotation>
+		<xs:attribute name="configuration" type="cob:ConfigurationType" use="required">
+			<xs:annotation>
+				<xs:documentation>Из какой конфигурации брать состав подсистемы</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+		<xs:attribute name="includeObjectsFromSubordinateSubsystems" type="xs:boolean" use="required">
+			<xs:annotation>
+				<xs:documentation>Включать объекты из подчиненных подсистем</xs:documentation>
+			</xs:annotation>
+		</xs:attribute>
+	</xs:complexType>
+</xs:schema>

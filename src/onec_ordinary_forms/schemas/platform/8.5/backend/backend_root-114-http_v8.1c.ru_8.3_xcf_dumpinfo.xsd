@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema
+    xmlns:cdi="http://v8.1c.ru/8.3/xcf/dumpinfo"
+    xmlns:xen="http://v8.1c.ru/8.3/xcf/enums"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    targetNamespace="http://v8.1c.ru/8.3/xcf/dumpinfo"
+    elementFormDefault="qualified"
+    attributeFormDefault="unqualified">
+
+    <xs:import namespace="http://v8.1c.ru/8.3/xcf/enums"
+     schemaLocation="../../../backend/src/res/xcf_enums.xsd"/>
+
+	<xs:complexType name="ConfigDumpInfo">
+        <xs:annotation>
+            <xs:documentation>
+                Тип документа файла версий для инкрементальной
+                XML выгрузки (ConfigDumpInfo.xml)
+            </xs:documentation>
+        </xs:annotation>
+		<xs:sequence>
+            <xs:element name="ConfigVersions" type="cdi:ConfigVersions">
+                <xs:annotation>
+                    <xs:documentation>
+                        Список версионируемых объектов конфигурации
+                    </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="format" type="xen:XCFFormat">
+            <xs:annotation>
+                <xs:documentation>
+                    Формат XML выгрузки может быть иерархический (Hierarchical)
+                    или линейным (Plain)
+                </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="version" type="xen:FormatVersion">
+            <xs:annotation>
+                <xs:documentation>
+                    Версия формата XML выгрузки
+                </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+	</xs:complexType>
+
+	<xs:complexType name="ConfigVersions">
+        <xs:annotation>
+            <xs:documentation>
+                Список версионируемых объектов конфигурации
+            </xs:documentation>
+        </xs:annotation>
+		    <xs:sequence>
+            <xs:element name="Metadata" type="cdi:MetadataVersion">
+                <xs:annotation>
+                    <xs:documentation>
+                        Версионируемый объект конфигурации - отбъект метаданных,
+                        или внешнее (отдельно хранящееся) свойство
+                    </xs:documentation>
+                </xs:annotation>
+            </xs:element>
+        </xs:sequence>
+	</xs:complexType>
+
+	<xs:complexType name="MetadataVersion">
+        <xs:annotation>
+            <xs:documentation>
+                Список версионируемых объектов конфигурации
+            </xs:documentation>
+        </xs:annotation>
+        <xs:complexContent>
+          <xs:restriction base="xs:anyType">
+                <xs:sequence>
+                    <xs:element name="Metadata" type="cdi:MetadataVersion"
+                                minOccurs="0" maxOccurs="unbounded">
+                        <xs:annotation>
+                            <xs:documentation>
+                                Список не версионируемых объектов метаданных
+                                являющихся подчиненными по отношению к данному
+                                объекту метаданных
+                            </xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+                <xs:attribute name="name" type="xs:string" use="required">
+                    <xs:annotation>
+                        <xs:documentation>
+                            Имя объекта метаданных
+                        </xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+                <xs:attribute name="id" type="xs:string" use="required">
+                    <xs:annotation>
+                        <xs:documentation>
+                            Идентификатор объекта метаданных - нужен для
+                            отслеживания переименований
+                        </xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+                <xs:attribute name="configVersion" type="xs:string">
+                    <xs:annotation>
+                        <xs:documentation>
+                            Версия объекта метаданных - отстутствует у
+                            не версионируемых объектов метаданных
+                        </xs:documentation>
+                    </xs:annotation>
+                </xs:attribute>
+            </xs:restriction>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:element name="ConfigDumpInfo" type="cdi:ConfigDumpInfo">
+        <xs:annotation>
+            <xs:documentation>
+                Корневой элемент файла версий для инкрементальной
+                XML выгрузки (ConfigDumpInfo.xml)
+            </xs:documentation>
+        </xs:annotation>
+    </xs:element>
+
+</xs:schema>

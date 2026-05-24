@@ -1,0 +1,716 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:tns="http://v8.1c.ru/8.1/data-composition-system/schema" xmlns:dcsc="http://v8.1c.ru/8.1/data-composition-system/common" xmlns:dcscore="http://v8.1c.ru/8.1/data-composition-system/core" xmlns:core="http://v8.1c.ru/8.1/data/core" targetNamespace="http://v8.1c.ru/8.1/data-composition-system/schema" elementFormDefault="qualified" attributeFormDefault="unqualified" xmlns:dscs="http://v8.1c.ru/8.1/data-composition-system/settings" xmlns:dcsat="http://v8.1c.ru/8.1/data-composition-system/area-template">
+	<xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/settings" schemaLocation="../../../dcscore/src/res/settings.xsd"/>
+	<xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/common" schemaLocation="common.xsd"/>
+	<xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/core" schemaLocation="../../../dcscore/src/res/core.xsd"/>
+	<xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+	<xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/area-template" schemaLocation="areaTemplate.xsd"/>
+	<xs:element name="dataCompositionSchema" type="tns:DataCompositionSchema">
+		<xs:annotation>
+			<xs:documentation>Схема компоновки данных</xs:documentation>
+		</xs:annotation>
+	</xs:element>
+	<xs:complexType name="DataCompositionSchema">
+		<xs:annotation>
+			<xs:documentation>Отчет</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="dataSource" type="tns:DataSource" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Источник данных</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="dataSet" type="tns:DataSet" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Набор данных.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="dataSetLink" type="tns:DataSetLink" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Связь между наборами данных.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="calculatedField" type="tns:CalculatedField" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Вычисляемое поле</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="totalField" type="tns:TotalField" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Итоги по полям</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="parameter" type="tns:Parameter" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Параметр.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="nestedSchema" type="tns:NestedDataCompositionSchema" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Вложенная схема компоновки данных.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="template" type="tns:TemplateDefinition" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Описание макета.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="fieldTemplate" type="tns:FieldTemplate" minOccurs="0" maxOccurs="unbounded"/>
+			<xs:element name="groupTemplate" type="tns:GroupTemplate" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Макет группировки</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="groupHeaderTemplate" type="tns:GroupTemplate" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Макет группировки</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="totalFieldsTemplate" type="tns:TotalFieldsTemplate" maxOccurs="unbounded" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Макет ресурса группировки</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="defaultSettings" type="dscs:Settings" maxOccurs="1" minOccurs="0"></xs:element>
+			<xs:element name="settingsVariant" type="dscs:SettingsVariant" maxOccurs="unbounded" minOccurs="0"></xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="DataSource">
+		<xs:annotation>
+			<xs:documentation>Источник данных</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="name" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Имя источника данных</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="dataSourceType" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Тип источника данных</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="connectionString" type="xs:string" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Строка соединения</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="DataSet" abstract="true">
+		<xs:annotation>
+			<xs:documentation>Абстрактный набор данных</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="name" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Имя набора данных</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="field" type="tns:DataSetField" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Поля набора данных</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="DataSetUnion">
+		<xs:annotation>
+			<xs:documentation>Набор данных - объединение</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="tns:DataSet">
+				<xs:sequence>
+					<xs:element name="item" type="tns:DataSet" minOccurs="0" maxOccurs="unbounded">
+						<xs:annotation>
+							<xs:documentation>Часть объединения.</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+				</xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="DataSetQuery">
+	    <xs:annotation>
+	        <xs:documentation>Набор данных - запрос</xs:documentation>
+	    </xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="tns:DataSet">
+			    <xs:sequence>
+			        <xs:element name="dataSource" type="xs:string">
+			            <xs:annotation>
+			                <xs:documentation>Имя источника данных из которого получаются данные</xs:documentation>
+			            </xs:annotation>
+			        </xs:element>
+			        <xs:element name="query" type="xs:string" minOccurs="1" maxOccurs="1">
+			            <xs:annotation>
+			                <xs:documentation>Текст запроса для получения данных</xs:documentation>
+			            </xs:annotation>
+			        </xs:element>
+			        <xs:element name="autoFillFields" type="xs:boolean" maxOccurs="1" minOccurs="0">
+			        	<xs:annotation>
+			        		<xs:documentation>Автоматическое заполнение доступных полей</xs:documentation>
+			        	</xs:annotation>
+			        </xs:element>
+			    </xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="DataSetObject">
+	    <xs:annotation>
+	        <xs:documentation>Набор данных - объект</xs:documentation>
+	    </xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="tns:DataSet">
+			    <xs:sequence>
+			        <xs:element name="dataSource" type="xs:string">
+			            <xs:annotation>
+			                <xs:documentation>Имя источника данных из которого получаются данные</xs:documentation>
+			            </xs:annotation>
+			        </xs:element>
+			        <xs:element name="objectName" type="xs:string">
+			            <xs:annotation>
+			                <xs:documentation>Имя объекта, содержащего данные.</xs:documentation>
+			            </xs:annotation>
+			        </xs:element>
+			    </xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="DataSetField" abstract="true">
+	    <xs:annotation>
+	        <xs:documentation>Поле набора данных</xs:documentation>
+	    </xs:annotation>
+	</xs:complexType>
+	<xs:complexType name="DataSetFieldFolder">
+	    <xs:annotation>
+	        <xs:documentation>Поле набора данных</xs:documentation>
+	    </xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="tns:DataSetField">
+			    <xs:sequence>
+			        <xs:element name="dataPath" type="xs:string">
+			            <xs:annotation>
+			                <xs:documentation>Путь к данным поля</xs:documentation>
+			            </xs:annotation>
+			        </xs:element>
+			        <xs:element name="title" minOccurs="0">
+			            <xs:annotation>
+			                <xs:documentation>Заголовок поля. Может быть xs:string или core:LocalStringType</xs:documentation>
+			            </xs:annotation>
+			        </xs:element>
+			        <xs:element name="useRestriction" type="tns:FieldUseRestriction" minOccurs="0">
+			            <xs:annotation>
+			                <xs:documentation>Ограничение доступности поля.</xs:documentation>
+			            </xs:annotation>
+			        </xs:element>
+			    </xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="DataSetFieldField">
+		<xs:annotation>
+			<xs:documentation>Поле набора данных</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="tns:DataSetField">
+				<xs:sequence>
+					<xs:element name="dataPath" type="xs:string">
+						<xs:annotation>
+							<xs:documentation>Путь к данным поля</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="field" type="xs:string">
+						<xs:annotation>
+							<xs:documentation>Поле набора данных</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="title" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Заголовок поля. Может быть xs:string или core:LocalStringType</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="useRestriction" type="tns:FieldUseRestriction" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Ограничение доступности поля.</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="attributeUseRestriction" type="tns:FieldUseRestriction" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Ограничение доступности полей - реквизитов.</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="role" type="dcsc:DataSetFieldRole" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Роль поля</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="presentationExpression" type="xs:string" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Выражение, по которому вычисляется представление поля.</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="orderExpression" type="dcsc:OrderExpression" minOccurs="0" maxOccurs="unbounded">
+						<xs:annotation>
+							<xs:documentation>Выражение упорядочивания</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="inHierarchyDataSet" type="xs:string" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Набор данных для проверки принадлежности иерархии</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="inHierarchyDataSetParameter" type="xs:string" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Параметр набора данных для проверки принадлежности иерархии.</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="valueType" type="core:TypeDescription" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Тип значения поля</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="appearance" type="dcscore:Appearance" maxOccurs="1" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>Оформление, применяемое к полю.</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="availableValue" type="tns:AvailableValue" minOccurs="0" maxOccurs="unbounded">
+						<xs:annotation>
+							<xs:documentation>Доступные значения для поля</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+                    <xs:element name="inputParameters" type="dcscore:InputParameters" maxOccurs="1" minOccurs="0">
+                        <xs:annotation>
+                            <xs:documentation>Параметры ввода.</xs:documentation>
+                        </xs:annotation>
+                    </xs:element>
+                </xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="DataSetFieldNestedDataSet">
+		<xs:annotation>
+			<xs:documentation>Поле набора данных - вложенный набор данных</xs:documentation>
+		</xs:annotation>
+		<xs:complexContent>
+			<xs:extension base="tns:DataSetField">
+				<xs:sequence>
+					<xs:element name="dataPath" type="xs:string">
+						<xs:annotation>
+							<xs:documentation>Путь к данным поля</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="field" type="xs:string">
+						<xs:annotation>
+							<xs:documentation>Поле набора данных</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+					<xs:element name="title" minOccurs="0">
+						<xs:annotation>
+							<xs:documentation>
+								Заголовок поля. Может быть xs:string или
+								core:LocalStringType
+							</xs:documentation>
+						</xs:annotation>
+					</xs:element>
+				</xs:sequence>
+			</xs:extension>
+		</xs:complexContent>
+	</xs:complexType>
+	<xs:complexType name="CalculatedField">
+		<xs:annotation>
+			<xs:documentation>Вычисляемое поле</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="dataPath" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Путь к данным поля - выражения</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="expression" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Выражение по которому вычисляется поле</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="title" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Заголовок поля. Может быть xs:string или core:LocalStringType</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="useRestriction" type="tns:FieldUseRestriction" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Ограничение доступности поля.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="presentationExpression" type="xs:string" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Выражение, по которому вычисляется представление поля.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="orderExpression" type="dcsc:OrderExpression" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Выражение упорядочивания</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="appearance" type="dcscore:Appearance" maxOccurs="1" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Оформление, применяемое к полю</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="availableValue" type="tns:AvailableValue" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Доступные значения для поля</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="valueType" type="core:TypeDescription" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Тип значения поля</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="inputParameters" type="dcscore:InputParameters" maxOccurs="1" minOccurs="0"></xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="FieldUseRestriction">
+		<xs:annotation>
+			<xs:documentation>Доступность поля</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="field" type="xs:boolean" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Недоступно для выбора</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="condition" type="xs:boolean" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Недоступно как условие</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="group" type="xs:boolean" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Недоступно для группировки</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="order" type="xs:boolean" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Недоступно для упорядочивания</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="TotalField">
+		<xs:annotation>
+			<xs:documentation>Итог по полю</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="dataPath" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Путь к данным поля - выражения</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="expression" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>
+						Выражение по которому вычисляется итог
+					</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="group" type="xs:string" maxOccurs="unbounded" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Группировки, для которых доступен ресурс</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="DataSetLink">
+		<xs:annotation>
+			<xs:documentation>Связь между наборами данных</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="sourceDataSet" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Набор данных - источник связи.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="destinationDataSet" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Набор данных - приемник связи.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="sourceExpression" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Выражение - источник.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="destinationExpression" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Выражение - приемник.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="parameter" type="xs:string" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Параметр связи.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="parameterListAllowed" type="xs:boolean" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Допустимо использование списка в качестве параметра.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="linkConditionExpression" type="xs:string" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Условие, при выполнении которого будет осуществляться связь.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="startExpression" type="xs:string" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Выражение, устанавливающее начальное значение связи при иерерхическом спуске.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="required" type="xs:boolean">
+				<xs:annotation>
+					<xs:documentation>Связь обязательно переходит в макет в случае, если между наборами данных будет осуществляться связь.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+  <xs:complexType name="Parameter">
+    <xs:annotation>
+      <xs:documentation>Параметр</xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+      <xs:element name="name" type="xs:string">
+        <xs:annotation>
+          <xs:documentation>Имя параметра</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="title" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Заголовок параметра. Может быть xs:string или core:LocalStringType</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="valueType" type="core:TypeDescription" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Тип значения параметра</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="value" minOccurs="0" type="xs:anyType" nillable="true" maxOccurs="unbounded">
+        <xs:annotation>
+          <xs:documentation>Значение параметра по умолчанию</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="useRestriction" type="xs:boolean" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Запрет использования.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="expression" type="xs:string" maxOccurs="1" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Выражение, по которому вычисляется значение параметра</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="availableValue" type="tns:AvailableValue" maxOccurs="unbounded" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Доступное значение</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="valueListAllowed" type="xs:boolean" maxOccurs="1" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>
+            В качестве знаения параметра можно использовать список значений
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="availableAsField" type="xs:boolean" maxOccurs="1" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Параметр будет доступен как поле.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="functionalOptionsParameter" type="xs:string" maxOccurs="1" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Имя параметра функциональной опции</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="inputParameters" type="dcscore:InputParameters" maxOccurs="1" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Параметры ввода.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="denyIncompleteValues" type="xs:boolean" maxOccurs="1" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Запрет незаполненных значений. По умолчанию false.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+      <xs:element name="use" type="dcscore:DataCompositionParameterUse" maxOccurs="1" minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>Использование. По умолчанию Auto.</xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="NestedDataCompositionSchema">
+		<xs:annotation>
+			<xs:documentation>Вложенная схема компоновки данных</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="name" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Имя вложенной схемы компоновки данных</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="title" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Заголовок вложенной схемы. Может быть xs:string или core:LocalStringType</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:sequence>
+				<xs:element name="URL" type="xs:string">
+					<xs:annotation>
+						<xs:documentation>Адрес, по которому расположена схема компоновки</xs:documentation>
+					</xs:annotation>
+				</xs:element>
+				<xs:element name="schema" type="tns:DataCompositionSchema">
+					<xs:annotation>
+						<xs:documentation>Схема компоновки</xs:documentation>
+					</xs:annotation>
+				</xs:element>
+			</xs:sequence>
+			<xs:element name="settings" type="dscs:Settings" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Настойки связи вложенной схемы с родительской схемой</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="FieldTemplate">
+		<xs:annotation>
+			<xs:documentation>Макет поля</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="field" type="dcscore:Field">
+				<xs:annotation>
+					<xs:documentation>Поле, для которого макет</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="template" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Макет</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="GroupTemplate">
+		<xs:annotation>
+			<xs:documentation>Макет группировки</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:choice>
+				<xs:element name="groupField" type="dcscore:Field" maxOccurs="unbounded">
+					<xs:annotation>
+						<xs:documentation>Поля группировки</xs:documentation>
+					</xs:annotation>
+				</xs:element>
+				<xs:element name="groupName" type="xs:string">
+					<xs:annotation>
+						<xs:documentation>Имя группировки</xs:documentation>
+					</xs:annotation>
+				</xs:element>
+			</xs:choice>
+			<xs:element name="templateType" type="dcsc:DataCompositionAreaTemplateType" default="Header" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Тип макета</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="template" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Макет</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="TotalFieldsTemplate">
+		<xs:annotation>
+			<xs:documentation>Макет ресурсов группировки</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="groupField1" type="dcscore:Field" maxOccurs="unbounded" minOccurs="0">
+					<xs:annotation>
+						<xs:documentation>Поля группировки</xs:documentation>
+					</xs:annotation>
+				</xs:element>
+			<xs:element name="groupName1" type="xs:string"
+				maxOccurs="1" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Имя группировки</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="templateType1" type="dcsc:DataCompositionAreaTemplateType" default="Header" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Тип макета</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="groupField2" type="dcscore:Field" maxOccurs="unbounded" minOccurs="0">
+					<xs:annotation>
+						<xs:documentation>Поля группировки</xs:documentation>
+					</xs:annotation>
+				</xs:element>
+			<xs:element name="groupName2" type="xs:string"
+				maxOccurs="1" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Имя группировки</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="templateType2" type="dcsc:DataCompositionAreaTemplateType" default="Header" minOccurs="0">
+				<xs:annotation>
+					<xs:documentation>Тип макета</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="template" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Макет</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="TemplateDefinition">
+		<xs:annotation>
+			<xs:documentation>Определение макета</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="name" type="xs:string">
+				<xs:annotation>
+					<xs:documentation>Имя макета.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="template">
+				<xs:annotation>
+					<xs:documentation>Макет.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="parameter" type="dcsat:AreaTemplateParameter" minOccurs="0" maxOccurs="unbounded">
+				<xs:annotation>
+					<xs:documentation>Параметр макета.</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="AvailableValue">
+		<xs:annotation>
+			<xs:documentation>Доступное значение</xs:documentation>
+		</xs:annotation>
+		<xs:sequence>
+			<xs:element name="value" type="xs:anyType" maxOccurs="1" minOccurs="0" nillable="true">
+				<xs:annotation>
+					<xs:documentation>Значение
+</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+			<xs:element name="presentation" type="xs:anyType">
+				<xs:annotation>
+					<xs:documentation>Представление значения</xs:documentation>
+				</xs:annotation>
+			</xs:element>
+		</xs:sequence>
+	</xs:complexType>
+
+</xs:schema>

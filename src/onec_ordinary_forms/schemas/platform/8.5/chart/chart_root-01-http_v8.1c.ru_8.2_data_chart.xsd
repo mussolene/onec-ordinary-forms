@@ -1,0 +1,2112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema 
+    xmlns="http://www.w3.org/2001/XMLSchema" 
+    targetNamespace="http://v8.1c.ru/8.2/data/chart" 
+    xmlns:tns="http://v8.1c.ru/8.2/data/chart"  
+    xmlns:v8ui="http://v8.1c.ru/8.1/data/ui" 
+    xmlns:core="http://v8.1c.ru/8.1/data/core"
+    elementFormDefault="qualified"
+    attributeFormDefault="unqualified">
+
+    <import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <import namespace="http://v8.1c.ru/8.1/data/ui" schemaLocation="../../../xdto/src/res/uiobjects.xsd"/>
+
+    <simpleType name="ChartLabelLocation">
+        <restriction base="string">
+            <enumeration value="Edge" />
+            <enumeration value="Center" />
+            <enumeration value="EdgeInside" />
+            <enumeration value="EdgeAuto" />
+            <enumeration value="Auto" />
+            <enumeration value="LeftBottom" />
+            <enumeration value="RightBottom" />
+            <enumeration value="LeftTop" />
+            <enumeration value="RightTop" />
+            <enumeration value="LeftAndTopSpecified" />
+            <enumeration value="EmptySpace"/>
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartOrientation">
+        <restriction base="string">
+            <enumeration value="SouthWest" />
+            <enumeration value="SouthEast" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="MaxSeries">
+        <restriction base="string">
+            <enumeration value="NotDefined" />
+            <enumeration value="Limited" />
+            <enumeration value="Percent" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartSpaceMode">
+        <restriction base="string">
+            <enumeration value="None" />
+            <enumeration value="Half" />
+            <enumeration value="Full" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartMarkerType">
+        <restriction base="string">
+            <enumeration value="None" />
+            <enumeration value="Rect" />
+            <enumeration value="Circle" />
+            <enumeration value="Rhomb" />
+            <enumeration value="Auto" />
+            <enumeration value="Alternation" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="RadarChartScaleType">
+        <restriction base="string">
+            <enumeration value="Circle" />
+            <enumeration value="Polygon" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="GaugeChartValueRepresentation">
+        <restriction base="string">
+            <enumeration value="Needle" />
+            <enumeration value="Sector" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="GaugeChartValuesScaleLabelsLocation">
+        <restriction base="string">
+            <enumeration value="AtScale" />
+            <enumeration value="InsideScale" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartSplineMode">
+      <restriction base="string">
+        <enumeration value="None" />
+        <enumeration value="SmoothCurve" />
+      </restriction>
+    </simpleType>
+
+    <simpleType name="ChartSemitransparencyMode">
+      <restriction base="string">
+        <enumeration value="DontUse" />
+        <enumeration value="Use" />
+        <enumeration value="Auto" />
+      </restriction>
+    </simpleType>
+
+  <simpleType name="ChartValuesBySeriesConnectionType">
+      <restriction base="string">
+        <enumeration value="None" />
+        <enumeration value="EdgesConnection" />
+      </restriction>
+    </simpleType>
+
+    <simpleType name="ChartAnimation">
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Use" />
+            <enumeration value="DontUse" />
+        </restriction>
+    </simpleType>
+
+    <complexType name="DoubleRect">
+        <sequence>
+            <element name="left" type="decimal" />
+            <element name="right" type="decimal" />
+            <element name="top" type="decimal" />
+            <element name="bottom" type="decimal" />
+        </sequence>
+    </complexType>
+
+    <simpleType name="ChartTrendlineApproximationType">
+        <annotation>
+          <documentation>Тип аппроксимации линии тренда</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Linear" />
+            <enumeration value="Exponential" />
+            <enumeration value="Logarithmic" />
+            <enumeration value="Power" />
+            <enumeration value="Polynomial" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartTrendlineFactor">
+        <annotation>
+            <documentation>Фактор линии тренда диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="PointNumber" />
+            <enumeration value="PointValue" />
+            <enumeration value="Auto" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="StockChartUsedPointValue">
+      <annotation>
+        <documentation>Используемое значение точки биржевой диаграммы</documentation>
+      </annotation>
+      <restriction base="string">
+        <enumeration value="Open" />
+        <enumeration value="High" />
+        <enumeration value="Low" />
+        <enumeration value="Close" />
+        <enumeration value="OpenCloseAverage" />
+      </restriction>
+    </simpleType>
+
+    <simpleType name="ShowInChartLegend">
+        <annotation>
+            <documentation>Режим отображения серии в легенде</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Show" />
+            <enumeration value="DontShow" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ShowInChart">
+        <annotation>
+            <documentation>Режим отображения серии при отрисовке диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Show" />
+            <enumeration value="DontShow" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartSeriesOrderInLegend">
+        <annotation>
+            <documentation>Порядок отображения серий в легенде диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Direct" />
+            <enumeration value="Reverse" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartPointsAxisValuesSource">
+        <annotation>
+            <documentation>Вариант источника значений на оси точек диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Series" />
+            <enumeration value="Points" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartBubbleSizeValueSource">
+        <annotation>
+            <documentation>Вариант источника значений размера пузырька в диаграмме</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="None" />
+            <enumeration value="CommonSeries" />
+            <enumeration value="NextSeries" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartBubbleSizing">
+        <annotation>
+            <documentation>Вариант вычисления размера пузырька в диаграмме</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="IncreaseDiameter" />
+            <enumeration value="IncreaseArea" />
+            <enumeration value="DecreaseDiameter" />
+            <enumeration value="DecreaseArea" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="BubbleChartNegativeValuesShowMode">
+        <annotation>
+            <documentation>Вариант отображения отрицательных значений в пузырьковой диаграмме</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="DontShow" />
+            <enumeration value="Abs" />
+            <enumeration value="Transparent" />
+            <enumeration value="InvertedBackColor" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartPointsConnectionType">
+        <annotation>
+            <documentation>Тип соединения точек в диаграмме</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Connect" />
+            <enumeration value="DontConnect" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartBoundaryDetectionMethod">
+        <annotation>
+            <documentation></documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="AutoDetect" />
+            <enumeration value="UseValue" />
+            <enumeration value="UseValueWithLimitations" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartScaleTitleTextSource">
+          <annotation>
+              <documentation>Способ заполнения текста заголовка шкалы диаграммы</documentation>
+          </annotation>
+          <restriction base="string">
+              <enumeration value="Auto" />
+              <enumeration value="UseText" />
+              <enumeration value="AutoText" />
+          </restriction>
+    </simpleType>
+  
+    <simpleType name="ShowChartScaleTitle">
+          <annotation>
+              <documentation>Отображение заголовка шкалы диаграммы</documentation>
+          </annotation>
+          <restriction base="string">
+              <enumeration value="Auto" />
+              <enumeration value="DontShow" />
+              <enumeration value="Show" />
+          </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartScaleTitlePlacement">
+          <annotation>
+              <documentation>Расположение заголовка шкалы диаграммы</documentation>
+          </annotation>
+          <restriction base="string">
+              <enumeration value="WithAxis" />
+              <enumeration value="PlotArea" />
+              <enumeration value="SpecialArea" />
+          </restriction>
+    </simpleType>
+  
+    <simpleType name="BarChartPointsOrder">
+        <annotation>
+            <documentation>Порядок отображения точек в горизонтальной диаграмме</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="TopToBottom" />
+            <enumeration value="BottomToTop" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartGridLinesShowMode">
+        <annotation>
+            <documentation>Отображение линий сетки диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="DontShow" />
+            <enumeration value="Show" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartScaleLabelLocation">
+        <annotation>
+            <documentation>Отображение подписей шкалы диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="None" />
+            <enumeration value="Inside" />
+            <enumeration value="Outside" />
+        </restriction>
+    </simpleType>
+    
+    <simpleType name="ChartScaleLocation">
+        <annotation>
+            <documentation>Положение шкалы диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="BaseValue" />
+            <enumeration value="Edge" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartScaleMarkLocation">
+        <annotation>
+            <documentation>Положение отметки шкалы диагарммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Outside" />
+            <enumeration value="Inside" />
+            <enumeration value="Center" />
+            <enumeration value="None" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartLegendPlacement">
+        <annotation>
+            <documentation>Расположение легенды диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Top" />
+            <enumeration value="Left" />
+            <enumeration value="Bottom" />
+            <enumeration value="Right" />
+            <enumeration value="UseCoordinates" />
+            <enumeration value="None" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartPlotAreaPlacement">
+        <annotation>
+            <documentation>Расположение области построения диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="UseCoordinates" />
+            <enumeration value="EmptySpace" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartTitleAreaPlacement">
+        <annotation>
+            <documentation>Расположение области заголовка диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="LeftBottom" />
+            <enumeration value="LeftTop" />
+            <enumeration value="RightBottom" />
+            <enumeration value="RightTop" />
+            <enumeration value="Bottom" />
+            <enumeration value="UseCoordinates" />
+            <enumeration value="None" />
+            <enumeration value="Top" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartReferenceLinePosition">
+        <annotation>
+            <documentation>Положение информационной линии диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="OnValue" />
+            <enumeration value="BetweenValues" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="ChartReferenceBandBorderPosition">
+        <annotation>
+            <documentation>Положение границы информационного интервала диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="OnValue" />
+            <enumeration value="BetweenValues" />
+        </restriction>
+    </simpleType>
+    
+    <simpleType name="NonnumericChartValueUse">
+        <annotation>
+            <documentation>Использование нечисловых значений диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="AsZero" />
+            <enumeration value="Skip" />
+        </restriction>
+    </simpleType>
+  
+    <simpleType name="PointsConnectionAcrossSkippedChartValuesType">
+        <annotation>
+            <documentation>Тип соединения точек при пропущенных значениях диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="None" />
+            <enumeration value="ConnectUnskippedValues" />
+            <enumeration value="ConnectWithBaseValue" />
+        </restriction>
+    </simpleType>
+    
+    <simpleType name="ChartValuesToolTipShowMode">
+        <annotation>
+            <documentation>Режим отображения подсказки значений диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="ShowForNearestValue" />
+            <enumeration value="ShowOnHover" />
+            <enumeration value="DontShow" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartValuesToolTipFillType">
+        <annotation>
+            <documentation>Заполнение подсказки значений диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="SingleValue" />
+            <enumeration value="AllPointValues" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="ChartSelectionMode">
+        <annotation>
+            <documentation>Режим выделения диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="ValuesSelection" />
+            <enumeration value="PointsSelection" />
+            <enumeration value="None" />
+        </restriction>
+    </simpleType>
+    
+    <simpleType name="ShowChartPopupReferenceLine">
+        <annotation>
+            <documentation>Отображение направлящих подсказки диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Show" />
+            <enumeration value="DontShow" />
+        </restriction>
+    </simpleType>
+        
+    <simpleType name="ChartSeriesGraphicalRepresentationType">
+        <annotation>
+            <documentation>Тип графического представления серии диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Line" />
+            <enumeration value="Step" />
+            <enumeration value="Area" />
+            <enumeration value="Column" />
+            <enumeration value="Column3D" />
+        </restriction>
+    </simpleType>
+            
+    <simpleType name="ChartSeriesStackType">
+        <annotation>
+            <documentation>Тип накопления серии диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Unstacked" />
+            <enumeration value="Stacked" />
+            <enumeration value="StackedNormalized" />
+        </restriction>
+    </simpleType>        
+    
+    <simpleType name="UsedChartValuesAxis">
+        <annotation>
+            <documentation>Используемая ось значений диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Main" />
+            <enumeration value="Additional" />
+        </restriction>
+    </simpleType>
+    
+    <simpleType name="ChartValuesEditMode">
+        <annotation>
+            <documentation>Режим редактирования значений диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Use" />
+            <enumeration value="DontUse" />
+        </restriction>
+    </simpleType>
+    
+    <simpleType name="ChartValueEditState">
+        <annotation>
+            <documentation>Состояние редактирования значения диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="InProgress" />
+            <enumeration value="Completed" />
+            <enumeration value="Canceled" />
+        </restriction>
+    </simpleType>
+            
+    <complexType name="ChartColorPaletteDescription">
+        <sequence>
+            <element name="colorPalette" type="v8ui:ChartColorPalette" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="gradientPaletteStartColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="gradientPaletteEndColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="gradientPaletteMaxColors" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: 0</documentation>
+                </annotation>
+            </element>
+            <element name="customPalette" type="core:Array" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  nil</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+  
+    <complexType name="ChartLabelArea">
+        <sequence>
+            <element name="location" type="tns:ChartLabelLocation" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию:  Auto</documentation>
+                </annotation>
+            </element>
+            <element name="left" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: 0.5</documentation>
+                </annotation>
+            </element>
+            <element name="top" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: 0.5</documentation>
+                </annotation>
+            </element>
+            <element name="font" type="v8ui:Font" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="textColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="backColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="transparent" type="boolean" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: true</documentation>
+                </annotation>
+            </element>
+            <element name="border" type="v8ui:Border" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: НетРамки</documentation>
+                </annotation>
+            </element>
+            <element name="borderColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: true</documentation>
+                </annotation>
+            </element>
+            <element name="marker" type="tns:ChartMarkerType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="orientation" type="v8ui:ChartLabelsOrientation" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="angle" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: 0</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+    
+    <complexType name="ChartReferenceLine">
+        <sequence>
+            <element name="value" type="anyType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: nil</documentation>
+                </annotation>
+            </element>
+            <element name="valueIsPointNumber" type="boolean" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: false</documentation>
+                </annotation>
+            </element>
+            <element name="labelText" type="core:LocalStringType" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: пусто</documentation>
+                </annotation>
+            </element>
+            <element name="toolTip" type="core:LocalStringType" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: пусто</documentation>
+                </annotation>
+            </element>
+            <element name="labelArea" type="tns:ChartLabelArea" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию равно значению по умолчанию для типа ChartLabelArea</documentation>
+                </annotation>
+            </element>
+            <element name="line" type="v8ui:Line" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: Сплошная, толщина 2</documentation>
+                </annotation>
+            </element>
+            <element name="color" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="semitransparencyPercent" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Неопределенно</documentation>
+                </annotation>
+            </element>
+            <element name="details" type="anyType" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: nil</documentation>
+                </annotation>
+            </element>
+            <element name="position" type="tns:ChartReferenceLinePosition" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+    
+    <complexType name="ChartReferenceLines">
+        <sequence>
+            <element name="referenceLine" type="tns:ChartReferenceLine" maxOccurs="unbounded" minOccurs="0" />
+        </sequence>
+    </complexType>
+    
+    <complexType name="ChartReferenceBand">
+        <sequence>
+            <element name="begin" type="anyType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: nil</documentation>
+                </annotation>
+            </element>
+            <element name="beginIsPointNumber" type="boolean" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: false</documentation>
+                </annotation>
+            </element>
+            <element name="end" type="anyType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: nil</documentation>
+                </annotation>
+            </element>
+            <element name="endIsPointNumber" type="boolean" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: false</documentation>
+                </annotation>
+            </element>
+            <element name="labelText" type="core:LocalStringType" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: пусто</documentation>
+                </annotation>
+            </element>
+            <element name="toolTip" type="core:LocalStringType" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: пусто</documentation>
+                </annotation>
+            </element>
+            <element name="labelArea" type="tns:ChartLabelArea" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию равно значению по умолчанию для типа ChartLabelArea</documentation>
+                </annotation>
+            </element>
+            <element name="color" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="semitransparencyPercent" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Неопределенно</documentation>
+                </annotation>
+            </element>
+            <element name="border" type="v8ui:Line" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: Сплошная, толщина 1</documentation>
+                </annotation>
+            </element>
+            <element name="borderColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="borderSemitransparencyPercent" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Неопределенно</documentation>
+                </annotation>
+            </element>
+            <element name="details" type="anyType" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: nil</documentation>
+                </annotation>
+            </element>
+            <element name="position" type="tns:ChartReferenceBandBorderPosition" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="displayAreaBegin" type="decimal" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: 0</documentation>
+                </annotation>
+            </element>
+            <element name="displayAreaEnd" type="decimal" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: 1</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+    
+    <complexType name="ChartReferenceBands">
+        <sequence>
+            <element name="referenceBand" type="tns:ChartReferenceBand" maxOccurs="unbounded" minOccurs="0" />
+        </sequence>
+    </complexType>
+  
+    <complexType name="ChartScale">
+        <sequence>
+            <element name="showTitle" type="tns:ShowChartScaleTitle" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию  Auto</documentation>
+                </annotation>
+            </element>
+            <element name="titleTextSource" type="tns:ChartScaleTitleTextSource" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="titleText" type="core:LocalStringType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию пусто</documentation>
+                </annotation>
+            </element>
+            <element name="titleArea" type="tns:ChartLabelArea" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию равно значению по умолчанию для типа ChartLabelArea</documentation>
+                </annotation>
+            </element>
+            <element name="titlePlacement" type="tns:ChartScaleTitlePlacement" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="gridLinesShowMode" type="tns:ChartGridLinesShowMode" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="scaleLabelLocation" type="tns:ChartScaleLabelLocation" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="gridLine" type="v8ui:Line" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию: Неопределено</documentation>
+                </annotation>
+            </element>
+            <element name="gridLineColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="labelFont" type="v8ui:Font" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="labelColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="labelOrientation" type="v8ui:ChartLabelsOrientation" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="labelFormat" type="core:LocalStringType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию пусто</documentation>
+                </annotation>
+            </element>
+            <element name="scaleLine" type="v8ui:Line" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию: Неопределено</documentation>
+                </annotation>
+            </element>
+            <element name="scaleLineColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="maxLabelRows" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию 0</documentation>
+                </annotation>
+            </element>
+            <element name="labelAngle" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию 0</documentation>
+                </annotation>
+            </element>
+            <element name="scaleLocation" type="tns:ChartScaleLocation" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="scaleStep" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию 0</documentation>
+                </annotation>
+            </element>
+            <element name="scaleMarkLocation" type="tns:ChartScaleMarkLocation" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="showInChart" type="tns:ShowInChart" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+  
+    <complexType name="ChartTrendline">
+        <sequence>
+            <element name="approximationType" type="tns:ChartTrendlineApproximationType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Linear</documentation>
+                </annotation>
+            </element>
+            <element name="approximationDegree" type="decimal" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: 3</documentation>
+                </annotation>
+            </element>
+            <element name="line" type="v8ui:Line" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: Сплошная, толщина 1</documentation>
+                </annotation>
+            </element>
+            <element name="factor" type="tns:ChartTrendlineFactor" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="color" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="text" type="core:LocalStringType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: пусто</documentation>
+                </annotation>
+            </element>
+            <element name="showInLegend" type="boolean" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: false</documentation>
+                </annotation>
+            </element>
+            <element name="showEquation" type="boolean" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: false</documentation>
+                </annotation>
+            </element>
+            <element name="showDeterminationFactor" type="boolean" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: false</documentation>
+                </annotation>
+            </element>
+            <element name="marker" type="tns:ChartMarkerType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: None</documentation>
+                </annotation>
+            </element>
+            <element name="stockChartUsedPointValue" type="tns:StockChartUsedPointValue" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: OpenCloseAverage</documentation>
+                </annotation>
+            </element>
+            <element name="equationArea" type="tns:ChartLabelArea" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию равно значению по умолчанию для типа ChartLabelArea</documentation>
+                </annotation>
+            </element>
+            <element name="details" type="anyType" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  nil</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+  
+    <complexType name="ChartTrendlines">
+        <sequence>
+            <element name="trendLine" type="tns:ChartTrendline" maxOccurs="unbounded" minOccurs="0" />
+        </sequence>
+    </complexType>
+  
+    <complexType name="ChartAxis">
+        <sequence>
+            <element name="baseValue" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: 0</documentation>
+                </annotation>
+            </element>
+            <element name="minValue" type="anyType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>
+                        Может принимать тип decimal и dateTime
+                        Значение по умолчанию: decimal(0)
+                    </documentation>
+                </annotation>
+            </element>
+            <element name="maxValue" type="anyType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>
+                        Может принимать тип decimal и dateTime
+                        Значение по умолчанию: decimal(0)
+                    </documentation>
+                </annotation>
+            </element>
+            <element name="minValueDetectionMethod" type="tns:ChartBoundaryDetectionMethod" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="maxValueDetectionMethod" type="tns:ChartBoundaryDetectionMethod" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+  
+    <complexType name="SeriesData">
+        <sequence>
+            <element name="id" type="decimal" />
+            <element name="color" type="v8ui:Color" />
+            <element name="line" type="v8ui:Line" />
+            <element name="marker" type="tns:ChartMarkerType" />
+            <element name="text" type="core:LocalStringType" />
+            <element name="strIsChanged" type="boolean" />
+            <element name="isExpand" type="boolean" />
+            <element name="isIndicator" type="boolean" />
+            <element name="colorPriority" type="boolean" />
+            <element name="key" type="anyType" maxOccurs="1" minOccurs="0"  />
+            <element name="valInfo" type="anyType" maxOccurs="1" minOccurs="0" />
+            <element name="trendline" type="tns:ChartTrendline" maxOccurs="unbounded" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  nil</documentation>
+                </annotation>
+            </element>
+            <element name="showGraphicalDataRepresentationInChartLegend" type="tns:ShowInChartLegend" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="showGraphicalDataRepresentationInChart" type="tns:ShowInChart" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="visualType" type="tns:ChartSeriesGraphicalRepresentationType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="addType" type="tns:ChartSeriesStackType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="valuesAxisUsage" type="tns:UsedChartValuesAxis" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="stackGroup" type="string" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: "" </documentation>
+                </annotation>
+            </element>
+            <element name="valueLabelFormat" type="core:LocalStringType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: "" </documentation>
+                </annotation>
+            </element>
+            <element name="percentLabelFormat" type="core:LocalStringType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: "" </documentation>
+                </annotation>
+            </element>
+            <element name="dataTableLabelFormat" type="core:LocalStringType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: "" </documentation>
+                </annotation>
+            </element>
+            <element name="valuesEditMode" type="tns:ChartValuesEditMode" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+
+    <complexType name="PointData">
+        <sequence>
+            <element name="id" type="decimal" />
+            <element name="color" type="v8ui:Color" />
+            <element name="line" type="v8ui:Line" />
+            <element name="marker" type="tns:ChartMarkerType" />
+            <element name="text" type="core:LocalStringType" />
+            <element name="strIsChanged" type="boolean" />
+            <element name="isExpand" type="boolean" />
+            <element name="isIndicator" type="boolean" />
+            <element name="colorPriority" type="boolean" />
+            <element name="key" type="anyType" maxOccurs="1" minOccurs="0" />
+            <element name="valInfo" type="anyType" maxOccurs="1" minOccurs="0"  />
+        </sequence>
+    </complexType>
+
+    <complexType name="RealDataItem">
+        <sequence>
+            <element name="valData" type="anyType" nillable="true" />
+            <element name="valInfo" type="anyType" nillable="true" />
+            <element name="toolTip" type="string" />
+            <element name="isToolTipFormatted" type="boolean" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: false</documentation>
+                </annotation>
+            </element>
+            <element name="editMode" type="tns:ChartValuesEditMode" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+    
+    <complexType name="RealDataItems">
+        <sequence>
+            <element name="item" type="tns:RealDataItem" maxOccurs="unbounded" minOccurs="1" />
+        </sequence>
+    </complexType>
+
+    <complexType name="ChartSelectedObjects">
+        <sequence>
+          <element name="point" type="decimal" maxOccurs="unbounded" minOccurs="0"/>
+          <element name="series" type="decimal" maxOccurs="unbounded" minOccurs="0"/>
+          <element name="value" type="decimal" maxOccurs="unbounded" minOccurs="0"/>
+        </sequence>
+    </complexType>
+  
+  <complexType name="Chart">
+        <sequence>
+            <element name="seriesCurId" type="decimal" />
+            <element name="pointsCurId" type="decimal" />
+            <element name="isSeriesDesign" type="boolean" />
+            <element name="realSeriesCount" type="decimal" />
+            <element name="realSeriesData" type="tns:SeriesData" maxOccurs="unbounded" minOccurs="0" />
+            <element name="realExSeriesData" type="tns:SeriesData" maxOccurs="1" minOccurs="0" />
+            <element name="isPointsDesign" type="boolean" />
+            <element name="realPointCount" type="decimal" />
+            <element name="realPointData" type="tns:PointData" maxOccurs="unbounded" minOccurs="0" />
+            <element name="curSeries" type="decimal" />
+            <element name="curPoint" type="decimal" />
+            <element name="chartType" type="v8ui:ChartType" />
+            <element name="circleLabelType" type="v8ui:ChartLabelType" />
+            <element name="labelsDelimiter" type="string" />
+            <element name="labelsLocation" type="tns:ChartLabelLocation" />
+            <element name="lbFormat" type="core:LocalStringType" />
+            <element name="lbpFormat" type="core:LocalStringType" />
+            <element name="labelsColor" type="v8ui:Color" />
+            <element name="labelsFont" type="v8ui:Font" />
+            <element name="transparentLabelsBkg" type="boolean" />
+            <element name="labelsBkgColor" type="v8ui:Color" />
+            <element name="labelsBorder" type="v8ui:Border" />
+            <element name="labelsBorderColor" type="v8ui:Color" />
+            <element name="circleExpandMode" type="v8ui:AutoSeriesSeparation" />
+            <element name="chart3Dcrd" type="tns:ChartOrientation" />
+            <element name="title" type="core:LocalStringType" />
+            <element name="isShowTitle" type="boolean" />
+            <element name="isShowLegend" type="boolean" />
+            <element name="ttlBorder" type="v8ui:Border" />            
+            <element name="ttlBorderColor" type="v8ui:Color" />
+            <element name="lgBorder" type="v8ui:Border" />
+            <element name="lgBorderColor" type="v8ui:Color" />
+            <element name="chBorder" type="v8ui:Border" />
+            <element name="chBorderColor" type="v8ui:Color" />
+            <element name="transparent" type="boolean" />
+            <element name="bkgColor" type="v8ui:Color" />
+            <element name="isTrnspTtl" type="boolean" />
+            <element name="ttlColor" type="v8ui:Color" />
+            <element name="isTrnspLeg" type="boolean" />
+            <element name="legColor" type="v8ui:Color" />
+            <element name="isTrnspCh" type="boolean" />
+            <element name="chColor" type="v8ui:Color" />
+            <element name="ttlTxtColor" type="v8ui:Color" />
+            <element name="legTxtColor" type="v8ui:Color" />
+            <element name="chTxtColor" type="v8ui:Color" />
+            <element name="ttlFont" type="v8ui:Font" />
+            <element name="legFont" type="v8ui:Font" />
+            <element name="chFont" type="v8ui:Font" />
+            <element name="isShowScale" type="boolean" />
+            <element name="isShowScaleVL" type="boolean" />
+            <element name="isShowSeriesScale" type="boolean" />
+            <element name="isShowPointsScale" type="boolean" />
+            <element name="isShowValuesScale" type="boolean" />
+            <element name="vsFormat" type="core:LocalStringType" />
+            <element name="xLabelsOrientation" type="v8ui:ChartLabelsOrientation" />
+            <element name="scaleLine" type="v8ui:Line" />
+            <element name="scaleColor" type="v8ui:Color" />
+            <element name="isAutoSeriesName" type="boolean" />
+            <element name="isAutoPointName" type="boolean" />
+            <element name="maxMode" type="tns:MaxSeries" />
+            <element name="maxSeries" type="decimal" />
+            <element name="maxSeriesPrc" type="decimal" />
+            <element name="spaceMode" type="tns:ChartSpaceMode" />
+            <element name="baseVal" type="decimal" />
+            <element name="isOutline" type="boolean" />
+            <element name="realPiePoint" type="decimal" />
+            <element name="realStockSeries" type="decimal" />
+            <element name="isLight" type="boolean" />
+            <element name="isGradient" type="boolean" />
+            <element name="isTransposition" type="boolean" />
+            <element name="hideBaseVal" type="boolean" />
+            <element name="dataTable" type="boolean" />
+            <element name="dtVerLines" type="boolean" />
+            <element name="dtHorLines" type="boolean" />
+            <element name="dtHAlign" type="v8ui:HorizontalAlign" />
+            <element name="dtFormat" type="core:LocalStringType" />
+            <element name="dtKeys" type="boolean" />
+            <element name="paletteKind" type="v8ui:ChartColorPalette" />
+            <element name="isTransposed" type="boolean" />
+            <element name="autoTransposition" type="boolean" />
+            <element name="legendScrollEnable" type="boolean" />
+            <element name="surfaceColor" type="v8ui:Color" />
+            <element name="radarScaleType" type="tns:RadarChartScaleType" />
+            <element name="gaugeValuesPresentation" type="tns:GaugeChartValueRepresentation" />
+            <element name="gaugeQualityBands" type="v8ui:GaugeChartQualityBands" maxOccurs="1" minOccurs="0" />            
+            <element name="beginGaugeAngle" type="decimal" />
+            <element name="endGaugeAngle" type="decimal" />
+            <element name="gaugeThickness" type="decimal" />
+            <element name="gaugeLabelsLocation" type="tns:GaugeChartValuesScaleLabelsLocation" />
+            <element name="gaugeLabelsArcDirection" type="boolean" />
+            <element name="gaugeBushThickness" type="decimal" />
+            <element name="gaugeBushColor" type="v8ui:Color" />
+            <element name="autoMaxValue" type="boolean" />
+            <element name="userMaxValue" type="decimal" />
+            <element name="autoMinValue" type="boolean" />
+            <element name="userMinValue" type="decimal" />
+            <element name="elementsIsInit" type="boolean" />
+            <element name="titleIsInit" type="boolean" />
+            <element name="legendIsInit" type="boolean" />
+            <element name="chartIsInit" type="boolean" />
+            <element name="elementsChart" type="tns:DoubleRect" />
+            <element name="elementsLegend" type="tns:DoubleRect" />
+            <element name="elementsTitle" type="tns:DoubleRect" />
+            <element name="borderColor" type="v8ui:Color" />            
+            <element name="border" type="v8ui:Border" />
+            <element name="dataSourceDescription" type="string" />
+            <element name="isDataSourceMode" type="boolean" />
+            <element name="isRandomizedNewValues" type="boolean" maxOccurs="1" minOccurs="0" />
+            <element name="realDataItems" type="tns:RealDataItems" maxOccurs="1" minOccurs="0" />
+            <element name="splineMode" type="tns:ChartSplineMode" maxOccurs="1" minOccurs="0" />
+            <element name="splineStrain" type="decimal" />
+            <element name="translucenceMode" type="tns:ChartSemitransparencyMode" maxOccurs="1" minOccurs="0" />
+            <element name="translucencePercent" type="decimal" />
+            <element name="funnelNeckHeightPercent" type="decimal" />
+            <element name="funnelNeckWidthPercent" type="decimal" />
+            <element name="funnelGapSumPercent" type="decimal" />
+            <element name="multiStageLinkMode" type="tns:ChartValuesBySeriesConnectionType" maxOccurs="1" minOccurs="0" />
+            <element name="multiStageLinkLine" type="v8ui:Line" />
+            <element name="multiStageLinkColor" type="v8ui:Color" />
+            <element name="animation" type="tns:ChartAnimation" maxOccurs="1" minOccurs="0" />
+            <element name="rebuildTime" type="decimal" minOccurs="0"/>
+            <element name="id" type="core:UUID" minOccurs="0"/>
+            <element name="seriesOrderInLegend" type="tns:ChartSeriesOrderInLegend" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+            <element name="valuesAxis" type="tns:ChartAxis" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию равно значению по умолчанию для типа ChartAxis</documentation>
+                </annotation>
+            </element>
+            <element name="pointsAxis" type="tns:ChartAxis" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию равно значению по умолчанию для типа ChartAxis</documentation>
+                </annotation>
+            </element>
+            <element name="pointsAxisValuesSource" type="tns:ChartPointsAxisValuesSource" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  Auto</documentation>
+                </annotation>
+            </element>
+            <element name="pointsAxisSeries" type="decimal" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  0</documentation>
+                </annotation>
+            </element>
+            <element name="bubbleSizeValueSource" type="tns:ChartBubbleSizeValueSource" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  NextSeries</documentation>
+                </annotation>
+            </element>
+            <element name="bubbleSizeCommonSeries" type="decimal" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  0</documentation>
+                </annotation>
+            </element>
+            <element name="bubbleSizing" type="tns:ChartBubbleSizing" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  DirectArea</documentation>
+                </annotation>
+            </element>
+            <element name="bubbleChartNegativeValuesShowMode" type="tns:BubbleChartNegativeValuesShowMode" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  NotDisplay</documentation>
+                </annotation>
+            </element>
+            <element name="defaultBubbleSize" type="decimal" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  10</documentation>
+                </annotation>
+            </element>
+            <element name="minBubbleSize" type="decimal" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  1</documentation>
+                </annotation>
+            </element>
+            <element name="maxBubbleSize" type="decimal" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  20</documentation>
+                </annotation>
+            </element>
+            <element name="pointsConnection" type="tns:ChartPointsConnectionType" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  Auto</documentation>
+                </annotation>
+            </element>
+            <element name="pointsScale" type="tns:ChartScale" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию равно значению по-умолчанию для типа ChartScale</documentation>
+                </annotation>
+            </element>
+            <element name="valuesScale" type="tns:ChartScale" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию равно значению по-умолчанию для типа ChartScale</documentation>
+                </annotation>
+            </element>
+            <element name="seriesScale" type="tns:ChartScale" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию равно значению по-умолчанию для типа ChartScale</documentation>
+                </annotation>
+            </element>
+            <element name="barChartPointsOrder" type="tns:BarChartPointsOrder" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="gradientPaletteMaxColors" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию 0</documentation>
+                </annotation>
+            </element>
+            <element name="gradientPaletteStartColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="gradientPaletteEndColor" type="v8ui:Color" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="customPalette" type="core:Array" maxOccurs="unbounded" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  nil</documentation>
+                </annotation>
+            </element>
+            <element name="legendPlacement" type="tns:ChartLegendPlacement" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="plotAreaPlacement" type="tns:ChartPlotAreaPlacement" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="titleAreaPlacement" type="tns:ChartTitleAreaPlacement" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="colorPaletteDescription" type="tns:ChartColorPaletteDescription" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по-умолчанию равно значению по-умолчанию для типа ChartColorPaletteDescription</documentation>
+                </annotation>
+            </element>
+            <element name="referenceBandsColorPaletteDescription" type="tns:ChartColorPaletteDescription" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по-умолчанию равно значению по-умолчанию для типа ChartColorPaletteDescription</documentation>
+                </annotation>
+            </element>
+            <element name="valuesReferenceLines" type="tns:ChartReferenceLines" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  nil</documentation>
+                </annotation>
+            </element>
+            <element name="pointsReferenceLines" type="tns:ChartReferenceLines" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  nil</documentation>
+                </annotation>
+            </element>
+            <element name="valuesReferenceBands" type="tns:ChartReferenceBands" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  nil</documentation>
+                </annotation>
+            </element>
+            <element name="pointsReferenceBands" type="tns:ChartReferenceBands" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию:  nil</documentation>
+                </annotation>
+            </element>
+            <element name="nonnumericValuesUse" type="tns:NonnumericChartValueUse" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="pointConnectionAcrossSkippedValues" type="tns:PointsConnectionAcrossSkippedChartValuesType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="valuesToolTipShowMode" type="tns:ChartValuesToolTipShowMode" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="valuesToolTipFillType" type="tns:ChartValuesToolTipFillType" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="selectionMode" type="tns:ChartSelectionMode" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="pointsDropLinesShowMode" type="tns:ShowChartPopupReferenceLine" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="valuesDropLinesShowMode" type="tns:ShowChartPopupReferenceLine" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию Auto</documentation>
+                </annotation>
+            </element>
+            <element name="selectedObjects" type="tns:ChartSelectedObjects" maxOccurs="1" minOccurs="0"/>
+            <element minOccurs="0" maxOccurs="1" name="distributedKey" type="string">
+                <annotation>
+                    <documentation>Ключ в хранилище</documentation>
+                </annotation>
+            </element>
+            <element name="listStreamData" type="string" maxOccurs="1" minOccurs="0"/>
+            <element name="innerRadiusDonutChart" type="decimal" maxOccurs="1" minOccurs="0">
+                <annotation>
+                  <documentation>Значение по-умолчанию 60</documentation>
+                </annotation>
+            </element>
+            <element name="startAnglePieChart" type="decimal" minOccurs="0" maxOccurs="1">
+                <annotation>
+                    <documentation>Значение по-умолчанию 0</documentation>
+                </annotation>
+            </element>
+            <element name="finishAnglePieChart" type="decimal" minOccurs="0" maxOccurs="1">
+                <annotation>
+                    <documentation>Значение по-умолчанию 360</documentation>
+                </annotation>
+            </element>
+            <element name="isometricDepth" type="decimal" minOccurs="0" maxOccurs="1">
+                <annotation>
+                    <documentation>Значение по-умолчанию 20 для круговой диаграммы, 50 для гистограммы.</documentation>
+                </annotation>
+            </element>
+            <element name="additionalValuesScale" type="tns:ChartScale" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по-умолчанию равно значению по-умолчанию для типа ChartScale</documentation>
+                </annotation>
+            </element>
+            <element name="additionalValuesAxis" type="tns:ChartAxis" maxOccurs="1" minOccurs="0" >
+                <annotation>
+                    <documentation>Значение по умолчанию равно значению по умолчанию для типа ChartAxis</documentation>
+                </annotation>
+            </element>
+            <element name="valuesEditMode" type="tns:ChartValuesEditMode" maxOccurs="1" minOccurs="0">
+                <annotation>
+                    <documentation>Значение по умолчанию: Auto</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+    
+    <complexType name="AddedItem">
+        <sequence>
+            <element name="itemId" type="decimal" maxOccurs="1" minOccurs="1"/>
+            <element name="prevItemId" type="decimal" maxOccurs="1" minOccurs="1"/>
+        </sequence>
+    </complexType>
+    
+    <complexType name="MovedItem">
+        <sequence>
+            <element name="itemId" type="decimal" maxOccurs="1" minOccurs="1"/>
+            <element name="oldPrevItemId" type="decimal" maxOccurs="1" minOccurs="1"/>
+            <element name="newPrevItemId" type="decimal" maxOccurs="1" minOccurs="1"/>
+        </sequence>
+    </complexType>
+    
+    <complexType name="CollectionChange">
+        <sequence>
+            <element name="added" type="tns:AddedItem" maxOccurs="1" minOccurs="0"/>
+            <element name="moved" type="tns:MovedItem" maxOccurs="1" minOccurs="0"/>
+            <element name="deletedId" type="decimal" maxOccurs="1" minOccurs="0"/>
+        </sequence>
+    </complexType>
+    
+    <complexType name="DataChanges">
+        <sequence>
+            <element name="seriesId" type="decimal" maxOccurs="1" minOccurs="1"/>
+            <element name="pointId" type="decimal" maxOccurs="1" minOccurs="1"/>
+            <element name="item" type="tns:RealDataItem" maxOccurs="1" minOccurs="1"/>
+        </sequence>
+    </complexType>
+        
+    <complexType name="ChartChanges">
+        <sequence>
+            <element name="chartPart" type="tns:Chart" maxOccurs="1" minOccurs="0"/>
+            <element name="pointsCollectionChanges" type="tns:CollectionChange" maxOccurs="unbounded" minOccurs="0"/>
+            <element name="seriesCollectionChanges" type="tns:CollectionChange" maxOccurs="unbounded" minOccurs="0"/>
+            <element name="pointPropChange" type="tns:PointData" maxOccurs="unbounded" minOccurs="0"/>
+            <element name="seriesPropChange" type="tns:SeriesData" maxOccurs="unbounded" minOccurs="0"/>
+            <element name="dataItem" type="tns:DataChanges" maxOccurs="unbounded" minOccurs="0"/>
+            <element name="pointsCurId" type="decimal" maxOccurs="1" minOccurs="0"/>
+            <element name="seriesCurId" type="decimal" maxOccurs="1" minOccurs="0"/>
+        </sequence>
+    </complexType>
+
+    <complexType name="ChartInterval">
+        <sequence>
+            <element name="itemKey" type="decimal" />
+            <element name="key" type="decimal" />
+            <element name="begin" type="dateTime" />
+            <element name="end" type="dateTime" />
+            <element name="text" type="core:LocalStringType" />
+            <element name="details" type="anyType" maxOccurs="1" minOccurs="0" />
+            <element name="color" type="v8ui:Color" />
+            <element name="intervalKey" type="decimal" />
+            <element name="textColor" type="v8ui:Color" />
+        </sequence>
+    </complexType>
+
+    <complexType name="ChartValue">
+        <sequence>
+            <element name="itemKey" type="decimal" />
+            <element name="key" type="decimal" />
+            <element name="text" type="core:LocalStringType" />
+            <element name="details" type="anyType" maxOccurs="1" minOccurs="0" />
+            <element name="editFlag" type="boolean" />
+            <element name="backColor" type="v8ui:Color" />
+            <element name="textColor" type="v8ui:Color" />
+            <element name="mainColor" type="v8ui:Color" />
+            <element name="secondColor" type="v8ui:Color" />
+            <element name="dtValueData" type="tns:GanttChartDTValueData" maxOccurs="unbounded" minOccurs="0" />
+            <element name="selectedState" type="boolean" maxOccurs="1" minOccurs="0" />
+        </sequence>
+    </complexType>
+
+    <complexType name="TimeScaleLabel">
+        <sequence>
+            <element name="key" type="dateTime" />
+            <element name="text" type="core:LocalStringType" />
+            <element name="details" type="anyType" maxOccurs="1" minOccurs="0"  />
+            <element name="lineColor" type="v8ui:Color" />
+            <element name="textColor" type="v8ui:Color" />
+            <element name="textFormatted" type="boolean" />
+        </sequence>
+    </complexType>
+
+    <complexType name="TimeScaleLabels">
+        <sequence>
+            <element name="label" type="tns:TimeScaleLabel" maxOccurs="unbounded" minOccurs="0" />
+            <element name="ticks" type="decimal" />
+        </sequence>
+    </complexType>
+
+    <simpleType name="GanttChartScaleKeeping">
+        <restriction base="string">
+            <enumeration value="Fixed" />
+            <enumeration value="Period" />
+            <enumeration value="AllData" />
+            <enumeration value="Auto" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="TimeScaleUnitType">
+        <restriction base="string">
+            <enumeration value="Second" />
+            <enumeration value="Minute" />
+            <enumeration value="Hour" />
+            <enumeration value="Day" />
+            <enumeration value="Week" />
+            <enumeration value="Month" />
+            <enumeration value="Quarter" />
+            <enumeration value="Year" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="TimeScaleDayFormat">
+        <restriction base="string">
+            <enumeration value="MonthDay" />
+            <enumeration value="WeekDay" />
+            <enumeration value="MonthDayWeekDay" />
+            <enumeration value="WeekDayMonthDay" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="GanttChartIntervalRepresentation">
+        <restriction base="string">
+            <enumeration value="Flat" />
+            <enumeration value="ThreeDimensional" />
+            <enumeration value="Rhomb" />
+            <enumeration value="Gradient" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="GanttChartVerticalStretch">
+        <restriction base="string">
+            <enumeration value="None" />
+            <enumeration value="StretchRows" />
+            <enumeration value="StretchRowsAndData" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="GanttChartLinkType">
+        <restriction base="string">
+            <enumeration value="BeginEnd" />
+            <enumeration value="BeginBegin" />
+            <enumeration value="EndBegin" />
+            <enumeration value="EndEnd" />
+        </restriction>
+    </simpleType>
+    
+    <complexType name="TimeScaleLevel">
+        <sequence>
+            <element name="measure" type="tns:TimeScaleUnitType" />
+            <element name="interval" type="decimal" />
+            <element name="show" type="boolean" />
+            <element name="line" type="v8ui:Line" />
+            <element name="scaleColor" type="v8ui:Color" />
+            <element name="dayFormatRule" type="tns:TimeScaleDayFormat" />
+            <element name="format" type="core:LocalStringType" />
+            <element name="labels" type="tns:TimeScaleLabels" />
+            <element name="backColor" type="v8ui:Color" />
+            <element name="textColor" type="v8ui:Color" />
+            <element name="showPereodicalLabels" type="boolean" />
+        </sequence>
+    </complexType>
+
+    <simpleType name="TimeScalePosition">
+        <restriction base="string">
+            <enumeration value="Top" />
+            <enumeration value="Bottom" />
+            <enumeration value="Left" />
+            <enumeration value="Right" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="GanttChartValueTextRepresentation">
+        <restriction base="string">
+            <enumeration value="None" />
+            <enumeration value="Right" />
+        </restriction>
+    </simpleType>
+
+    <complexType name="TimeScale">
+        <sequence>
+            <element name="placement" type="tns:TimeScalePosition" />
+            <element name="level" type="tns:TimeScaleLevel" maxOccurs="unbounded" minOccurs="0" />
+            <element name="transparent" type="boolean" />
+            <element name="backColor" type="v8ui:Color" />            
+            <element name="textColor" type="v8ui:Color" />            
+            <element name="currentLevel" type="decimal" />
+        </sequence>
+    </complexType>
+    
+    <complexType name="CollectItem">
+        <sequence>
+            <element name="key" type="dateTime" />
+            <element name="secondaryDate" type="dateTime" />
+            <element name="cacheKey" type="decimal" />
+        </sequence>
+    </complexType>
+
+    <complexType name="Collect">
+        <sequence>
+            <element name="item" type="tns:CollectItem" maxOccurs="unbounded" minOccurs="0" />
+            <element name="ticks" type="decimal" />
+        </sequence>
+    </complexType>
+
+    <complexType name="GanttChartBackgroundIntervals">
+        <sequence>
+            <element name="collection" type="tns:Collect" />
+            <element name="contentCacheItem" type="v8ui:Color" maxOccurs="unbounded" minOccurs="0" />            
+            <element name="ticks" type="decimal" />
+        </sequence>
+    </complexType>
+    
+    <complexType name="PointDimensionValue">
+        <sequence>
+            <element name="itemKey" type="decimal" />
+            <element name="key" type="decimal" />
+            <element name="parentKey" type="decimal" />
+            <element name="leftKey" type="decimal" />
+            <element name="rightKey" type="decimal" />
+            <element name="extKey" type="decimal" />
+            <element name="valueKey" type="anyType"  maxOccurs="1" minOccurs="0" />
+            <element name="title" type="core:LocalStringType" />
+            <element name="details" type="anyType"  maxOccurs="1" minOccurs="0" />
+            <element name="cacheKey" type="decimal" />
+            <element name="baseData" type="decimal" />
+            <element name="font" type="v8ui:Font" />        
+            <element name="picture" type="v8ui:Picture" />
+        </sequence>
+    </complexType>
+
+    <complexType name="SeriesDimensionValue">
+        <sequence>
+            <element name="itemKey" type="decimal" />
+            <element name="key" type="decimal" />
+            <element name="parentKey" type="decimal" />
+            <element name="leftKey" type="decimal" />
+            <element name="rightKey" type="decimal" />
+            <element name="extKey" type="decimal" />
+            <element name="valueKey" type="anyType"  maxOccurs="1" minOccurs="0" />
+            <element name="title" type="core:LocalStringType" />
+            <element name="details" type="anyType"  maxOccurs="1" minOccurs="0" />
+            <element name="cacheKey" type="decimal" />
+            <element name="baseData" type="decimal" />
+        </sequence>
+    </complexType>
+
+    <complexType name="GanttChartPointValueContent">
+        <sequence>
+            <element name="mainColor" type="v8ui:Color" />
+            <element name="secondColor" type="v8ui:Color" />
+            <element name="backColor" type="v8ui:Color" />
+            <element name="textColor" type="v8ui:Color" />
+        </sequence>
+    </complexType>
+    
+    <complexType name="ChartPoints">
+        <sequence>
+            <element name="testMode" type="boolean" />
+            <element name="value" type="tns:PointDimensionValue" maxOccurs="unbounded" minOccurs="0" />
+            <element name="contentCacheItem" type="tns:GanttChartPointValueContent" maxOccurs="unbounded" minOccurs="0" />            
+            <element name="autoText" type="boolean" />
+            <element name="useValuesReverseBehavior" type="boolean" />
+        </sequence>
+    </complexType>
+    
+    <complexType name="GanttChartSeriesValueContent">
+        <sequence>
+            <element name="mainColor" type="v8ui:Color" />
+            <element name="secondColor" type="v8ui:Color" />
+            <element name="hatchBetweenIntervalsColor" type="v8ui:Color" />
+        </sequence>
+    </complexType>
+    
+    <complexType name="ChartSeries">
+        <sequence>
+            <element name="testMode" type="boolean" />
+            <element name="value" type="tns:SeriesDimensionValue" maxOccurs="unbounded" minOccurs="0" />
+            <element name="contentCacheItem" type="tns:GanttChartSeriesValueContent" maxOccurs="unbounded" minOccurs="0" />            
+            <element name="autoText" type="boolean" />
+            <element name="useValuesReverseBehavior" type="boolean" />
+        </sequence>
+    </complexType>
+    
+    <complexType name="GanttChartLink">
+        <sequence>
+            <element name="curBeginKey" type="decimal" />
+            <element name="curEndKey" type="decimal" />
+            <element name="beginKey" type="decimal" />
+            <element name="endKey" type="decimal" />
+            <element name="linkType" type="tns:GanttChartLinkType" />
+            <element name="color" type="v8ui:Color" />            
+        </sequence>
+    </complexType>
+
+    <complexType name="GanttChart">
+        <sequence>
+            <element name="chart" type="tns:Chart" />
+            <element name="dtDataColumn" type="tns:GanttChartDTDataColumn" maxOccurs="unbounded" minOccurs="0" />
+            <element name="points" type="tns:ChartPoints" />
+            <element name="series" type="tns:ChartSeries" />
+            <element name="interval" type="tns:ChartInterval" maxOccurs="unbounded" minOccurs="0" />
+            <element name="value" type="tns:ChartValue" maxOccurs="unbounded" minOccurs="0" />
+            <element name="drawEmpty" type="boolean" />
+            <element name="timeScale" type="tns:TimeScale" />
+            <element name="keepScaleVariant" type="tns:GanttChartScaleKeeping" />
+            <element name="fixedVariantMeasure" type="tns:TimeScaleUnitType" />
+            <element name="fixedVariantInterval" type="decimal" />
+            <element name="autoFullInterval" type="boolean" />
+            <element name="fullIntervalBegin" type="dateTime" />
+            <element name="fullIntervalEnd" type="dateTime" />
+            <element name="visualBegin" type="dateTime" />
+            <element name="intervalDrawType" type="tns:GanttChartIntervalRepresentation" />
+            <element name="noneVariantChars" type="decimal" />
+            <element name="noneVariantMeasure" type="tns:TimeScaleUnitType" />
+            <element name="verticalStretch" type="tns:GanttChartVerticalStretch" />
+            <element name="verticalScrollEnable" type="boolean" />
+            <element name="showValueText" type="tns:GanttChartValueTextRepresentation" />
+            <element name="extTitle" type="core:LocalStringType" />
+            <element name="outboundColor" type="v8ui:Color" />
+            <element name="backIntervals" type="tns:GanttChartBackgroundIntervals" />
+            <element name="link" type="tns:GanttChartLink" maxOccurs="unbounded" minOccurs="0" />
+            <element name="linksColor" type="v8ui:Color" />
+            <element name="linksLine" type="v8ui:Line" />
+            <element name="showPointsText" type="tns:ShowInGanttChart" />
+            <element name="showData" type="tns:ShowInGanttChart" />
+            <element name="textPlacement" type="tns:GanttChartTextPlacementType" />
+            <element name="intervalTextRepresentation" type="tns:GanttChartIntervalTextRepresentation" />
+        </sequence>
+    </complexType>
+
+    <simpleType name="DendrogramOrientation">
+        <restriction base="string">
+            <enumeration value="Top" />
+            <enumeration value="Bottom" />
+            <enumeration value="Right" />
+            <enumeration value="Left" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="DendrogramScaleKeeping">
+        <restriction base="string">
+            <enumeration value="AllItems" />
+            <enumeration value="ItemCount" />
+            <enumeration value="MinimumWidth" />
+        </restriction>
+    </simpleType>
+
+    <complexType name="DendrogramDimensionValue">
+        <sequence>
+            <element name="itemKey" type="decimal" />
+            <element name="key" type="decimal" />
+            <element name="parentKey" type="decimal" />
+            <element name="leftKey" type="decimal" />
+            <element name="rightKey" type="decimal" />
+            <element name="extKey" type="decimal" />
+            <element name="valueKey" type="anyType"  maxOccurs="1" minOccurs="0" />
+            <element name="title" type="core:LocalStringType" />
+            <element name="details" type="anyType"  maxOccurs="1" minOccurs="0" />
+            <element name="cacheKey" type="decimal" />
+            <element name="baseData" type="decimal" />
+        </sequence>
+    </complexType>
+
+    <complexType name="DendrogramContent">
+        <sequence>
+            <element name="mainColor" type="v8ui:Color" />
+            <element name="secondColor" type="v8ui:Color" />
+        </sequence>
+    </complexType>    
+
+    <complexType name="DendrogramElements">
+        <sequence>
+            <element name="testMode" type="boolean" />
+            <element name="value" type="tns:DendrogramDimensionValue" maxOccurs="unbounded" minOccurs="0" />
+            <element name="contentCacheItem" type="tns:DendrogramContent" maxOccurs="unbounded" minOccurs="0" />            
+            <element name="autoText" type="boolean" />
+            <element name="useValuesReverseBehavior" type="boolean" />
+        </sequence>
+    </complexType>
+    
+    <complexType name="DendrogramLinkValue">
+        <sequence>
+            <element name="itemKey" type="decimal" />
+            <element name="key" type="decimal" />
+            <element name="parentKey" type="decimal" />
+            <element name="leftKey" type="decimal" />
+            <element name="rightKey" type="decimal" />
+            <element name="extKey" type="decimal" />
+            <element name="valueKey" type="anyType"  maxOccurs="1" minOccurs="0" />
+            <element name="title" type="core:LocalStringType" />
+            <element name="details" type="anyType"  maxOccurs="1" minOccurs="0" />
+            <element name="cacheKey" type="decimal" />
+            <element name="baseData" type="decimal" />
+            <element name="firstElementKey" type="decimal" />
+            <element name="secondElementKey" type="decimal" />
+            <element name="distance" type="decimal" />
+        </sequence>
+    </complexType>
+
+    <complexType name="DendrogramLinks">
+        <sequence>
+            <element name="testMode" type="boolean" />
+            <element name="value" type="tns:DendrogramLinkValue" maxOccurs="unbounded" minOccurs="0" />
+            <element name="contentCacheItem" type="tns:DendrogramContent" maxOccurs="unbounded" minOccurs="0" />            
+            <element name="autoText" type="boolean" />
+            <element name="useValuesReverseBehavior" type="boolean" />
+        </sequence>
+    </complexType>
+    
+    <complexType name="Dendrogram">
+        <sequence>
+            <element name="chart" type="tns:Chart" />
+            <element name="elements" type="tns:DendrogramElements" />
+            <element name="links" type="tns:DendrogramLinks" />
+            <element name="orientation" type="tns:DendrogramOrientation" />
+            <element name="scaleType" type="tns:DendrogramScaleKeeping" />
+            <element name="countElements" type="decimal" />
+            <element name="fixedMinWidthElement" type="decimal" />
+            <element name="lineColor" type="v8ui:Color" />            
+            <element name="line" type="v8ui:Line" />            
+            <element name="verticalLabels" type="boolean" />
+        </sequence>
+    </complexType>
+
+    <complexType name="PivotChart">
+        <sequence>
+            <element name="chart" type="tns:Chart" />
+            <element name="horizontalScaleKeeping" type="tns:PivotChartScaleKeeping" />
+            <choice minOccurs="0">
+                <annotation>
+                    <documentation>
+                        Данные элементы могут появляться только при значении
+                        horizontalScaleKeeping отличном от AllValues
+                    </documentation>
+                </annotation>
+                <element name="horizontalScaleValueCount" type="decimal">
+                    <annotation>
+                        <documentation>для ValuesCount</documentation>
+                    </annotation>
+                </element>
+                <element name="horizontalScaleValueMinWidth" type="decimal" minOccurs="0">
+                    <annotation>
+                        <documentation>для MinimumWidth</documentation>
+                    </annotation>
+                </element>
+            </choice>
+            <element name="pivotChartType" type="tns:PivotChartType" />
+            <element name="pointsValuesShowMode" type="tns:PivotChartValuesShowMode" />
+            <element name="seriesValuesShowMode" type="tns:PivotChartValuesShowMode" />
+            <element name="horizontalScaleLabelsOrientation" type="tns:PivotChartLabelsOrientation" />
+            <element name="horizontalScaleTopLevelCount" type="decimal" />
+            <element name="fieldAreasTransparent" type="boolean" />
+            <element name="fieldAreasBackColor" type="v8ui:Color" />
+            <element name="fieldAreasTextColor" type="v8ui:Color" />
+            <element name="showFields" type="boolean">
+                <annotation>
+                    <documentation>Отображать диалог выбора полей</documentation>
+                </annotation>
+            </element>
+        </sequence>
+    </complexType>
+
+    <complexType name="ChartsViewSettings">
+        <sequence>
+            <element name="animation" type="tns:ChartAnimation" />
+        </sequence>
+    </complexType>
+
+
+    <!--complexType name="PivotChartTranslator">
+        <sequence>
+            <element name="points" type="tns:ChartPoints" />
+            <element name="series" type="tns:ChartSeries" />
+            <element name="values" type="tns:ValueHolder"/>
+            <element name="pointsValuesShowMode" type="tns:PivotChartValuesShowMode" />
+            <element name="seriesValuesShowMode" type="tns:PivotChartValuesShowMode" />
+        </sequence>
+    </complexType>
+
+    <complexType name="ValueHolder">
+        <sequence>
+            <element name="item" type="tns:ValueHolderItem" minOccurs="0" maxOccurs="unbounded"/>
+        </sequence>
+    </complexType>
+
+    <complexType name="ValueHolderItem">
+        <sequence>
+            <element name="key" type="decimal"/>
+            <element name="value"/>
+        </sequence>
+    </complexType-->
+
+    <simpleType name="PivotChartValuesShowMode">
+        <annotation>
+            <documentation>Отображение значений точек сводной диаграммы </documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="AllValues" />
+            <enumeration value="LastLevelValues" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="PivotChartScaleKeeping">
+        <annotation>
+            <documentation>ГоризонтальнаяПоддержкаМасштаба</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="AllValues" />
+            <enumeration value="ValuesCount" />
+            <enumeration value="MinimumWidth" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="PivotChartType">
+        <annotation>
+            <documentation>Тип сводной диаграммы нет среилизации</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="Column" />
+            <enumeration value="Column3D" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="PivotChartLabelsOrientation">
+        <annotation>
+            <documentation>Тип сводной диаграммы</documentation>
+        </annotation>
+        <restriction base="string">
+            <enumeration value="TopLevelsVertical" />
+            <enumeration value="AllLevelsVertical" />
+            <enumeration value="AllLevelsHorizontal" />
+        </restriction>
+    </simpleType>
+
+    <complexType name="GanttChartValueID">
+        <sequence>
+            <element name="valueKey" type="decimal" />
+        </sequence>
+    </complexType>
+
+    <complexType name="GanttChartIntervalID">
+        <sequence>
+            <element name="intervalKey" type="decimal" />
+        </sequence>
+    </complexType>
+
+    <simpleType name="ShowInGanttChart">
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Show" />
+            <enumeration value="DontShow" />
+        </restriction>
+    </simpleType>
+
+    <complexType name="GanttChartDTDataColumn">
+        <sequence>
+            <element name="id" type="decimal" />
+            <element name="nameInternational" type="string" />
+            <element name="nameRussian" type="string" />
+            <element name="title" type="core:LocalStringType" />
+            <element name="valueType" type="core:TypeDescription" />
+        </sequence>
+    </complexType>
+
+    <complexType name="GanttChartDTValueData">
+        <sequence>
+            <element name="id" type="decimal" />
+            <element name="value" type="anyType" />
+        </sequence>
+    </complexType>
+
+    <complexType name="GanttChartValuesSelectionParams">
+        <sequence>
+            <element name="selectedValueKey" type="decimal" maxOccurs="unbounded" minOccurs="0" />
+            <element name="lastSelectedValueKey" type="decimal" maxOccurs="1" minOccurs="0" />
+        </sequence>
+    </complexType>
+
+    <complexType name="GanttChartIntervalsSelectionParams">
+        <sequence>
+            <element name="selectedIntervalKey" type="decimal" maxOccurs="unbounded" minOccurs="0" />
+            <element name="lastSelectedIntervalKey" type="decimal" maxOccurs="1" minOccurs="0" />
+        </sequence>
+    </complexType>
+
+    <simpleType name="GanttChartTextPlacementType">
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Cut" />
+            <enumeration value="Wrap" />
+        </restriction>
+    </simpleType>
+
+    <simpleType name="GanttChartIntervalTextRepresentation">
+        <restriction base="string">
+            <enumeration value="Auto" />
+            <enumeration value="Show" />
+            <enumeration value="DontShow" />
+        </restriction>
+    </simpleType>
+
+    <complexType name="ValueAppearanceValue2ValueMapItem">
+      <sequence>
+        <element name="key" type="anyType" minOccurs="1" maxOccurs="1"/>
+        <element name="value" type="anyType" minOccurs="1" maxOccurs="1"/>
+      </sequence>
+    </complexType>
+
+    <complexType name="ValueAppearanceDataItem">
+      <sequence>
+        <element name="id" type="core:UUID" minOccurs="0" maxOccurs="1"/>
+        <element name="item" type="tns:ValueAppearanceValue2ValueMapItem" minOccurs="1" maxOccurs="unbounded"/>
+      </sequence>
+    </complexType>
+  
+    <complexType name="ValueAppearance">
+      <sequence>
+        <element name="item" type="tns:ValueAppearanceDataItem" minOccurs="0" maxOccurs="unbounded"/>
+      </sequence>
+    </complexType>
+
+</schema>

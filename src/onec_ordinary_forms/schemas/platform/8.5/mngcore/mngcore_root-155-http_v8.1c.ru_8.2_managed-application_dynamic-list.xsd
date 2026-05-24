@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.2/managed-application/dynamic-list"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           xmlns:dcs="http://v8.1c.ru/8.1/data-composition-system/settings"
+           xmlns:dcscore="http://v8.1c.ru/8.1/data-composition-system/core"
+           xmlns:lf="http://v8.1c.ru/8.2/managed-application/logform"
+           targetNamespace="http://v8.1c.ru/8.2/managed-application/dynamic-list"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+  <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+  <xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/core" schemaLocation="../../../dcscore/src/res/core.xsd"/>
+  <xs:import namespace="http://v8.1c.ru/8.1/data-composition-system/settings" schemaLocation="../../../dcscore/src/res/settings.xsd"/>
+  <xs:import namespace="http://v8.1c.ru/8.2/managed-application/logform" schemaLocation="../../../mngcore/src/res/logform.xsd"/>
+
+  <!-- DynamicList schema -->
+
+  <xs:complexType name="UsedField">
+    <xs:attribute  name="ID" type="xs:decimal"/>
+    <xs:attribute  name="Name" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="LFEDataPath">
+    <xs:sequence>
+      <xs:element name="id" type="core:CompositeID" minOccurs="0" maxOccurs="unbounded" />
+    </xs:sequence>
+  </xs:complexType>
+  
+  <xs:complexType name="UseRestrictions">
+    <xs:sequence>
+      <xs:element name="Group" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Order" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Filter" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="DynamicList">
+    <xs:sequence>
+      <xs:element name="QueryText" type="xs:string" minOccurs="0"/>
+      <xs:element name="UsedField" type="tns:UsedField" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="RequiredField" type="xs:decimal" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="DataPaths" type="tns:LFEDataPath" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="SettingsComposer" type="dcs:SettingsComposer" minOccurs="0"/>
+      <xs:element name="GroupFieldsItem" type="dcs:GroupItem" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="SettingsSourceException" type="core:GenericException" minOccurs="0"/>
+      <xs:element name="Restrictions" type="tns:UseRestrictions" minOccurs="0"/>
+      <xs:element name="AdditionalData" type="xs:string" minOccurs="0"/>
+      <xs:element name="EmptyParentValue" type="xs:anyType" minOccurs="0"/>
+      <xs:element name="ChangesVersion" type="xs:decimal" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="ChangeState" type="xs:decimal"/>
+    <xs:attribute name="FormUUID" type="core:UUID"/>
+    <xs:attribute name="MainTable" type="core:UUID"/>
+    <xs:attribute name="KeyType" type="core:UUID"/>
+    <xs:attribute name="MainTableCategory" type="xs:decimal"/>
+    <xs:attribute name="StaticQuery" type="xs:boolean"/>
+    <xs:attribute name="AutoFillAvailableFields" type="xs:boolean"/>
+    <xs:attribute name="ManualQuery" type="xs:boolean"/>
+    <xs:attribute name="HierAvailable" type="xs:boolean"/>
+    <xs:attribute name="CurrUsrSettingsKey" type="xs:string"/>
+    <xs:attribute name="AutoSaveUsrSettings" type="xs:boolean"/>
+    <xs:attribute name="GetInvisibleFieldPresentations" type="xs:boolean"/>
+  </xs:complexType>
+
+  <xs:complexType name="DynamicalListGroupRow">
+    <xs:sequence>
+      <xs:element name="GroupValue" type="xs:anyType" />
+      <xs:element name="Presentation" type="xs:string" minOccurs="0" />
+      <xs:element name="GroupName" type="xs:string" minOccurs="0" maxOccurs="2"/>
+      <xs:element name="Parent" type="tns:DynamicalListGroupRow" nillable="true" />
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="TableExtensionSettings">
+    <xs:sequence>
+      <xs:element name="period" type="core:StandardPeriod" minOccurs="0"/>
+      <xs:element name="appearance" type="dcs:ConditionalAppearanceItem" minOccurs="0"/>
+      <xs:element name="filter" type="dcs:FilterItem" minOccurs="0"/>
+      <xs:element name="configuredFilter" type="dcs:FilterItem" minOccurs="0"/>
+      <xs:element name="currentLine" type="xs:anyType" minOccurs="0"/>
+      <xs:element name="representation" type="lf:TableRepresentation"/>
+    </xs:sequence>
+    <xs:attribute name="applyOnStartUp" type="xs:boolean"/>
+    <xs:attribute name="findInList" type="xs:decimal"/>
+    <xs:attribute name="restoreRepresentation" type="xs:boolean"/>
+  </xs:complexType>
+
+  <xs:complexType name="SearchHistoryItem">
+    <xs:sequence>
+      <xs:element name="path" type="xs:string" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="comp" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="value" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="pres" type="xs:string" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="SearchHistory">
+    <xs:sequence>
+      <xs:element name="item" type="tns:SearchHistoryItem" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ULSettingsSourceFormCreationParam">
+    <xs:annotation>
+      <xs:documentation>
+        Параметр создания источника доступных настроек списка привязанного к форме
+      </xs:documentation>
+    </xs:annotation>
+    <xs:sequence>
+
+      <xs:element name="kind"
+                  type="xs:int">
+          <xs:annotation>
+              <xs:documentation>
+                  Вид параметра.
+              </xs:documentation>
+          </xs:annotation>
+      </xs:element>
+
+      <xs:element name="formUUID"
+                  type="core:UUID">
+        <xs:annotation>
+          <xs:documentation>
+            Идентификатор экземпляра формы.
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="data"
+                  type="xs:string">
+        <xs:annotation>
+          <xs:documentation>
+              Данные для получения информации схемы.
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+
+      <xs:element name="availableSettingsCache"
+                  minOccurs="0">
+        <xs:annotation>
+          <xs:documentation>
+              Кеш доступных настроек
+          </xs:documentation>
+        </xs:annotation>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+</xs:schema>

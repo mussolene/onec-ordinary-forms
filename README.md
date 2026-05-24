@@ -127,6 +127,24 @@ metadata classes, mcore type/value classes, and platform serializer evidence.
 It records this object-model vocabulary without shipping platform binaries.
 These codec concepts are not a public raw-stream dump.
 
+The vendored platform schema layer lives under
+`src/onec_ordinary_forms/schemas/platform/`. The current baseline is the
+full extracted 8.5 schema set referenced from `Configuration.xsd`; the 8.2
+extraction is kept as a compatibility reference. Regenerate this layer from a
+local platform mirror with:
+
+```bash
+python3 tools/extract_platform_xml_resources.py \
+  --root <platform-bin-dir> \
+  --out-dir scan-output/platform85/xml-clean \
+  --schemas-only
+python3 tools/vendor_platform_schemas.py \
+  --resources-json scan-output/platform85/xml-clean/resources.json \
+  --source-dir scan-output/platform85/xml-clean \
+  --out-dir src/onec_ordinary_forms/schemas/platform \
+  --platform-version 8.5
+```
+
 ### What Must Not Be In Public XML
 
 Public `Form.xml` must not contain raw or renamed platform dumps. The following
