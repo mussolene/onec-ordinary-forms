@@ -222,6 +222,15 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         first_page = pages[0] if pages else None
         title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
 
+    sidecar_metadata = form_sidecar_metadata(asset_root)
+    root_layout = form_root_layout_from_metadata(sidecar_metadata)
+    attributes_layout = form_attributes_layout_from_metadata(sidecar_metadata)
+    object_info = form_object_info_from_metadata(sidecar_metadata)
+    event_style_profile = form_event_style_profile_from_metadata(sidecar_metadata)
+    root_style = form_root_style_from_metadata(sidecar_metadata)
+    control_templates = control_templates_from_metadata(sidecar_metadata)
+    record_flags = (attributes_layout or {}).get("recordFlags", {})
+
     attributes = []
     attribute_type_patterns: dict[str, list[object]] = {}
     attribute_slots: dict[str, str] = {}
@@ -233,23 +242,26 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         attribute_type_patterns[name] = type_pattern
         if attribute.get("slot"):
             attribute_slots[name] = attribute.get("slot", "")
-        attributes.append(attribute_record_from_xml(attribute))
+        record_flag = record_flags.get(name) if isinstance(record_flags, dict) else None
+        attributes.append(attribute_record_from_xml(attribute, str(record_flag) if record_flag is not None else None))
 
     controls: list[object] = []
     for page in top_level_pages(root):
         for child in page:
-            control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots)
+            control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots, control_templates)
             if control:
                 controls.append(control)
 
-    root_layout = form_root_layout_from_asset_root(asset_root)
     stream = ordinary_form_stream(
         title or "Main",
         attributes,
         controls,
-        events_from_xml(root),
+        events_from_xml(root, event_style_profile),
         form_size_from_xml(root, root_layout),
         root_layout,
+        attributes_layout,
+        object_info,
+        root_style,
     )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
 
@@ -261,12 +273,15 @@ def ordinary_form_stream(
     events: list[object],
     form_size: tuple[str, str, bool],
     root_layout: dict[str, str] | None = None,
+    attributes_layout: dict[str, object] | None = None,
+    object_info: list[object] | None = None,
+    root_style: list[object] | None = None,
 ) -> list[object]:
     return [
         "27",
         form_root_record(title, controls, form_size, root_layout),
-        attributes_table(attributes, controls),
-        form_object_info_record(),
+        attributes_table(attributes, controls, attributes_layout),
+        copy.deepcopy(object_info) if object_info is not None else form_object_info_record(),
         ["1", *events] if events else ["0"],
         "1",
         "4",
@@ -276,7 +291,7 @@ def ordinary_form_stream(
         "0",
         ["0"],
         ["0"],
-        ["10", "0", empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "0", "0", "0", "0", "0"],
+        copy.deepcopy(root_style) if root_style is not None else ["10", "0", empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "0", "0", "0", "0", "0"],
         "1",
         "2",
         "0",
@@ -557,7 +572,11 @@ def font_record_from_xml(font: ET.Element | None) -> list[object]:
     return result
 
 
-def attributes_table(attributes: list[object], controls: list[object] | None = None) -> list[object]:
+def attributes_table(
+    attributes: list[object],
+    controls: list[object] | None = None,
+    attributes_layout: dict[str, object] | None = None,
+) -> list[object]:
     max_slot = 0
     for attribute in attributes:
         if isinstance(attribute, list) and attribute and isinstance(attribute[0], list) and attribute[0]:
@@ -565,9 +584,11 @@ def attributes_table(attributes: list[object], controls: list[object] | None = N
                 max_slot = max(max_slot, int(str(attribute[0][0])))
             except ValueError:
                 pass
+    marker = str((attributes_layout or {}).get("marker", "1"))
+    slot_count = str((attributes_layout or {}).get("slotCount", "")) if attributes_layout else ""
     return [
-        ["1"],
-        str(max_slot + 1 if attributes else 0),
+        [marker],
+        slot_count or str(max_slot + 1 if attributes else 0),
         [str(len(attributes)), *attributes],
         attribute_link_table(attributes, controls or []),
     ]
@@ -607,7 +628,7 @@ def iter_control_records(controls: list[object]) -> list[list[object]]:
     return result
 
 
-def attribute_record_from_xml(attribute: ET.Element) -> list[object]:
+def attribute_record_from_xml(attribute: ET.Element, record_flag: str | None = None) -> list[object]:
     object_id = attribute.get("id", "0")
     visible_id = attribute.get("slot") or object_id
     pattern = type_pattern_from_xml(attribute)
@@ -616,7 +637,7 @@ def attribute_record_from_xml(attribute: ET.Element) -> list[object]:
         type_record.append(pattern)
     return [
         [visible_id],
-        "0" if visible_id == "1" else "1",
+        record_flag if record_flag is not None else ("0" if visible_id == "1" else "1"),
         "0",
         "1",
         quoted_atom(attribute.get("name", "")),
@@ -628,26 +649,27 @@ def form_object_info_record() -> list[object]:
     return ["59d6c227-97d3-46f6-84a0-584c5a2807e1", "1", ["2", "0", ["0", "0"], ["0"], "1"]]
 
 
-def events_from_xml(root: ET.Element) -> list[object]:
+def events_from_xml(root: ET.Element, style_profile: str = "extended") -> list[object]:
     result: list[object] = []
     for event in root.findall("./Events/Event"):
         name = event.get("name")
         uuid = event.get("uuid")
         if not name or not uuid:
             continue
-        result.append(["70001", uuid, ["3", quoted_atom(name), event_descriptor(name)]])
+        result.append(["70001", uuid, ["3", quoted_atom(name), event_descriptor(name, style_profile=style_profile)]])
     return result
 
 
-def event_descriptor(name: str, title: str | None = None) -> list[object]:
+def event_descriptor(name: str, title: str | None = None, style_profile: str = "extended") -> list[object]:
     title = title or name.replace("ПриОткрытии", "При открытии")
+    style = compact_empty_page_style_record() if style_profile == "compact" else empty_page_style_record()
     return [
         "1",
         quoted_atom(name),
         localized_text_record(title),
         localized_text_record(title),
         localized_text_record(title),
-        empty_page_style_record(),
+        style,
         ["0", "0", "0"],
     ]
 
@@ -666,20 +688,71 @@ def form_size_from_xml(root: ET.Element, root_layout: dict[str, str] | None = No
     return width or "885", height or "244", bool(width and height)
 
 
-def form_root_layout_from_asset_root(asset_root: Path | None) -> dict[str, str] | None:
+def form_sidecar_metadata(asset_root: Path | None) -> dict[str, object]:
     if asset_root is None:
-        return None
+        return {}
     metadata_path = asset_root / CONTAINER_INFO_NAME
     if not metadata_path.exists():
-        return None
+        return {}
     try:
         metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     except (OSError, TypeError, ValueError):
-        return None
+        return {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def form_root_layout_from_metadata(metadata: dict[str, object]) -> dict[str, str] | None:
     root_layout = metadata.get("formRoot")
     if not isinstance(root_layout, dict):
         return None
     return {str(key): str(value) for key, value in root_layout.items()}
+
+
+def form_attributes_layout_from_metadata(metadata: dict[str, object]) -> dict[str, object] | None:
+    attributes_layout = metadata.get("attributesTable")
+    if not isinstance(attributes_layout, dict):
+        return None
+    result: dict[str, object] = {
+        "marker": str(attributes_layout.get("marker", "1")),
+        "slotCount": str(attributes_layout.get("slotCount", "")),
+    }
+    record_flags = attributes_layout.get("recordFlags")
+    if isinstance(record_flags, dict):
+        result["recordFlags"] = {str(key): str(value) for key, value in record_flags.items()}
+    return result
+
+
+def form_object_info_from_metadata(metadata: dict[str, object]) -> list[object] | None:
+    object_info = metadata.get("formObjectInfo")
+    return object_info if isinstance(object_info, list) else None
+
+
+def form_event_style_profile_from_metadata(metadata: dict[str, object]) -> str:
+    profile = str(metadata.get("eventStyleProfile", ""))
+    return profile if profile in {"compact", "extended"} else "extended"
+
+
+def form_root_style_from_metadata(metadata: dict[str, object]) -> list[object] | None:
+    root_style = metadata.get("rootStyleRecord")
+    return root_style if isinstance(root_style, list) else None
+
+
+def control_templates_from_metadata(metadata: dict[str, object]) -> dict[tuple[str, str], dict[str, object]]:
+    result: dict[tuple[str, str], dict[str, object]] = {}
+    templates = metadata.get("controlTemplates", [])
+    if not isinstance(templates, list):
+        return result
+    for item in templates:
+        if not isinstance(item, dict):
+            continue
+        control_type = str(item.get("type", ""))
+        control_id = str(item.get("id", ""))
+        control_name = str(item.get("name", ""))
+        if control_type and control_id:
+            result[(control_type, control_id)] = item
+        if control_type and control_name:
+            result[(control_type, control_name)] = item
+    return result
 
 
 def top_level_pages(root: ET.Element) -> list[ET.Element]:
@@ -720,8 +793,9 @@ def control_stream_from_xml(
     asset_root: Path | None,
     attribute_type_patterns: dict[str, list[object]] | None = None,
     attribute_slots: dict[str, str] | None = None,
+    control_templates: dict[tuple[str, str], dict[str, object]] | None = None,
 ) -> list[object] | None:
-    return control_stream_from_xml_with_page(element, asset_root, attribute_type_patterns or {}, attribute_slots or {}, None, None)
+    return control_stream_from_xml_with_page(element, asset_root, attribute_type_patterns or {}, attribute_slots or {}, control_templates or {}, None, None)
 
 
 def control_stream_from_xml_with_page(
@@ -729,6 +803,7 @@ def control_stream_from_xml_with_page(
     asset_root: Path | None,
     attribute_type_patterns: dict[str, list[object]],
     attribute_slots: dict[str, str],
+    control_templates: dict[tuple[str, str], dict[str, object]],
     page_index: int | None,
     page_order: int | None,
 ) -> list[object] | None:
@@ -740,9 +815,10 @@ def control_stream_from_xml_with_page(
         raise ValueError(f"Unsupported ordinary form control type for stream writer: {element.tag}")
     object_id = required_control_id(element)
     name = required_control_name(element)
+    control_template = control_templates.get((control_type, object_id)) or control_templates.get((control_type, name))
     title = get_multilang_text(element, "Title")
     title_record = localized_text_record(title or name)
-    info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns)
+    info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns, control_template)
     data_path = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else ""
     data_slot = attribute_slots.get(data_path, "")
     if not data_slot and control_type == "RadioButton":
@@ -755,6 +831,7 @@ def control_stream_from_xml_with_page(
         page_order,
         data_slot,
         radio_ordinal,
+        control_template,
     )
     metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
     if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "КоманднаяПанель3", "ОсновныеДействияФормы"}:
@@ -763,12 +840,13 @@ def control_stream_from_xml_with_page(
         metadata_scope = CONTROL_METADATA_SCOPE["default"]
     else:
         metadata_scope = CONTROL_METADATA_SCOPE.get(control_type, CONTROL_METADATA_SCOPE["default"])
-    metadata = ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
+    template_metadata = (control_template or {}).get("metadata")
+    metadata = copy.deepcopy(template_metadata) if isinstance(template_metadata, list) else ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
     if control_type == "RadioButton":
         metadata[5] = bool_record_from_xml(element, "FirstInGroup", default=False)
     children: list[object] = []
     for child in element:
-        child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, None, None)
+        child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, control_templates, None, None)
         if child_stream:
             children.append(child_stream)
     pages = element.find("Pages")
@@ -779,7 +857,7 @@ def control_stream_from_xml_with_page(
             for child in page:
                 if not control_type_from_xml_tag(child.tag):
                     continue
-                child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, page_number, page_child_order)
+                child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, control_templates, page_number, page_child_order)
                 if child_stream:
                     page_children.append((int(child_stream[1]), child_stream))
                     page_child_order += 1
@@ -864,10 +942,14 @@ def control_info_from_xml(
     control_type: str,
     asset_root: Path | None,
     attribute_type_patterns: dict[str, list[object]],
+    control_template: dict[str, object] | None = None,
 ) -> list[object]:
     title = get_multilang_text(element, "Title")
     title_record = localized_text_record(title or name)
     actions = control_actions_from_xml(element)
+    template_info = (control_template or {}).get("info")
+    if isinstance(template_info, list):
+        return copy.deepcopy(template_info)
     if control_type == "Panel":
         return panel_control_info_from_xml(element, title_record)
     if control_type == "Button":
@@ -3189,7 +3271,11 @@ def geometry_stream_from_xml(
     page_order: int | None = None,
     data_slot: str = "",
     radio_ordinal: int = 0,
+    control_template: dict[str, object] | None = None,
 ) -> list[object]:
+    template_geometry = (control_template or {}).get("geometry")
+    if isinstance(template_geometry, list):
+        return geometry_stream_from_template(template_geometry, position)
     left = position.get("left", "0") if position is not None else "0"
     top = position.get("top", "0") if position is not None else "0"
     right = position.get("right", "0") if position is not None else "0"
@@ -3416,6 +3502,48 @@ def layout_group_tail(
     except ValueError:
         next_order = "0"
     return [group, order, next_order, "0", "0"]
+
+
+def geometry_stream_from_template(template_geometry: list[object], position: ET.Element | None) -> list[object]:
+    result = copy.deepcopy(template_geometry)
+    if len(result) < 5 or position is None:
+        return result
+    for index, key in enumerate(("left", "top", "right", "bottom"), start=1):
+        value = position.get(key)
+        if value is not None:
+            result[index] = value
+    binding_container = position.find("Bindings")
+    if binding_container is None:
+        return result
+    for binding in binding_container.findall("Binding"):
+        slot = binding.get("slot")
+        if not slot and binding.get("coordinate"):
+            mapped = BINDING_COORDINATE_SLOT.get(binding.get("coordinate", ""))
+            slot = str(mapped) if mapped is not None else None
+        if not slot:
+            continue
+        try:
+            index = int(slot) - 1
+        except ValueError:
+            continue
+        target = 6 + index
+        if 0 <= index < 6 and target < len(result):
+            result[target] = binding_to_raw(binding)
+    for binding in binding_container.findall("DimensionBinding"):
+        slot = binding.get("slot")
+        if not slot and binding.get("dimension"):
+            mapped = DIMENSION_NAME_SLOT.get(binding.get("dimension", ""))
+            slot = str(mapped) if mapped is not None else None
+        if not slot:
+            continue
+        try:
+            index = int(slot) - 1
+        except ValueError:
+            continue
+        target = 13 + index
+        if 0 <= index < 4 and target < len(result):
+            result[target] = dimension_binding_to_raw(binding)
+    return result
 
 
 def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[object]) -> None:

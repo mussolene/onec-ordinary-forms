@@ -1333,7 +1333,7 @@ def dump_xml_from_paths(
     asset_root = out_path.with_suffix("")
 
     module_bytes = module_path.read_bytes() if module_path and module_path.exists() else b""
-    form_root = parse_list_stream_document(form_path.read_text(encoding="utf-8-sig"), allow_trailing=True).value
+    form_root = parse_list_stream_document(form_path.read_bytes().decode("utf-8-sig"), allow_trailing=True).value
     metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path else None
     object_types = metadata_object_type_map(metadata)
     element_index = build_element_index(control_index)
@@ -1357,6 +1357,21 @@ def dump_xml_from_paths(
         root_layout = form_root_layout_metadata(form_root)
         if root_layout:
             metadata["formRoot"] = root_layout
+        attributes_layout = form_attributes_metadata(form_root)
+        if attributes_layout:
+            metadata["attributesTable"] = attributes_layout
+        object_info = form_object_info_metadata(form_root)
+        if object_info:
+            metadata["formObjectInfo"] = object_info
+        event_style_profile = form_event_style_profile_metadata(form_root)
+        if event_style_profile:
+            metadata["eventStyleProfile"] = event_style_profile
+        root_style = form_root_style_metadata(form_root)
+        if root_style:
+            metadata["rootStyleRecord"] = root_style
+        control_templates = control_template_metadata(control_index)
+        if control_templates:
+            metadata["controlTemplates"] = control_templates
         (asset_root / CONTAINER_INFO_NAME).write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     add_form_events(root, form_root)
@@ -1428,6 +1443,105 @@ def form_root_layout_metadata(form_root: object) -> dict[str, str] | None:
             if isinstance(base, list) and base:
                 result["rootPanelBaseKind"] = clean_token(base[0])
     return result
+
+
+def form_attributes_metadata(form_root: object) -> dict[str, object] | None:
+    if not isinstance(form_root, list) or len(form_root) <= 2 or not isinstance(form_root[2], list):
+        return None
+    table = form_root[2]
+    if len(table) < 3:
+        return None
+    marker = table[0]
+    records = table[2]
+    result: dict[str, object] = {
+        "marker": clean_token(marker[0]) if isinstance(marker, list) and marker else clean_token(marker),
+        "slotCount": clean_token(table[1]),
+    }
+    if isinstance(records, list):
+        record_flags: dict[str, str] = {}
+        for record in records[1:]:
+            if not isinstance(record, list) or len(record) < 5:
+                continue
+            record_flags[clean_token(record[4])] = clean_token(record[1])
+        if record_flags:
+            result["recordFlags"] = record_flags
+    return result
+
+
+def form_object_info_metadata(form_root: object) -> list[object] | None:
+    if not isinstance(form_root, list) or len(form_root) <= 3 or not isinstance(form_root[3], list):
+        return None
+    return form_root[3]
+
+
+def form_event_style_profile_metadata(form_root: object) -> str | None:
+    if not isinstance(form_root, list) or len(form_root) <= 4 or not isinstance(form_root[4], list):
+        return None
+    events = form_root[4]
+    if len(events) <= 1 or not isinstance(events[1], list):
+        return None
+    try:
+        style = events[1][2][2][5]
+    except (IndexError, TypeError):
+        return None
+    if isinstance(style, list) and style:
+        if clean_token(style[0]) == "3" and len(style) == 8:
+            return "compact"
+        if clean_token(style[0]) == "4" and len(style) == 9:
+            return "extended"
+    return None
+
+
+def form_root_style_metadata(form_root: object) -> list[object] | None:
+    if not isinstance(form_root, list) or len(form_root) <= 13 or not isinstance(form_root[13], list):
+        return None
+    return form_root[13]
+
+
+def control_template_metadata(control_index: dict) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    data = control_index.get("data", {})
+    tree = control_index.get("tree", [])
+    if not isinstance(data, dict) or not isinstance(tree, list):
+        return result
+
+    def walk(items: list[dict[str, object]]) -> None:
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            control_type = str(item.get("type", ""))
+            raw_key = str(item.get("rawKey") or f"{item.get('page', '')}/{item.get('name', '')}")
+            item_data = data.get(raw_key)
+            raw = item_data.get("raw") if isinstance(item_data, dict) else item.get("raw")
+            if control_type and isinstance(raw, list) and len(raw) >= 6:
+                geometry = control_geometry_record(raw)
+                template: dict[str, object] = {
+                    "id": str(item.get("id", "")),
+                    "name": str(item.get("name", "")),
+                    "type": control_type,
+                }
+                if control_type in {"CommandBar", "Table"}:
+                    template["info"] = raw[2]
+                if geometry is not None:
+                    template["geometry"] = geometry
+                if isinstance(raw[4], list):
+                    template["metadata"] = raw[4]
+                if "info" in template or "geometry" in template:
+                    result.append(template)
+            child = item.get("child")
+            if isinstance(child, list):
+                walk(child)
+
+    walk(tree)
+    deduped: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    for template in result:
+        key = (str(template.get("type", "")), str(template.get("id", "")))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(template)
+    return deduped
 
 
 def add_form_events(parent: ET.Element, form_root: object) -> None:

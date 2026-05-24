@@ -44,7 +44,7 @@ def dump_form_bin_to_xml(
         work_dir = Path(temp_dir)
         unpack_form_bin(form_bin, work_dir)
         form_stream = work_dir / "Form.xml"
-        form_text = form_stream.read_text(encoding="utf-8-sig")
+        form_text = form_stream.read_bytes().decode("utf-8-sig")
         element_index = extract_control_index_from_bracket(form_text)
         module = work_dir / "Module.bsl"
         model_xml_writer(
