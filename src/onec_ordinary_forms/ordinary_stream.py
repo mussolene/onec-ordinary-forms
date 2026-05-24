@@ -1220,12 +1220,19 @@ def splitter_control_info(element: ET.Element) -> list[object]:
     return [
         "0",
         [
-            base_info_record_from_xml(element),
+            splitter_base_info_record_from_xml(element),
             "2",
             "2",
             "0",
         ],
     ]
+
+
+def splitter_base_info_record_from_xml(element: ET.Element) -> list[object]:
+    base = extended_base_info_record_from_xml(element)
+    base[5] = "1"
+    base[11] = ["3", "0", ["-18"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"]
+    return base
 
 
 def chart_control_info() -> list[object]:
@@ -2150,6 +2157,23 @@ def geometry_stream_from_xml(
                         index = -1
                     if 0 <= index < len(dimensions):
                         dimensions[index] = dimension_binding_to_raw(binding)
+    if control_type == "Splitter":
+        default_group = str(page_order) if page_order is not None else "0"
+        default_order = str(page_index) if page_index is not None else "0"
+        return [
+            "8",
+            left,
+            top,
+            right,
+            bottom,
+            "1",
+            *bindings,
+            "0",
+            *dimensions,
+            "0",
+            "0",
+            *layout_group_tail(layout_group, layout_order, default_group, default_order),
+        ]
     if page_index is None or page_order is None:
         trailer = GEOMETRY_TRAILER_PROFILE.get(control_type, GEOMETRY_TRAILER_PROFILE["default"])
         if control_type == "CommandBar" and dimensions[2] != "0":
