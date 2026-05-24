@@ -260,7 +260,7 @@ def ordinary_form_stream(
     return [
         "27",
         form_root_record(title, controls, form_size),
-        attributes_table(attributes),
+        attributes_table(attributes, controls),
         form_object_info_record(),
         ["1", *events] if events else ["0"],
         "1",
@@ -271,7 +271,7 @@ def ordinary_form_stream(
         "0",
         ["0"],
         ["0"],
-        ["3", "0", ["3", "0", ["0"], '""', "-1", "-1", "1", "0"]],
+        ["10", "0", empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "0", "0", "0", "0", "0"],
         "1",
         "2",
         "0",
@@ -464,7 +464,7 @@ def font_record_from_xml(font: ET.Element | None) -> list[object]:
     return result
 
 
-def attributes_table(attributes: list[object]) -> list[object]:
+def attributes_table(attributes: list[object], controls: list[object] | None = None) -> list[object]:
     max_slot = 0
     for attribute in attributes:
         if isinstance(attribute, list) and attribute and isinstance(attribute[0], list) and attribute[0]:
@@ -472,7 +472,46 @@ def attributes_table(attributes: list[object]) -> list[object]:
                 max_slot = max(max_slot, int(str(attribute[0][0])))
             except ValueError:
                 pass
-    return [["1"], str(max_slot + 1 if attributes else 0), ["3", *attributes], ["0"]]
+    return [
+        ["1"],
+        str(max_slot + 1 if attributes else 0),
+        [str(len(attributes)), *attributes],
+        attribute_link_table(attributes, controls or []),
+    ]
+
+
+def attribute_link_table(attributes: list[object], controls: list[object]) -> list[object]:
+    controls_by_name: dict[str, str] = {}
+    for control in iter_control_records(controls):
+        if not isinstance(control, list) or len(control) < 5:
+            continue
+        metadata = control[-2]
+        if not isinstance(metadata, list) or len(metadata) < 2 or metadata[0] != "14":
+            continue
+        controls_by_name[str(metadata[1])] = str(control[1])
+    links: list[object] = []
+    for attribute in attributes:
+        if not isinstance(attribute, list) or len(attribute) < 5 or not isinstance(attribute[0], list) or not attribute[0]:
+            continue
+        slot = str(attribute[0][0])
+        if slot == "1":
+            continue
+        control_id = controls_by_name.get(str(attribute[4]))
+        if control_id:
+            links.append([control_id, ["1", [slot]]])
+    return [str(len(links)), *links]
+
+
+def iter_control_records(controls: list[object]) -> list[list[object]]:
+    result: list[list[object]] = []
+    for control in controls:
+        if not isinstance(control, list):
+            continue
+        result.append(control)
+        child_table = control[-1] if control else None
+        if isinstance(child_table, list) and child_table:
+            result.extend(iter_control_records(child_table[1:]))
+    return result
 
 
 def attribute_record_from_xml(attribute: ET.Element) -> list[object]:
@@ -484,7 +523,7 @@ def attribute_record_from_xml(attribute: ET.Element) -> list[object]:
         type_record.append(pattern)
     return [
         [visible_id],
-        "0",
+        "0" if visible_id == "1" else "1",
         "0",
         "1",
         quoted_atom(attribute.get("name", "")),
