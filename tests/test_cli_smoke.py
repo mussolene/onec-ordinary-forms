@@ -874,7 +874,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(choice)
         info = choice[2]
         self.assertEqual(info[0], "2")
-        choice_info = info[1][0]
+        choice_info = info[1]
         self.assertEqual(choice_info[0][12][2], ['"ru"', '"Mode tooltip"'])
         self.assertEqual(choice_info[12], "1")
         self.assertEqual(choice_info[23], "0")

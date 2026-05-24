@@ -1066,15 +1066,15 @@ def checkbox_control_info(element: ET.Element, title_record: list[object], actio
 def choice_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
     return [
         "2",
-        [choice_field_info_record_from_xml(element)],
+        choice_field_info_record_from_xml(element),
         ["1", *actions] if actions else ["0"],
     ]
 
 
 def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
     return [
-        base_info_record_from_xml(element),
-        "21",
+        choice_field_base_info_record_from_xml(element),
+        "31",
         "0",
         "0",
         "1",
@@ -1101,8 +1101,8 @@ def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
         bool_record_from_xml(element, "OpenButton", default=False),
         bool_record_from_xml(element, "CreateButton", default=False),
         bool_record_from_xml(element, "EditButton", default=False),
-        ["3", "0", ["0"], '""', "-1", "-1", "1", "0"],
-        ["3", "0", ["0"], '""', "-1", "-1", "1", "0"],
+        empty_page_style_record(),
+        empty_page_style_record(),
         "0",
         "0",
         "0",
@@ -1112,7 +1112,20 @@ def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
         "0",
         "0",
         "0",
+        "0",
+        "0",
+        "0",
+        "16777215",
+        "2",
+        "0",
+        "0",
     ]
+
+
+def choice_field_base_info_record_from_xml(element: ET.Element) -> list[object]:
+    base = extended_base_info_record_from_xml(element)
+    base[11] = ["3", "1", ["-18"], "0", "0", "0"]
+    return base
 
 
 def radio_button_control_info(
