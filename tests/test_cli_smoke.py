@@ -1185,11 +1185,17 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(pivot[2][1][2][8][2], ['"ru"', '"Pivot title"'])
         self.assertIsNotNone(gantt)
         self.assertEqual(gantt[2][0], "19")
+        self.assertEqual(len(gantt[2]), 33)
+        self.assertEqual(len(gantt[2][1]), 3)
         self.assertEqual(gantt[2][1][2][0], "75")
+        self.assertEqual(len(gantt[2][1][2]), 221)
         self.assertEqual(gantt[2][1][2][8][2], ['"ru"', '"Gantt title"'])
         self.assertIsNotNone(dendrogram)
         self.assertEqual(dendrogram[2][0], "0")
+        self.assertEqual(len(dendrogram[2]), 11)
+        self.assertEqual(len(dendrogram[2][1]), 3)
         self.assertEqual(dendrogram[2][1][2][0], "75")
+        self.assertEqual(len(dendrogram[2][1][2]), 221)
         self.assertEqual(dendrogram[2][1][2][8][2], ['"ru"', '"Dendrogram title"'])
 
     def test_build_bin_uses_platform_extended_root_record_for_sized_forms(self) -> None:

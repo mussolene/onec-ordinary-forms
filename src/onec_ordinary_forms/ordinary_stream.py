@@ -1346,48 +1346,96 @@ def gantt_chart_control_info(element: ET.Element, title_record: list[object]) ->
             "0",
             chart_control_info(),
             diagram_presentation_record(element, title_record, kind="gantt"),
+        ],
+        *gantt_chart_info_tail(),
+    ]
+
+
+def gantt_chart_info_tail() -> list[object]:
+    return [
+        [
+            "1",
+            [
+                "3",
+                "0",
+                "1",
+                "0",
+                [
+                    "2",
+                    ["8", "0", "0", "0", "0", "0", [quoted_atom("U")], ["1", "0"], [quoted_atom("U")], "0", "4294949825"],
+                    empty_page_style_record(),
+                    ["8", "3", "0", "1", "100"],
+                ],
+                ["0", "1", ["0", ["0", ["4", "0", ["0"], "0"], ["4", "0", ["0"], "0"]], ["4", "4", ["0"], "4"], ["4", "4", ["0"], "4"]]],
+                "1",
+                "0",
+            ],
+        ],
+        [
             "0",
+            [
+                "3",
+                "0",
+                "1",
+                "0",
+                ["3", ["8", "0", "0", "0", "0", "0", [quoted_atom("U")], ["1", "0"], [quoted_atom("U")], "0", "4294902785"]],
+                ["0", "1", ["0", ["0", ["4", "0", ["0"], "0"], ["4", "0", ["0"], "0"]], ["4", "0", ["0"], "0"]]],
+                "1",
+                "0",
+            ],
+        ],
+        "0",
+        "0",
+        "1",
+        [
+            "3",
             "0",
+            "1",
+            [
+                "8",
+                "30",
+                "1",
+                "1",
+                ["4", "0", ["0"], "2", "1", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
+                ["4", "0", ["12632256"], "0"],
+                "3",
+                ["1", "0"],
+                ["0", ["1", "0", "0"]],
+                ["4", "4", ["0"], "4"],
+                ["4", "4", ["0"], "4"],
+                "1",
+            ],
             "0",
-            "0",
-            ["0"],
-            "0",
-            "0",
-            "0",
+            ["4", "3", ["-10"], "3"],
+            ["4", "3", ["-3"], "3"],
             "0",
         ],
-        ["0"],
+        "2",
+        "50",
+        "1",
+        "1",
+        "20260524000000",
+        "20260604235959",
+        "20260524000000",
+        "3",
+        "3",
+        "30",
+        "0",
+        "1",
+        "0",
+        ["1", "0"],
+        ["4", "0", ["16777215"], "0"],
+        ["3", ["0", ["1", "0", "0"], "0"], ["0", "0"]],
+        "0",
+        ["4", "0", ["8388608"], "0"],
+        ["4", "0", ["0"], "1", "1", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
+        ["0", "0", "0"],
         "0",
         "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
-        "0",
+        "1",
         "0",
         "0",
     ]
-
 
 def dendrogram_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
     return [
@@ -1396,16 +1444,47 @@ def dendrogram_control_info(element: ET.Element, title_record: list[object]) -> 
             "0",
             chart_control_info(),
             diagram_presentation_record(element, title_record, kind="dendrogram"),
-            "0",
-            "0",
-            "0",
-            "0",
-            ["0"],
-            "0",
-            "0",
         ],
+        *dendrogram_info_tail(),
     ]
 
+
+def dendrogram_info_tail() -> list[object]:
+    return [
+        [
+            "0",
+            [
+                "3",
+                "0",
+                "1",
+                "0",
+                ["0", ["8", "0", "0", "0", "0", "0", [quoted_atom("U")], ["1", "0"], [quoted_atom("U")], "0", "4294901793"]],
+                ["0", "1", ["0", ["4", "0", ["0"], "0"], ["4", "0", ["0"], "0"]]],
+                "1",
+                "0",
+            ],
+        ],
+        [
+            "0",
+            [
+                "3",
+                "0",
+                "1",
+                "0",
+                ["0", ["8", "0", "0", "0", "0", "0", [quoted_atom("U")], ["1", "0"], [quoted_atom("U")], "0", "4294901761"], "0", "0", "0"],
+                ["0", "1", ["0", ["4", "0", ["0"], "0"], ["4", "0", ["0"], "0"]]],
+                "1",
+                "0",
+            ],
+        ],
+        "0",
+        "1",
+        "6",
+        "12",
+        ["4", "0", ["8388608"], "0"],
+        ["4", "0", ["0"], "1", "1", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
+        "0",
+    ]
 
 def diagram_presentation_record(element: ET.Element, title_record: list[object], *, kind: str) -> list[object]:
     kind_code = (element.findtext("PivotChartKind") or "").strip() if kind == "pivot" else ""
@@ -1481,6 +1560,8 @@ def diagram_presentation_record(element: ET.Element, title_record: list[object],
     if kind == "gantt":
         record[36] = ["3", "0", ["0"], "1", "1", "0", "00000000-0000-0000-0000-000000000000"]
     if kind in {"chart", "gantt"}:
+        record.extend(chart_presentation_tail(kind))
+    if kind == "dendrogram":
         record.extend(chart_presentation_tail(kind))
     if kind == "pivot":
         apply_pivot_chart_default_presentation_settings(record, title_record)
@@ -1667,6 +1748,30 @@ def chart_presentation_tail(kind: str = "chart") -> list[object]:
         tail[126] = "0.0377733598409543"
         tail[129] = "0.831914893617021"
         tail[132] = "0.962226640159045"
+    if kind == "dendrogram":
+        tail[42] = "4.166666666666666e-2"
+        tail[43] = "0"
+        tail[45] = "0"
+        tail[46] = "0"
+        tail[47] = "1"
+        tail[48] = "1"
+        tail[49] = "0"
+        tail[52] = "9.583333333333334e-1"
+        tail[107] = "0.041666666666666666666666667"
+        tail[108] = "0"
+        tail[110] = "0"
+        tail[111] = "0"
+        tail[112] = "1"
+        tail[113] = "1"
+        tail[114] = "0"
+        tail[117] = "0.958333333333333333333333333"
+        tail[119] = "6"
+        tail[122] = "0.0425055928411633"
+        tail[123] = "0"
+        tail[125] = "1"
+        tail[126] = "0.0425055928411633"
+        tail[129] = "0"
+        tail[132] = "0.957494407158836"
     return tail
 
 
