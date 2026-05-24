@@ -1004,6 +1004,41 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(button[2][1][1], "14")
         self.assertEqual(base[12][2], ['"ru"', '"Run tooltip"'])
 
+    def test_build_bin_writes_default_paged_button_geometry_bindings(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Panel name="PagesPanel" id="4">
+                    <Position left="8" top="8" right="400" bottom="300" width="392" height="292"/>
+                    <Pages>
+                      <Page name="Page1">
+                        <Button name="AddedButton" id="53">
+                          <Title><Item lang="ru">Added</Item></Title>
+                          <Position left="13" top="172" right="190" bottom="196" width="177" height="24"/>
+                        </Button>
+                      </Page>
+                    </Pages>
+                  </Panel>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        button = self._find_control(stream, "6ff79819-710e-4145-97cd-1618da79e3e2")
+
+        self.assertIsNotNone(button)
+        geometry = button[3]
+        self.assertEqual(geometry[6], ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]])
+        self.assertEqual(geometry[7], ["0", ["2", "53", "0", "24"], ["2", "-1", "6", "0"]])
+        self.assertEqual(geometry[9], ["0", ["2", "53", "2", "177"], ["2", "-1", "6", "0"]])
+        self.assertEqual(geometry[13], ["0", "53", "1"])
+        self.assertEqual(geometry[16], ["0", "53", "3"])
+        self.assertEqual(geometry[-5:], ["0", "0", "1", "0", "0"])
+
     def test_build_bin_uses_checkbox_info_kind_and_named_title(self) -> None:
         root = ET.fromstring(
             """<Form>
