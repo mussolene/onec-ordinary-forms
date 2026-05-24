@@ -8,6 +8,7 @@ from pathlib import Path
 import json
 import re
 from struct import pack, unpack
+from typing import Mapping
 
 
 MARKER_RE = re.compile(rb"(?:(?<=\n)|^)([0-9a-f]{8}) ([0-9a-f]{8}) ([0-9a-f]{8}) \r?\n")
@@ -253,48 +254,21 @@ def _append_document(data: bytearray, payload: bytes, *, min_block_size: int = 0
     return first_offset
 
 
-def _append_document_aligned_to_odd_end(data: bytearray, payload: bytes, *, min_block_size: int = 0) -> int:
-    """Append a container document and leave the next document on an odd offset.
-
-    1C container block headers distinguish logical document size from physical
-    block size. Platform exports use that slack in the last block so the next
-    document descriptor starts on the same odd/even boundary after payload size
-    changes. Keeping ``doc_size`` logical while increasing ``current_size`` is
-    what lets readers ignore the padding bytes.
-    """
-
-    predicted = _document_end_offset(len(data), len(payload), min_block_size=min_block_size)
-    padding = 1 if predicted % 2 == 0 else 0
-    return _append_document(data, payload, min_block_size=_last_block_min_size(len(payload), min_block_size) + padding)
-
-
-def _document_end_offset(start_offset: int, payload_size: int, *, min_block_size: int = 0) -> int:
-    header_size = len(_block_header(0, 0))
-    if payload_size <= CONTAINER_DOCUMENT_BLOCK_SIZE:
-        return start_offset + header_size + max(min_block_size, payload_size)
-    full_chunks, last_chunk_size = divmod(payload_size, CONTAINER_DOCUMENT_BLOCK_SIZE)
-    chunk_count = full_chunks + (1 if last_chunk_size else 0)
-    if last_chunk_size == 0:
-        last_chunk_size = CONTAINER_DOCUMENT_BLOCK_SIZE
-    return (
-        start_offset
-        + chunk_count * header_size
-        + max(chunk_count - 1, 0) * CONTAINER_DOCUMENT_BLOCK_SIZE
-        + max(min_block_size, last_chunk_size)
-    )
-
-
-def _last_block_min_size(payload_size: int, min_block_size: int = 0) -> int:
-    if payload_size <= CONTAINER_DOCUMENT_BLOCK_SIZE:
-        return max(min_block_size, payload_size)
-    last_chunk_size = payload_size % CONTAINER_DOCUMENT_BLOCK_SIZE
-    if last_chunk_size == 0:
-        last_chunk_size = CONTAINER_DOCUMENT_BLOCK_SIZE
-    return max(min_block_size, last_chunk_size)
-
-
 def _file_descriptor_payload(name: str, created: int, modified: int) -> bytes:
     return pack("<QQi", created, modified, 0) + name.encode("utf-16le") + b"\x00" * 4
+
+
+def _container_file_ticks(
+    name: str,
+    *,
+    file_times: Mapping[str, tuple[int | None, int | None]] | None = None,
+    created: int | None = None,
+    modified: int | None = None,
+) -> tuple[int, int]:
+    file_created, file_modified = (file_times or {}).get(name, (created, modified))
+    created_ticks = _default_container_ticks() if file_created is None else file_created
+    modified_ticks = created_ticks if file_modified is None else file_modified
+    return created_ticks, modified_ticks
 
 
 def build_form_bin_container(
@@ -303,38 +277,61 @@ def build_form_bin_container(
     *,
     created: int | None = None,
     modified: int | None = None,
+    file_times: Mapping[str, tuple[int | None, int | None]] | None = None,
+    toc_padding: bytes | None = None,
 ) -> bytes:
-    """Build ordinary-form ``Form.bin`` as a canonical 32-bit 1C container.
+    """Build ordinary-form ``Form.bin`` as a platform-style 32-bit 1C container.
 
     The container stores two files named ``form`` and ``module``. File
     descriptors use the standard 1C layout: created ticks, modified ticks,
     zero flags, UTF-16LE file name, and a UTF-16 terminator.
     """
 
-    created_ticks = _default_container_ticks() if created is None else created
-    modified_ticks = created_ticks if modified is None else modified
     data = bytearray(pack("<4i", CONTAINER_END_MARKER, CONTAINER_BLOCK_SIZE, 2, 0))
 
     toc_offset = len(data)
     data.extend(b"\x00" * (CONTAINER_BLOCK_HEADER_SIZE + CONTAINER_TOC_BLOCK_SIZE))
 
-    entries: list[tuple[int, int]] = []
-    files = (("form", form_payload), ("module", module_payload))
-    for index, (name, payload) in enumerate(files):
-        descriptor_offset = _append_document(data, _file_descriptor_payload(name, created_ticks, modified_ticks))
-        append_payload = _append_document_aligned_to_odd_end if index + 1 < len(files) else _append_document
-        payload_offset = append_payload(data, payload, min_block_size=CONTAINER_BLOCK_SIZE)
-        entries.append((descriptor_offset, payload_offset))
+    form_created, form_modified = _container_file_ticks("form", file_times=file_times, created=created, modified=modified)
+    module_created, module_modified = _container_file_ticks("module", file_times=file_times, created=created, modified=modified)
+
+    form_descriptor_offset = _append_document(data, _file_descriptor_payload("form", form_created, form_modified))
+    module_descriptor_offset = _append_document(data, _file_descriptor_payload("module", module_created, module_modified))
+    module_payload_offset = _append_block(data, module_payload, min_block_size=CONTAINER_BLOCK_SIZE)
+    form_payload_offset = _append_block(data, form_payload, min_block_size=CONTAINER_BLOCK_SIZE)
+
+    entries = (
+        (form_descriptor_offset, form_payload_offset),
+        (module_descriptor_offset, module_payload_offset),
+    )
 
     toc_payload = b"".join(pack("<3i", descriptor_offset, payload_offset, CONTAINER_END_MARKER) for descriptor_offset, payload_offset in entries)
     toc_block = _block_header(len(toc_payload), CONTAINER_TOC_BLOCK_SIZE) + toc_payload
-    toc_block += b"\x00" * (CONTAINER_BLOCK_HEADER_SIZE + CONTAINER_TOC_BLOCK_SIZE - len(toc_block))
+    padding_size = CONTAINER_BLOCK_HEADER_SIZE + CONTAINER_TOC_BLOCK_SIZE - len(toc_block)
+    padding = (toc_padding or b"")[:padding_size]
+    toc_block += padding
+    toc_block += b"\x00" * (padding_size - len(padding))
     data[toc_offset : toc_offset + len(toc_block)] = toc_block
     return bytes(data)
 
 
+def _toc_padding(data: bytes) -> bytes:
+    doc_size, current_size, _next_offset, payload_offset = _read_block_header(data, CONTAINER_HEADER_SIZE)
+    if current_size <= doc_size:
+        return b""
+    return data[payload_offset + doc_size : payload_offset + current_size]
+
+
+def _metadata_toc_padding(metadata: dict[str, object]) -> bytes | None:
+    try:
+        return bytes.fromhex(str(metadata.get("tocPaddingHex", "")))
+    except ValueError:
+        return None
+
+
 def unpack_form_bin(form_bin: Path, out_dir: Path) -> dict[str, object]:
-    container = parse_form_bin_container(form_bin.read_bytes())
+    source_data = form_bin.read_bytes()
+    container = parse_form_bin_container(source_data)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     files = {file.name: file for file in container.files}
@@ -348,6 +345,7 @@ def unpack_form_bin(form_bin: Path, out_dir: Path) -> dict[str, object]:
         "format": "onec-ordinary-formbin-container",
         "version": 1,
         "blockSize": container.block_size,
+        "tocPaddingHex": _toc_padding(source_data).hex(),
         "files": [
             {
                 "name": file.name,
@@ -376,6 +374,8 @@ def pack_form_bin(parts_dir: Path, out_form_bin: Path) -> None:
         (parts_dir / "Module.bsl").read_bytes(),
         created=created,
         modified=modified,
+        file_times=times,
+        toc_padding=_metadata_toc_padding(metadata),
     )
     out_form_bin.parent.mkdir(parents=True, exist_ok=True)
     out_form_bin.write_bytes(data)

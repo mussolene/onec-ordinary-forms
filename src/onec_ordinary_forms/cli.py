@@ -15,6 +15,7 @@ import json
 
 from onec_ordinary_forms.corpus import build_corpus_report, write_report
 from onec_ordinary_forms.formbin import (
+    CONTAINER_INFO_NAME,
     build_form_bin_container,
     pack_form_bin,
     unpack_form_bin,
@@ -1349,6 +1350,10 @@ def dump_xml_from_paths(
         module_out = asset_root / "Module.bsl"
         module_out.parent.mkdir(parents=True, exist_ok=True)
         module_out.write_bytes(module_bytes)
+    container_info = form_path.parent / CONTAINER_INFO_NAME
+    if container_info.exists():
+        asset_root.mkdir(parents=True, exist_ok=True)
+        (asset_root / CONTAINER_INFO_NAME).write_bytes(container_info.read_bytes())
 
     add_form_events(root, form_root)
 
@@ -1568,6 +1573,41 @@ def container_times_from_xml(root: ET.Element) -> tuple[int | None, int | None]:
     return None, None
 
 
+def container_times_from_asset_root(asset_root: Path) -> dict[str, tuple[int, int]]:
+    metadata_path = asset_root / CONTAINER_INFO_NAME
+    if not metadata_path.exists():
+        return {}
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError):
+        return {}
+    result: dict[str, tuple[int, int]] = {}
+    for file in metadata.get("files", []):
+        if not isinstance(file, dict):
+            continue
+        name = str(file.get("name", ""))
+        created = file.get("createdTicks")
+        modified = file.get("modifiedTicks")
+        if not name or created is None or modified is None:
+            continue
+        try:
+            result[name] = (int(created), int(modified))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
+def container_toc_padding_from_asset_root(asset_root: Path) -> bytes | None:
+    metadata_path = asset_root / CONTAINER_INFO_NAME
+    if not metadata_path.exists():
+        return None
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        return bytes.fromhex(str(metadata.get("tocPaddingHex", "")))
+    except (OSError, TypeError, ValueError):
+        return None
+
+
 def form_title_from_xml(root: ET.Element) -> str:
     return get_multilang_text(root, "Title")
 
@@ -1589,7 +1629,14 @@ def build_bin(args: argparse.Namespace) -> None:
     form_data = form_stream_from_object_xml(root, asset_root)
     module_data = module_data_from_xml(root, asset_root)
     created, modified = container_times_from_xml(root)
-    bin_data = build_form_bin_container(form_data, module_data, created=created, modified=modified)
+    bin_data = build_form_bin_container(
+        form_data,
+        module_data,
+        created=created,
+        modified=modified,
+        file_times=container_times_from_asset_root(asset_root),
+        toc_padding=container_toc_padding_from_asset_root(asset_root),
+    )
     out_bin.parent.mkdir(parents=True, exist_ok=True)
     out_bin.write_bytes(bin_data)
 

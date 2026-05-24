@@ -314,7 +314,7 @@ class CliSmokeTest(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             source = root / "Form.bin"
-            source.write_bytes(build_form_bin_container(b"form", b"module"))
+            source.write_bytes(build_form_bin_container(b"form", b"module", toc_padding=b"toc-slack"))
 
             parts = root / "parts"
             unpack_form_bin(source, parts)
@@ -325,23 +325,27 @@ class CliSmokeTest(unittest.TestCase):
             self.assertEqual((parts / "Module.bsl").read_bytes(), b"module")
             self.assertEqual((parts / "Form.xml").read_bytes(), b"form")
 
-    def test_form_bin_container_splits_large_documents_like_platform(self) -> None:
+    def test_form_bin_container_writes_large_form_as_platform_single_block(self) -> None:
         form = b"x" * (0xA000 + 17)
         data = build_form_bin_container(form, b"module")
         container = parse_form_bin_container(data)
 
         self.assertEqual({file.name: file.payload for file in container.files}["form"], form)
-        self.assertIn(f"{len(form):08x} 0000a000".encode("ascii"), data)
+        self.assertIn(f"{len(form):08x} {len(form):08x}".encode("ascii"), data)
+        self.assertNotIn(f"{len(form):08x} 0000a000".encode("ascii"), data)
 
-    def test_form_bin_container_aligns_next_document_after_resized_form(self) -> None:
+    def test_form_bin_container_uses_platform_document_order(self) -> None:
         form = b"x" * (0xA000 + 16)
         data = build_form_bin_container(form, b"module")
         toc = _read_document(data, CONTAINER_HEADER_SIZE)
+        form_descriptor_offset, form_data_offset, form_marker = unpack("<3i", toc[:12])
         module_descriptor_offset, module_data_offset, marker = unpack("<3i", toc[12:24])
 
+        self.assertEqual(form_marker, 0x7FFFFFFF)
         self.assertEqual(marker, 0x7FFFFFFF)
-        self.assertEqual(module_descriptor_offset % 2, 1)
-        self.assertEqual(module_data_offset % 2, 0)
+        self.assertLess(form_descriptor_offset, module_descriptor_offset)
+        self.assertLess(module_descriptor_offset, module_data_offset)
+        self.assertLess(module_data_offset, form_data_offset)
         self.assertEqual({file.name: file.payload for file in parse_form_bin_container(data).files}["form"], form)
 
     def test_form_bin_unpack_assembles_descriptor_split_streams(self) -> None:
@@ -573,6 +577,7 @@ class CliSmokeTest(unittest.TestCase):
             self.assertNotIn("<LogicalStream", xml)
             self.assertNotIn("binFile=", xml)
             self.assertEqual((root / "Form" / "Module.bsl").read_bytes(), module)
+            self.assertTrue((root / "Form" / "Form.bin.container.json").exists())
             validate_xml_file(out)
 
             rebuilt = root / "rebuilt.bin"
