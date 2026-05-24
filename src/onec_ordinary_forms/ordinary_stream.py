@@ -228,12 +228,14 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
     object_info = form_object_info_from_metadata(sidecar_metadata)
     event_style_profile = form_event_style_profile_from_metadata(sidecar_metadata)
     root_style = form_root_style_from_metadata(sidecar_metadata)
+    stream_profile = form_stream_profile_from_metadata(sidecar_metadata)
     control_templates = control_templates_from_metadata(sidecar_metadata)
     record_flags = (attributes_layout or {}).get("recordFlags", {})
 
     attributes = []
     attribute_type_patterns: dict[str, list[object]] = {}
     attribute_slots: dict[str, str] = {}
+    attribute_templates = (attributes_layout or {}).get("attributeRecords", {})
     for attribute in root.findall("./Attributes/Attribute"):
         name = attribute.get("name", "")
         if not name:
@@ -243,7 +245,14 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         if attribute.get("slot"):
             attribute_slots[name] = attribute.get("slot", "")
         record_flag = record_flags.get(name) if isinstance(record_flags, dict) else None
-        attributes.append(attribute_record_from_xml(attribute, str(record_flag) if record_flag is not None else None))
+        record_template = attribute_templates.get(name) if isinstance(attribute_templates, dict) else None
+        attributes.append(
+            attribute_record_from_xml(
+                attribute,
+                str(record_flag) if record_flag is not None else None,
+                record_template if isinstance(record_template, list) else None,
+            )
+        )
 
     controls: list[object] = []
     for page in top_level_pages(root):
@@ -262,6 +271,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         attributes_layout,
         object_info,
         root_style,
+        stream_profile,
     )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
 
@@ -276,8 +286,9 @@ def ordinary_form_stream(
     attributes_layout: dict[str, object] | None = None,
     object_info: list[object] | None = None,
     root_style: list[object] | None = None,
+    stream_profile: dict[str, object] | None = None,
 ) -> list[object]:
-    return [
+    stream = [
         "27",
         form_root_record(title, controls, form_size, root_layout),
         attributes_table(attributes, controls, attributes_layout),
@@ -299,6 +310,14 @@ def ordinary_form_stream(
         "1",
         "1",
     ]
+    if stream_profile is not None:
+        marker = stream_profile.get("marker")
+        if isinstance(marker, str) and marker:
+            stream[0] = marker
+        tail = stream_profile.get("tail")
+        if isinstance(tail, list):
+            stream = stream[:5] + copy.deepcopy(tail)
+    return stream
 
 
 def form_root_record(
@@ -334,23 +353,27 @@ def form_root_record(
             root_layout.get("slot10", "38"),
         ]
     record = [
-        "16",
-        [localized_text_record(title), "52", "4294967295"],
+        (root_layout or {}).get("recordKind", "16"),
+        [
+            localized_text_record(title),
+            (root_layout or {}).get("titleMarker", "52"),
+            (root_layout or {}).get("titleScope", "4294967295"),
+        ],
         root_panel,
         width,
         height,
-        "1",
-        "0",
-        "1",
-        "4",
-        "4",
-        "6",
+        (root_layout or {}).get("slot5", "1"),
+        (root_layout or {}).get("slot6", "0"),
+        (root_layout or {}).get("slot7", "1"),
+        (root_layout or {}).get("slot8", "4"),
+        (root_layout or {}).get("slot9", "4"),
+        (root_layout or {}).get("slot10", "6"),
     ]
     if explicit_size:
         record[0] = "18"
-        record[1][1] = "41"
-        record[1][2] = "3"
-        record[-1] = "3"
+        record[1][1] = (root_layout or {}).get("titleMarker", "41")
+        record[1][2] = (root_layout or {}).get("titleScope", "3")
+        record[-1] = (root_layout or {}).get("slot10", "3")
         record.extend([width, height, "96"])
     return record
 
@@ -595,7 +618,9 @@ def attributes_table(
         [marker],
         slot_count or str(max_slot + 1 if attributes else 0),
         [str(len(attributes)), *attributes],
-        attribute_link_table(attributes, controls or []),
+        copy.deepcopy(attributes_layout["linkTable"])
+        if isinstance((attributes_layout or {}).get("linkTable"), list)
+        else attribute_link_table(attributes, controls or []),
     ]
 
 
@@ -633,13 +658,35 @@ def iter_control_records(controls: list[object]) -> list[list[object]]:
     return result
 
 
-def attribute_record_from_xml(attribute: ET.Element, record_flag: str | None = None) -> list[object]:
+def attribute_record_from_xml(
+    attribute: ET.Element,
+    record_flag: str | None = None,
+    template: list[object] | None = None,
+) -> list[object]:
     object_id = attribute.get("id", "0")
     visible_id = attribute.get("slot") or object_id
     pattern = type_pattern_from_xml(attribute)
     type_record: list[object] = [quoted_atom("Pattern")]
     if pattern:
         type_record.append(pattern)
+    if template is not None and len(template) >= 5:
+        result = copy.deepcopy(template)
+        if attribute.get("slot"):
+            result[0] = [visible_id]
+        if len(result) > 1:
+            result[1] = record_flag if record_flag is not None else result[1]
+        type_index = next(
+            (
+                index
+                for index, value in enumerate(result)
+                if isinstance(value, list) and value and clean_atom(value[0]) == "Pattern"
+            ),
+            None,
+        )
+        if type_index is not None and type_index > 0:
+            result[type_index - 1] = quoted_atom(attribute.get("name", ""))
+            result[type_index] = type_record
+            return result
     return [
         [visible_id],
         record_flag if record_flag is not None else ("0" if visible_id == "1" else "1"),
@@ -713,6 +760,20 @@ def form_root_layout_from_metadata(metadata: dict[str, object]) -> dict[str, obj
     return {str(key): copy.deepcopy(value) if isinstance(value, list) else str(value) for key, value in root_layout.items()}
 
 
+def form_stream_profile_from_metadata(metadata: dict[str, object]) -> dict[str, object] | None:
+    profile = metadata.get("formStreamProfile")
+    if not isinstance(profile, dict):
+        return None
+    result: dict[str, object] = {}
+    marker = profile.get("marker")
+    if marker is not None:
+        result["marker"] = str(marker)
+    tail = profile.get("tail")
+    if isinstance(tail, list):
+        result["tail"] = copy.deepcopy(tail)
+    return result
+
+
 def form_attributes_layout_from_metadata(metadata: dict[str, object]) -> dict[str, object] | None:
     attributes_layout = metadata.get("attributesTable")
     if not isinstance(attributes_layout, dict):
@@ -724,6 +785,16 @@ def form_attributes_layout_from_metadata(metadata: dict[str, object]) -> dict[st
     record_flags = attributes_layout.get("recordFlags")
     if isinstance(record_flags, dict):
         result["recordFlags"] = {str(key): str(value) for key, value in record_flags.items()}
+    record_templates = attributes_layout.get("attributeRecords")
+    if isinstance(record_templates, dict):
+        result["attributeRecords"] = {
+            str(key): copy.deepcopy(value)
+            for key, value in record_templates.items()
+            if isinstance(value, list)
+        }
+    link_table = attributes_layout.get("linkTable")
+    if isinstance(link_table, list):
+        result["linkTable"] = copy.deepcopy(link_table)
     return result
 
 

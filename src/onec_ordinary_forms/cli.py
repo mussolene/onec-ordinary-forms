@@ -1358,6 +1358,9 @@ def dump_xml_from_paths(
         root_layout = form_root_layout_metadata(form_root)
         if root_layout:
             metadata["formRoot"] = root_layout
+        stream_profile = form_stream_profile_metadata(form_root)
+        if stream_profile:
+            metadata["formStreamProfile"] = stream_profile
         attributes_layout = form_attributes_metadata(form_root)
         if attributes_layout:
             metadata["attributesTable"] = attributes_layout
@@ -1447,6 +1450,15 @@ def form_root_layout_metadata(form_root: object) -> dict[str, str] | None:
     return result
 
 
+def form_stream_profile_metadata(form_root: object) -> dict[str, object] | None:
+    if not isinstance(form_root, list) or len(form_root) < 5:
+        return None
+    return {
+        "marker": clean_token(form_root[0]),
+        "tail": copy.deepcopy(form_root[5:]),
+    }
+
+
 def form_attributes_metadata(form_root: object) -> dict[str, object] | None:
     if not isinstance(form_root, list) or len(form_root) <= 2 or not isinstance(form_root[2], list):
         return None
@@ -1459,15 +1471,32 @@ def form_attributes_metadata(form_root: object) -> dict[str, object] | None:
         "marker": clean_token(marker[0]) if isinstance(marker, list) and marker else clean_token(marker),
         "slotCount": clean_token(table[1]),
     }
+    if len(table) > 3 and isinstance(table[3], list):
+        result["linkTable"] = copy.deepcopy(table[3])
     if isinstance(records, list):
         record_flags: dict[str, str] = {}
+        record_templates: dict[str, object] = {}
         for record in records[1:]:
             if not isinstance(record, list) or len(record) < 5:
                 continue
-            record_flags[clean_token(record[4])] = clean_token(record[1])
+            name = attribute_record_name(record)
+            if not name:
+                continue
+            record_flags[name] = clean_token(record[1])
+            record_templates[name] = copy.deepcopy(record)
         if record_flags:
             result["recordFlags"] = record_flags
+        if record_templates:
+            result["attributeRecords"] = record_templates
     return result
+
+
+def attribute_record_name(record: list[object]) -> str:
+    if len(record) >= 2 and isinstance(record[-1], list) and record[-1] and clean_token(record[-1][0]) == "Pattern":
+        return clean_token(record[-2])
+    if len(record) > 4:
+        return clean_token(record[4])
+    return ""
 
 
 def form_object_info_metadata(form_root: object) -> list[object] | None:
@@ -1577,7 +1606,9 @@ def attribute_slots_from_form_root(form_root: object) -> dict[str, str]:
             continue
         slot_record = record[0]
         if isinstance(slot_record, list) and slot_record:
-            result[clean_token(record[4])] = clean_token(slot_record[0])
+            name = attribute_record_name(record)
+            if name:
+                result[name] = clean_token(slot_record[0])
     return result
 
 

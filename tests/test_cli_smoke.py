@@ -438,6 +438,127 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertIn("sentinel-root-panel-info", text)
 
+    def test_form_stream_preserves_top_level_profile_from_sidecar(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            xml = root / "Form.xml"
+            asset_root = root / "Form"
+            asset_root.mkdir()
+            xml.write_text(
+                """<?xml version='1.0' encoding='utf-8'?>
+<Form version="0.1">
+  <Title><Item lang="ru">List form</Item></Title>
+  <Pages><Page name="List form"/></Pages>
+</Form>
+""",
+                encoding="utf-8",
+            )
+            tail = ["1", "4", "1", "0", "0", "0", ["0"], ["0"], ["3", "0", ["0"]], "1", "2", "0", "0", "1"]
+            (asset_root / "Form.bin.container.json").write_text(
+                json.dumps({"formStreamProfile": {"marker": "26", "tail": tail}}),
+                encoding="utf-8",
+            )
+
+            text = form_stream_from_object_xml(ET.parse(xml).getroot(), asset_root).decode("utf-8-sig")
+            stream = parse_list_stream_document(text).value
+
+        self.assertEqual(stream[0], "26")
+        self.assertEqual(len(stream), 19)
+        self.assertEqual(stream[5:], tail)
+
+    def test_form_stream_preserves_noncompact_root_slots_from_sidecar(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            xml = root / "Form.xml"
+            asset_root = root / "Form"
+            asset_root.mkdir()
+            xml.write_text(
+                """<?xml version='1.0' encoding='utf-8'?>
+<Form version="0.1">
+  <Title><Item lang="ru">List form</Item></Title>
+  <Pages><Page name="List form"/></Pages>
+</Form>
+""",
+                encoding="utf-8",
+            )
+            (asset_root / "Form.bin.container.json").write_text(
+                json.dumps(
+                    {
+                        "formRoot": {
+                            "recordKind": "16",
+                            "titleMarker": "32",
+                            "titleScope": "4294967295",
+                            "width": "780",
+                            "height": "308",
+                            "slot5": "1",
+                            "slot6": "1",
+                            "slot7": "1",
+                            "slot8": "4",
+                            "slot9": "4",
+                            "slot10": "38",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            text = form_stream_from_object_xml(ET.parse(xml).getroot(), asset_root).decode("utf-8-sig")
+            stream = parse_list_stream_document(text).value
+            root_record = stream[1]
+
+        self.assertEqual(root_record[1][1], "32")
+        self.assertEqual(root_record[5:11], ["1", "1", "1", "4", "4", "38"])
+
+    def test_form_stream_preserves_attribute_record_template_from_sidecar(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            xml = root / "Form.xml"
+            asset_root = root / "Form"
+            asset_root.mkdir()
+            xml.write_text(
+                """<?xml version='1.0' encoding='utf-8'?>
+<Form version="0.1">
+  <Attributes>
+    <Attribute name="List" id="29">
+      <Type source="TypeDomainPattern">
+        <Pattern encoding="TypeDomainPattern" itemCount="1">
+          <PatternItem code="S" typeName="xs:string"/>
+        </Pattern>
+      </Type>
+    </Attribute>
+  </Attributes>
+  <Pages><Page name="List form"/></Pages>
+</Form>
+""",
+                encoding="utf-8",
+            )
+            template = [["0"], "0", "1", '"List"', ['"Pattern"', ['"S"']]]
+            link_table = ["2", ["1", ["1", ["0"]]], ["1", ["1", ["29"]]]]
+            (asset_root / "Form.bin.container.json").write_text(
+                json.dumps(
+                    {
+                        "attributesTable": {
+                            "marker": "0",
+                            "slotCount": "2",
+                            "recordFlags": {"List": "0"},
+                            "attributeRecords": {"List": template},
+                            "linkTable": link_table,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            text = form_stream_from_object_xml(ET.parse(xml).getroot(), asset_root).decode("utf-8-sig")
+            stream = parse_list_stream_document(text).value
+            attribute = stream[2][2][1]
+
+        self.assertEqual(len(attribute), 5)
+        self.assertEqual(attribute[0], ["0"])
+        self.assertEqual(attribute[-2], '"List"')
+        self.assertEqual(attribute[-1], ['"Pattern"', ['"S"']])
+        self.assertEqual(stream[2][3], link_table)
+
     def test_control_template_metadata_preserves_info_for_regular_controls(self) -> None:
         control_index = {
             "data": {},
