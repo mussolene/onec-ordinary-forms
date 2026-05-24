@@ -922,6 +922,15 @@ class CliSmokeTest(unittest.TestCase):
                   <TextDocumentField name="Text" id="67"/>
                   <GeographicalSchemaField name="Geo" id="68"/>
                   <GraphicalSchemaField name="Graph" id="69"/>
+                  <PivotChart name="Pivot" id="70">
+                    <Title><Item lang="ru">Pivot title</Item></Title>
+                  </PivotChart>
+                  <GanttChart name="Gantt" id="71">
+                    <Title><Item lang="ru">Gantt title</Item></Title>
+                  </GanttChart>
+                  <Dendrogram name="Dendrogram" id="72">
+                    <Title><Item lang="ru">Dendrogram title</Item></Title>
+                  </Dendrogram>
                 </Page>
               </Pages>
             </Form>"""
@@ -938,6 +947,9 @@ class CliSmokeTest(unittest.TestCase):
         text = self._find_control(stream, "14c4a229-bfc3-42fe-9ce1-2da049fd0109")
         geo = self._find_control(stream, "ad37194e-555e-4305-b718-5dca84baf145")
         graph = self._find_control(stream, "42248403-7748-49da-b782-e4438fd7bff3")
+        pivot = self._find_control(stream, "a26da99e-184a-4823-b0d6-62816d38dc4e")
+        gantt = self._find_control(stream, "e5fdc112-5c84-4a16-9728-72b85692b6e2")
+        dendrogram = self._find_control(stream, "984981b1-622d-4ebc-94f7-885f0cdfb59a")
 
         self.assertIsNotNone(command_bar)
         self.assertEqual(command_bar[2][0], "2")
@@ -967,6 +979,18 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(geo[2][0], "10")
         self.assertIsNotNone(graph)
         self.assertEqual(graph[2][1], "5")
+        self.assertIsNotNone(pivot)
+        self.assertEqual(pivot[2][0], "3")
+        self.assertEqual(pivot[2][1][2][0], "75")
+        self.assertEqual(pivot[2][1][2][8][2], ['"ru"', '"Pivot title"'])
+        self.assertIsNotNone(gantt)
+        self.assertEqual(gantt[2][0], "19")
+        self.assertEqual(gantt[2][1][2][0], "75")
+        self.assertEqual(gantt[2][1][2][8][2], ['"ru"', '"Gantt title"'])
+        self.assertIsNotNone(dendrogram)
+        self.assertEqual(dendrogram[2][0], "0")
+        self.assertEqual(dendrogram[2][1][2][0], "75")
+        self.assertEqual(dendrogram[2][1][2][8][2], ['"ru"', '"Dendrogram title"'])
 
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):

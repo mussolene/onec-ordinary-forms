@@ -465,6 +465,12 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
         return splitter_control_info(element)
     if control_type == "Chart":
         return chart_control_info()
+    if control_type == "PivotChart":
+        return pivot_chart_control_info(element, title_record)
+    if control_type == "GanttChart":
+        return gantt_chart_control_info(element, title_record)
+    if control_type == "Dendrogram":
+        return dendrogram_control_info(element, title_record)
     if control_type == "HTMLDocumentField":
         return html_document_field_control_info()
     if control_type == "ListBox":
@@ -806,6 +812,160 @@ def splitter_control_info(element: ET.Element) -> list[object]:
 
 def chart_control_info() -> list[object]:
     return ["11"]
+
+
+def pivot_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
+    return [
+        "3",
+        [
+            "0",
+            chart_control_info(),
+            diagram_presentation_record(element, title_record, kind="pivot"),
+            "0",
+            "0",
+            "0",
+            "0",
+            ["0"],
+            "0",
+            "0",
+            "0",
+            "0",
+        ],
+        ["0"],
+    ]
+
+
+def gantt_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
+    return [
+        "19",
+        [
+            "0",
+            chart_control_info(),
+            diagram_presentation_record(element, title_record, kind="gantt"),
+            "0",
+            "0",
+            "0",
+            "0",
+            ["0"],
+            "0",
+            "0",
+            "0",
+            "0",
+        ],
+        ["0"],
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+    ]
+
+
+def dendrogram_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
+    return [
+        "0",
+        [
+            "0",
+            chart_control_info(),
+            diagram_presentation_record(element, title_record, kind="dendrogram"),
+            "0",
+            "0",
+            "0",
+            "0",
+            ["0"],
+            "0",
+            "0",
+        ],
+    ]
+
+
+def diagram_presentation_record(element: ET.Element, title_record: list[object], *, kind: str) -> list[object]:
+    kind_code = {"pivot": "4", "gantt": "1", "dendrogram": "1"}.get(kind, "1")
+    return [
+        "75",
+        "1",
+        "0",
+        "1",
+        "0",
+        ["4", "0", ["1644953"], "0"],
+        ["4", "0", ["0"], "1", "2", "0", "e5cabe59-d992-4d31-8086-3116931aff81", "0"],
+        "3",
+        title_record,
+        "0",
+        "0",
+        "0",
+        "1",
+        [quoted_atom("U")],
+        [quoted_atom("U")],
+        "0",
+        "1",
+        "0",
+        "-1",
+        "0",
+        kind_code,
+        "0",
+        quoted_atom(", "),
+        "0",
+        ["1", "0"],
+        ["1", "0"],
+        ["4", "3", ["-3"], "3"],
+        "0",
+        "0",
+        title_record,
+        "1",
+        "0",
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["4", "3", ["-22"], "3"],
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["4", "3", ["-22"], "3"],
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        ["4", "3", ["-22"], "3"],
+        "0",
+        ["4", "3", ["-1"], "3"],
+        "1",
+        ["4", "3", ["-1"], "3"],
+        "1",
+        ["4", "3", ["-1"], "3"],
+        "0",
+        ["4", "0", ["16777215"], "0"],
+        ["4", "3", ["-3"], "3"],
+        ["4", "3", ["-3"], "3"],
+        ["4", "3", ["-3"], "3"],
+        ["8", "2", "0", ["-20"], "1", "100"],
+        ["8", "2", "0", ["-20"], "1", "100"],
+        ["8", "2", "0", ["-20"], "1", "100"],
+        "1",
+        "1",
+        "1",
+        "1",
+        "1",
+        ["1", "0"],
+        "0",
+    ]
 
 
 def html_document_field_control_info() -> list[object]:
