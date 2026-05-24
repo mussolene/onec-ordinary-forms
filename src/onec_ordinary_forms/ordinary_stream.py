@@ -858,6 +858,7 @@ def control_stream_from_xml_with_page(
         data_slot,
         radio_ordinal,
         control_template,
+        object_id,
     )
     metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
     if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "КоманднаяПанель3", "ОсновныеДействияФормы"}:
@@ -3300,6 +3301,7 @@ def geometry_stream_from_xml(
     data_slot: str = "",
     radio_ordinal: int = 0,
     control_template: dict[str, object] | None = None,
+    object_id: str = "0",
 ) -> list[object]:
     template_geometry = (control_template or {}).get("geometry")
     if isinstance(template_geometry, list):
@@ -3312,9 +3314,11 @@ def geometry_stream_from_xml(
     layout_order = position.get("layoutOrder") if position is not None else None
     bindings: list[object] = ["0"] * 6
     dimensions: list[object] = ["0"] * 4
+    has_explicit_geometry_bindings = False
     if position is not None:
         binding_container = position.find("Bindings")
         if binding_container is not None:
+            has_explicit_geometry_bindings = True
             for binding in binding_container.findall("Binding"):
                 slot = binding.get("slot")
                 if not slot and binding.get("coordinate"):
@@ -3339,6 +3343,8 @@ def geometry_stream_from_xml(
                         index = -1
                     if 0 <= index < len(dimensions):
                         dimensions[index] = dimension_binding_to_raw(binding)
+    if page_index is not None and page_order is not None and not has_explicit_geometry_bindings:
+        bindings, dimensions = default_paged_geometry_bindings(object_id, right, bottom, left, top)
     if control_type == "Splitter":
         default_group = str(page_order) if page_order is not None else "0"
         default_order = str(page_index) if page_index is not None else "0"
@@ -3530,6 +3536,36 @@ def layout_group_tail(
     except ValueError:
         next_order = "0"
     return [group, order, next_order, "0", "0"]
+
+
+def default_paged_geometry_bindings(
+    object_id: str,
+    right: str,
+    bottom: str,
+    left: str = "0",
+    top: str = "0",
+) -> tuple[list[object], list[object]]:
+    width = geometry_delta(right, left)
+    height = geometry_delta(bottom, top)
+    empty_anchor = ["2", "-1", "6", "0"]
+    return (
+        [
+            ["0", empty_anchor, empty_anchor],
+            ["0", ["2", object_id, "0", height], empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", ["2", object_id, "2", width], empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+        ],
+        [["0", object_id, "1"], "0", "1", ["0", object_id, "3"]],
+    )
+
+
+def geometry_delta(end: str, start: str) -> str:
+    try:
+        return str(int(end) - int(start))
+    except ValueError:
+        return "0"
 
 
 def geometry_stream_from_template(template_geometry: list[object], position: ET.Element | None) -> list[object]:

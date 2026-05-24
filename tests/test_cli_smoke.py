@@ -461,6 +461,7 @@ class CliSmokeTest(unittest.TestCase):
         templates = control_template_metadata(control_index)
 
         self.assertEqual(templates[0]["info"], control_index["tree"][0]["raw"][2])
+        self.assertEqual(templates[0]["childCount"], "0")
 
     def test_form_bin_unpack_assembles_descriptor_split_streams(self) -> None:
         with TemporaryDirectory() as temp_dir:

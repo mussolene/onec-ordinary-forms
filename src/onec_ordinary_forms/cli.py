@@ -1528,6 +1528,8 @@ def control_template_metadata(control_index: dict) -> list[dict[str, object]]:
                     template["geometry"] = geometry
                 if isinstance(raw[4], list):
                     template["metadata"] = raw[4]
+                if isinstance(raw[-1], list) and raw[-1]:
+                    template["childCount"] = clean_token(raw[-1][0])
                 if "info" in template or "geometry" in template:
                     result.append(template)
             child = item.get("child")
