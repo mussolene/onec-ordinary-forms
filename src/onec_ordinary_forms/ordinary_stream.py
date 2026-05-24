@@ -1169,13 +1169,17 @@ def checkbox_control_inner_info(element: ET.Element, title_record: list[object])
 
 
 def image_control_info(element: ET.Element, title_record: list[object], picture_payload: str) -> list[object]:
-    picture_record = ["3", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload if picture_payload else '""']], "0"]
+    picture_record: list[object]
+    if picture_payload:
+        picture_record = ["3", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload]], "0"]
+    else:
+        picture_record = page_style_group_record("0")
     return [
         "1",
         [
-            base_info_record_from_xml(element),
-            "15",
-            "2",
+            extended_base_info_record_from_xml(element),
+            "20",
+            "0",
             "0",
             picture_record,
             ["0", "0", "0"],
@@ -1184,6 +1188,10 @@ def image_control_info(element: ET.Element, title_record: list[object], picture_
             "0",
             "0",
             ["1", "0"],
+            "0",
+            "1",
+            "0",
+            "1",
         ],
         ["0"],
     ]
