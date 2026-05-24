@@ -681,7 +681,8 @@ class CliSmokeTest(unittest.TestCase):
             if isinstance(value, list):
                 if (
                     len(value) > 12
-                    and value[0] == "10"
+                    and isinstance(value[0], str)
+                    and value[0] in {"10", "19"}
                     and isinstance(value[12], list)
                     and len(value[12]) > 2
                     and value[12][2] == ['"ru"', '"Номер документа"']

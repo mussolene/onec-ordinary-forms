@@ -99,6 +99,14 @@ CORE_CONTROL_INFO_DESCRIPTORS = {
     ),
 }
 
+TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN = {
+    ('"S"',): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVFLCgIxDBWXwiy9QNYpJG3HNrcQxAOMOlsX4k56\r\r\nMhceySvYNqOOOmBTSF8+Ly90OZ/Vc7/eLoLN4gLr7nzuT0eoYAOpWaTy1MuCXJBH\r\r\nXxwl9GkKR3RIuZQph0grXHHG2oRusucXa0d4NwwU/Iw4VWM4linZapSRFObp+LSv\r\r\nAWUrx1qFNLIx8toHW0gvD/BRVGlpoM05w+WWPED6k30xTEgfCVqFECy3aGvV8B11\r\r\nb+nCyruDNSy9GN/21sQozthIu72wtJ0E1fC9BekelW5grINZBamM9AA=",
+    ('"N"', "10", "0", "0"): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVExDsIwDESMSDyBxbMjxUlK4k8gFh5QoCsDYkN5\r\r\nGQNP4gvEcSlVqUQcyTo7dz4rm+WintfjeWdcr+6wb2+37nqBCnaAZLFEXq+yVPQS\r\r\nIwkKGCTZjCHP4YS+kKlolJLVF16ScS6jn+X8YmXEL6GXoE/FqxtDSaaIW4GEVmGZ\r\r\njp+YDJCtPKH9CeqZNQUlwgHykAGGV4Ou7XVLz5Bc6QPkP91BYcb7yNE2xuioQTf+\r\r\nj7o4t3Eb/NkZ4o5NaDpnUmJvXLLHExM3LUf1MN3C6h5Vrlesg0kNqY38Bg==",
+    ('"D"', '"D"'): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVE7DsIwDEWMSD0Aq2dHipOUxDsHYOEABboyIDaU\r\r\nkzFwJK5AHJdfqUScyHr+PD8ry/msnvv1dmFsFhfYdOdzfzpCBWvA8nKzyAL1EiMJ\r\r\nChjE2YwhT+GEHm0pJVtCViu8OONcRj/Z84u1I74bBgp6RryqMZRkSrEaJbQKy3R8\r\r\n2miAbOUJ33kaebGgfbCF/PIAX0WV1g60JWdIruQB8p/si2FC+oewVYzRUYuuVg3f\r\r\nUffmLq6CPzhD3LMJbe9MSuyNS3a3Z+K246gaxltY3aPSDYx1MKkglZEf",
+    ('"B"',): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVE7DsIwDEWMSB25gGdHipOUxCsnYOEABboyIDaU\r\r\nkzFwJK5AHBfKpxJxVOfZz8+2upzP6rlfbxfGZnGBTXc+96cjVLCG3CyyPPUSIwkK\r\r\nGMTZjCFP4YQebaGSLSGrDC/OOJfRT9b8Yq2IY8EgQc+I12kMJelSrEYJrcLSHZ/2\r\r\n1UC28qSst+/oxYLWwRbyywN8kKqsHWRLzpBcyQPkP9mXwsToo9EqxuioRVdZw++o\r\r\ne3MXV8EfnCHu2YS2dyYl9sYlu9szcdtx1Bm+t7C6R5UbFGtj0oF0jPwA",
+    ('"#"', "4772b3b4-f4a3-49c0-a1a5-8cb5961511a3"): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVExbsMwDCw6Bsgn1JUERJGypV90yQNkQx07FNkC\r\r\nvaxDn9QvVBIVJ2kN1CRMHHk8UiA9P/Xv+/PrEuF4uJjXdD7nj3fTwYsBmWe38CL4\r\r\nJolR4moxUfIY1sXHiTxR4nI8lMZXpwjUkIC0YAtI2cMBGGylkq0pqwxuAZ0rwLs9\r\r\nf7F2zLeGIUHXDOs2SKFNqdazBFZhnQ5X+zWgvYpJWeN/j9RE+8zJlC0a80DqsnbI\r\r\n1hpS81Y3pvxT3RR2Vr8ZTXM9E3lwnTXO0d8dOLnonUU75YDCEjCGuGJa8hRzyMzZ\r\r\nqf799ZuE+lhM37NNLz8=",
+}
+
 
 BINDING_COORDINATE_SLOT = {
     "top": 1,
@@ -167,18 +175,21 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
 
     attributes = []
     attribute_type_patterns: dict[str, list[object]] = {}
+    attribute_slots: dict[str, str] = {}
     for attribute in root.findall("./Attributes/Attribute"):
         name = attribute.get("name", "")
         if not name:
             continue
         type_pattern = type_pattern_from_xml(attribute)
         attribute_type_patterns[name] = type_pattern
+        if attribute.get("slot"):
+            attribute_slots[name] = attribute.get("slot", "")
         attributes.append(attribute_record_from_xml(attribute))
 
     controls: list[object] = []
     for page in top_level_pages(root):
         for child in page:
-            control = control_stream_from_xml(child, asset_root, attribute_type_patterns)
+            control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots)
             if control:
                 controls.append(control)
 
@@ -505,14 +516,20 @@ def type_pattern_from_xml(attribute: ET.Element) -> list[object]:
     return result
 
 
-def control_stream_from_xml(element: ET.Element, asset_root: Path | None, attribute_type_patterns: dict[str, list[object]] | None = None) -> list[object] | None:
-    return control_stream_from_xml_with_page(element, asset_root, attribute_type_patterns or {}, None, None)
+def control_stream_from_xml(
+    element: ET.Element,
+    asset_root: Path | None,
+    attribute_type_patterns: dict[str, list[object]] | None = None,
+    attribute_slots: dict[str, str] | None = None,
+) -> list[object] | None:
+    return control_stream_from_xml_with_page(element, asset_root, attribute_type_patterns or {}, attribute_slots or {}, None, None)
 
 
 def control_stream_from_xml_with_page(
     element: ET.Element,
     asset_root: Path | None,
     attribute_type_patterns: dict[str, list[object]],
+    attribute_slots: dict[str, str],
     page_index: int | None,
     page_order: int | None,
 ) -> list[object] | None:
@@ -525,8 +542,10 @@ def control_stream_from_xml_with_page(
     object_id = required_control_id(element)
     name = required_control_name(element)
     info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns)
-    geometry = geometry_stream_from_xml(control_type, element.find("Position"), page_index, page_order)
-    metadata_name = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else name
+    data_path = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else ""
+    data_slot = attribute_slots.get(data_path, "")
+    geometry = geometry_stream_from_xml(control_type, element.find("Position"), page_index, page_order, data_slot)
+    metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
     if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "ОсновныеДействияФормы"}:
         metadata_scope = "8"
     else:
@@ -534,7 +553,7 @@ def control_stream_from_xml_with_page(
     metadata = ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
     children: list[object] = []
     for child in element:
-        child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, None, None)
+        child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, None, None)
         if child_stream:
             children.append(child_stream)
     pages = element.find("Pages")
@@ -545,7 +564,7 @@ def control_stream_from_xml_with_page(
             for child in page:
                 if not control_type_from_xml_tag(child.tag):
                     continue
-                child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, page_number, page_child_order)
+                child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, page_number, page_child_order)
                 if child_stream:
                     page_children.append((int(child_stream[1]), child_stream))
                     page_child_order += 1
@@ -633,7 +652,8 @@ def control_info_from_xml(
     if control_type == "RadioButton":
         return radio_button_control_info(element, title_record, actions)
     if control_type == "InputField":
-        return input_field_control_info(element, actions)
+        data_path = data_path_from_xml(element)
+        return input_field_control_info(element, actions, attribute_type_patterns.get(data_path, []))
     if control_type == "GroupBox":
         return group_box_control_info(element, title_record)
     if control_type == "Splitter":
@@ -846,7 +866,8 @@ def panel_position_records(page_count: int, width: str, height: str, *, mode: st
 
 
 def label_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
-    label_mode = "4"
+    title = get_multilang_text(element, "Title") or element.get("name", "")
+    label_mode = "0" if title.endswith(":") else "4"
     return [
         "3",
         [
@@ -876,24 +897,45 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
     ]
 
 
-def input_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+def input_field_control_info(element: ET.Element, actions: list[object], type_pattern: list[object] | None = None) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
+    pattern = type_pattern or [quoted_atom("S")]
     return [
         descriptor.info_kind,
-        [quoted_atom("Pattern"), [quoted_atom("S")]],
+        [quoted_atom("Pattern"), pattern],
         [input_field_info_record_from_xml(element)],
+        input_field_data_source_record(element),
         ["1", *actions] if actions else ["0"],
+        "0",
+        "1",
+        "0",
+        ["1", "0"],
+        "0",
     ]
+
+
+def input_field_data_source_record(element: ET.Element) -> list[object]:
+    if element.findtext("DataPath"):
+        return [
+            "1",
+            [
+                "9a7643d2-19e9-45e2-8893-280bc9195a97",
+                ["4", [quoted_atom("U")], [quoted_atom("U")], "0", '""', "0", "0"],
+            ],
+        ]
+    return ["0"]
 
 
 def input_field_info_record_from_xml(element: ET.Element) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
+    base = extended_base_info_record_from_xml(element)
+    base[11] = ["3", "1", ["-18"], "0", "0", "0"]
     record = [
-        base_info_record_from_xml(element),
-        "21",
+        base,
+        "31",
         "0",
         "0",
-        "0",
+        "1",
         "0",
         "0",
         "0",
@@ -901,6 +943,39 @@ def input_field_info_record_from_xml(element: ET.Element) -> list[object]:
         "0",
         "0",
         "1",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "4",
+        "0",
+        [quoted_atom("U")],
+        [quoted_atom("U")],
+        '""',
+        "0",
+        "1",
+        "0",
+        "0",
+        "0",
+        "0",
+        empty_page_style_record(),
+        empty_page_style_record(),
+        "0",
+        "0",
+        "0",
+        ["0", "0", "0"],
+        ["1", "0"],
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "16777215",
+        "2",
+        "0",
         "0",
     ]
     record[descriptor.slot_index("ReadOnly")] = bool_record_from_xml(element, "ReadOnly", default=False)
@@ -1532,15 +1607,24 @@ def table_control_info(element: ET.Element, actions: list[object], type_pattern:
             base,
             table_view_record_from_xml(element),
         ],
-        ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]],
+        table_data_source_record(element),
         ["1", *actions] if actions else ["0"],
     ]
+
+
+def table_data_source_record(element: ET.Element) -> list[object]:
+    if table_columns_from_xml(element):
+        return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "1"]]
+    return ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]]
 
 
 def table_view_record_from_xml(element: ET.Element) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["Table"]
     columns_count = element.findtext("ColumnsCount") or "0"
     rows_count = element.findtext("RowsCount") or "0"
+    columns = table_columns_from_xml(element)
+    if columns:
+        return extended_table_view_record(columns)
     record = [
         "12",
         "100801549",
@@ -1575,6 +1659,122 @@ def table_view_record_from_xml(element: ET.Element) -> list[object]:
         default=True,
     )
     return record
+
+
+def table_columns_from_xml(element: ET.Element) -> list[ET.Element]:
+    columns = element.find("Columns")
+    if columns is None:
+        return []
+    return columns.findall("Column")
+
+
+def extended_table_view_record(columns: list[ET.Element]) -> list[object]:
+    return [
+        "23",
+        "117644301",
+        default_color_record(),
+        default_color_record(),
+        default_color_record(),
+        default_color_record(),
+        ["4", "3", ["-14"], "3"],
+        ["4", "3", ["-15"], "3"],
+        ["4", "3", ["-13"], "3"],
+        "2",
+        "2",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+        "1",
+        ["8", "2", "0", ["-20"], "1", "100"],
+        ["8", "2", "0", ["-20"], "1", "100"],
+        "2",
+        "0",
+        "1",
+        ["5", *[table_column_record(column, index) for index, column in enumerate(columns)]],
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "100",
+        "1",
+        "2",
+        "1",
+        "1",
+        "0",
+        "0",
+        "2",
+    ]
+
+
+def table_column_record(column: ET.Element, index: int) -> list[object]:
+    title = get_multilang_text(column, "Title") or column.get("name") or f"Колонка{index + 1}"
+    order = column.get("order") or str(index)
+    pattern = type_pattern_from_xml(column) or [quoted_atom("S")]
+    payload = TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN.get(tuple(pattern), TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN[(quoted_atom("S"),)])
+    body = [
+        "23",
+        localized_text_record(title),
+        ["1", "0"],
+        ["1", "0"],
+        "1e2",
+        order,
+        "-1",
+        "-1",
+        "-1",
+        "12590592",
+        empty_page_style_record(),
+        empty_page_style_record(),
+        empty_page_style_record(),
+        "16",
+        "16",
+        "d2314b5d-8da4-4e0f-822b-45e7500eae09",
+        default_color_record(),
+        default_color_record(),
+        default_color_record(),
+        default_color_record(),
+        default_color_record(),
+        default_color_record(),
+        ["8", "3", "0", "1", "100"],
+        ["8", "3", "0", "1", "100"],
+        ["8", "3", "0", "1", "100"],
+        "1",
+        "0",
+        "0",
+        "4",
+        "0",
+        quoted_atom(title),
+        [],
+        "15",
+        "0",
+        ["1", "0"],
+        [quoted_atom("Pattern"), pattern],
+        "0",
+        "1",
+        ORDINARY_CONTROL_GUID_BY_TYPE["InputField"],
+        [[payload], "0"],
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1e2",
+        "0",
+        "1",
+        "0",
+        "0",
+        "2",
+        "0",
+    ]
+    return [
+        "737535a4-21e6-4971-8513-3e3173a9fedd",
+        ["8", ["8", body, ["-1"], ["-1"], ["-1"]], quoted_atom(title), '""', '""', "0"],
+    ]
 
 
 def spreadsheet_document_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
@@ -1777,6 +1977,7 @@ def geometry_stream_from_xml(
     position: ET.Element | None,
     page_index: int | None = None,
     page_order: int | None = None,
+    data_slot: str = "",
 ) -> list[object]:
     left = position.get("left", "0") if position is not None else "0"
     top = position.get("top", "0") if position is not None else "0"
@@ -1817,6 +2018,51 @@ def geometry_stream_from_xml(
             trailer = ["0", "0", "0", "0", "1", "3", "1", "1"]
         dimension_flag = "1" if any(dimension != "0" for dimension in dimensions) else "0"
         return ["8", left, top, right, bottom, "1", *bindings, dimension_flag, *dimensions, *trailer]
+    if control_type == "Table":
+        return [
+            "8",
+            left,
+            top,
+            right,
+            bottom,
+            "1",
+            *bindings,
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            str(page_index),
+            "1",
+            str(page_index),
+            "0",
+            "0",
+        ]
+    if data_slot:
+        dimension_flag = "1" if dimensions[0] != "0" else "0"
+        dimension_part = [dimensions[0]] if dimension_flag == "1" else []
+        return [
+            "8",
+            left,
+            top,
+            right,
+            bottom,
+            "1",
+            *bindings,
+            dimension_flag,
+            *dimension_part,
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            data_slot,
+            "1",
+            "2",
+            "0",
+            "0",
+        ]
     paged_trailer = ["0", "0"] if control_type == "CommandBar" else GEOMETRY_TRAILER_PROFILE["paged"]
     return [
         "8",

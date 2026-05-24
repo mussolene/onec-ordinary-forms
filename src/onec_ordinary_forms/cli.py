@@ -678,6 +678,7 @@ def add_semantic_item(
     add_data_path(node, item, item_data)
     add_visible(node, item_data)
     add_read_only(node, item, item_data)
+    add_table_columns(node, item, item_data)
     add_text_color(node, item_data)
     add_back_color(node, item_data)
     add_border_color(node, item_data)
@@ -805,6 +806,54 @@ def add_read_only(parent: ET.Element, item: dict, item_data: object) -> None:
         return
     if clean_token(input_info[12]) == "1":
         set_text(parent, "ReadOnly", "true")
+
+
+def add_table_columns(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "Table":
+        return
+    columns = table_columns_from_item_data(item_data)
+    if not columns:
+        return
+    columns_node = ET.SubElement(parent, "Columns")
+    for column in columns:
+        column_node = ET.SubElement(columns_node, "Column")
+        column_node.set("name", column["name"])
+        column_node.set("order", column["order"])
+        add_multilang_text(column_node, "Title", column["title"])
+        add_type(column_node, column["pattern"], {})
+
+
+def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
+    if not isinstance(item_data, dict):
+        return []
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return []
+    info = raw[2]
+    if len(info) <= 2 or not isinstance(info[2], list) or len(info[2]) <= 1:
+        return []
+    view = info[2][1]
+    if not isinstance(view, list) or len(view) <= 23 or not isinstance(view[23], list):
+        return []
+    result: list[dict[str, object]] = []
+    for column in view[23][1:]:
+        if not isinstance(column, list) or len(column) < 2 or not isinstance(column[1], list):
+            continue
+        if len(column[1]) <= 1 or not isinstance(column[1][1], list) or len(column[1][1]) <= 1:
+            continue
+        body = column[1][1][1]
+        if not isinstance(body, list) or len(body) <= 35:
+            continue
+        title = first_localized_text(body[1]) if len(body) > 1 else ""
+        order = clean_token(body[5]) if len(body) > 5 else str(len(result))
+        name = clean_token(body[30]) if len(body) > 30 else title
+        pattern_record = body[35]
+        pattern = pattern_record[1] if isinstance(pattern_record, list) and len(pattern_record) > 1 and isinstance(pattern_record[1], list) else []
+        if not title and name:
+            title = name
+        if title:
+            result.append({"name": name or title, "title": title, "order": order, "pattern": pattern})
+    return result
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:
