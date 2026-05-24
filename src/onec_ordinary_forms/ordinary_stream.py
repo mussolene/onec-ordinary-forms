@@ -452,10 +452,12 @@ def control_info_from_xml(element: ET.Element, name: str, control_type: str, ass
     if control_type == "Panel":
         return panel_control_info_from_xml(element, title_record)
     if control_type == "Button":
-        return button_control_info(title_record, actions)
+        return button_control_info(element, title_record, actions)
     if control_type == "Image":
         picture_payload = picture_payload_from_xml(element.find("Picture"), asset_root)
-        return image_control_info(title_record, picture_payload)
+        return image_control_info(element, title_record, picture_payload)
+    if control_type == "CheckBox":
+        return checkbox_control_info(element, title_record, actions)
     if control_type == "InputField":
         return input_field_control_info(element, actions)
     return label_control_info(element, title_record, actions)
@@ -604,11 +606,11 @@ def input_field_info_record_from_xml(element: ET.Element) -> list[object]:
     ]
 
 
-def button_control_info(title_record: list[object], actions: list[object]) -> list[object]:
+def button_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
     return [
         "1",
         [
-            button_base_info_record(),
+            button_base_info_record(element),
             "10",
             title_record,
             "1",
@@ -625,12 +627,32 @@ def button_control_info(title_record: list[object], actions: list[object]) -> li
     ]
 
 
-def image_control_info(title_record: list[object], picture_payload: str) -> list[object]:
+def checkbox_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
+    return [
+        "1",
+        [
+            [
+                base_info_record_from_xml(element),
+                "4",
+                title_record,
+                "1",
+                "0",
+                "1",
+            ],
+            "1",
+            "0",
+            "0",
+        ],
+        ["1", *actions] if actions else ["0"],
+    ]
+
+
+def image_control_info(element: ET.Element, title_record: list[object], picture_payload: str) -> list[object]:
     picture_record = ["3", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload if picture_payload else '""']], "0"]
     return [
         "1",
         [
-            base_info_record_from_xml(None),
+            base_info_record_from_xml(element),
             "15",
             "2",
             "0",
@@ -646,8 +668,8 @@ def image_control_info(title_record: list[object], picture_payload: str) -> list
     ]
 
 
-def button_base_info_record() -> list[object]:
-    base = base_info_record_from_xml(None)
+def button_base_info_record(element: ET.Element) -> list[object]:
+    base = base_info_record_from_xml(element)
     base[5] = "1"
     return base
 

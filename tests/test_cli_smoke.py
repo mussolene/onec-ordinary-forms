@@ -737,6 +737,58 @@ class CliSmokeTest(unittest.TestCase):
         add_read_only(node, {"type": "InputField"}, item_data)
         self.assertEqual(node.findtext("ReadOnly"), "true")
 
+    def test_build_bin_writes_button_base_info_from_xml(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Button name="Run" id="26">
+                    <Title><Item lang="ru">Run</Item></Title>
+                    <Visible>false</Visible>
+                    <ToolTip><Item lang="ru">Run tooltip</Item></ToolTip>
+                  </Button>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        button = self._find_control(stream, "6ff79819-710e-4145-97cd-1618da79e3e2")
+
+        self.assertIsNotNone(button)
+        base = button[2][1][0]
+        self.assertEqual(button[2][0], "1")
+        self.assertEqual(base[1], "0")
+        self.assertEqual(base[12][2], ['"ru"', '"Run tooltip"'])
+
+    def test_build_bin_uses_checkbox_info_kind_and_named_title(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <CheckBox name="UseColor" id="33">
+                    <Title><Item lang="ru">Use color</Item></Title>
+                    <ToolTip><Item lang="ru">Use color tooltip</Item></ToolTip>
+                  </CheckBox>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        checkbox = self._find_control(stream, "35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26")
+
+        self.assertIsNotNone(checkbox)
+        info = checkbox[2]
+        self.assertEqual(info[0], "1")
+        checkbox_info = info[1][0]
+        self.assertEqual(checkbox_info[2][2], ['"ru"', '"Use color"'])
+        self.assertEqual(checkbox_info[0][12][2], ['"ru"', '"Use color tooltip"'])
+
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):
             if value and value[0] == class_id:
