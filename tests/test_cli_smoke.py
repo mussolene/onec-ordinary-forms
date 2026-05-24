@@ -1068,7 +1068,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(table[2][2][1][21], "3")
         self.assertEqual(table[2][2][1][22], "0")
         self.assertIsNotNone(spreadsheet)
-        self.assertEqual(spreadsheet[2][0], "14")
+        self.assertEqual(spreadsheet[2][0], "18")
         self.assertEqual(spreadsheet[2][3], "200")
         self.assertEqual(spreadsheet[2][4], "100")
         self.assertIsNotNone(track)

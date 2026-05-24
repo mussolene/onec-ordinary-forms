@@ -1425,7 +1425,7 @@ def track_bar_control_info(element: ET.Element) -> list[object]:
     return [
         "1",
         [
-            base_info_record_from_xml(element),
+            extended_base_info_record_from_xml(element),
             "5",
             element.findtext("MinimumValue") or "0",
             element.findtext("MaximumValue") or "100",
@@ -1441,14 +1441,16 @@ def track_bar_control_info(element: ET.Element) -> list[object]:
 
 
 def calendar_field_control_info(element: ET.Element) -> list[object]:
+    base = extended_base_info_record_from_xml(element)
+    base[11] = ["3", "1", ["-18"], "0", "0", "0"]
     return [
         "1",
         [
-            base_info_record_from_xml(element),
+            base,
             "9",
-            ["3", "3", ["-16"]],
-            ["3", "3", ["-14"]],
-            ["3", "3", ["-15"]],
+            ["4", "3", ["-16"], "3"],
+            ["4", "3", ["-14"], "3"],
+            ["4", "3", ["-15"], "3"],
             element.findtext("PeriodStart") or "00010101000000",
             element.findtext("PeriodEnd") or "00010101000000",
             "1",
@@ -1465,7 +1467,7 @@ def calendar_field_control_info(element: ET.Element) -> list[object]:
 
 def text_document_field_control_info(element: ET.Element) -> list[object]:
     return [
-        base_info_record_from_xml(element),
+        extended_base_info_record_from_xml(element),
         "6",
         "1",
         "00000000-0000-0000-0000-000000000000",
@@ -1878,47 +1880,60 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
 
 def spreadsheet_document_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
     position = element.find("Position")
-    width = position.get("width", "100") if position is not None else "100"
-    height = position.get("height", "100") if position is not None else "100"
+    left = position.get("left", "0") if position is not None else "0"
+    top = position.get("top", "0") if position is not None else "0"
+    right = position.get("right", "100") if position is not None else "100"
+    bottom = position.get("bottom", "100") if position is not None else "100"
     return [
-        "14",
-        "8",
+        "18",
+        left,
+        top,
+        right,
+        bottom,
+        "5",
+        "5",
         "0",
-        width,
-        height,
-        "5",
-        "5",
         "1",
-        "1",
-        color_record_from_xml(element, "BackColor"),
+        spreadsheet_back_color_record_from_xml(element),
         ["3", "1", ["-18"], "0", "0", "0"],
         spreadsheet_settings_record(),
+        "0",
         "1",
-        "1",
-        ["1", "6", "0", "100", "0", "0", "0", "1", "1", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", quoted_atom("ru"), "0", "1", ["3", "6", "4", "6", "4", "00000000-0000-0000-0000-000000000000"], "0"],
+        ["3", "0", "0", "100", "0", "0", "0", "1", "1", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", quoted_atom("ru"), "0", "1", ["3", "0", "0", "0", "0", "00000000-0000-0000-0000-000000000000"], "0", "0", "0", "0", "0"],
         "1",
         "1",
         ["1", *actions] if actions else ["0"],
-        "1",
+        "0",
+        "0",
+        "0",
+        "0",
         "0",
         "1",
         "0",
-        "0",
-        "1",
-        "0",
         "1",
         "1",
         "0",
         "0",
+        "0",
+        "0",
+        "1",
+        "1",
     ]
+
+
+def spreadsheet_back_color_record_from_xml(element: ET.Element) -> list[object]:
+    node = element.find("BackColor")
+    if node is None or not node.text:
+        return ["4", "3", ["-22"], "3"]
+    return color_record_from_xml(element, "BackColor")
 
 
 def spreadsheet_settings_record() -> list[object]:
     return [
         "8",
         "1",
-        "1",
-        [quoted_atom("ru"), quoted_atom("ru"), "1", "1", quoted_atom("ru"), quoted_atom("Русский"), quoted_atom("Русский")],
+        "12",
+        [quoted_atom("ru"), quoted_atom("ru"), "1", "1", quoted_atom("ru"), quoted_atom("Русский"), quoted_atom("Русский"), "1"],
         ["128", "72"],
         ["0"],
         "0",
@@ -1930,9 +1945,6 @@ def spreadsheet_settings_record() -> list[object]:
         ["0", "0"],
         "0",
         "2",
-        "1",
-        "1",
-        "0",
         "0",
         ["0", "0", "00000000-0000-0000-0000-000000000000", "0"],
         "0",
@@ -1949,7 +1961,7 @@ def spreadsheet_settings_record() -> list[object]:
         ["0"],
         ["0"],
         '""',
-        [["0"]],
+        [["0", "6", "6", [quoted_atom("N"), "1000"], "7", [quoted_atom("N"), "1000"], "8", [quoted_atom("N"), "1000"], "9", [quoted_atom("N"), "1000"], "10", [quoted_atom("N"), "1000"], "11", [quoted_atom("N"), "1000"]]],
         ["0", "-1", "-1", "-1", "-1", "00000000-0000-0000-0000-000000000000"],
         "0",
         "0",
@@ -1967,8 +1979,19 @@ def spreadsheet_settings_record() -> list[object]:
         "0",
         "0",
         "2",
-        ["3", "3", ["-1"]],
-        ["3", "3", ["-3"]],
+        ["4", "3", ["-1"], "3"],
+        ["4", "3", ["-3"], "3"],
+        "0",
+        "0",
+        "0",
+        '""',
+        "0",
+        ["3", "0", "0", "100", "1", "1", "0", "1", "1", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", '""', "0", "0", "0", "0", "0", "0", "0"],
+        ["0"],
+        "0",
+        "0",
+        "0",
+        "1",
         "0",
         "0",
         "0",
@@ -2173,6 +2196,20 @@ def geometry_stream_from_xml(
             "0",
             "0",
             *layout_group_tail(layout_group, layout_order, default_group, default_order),
+        ]
+    if control_type in {"SpreadsheetDocumentField", "TextDocumentField"} and page_index is not None and page_order is not None:
+        return [
+            "8",
+            left,
+            top,
+            right,
+            bottom,
+            "1",
+            *bindings,
+            *dimensions,
+            "0",
+            "0",
+            *layout_group_tail(layout_group, layout_order, str(page_order), str(page_index)),
         ]
     if page_index is None or page_order is None:
         trailer = GEOMETRY_TRAILER_PROFILE.get(control_type, GEOMETRY_TRAILER_PROFILE["default"])
