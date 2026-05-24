@@ -315,7 +315,7 @@ list-stream/скобкоформат платформы и затем упако
 
 ## Status
 
-Current release: `0.3.0`.
+Current release: `0.4.0`.
 
 Current implementation status:
 
@@ -325,7 +325,17 @@ Current implementation status:
 - validate `Form.xml` against the bundled ordinary-form schemas;
 - build ordinary `Form.bin` back from the named object XML package without
   template `Form.bin`;
+- preserve compact platform profile metadata in sidecars for no-op ordinary
+  form byte round-trips while keeping the public `Form.xml` object-only;
 - scan local EPF/ERF corpora without committing private processors or exports.
+
+Validation status for this release:
+
+- one UT ordinary list-form no-op dump/build is byte-identical for the full
+  `Form.bin` container, form payload, and module payload;
+- first-50 UT corpus smoke currently has no exceptions and keeps module
+  payloads stable, but only 1/50 forms are full byte-identical;
+- the next known mismatch class is a root format/profile length variant.
 
 ## Install
 
