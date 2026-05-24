@@ -1586,6 +1586,7 @@
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
+          <xs:element name="ChartKind" type="xs:string"/>
           <xs:element name="Events" type="ChartEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>

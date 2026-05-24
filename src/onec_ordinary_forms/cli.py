@@ -696,6 +696,7 @@ def add_semantic_item(
     add_visible(node, item_data)
     add_read_only(node, item, item_data)
     add_table_columns(node, item, item_data)
+    add_chart_properties(node, item, item_data)
     add_pivot_chart_properties(node, item, item_data)
     add_geographical_schema_properties(node, item, item_data)
     add_label_properties(node, item, item_data)
@@ -902,6 +903,19 @@ def add_pivot_chart_properties(parent: ET.Element, item: dict, item_data: object
         set_text(parent, "PivotChartKind", kind)
     add_pivot_chart_fields(parent, presentation)
     add_pivot_chart_source_data(parent, presentation)
+
+
+def add_chart_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "Chart":
+        return
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 3 or not isinstance(raw[3], list):
+        return
+    presentation = raw[3]
+    if len(presentation) > 20:
+        set_text(parent, "ChartKind", clean_token(presentation[20]))
 
 
 def pivot_chart_presentation_record(item_data: object) -> list[object] | None:

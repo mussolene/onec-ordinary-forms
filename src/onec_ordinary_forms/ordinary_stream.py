@@ -588,6 +588,8 @@ def control_stream_from_xml_with_page(
         raise ValueError(f"Unsupported ordinary form control type for stream writer: {element.tag}")
     object_id = required_control_id(element)
     name = required_control_name(element)
+    title = get_multilang_text(element, "Title")
+    title_record = localized_text_record(title or name)
     info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns)
     data_path = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else ""
     data_slot = attribute_slots.get(data_path, "")
@@ -631,6 +633,8 @@ def control_stream_from_xml_with_page(
                     page_child_order += 1
         children.extend(child for _, child in sorted(page_children, key=lambda item: item[0]))
     child_table: list[object] = [str(len(children)), *children]
+    if control_type == "Chart":
+        return [class_id, object_id, info, chart_presentation_record(element, title_record), geometry, metadata, child_table]
     if control_type == "GeographicalSchemaField":
         return [class_id, object_id, info, geographical_schema_settings_record(element), geometry, metadata, child_table]
     return [class_id, object_id, info, geometry, metadata, child_table]
@@ -1291,6 +1295,10 @@ def chart_control_info() -> list[object]:
     return ["11"]
 
 
+def chart_presentation_record(element: ET.Element, title_record: list[object]) -> list[object]:
+    return diagram_presentation_record(element, title_record, kind="chart")
+
+
 def pivot_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
     body = DIAGRAM_BODY_DESCRIPTOR.build({2: diagram_presentation_record(element, title_record, kind="pivot")})
     return PIVOT_CHART_INFO_DESCRIPTOR.build({1: body, 2: pivot_chart_info_secondary_record()})
@@ -1401,8 +1409,10 @@ def dendrogram_control_info(element: ET.Element, title_record: list[object]) -> 
 
 def diagram_presentation_record(element: ET.Element, title_record: list[object], *, kind: str) -> list[object]:
     kind_code = (element.findtext("PivotChartKind") or "").strip() if kind == "pivot" else ""
+    if kind == "chart":
+        kind_code = (element.findtext("ChartKind") or "").strip()
     if not kind_code:
-        kind_code = {"pivot": "4", "gantt": "1", "dendrogram": "1"}.get(kind, "1")
+        kind_code = {"pivot": "4", "chart": "6", "gantt": "1", "dendrogram": "1"}.get(kind, "1")
     record = [
         "75",
         "1",
@@ -1464,6 +1474,8 @@ def diagram_presentation_record(element: ET.Element, title_record: list[object],
         ["1", "0"],
         "0",
     ]
+    if kind in {"chart", "gantt", "dendrogram"}:
+        record[29] = localized_text_record(required_control_name(element))
     if kind == "pivot":
         apply_pivot_chart_default_presentation_settings(record, title_record)
         apply_pivot_chart_fields(record, element, kind_code)

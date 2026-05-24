@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
 from onec_ordinary_forms.cli import (
+    add_chart_properties,
     add_pivot_chart_properties,
     format_xml_file,
     pretty_xml_bytes,
@@ -166,6 +167,21 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(point.get("valueType"), "N")
         self.assertEqual(point.get("value"), "2")
         self.assertEqual(point.text, "A\r\nB\r\n2")
+
+    def test_chart_dump_uses_typed_chart_kind(self) -> None:
+        item_data = {
+            "raw": [
+                "a8b97779-1a4b-4059-b09c-807f86d2a461",
+                "39",
+                ["11"],
+                ["75", "1", "0", "1", "0", "0", "0", "3", ["1", "1", ['"ru"', '"Chart"']], "0", "0", "0", "1", ['"U"'], ['"U"'], "0", "1", "0", "-1", "0", "6"],
+            ],
+        }
+        node = ET.Element("Chart")
+
+        add_chart_properties(node, {"type": "Chart"}, item_data)
+
+        self.assertEqual(node.findtext("ChartKind"), "6")
 
     def test_ordinary_model_keeps_control_tables_together(self) -> None:
         form = [
@@ -1042,6 +1058,9 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(splitter[2][0], "0")
         self.assertIsNotNone(chart)
         self.assertEqual(chart[2], ["11"])
+        self.assertEqual(chart[3][0], "75")
+        self.assertEqual(chart[3][20], "6")
+        self.assertEqual(chart[4][0], "8")
         self.assertIsNotNone(html)
         self.assertEqual(html[2][0], "5")
         self.assertIsNotNone(list_box)
