@@ -367,7 +367,7 @@ python3 tools/vendor_platform_schemas.py \
 
 ## Status / Статус
 
-Current release: `0.4.1`.
+Current release: `0.4.2`.
 
 Current implementation status:
 
@@ -395,6 +395,8 @@ Current implementation status:
 
 Validation status:
 
+- `v0.4.2` extends the `v0.4.1` edit stabilization with strict
+  platform-validated add `Button` and delete leaf `LabelDecoration` scenarios.
 - `v0.4.1` preserves the `v0.4.0` no-op rebuild baseline and adds a strict
   platform-validated XML add-control path for a paged `LabelDecoration` with
   `id=max(existing)+1`.
@@ -406,6 +408,9 @@ Validation status:
 
 Статус проверок:
 
+- `v0.4.2` расширяет стабилизацию редактирования `v0.4.1` строгими
+  платформенными проверками добавления `Button` и удаления leaf
+  `LabelDecoration`.
 - `v0.4.1` сохраняет baseline обратной сборки `v0.4.0` и добавляет строгую
   платформенную проверку добавления paged `LabelDecoration` из XML с
   `id=max(existing)+1`.
