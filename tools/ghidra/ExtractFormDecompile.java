@@ -13,6 +13,7 @@ import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
+import ghidra.program.model.symbol.Reference;
 import java.io.File;
 import java.io.PrintWriter;
 import java.util.LinkedHashMap;
@@ -70,6 +71,28 @@ public class ExtractFormDecompile extends GhidraScript {
             return byAddress;
         }
         return functionBySymbol(target);
+    }
+
+    private String callersJson(Function function) {
+        StringBuilder result = new StringBuilder("[");
+        boolean first = true;
+        for (Reference ref : getReferencesTo(function.getEntryPoint())) {
+            Function caller = getFunctionContaining(ref.getFromAddress());
+            if (!first) {
+                result.append(",");
+            }
+            first = false;
+            result
+                .append("{\"from\":\"")
+                .append(ref.getFromAddress())
+                .append("\",\"type\":\"")
+                .append(esc(ref.getReferenceType().toString()))
+                .append("\",\"function\":\"")
+                .append(esc(caller == null ? "" : caller.getName(true)))
+                .append("\"}");
+        }
+        result.append("]");
+        return result.toString();
     }
 
     @Override
@@ -142,7 +165,8 @@ public class ExtractFormDecompile extends GhidraScript {
                     "    {\"name\":\"" + esc(function.getName(true))
                         + "\",\"address\":\"" + function.getEntryPoint()
                         + "\",\"signature\":\"" + esc(function.getSignature().toString())
-                        + "\",\"body\":\"" + esc(c)
+                        + "\",\"callers\":" + callersJson(function)
+                        + ",\"body\":\"" + esc(c)
                         + "\",\"error\":\"" + esc(error)
                         + "\"}"
                 );

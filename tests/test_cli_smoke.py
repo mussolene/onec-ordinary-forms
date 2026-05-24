@@ -25,6 +25,12 @@ from onec_ordinary_forms.bracket import extract_elem_json_from_bracket
 from onec_ordinary_forms.liststream import dumps, dumps_list_out_stream, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
+from onec_ordinary_forms.ordinary_platform import (
+    PLATFORM_TRANSFER_RECORD_SIZE,
+    PlatformTransferRecord,
+    pack_platform_transfer_records,
+    unpack_platform_transfer_records,
+)
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
 from onec_ordinary_forms.ordinary_stream import PLATFORM_CONTROL_FORMAT_IDS, apply_geometry_bindings_to_raw, form_stream_from_object_xml
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
@@ -82,6 +88,19 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(ordinary_control_type("381ed624-9217-4e63-85db-c4c3cb87daae"), "InputField")
         self.assertEqual(ordinary_control_type("e69bf21d-97b2-4f37-86db-675aea9ec2cb"), "CommandBar")
         self.assertEqual(ordinary_control_type("35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26"), "CheckBox")
+
+    def test_platform_transfer_records_use_confirmed_16_byte_layout(self) -> None:
+        records = [
+            PlatformTransferRecord(1, 2, 3, 4),
+            PlatformTransferRecord(0x10, 0x20, 0x30, 0x40),
+        ]
+
+        payload = pack_platform_transfer_records(records)
+
+        self.assertEqual(len(payload), 4 + len(records) * PLATFORM_TRANSFER_RECORD_SIZE)
+        self.assertEqual(unpack_platform_transfer_records(payload), records)
+        with self.assertRaises(ValueError):
+            unpack_platform_transfer_records(payload + b"\x00")
 
     def test_ordinary_model_keeps_control_tables_together(self) -> None:
         form = [

@@ -9,10 +9,29 @@ the editable XML object model.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from struct import pack, unpack_from
+
 
 CF_FORM_CONTROLS8_FORMAT_ID = 0x2500
 CF_FORM_CONTROLS_POSITION8_FORMAT_ID = 0x5500
 CF_FORM_CONTROLS_INFO8_FORMAT_ID = 0x9D00
+
+PLATFORM_TRANSFER_COUNT_SIZE = 4
+PLATFORM_TRANSFER_RECORD_SIZE = 0x10
+
+
+@dataclass(frozen=True)
+class PlatformTransferRecord:
+    """One 16-byte entry from platform cf_form_controls_info8/position8 data."""
+
+    word0: int
+    word1: int
+    word2: int
+    word3: int
+
+    def as_tuple(self) -> tuple[int, int, int, int]:
+        return (self.word0, self.word1, self.word2, self.word3)
 
 
 ORDINARY_CONTROL_CLASS_BY_GUID = {
@@ -39,3 +58,35 @@ ORDINARY_CONTROL_GUID_BY_TYPE = {value: key for key, value in ORDINARY_CONTROL_C
 
 def ordinary_control_type(class_id: object) -> str:
     return ORDINARY_CONTROL_CLASS_BY_GUID.get(str(class_id).lower(), "")
+
+
+def unpack_platform_transfer_records(payload: bytes) -> list[PlatformTransferRecord]:
+    """Decode platform transfer payloads shaped as ``uint32 count + 0x10 * count``.
+
+    1C 8.2 writes both ``cf_form_controls_position8`` and
+    ``cf_form_controls_info8`` this way. In 8.5 decompile the info payload is
+    copied as two 64-bit words, but the external byte layout remains 16 bytes
+    per record, so the four-word representation keeps the contract explicit.
+    """
+
+    if len(payload) < PLATFORM_TRANSFER_COUNT_SIZE:
+        raise ValueError("Platform transfer payload is too short for count")
+    count = unpack_from("<I", payload, 0)[0]
+    expected = PLATFORM_TRANSFER_COUNT_SIZE + count * PLATFORM_TRANSFER_RECORD_SIZE
+    if len(payload) != expected:
+        raise ValueError(f"Platform transfer payload has {len(payload)} bytes, expected {expected}")
+    records: list[PlatformTransferRecord] = []
+    offset = PLATFORM_TRANSFER_COUNT_SIZE
+    for _ in range(count):
+        records.append(PlatformTransferRecord(*unpack_from("<IIII", payload, offset)))
+        offset += PLATFORM_TRANSFER_RECORD_SIZE
+    return records
+
+
+def pack_platform_transfer_records(records: list[PlatformTransferRecord]) -> bytes:
+    """Encode ``cf_form_controls_info8``/``position8`` transfer records."""
+
+    result = bytearray(pack("<I", len(records)))
+    for record in records:
+        result.extend(pack("<IIII", *record.as_tuple()))
+    return bytes(result)
