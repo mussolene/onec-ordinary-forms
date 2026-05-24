@@ -1756,6 +1756,7 @@ def chart_presentation_tail(kind: str = "chart") -> list[object]:
         ["0", "0", "0", "0", "0"],
         ["0", "0", "0", "0"],
         "0",
+        "",
         "60",
         axis(),
         ["0", "0", ["0", "1", "0", "1", "0"], "0", "0"],
@@ -2180,6 +2181,7 @@ def pivot_chart_final_trailer_middle() -> list[object]:
 
 def pivot_chart_final_trailer_tail() -> list[object]:
     return [
+        "",
         "60",
         pivot_chart_axis_layout_record(),
         ["0", "0", ["0", "1", "0", "1", "0"], "0", "0"],
