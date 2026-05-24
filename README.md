@@ -119,14 +119,13 @@ Form.xml -> platform object model -> ListOutStream -> form raw stream -> Form.bi
 ```
 
 `ordinary-form.xsd` describes the public ordinary-form XML. The separate
-`metadata-configuration.xsd` describes platform-derived metadata/value concepts
-used by the codec layer, including `CompositeID`, `TypeDomainPattern`,
-`ValueToStringInternal`/`ValueFromStringInternal`, and the platform schema
-resources extracted from 8.2 resource files. The bundled
-`platform_model_catalog.json` is generated from platform resources and EDT EMF
-model jars; it records metadata classes, mcore type/value classes, and
-serializer evidence without shipping platform binaries. These codec concepts
-are not a public raw-stream dump.
+`Configuration.xsd` is the single bundled schema for platform-derived
+configuration metadata and value concepts used by the codec layer, including
+`CompositeID`, `TypeDomainPattern`, `ValueToStringInternal`/
+`ValueFromStringInternal`, metadata object kinds, type-tree kinds, EDT EMF
+metadata classes, mcore type/value classes, and platform serializer evidence.
+It records this object-model vocabulary without shipping platform binaries.
+These codec concepts are not a public raw-stream dump.
 
 ### What Must Not Be In Public XML
 

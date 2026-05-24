@@ -1,15 +1,15 @@
 """Platform object-model vocabulary used by the ordinary-form codec.
 
-This module is the Python counterpart of ``metadata-configuration.xsd``. It is
-not a dump format; it is a small, explicit catalog of platform concepts that
-the ListIn/ListOut layer can use while mapping binary form streams to named XML.
+``schemas/Configuration.xsd`` is the single bundled source for configuration
+metadata, type tree, value-domain codes, and platform serializer evidence. This
+module only reads that schema into Python tuples for codec code and tests.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from importlib import resources
+import xml.etree.ElementTree as ET
 
 
 @dataclass(frozen=True)
@@ -33,83 +33,51 @@ class PlatformTypeDomainCode:
     kind: str
 
 
-def load_platform_model_catalog() -> dict[str, object]:
-    data = resources.files(__package__).joinpath("platform_model_catalog.json").read_text(encoding="utf-8")
-    return json.loads(data)
+XS_NS = {"xs": "http://www.w3.org/2001/XMLSchema"}
 
 
-PLATFORM_MODEL_CATALOG = load_platform_model_catalog()
+def configuration_schema_root() -> ET.Element:
+    data = resources.files(__package__).joinpath("schemas/Configuration.xsd").read_text(encoding="utf-8")
+    return ET.fromstring(data)
 
 
-def schema_namespace(schema_name: str) -> str:
-    if "managed-application_logform_layouter" in schema_name:
-        return "http://v8.1c.ru/8.2/managed-application/logform/layouter"
-    if "managed-application_logform.xsd" in schema_name:
-        return "http://v8.1c.ru/8.2/managed-application/logform"
-    if "uobjects" in schema_name:
-        return "http://v8.1c.ru/8.2/uobjects"
-    if "xdto_root" in schema_name and schema_name.endswith("_core.xsd"):
-        return "http://v8.1c.ru/8.1/data/core"
-    if "xdto_root" in schema_name and schema_name.endswith("_ui.xsd"):
-        return "http://v8.1c.ru/8.1/data/ui"
-    if schema_name.endswith("_geo.xsd"):
-        return "http://v8.1c.ru/8.2/data/geo"
-    if schema_name.endswith("_graphscheme.xsd"):
-        return "http://v8.1c.ru/8.2/data/graphscheme"
-    if schema_name.endswith("_txtedt.xsd"):
-        return "http://v8.1c.ru/8.1/data/txtedt"
-    return ""
+_SCHEMA_ROOT = configuration_schema_root()
 
 
-def schema_short_name(schema_name: str) -> str:
-    if "logform_layouter" in schema_name:
-        return "logform_layouter.xsd"
-    if "logform" in schema_name:
-        return "logform.xsd"
-    if "uobjects" in schema_name:
-        return "uobjects.xsd"
-    return schema_name.rsplit("_", 1)[-1]
-
-
-_schema_resources = []
-_schema_resource_keys = set()
-for _item in PLATFORM_MODEL_CATALOG["schemaResources"]:
-    _schema = str(_item["schema"])
-    _namespace = schema_namespace(_schema)
-    if not _namespace:
-        continue
-    _resource = PlatformSchemaResource(str(_item["source"]), schema_short_name(_schema), _namespace)
-    _key = (_resource.source, _resource.schema, _resource.namespace)
-    if _key not in _schema_resource_keys:
-        _schema_resources.append(_resource)
-        _schema_resource_keys.add(_key)
-
-PLATFORM_SCHEMA_RESOURCES = tuple(_schema_resources)
+PLATFORM_SCHEMA_RESOURCES = tuple(
+    PlatformSchemaResource(str(node.get("source")), str(node.get("schema")), str(node.get("namespace")))
+    for node in _SCHEMA_ROOT.findall(".//PlatformSchemaResources/Resource")
+)
 
 
 PLATFORM_SERIALIZERS = tuple(
-    PlatformSerializer(str(item["name"]), str(item["direction"]), str(item["role"]))
-    for item in PLATFORM_MODEL_CATALOG["serializers"]
+    PlatformSerializer(str(node.get("name")), str(node.get("direction")), str(node.get("role")))
+    for node in _SCHEMA_ROOT.findall(".//PlatformSerializers/Serializer")
 )
 
 
 PLATFORM_TYPE_DOMAIN_CODES = tuple(
-    PlatformTypeDomainCode(str(item["code"]), str(item["typeName"]), str(item["kind"]))
-    for item in PLATFORM_MODEL_CATALOG["typeDomainCodes"]
+    PlatformTypeDomainCode(str(node.get("value")), str(node.get("typeName")), str(node.get("kind")))
+    for node in _SCHEMA_ROOT.findall(".//TypeDomainCodes/Code")
 )
 
 
 PLATFORM_TYPE_DOMAIN_CODE_NAMES = {item.code: item.type_name for item in PLATFORM_TYPE_DOMAIN_CODES}
 
 
-PLATFORM_METADATA_OBJECT_KINDS = tuple(str(item["name"]) for item in PLATFORM_MODEL_CATALOG["metadataObjectKinds"])
+PLATFORM_METADATA_OBJECT_KINDS = tuple(
+    str(node.get("value"))
+    for node in _SCHEMA_ROOT.findall(".//xs:simpleType[@name='MetadataObjectKind']/xs:restriction/xs:enumeration", XS_NS)
+)
 
 
-PLATFORM_TYPE_TREE_KINDS = tuple(str(item["name"]) for item in PLATFORM_MODEL_CATALOG["typeTreeKinds"])
+PLATFORM_TYPE_TREE_KINDS = tuple(
+    str(node.get("value"))
+    for node in _SCHEMA_ROOT.findall(".//xs:simpleType[@name='TypeTreeKind']/xs:restriction/xs:enumeration", XS_NS)
+)
 
 
-_edt_plugins = PLATFORM_MODEL_CATALOG.get("edtModel", {}).get("plugins", [])
-PLATFORM_EDT_METADATA_CLASSES = tuple(_edt_plugins[0].get("createdTypes", ())) if len(_edt_plugins) > 0 else ()
+PLATFORM_EDT_METADATA_CLASSES = tuple(str(node.get("name")) for node in _SCHEMA_ROOT.findall(".//MetadataClasses/Class"))
 
 
-PLATFORM_EDT_MCORE_CLASSES = tuple(_edt_plugins[1].get("createdTypes", ())) if len(_edt_plugins) > 1 else ()
+PLATFORM_EDT_MCORE_CLASSES = tuple(str(node.get("name")) for node in _SCHEMA_ROOT.findall(".//McoreClasses/Class"))

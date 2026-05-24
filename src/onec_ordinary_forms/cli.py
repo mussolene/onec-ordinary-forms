@@ -35,8 +35,8 @@ from onec_ordinary_forms.value_codec import (
 SCHEMA_VERSION = "0.1"
 XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
 ORDINARY_FORM_SCHEMA = "ordinary-form.xsd"
-METADATA_CONFIGURATION_SCHEMA = "metadata-configuration.xsd"
-KNOWN_SCHEMAS = (ORDINARY_FORM_SCHEMA, METADATA_CONFIGURATION_SCHEMA)
+CONFIGURATION_SCHEMA = "Configuration.xsd"
+KNOWN_SCHEMAS = (ORDINARY_FORM_SCHEMA, CONFIGURATION_SCHEMA)
 
 ET.register_namespace("xsi", XSI_NS)
 

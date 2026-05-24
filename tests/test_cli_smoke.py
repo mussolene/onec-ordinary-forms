@@ -41,9 +41,9 @@ class CliSmokeTest(unittest.TestCase):
     def test_version_is_present(self) -> None:
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
 
-    def test_bundled_schema_paths_include_metadata_configuration(self) -> None:
+    def test_bundled_schema_paths_include_configuration(self) -> None:
         self.assertTrue(schema_path("ordinary-form.xsd").is_file())
-        self.assertTrue(schema_path("metadata-configuration.xsd").is_file())
+        self.assertTrue(schema_path("Configuration.xsd").is_file())
 
     def test_public_import_wrappers_dump_validate_and_build(self) -> None:
         with TemporaryDirectory() as temp_dir:

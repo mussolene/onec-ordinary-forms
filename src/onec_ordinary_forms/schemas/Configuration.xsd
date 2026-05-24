@@ -1,0 +1,489 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
+  <xs:annotation>
+    <xs:documentation>Platform-derived configuration metadata and value schema used by the ordinary-form codec layer. This is the single bundled schema for configuration tree, type tree, type-domain patterns, and platform serializer evidence; it is not a public raw stream dump format.</xs:documentation>
+    <xs:appinfo>
+      <PlatformSchemaResources source="1C 8.2 platform embedded XML/XSD resources">
+        <Resource source="mngcore_root.res" schema="logform.xsd" namespace="http://v8.1c.ru/8.2/managed-application/logform"/>
+        <Resource source="mngcore_root.res" schema="logform_layouter.xsd" namespace="http://v8.1c.ru/8.2/managed-application/logform/layouter"/>
+        <Resource source="mngcore_root.res" schema="uobjects.xsd" namespace="http://v8.1c.ru/8.2/uobjects"/>
+        <Resource source="xdto_root.res" schema="core.xsd" namespace="http://v8.1c.ru/8.1/data/core"/>
+        <Resource source="xdto_root.res" schema="ui.xsd" namespace="http://v8.1c.ru/8.1/data/ui"/>
+        <Resource source="map_root.res" schema="geo.xsd" namespace="http://v8.1c.ru/8.2/data/geo"/>
+        <Resource source="scheme_root.res" schema="graphscheme.xsd" namespace="http://v8.1c.ru/8.2/data/graphscheme"/>
+        <Resource source="txtedt_root.res" schema="txtedt.xsd" namespace="http://v8.1c.ru/8.1/data/txtedt"/>
+      </PlatformSchemaResources>
+      <PlatformObjectModel source="1C EDT EMF model jars">
+        <MetadataClasses>
+          <Class name="AdjustableBoolean"/>
+          <Class name="ForRoleType"/>
+          <Class name="StandardCommand"/>
+          <Class name="CharacteristicsDescription"/>
+          <Class name="StandardAttribute"/>
+          <Class name="StandardTabularSectionDescription"/>
+          <Class name="CommonAttributeContentItem"/>
+          <Class name="AbstractCommandInterface"/>
+          <Class name="AbstractMobileClientSign"/>
+          <Class name="AbstractStandaloneContent"/>
+          <Class name="BasicMobileClientSign"/>
+          <Class name="MobileClientSign"/>
+          <Class name="MobileClientDigestData"/>
+          <Class name="MobileClientDigestTypes"/>
+          <Class name="ConvertedMobileClientSign"/>
+          <Class name="AbstractClientApplicationInterface"/>
+          <Class name="AbstractFlowchart"/>
+          <Class name="AbstractForm"/>
+          <Class name="MdPicture"/>
+          <Class name="Template"/>
+          <Class name="TabularSectionAttribute"/>
+          <Class name="CommonCommand"/>
+          <Class name="AbstractRoleDescription"/>
+          <Class name="Role"/>
+          <Class name="Language"/>
+          <Class name="SessionParameter"/>
+          <Class name="CommonTemplate"/>
+          <Class name="CommonModule"/>
+          <Class name="CommonAttribute"/>
+          <Class name="CommonForm"/>
+          <Class name="CommonPicture"/>
+          <Class name="CommandGroup"/>
+          <Class name="Catalog"/>
+          <Class name="CatalogAttribute"/>
+          <Class name="CatalogTabularSection"/>
+          <Class name="CatalogForm"/>
+          <Class name="CatalogCommand"/>
+          <Class name="CatalogPredefinedItem"/>
+          <Class name="CatalogPredefined"/>
+          <Class name="Document"/>
+          <Class name="DocumentAttribute"/>
+          <Class name="DocumentForm"/>
+          <Class name="DocumentTabularSection"/>
+          <Class name="DocumentCommand"/>
+          <Class name="DocumentNumerator"/>
+          <Class name="ChartOfCharacteristicTypes"/>
+          <Class name="ChartOfCharacteristicTypesAttribute"/>
+          <Class name="ChartOfCharacteristicTypesTabularSection"/>
+          <Class name="ChartOfCharacteristicTypesForm"/>
+          <Class name="ChartOfCharacteristicTypesCommand"/>
+          <Class name="ChartOfCharacteristicTypesPredefinedItem"/>
+          <Class name="ChartOfCharacteristicTypesPredefined"/>
+          <Class name="Enum"/>
+          <Class name="EnumValue"/>
+          <Class name="EnumForm"/>
+          <Class name="EnumCommand"/>
+          <Class name="InformationRegister"/>
+          <Class name="InformationRegisterResource"/>
+          <Class name="InformationRegisterAttribute"/>
+          <Class name="InformationRegisterDimension"/>
+          <Class name="InformationRegisterForm"/>
+          <Class name="InformationRegisterCommand"/>
+          <Class name="Interface"/>
+          <Class name="Style"/>
+          <Class name="Configuration"/>
+          <Class name="ContainedObject"/>
+          <Class name="AbstractWorkArea"/>
+          <Class name="StyleItem"/>
+          <Class name="ExchangePlan"/>
+          <Class name="ExchangePlanContentItem"/>
+          <Class name="ExchangePlanAttribute"/>
+          <Class name="ExchangePlanTabularSection"/>
+          <Class name="ExchangePlanForm"/>
+          <Class name="ExchangePlanCommand"/>
+          <Class name="Subsystem"/>
+          <Class name="WSReference"/>
+          <Class name="EventSubscription"/>
+          <Class name="DefinedType"/>
+          <Class name="Constant"/>
+          <Class name="Sequence"/>
+          <Class name="SequenceDimension"/>
+          <Class name="DocumentJournal"/>
+          <Class name="DocumentJournalForm"/>
+          <Class name="Column"/>
+          <Class name="DocumentJournalCommand"/>
+          <Class name="Report"/>
+          <Class name="ReportAttribute"/>
+          <Class name="ReportTabularSection"/>
+          <Class name="ReportTabularSectionAttribute"/>
+          <Class name="ReportForm"/>
+          <Class name="ReportCommand"/>
+          <Class name="ExternalReport"/>
+          <Class name="DataProcessor"/>
+          <Class name="DataProcessorAttribute"/>
+          <Class name="DataProcessorTabularSection"/>
+          <Class name="DataProcessorTabularSectionAttribute"/>
+          <Class name="DataProcessorForm"/>
+          <Class name="DataProcessorCommand"/>
+          <Class name="ExternalDataProcessor"/>
+          <Class name="AccumulationRegister"/>
+          <Class name="AccumulationRegisterResource"/>
+          <Class name="AccumulationRegisterAttribute"/>
+          <Class name="AccumulationRegisterDimension"/>
+          <Class name="AccumulationRegisterForm"/>
+          <Class name="AccumulationRegisterCommand"/>
+          <Class name="FunctionalOption"/>
+          <Class name="BusinessProcess"/>
+          <Class name="BusinessProcessForm"/>
+          <Class name="BusinessProcessCommand"/>
+          <Class name="BusinessProcessAttribute"/>
+          <Class name="BusinessProcessTabularSection"/>
+          <Class name="Task"/>
+          <Class name="TaskCommand"/>
+          <Class name="TaskForm"/>
+          <Class name="TaskAttribute"/>
+          <Class name="TaskTabularSection"/>
+          <Class name="AddressingAttribute"/>
+          <Class name="ScheduledJob"/>
+          <Class name="FunctionalOptionsParameter"/>
+          <Class name="FilterCriterion"/>
+          <Class name="FilterCriterionCommand"/>
+          <Class name="FilterCriterionForm"/>
+          <Class name="SettingsStorage"/>
+          <Class name="SettingsStorageForm"/>
+          <Class name="XDTOPackage"/>
+          <Class name="WebService"/>
+          <Class name="Operation"/>
+          <Class name="Parameter"/>
+          <Class name="HTTPService"/>
+          <Class name="URLTemplate"/>
+          <Class name="Method"/>
+          <Class name="ExternalDataSource"/>
+          <Class name="Table"/>
+          <Class name="TableForm"/>
+          <Class name="TableCommand"/>
+          <Class name="Field"/>
+          <Class name="Cube"/>
+          <Class name="DimensionTable"/>
+          <Class name="DimensionTableForm"/>
+          <Class name="DimensionTableCommand"/>
+          <Class name="Dimension"/>
+          <Class name="Resource"/>
+          <Class name="CubeForm"/>
+          <Class name="CubeCommand"/>
+          <Class name="Function"/>
+          <Class name="ChartOfAccounts"/>
+          <Class name="ChartOfAccountsPredefinedItem"/>
+          <Class name="ExtDimensionType"/>
+          <Class name="ChartOfAccountsPredefined"/>
+          <Class name="ChartOfAccountsAttribute"/>
+          <Class name="ChartOfAccountsTabularSection"/>
+          <Class name="AccountingFlag"/>
+          <Class name="ExtDimensionAccountingFlag"/>
+          <Class name="ChartOfAccountsCommand"/>
+          <Class name="ChartOfAccountsForm"/>
+          <Class name="ChartOfCalculationTypes"/>
+          <Class name="ChartOfCalculationTypesPredefinedItem"/>
+          <Class name="ChartOfCalculationTypesPredefined"/>
+          <Class name="ChartOfCalculationTypesAttribute"/>
+          <Class name="ChartOfCalculationTypesTabularSection"/>
+          <Class name="ChartOfCalculationTypesForm"/>
+          <Class name="ChartOfCalculationTypesCommand"/>
+          <Class name="AccountingRegister"/>
+          <Class name="AccountingRegisterDimension"/>
+          <Class name="AccountingRegisterResource"/>
+          <Class name="AccountingRegisterAttribute"/>
+          <Class name="AccountingRegisterForm"/>
+          <Class name="AccountingRegisterCommand"/>
+          <Class name="CalculationRegister"/>
+          <Class name="CalculationRegisterResource"/>
+          <Class name="RecalculationDimension"/>
+          <Class name="CalculationRegisterAttribute"/>
+          <Class name="CalculationRegisterDimension"/>
+          <Class name="Recalculation"/>
+          <Class name="CalculationRegisterForm"/>
+          <Class name="CalculationRegisterCommand"/>
+          <Class name="AbstractGeographicalSchema"/>
+          <Class name="AbstractStyle"/>
+          <Class name="IntegrationService"/>
+          <Class name="IntegrationServiceChannel"/>
+          <Class name="Bot"/>
+          <Class name="WebSocketClient"/>
+          <Class name="AbstractDistributionSupport"/>
+          <Class name="SourceReferenceTypeDescription"/>
+          <Class name="MdObjectReferenceTypeDescription"/>
+          <Class name="SourceReferenceTypeContainer"/>
+          <Class name="PaletteColor"/>
+        </MetadataClasses>
+        <McoreClasses>
+          <Class name="StringKeyAndValue"/>
+          <Class name="Type"/>
+          <Class name="PromiseType"/>
+          <Class name="EmptyContextDef"/>
+          <Class name="Ctor"/>
+          <Class name="FakeCtor"/>
+          <Class name="FakeParameter"/>
+          <Class name="TypeSet"/>
+          <Class name="NumberQualifiers"/>
+          <Class name="StringQualifiers"/>
+          <Class name="DateQualifiers"/>
+          <Class name="BinaryQualifiers"/>
+          <Class name="TypeDescription"/>
+          <Class name="TypeValue"/>
+          <Class name="TypeDescriptionValue"/>
+          <Class name="UndefinedValue"/>
+          <Class name="NullValue"/>
+          <Class name="NumberValue"/>
+          <Class name="BooleanValue"/>
+          <Class name="StringValue"/>
+          <Class name="DateValue"/>
+          <Class name="BinaryValue"/>
+          <Class name="ReferenceValue"/>
+          <Class name="EnumValue"/>
+          <Class name="SysEnumValue"/>
+          <Class name="ColorValue"/>
+          <Class name="FontValue"/>
+          <Class name="LineValue"/>
+          <Class name="BorderValue"/>
+          <Class name="IrresolvableReferenceValue"/>
+          <Class name="ValueList"/>
+          <Class name="FixedArrayValue"/>
+          <Class name="TypedValueListItem"/>
+          <Class name="TypedValueList"/>
+          <Class name="StructureProperty"/>
+          <Class name="Structure"/>
+          <Class name="UuidValue"/>
+          <Class name="RuntimeValue"/>
+          <Class name="StandardBeginningDate"/>
+          <Class name="StandardBeginningDateValue"/>
+          <Class name="StandardPeriod"/>
+          <Class name="StandardPeriodValue"/>
+          <Class name="ContextDef"/>
+          <Class name="ContextDefWithRefItem"/>
+          <Class name="Property"/>
+          <Class name="TypeContainerRef"/>
+          <Class name="TypeContainerDef"/>
+          <Class name="DerivedProperty"/>
+          <Class name="ContainingSourceDerivedProperty"/>
+          <Class name="Method"/>
+          <Class name="Event"/>
+          <Class name="ParamSet"/>
+          <Class name="Parameter"/>
+          <Class name="GeneralContextDef"/>
+          <Class name="Field"/>
+          <Class name="DerivedField"/>
+          <Class name="StandardTabularPart"/>
+          <Class name="CommandRef"/>
+          <Class name="StandardCommandGroup"/>
+          <Class name="Point"/>
+          <Class name="PictureRef"/>
+          <Class name="ColorDef"/>
+          <Class name="ColorRef"/>
+          <Class name="StyleColor"/>
+          <Class name="StyleBorder"/>
+          <Class name="StyleFont"/>
+          <Class name="BorderDef"/>
+          <Class name="BorderRef"/>
+          <Class name="FontDef"/>
+          <Class name="AutoFont"/>
+          <Class name="FontRef"/>
+          <Class name="Line"/>
+          <Class name="Help"/>
+          <Class name="HelpPage"/>
+          <Class name="RefContextDelegatingContextDef"/>
+          <Class name="QName"/>
+          <Class name="AutoColor"/>
+          <Class name="PaletteColor"/>
+        </McoreClasses>
+      </PlatformObjectModel>
+      <PlatformSerializers>
+        <Serializer name="ListInStream" direction="read" role="platform bracket/list-stream reader"/>
+        <Serializer name="ListOutStream" direction="write" role="platform bracket/list-stream writer"/>
+        <Serializer name="ValueFromStringInternal" direction="read" role="typed scalar value reader"/>
+        <Serializer name="ValueToStringInternal" direction="write" role="typed scalar value writer"/>
+        <Serializer name="CompositeID::serialize" direction="write" role="platform metadata object id writer"/>
+        <Serializer name="CompositeID::deserialize" direction="read" role="platform metadata object id reader"/>
+        <Serializer name="TypeDomainPattern::serialize" direction="write" role="platform type-domain writer"/>
+        <Serializer name="TypeDomainPattern::deserialize" direction="read" role="platform type-domain reader"/>
+      </PlatformSerializers>
+      <TypeDomainCodes>
+        <Code value="S" typeName="xs:string" kind="primitive"/>
+        <Code value="N" typeName="xs:decimal" kind="primitive"/>
+        <Code value="B" typeName="xs:boolean" kind="primitive"/>
+        <Code value="D" typeName="xs:dateTime" kind="primitive"/>
+        <Code value="U" typeName="xs:anyType" kind="primitive"/>
+        <Code value="#" typeName="cfg:uuid" kind="reference"/>
+      </TypeDomainCodes>
+    </xs:appinfo>
+  </xs:annotation>
+
+  <xs:simpleType name="UUID">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="CompositeID">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="-?[0-9]+(:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="TypeDomainCode">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="S"/>
+      <xs:enumeration value="N"/>
+      <xs:enumeration value="B"/>
+      <xs:enumeration value="D"/>
+      <xs:enumeration value="U"/>
+      <xs:enumeration value="#"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="TypeDomainPatternItem">
+    <xs:attribute name="code" type="TypeDomainCode" use="required"/>
+    <xs:attribute name="uuid" type="UUID"/>
+    <xs:attribute name="typeName" type="xs:string" use="required"/>
+    <xs:attribute name="kind" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="TypeDomainPattern">
+    <xs:sequence>
+      <xs:element name="PatternItem" type="TypeDomainPatternItem" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="encoding" fixed="TypeDomainPattern"/>
+  </xs:complexType>
+
+  <xs:simpleType name="ValueStringInternalKind">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="null"/>
+      <xs:enumeration value="boolean"/>
+      <xs:enumeration value="integer"/>
+      <xs:enumeration value="number"/>
+      <xs:enumeration value="string"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="ValueStringInternal">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="kind" type="ValueStringInternalKind" use="required"/>
+        <xs:attribute name="encoding" fixed="ValueToStringInternal"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataAttribute">
+    <xs:sequence>
+      <xs:element name="Type" type="TypeDomainPattern" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="id" type="CompositeID"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataObject">
+    <xs:sequence>
+      <xs:element name="Attribute" type="MetadataAttribute" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Form" type="MetadataForm" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="TablePart" type="MetadataObject" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="type" type="MetadataObjectKind" use="required"/>
+    <xs:attribute name="uuid" type="UUID"/>
+  </xs:complexType>
+
+  <xs:simpleType name="MetadataObjectKind">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Configuration"/>
+      <xs:enumeration value="Common"/>
+      <xs:enumeration value="Constant"/>
+      <xs:enumeration value="Catalog"/>
+      <xs:enumeration value="Document"/>
+      <xs:enumeration value="DocumentJournal"/>
+      <xs:enumeration value="Enumeration"/>
+      <xs:enumeration value="Report"/>
+      <xs:enumeration value="DataProcessor"/>
+      <xs:enumeration value="ChartOfCharacteristicTypes"/>
+      <xs:enumeration value="ChartOfAccounts"/>
+      <xs:enumeration value="ChartOfCalculationTypes"/>
+      <xs:enumeration value="InformationRegister"/>
+      <xs:enumeration value="AccumulationRegister"/>
+      <xs:enumeration value="AccountingRegister"/>
+      <xs:enumeration value="CalculationRegister"/>
+      <xs:enumeration value="BusinessProcess"/>
+      <xs:enumeration value="Task"/>
+      <xs:enumeration value="ExternalDataSource"/>
+      <xs:enumeration value="ExternalDataProcessorObject"/>
+      <xs:enumeration value="ExchangePlan"/>
+      <xs:enumeration value="FilterCriterion"/>
+      <xs:enumeration value="CommonModule"/>
+      <xs:enumeration value="CommonForm"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="TypeTreeKind">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="Number"/>
+      <xs:enumeration value="String"/>
+      <xs:enumeration value="Date"/>
+      <xs:enumeration value="Boolean"/>
+      <xs:enumeration value="ValueList"/>
+      <xs:enumeration value="CatalogRef"/>
+      <xs:enumeration value="DocumentRef"/>
+      <xs:enumeration value="EnumerationRef"/>
+      <xs:enumeration value="ChartOfCharacteristicTypesRef"/>
+      <xs:enumeration value="ChartOfAccountsRef"/>
+      <xs:enumeration value="ChartOfCalculationTypesRef"/>
+      <xs:enumeration value="BusinessProcessRef"/>
+      <xs:enumeration value="BusinessProcessRoutePointRef"/>
+      <xs:enumeration value="TaskRef"/>
+      <xs:enumeration value="ExchangePlanRef"/>
+      <xs:enumeration value="Characteristic"/>
+      <xs:enumeration value="AnyRef"/>
+      <xs:enumeration value="TypeDescription"/>
+      <xs:enumeration value="Color"/>
+      <xs:enumeration value="Font"/>
+      <xs:enumeration value="StandardBeginningDate"/>
+      <xs:enumeration value="StandardPeriod"/>
+      <xs:enumeration value="Filter"/>
+      <xs:enumeration value="Order"/>
+      <xs:enumeration value="ConditionalAppearance"/>
+      <xs:enumeration value="AppearanceSettings"/>
+      <xs:enumeration value="FormattingField"/>
+      <xs:enumeration value="SystemEnumeration"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="TypeTreeNode">
+    <xs:sequence>
+      <xs:element name="Type" type="TypeTreeNode" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="kind" type="TypeTreeKind" use="required"/>
+    <xs:attribute name="uuid" type="UUID"/>
+    <xs:attribute name="typeName" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataForm">
+    <xs:sequence>
+      <xs:element name="Attribute" type="MetadataAttribute" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Command" type="MetadataCommand" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Event" type="MetadataEvent" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="kind" type="xs:string"/>
+    <xs:attribute name="uuid" type="UUID"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataCommand">
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="id" type="CompositeID"/>
+    <xs:attribute name="handler" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataEvent">
+    <xs:attribute name="name" type="xs:NMTOKEN" use="required"/>
+    <xs:attribute name="id" type="UUID"/>
+    <xs:attribute name="handler" type="xs:string"/>
+  </xs:complexType>
+
+  <xs:complexType name="MetadataConfiguration">
+    <xs:sequence>
+      <xs:element name="TypeDomain" type="TypeDomainPattern" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="TypeTree" type="TypeTreeNode" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Object" type="MetadataObject" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:NMTOKEN"/>
+    <xs:attribute name="uuid" type="UUID"/>
+  </xs:complexType>
+
+  <xs:element name="MetadataConfiguration" type="MetadataConfiguration"/>
+</xs:schema>

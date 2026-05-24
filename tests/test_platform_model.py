@@ -5,7 +5,6 @@ from onec_ordinary_forms.platform_model import (
     PLATFORM_EDT_MCORE_CLASSES,
     PLATFORM_EDT_METADATA_CLASSES,
     PLATFORM_METADATA_OBJECT_KINDS,
-    PLATFORM_MODEL_CATALOG,
     PLATFORM_SCHEMA_RESOURCES,
     PLATFORM_SERIALIZERS,
     PLATFORM_TYPE_DOMAIN_CODES,
@@ -14,11 +13,11 @@ from onec_ordinary_forms.platform_model import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-METADATA_XSD = ROOT / "src" / "onec_ordinary_forms" / "schemas" / "metadata-configuration.xsd"
+CONFIGURATION_XSD = ROOT / "src" / "onec_ordinary_forms" / "schemas" / "Configuration.xsd"
 
 
-def test_platform_model_catalog_matches_metadata_schema_appinfo() -> None:
-    root = ET.parse(METADATA_XSD).getroot()
+def test_platform_model_matches_configuration_schema_appinfo() -> None:
+    root = ET.parse(CONFIGURATION_XSD).getroot()
     resources = {
         (node.get("source"), node.get("schema"), node.get("namespace"))
         for node in root.findall(".//PlatformSchemaResources/Resource")
@@ -32,10 +31,10 @@ def test_platform_model_catalog_matches_metadata_schema_appinfo() -> None:
     assert serializers == {(item.name, item.direction, item.role) for item in PLATFORM_SERIALIZERS}
 
 
-def test_metadata_configuration_schema_is_valid_xsd() -> None:
+def test_configuration_schema_is_valid_xsd() -> None:
     from lxml import etree
 
-    etree.XMLSchema(etree.parse(str(METADATA_XSD)))
+    etree.XMLSchema(etree.parse(str(CONFIGURATION_XSD)))
 
 
 def test_platform_model_contains_confirmed_value_and_metadata_vocabulary() -> None:
@@ -50,11 +49,11 @@ def test_platform_model_contains_confirmed_value_and_metadata_vocabulary() -> No
     assert "DataProcessorForm" in PLATFORM_EDT_METADATA_CLASSES
     assert "TypeDescription" in PLATFORM_EDT_MCORE_CLASSES
     assert "ColorValue" in PLATFORM_EDT_MCORE_CLASSES
-    assert PLATFORM_MODEL_CATALOG["edtModel"]["entryCounts"]["metadata.mdclass"] > 100
+    assert len(PLATFORM_EDT_METADATA_CLASSES) > 100
 
 
-def test_metadata_configuration_schema_contains_configuration_tree() -> None:
-    root = ET.parse(METADATA_XSD).getroot()
+def test_configuration_schema_contains_configuration_tree() -> None:
+    root = ET.parse(CONFIGURATION_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
 
     object_kind = root.find(".//xs:simpleType[@name='MetadataObjectKind']/xs:restriction", ns)
