@@ -1319,6 +1319,115 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(first_column_body[35], ['"Pattern"', ['"S"']])
         self.assertEqual(first_column_body[38], "381ed624-9217-4e63-85db-c4c3cb87daae")
 
+    def test_platform_current_root_profile_for_table_value_edit(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Авансы по договорам комиссии</Item></Title>
+              <Width>885</Width>
+              <Height>244</Height>
+              <SerializationCounter>12</SerializationCounter>
+              <Attributes>
+                <Attribute name="РегистрНакопленияСписок" id="9" slot="0">
+                  <Type source="TypeDomainPattern">
+                    <Pattern encoding="TypeDomainPattern" itemCount="1">
+                      <PatternItem code="#" uuid="acf6192e-81ca-46ef-93a6-5a6968b78663"/>
+                    </Pattern>
+                  </Type>
+                </Attribute>
+                <Attribute name="ПолеВвода1" id="11" slot="1">
+                  <Type source="TypeDomainPattern">
+                    <Pattern encoding="TypeDomainPattern" itemCount="1">
+                      <PatternItem code="S" typeName="xs:string"/>
+                    </Pattern>
+                  </Type>
+                </Attribute>
+              </Attributes>
+              <Pages>
+                <Page name="Main">
+                  <Table name="РегистрНакопленияСписок" id="1">
+                    <DataPath>РегистрНакопленияСписок</DataPath>
+                    <Columns>
+                      <Column name="Колонка1" order="0">
+                        <Title><Item lang="ru">Колонка1</Item></Title>
+                        <Type source="TypeDomainPattern">
+                          <Pattern encoding="TypeDomainPattern" itemCount="1">
+                            <PatternItem code="S" typeName="xs:string"/>
+                          </Pattern>
+                        </Type>
+                      </Column>
+                      <Column name="Колонка2" order="1">
+                        <Title><Item lang="ru">Колонка2</Item></Title>
+                        <Type source="TypeDomainPattern">
+                          <Pattern encoding="TypeDomainPattern" itemCount="1">
+                            <PatternItem code="S" typeName="xs:string"/>
+                          </Pattern>
+                        </Type>
+                      </Column>
+                    </Columns>
+                    <Position left="8" top="33" right="772" bottom="300">
+                      <Bindings>
+                        <DimensionBinding dimension="height" value="0"/>
+                        <DimensionBinding dimension="minHeight" value="0"/>
+                        <DimensionBinding dimension="stretch" value="0"/>
+                        <DimensionBinding dimension="width" value="0"/>
+                      </Bindings>
+                    </Position>
+                  </Table>
+                  <CommandBar name="ДействияФормы" id="2">
+                    <Position left="0" top="0" right="780" bottom="25">
+                      <Bindings>
+                        <DimensionBinding dimension="height" mode="0" targetId="2" side="bottom"/>
+                        <DimensionBinding dimension="minHeight" value="0"/>
+                        <DimensionBinding dimension="stretch" value="0"/>
+                        <DimensionBinding dimension="width" value="0"/>
+                      </Bindings>
+                    </Position>
+                  </CommandBar>
+                  <LabelDecoration name="НадписьПолеВвода1" id="3">
+                    <Title><Item lang="ru">Поле ввода1:</Item></Title>
+                    <TextPosition>0</TextPosition>
+                    <Position left="155" top="5" right="223" bottom="25">
+                      <Bindings>
+                        <DimensionBinding dimension="height" mode="0" targetId="3" side="bottom"/>
+                        <DimensionBinding dimension="minHeight" value="0"/>
+                        <DimensionBinding dimension="stretch" value="1"/>
+                        <DimensionBinding dimension="width" mode="0" targetId="3" side="right"/>
+                      </Bindings>
+                    </Position>
+                  </LabelDecoration>
+                  <InputField name="ПолеВвода1" id="4">
+                    <DataPath>ПолеВвода1</DataPath>
+                    <Position left="228" top="5" right="534" bottom="25">
+                      <Bindings>
+                        <DimensionBinding dimension="height" mode="0" targetId="4" side="bottom"/>
+                        <DimensionBinding dimension="minHeight" value="0"/>
+                        <DimensionBinding dimension="stretch" value="0"/>
+                        <DimensionBinding dimension="width" value="0"/>
+                      </Bindings>
+                    </Position>
+                  </InputField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        root_record = stream[1]
+        root_panel_info = root_record[2][1][1]
+        controls = root_record[2][2]
+
+        self.assertEqual(root_record[1][1:], ["4", "4294967295"])
+        self.assertEqual(root_record[10], "12")
+        self.assertEqual(len(root_panel_info), 36)
+        self.assertEqual(root_panel_info[23], ["2", "788", "1", "1", "3", "0", "0", "81", "0"])
+        self.assertEqual(root_panel_info[24], ["2", "300", "0", "1", "4", "0", "0", "0", "0"])
+        self.assertEqual(controls[1][3][-3:], ["4", "0", "0"])
+        self.assertEqual(controls[2][3][-4:], ["1", "1", "1", "0"])
+        self.assertEqual(controls[3][3][-4:], ["2", "2", "0", "0"])
+        self.assertEqual(controls[4][3][-4:], ["3", "3", "0", "0"])
+        self.assertEqual(stream[2][3], ["2", ["1", ["1", ["0"]]], ["4", ["1", ["1"]]]])
+        self.assertEqual(stream[3], ["00000000-0000-0000-0000-000000000000", "0"])
+
     def test_build_bin_uses_platform_extended_root_record_for_sized_forms(self) -> None:
         root = ET.fromstring(
             """<Form version="0.1">

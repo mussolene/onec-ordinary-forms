@@ -1389,6 +1389,10 @@ def add_form_properties(parent: ET.Element, form_root: object) -> None:
         set_text(parent, "Width", width)
     if height.isdigit():
         set_text(parent, "Height", height)
+    if len(form_record) > 10:
+        counter = clean_token(form_record[10])
+        if counter.isdigit():
+            set_text(parent, "SerializationCounter", counter)
 
 
 def attribute_record_name(record: list[object]) -> str:

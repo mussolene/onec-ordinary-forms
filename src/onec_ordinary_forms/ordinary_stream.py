@@ -201,9 +201,11 @@ CONTROL_METADATA_SCOPE = {
 # The serializer writes a common header and then appends a trailer profile.
 GEOMETRY_TRAILER_PROFILE = {
     "default": ["0", "0", "0", "1", "0", "0"],
-    "CommandBar": ["0", "0", "0", "0", "1", "1", "0"],
-    "Label": ["0", "0", "0", "1", "0", "1", "0", "0"],
+    "CommandBar": ["0", "0", "0", "1", "1", "1", "0"],
+    "InputField": ["0", "0", "0", "3", "3", "0", "0"],
+    "Label": ["0", "0", "0", "0", "2", "2", "0", "0"],
     "Panel": ["0", "0", "2", "2", "0", "0"],
+    "Table": ["0", "0", "0", "4", "0", "0"],
     "paged": ["0", "0", "0"],
 }
 
@@ -246,6 +248,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         controls,
         events_from_xml(root),
         form_size_from_xml(root),
+        serialization_counter=form_serialization_counter_from_xml(root),
     )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
 
@@ -260,10 +263,11 @@ def ordinary_form_stream(
     attributes_layout: dict[str, object] | None = None,
     object_info: list[object] | None = None,
     root_style: list[object] | None = None,
+    serialization_counter: str = "",
 ) -> list[object]:
     return [
         "27",
-        form_root_record(title, controls, form_size, root_layout),
+        form_root_record(title, controls, form_size, root_layout, serialization_counter),
         attributes_table(attributes, controls, attributes_layout),
         copy.deepcopy(object_info) if object_info is not None else form_object_info_record(),
         ["1", *events] if events else ["0"],
@@ -290,6 +294,7 @@ def form_root_record(
     controls: list[object],
     form_size: tuple[str, str, bool],
     root_layout: dict[str, str] | None = None,
+    serialization_counter: str = "",
 ) -> list[object]:
     width, height, explicit_size = form_size
     compact_root = root_layout is not None and root_layout.get("recordKind") == "16" and root_layout.get("rootPanelInfoProfile") == "21"
@@ -297,7 +302,9 @@ def form_root_record(
     if isinstance(root_panel_info_template, list):
         root_panel_info_record = copy.deepcopy(root_panel_info_template)
     else:
-        root_panel_info_record = compact_root_panel_info(title, width, height) if compact_root else root_panel_info(title, width, height)
+        root_panel_info_record = (
+            compact_root_panel_info(title, width, height) if compact_root else root_panel_info(title, width, height, controls)
+        )
     root_panel = [
         ORDINARY_CONTROL_GUID_BY_TYPE["Panel"],
         root_panel_info_record,
@@ -336,9 +343,9 @@ def form_root_record(
     ]
     if explicit_size:
         record[0] = "18"
-        record[1][1] = (root_layout or {}).get("titleMarker", "41")
-        record[1][2] = (root_layout or {}).get("titleScope", "3")
-        record[-1] = (root_layout or {}).get("slot10", "3")
+        record[1][1] = (root_layout or {}).get("titleMarker", "4" if controls else "41")
+        record[1][2] = (root_layout or {}).get("titleScope", "4294967295" if controls else "3")
+        record[-1] = serialization_counter or (root_layout or {}).get("slot10", "3")
         record.extend([width, height, "96"])
     return record
 
@@ -389,10 +396,16 @@ def compact_root_panel_info(title: str, form_width: str, form_height: str) -> li
     ]
 
 
-def root_panel_info(title: str, form_width: str, form_height: str) -> list[object]:
+def root_panel_info(title: str, form_width: str, form_height: str, controls: list[object] | None = None) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["FormRootPanel"]
     margin_left = "8"
     margin_top = "33"
+    max_right, max_bottom = controls_extent(controls or [])
+    if max_right and max_bottom:
+        page_width = str(max_right + 8)
+        page_height = str(max_bottom)
+        right_offset = str(max(int_atom(form_width) - max_right - 24, 0))
+        return root_panel_info_from_control_extent(page_width, page_height, right_offset)
     page_width = panel_extent_value(form_width, 8)
     page_height = panel_extent_value(form_height, 33)
     page_title = localized_text_record("Страница1")
@@ -443,6 +456,96 @@ def root_panel_info(title: str, form_width: str, form_height: str) -> list[objec
         ],
         ["0"],
     ]
+
+
+def root_panel_info_from_control_extent(page_width: str, page_height: str, right_offset: str) -> list[object]:
+    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["FormRootPanel"]
+    page_title = localized_text_record("Страница1")
+    position_records = [
+        ["2", "8", "1", "1", "1", "0", "0", "0", "0"],
+        ["2", "33", "0", "1", "2", "0", "0", "0", "0"],
+        ["2", page_width, "1", "1", "3", "0", "0", right_offset, "0"],
+        ["2", page_height, "0", "1", "4", "0", "0", "0", "0"],
+    ]
+    return [
+        descriptor.info_kind,
+        [
+            root_panel_base_info_record(),
+            "26",
+            "0",
+            "1",
+            ["0", "1", "1"],
+            "1",
+            ["0", "2", "2"],
+            "3",
+            ["0", "1", "3"],
+            ["0", "2", "3"],
+            ["0", "4", "3"],
+            "0",
+            "0",
+            page_style_group_record("1"),
+            "0",
+            "1",
+            [
+                "1",
+                "1",
+                [
+                    "6",
+                    page_title,
+                    page_style_group_record("0"),
+                    "-1",
+                    "1",
+                    "1",
+                    quoted_atom("Страница1"),
+                    "1",
+                    default_color_record(),
+                    default_color_record(),
+                    ["8", "3", "0", "1", "100"],
+                    "1",
+                ],
+            ],
+            "1",
+            "1",
+            "0",
+            "4",
+            *position_records,
+            "0",
+            "4294967295",
+            "5",
+            "64",
+            "0",
+            default_color_record(),
+            "0",
+            "0",
+            "57",
+            "0",
+            "0",
+        ],
+        ["0"],
+    ]
+
+
+def controls_extent(controls: list[object]) -> tuple[int, int]:
+    max_right = 0
+    max_bottom = 0
+    for control in controls:
+        if not isinstance(control, list) or len(control) <= 3 or not isinstance(control[3], list):
+            continue
+        geometry = control[3]
+        if len(geometry) <= 4:
+            continue
+        right = int_atom(geometry[3])
+        bottom = int_atom(geometry[4])
+        max_right = max(max_right, right)
+        max_bottom = max(max_bottom, bottom)
+    return max_right, max_bottom
+
+
+def int_atom(value: object) -> int:
+    try:
+        return int(clean_atom(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def panel_base_info_record() -> list[object]:
@@ -603,8 +706,6 @@ def attribute_link_table(attributes: list[object], controls: list[object]) -> li
         if not isinstance(attribute, list) or len(attribute) < 5 or not isinstance(attribute[0], list) or not attribute[0]:
             continue
         slot = str(attribute[0][0])
-        if slot == "1":
-            continue
         control_id = controls_by_name.get(str(attribute[4]))
         if control_id:
             links.append([control_id, ["1", [slot]]])
@@ -654,7 +755,7 @@ def attribute_record_from_xml(
             return result
     return [
         [visible_id],
-        record_flag if record_flag is not None else ("0" if visible_id == "1" else "1"),
+        record_flag if record_flag is not None else "1",
         "0",
         "1",
         quoted_atom(attribute.get("name", "")),
@@ -663,7 +764,7 @@ def attribute_record_from_xml(
 
 
 def form_object_info_record() -> list[object]:
-    return ["59d6c227-97d3-46f6-84a0-584c5a2807e1", "1", ["2", "0", ["0", "0"], ["0"], "1"]]
+    return ["00000000-0000-0000-0000-000000000000", "0"]
 
 
 def events_from_xml(root: ET.Element, style_profile: str = "extended") -> list[object]:
@@ -703,6 +804,11 @@ def form_size_from_xml(root: ET.Element, root_layout: dict[str, str] | None = No
         height = height or root_layout.get("height", "")
         return width or "885", height or "244", False
     return width or "885", height or "244", bool(width and height)
+
+
+def form_serialization_counter_from_xml(root: ET.Element) -> str:
+    value = (root.findtext("SerializationCounter") or "").strip()
+    return value if value.isdigit() else ""
 
 
 def replace_first_localized_text_record(value: object, replacement: list[object]) -> bool:
@@ -1161,10 +1267,12 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
     title = get_multilang_text(element, "Title") or element.get("name", "")
     label_mode = element.findtext("TextPosition") or ("0" if title.endswith(":") else "4")
     label_style_mode = "0" if title.endswith(":") else label_mode
+    base = extended_base_info_record_from_xml(element)
+    base[6] = default_color_record()
     return [
         "3",
         [
-            extended_base_info_record_from_xml(element),
+            base,
             "11",
             title_record,
             label_mode,
@@ -1222,6 +1330,7 @@ def input_field_data_source_record(element: ET.Element) -> list[object]:
 def input_field_info_record_from_xml(element: ET.Element, type_pattern: list[object]) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
     base = extended_base_info_record_from_xml(element)
+    base[6] = default_color_record()
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
     record = [
         base,
@@ -2789,10 +2898,10 @@ def command_bar_base_info_record(element: ET.Element) -> list[object]:
         "0",
         "0",
         "100",
-        "0",
-        "0",
-        "0",
-        "0",
+        "2",
+        "2",
+        "1",
+        "2",
         default_color_record(),
     ]
 
@@ -3181,10 +3290,6 @@ def extended_base_info_record_from_xml(element: ET.Element) -> list[object]:
     base = root_panel_base_info_record()
     base[1] = visible_record_from_xml(element)
     base[12] = tooltip_record_from_xml(element)
-    base[16] = "0"
-    base[17] = "0"
-    base[18] = "0"
-    base[19] = "0"
     return base
 
 
