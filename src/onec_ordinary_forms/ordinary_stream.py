@@ -943,7 +943,7 @@ def control_stream_from_xml_with_page(
         children.extend(child for _, child in sorted(page_children, key=lambda item: item[0]))
     child_table: list[object] = [str(len(children)), *children]
     if control_type == "Chart":
-        return [class_id, object_id, info, chart_presentation_record(element, title_record), geometry, metadata, child_table]
+        return [class_id, object_id, info, chart_presentation_record(element, title_record, control_actions_from_xml(element)), geometry, metadata, child_table]
     if control_type == "GeographicalSchemaField":
         return [class_id, object_id, info, geographical_schema_settings_record(element), geometry, metadata, child_table]
     return [class_id, object_id, info, geometry, metadata, child_table]
@@ -1037,7 +1037,7 @@ def control_info_from_xml(
         return button_control_info(element, title_record, actions)
     if control_type == "Image":
         picture_payload = picture_payload_from_xml(element.find("Picture"), asset_root)
-        return image_control_info(element, title_record, picture_payload)
+        return image_control_info(element, title_record, picture_payload, actions)
     if control_type == "CheckBox":
         return checkbox_control_info(element, title_record, actions)
     if control_type == "ChoiceField":
@@ -1066,9 +1066,9 @@ def control_info_from_xml(
     if control_type == "Dendrogram":
         return dendrogram_control_info(element, title_record)
     if control_type == "HTMLDocumentField":
-        return html_document_field_control_info()
+        return html_document_field_control_info(actions)
     if control_type == "ListBox":
-        return list_box_control_info(element)
+        return list_box_control_info(element, actions)
     if control_type == "ProgressBar":
         return progress_bar_control_info(element)
     if control_type == "TrackBar":
@@ -1080,7 +1080,7 @@ def control_info_from_xml(
     if control_type == "GeographicalSchemaField":
         return geographical_schema_field_control_info(element)
     if control_type == "GraphicalSchemaField":
-        return graphical_schema_field_control_info(element)
+        return graphical_schema_field_control_info(element, actions)
     if control_type == "CommandBar":
         return command_bar_control_info(element)
     if control_type == "Table":
@@ -1542,7 +1542,7 @@ def checkbox_control_inner_info(element: ET.Element, title_record: list[object])
     ]
 
 
-def image_control_info(element: ET.Element, title_record: list[object], picture_payload: str) -> list[object]:
+def image_control_info(element: ET.Element, title_record: list[object], picture_payload: str, actions: list[object]) -> list[object]:
     picture_record: list[object]
     if picture_payload:
         picture_record = ["3", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload]], "0"]
@@ -1567,7 +1567,7 @@ def image_control_info(element: ET.Element, title_record: list[object], picture_
             "0",
             "1",
         ],
-        ["0"],
+        ["1", *actions] if actions else ["0"],
     ]
 
 
@@ -1613,8 +1613,8 @@ def chart_control_info() -> list[object]:
     return ["11"]
 
 
-def chart_presentation_record(element: ET.Element, title_record: list[object]) -> list[object]:
-    return diagram_presentation_record(element, title_record, kind="chart")
+def chart_presentation_record(element: ET.Element, title_record: list[object], actions: list[object] | None = None) -> list[object]:
+    return diagram_presentation_record(element, title_record, kind="chart", actions=actions or [])
 
 
 def pivot_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
@@ -1804,7 +1804,7 @@ def dendrogram_info_tail() -> list[object]:
         "0",
     ]
 
-def diagram_presentation_record(element: ET.Element, title_record: list[object], *, kind: str) -> list[object]:
+def diagram_presentation_record(element: ET.Element, title_record: list[object], *, kind: str, actions: list[object] | None = None) -> list[object]:
     kind_code = (element.findtext("PivotChartKind") or "").strip() if kind == "pivot" else ""
     if kind == "chart":
         kind_code = (element.findtext("ChartKind") or "").strip()
@@ -1879,6 +1879,9 @@ def diagram_presentation_record(element: ET.Element, title_record: list[object],
         record[36] = ["3", "0", ["0"], "1", "1", "0", "00000000-0000-0000-0000-000000000000"]
     if kind in {"chart", "gantt"}:
         record.extend(chart_presentation_tail(kind))
+        if actions:
+            record[-110] = "1"
+            record.insert(-109, ["1", *actions])
     if kind == "dendrogram":
         record.extend(chart_presentation_tail(kind))
     if kind == "pivot":
@@ -2500,11 +2503,11 @@ def bool_attribute_record_from_xml(element: ET.Element, name: str, *, default: b
     return "1" if default else "0"
 
 
-def html_document_field_control_info() -> list[object]:
+def html_document_field_control_info(actions: list[object]) -> list[object]:
     return [
         "5",
         "0",
-        ["0"],
+        [str(len(actions)), *actions] if actions else ["0"],
         ["3", "3", ["-22"]],
         ["3", "1", ["-18"], "0", "0", "0"],
         "1",
@@ -2676,7 +2679,7 @@ def geographical_schema_settings_record(element: ET.Element) -> list[object]:
     ]
 
 
-def graphical_schema_field_control_info(element: ET.Element) -> list[object]:
+def graphical_schema_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
     return [
         graphical_schema_base_info_record(element),
         "5",
@@ -2710,8 +2713,8 @@ def graphical_schema_field_control_info(element: ET.Element) -> list[object]:
                 "0",
             ]
         ],
-        ["0"],
-        "0",
+        ["1", *actions] if actions else ["0"],
+        "1" if actions else "0",
         "0",
     ]
 
@@ -2722,7 +2725,7 @@ def graphical_schema_base_info_record(element: ET.Element) -> list[object]:
     return base
 
 
-def list_box_control_info(element: ET.Element) -> list[object]:
+def list_box_control_info(element: ET.Element, actions: list[object]) -> list[object]:
     return [
         "1",
         [
@@ -2734,7 +2737,7 @@ def list_box_control_info(element: ET.Element) -> list[object]:
             "1",
             "0",
         ],
-        ["0"],
+        ["1", *actions] if actions else ["0"],
     ]
 
 

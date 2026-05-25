@@ -855,6 +855,40 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn('"ПолеКалендаряПеретаскивание"', form_text)
         self.assertIn('"ПолеКалендаряПриИзменении"', form_text)
 
+    def test_build_bin_writes_extended_control_events_to_action_tables(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <PictureDecoration name="Картинка" id="41">
+                    <Events><Event name="Нажатие">КартинкаНажатие</Event></Events>
+                  </PictureDecoration>
+                  <ListBox name="Список" id="42">
+                    <Events><Event name="Выбор">СписокВыбор</Event></Events>
+                  </ListBox>
+                  <HTMLDocumentField name="HTML" id="43">
+                    <Events><Event name="ДокументСформирован">HTMLДокументСформирован</Event></Events>
+                  </HTMLDocumentField>
+                  <GraphicalSchemaField name="Карта" id="44">
+                    <Events><Event name="ПриАктивизации">КартаПриАктивизации</Event></Events>
+                  </GraphicalSchemaField>
+                  <Chart name="Диаграмма" id="45">
+                    <Events><Event name="ОбработкаРасшифровки">ДиаграммаОбработкаРасшифровки</Event></Events>
+                  </Chart>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+
+        self.assertIn('"КартинкаНажатие"', form_text)
+        self.assertIn('"СписокВыбор"', form_text)
+        self.assertIn('"HTMLДокументСформирован"', form_text)
+        self.assertIn('"КартаПриАктивизации"', form_text)
+        self.assertIn('"ДиаграммаОбработкаРасшифровки"', form_text)
+
     def test_build_bin_preserves_table_column_name_separate_from_title(self) -> None:
         root = ET.fromstring(
             """<Form>
