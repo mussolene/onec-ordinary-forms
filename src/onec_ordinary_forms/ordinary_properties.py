@@ -132,6 +132,12 @@ DIAGRAM_CONTROL_PROPERTIES = COMMON_CONTROL_PROPERTIES + (
 
 
 ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
+    "ActiveXControl": OrdinaryControlDescriptor(
+        "ActiveXControl",
+        "ЭлементУправленияActiveX",
+        "ActiveXControl",
+        COMMON_CONTROL_PROPERTIES + ("Clsid", "State"),
+    ),
     "Panel": OrdinaryControlDescriptor("Panel", "Панель", "Pages", COMMON_CONTROL_PROPERTIES + ("Pages", "PagesRepresentation")),
     "Label": OrdinaryControlDescriptor(
         "LabelDecoration",

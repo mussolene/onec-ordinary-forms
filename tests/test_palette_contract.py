@@ -26,7 +26,7 @@ def test_descriptors_have_platform_palette_members() -> None:
     descriptor_tags = {descriptor.xml_tag for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()}
 
     assert descriptor_tags == set(PLATFORM_PALETTE)
-    assert sum(len(descriptor.platform_properties) for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()) == 417
+    assert sum(len(descriptor.platform_properties) for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()) == 419
     assert sum(len(descriptor.platform_events) for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()) == 79
 
 
@@ -65,7 +65,7 @@ def test_elements_xsd_contains_platform_vocabulary() -> None:
             platform_types.add(prop.get("platformType", ""))
         for event in control.findall("./Events/Event"):
             platform_events.add(event.get("platformName", ""))
-    assert len(platform_properties) == 198
+    assert len(platform_properties) == 200
     assert len(platform_events) == 40
     assert "Цвет" in " ; ".join(platform_types)
     assert "Шрифт" in " ; ".join(platform_types)

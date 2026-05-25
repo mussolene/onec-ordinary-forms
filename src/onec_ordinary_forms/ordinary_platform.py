@@ -47,6 +47,7 @@ class PlatformCompositeFlagRecord:
 
 ORDINARY_CONTROL_CLASS_BY_GUID = {
     "09ccdc77-ea1a-4a6d-ab1c-3435eada2433": "Panel",
+    "621e95f1-064f-11d4-9400-008048da11f9": "ActiveXControl",
     "0fc7e20d-f241-460c-bdf4-5ad88e5474a5": "Label",
     "151ef23e-6bb2-4681-83d0-35bc2217230c": "Image",
     "6ff79819-710e-4145-97cd-1618da79e3e2": "Button",

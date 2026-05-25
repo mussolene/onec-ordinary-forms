@@ -672,6 +672,32 @@ def add_picture(parent: ET.Element, item_data: dict | None, item_name: str, asse
             node.set("mime", "image/gif")
 
 
+def add_activex_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "ActiveXControl":
+        return
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    if len(info) > 1:
+        set_text(parent, "Clsid", clean_token(info[1]))
+    state = ET.SubElement(parent, "State")
+    added = 0
+    for index, value in ((1, info[4] if len(info) > 4 else None), (2, info[8] if len(info) > 8 else None)):
+        payload = find_base64_payload(value)
+        if not payload:
+            continue
+        blob = ET.SubElement(state, "StateBlob")
+        blob.set("slot", str(index))
+        blob.set("encoding", "base64")
+        blob.text = payload
+        added += 1
+    if not added:
+        parent.remove(state)
+
+
 def add_semantic_item(
     parent: ET.Element,
     item: dict,
@@ -703,6 +729,7 @@ def add_semantic_item(
     add_chart_properties(node, item, item_data)
     add_pivot_chart_properties(node, item, item_data)
     add_geographical_schema_properties(node, item, item_data)
+    add_activex_properties(node, item, item_data)
     add_label_properties(node, item, item_data)
     add_text_color(node, item_data)
     add_back_color(node, item_data)

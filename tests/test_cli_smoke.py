@@ -161,7 +161,8 @@ class CliSmokeTest(unittest.TestCase):
             self.assertEqual(files["module"].modified, ticks)
 
     def test_ordinary_palette_describes_all_known_controls(self) -> None:
-        self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 26)
+        self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 27)
+        self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["ActiveXControl"].platform_name, "ЭлементУправленияActiveX")
         self.assertIn("Title", ORDINARY_CONTROL_DESCRIPTORS["Label"].properties)
         self.assertIn("ChoiceButton", ORDINARY_CONTROL_DESCRIPTORS["InputField"].properties)
         self.assertIn("RegulationButton", ORDINARY_CONTROL_DESCRIPTORS["InputField"].properties)
@@ -183,11 +184,42 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("КнопкаВыбора", {prop.name for prop in input_field.platform_properties})
         self.assertIn("АвтоВводНовойСтроки", {prop.name for prop in table.platform_properties})
 
+    def test_activex_control_roundtrips_typed_state(self) -> None:
+        root = ET.fromstring(
+            """
+            <Form version="1" containerCreatedTicks="0" containerModifiedTicks="0">
+              <Title><Item lang="ru">Тест</Item></Title>
+              <Width>800</Width>
+              <Height>600</Height>
+              <Pages>
+                <Page name="Страница1">
+                  <ActiveXControl name="ЭлементУправления1" id="42">
+                    <Position left="95" top="64" right="736" bottom="507"/>
+                    <Clsid>ca8a9780-280d-11cf-a24d-444553540000</Clsid>
+                    <State>
+                      <StateBlob slot="1" encoding="base64">AA4AAEBCAADJLQAA</StateBlob>
+                      <StateBlob slot="2" encoding="base64">AQAJAAADHQAAAAAABQAAAAAAAwAAAB4ABQAAAAsCAAAAAAUAAAAMArsBgQIEAAAAJwH//wMAAAAAAA==</StateBlob>
+                    </State>
+                  </ActiveXControl>
+                </Page>
+              </Pages>
+            </Form>
+            """
+        )
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        controls = stream[1][2][2]
+        self.assertEqual(controls[1][0], "621e95f1-064f-11d4-9400-008048da11f9")
+        self.assertEqual(controls[1][2][1], "ca8a9780-280d-11cf-a24d-444553540000")
+        self.assertEqual(controls[1][2][4][0], "#base64:AA4AAEBCAADJLQAA")
+        payload = controls[1][2][8][0].replace("#base64:", "").replace("\r", "").replace("\n", "")
+        self.assertEqual(base64.b64decode(payload)[:4], b"\x01\x00\x09\x00")
+
     def test_platform_control_guids_drive_item_types(self) -> None:
         self.assertEqual(ordinary_control_type("0fc7e20d-f241-460c-bdf4-5ad88e5474a5"), "Label")
         self.assertEqual(ordinary_control_type("6ff79819-710e-4145-97cd-1618da79e3e2"), "Button")
         self.assertEqual(ordinary_control_type("151ef23e-6bb2-4681-83d0-35bc2217230c"), "Image")
         self.assertEqual(ordinary_control_type("09ccdc77-ea1a-4a6d-ab1c-3435eada2433"), "Panel")
+        self.assertEqual(ordinary_control_type("621e95f1-064f-11d4-9400-008048da11f9"), "ActiveXControl")
         self.assertEqual(ordinary_control_type("381ed624-9217-4e63-85db-c4c3cb87daae"), "InputField")
         self.assertEqual(ordinary_control_type("e69bf21d-97b2-4f37-86db-675aea9ec2cb"), "CommandBar")
         self.assertEqual(ordinary_control_type("35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26"), "CheckBox")

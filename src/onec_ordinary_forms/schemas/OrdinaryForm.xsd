@@ -4,6 +4,13 @@
     <xs:documentation>Ordinary Form.xml public object model schema. This single schema contains the form root, ordinary controls, reusable XML value types, and platform palette annotations. Public XML element and type names use one English vocabulary; 1C platform Russian names, property names, event names, and value types are stored as schema appinfo metadata.</xs:documentation>
     <xs:appinfo>
       <PlatformPalette source="1C 8.2.19 ordinary-form help" language="ru" publicVocabulary="en">
+        <Control name="ActiveXControl" platformName="ЭлементУправленияActiveX">
+          <Properties>
+            <Property platformName="CLSID" platformType="Идентификатор"/>
+            <Property platformName="Состояние" platformType="ДвоичныеДанные"/>
+          </Properties>
+          <Events/>
+        </Control>
         <Control name="Button" platformName="Кнопка">
           <Properties>
             <Property platformName="ВертикальноеПоложение" platformType="ВертикальноеПоложение"/>
@@ -700,6 +707,11 @@
       <xs:pattern value="[0-9a-f]{64}"/>
     </xs:restriction>
   </xs:simpleType>
+  <xs:simpleType name="GuidType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"/>
+    </xs:restriction>
+  </xs:simpleType>
   <xs:complexType name="LocalizedTextType">
     <xs:sequence>
       <xs:element name="Item" type="LocalizedTextItemType" minOccurs="0" maxOccurs="unbounded"/>
@@ -746,6 +758,7 @@
   </xs:complexType>
   <xs:group name="ControlElementGroup">
     <xs:choice>
+      <xs:element name="ActiveXControl" type="ActiveXControlType"/>
       <xs:element name="Panel" type="PanelType"/>
       <xs:element name="LabelDecoration" type="LabelDecorationType"/>
       <xs:element name="PictureDecoration" type="PictureDecorationType"/>
@@ -777,6 +790,41 @@
   <xs:complexType name="ControlIdentityType">
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="id" type="xs:integer"/>
+  </xs:complexType>
+  <xs:complexType name="ActiveXStateBlobType" mixed="true">
+    <xs:attribute name="slot" type="xs:positiveInteger" use="required"/>
+    <xs:attribute name="encoding" type="xs:string" fixed="base64"/>
+  </xs:complexType>
+  <xs:complexType name="ActiveXStateType">
+    <xs:sequence>
+      <xs:element name="StateBlob" type="ActiveXStateBlobType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="ActiveXControlType">
+    <xs:complexContent>
+      <xs:extension base="ControlIdentityType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="Title" type="LocalizedTextType"/>
+          <xs:element name="ToolTip" type="LocalizedTextType"/>
+          <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Visible" type="xs:boolean"/>
+          <xs:element name="Enabled" type="xs:boolean"/>
+          <xs:element name="ReadOnly" type="xs:boolean"/>
+          <xs:element name="SkipOnInput" type="xs:boolean"/>
+          <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="Font" type="FontType"/>
+          <xs:element name="TextColor" type="ColorType"/>
+          <xs:element name="BackColor" type="ColorType"/>
+          <xs:element name="BorderColor" type="ColorType"/>
+          <xs:element name="ContextMenu" type="NamedRefType"/>
+          <xs:element name="AutoContextMenu" type="xs:boolean"/>
+          <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="Clsid" type="GuidType"/>
+          <xs:element name="State" type="ActiveXStateType"/>
+          <xs:group ref="ControlElementGroup"/>
+        </xs:choice>
+      </xs:extension>
+    </xs:complexContent>
   </xs:complexType>
   <xs:simpleType name="PanelEventNameType">
     <xs:restriction base="xs:string">
@@ -2005,6 +2053,7 @@
       <xs:documentation>Public ordinary Form.xml control element names.</xs:documentation>
     </xs:annotation>
     <xs:restriction base="xs:string">
+      <xs:enumeration value="ActiveXControl"/>
       <xs:enumeration value="Button"/>
       <xs:enumeration value="CalendarField"/>
       <xs:enumeration value="Chart"/>

@@ -972,6 +972,14 @@ DATA_BOUND_CONTROL_TYPES = {
 }
 
 
+def active_x_state_payload(element: ET.Element, slot: str) -> str:
+    for blob in element.findall("./State/StateBlob"):
+        if blob.get("slot") == slot:
+            payload = "".join((blob.text or "").split())
+            return wrap_base64_payload(payload) if payload else ""
+    return ""
+
+
 def data_path_from_xml(element: ET.Element) -> str:
     data_path = element.findtext("DataPath")
     if data_path and data_path.strip():
@@ -1033,6 +1041,8 @@ def control_info_from_xml(
         return info
     if control_type == "Panel":
         return panel_control_info_from_xml(element, title_record, actions)
+    if control_type == "ActiveXControl":
+        return active_x_control_info(element)
     if control_type == "Button":
         return button_control_info(element, title_record, actions)
     if control_type == "Image":
@@ -1091,6 +1101,26 @@ def control_info_from_xml(
     if control_type == "Label":
         return label_control_info(element, title_record, actions)
     raise ValueError(f"Unsupported ordinary form control type for stream writer: {control_type}")
+
+
+def active_x_control_info(element: ET.Element) -> list[object]:
+    clsid = element.findtext("Clsid", "").strip()
+    if not clsid:
+        raise ValueError("ActiveXControl must contain <Clsid>")
+    state_1 = active_x_state_payload(element, "1")
+    state_2 = active_x_state_payload(element, "2")
+    return [
+        "3",
+        clsid.lower(),
+        ["0"],
+        "2",
+        [state_1] if state_1 else ["0"],
+        "8",
+        "16960",
+        "11721",
+        [state_2] if state_2 else ["0"],
+        ["0"],
+    ]
 
 
 def control_actions_from_xml(element: ET.Element) -> list[object]:
