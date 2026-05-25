@@ -147,7 +147,7 @@ PIVOT_CHART_INFO_DESCRIPTOR = PlatformListRecordDescriptor(
 )
 
 TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN = {
-    ('"S"',): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVFLCgIxDBWXwiy9QNYpJG3HNrcQxAOMOlsX4k56\r\r\nMhceySvYNqOOOmBTSF8+Ly90OZ/Vc7/eLoLN4gLr7nzuT0eoYAOpWaTy1MuCXJBH\r\r\nXxwl9GkKR3RIuZQph0grXHHG2oRusucXa0d4NwwU/Iw4VWM4linZapSRFObp+LSv\r\r\nAWUrx1qFNLIx8toHW0gvD/BRVGlpoM05w+WWPED6k30xTEgfCVqFECy3aGvV8B11\r\r\nb+nCyruDNSy9GN/21sQozthIu72wtJ0E1fC9BekelW5grINZBamM9AA=",
+    ('"S"',): "#base64:AgFTS2/0iI3BTqDV67a9oKcNjVE7DsIwDEWMSJ24gWdHipOUxLdAQhygQFcG1A3l\r\r\nZAwciSsQxwXxqQR1KvfZzvN76nI+q8/tcj0zNoszrLth6E9HqGADuVlk+dRDjCQo\r\r\nYJBkM4Y8hRN6tGWUbCnZf258Yy/JxIz+reDoUfGqxVCSHSVqldAqLLvRlaDyfiwQ\r\r\nT550Sq+O8YqCCoct5GcGeBuqtHakLT1DcqQPkH90nwwT0l8ErWKMjtriQabGn1F9\r\r\ncxdXwR+cIe7ZhLZ3JiX2xiW72zNx23FUDZ8urPqodCNjXUwqSGXkOw==",
     ('"N"', "10", "0", "0"): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVExDsIwDESMSDyBxbMjxUlK4k8gFh5QoCsDYkN5\r\r\nGQNP4gvEcSlVqUQcyTo7dz4rm+WintfjeWdcr+6wb2+37nqBCnaAZLFEXq+yVPQS\r\r\nIwkKGCTZjCHP4YS+kKlolJLVF16ScS6jn+X8YmXEL6GXoE/FqxtDSaaIW4GEVmGZ\r\r\njp+YDJCtPKH9CeqZNQUlwgHykAGGV4Ou7XVLz5Bc6QPkP91BYcb7yNE2xuioQTf+\r\r\nj7o4t3Eb/NkZ4o5NaDpnUmJvXLLHExM3LUf1MN3C6h5Vrlesg0kNqY38Bg==",
     ('"D"', '"D"'): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVE7DsIwDEWMSD0Aq2dHipOUxDsHYOEABboyIDaU\r\r\nkzFwJK5AHJdfqUScyHr+PD8ry/msnvv1dmFsFhfYdOdzfzpCBWvA8nKzyAL1EiMJ\r\r\nChjE2YwhT+GEHm0pJVtCViu8OONcRj/Z84u1I74bBgp6RryqMZRkSrEaJbQKy3R8\r\r\n2miAbOUJ33kaebGgfbCF/PIAX0WV1g60JWdIruQB8p/si2FC+oewVYzRUYuuVg3f\r\r\nUffmLq6CPzhD3LMJbe9MSuyNS3a3Z+K246gaxltY3aPSDYx1MKkglZEf",
     ('"B"',): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVE7DsIwDEWMSB25gGdHipOUxCsnYOEABboyIDaU\r\r\nkzFwJK5AHBfKpxJxVOfZz8+2upzP6rlfbxfGZnGBTXc+96cjVLCG3CyyPPUSIwkK\r\r\nGMTZjCFP4YQebaGSLSGrDC/OOJfRT9b8Yq2IY8EgQc+I12kMJelSrEYJrcLSHZ/2\r\r\n1UC28qSst+/oxYLWwRbyywN8kKqsHWRLzpBcyQPkP9mXwsToo9EqxuioRVdZw++o\r\r\ne3MXV8EfnCHu2YS2dyYl9sYlu9szcdtx1Bm+t7C6R5UbFGtj0oF0jPwA",
@@ -2873,7 +2873,7 @@ def table_columns_from_xml(element: ET.Element) -> list[ET.Element]:
 def extended_table_view_record(columns: list[ET.Element]) -> list[object]:
     return [
         "23",
-        "117644301",
+        "117644289",
         default_color_record(),
         default_color_record(),
         default_color_record(),
@@ -2892,10 +2892,10 @@ def extended_table_view_record(columns: list[ET.Element]) -> list[object]:
         "1",
         ["8", "2", "0", ["-20"], "1", "100"],
         ["8", "2", "0", ["-20"], "1", "100"],
-        "2",
+        "0",
         "0",
         "1",
-        ["5", *[table_column_record(column, index) for index, column in enumerate(columns)]],
+        [str(len(columns)), *[table_column_record(column, index) for index, column in enumerate(columns)]],
         "0",
         "0",
         "0",

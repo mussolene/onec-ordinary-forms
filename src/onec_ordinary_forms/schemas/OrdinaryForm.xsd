@@ -1376,7 +1376,7 @@
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
-          <xs:element name="Columns" type="OpenElementType"/>
+          <xs:element name="Columns" type="TableColumnsType"/>
           <xs:element name="Rows" type="OpenElementType"/>
           <xs:element name="ColumnsCount" type="xs:integer"/>
           <xs:element name="RowsCount" type="xs:integer"/>
@@ -1543,6 +1543,19 @@
         </xs:choice>
       </xs:extension>
     </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="TableColumnsType">
+    <xs:sequence>
+      <xs:element name="Column" type="TableColumnType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="TableColumnType">
+    <xs:sequence>
+      <xs:element name="Title" type="LocalizedTextType" minOccurs="0"/>
+      <xs:element name="Type" type="OpenElementType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="order" type="xs:integer"/>
   </xs:complexType>
   <xs:complexType name="SplitterType">
     <xs:complexContent>

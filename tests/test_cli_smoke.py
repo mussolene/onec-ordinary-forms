@@ -1271,6 +1271,54 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(len(dendrogram[2][1][2]), 221)
         self.assertEqual(dendrogram[2][1][2][8][2], ['"ru"', '"Dendrogram title"'])
 
+    def test_table_value_columns_use_platform_oracle_view_profile(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="1">
+                    <Columns>
+                      <Column name="Колонка1" order="0">
+                        <Title><Item lang="ru">Колонка1</Item></Title>
+                        <Type source="TypeDomainPattern">
+                          <Pattern encoding="TypeDomainPattern" itemCount="1">
+                            <PatternItem code="S" typeName="xs:string"/>
+                          </Pattern>
+                        </Type>
+                      </Column>
+                      <Column name="Колонка2" order="1">
+                        <Title><Item lang="ru">Колонка2</Item></Title>
+                        <Type source="TypeDomainPattern">
+                          <Pattern encoding="TypeDomainPattern" itemCount="1">
+                            <PatternItem code="S" typeName="xs:string"/>
+                          </Pattern>
+                        </Type>
+                      </Column>
+                    </Columns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        control_index = extract_control_index_from_bracket(form_text)
+        item = next(item for item in control_index["tree"] if item.get("type") == "Table")
+        key = item.get("rawKey") or f"{item.get('page', '')}/{item.get('name', '')}"
+        view = control_index["data"][key]["raw"][2][2][1]
+
+        self.assertEqual(view[0], "23")
+        self.assertEqual(view[1], "117644289")
+        self.assertEqual(view[20], "0")
+        self.assertEqual(view[23][0], "2")
+        self.assertEqual(view[23][1][0], "737535a4-21e6-4971-8513-3e3173a9fedd")
+        first_column_body = view[23][1][1][1][1]
+        self.assertEqual(len(first_column_body), 52)
+        self.assertEqual(first_column_body[0], "23")
+        self.assertEqual(first_column_body[35], ['"Pattern"', ['"S"']])
+        self.assertEqual(first_column_body[38], "381ed624-9217-4e63-85db-c4c3cb87daae")
+
     def test_build_bin_uses_platform_extended_root_record_for_sized_forms(self) -> None:
         root = ET.fromstring(
             """<Form version="0.1">
