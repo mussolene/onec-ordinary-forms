@@ -1032,7 +1032,7 @@ def control_info_from_xml(
         replace_first_localized_text_record(info, title_record)
         return info
     if control_type == "Panel":
-        return panel_control_info_from_xml(element, title_record)
+        return panel_control_info_from_xml(element, title_record, actions)
     if control_type == "Button":
         return button_control_info(element, title_record, actions)
     if control_type == "Image":
@@ -1100,7 +1100,7 @@ def control_actions_from_xml(element: ET.Element) -> list[object]:
     return event_table_from_xml(element.find("Events"))
 
 
-def panel_control_info_from_xml(element: ET.Element, title_record: list[object]) -> list[object]:
+def panel_control_info_from_xml(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["Panel"]
     pages = element.find("Pages")
     page_nodes = pages.findall("Page") if pages is not None else []
@@ -1165,7 +1165,7 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object])
             "0",
             "0",
         ],
-        ["0"],
+        ["1", *actions] if actions else ["0"],
     ]
 
 

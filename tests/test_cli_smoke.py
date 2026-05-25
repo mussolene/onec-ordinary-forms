@@ -812,6 +812,25 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn('"DateOnChange"', form_text)
         self.assertIn("e1692cc2-605b-4535-84dd-28440238746c", form_text)
 
+    def test_build_bin_writes_panel_events_to_action_table(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Panel name="ОсновнаяПанель" id="131">
+                    <Events><Event name="ПриСменеСтраницы">ОсновнаяПанельПриСменеСтраницы</Event></Events>
+                  </Panel>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+
+        self.assertIn('"ОсновнаяПанельПриСменеСтраницы"', form_text)
+        self.assertIn("e1692cc2-605b-4535-84dd-28440238746c", form_text)
+
     def test_build_bin_uses_input_field_info_kind_and_read_only_slot(self) -> None:
         root = ET.fromstring(
             """<Form>
