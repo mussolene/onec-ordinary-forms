@@ -831,6 +831,30 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn('"ОсновнаяПанельПриСменеСтраницы"', form_text)
         self.assertIn("e1692cc2-605b-4535-84dd-28440238746c", form_text)
 
+    def test_build_bin_writes_calendar_events_to_action_table(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <CalendarField name="ПолеКалендаря" id="38">
+                    <Events>
+                      <Event name="ПроверкаПеретаскивания">ПолеКалендаряПроверкаПеретаскивания</Event>
+                      <Event name="Перетаскивание">ПолеКалендаряПеретаскивание</Event>
+                      <Event name="ПриИзменении">ПолеКалендаряПриИзменении</Event>
+                    </Events>
+                  </CalendarField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+
+        self.assertIn('"ПолеКалендаряПроверкаПеретаскивания"', form_text)
+        self.assertIn('"ПолеКалендаряПеретаскивание"', form_text)
+        self.assertIn('"ПолеКалендаряПриИзменении"', form_text)
+
     def test_build_bin_uses_input_field_info_kind_and_read_only_slot(self) -> None:
         root = ET.fromstring(
             """<Form>

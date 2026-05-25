@@ -1074,7 +1074,7 @@ def control_info_from_xml(
     if control_type == "TrackBar":
         return track_bar_control_info(element)
     if control_type == "CalendarField":
-        return calendar_field_control_info(element)
+        return calendar_field_control_info(element, actions)
     if control_type == "TextDocumentField":
         return text_document_field_control_info(element)
     if control_type == "GeographicalSchemaField":
@@ -2560,7 +2560,7 @@ def track_bar_control_info(element: ET.Element) -> list[object]:
     ]
 
 
-def calendar_field_control_info(element: ET.Element) -> list[object]:
+def calendar_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
     base = extended_base_info_record_from_xml(element)
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
     return [
@@ -2581,7 +2581,7 @@ def calendar_field_control_info(element: ET.Element) -> list[object]:
             "0",
             "1",
         ],
-        ["0"],
+        ["1", *actions] if actions else ["0"],
     ]
 
 
