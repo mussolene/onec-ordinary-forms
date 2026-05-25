@@ -855,6 +855,29 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn('"ПолеКалендаряПеретаскивание"', form_text)
         self.assertIn('"ПолеКалендаряПриИзменении"', form_text)
 
+    def test_build_bin_preserves_table_column_name_separate_from_title(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="48">
+                    <Columns>
+                      <Column name="ВидСравнения" order="2">
+                        <Title><Item lang="ru">Тип сравнения</Item></Title>
+                      </Column>
+                    </Columns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+
+        self.assertIn('"ВидСравнения"', form_text)
+        self.assertIn('"Тип сравнения"', form_text)
+
     def test_build_bin_uses_input_field_info_kind_and_read_only_slot(self) -> None:
         root = ET.fromstring(
             """<Form>
@@ -1782,6 +1805,66 @@ class CliSmokeTest(unittest.TestCase):
         add_semantic_item(root, panel, data, "Panel", {}, Path("/tmp"))
 
         self.assertIsNotNone(root.find(".//InputField[@name='LostInput']"))
+
+    def test_panel_dump_uses_geometry_page_index_before_page_name(self) -> None:
+        from onec_ordinary_forms.cli import add_semantic_item
+
+        geometry = [
+            "8",
+            "1",
+            "2",
+            "3",
+            "4",
+            "1",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "1",
+            "0",
+            "0",
+            "0",
+            "0",
+        ]
+        child = {
+            "id": "7",
+            "name": "RepeatedName",
+            "type": "InputField",
+            "page": "Страница1",
+            "rawKey": "Panel/RepeatedName",
+            "raw": [
+                "381ed624-9217-4e63-85db-c4c3cb87daae",
+                "7",
+                ["9"],
+                geometry,
+                ["14", '"RepeatedName"', "4294967295", "0", "0", "0"],
+                ["0"],
+            ],
+        }
+        panel = {"id": "1", "name": "Panel", "type": "Panel", "rawKey": "Panel", "child": [child]}
+        data = {
+            "Panel": {"id": "1", "raw": []},
+            "Panel/-pages-": ["Страница1", "Параметры"],
+            "Panel/Страница1": {},
+            "Panel/Параметры": {},
+            "Panel/RepeatedName": {"id": "7", "raw": child["raw"]},
+        }
+        root = ET.Element("Root")
+
+        add_semantic_item(root, panel, data, "Panel", {}, Path("/tmp"))
+
+        fields = root.findall(".//InputField[@name='RepeatedName']")
+        self.assertEqual(len(fields), 1)
+        second_page = root.findall(".//Page")[1]
+        self.assertIsNotNone(second_page.find("./InputField[@name='RepeatedName']"))
 
     def test_form_bin_pipeline_keeps_cli_out_of_section_details(self) -> None:
         with TemporaryDirectory() as temp_dir:

@@ -725,7 +725,17 @@ def add_semantic_item(
     )
     if page_descriptors:
         pages = ET.SubElement(node, "Pages")
-        placed_child_names: set[str] = set()
+        placed_child_keys: set[str] = set()
+
+        def child_key_for_page(child: dict) -> str:
+            return str(child.get("rawKey") or f"{raw_key}/{child.get('name', '')}")
+
+        def child_belongs_to_page(child: dict, page_index: int, page_name: object, page_path: str) -> bool:
+            geometry_page_index = child_page_index(data, raw_key, child)
+            if geometry_page_index is not None:
+                return geometry_page_index == page_index
+            return str(child.get("page", "")) == str(page_name) or str(child.get("page", "")) == page_path
+
         for page_index, page_descriptor in enumerate(page_descriptors):
             page_name = page_descriptor["name"]
             page_path = f"{raw_key}/{page_name}"
@@ -737,23 +747,21 @@ def add_semantic_item(
             page_items = [
                 child
                 for child in children
-                if child_page_index(data, raw_key, child) == page_index
-                or str(child.get("page", "")) == str(page_name)
-                or str(child.get("page", "")) == page_path
+                if child_belongs_to_page(child, page_index, page_name, page_path)
             ]
             page_items_node = page
             for child in page_items:
-                placed_child_names.add(str(child.get("name", "")))
-                child_key = str(child.get("rawKey") or f"{page_path}/{child.get('name', '')}")
+                child_key = child_key_for_page(child)
+                placed_child_keys.add(child_key)
                 add_semantic_item(page_items_node, child, data, child_key, element_index, asset_root)
         loose_children = [
             child
             for child in children
-            if str(child.get("name", "")) not in placed_child_names
+            if child_key_for_page(child) not in placed_child_keys
         ]
         if loose_children:
             for child in loose_children:
-                child_key = f"{raw_key}/{child.get('name', '')}"
+                child_key = child_key_for_page(child)
                 add_semantic_item(node, child, data, child_key, element_index, asset_root)
     elif children:
         for child in children:

@@ -3026,6 +3026,7 @@ def extended_table_view_record(columns: list[ET.Element]) -> list[object]:
 
 def table_column_record(column: ET.Element, index: int) -> list[object]:
     title = get_multilang_text(column, "Title") or column.get("name") or f"Колонка{index + 1}"
+    name = column.get("name") or title
     order = column.get("order") or str(index)
     pattern = type_pattern_from_xml(column) or [quoted_atom("S")]
     payload = TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN.get(tuple(pattern), TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN[(quoted_atom("S"),)])
@@ -3060,7 +3061,7 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
         "0",
         "4",
         "0",
-        quoted_atom(title),
+        quoted_atom(name),
         [],
         "15",
         "0",
