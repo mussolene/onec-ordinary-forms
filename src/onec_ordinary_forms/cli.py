@@ -749,7 +749,7 @@ def add_semantic_item(
         loose_children = [
             child
             for child in children
-            if str(child.get("name", "")) not in placed_child_names and child_page_index(data, raw_key, child) is None
+            if str(child.get("name", "")) not in placed_child_names
         ]
         if loose_children:
             for child in loose_children:

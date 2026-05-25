@@ -1652,6 +1652,61 @@ class CliSmokeTest(unittest.TestCase):
             self.assertNotIn('edge="[', xml)
             self.assertNotIn('side="edge[', xml)
 
+    def test_panel_dump_keeps_children_with_out_of_range_page_index(self) -> None:
+        from onec_ordinary_forms.cli import add_semantic_item
+
+        geometry = [
+            "8",
+            "1",
+            "2",
+            "3",
+            "4",
+            "1",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "99",
+            "0",
+            "0",
+            "0",
+            "0",
+        ]
+        child = {
+            "id": "7",
+            "name": "LostInput",
+            "type": "InputField",
+            "rawKey": "Panel/LostInput",
+            "raw": [
+                "381ed624-9217-4e63-85db-c4c3cb87daae",
+                "7",
+                ["9"],
+                geometry,
+                ["14", '"LostInput"', "4294967295", "0", "0", "0"],
+                ["0"],
+            ],
+        }
+        panel = {"id": "1", "name": "Panel", "type": "Panel", "rawKey": "Panel", "child": [child]}
+        data = {
+            "Panel": {"id": "1", "raw": []},
+            "Panel/-pages-": ["Page1"],
+            "Panel/Page1": {},
+            "Panel/LostInput": {"id": "7", "raw": child["raw"]},
+        }
+        root = ET.Element("Root")
+
+        add_semantic_item(root, panel, data, "Panel", {}, Path("/tmp"))
+
+        self.assertIsNotNone(root.find(".//InputField[@name='LostInput']"))
+
     def test_form_bin_pipeline_keeps_cli_out_of_section_details(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
