@@ -45,6 +45,7 @@ from onec_ordinary_forms.ordinary_stream import (
     PLATFORM_CONTROL_FORMAT_IDS,
     apply_geometry_bindings_to_raw,
     form_stream_from_object_xml,
+    geometry_stream_from_xml,
 )
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
@@ -448,6 +449,28 @@ class CliSmokeTest(unittest.TestCase):
         apply_geometry_bindings_to_raw(geometry, raw_geometry)
 
         self.assertEqual(raw_geometry[13], ["0", "20", "1"])
+
+    def test_geometry_writer_preserves_compact_two_dimension_profile(self) -> None:
+        position = ET.fromstring(
+            """
+            <Position left="0" top="0" right="0" bottom="0">
+              <Bindings>
+                <Binding coordinate="top" value="155"/>
+                <Binding coordinate="bottom" value="138"/>
+                <Binding coordinate="left" value="21"/>
+                <Binding coordinate="right" value="0"/>
+                <Binding coordinate="verticalCenter" value="1"/>
+                <Binding coordinate="horizontalCenter" value="1"/>
+                <DimensionBinding dimension="height" value="0"/>
+                <DimensionBinding dimension="minHeight" value="1"/>
+              </Bindings>
+            </Position>
+            """
+        )
+
+        raw_geometry = geometry_stream_from_xml("Panel", position, page_index=0, page_order=13)
+
+        self.assertEqual(raw_geometry, ["3", "0", "0", "0", "0", "13", "155", "138", "21", "0", "1", "1", "0", "0", "1"])
 
     def test_platform_control_format_ids_are_known(self) -> None:
         self.assertEqual(PLATFORM_CONTROL_FORMAT_IDS["controls"], 0x2500)
