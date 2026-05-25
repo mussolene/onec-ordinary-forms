@@ -54,6 +54,11 @@ class CliSmokeTest(unittest.TestCase):
     def test_version_is_present(self) -> None:
         self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
 
+    def test_list_stream_strings_do_not_treat_backslash_as_escape(self) -> None:
+        document = parse_list_stream_document('{"A:\\\\",{"B:\\\\"}}')
+
+        self.assertEqual(document.value, ['"A:\\\\"', ['"B:\\\\"']])
+
     def test_bundled_schema_paths_include_configuration(self) -> None:
         self.assertTrue(schema_path("OrdinaryForm.xsd").is_file())
         self.assertTrue(schema_path("PlatformConfigStructure.xsd").is_file())
@@ -75,6 +80,55 @@ class CliSmokeTest(unittest.TestCase):
             rebuilt_files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
             self.assertEqual(rebuilt_files["module"], b"module")
             self.assertIn(b"Main", rebuilt_files["form"])
+
+    def test_geometry_writer_preserves_raw_list_anchors(self) -> None:
+        position = ET.fromstring(
+            """
+            <Position left="0" top="0" right="10" bottom="10">
+              <Bindings>
+                <Binding coordinate="left" mode="3">
+                  <From value="1"/>
+                  <To relation="rawList" count="3">
+                    <Value index="1" kind="integer">3</Value>
+                    <Value index="2" kind="list" count="1">
+                      <Value index="1" kind="integer">0</Value>
+                    </Value>
+                    <Value index="3" kind="string">Anchor</Value>
+                  </To>
+                </Binding>
+              </Bindings>
+            </Position>
+            """
+        )
+
+        geometry = geometry_stream_from_xml("InputField", position)
+
+        self.assertEqual(geometry[8], ["3", "1", ["3", ["0"], "Anchor"]])
+
+    def test_gantt_chart_and_track_bar_events_are_serialized(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <TrackBar name="Месяц" id="1">
+                    <Events><Event name="ПриИзменении">МесяцПриИзменении</Event></Events>
+                  </TrackBar>
+                  <GanttChart name="ДиаграммаГанта" id="2">
+                    <Events><Event name="ПриОкончанииРедактированияИнтервала">ДиаграммаГантаПриОкончанииРедактированияИнтервала</Event></Events>
+                  </GanttChart>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        track = self._find_control(stream, "6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef")
+        gantt = self._find_control(stream, "e5fdc112-5c84-4a16-9728-72b85692b6e2")
+
+        self.assertIn('"МесяцПриИзменении"', dumps(track))
+        self.assertIn('"ДиаграммаГантаПриОкончанииРедактированияИнтервала"', dumps(gantt))
 
     def test_dump_build_preserves_container_ticks_via_xml_attributes(self) -> None:
         with TemporaryDirectory() as temp_dir:

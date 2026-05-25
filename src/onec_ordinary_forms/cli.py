@@ -680,7 +680,9 @@ def add_semantic_item(
     element_index: dict[str, dict[str, str]],
     asset_root: Path,
 ) -> None:
-    descriptor = control_descriptor(item.get("type"))
+    item_type = str(item.get("type") or "")
+    public_type = "Panel" if item_type == "Item" else item_type
+    descriptor = control_descriptor(public_type)
     node = ET.SubElement(parent, descriptor.xml_tag if descriptor is not None else str(item.get("type") or "Item"))
     node.set("name", str(item.get("name", "")))
     children = item.get("child") or []
@@ -689,11 +691,11 @@ def add_semantic_item(
         item_data = item
     if isinstance(item_data, dict) and item_data.get("id") is not None:
         node.set("id", str(item_data["id"]))
-    title = item_title(item_data, str(item.get("type", "")))
+    title = item_title(item_data, public_type)
     if title:
         add_multilang_text(node, "Title", title)
     add_tooltip(node, item_data)
-    add_data_path(node, item, item_data)
+    add_data_path(node, {**item, "type": public_type}, item_data)
     add_first_in_group(node, item, item_data)
     add_visible(node, item_data)
     add_read_only(node, item, item_data)
@@ -707,14 +709,14 @@ def add_semantic_item(
     add_border_color(node, item_data)
     add_font(node, item_data)
     add_geometry(node, item_data, element_index)
-    if str(item.get("type", "")) == "Image":
+    if public_type == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
-    action = action_binding(item_data) if str(item.get("type", "")) in {"Button", "Label"} else {}
+    action = action_binding(item_data) if public_type in {"Button", "Label"} else {}
     if action:
         action_node = ET.SubElement(node, "Action")
         for key, value in action.items():
             action_node.set(key, value)
-    add_control_events(node, str(item.get("type", "")), item_data)
+    add_control_events(node, public_type, item_data)
 
     page_names = data.get(f"{raw_key}/-pages-", [])
     parsed_pages = panel_pages_from_raw(item_data.get("raw") if isinstance(item_data, dict) else None)

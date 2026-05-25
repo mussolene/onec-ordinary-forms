@@ -93,15 +93,10 @@ def tokenize(text: str) -> list[Token]:
         if char == '"':
             start = index
             index += 1
-            escaped = False
             while index < len(text):
                 current = text[index]
                 index += 1
-                if escaped:
-                    escaped = False
-                elif current == "\\":
-                    escaped = True
-                elif current == '"':
+                if current == '"':
                     if index < len(text) and text[index] == '"':
                         index += 1
                         continue

@@ -2100,6 +2100,7 @@
       <xs:element name="Extra3" type="AnchorType" minOccurs="0"/>
       <xs:element name="Extra4" type="AnchorType" minOccurs="0"/>
       <xs:element name="Extra5" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra6" type="AnchorType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="coordinate" type="xs:string" use="required"/>
     <xs:attribute name="value" type="xs:string"/>
@@ -2107,6 +2108,14 @@
     <xs:attribute name="modeName" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="DimensionBindingType">
+    <xs:sequence>
+      <xs:element name="Extra1" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra2" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra3" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra4" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra5" type="AnchorType" minOccurs="0"/>
+      <xs:element name="Extra6" type="AnchorType" minOccurs="0"/>
+    </xs:sequence>
     <xs:attribute name="dimension" type="xs:string" use="required"/>
     <xs:attribute name="value" type="xs:string"/>
     <xs:attribute name="mode" type="xs:string"/>
@@ -2131,8 +2140,12 @@
     <xs:attribute name="offset" type="xs:integer"/>
   </xs:complexType>
   <xs:complexType name="IndexedValueType" mixed="true">
+    <xs:sequence>
+      <xs:element name="Value" type="IndexedValueType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
     <xs:attribute name="index" type="xs:nonNegativeInteger" use="required"/>
     <xs:attribute name="kind" type="xs:string"/>
+    <xs:attribute name="count" type="xs:nonNegativeInteger"/>
   </xs:complexType>
   <xs:complexType name="OpenElementType" mixed="true">
     <xs:sequence>

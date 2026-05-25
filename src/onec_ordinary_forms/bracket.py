@@ -225,6 +225,9 @@ def _extract_items(root: object, default_page: str) -> list[dict[str, object]]:
         geometry_index = _geometry_index(node)
         if geometry_index is None:
             continue
+        item_type = _element_type(node)
+        if item_type == "Item" and not _metadata_name(node):
+            continue
         name = _element_name(node, len(items) + 1)
         if name in seen_names:
             continue
@@ -233,7 +236,7 @@ def _extract_items(root: object, default_page: str) -> list[dict[str, object]]:
             {
                 "id": str(next_id),
                 "name": name,
-                "type": _element_type(node),
+                "type": item_type,
                 "page": default_page,
                 "raw": _normalize_item_raw(node, geometry_index),
             }

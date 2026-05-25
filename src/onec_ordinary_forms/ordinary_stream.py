@@ -1062,7 +1062,7 @@ def control_info_from_xml(
     if control_type == "PivotChart":
         return pivot_chart_control_info(element, title_record)
     if control_type == "GanttChart":
-        return gantt_chart_control_info(element, title_record)
+        return gantt_chart_control_info(element, title_record, actions)
     if control_type == "Dendrogram":
         return dendrogram_control_info(element, title_record)
     if control_type == "HTMLDocumentField":
@@ -1072,7 +1072,7 @@ def control_info_from_xml(
     if control_type == "ProgressBar":
         return progress_bar_control_info(element)
     if control_type == "TrackBar":
-        return track_bar_control_info(element)
+        return track_bar_control_info(element, actions)
     if control_type == "CalendarField":
         return calendar_field_control_info(element, actions)
     if control_type == "TextDocumentField":
@@ -1657,13 +1657,13 @@ def pivot_chart_info_secondary_record() -> list[object]:
     ]
 
 
-def gantt_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
+def gantt_chart_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
     return [
         "19",
         [
             "0",
             chart_control_info(),
-            diagram_presentation_record(element, title_record, kind="gantt"),
+            diagram_presentation_record(element, title_record, kind="gantt", actions=actions),
         ],
         *gantt_chart_info_tail(),
     ]
@@ -2544,7 +2544,7 @@ def progress_bar_base_info_record(element: ET.Element) -> list[object]:
     return base
 
 
-def track_bar_control_info(element: ET.Element) -> list[object]:
+def track_bar_control_info(element: ET.Element, actions: list[object]) -> list[object]:
     return [
         "1",
         [
@@ -2559,7 +2559,7 @@ def track_bar_control_info(element: ET.Element) -> list[object]:
             element.findtext("MarkStep") or "5",
             element.findtext("CurrentValue") or "100",
         ],
-        ["0"],
+        ["1", *actions] if actions else ["0"],
     ]
 
 
@@ -3754,6 +3754,8 @@ def dimension_binding_to_raw(node: ET.Element) -> object:
 
 
 def anchor_to_raw(node: ET.Element) -> object:
+    if node.get("relation") == "rawList":
+        return [raw_value_from_xml(child) for child in node.findall("Value")]
     if "value" in node.attrib:
         return node.get("value", "")
     return [
@@ -3762,6 +3764,12 @@ def anchor_to_raw(node: ET.Element) -> object:
         anchor_edge_code(node.get("side", "none")),
         node.get("offset", "0"),
     ]
+
+
+def raw_value_from_xml(node: ET.Element) -> object:
+    if node.get("kind") == "list":
+        return [raw_value_from_xml(child) for child in node.findall("Value")]
+    return node.text or ""
 
 
 def anchor_kind_code(name: str) -> str:
