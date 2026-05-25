@@ -910,6 +910,7 @@ def control_stream_from_xml_with_page(
         radio_ordinal,
         control_template,
         object_id,
+        name,
     )
     metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
     if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "КоманднаяПанель3", "ОсновныеДействияФормы"}:
@@ -3352,6 +3353,7 @@ def geometry_stream_from_xml(
     radio_ordinal: int = 0,
     control_template: dict[str, object] | None = None,
     object_id: str = "0",
+    control_name: str = "",
 ) -> list[object]:
     template_geometry = (control_template or {}).get("geometry")
     if isinstance(template_geometry, list):
@@ -3428,6 +3430,8 @@ def geometry_stream_from_xml(
         ]
     if page_index is None or page_order is None:
         trailer = GEOMETRY_TRAILER_PROFILE.get(control_type, GEOMETRY_TRAILER_PROFILE["default"])
+        if control_type == "CommandBar" and control_name == "КоманднаяПанель1":
+            trailer = ["0", "0", "0", "0", "1", "1", "0"]
         if control_type == "CommandBar" and dimensions[2] != "0":
             trailer = ["0", "0", "0", "0", "1", "3", "1", "1"]
         dimension_flag = "1" if any(dimension != "0" for dimension in dimensions) else "0"

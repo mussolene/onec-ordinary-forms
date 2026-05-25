@@ -1446,6 +1446,43 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(len(root_record) - 1, 13)
         self.assertEqual(root_record[10:], ["3", "1244", "1120", "96"])
 
+    def test_default_command_bar_geometry_uses_platform_name_profile(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <CommandBar name="КоманднаяПанель1" id="2">
+                    <Position left="0" top="0" right="100" bottom="25">
+                      <Bindings>
+                        <DimensionBinding dimension="height" mode="0" targetId="2" side="bottom"/>
+                        <DimensionBinding dimension="minHeight" value="0"/>
+                        <DimensionBinding dimension="stretch" value="0"/>
+                        <DimensionBinding dimension="width" value="0"/>
+                      </Bindings>
+                    </Position>
+                  </CommandBar>
+                  <CommandBar name="ДействияФормы" id="3">
+                    <Position left="0" top="75" right="100" bottom="100">
+                      <Bindings>
+                        <DimensionBinding dimension="height" mode="0" targetId="3" side="bottom"/>
+                        <DimensionBinding dimension="minHeight" value="1"/>
+                        <DimensionBinding dimension="stretch" value="0"/>
+                        <DimensionBinding dimension="width" value="0"/>
+                      </Bindings>
+                    </Position>
+                  </CommandBar>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        controls = {control[1]: control for control in self._find_controls(stream, "e69bf21d-97b2-4f37-86db-675aea9ec2cb")}
+
+        self.assertEqual(controls["2"][3][-4:], ["0", "1", "1", "0"])
+        self.assertEqual(controls["3"][3][-4:], ["1", "1", "1", "0"])
+
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):
             if value and value[0] == class_id:
