@@ -2,6 +2,7 @@ import unittest
 import base64
 import json
 import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 from struct import unpack
 from tempfile import TemporaryDirectory
@@ -11,7 +12,6 @@ from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_fo
 from onec_ordinary_forms.cli import (
     add_chart_properties,
     add_pivot_chart_properties,
-    control_template_metadata,
     format_xml_file,
     pretty_xml_bytes,
     schema_path,
@@ -21,6 +21,7 @@ from onec_ordinary_forms.formbin import (
     CONTAINER_HEADER_SIZE,
     _read_document,
     build_form_bin_container,
+    datetime_to_container_ticks,
     pack_form_bin,
     parse_form_bin_container,
     unpack_form_bin,
@@ -73,6 +74,36 @@ class CliSmokeTest(unittest.TestCase):
             rebuilt_files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
             self.assertEqual(rebuilt_files["module"], b"module")
             self.assertIn(b"Main", rebuilt_files["form"])
+
+    def test_dump_build_preserves_container_ticks_via_xml_attributes(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "Form.bin"
+            xml = root / "Form.xml"
+            rebuilt = root / "rebuilt.bin"
+            ticks = datetime_to_container_ticks(datetime(2024, 1, 2, 3, 4, 5))
+            source.write_bytes(
+                build_form_bin_container(
+                    b'{{"MainCaption",1,1,{"ru","Main"}}}',
+                    b"module",
+                    file_times={"form": (ticks, ticks), "module": (ticks, ticks)},
+                )
+            )
+
+            from onec_ordinary_forms.cli import build_bin, dump_bin
+
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(xml), "metadata_json": None})())
+            xml_text = xml.read_text(encoding="utf-8")
+            self.assertIn(f'containerCreatedTicks="{ticks}"', xml_text)
+            self.assertIn(f'containerModifiedTicks="{ticks}"', xml_text)
+            self.assertFalse((root / "Form" / "Form.bin.container.json").exists())
+            build_bin(type("Args", (), {"xml": str(xml), "out_bin": str(rebuilt), "asset_root": None})())
+
+            files = {file.name: file for file in parse_form_bin_container(rebuilt.read_bytes()).files}
+            self.assertEqual(files["form"].created, ticks)
+            self.assertEqual(files["form"].modified, ticks)
+            self.assertEqual(files["module"].created, ticks)
+            self.assertEqual(files["module"].modified, ticks)
 
     def test_ordinary_palette_describes_all_known_controls(self) -> None:
         self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 26)
@@ -350,240 +381,6 @@ class CliSmokeTest(unittest.TestCase):
         self.assertLess(module_data_offset, form_data_offset)
         self.assertEqual({file.name: file.payload for file in parse_form_bin_container(data).files}["form"], form)
 
-    def test_form_stream_uses_compact_root_profile_from_sidecar(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            xml = root / "Form.xml"
-            asset_root = root / "Form"
-            asset_root.mkdir()
-            xml.write_text(
-                """<?xml version='1.0' encoding='utf-8'?>
-<Form version="0.1">
-  <Title><Item lang="ru">List form</Item></Title>
-  <Pages><Page name="List form"/></Pages>
-</Form>
-""",
-                encoding="utf-8",
-            )
-            (asset_root / "Form.bin.container.json").write_text(
-                json.dumps(
-                    {
-                        "formRoot": {
-                            "recordKind": "16",
-                            "titleMarker": "2",
-                            "titleScope": "4294967295",
-                            "width": "780",
-                            "height": "308",
-                            "slot5": "1",
-                            "slot6": "1",
-                            "slot7": "1",
-                            "slot8": "4",
-                            "slot9": "4",
-                            "slot10": "38",
-                            "rootPanelInfoProfile": "21",
-                        }
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            text = form_stream_from_object_xml(ET.parse(xml).getroot(), asset_root).decode("utf-8-sig")
-
-        self.assertIn('{"ru","List form"}\r\n},2,4294967295', text)
-        self.assertIn("{10,1,", text)
-        self.assertIn("{2,772,1,1,3,0,0,8,0}", text)
-        self.assertIn("{2,308,0,1,4,0,0,0,0}", text)
-        self.assertNotIn("{19,1,", text)
-
-    def test_form_stream_preserves_root_panel_info_template_from_sidecar(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            xml = root / "Form.xml"
-            asset_root = root / "Form"
-            asset_root.mkdir()
-            xml.write_text(
-                """<?xml version='1.0' encoding='utf-8'?>
-<Form version="0.1">
-  <Title><Item lang="ru">List form</Item></Title>
-  <Pages><Page name="List form"/></Pages>
-</Form>
-""",
-                encoding="utf-8",
-            )
-            root_panel_info = ["1", [["10", "1"], "21", "0", "0", "sentinel-root-panel-info"], ["0"]]
-            (asset_root / "Form.bin.container.json").write_text(
-                json.dumps(
-                    {
-                        "formRoot": {
-                            "recordKind": "16",
-                            "titleMarker": "2",
-                            "titleScope": "4294967295",
-                            "width": "780",
-                            "height": "308",
-                            "slot5": "1",
-                            "slot6": "1",
-                            "slot7": "1",
-                            "slot8": "4",
-                            "slot9": "4",
-                            "slot10": "38",
-                            "rootPanelInfoProfile": "21",
-                            "rootPanelInfo": root_panel_info,
-                        }
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            text = form_stream_from_object_xml(ET.parse(xml).getroot(), asset_root).decode("utf-8-sig")
-
-        self.assertIn("sentinel-root-panel-info", text)
-
-    def test_form_stream_preserves_top_level_profile_from_sidecar(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            xml = root / "Form.xml"
-            asset_root = root / "Form"
-            asset_root.mkdir()
-            xml.write_text(
-                """<?xml version='1.0' encoding='utf-8'?>
-<Form version="0.1">
-  <Title><Item lang="ru">List form</Item></Title>
-  <Pages><Page name="List form"/></Pages>
-</Form>
-""",
-                encoding="utf-8",
-            )
-            tail = ["1", "4", "1", "0", "0", "0", ["0"], ["0"], ["3", "0", ["0"]], "1", "2", "0", "0", "1"]
-            (asset_root / "Form.bin.container.json").write_text(
-                json.dumps({"formStreamProfile": {"marker": "26", "tail": tail}}),
-                encoding="utf-8",
-            )
-
-            text = form_stream_from_object_xml(ET.parse(xml).getroot(), asset_root).decode("utf-8-sig")
-            stream = parse_list_stream_document(text).value
-
-        self.assertEqual(stream[0], "26")
-        self.assertEqual(len(stream), 19)
-        self.assertEqual(stream[5:], tail)
-
-    def test_form_stream_preserves_noncompact_root_slots_from_sidecar(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            xml = root / "Form.xml"
-            asset_root = root / "Form"
-            asset_root.mkdir()
-            xml.write_text(
-                """<?xml version='1.0' encoding='utf-8'?>
-<Form version="0.1">
-  <Title><Item lang="ru">List form</Item></Title>
-  <Pages><Page name="List form"/></Pages>
-</Form>
-""",
-                encoding="utf-8",
-            )
-            (asset_root / "Form.bin.container.json").write_text(
-                json.dumps(
-                    {
-                        "formRoot": {
-                            "recordKind": "16",
-                            "titleMarker": "32",
-                            "titleScope": "4294967295",
-                            "width": "780",
-                            "height": "308",
-                            "slot5": "1",
-                            "slot6": "1",
-                            "slot7": "1",
-                            "slot8": "4",
-                            "slot9": "4",
-                            "slot10": "38",
-                        }
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            text = form_stream_from_object_xml(ET.parse(xml).getroot(), asset_root).decode("utf-8-sig")
-            stream = parse_list_stream_document(text).value
-            root_record = stream[1]
-
-        self.assertEqual(root_record[1][1], "32")
-        self.assertEqual(root_record[5:11], ["1", "1", "1", "4", "4", "38"])
-
-    def test_form_stream_preserves_attribute_record_template_from_sidecar(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            xml = root / "Form.xml"
-            asset_root = root / "Form"
-            asset_root.mkdir()
-            xml.write_text(
-                """<?xml version='1.0' encoding='utf-8'?>
-<Form version="0.1">
-  <Attributes>
-    <Attribute name="List" id="29">
-      <Type source="TypeDomainPattern">
-        <Pattern encoding="TypeDomainPattern" itemCount="1">
-          <PatternItem code="S" typeName="xs:string"/>
-        </Pattern>
-      </Type>
-    </Attribute>
-  </Attributes>
-  <Pages><Page name="List form"/></Pages>
-</Form>
-""",
-                encoding="utf-8",
-            )
-            template = [["0"], "0", "1", '"List"', ['"Pattern"', ['"S"']]]
-            link_table = ["2", ["1", ["1", ["0"]]], ["1", ["1", ["29"]]]]
-            (asset_root / "Form.bin.container.json").write_text(
-                json.dumps(
-                    {
-                        "attributesTable": {
-                            "marker": "0",
-                            "slotCount": "2",
-                            "recordFlags": {"List": "0"},
-                            "attributeRecords": {"List": template},
-                            "linkTable": link_table,
-                        }
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            text = form_stream_from_object_xml(ET.parse(xml).getroot(), asset_root).decode("utf-8-sig")
-            stream = parse_list_stream_document(text).value
-            attribute = stream[2][2][1]
-
-        self.assertEqual(len(attribute), 5)
-        self.assertEqual(attribute[0], ["0"])
-        self.assertEqual(attribute[-2], '"List"')
-        self.assertEqual(attribute[-1], ['"Pattern"', ['"S"']])
-        self.assertEqual(stream[2][3], link_table)
-
-    def test_control_template_metadata_preserves_info_for_regular_controls(self) -> None:
-        control_index = {
-            "data": {},
-            "tree": [
-                {
-                    "id": "20",
-                    "name": "Caption",
-                    "type": "Label",
-                    "raw": [
-                        "0fc7e20d-f241-460c-bdf4-5ad88e5474a5",
-                        "20",
-                        ["3", [["10", "1"], "7", ["1", "1", ['"ru"', '"Caption"']]], ["0"]],
-                        ["8", "1", "2", "3", "4"],
-                        ["14", '"Caption"', "4294967295", "0", "0", "0"],
-                        ["0"],
-                    ],
-                }
-            ],
-        }
-
-        templates = control_template_metadata(control_index)
-
-        self.assertEqual(templates[0]["info"], control_index["tree"][0]["raw"][2])
-        self.assertEqual(templates[0]["childCount"], "0")
-
     def test_form_bin_unpack_assembles_descriptor_split_streams(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -813,7 +610,7 @@ class CliSmokeTest(unittest.TestCase):
             self.assertNotIn("<LogicalStream", xml)
             self.assertNotIn("binFile=", xml)
             self.assertEqual((root / "Form" / "Module.bsl").read_bytes(), module)
-            self.assertTrue((root / "Form" / "Form.bin.container.json").exists())
+            self.assertFalse((root / "Form" / "Form.bin.container.json").exists())
             validate_xml_file(out)
 
             rebuilt = root / "rebuilt.bin"

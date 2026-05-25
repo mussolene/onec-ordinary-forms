@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import base64
 import copy
-import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
-from onec_ordinary_forms.formbin import CONTAINER_INFO_NAME
 from onec_ordinary_forms.liststream import dumps_list_out_stream
 from onec_ordinary_forms.ordinary_platform import (
     CF_FORM_CONTROLS8_FORMAT_ID,
@@ -222,20 +220,9 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         first_page = pages[0] if pages else None
         title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
 
-    sidecar_metadata = form_sidecar_metadata(asset_root)
-    root_layout = form_root_layout_from_metadata(sidecar_metadata)
-    attributes_layout = form_attributes_layout_from_metadata(sidecar_metadata)
-    object_info = form_object_info_from_metadata(sidecar_metadata)
-    event_style_profile = form_event_style_profile_from_metadata(sidecar_metadata)
-    root_style = form_root_style_from_metadata(sidecar_metadata)
-    stream_profile = form_stream_profile_from_metadata(sidecar_metadata)
-    control_templates = control_templates_from_metadata(sidecar_metadata)
-    record_flags = (attributes_layout or {}).get("recordFlags", {})
-
     attributes = []
     attribute_type_patterns: dict[str, list[object]] = {}
     attribute_slots: dict[str, str] = {}
-    attribute_templates = (attributes_layout or {}).get("attributeRecords", {})
     for attribute in root.findall("./Attributes/Attribute"):
         name = attribute.get("name", "")
         if not name:
@@ -244,20 +231,12 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         attribute_type_patterns[name] = type_pattern
         if attribute.get("slot"):
             attribute_slots[name] = attribute.get("slot", "")
-        record_flag = record_flags.get(name) if isinstance(record_flags, dict) else None
-        record_template = attribute_templates.get(name) if isinstance(attribute_templates, dict) else None
-        attributes.append(
-            attribute_record_from_xml(
-                attribute,
-                str(record_flag) if record_flag is not None else None,
-                record_template if isinstance(record_template, list) else None,
-            )
-        )
+        attributes.append(attribute_record_from_xml(attribute))
 
     controls: list[object] = []
     for page in top_level_pages(root):
         for child in page:
-            control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots, control_templates)
+            control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots, {})
             if control:
                 controls.append(control)
 
@@ -265,13 +244,8 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         title or "Main",
         attributes,
         controls,
-        events_from_xml(root, event_style_profile),
-        form_size_from_xml(root, root_layout),
-        root_layout,
-        attributes_layout,
-        object_info,
-        root_style,
-        stream_profile,
+        events_from_xml(root),
+        form_size_from_xml(root),
     )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
 
@@ -286,9 +260,8 @@ def ordinary_form_stream(
     attributes_layout: dict[str, object] | None = None,
     object_info: list[object] | None = None,
     root_style: list[object] | None = None,
-    stream_profile: dict[str, object] | None = None,
 ) -> list[object]:
-    stream = [
+    return [
         "27",
         form_root_record(title, controls, form_size, root_layout),
         attributes_table(attributes, controls, attributes_layout),
@@ -310,14 +283,6 @@ def ordinary_form_stream(
         "1",
         "1",
     ]
-    if stream_profile is not None:
-        marker = stream_profile.get("marker")
-        if isinstance(marker, str) and marker:
-            stream[0] = marker
-        tail = stream_profile.get("tail")
-        if isinstance(tail, list):
-            stream = stream[:5] + copy.deepcopy(tail)
-    return stream
 
 
 def form_root_record(
@@ -738,97 +703,6 @@ def form_size_from_xml(root: ET.Element, root_layout: dict[str, str] | None = No
         height = height or root_layout.get("height", "")
         return width or "885", height or "244", False
     return width or "885", height or "244", bool(width and height)
-
-
-def form_sidecar_metadata(asset_root: Path | None) -> dict[str, object]:
-    if asset_root is None:
-        return {}
-    metadata_path = asset_root / CONTAINER_INFO_NAME
-    if not metadata_path.exists():
-        return {}
-    try:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, TypeError, ValueError):
-        return {}
-    return metadata if isinstance(metadata, dict) else {}
-
-
-def form_root_layout_from_metadata(metadata: dict[str, object]) -> dict[str, object] | None:
-    root_layout = metadata.get("formRoot")
-    if not isinstance(root_layout, dict):
-        return None
-    return {str(key): copy.deepcopy(value) if isinstance(value, list) else str(value) for key, value in root_layout.items()}
-
-
-def form_stream_profile_from_metadata(metadata: dict[str, object]) -> dict[str, object] | None:
-    profile = metadata.get("formStreamProfile")
-    if not isinstance(profile, dict):
-        return None
-    result: dict[str, object] = {}
-    marker = profile.get("marker")
-    if marker is not None:
-        result["marker"] = str(marker)
-    tail = profile.get("tail")
-    if isinstance(tail, list):
-        result["tail"] = copy.deepcopy(tail)
-    return result
-
-
-def form_attributes_layout_from_metadata(metadata: dict[str, object]) -> dict[str, object] | None:
-    attributes_layout = metadata.get("attributesTable")
-    if not isinstance(attributes_layout, dict):
-        return None
-    result: dict[str, object] = {
-        "marker": str(attributes_layout.get("marker", "1")),
-        "slotCount": str(attributes_layout.get("slotCount", "")),
-    }
-    record_flags = attributes_layout.get("recordFlags")
-    if isinstance(record_flags, dict):
-        result["recordFlags"] = {str(key): str(value) for key, value in record_flags.items()}
-    record_templates = attributes_layout.get("attributeRecords")
-    if isinstance(record_templates, dict):
-        result["attributeRecords"] = {
-            str(key): copy.deepcopy(value)
-            for key, value in record_templates.items()
-            if isinstance(value, list)
-        }
-    link_table = attributes_layout.get("linkTable")
-    if isinstance(link_table, list):
-        result["linkTable"] = copy.deepcopy(link_table)
-    return result
-
-
-def form_object_info_from_metadata(metadata: dict[str, object]) -> list[object] | None:
-    object_info = metadata.get("formObjectInfo")
-    return object_info if isinstance(object_info, list) else None
-
-
-def form_event_style_profile_from_metadata(metadata: dict[str, object]) -> str:
-    profile = str(metadata.get("eventStyleProfile", ""))
-    return profile if profile in {"compact", "extended"} else "extended"
-
-
-def form_root_style_from_metadata(metadata: dict[str, object]) -> list[object] | None:
-    root_style = metadata.get("rootStyleRecord")
-    return root_style if isinstance(root_style, list) else None
-
-
-def control_templates_from_metadata(metadata: dict[str, object]) -> dict[tuple[str, str], dict[str, object]]:
-    result: dict[tuple[str, str], dict[str, object]] = {}
-    templates = metadata.get("controlTemplates", [])
-    if not isinstance(templates, list):
-        return result
-    for item in templates:
-        if not isinstance(item, dict):
-            continue
-        control_type = str(item.get("type", ""))
-        control_id = str(item.get("id", ""))
-        control_name = str(item.get("name", ""))
-        if control_type and control_id:
-            result[(control_type, control_id)] = item
-        if control_type and control_name:
-            result[(control_type, control_name)] = item
-    return result
 
 
 def replace_first_localized_text_record(value: object, replacement: list[object]) -> bool:

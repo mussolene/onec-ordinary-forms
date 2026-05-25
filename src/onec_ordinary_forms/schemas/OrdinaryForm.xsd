@@ -691,6 +691,8 @@
       <xs:element name="Pages" type="PagesType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="version" type="xs:string" use="required"/>
+    <xs:attribute name="containerCreatedTicks" type="xs:unsignedLong" use="required"/>
+    <xs:attribute name="containerModifiedTicks" type="xs:unsignedLong" use="required"/>
   </xs:complexType>
   <xs:simpleType name="Sha256Type">
     <xs:restriction base="xs:string">

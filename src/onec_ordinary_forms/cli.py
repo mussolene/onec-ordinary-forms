@@ -1336,6 +1336,7 @@ def dump_xml_from_paths(
     module_bytes = module_path.read_bytes() if module_path and module_path.exists() else b""
     form_root = parse_list_stream_document(form_path.read_bytes().decode("utf-8-sig"), allow_trailing=True).value
     metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path else None
+    container_file_times = container_file_times_from_metadata(container_metadata_for_form(form_path))
     object_types = metadata_object_type_map(metadata)
     element_index = build_element_index(control_index)
     root_title = str((control_index.get("data", {}).get("-pages-") or [""])[0])
@@ -1343,6 +1344,7 @@ def dump_xml_from_paths(
     root = ET.Element("Form")
     root.set("version", SCHEMA_VERSION)
     root.set(f"{{{XSI_NS}}}noNamespaceSchemaLocation", ORDINARY_FORM_SCHEMA)
+    set_container_time_attributes(root, container_file_times)
 
     if root_title:
         add_multilang_text(root, "Title", root_title)
@@ -1351,33 +1353,6 @@ def dump_xml_from_paths(
         module_out = asset_root / "Module.bsl"
         module_out.parent.mkdir(parents=True, exist_ok=True)
         module_out.write_bytes(module_bytes)
-    container_info = form_path.parent / CONTAINER_INFO_NAME
-    if container_info.exists():
-        asset_root.mkdir(parents=True, exist_ok=True)
-        metadata = json.loads(container_info.read_text(encoding="utf-8"))
-        root_layout = form_root_layout_metadata(form_root)
-        if root_layout:
-            metadata["formRoot"] = root_layout
-        stream_profile = form_stream_profile_metadata(form_root)
-        if stream_profile:
-            metadata["formStreamProfile"] = stream_profile
-        attributes_layout = form_attributes_metadata(form_root)
-        if attributes_layout:
-            metadata["attributesTable"] = attributes_layout
-        object_info = form_object_info_metadata(form_root)
-        if object_info:
-            metadata["formObjectInfo"] = object_info
-        event_style_profile = form_event_style_profile_metadata(form_root)
-        if event_style_profile:
-            metadata["eventStyleProfile"] = event_style_profile
-        root_style = form_root_style_metadata(form_root)
-        if root_style:
-            metadata["rootStyleRecord"] = root_style
-        control_templates = control_template_metadata(control_index)
-        if control_templates:
-            metadata["controlTemplates"] = control_templates
-        (asset_root / CONTAINER_INFO_NAME).write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
     add_form_events(root, form_root)
 
     attrs = ET.SubElement(root, "Attributes")
@@ -1416,165 +1391,12 @@ def add_form_properties(parent: ET.Element, form_root: object) -> None:
         set_text(parent, "Height", height)
 
 
-def form_root_layout_metadata(form_root: object) -> dict[str, str] | None:
-    if not isinstance(form_root, list) or len(form_root) <= 1 or not isinstance(form_root[1], list):
-        return None
-    record = form_root[1]
-    if len(record) < 11:
-        return None
-    if not isinstance(record[1], list) or len(record[1]) < 3:
-        return None
-    result = {
-        "recordKind": clean_token(record[0]),
-        "titleMarker": clean_token(record[1][1]),
-        "titleScope": clean_token(record[1][2]),
-        "width": clean_token(record[3]),
-        "height": clean_token(record[4]),
-        "slot5": clean_token(record[5]),
-        "slot6": clean_token(record[6]),
-        "slot7": clean_token(record[7]),
-        "slot8": clean_token(record[8]),
-        "slot9": clean_token(record[9]),
-        "slot10": clean_token(record[10]),
-    }
-    root_panel = record[2]
-    if isinstance(root_panel, list) and len(root_panel) > 1 and isinstance(root_panel[1], list):
-        info = root_panel[1]
-        result["rootPanelInfo"] = copy.deepcopy(info)
-        result["rootPanelInfoKind"] = clean_token(info[0]) if info else ""
-        if len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 1:
-            result["rootPanelInfoProfile"] = clean_token(info[1][1])
-            base = info[1][0]
-            if isinstance(base, list) and base:
-                result["rootPanelBaseKind"] = clean_token(base[0])
-    return result
-
-
-def form_stream_profile_metadata(form_root: object) -> dict[str, object] | None:
-    if not isinstance(form_root, list) or len(form_root) < 5:
-        return None
-    return {
-        "marker": clean_token(form_root[0]),
-        "tail": copy.deepcopy(form_root[5:]),
-    }
-
-
-def form_attributes_metadata(form_root: object) -> dict[str, object] | None:
-    if not isinstance(form_root, list) or len(form_root) <= 2 or not isinstance(form_root[2], list):
-        return None
-    table = form_root[2]
-    if len(table) < 3:
-        return None
-    marker = table[0]
-    records = table[2]
-    result: dict[str, object] = {
-        "marker": clean_token(marker[0]) if isinstance(marker, list) and marker else clean_token(marker),
-        "slotCount": clean_token(table[1]),
-    }
-    if len(table) > 3 and isinstance(table[3], list):
-        result["linkTable"] = copy.deepcopy(table[3])
-    if isinstance(records, list):
-        record_flags: dict[str, str] = {}
-        record_templates: dict[str, object] = {}
-        for record in records[1:]:
-            if not isinstance(record, list) or len(record) < 5:
-                continue
-            name = attribute_record_name(record)
-            if not name:
-                continue
-            record_flags[name] = clean_token(record[1])
-            record_templates[name] = copy.deepcopy(record)
-        if record_flags:
-            result["recordFlags"] = record_flags
-        if record_templates:
-            result["attributeRecords"] = record_templates
-    return result
-
-
 def attribute_record_name(record: list[object]) -> str:
     if len(record) >= 2 and isinstance(record[-1], list) and record[-1] and clean_token(record[-1][0]) == "Pattern":
         return clean_token(record[-2])
     if len(record) > 4:
         return clean_token(record[4])
     return ""
-
-
-def form_object_info_metadata(form_root: object) -> list[object] | None:
-    if not isinstance(form_root, list) or len(form_root) <= 3 or not isinstance(form_root[3], list):
-        return None
-    return form_root[3]
-
-
-def form_event_style_profile_metadata(form_root: object) -> str | None:
-    if not isinstance(form_root, list) or len(form_root) <= 4 or not isinstance(form_root[4], list):
-        return None
-    events = form_root[4]
-    if len(events) <= 1 or not isinstance(events[1], list):
-        return None
-    try:
-        style = events[1][2][2][5]
-    except (IndexError, TypeError):
-        return None
-    if isinstance(style, list) and style:
-        if clean_token(style[0]) == "3" and len(style) == 8:
-            return "compact"
-        if clean_token(style[0]) == "4" and len(style) == 9:
-            return "extended"
-    return None
-
-
-def form_root_style_metadata(form_root: object) -> list[object] | None:
-    if not isinstance(form_root, list) or len(form_root) <= 13 or not isinstance(form_root[13], list):
-        return None
-    return form_root[13]
-
-
-def control_template_metadata(control_index: dict) -> list[dict[str, object]]:
-    result: list[dict[str, object]] = []
-    data = control_index.get("data", {})
-    tree = control_index.get("tree", [])
-    if not isinstance(data, dict) or not isinstance(tree, list):
-        return result
-
-    def walk(items: list[dict[str, object]]) -> None:
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            control_type = str(item.get("type", ""))
-            raw_key = str(item.get("rawKey") or f"{item.get('page', '')}/{item.get('name', '')}")
-            item_data = data.get(raw_key)
-            raw = item_data.get("raw") if isinstance(item_data, dict) else item.get("raw")
-            if control_type and isinstance(raw, list) and len(raw) >= 6:
-                geometry = control_geometry_record(raw)
-                template: dict[str, object] = {
-                    "id": str(item.get("id", "")),
-                    "name": str(item.get("name", "")),
-                    "type": control_type,
-                }
-                if isinstance(raw[2], list):
-                    template["info"] = raw[2]
-                if geometry is not None:
-                    template["geometry"] = geometry
-                if isinstance(raw[4], list):
-                    template["metadata"] = raw[4]
-                if isinstance(raw[-1], list) and raw[-1]:
-                    template["childCount"] = clean_token(raw[-1][0])
-                if "info" in template or "geometry" in template:
-                    result.append(template)
-            child = item.get("child")
-            if isinstance(child, list):
-                walk(child)
-
-    walk(tree)
-    deduped: list[dict[str, object]] = []
-    seen: set[tuple[str, str]] = set()
-    for template in result:
-        key = (str(template.get("type", "")), str(template.get("id", "")))
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(template)
-    return deduped
 
 
 def add_form_events(parent: ET.Element, form_root: object) -> None:
@@ -1671,6 +1493,53 @@ def write_pretty_xml(root: ET.Element, path: Path) -> None:
     path.write_bytes(pretty_xml_bytes(root))
 
 
+def container_metadata_for_form(form_path: Path) -> dict[str, object] | None:
+    info_path = form_path.parent / CONTAINER_INFO_NAME
+    if not info_path.exists():
+        return None
+    try:
+        metadata = json.loads(info_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return metadata if isinstance(metadata, dict) else None
+
+
+def container_file_times_from_metadata(metadata: dict[str, object] | None) -> dict[str, tuple[int | None, int | None]]:
+    if not isinstance(metadata, dict):
+        return {}
+    result: dict[str, tuple[int | None, int | None]] = {}
+    for file in metadata.get("files", []):
+        if not isinstance(file, dict):
+            continue
+        name = str(file.get("name", ""))
+        if not name:
+            continue
+        try:
+            created = int(file["createdTicks"]) if file.get("createdTicks") is not None else None
+            modified = int(file["modifiedTicks"]) if file.get("modifiedTicks") is not None else None
+        except (TypeError, ValueError):
+            continue
+        result[name] = (created, modified)
+    return result
+
+
+def set_container_time_attributes(root: ET.Element, file_times: dict[str, tuple[int | None, int | None]]) -> None:
+    created, modified = file_times.get("form", file_times.get("module", (None, None)))
+    if created is not None:
+        root.set("containerCreatedTicks", str(created))
+    if modified is not None:
+        root.set("containerModifiedTicks", str(modified))
+
+
+def container_file_times_from_xml(root: ET.Element) -> dict[str, tuple[int | None, int | None]]:
+    try:
+        created = int(root.get("containerCreatedTicks", ""))
+        modified = int(root.get("containerModifiedTicks", ""))
+    except ValueError:
+        return {}
+    return {"form": (created, modified), "module": (created, modified)}
+
+
 def semantic_model_hash(root: ET.Element) -> str:
     model = ET.Element("SemanticModel")
     for tag in ("Title", "Attributes", "Pages"):
@@ -1743,57 +1612,6 @@ def module_data_from_xml(root: ET.Element, asset_root: Path) -> bytes:
     return module_path.read_bytes()
 
 
-def container_times_from_xml(root: ET.Element) -> tuple[int | None, int | None]:
-    source = root.find("./Source")
-    if source is None:
-        return None, None
-    created = source.get("formCreatedTicks")
-    modified = source.get("formModifiedTicks")
-    try:
-        return (
-            int(created) if created is not None else None,
-            int(modified) if modified is not None else None,
-        )
-    except ValueError:
-        return None, None
-    return None, None
-
-
-def container_times_from_asset_root(asset_root: Path) -> dict[str, tuple[int, int]]:
-    metadata_path = asset_root / CONTAINER_INFO_NAME
-    if not metadata_path.exists():
-        return {}
-    try:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, TypeError, ValueError):
-        return {}
-    result: dict[str, tuple[int, int]] = {}
-    for file in metadata.get("files", []):
-        if not isinstance(file, dict):
-            continue
-        name = str(file.get("name", ""))
-        created = file.get("createdTicks")
-        modified = file.get("modifiedTicks")
-        if not name or created is None or modified is None:
-            continue
-        try:
-            result[name] = (int(created), int(modified))
-        except (TypeError, ValueError):
-            continue
-    return result
-
-
-def container_toc_padding_from_asset_root(asset_root: Path) -> bytes | None:
-    metadata_path = asset_root / CONTAINER_INFO_NAME
-    if not metadata_path.exists():
-        return None
-    try:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-        return bytes.fromhex(str(metadata.get("tocPaddingHex", "")))
-    except (OSError, TypeError, ValueError):
-        return None
-
-
 def form_title_from_xml(root: ET.Element) -> str:
     return get_multilang_text(root, "Title")
 
@@ -1814,14 +1632,10 @@ def build_bin(args: argparse.Namespace) -> None:
     root = ET.parse(xml_path).getroot()
     form_data = form_stream_from_object_xml(root, asset_root)
     module_data = module_data_from_xml(root, asset_root)
-    created, modified = container_times_from_xml(root)
     bin_data = build_form_bin_container(
         form_data,
         module_data,
-        created=created,
-        modified=modified,
-        file_times=container_times_from_asset_root(asset_root),
-        toc_padding=container_toc_padding_from_asset_root(asset_root),
+        file_times=container_file_times_from_xml(root),
     )
     out_bin.parent.mkdir(parents=True, exist_ok=True)
     out_bin.write_bytes(bin_data)
