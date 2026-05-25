@@ -1483,6 +1483,39 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(controls["2"][3][-4:], ["0", "1", "1", "0"])
         self.assertEqual(controls["3"][3][-4:], ["1", "1", "1", "0"])
 
+    def test_compact_command_bar_geometry_roundtrips_two_dimension_profile(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <CommandBar name="КонтекстноеМенюМокселя" id="126">
+                    <Position left="2" top="18" right="102" bottom="36">
+                      <Bindings>
+                        <Binding coordinate="top" value="20"/>
+                        <Binding coordinate="bottom" value="6"/>
+                        <Binding coordinate="left" value="21"/>
+                        <Binding coordinate="right" value="0"/>
+                        <Binding coordinate="verticalCenter" value="0"/>
+                        <Binding coordinate="horizontalCenter" value="0"/>
+                        <DimensionBinding dimension="height" value="0"/>
+                        <DimensionBinding dimension="minHeight" value="4"/>
+                      </Bindings>
+                    </Position>
+                  </CommandBar>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        controls = {control[1]: control for control in self._find_controls(stream, "e69bf21d-97b2-4f37-86db-675aea9ec2cb")}
+
+        self.assertEqual(
+            controls["126"][3],
+            ["3", "2", "18", "102", "36", "3", "20", "6", "21", "0", "0", "0", "0", "0", "4"],
+        )
+
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):
             if value and value[0] == class_id:

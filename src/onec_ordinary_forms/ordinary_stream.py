@@ -3397,6 +3397,8 @@ def geometry_stream_from_xml(
                         dimensions[index] = dimension_binding_to_raw(binding)
     if page_index is not None and page_order is not None and not has_explicit_geometry_bindings:
         bindings, dimensions = default_paged_geometry_bindings(object_id, right, bottom, left, top)
+    if compact_command_bar_geometry(control_type, position, bindings, dimensions):
+        return ["3", left, top, right, bottom, "3", *bindings, "0", *dimensions[:2]]
     if control_type == "Splitter":
         default_group = str(page_order) if page_order is not None else "0"
         default_order = str(page_index) if page_index is not None else "0"
@@ -3590,6 +3592,25 @@ def layout_group_tail(
     except ValueError:
         next_order = "0"
     return [group, order, next_order, "0", "0"]
+
+
+def compact_command_bar_geometry(
+    control_type: str,
+    position: ET.Element | None,
+    bindings: list[object],
+    dimensions: list[object],
+) -> bool:
+    if control_type != "CommandBar" or position is None:
+        return False
+    binding_container = position.find("Bindings")
+    if binding_container is None:
+        return False
+    dimension_names = {binding.get("dimension", "") for binding in binding_container.findall("DimensionBinding")}
+    if not dimension_names or not dimension_names <= {"height", "minHeight"}:
+        return False
+    return all(not isinstance(binding, list) for binding in bindings) and all(
+        not isinstance(dimension, list) for dimension in dimensions[:2]
+    )
 
 
 def default_paged_geometry_bindings(
