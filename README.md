@@ -367,7 +367,7 @@ python3 tools/vendor_platform_schemas.py \
 
 ## Status / Статус
 
-Current release: `0.4.2`.
+Current release: `0.4.3`.
 
 Current implementation status:
 
@@ -395,6 +395,9 @@ Current implementation status:
 
 Validation status:
 
+- `v0.4.3` adds typed ordinary-form `ActiveXControl` XML/XSD support,
+  including CLSID and state blobs, and preserves the PDF ActiveX control found
+  in a direct `Form.bin` dump/build check.
 - `v0.4.2` extends the `v0.4.1` edit stabilization with strict
   platform-validated add `Button` and delete leaf `LabelDecoration` scenarios.
 - `v0.4.1` preserves the `v0.4.0` no-op rebuild baseline and adds a strict
@@ -408,6 +411,9 @@ Validation status:
 
 Статус проверок:
 
+- `v0.4.3` добавляет типизированную XML/XSD-поддержку обычного
+  `ActiveXControl`, включая CLSID и state blobs, и сохраняет PDF ActiveX
+  control в прямой проверке `Form.bin` dump/build.
 - `v0.4.2` расширяет стабилизацию редактирования `v0.4.1` строгими
   платформенными проверками добавления `Button` и удаления leaf
   `LabelDecoration`.
