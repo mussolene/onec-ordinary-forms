@@ -1391,6 +1391,55 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(list_box[2][1][1][0], "23")
         self.assertEqual(list_box[2][1][1][22], "0")
 
+    def test_short_paged_positions_use_platform_parent_anchor_profiles(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Width>1244</Width>
+              <Height>1120</Height>
+              <Pages>
+                <Page name="Main">
+                  <Panel name="Panel" id="4">
+                    <Position left="8" top="33" right="1236" bottom="1087" width="1228" height="1054"/>
+                    <Pages>
+                      <Page name="Page">
+                        <CommandBar name="NestedBar" id="7">
+                          <Position left="16" top="56" right="580" bottom="81" width="564" height="25"/>
+                        </CommandBar>
+                        <Splitter name="Split" id="25">
+                          <Position left="16" top="278" right="580" bottom="286" width="564" height="8"/>
+                        </Splitter>
+                        <SpreadsheetDocumentField name="Sheet" id="26">
+                          <Position left="16" top="674" right="360" bottom="850" width="344" height="176"/>
+                        </SpreadsheetDocumentField>
+                        <TextDocumentField name="Text" id="29">
+                          <Position left="640" top="674" right="960" bottom="850" width="320" height="176"/>
+                        </TextDocumentField>
+                        <PivotChart name="Pivot" id="30">
+                          <Position left="16" top="870" right="360" bottom="1040" width="344" height="170"/>
+                        </PivotChart>
+                      </Page>
+                    </Pages>
+                  </Panel>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        command_bar = next(control for control in self._find_controls(stream, "e69bf21d-97b2-4f37-86db-675aea9ec2cb") if control[1] == "7")
+        splitter = self._find_control(stream, "36e52348-5d60-4770-8e89-a16ed50a2006")
+        spreadsheet = self._find_control(stream, "236a17b3-7f44-46d9-a907-75f9cdc61ab5")
+        text = self._find_control(stream, "14c4a229-bfc3-42fe-9ce1-2da049fd0109")
+        pivot = self._find_control(stream, "a26da99e-184a-4823-b0d6-62816d38dc4e")
+
+        self.assertEqual(command_bar[3][13], ["0", "7", "1"])
+        self.assertEqual(command_bar[3][15:19], ["0", "0", "0", "0"])
+        self.assertEqual(splitter[3][13:16], ["1", ["0", "25", "0"], "0"])
+        self.assertEqual(spreadsheet[3][12:16], ["0", "0", "0", "0"])
+        self.assertEqual(text[3][12:16], ["0", "0", "0", "0"])
+        self.assertEqual(pivot[3][12:16], ["0", "0", "0", "0"])
+
     def test_build_bin_uses_heavy_control_info_kinds(self) -> None:
         root = ET.fromstring(
             """<Form>

@@ -209,6 +209,19 @@ GEOMETRY_TRAILER_PROFILE = {
     "paged": ["0", "0", "0"],
 }
 
+SHORT_POSITION_PARENT_ANCHORED_TYPES = {
+    "CommandBar",
+    "PivotChart",
+    "SpreadsheetDocumentField",
+    "Splitter",
+    "TextDocumentField",
+}
+
+SHORT_POSITION_FIXED_HEIGHT_TYPES = {
+    "CommandBar",
+    "Splitter",
+}
+
 
 def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None) -> bytes:
     """Serialize public ordinary ``Form.xml`` into platform list-stream bytes."""
@@ -889,6 +902,7 @@ def control_stream_from_xml_with_page(
     control_templates: dict[tuple[str, str], dict[str, object]],
     page_index: int | None,
     page_order: int | None,
+    parent_size: tuple[str, str] | None = None,
 ) -> list[object] | None:
     control_type = control_type_from_xml_tag(element.tag)
     if not control_type:
@@ -917,6 +931,7 @@ def control_stream_from_xml_with_page(
         control_template,
         object_id,
         name,
+        parent_size,
     )
     metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
     if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "КоманднаяПанель3", "ОсновныеДействияФормы"}:
@@ -936,13 +951,23 @@ def control_stream_from_xml_with_page(
             children.append(child_stream)
     pages = element.find("Pages")
     if pages is not None:
+        child_parent_size = position_size(element.find("Position"))
         page_children: list[tuple[int, list[object]]] = []
         for page_number, page in enumerate(pages.findall("Page")):
             page_child_order = 0
             for child in page:
                 if not control_type_from_xml_tag(child.tag):
                     continue
-                child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, control_templates, page_number, page_child_order)
+                child_stream = control_stream_from_xml_with_page(
+                    child,
+                    asset_root,
+                    attribute_type_patterns,
+                    attribute_slots,
+                    control_templates,
+                    page_number,
+                    page_child_order,
+                    child_parent_size,
+                )
                 if child_stream:
                     page_children.append((int(child_stream[1]), child_stream))
                     page_child_order += 1
@@ -3390,6 +3415,7 @@ def geometry_stream_from_xml(
     control_template: dict[str, object] | None = None,
     object_id: str = "0",
     control_name: str = "",
+    parent_size: tuple[str, str] | None = None,
 ) -> list[object]:
     template_geometry = (control_template or {}).get("geometry")
     if isinstance(template_geometry, list):
@@ -3433,6 +3459,19 @@ def geometry_stream_from_xml(
                         dimensions[index] = dimension_binding_to_raw(binding)
     if page_index is not None and page_order is not None and not has_explicit_geometry_bindings:
         bindings, dimensions = default_paged_geometry_bindings(object_id, right, bottom, left, top)
+        if control_type in SHORT_POSITION_PARENT_ANCHORED_TYPES:
+            bindings, dimensions = default_parent_anchored_geometry_bindings(
+                object_id,
+                right,
+                bottom,
+                left,
+                top,
+                parent_size,
+                fixed_height=control_type in SHORT_POSITION_FIXED_HEIGHT_TYPES,
+                fixed_width=False,
+            )
+            if control_type == "Splitter":
+                dimensions = ["1", ["0", object_id, "0"], "0", "0"]
     if compact_scalar_geometry(position, bindings, dimensions):
         compact_order = str(page_order) if page_order is not None else "3"
         return ["3", left, top, right, bottom, compact_order, *bindings, "0", *dimensions[:2]]
@@ -3670,6 +3709,53 @@ def default_paged_geometry_bindings(
         ],
         [["0", object_id, "1"], "0", "1", ["0", object_id, "3"]],
     )
+
+
+def default_parent_anchored_geometry_bindings(
+    object_id: str,
+    right: str,
+    bottom: str,
+    left: str,
+    top: str,
+    parent_size: tuple[str, str] | None,
+    *,
+    fixed_height: bool,
+    fixed_width: bool,
+) -> tuple[list[object], list[object]]:
+    width = geometry_delta(right, left)
+    height = geometry_delta(bottom, top)
+    parent_width, parent_height = parent_size or ("0", "0")
+    empty_anchor = ["2", "-1", "6", "0"]
+    bottom_anchor = ["2", object_id, "0", height] if fixed_height else ["2", "0", "1", geometry_delta(bottom, parent_height)]
+    right_anchor = ["2", object_id, "2", width] if fixed_width else ["2", "0", "3", geometry_delta(right, parent_width)]
+    dimensions: list[object] = []
+    dimensions.append(["0", object_id, "1"] if fixed_height else "0")
+    dimensions.append("0")
+    dimensions.append("1" if fixed_width else "0")
+    dimensions.append(["0", object_id, "3"] if fixed_width else "0")
+    return (
+        [
+            ["0", empty_anchor, empty_anchor],
+            ["0", bottom_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", right_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+        ],
+        dimensions,
+    )
+
+
+def position_size(position: ET.Element | None) -> tuple[str, str] | None:
+    if position is None:
+        return None
+    width = position.get("width")
+    height = position.get("height")
+    if not width:
+        width = geometry_delta(position.get("right", "0"), position.get("left", "0"))
+    if not height:
+        height = geometry_delta(position.get("bottom", "0"), position.get("top", "0"))
+    return width, height
 
 
 def geometry_delta(end: str, start: str) -> str:
