@@ -11,6 +11,8 @@ from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
 from onec_ordinary_forms.cli import (
     add_chart_properties,
+    add_font,
+    add_text_color,
     add_pivot_chart_properties,
     format_xml_file,
     pretty_xml_bytes,
@@ -1152,6 +1154,10 @@ class CliSmokeTest(unittest.TestCase):
                   <Button name="Run" id="26">
                     <Title><Item lang="ru">Run</Item></Title>
                     <Visible>false</Visible>
+                    <TextColor>#112233</TextColor>
+                    <BackColor rgb="#445566"/>
+                    <BorderColor value="7829367"/>
+                    <Font kind="6" family="3" style="0" size="100"/>
                     <ToolTip><Item lang="ru">Run tooltip</Item></ToolTip>
                   </Button>
                 </Page>
@@ -1167,8 +1173,69 @@ class CliSmokeTest(unittest.TestCase):
         base = button[2][1][0]
         self.assertEqual(button[2][0], "1")
         self.assertEqual(base[1], "0")
+        self.assertEqual(base[2], ["3", "3", ["1122867"]])
+        self.assertEqual(base[3], ["3", "3", ["4478310"]])
+        self.assertEqual(base[4], ["6", "3", "0", ["0"], "100"])
+        self.assertEqual(base[6], ["3", "3", ["7829367"]])
         self.assertEqual(button[2][1][1], "14")
         self.assertEqual(base[12][2], ['"ru"', '"Run tooltip"'])
+
+    def test_dump_writes_platform_readable_font_and_color_values(self) -> None:
+        base = [
+            "10",
+            "1",
+            ["3", "3", ["1122867"]],
+            ["3", "4", ["0"]],
+            ["6", "3", "0", ["0"], "100"],
+            "0",
+            ["3", "4", ["0"]],
+            ["3", "4", ["0"]],
+            ["3", "4", ["0"]],
+            ["3", "3", ["-7"]],
+            ["3", "3", ["-21"]],
+            ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+            ["1", "0"],
+        ]
+        node = ET.Element("Button")
+        item_data = {"raw": ["6ff79819-710e-4145-97cd-1618da79e3e2", "26", ["1", [base]]]}
+
+        add_text_color(node, item_data)
+        add_font(node, item_data)
+
+        color = node.find("TextColor")
+        self.assertIsNotNone(color)
+        self.assertEqual(color.text, "#112233")
+        self.assertEqual(color.get("kind"), "Absolute")
+        self.assertEqual(color.get("value"), "1122867")
+        self.assertEqual(color.get("rgb"), "#112233")
+        font = node.find("Font")
+        self.assertIsNotNone(font)
+        self.assertEqual(font.get("kind"), "6")
+        self.assertEqual(font.get("family"), "3")
+        self.assertEqual(font.get("style"), "0")
+        self.assertEqual(font.get("size"), "100")
+        self.assertEqual(font.get("height"), "100")
+
+    def test_schema_accepts_platform_style_font_and_color_values(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            xml = Path(temp_dir) / "Form.xml"
+            xml.write_text(
+                """<Form version="1" containerCreatedTicks="0" containerModifiedTicks="0">
+                  <Title><Item lang="ru">Main</Item></Title>
+                  <Pages>
+                    <Page name="Main">
+                      <Button name="Run" id="26">
+                        <TextColor>#112233</TextColor>
+                        <BackColor>style:FormBackColor</BackColor>
+                        <Font ref="style:NormalTextFont" height="9" kind="StyleItem" scale="100"/>
+                      </Button>
+                    </Page>
+                  </Pages>
+                </Form>""",
+                encoding="utf-8",
+            )
+
+            validate_xml_file(xml)
 
     def test_build_bin_writes_default_paged_button_geometry_bindings(self) -> None:
         root = ET.fromstring(

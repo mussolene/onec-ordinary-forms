@@ -671,9 +671,12 @@ def color_record_from_xml(element: ET.Element | None, tag: str) -> list[object]:
     if element is None:
         return ["3", "4", ["0"]]
     node = element.find(tag)
-    if node is None or not node.text:
+    if node is None:
         return ["3", "4", ["0"]]
-    return ["3", "3", [node.text.strip()]]
+    value = color_value_from_xml_node(node)
+    if not value:
+        return ["3", "4", ["0"]]
+    return ["3", "3", [value]]
 
 
 def font_record_from_xml(font: ET.Element | None) -> list[object]:
@@ -684,7 +687,29 @@ def font_record_from_xml(font: ET.Element | None) -> list[object]:
     result.append(deltas if deltas else ["0"])
     for value in font.findall("Value"):
         result.append(value.text or "0")
+    if len(result) == 4 and font.get("size"):
+        result.append(font.get("size") or "0")
+    elif len(result) == 4 and font.get("height"):
+        result.append(font.get("height") or "0")
     return result
+
+
+def color_value_from_xml_node(node: ET.Element) -> str:
+    for key in ("value", "decimal"):
+        value = (node.get(key) or "").strip()
+        if value:
+            return value
+    rgb = (node.get("rgb") or "").strip()
+    if not rgb and node.text:
+        rgb = node.text.strip()
+    if rgb.lower() == "auto":
+        return ""
+    if rgb.startswith("#") and len(rgb) == 7:
+        try:
+            return str(int(rgb[1:], 16))
+        except ValueError:
+            return rgb
+    return rgb
 
 
 def attributes_table(
@@ -3351,6 +3376,10 @@ def button_base_info_record(element: ET.Element) -> list[object]:
 def extended_base_info_record_from_xml(element: ET.Element) -> list[object]:
     base = root_panel_base_info_record()
     base[1] = visible_record_from_xml(element)
+    base[2] = color_record_from_xml(element, "TextColor")
+    base[3] = color_record_from_xml(element, "BackColor")
+    base[4] = font_record_from_xml(element.find("Font") if element is not None else None)
+    base[6] = color_record_from_xml(element, "BorderColor")
     base[12] = tooltip_record_from_xml(element)
     return base
 

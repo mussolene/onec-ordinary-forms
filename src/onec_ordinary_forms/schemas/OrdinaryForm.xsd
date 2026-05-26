@@ -2087,11 +2087,46 @@
     <xs:attribute name="id" type="xs:integer"/>
     <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
+  <xs:simpleType name="AbsoluteColorType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="#[0-9a-fA-F]{6}"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="AutoColorType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="auto"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="StyleRefType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="style:.+"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="PlatformColorValueType">
+    <xs:union memberTypes="AbsoluteColorType AutoColorType StyleRefType xs:integer xs:QName"/>
+  </xs:simpleType>
+  <xs:simpleType name="FontKindType">
+    <xs:union>
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="Absolute"/>
+          <xs:enumeration value="WindowsFont"/>
+          <xs:enumeration value="StyleItem"/>
+          <xs:enumeration value="AutoFont"/>
+        </xs:restriction>
+      </xs:simpleType>
+      <xs:simpleType>
+        <xs:restriction base="xs:string"/>
+      </xs:simpleType>
+    </xs:union>
+  </xs:simpleType>
   <xs:complexType name="ColorType">
     <xs:simpleContent>
-      <xs:extension base="xs:string">
+      <xs:extension base="PlatformColorValueType">
         <xs:attribute name="kind" type="xs:string"/>
         <xs:attribute name="value" type="xs:string"/>
+        <xs:attribute name="decimal" type="xs:integer"/>
+        <xs:attribute name="rgb" type="AbsoluteColorType"/>
         <xs:attribute name="name" type="xs:string"/>
       </xs:extension>
     </xs:simpleContent>
@@ -2101,14 +2136,20 @@
       <xs:element name="Delta" type="xs:string"/>
       <xs:element name="Value" type="IndexedValueType"/>
     </xs:choice>
-    <xs:attribute name="kind" type="xs:string"/>
+    <xs:attribute name="ref" type="StyleRefType"/>
+    <xs:attribute name="kind" type="FontKindType"/>
     <xs:attribute name="family" type="xs:string"/>
     <xs:attribute name="style" type="xs:string"/>
     <xs:attribute name="name" type="xs:string"/>
+    <xs:attribute name="faceName" type="xs:string"/>
     <xs:attribute name="size" type="xs:string"/>
+    <xs:attribute name="height" type="xs:decimal"/>
     <xs:attribute name="bold" type="xs:boolean"/>
     <xs:attribute name="italic" type="xs:boolean"/>
     <xs:attribute name="underline" type="xs:boolean"/>
+    <xs:attribute name="strikeout" type="xs:boolean"/>
+    <xs:attribute name="scale" type="xs:decimal"/>
+    <xs:attribute name="lineHeight" type="xs:decimal"/>
     <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
   <xs:complexType name="EventsType">

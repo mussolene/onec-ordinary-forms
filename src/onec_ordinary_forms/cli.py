@@ -1293,7 +1293,11 @@ def add_font(parent: ET.Element, item_data: object) -> None:
     for index, value in enumerate(font[4:], start=1):
         extra = ET.SubElement(node, "Value")
         extra.set("index", str(index))
-        extra.text = clean_token(value)
+        clean_value = clean_token(value)
+        if index == 1:
+            node.set("size", clean_value)
+            node.set("height", clean_value)
+        extra.text = clean_value
 
 
 def add_back_color(parent: ET.Element, item_data: object) -> None:
@@ -1314,8 +1318,26 @@ def add_color(parent: ET.Element, tag: str, item_data: object, slot: int) -> Non
         return
     value = base[slot]
     if isinstance(value, list) and len(value) >= 3 and isinstance(value[2], list) and value[2]:
+        color_value = clean_token(value[2][0])
         node = ET.SubElement(parent, tag)
-        node.text = clean_token(value[2][0])
+        node.set("kind", "Absolute")
+        node.set("value", color_value)
+        rgb = color_decimal_to_rgb(color_value)
+        if rgb:
+            node.set("rgb", rgb)
+            node.text = rgb
+        else:
+            node.text = color_value
+
+
+def color_decimal_to_rgb(value: str) -> str | None:
+    try:
+        number = int(value)
+    except ValueError:
+        return None
+    if number < 0 or number > 0xFFFFFF:
+        return None
+    return f"#{number:06X}"
 
 
 def base_info_from_item_data(item_data: object) -> list[object] | None:
