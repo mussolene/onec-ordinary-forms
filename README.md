@@ -395,6 +395,9 @@ Current implementation status:
 
 Validation status:
 
+- `v0.4.4` writes regular `Panel` page metadata with the platform 25-page
+  capacity profile, fixing strict Designer load for XML-writer rebuilt forms
+  that contain nested panel pages and typed `ActiveXControl` payloads.
 - `v0.4.3` adds typed ordinary-form `ActiveXControl` XML/XSD support,
   including CLSID and state blobs, and preserves the PDF ActiveX control found
   in a direct `Form.bin` dump/build check.
@@ -411,6 +414,10 @@ Validation status:
 
 Статус проверок:
 
+- `v0.4.4` пишет metadata страниц обычного `Panel` через платформенный
+  capacity-профиль на 25 страниц, что чинит строгую загрузку Designer для форм,
+  пересобранных XML-writer-ом, с вложенными страницами панели и типизированным
+  `ActiveXControl`.
 - `v0.4.3` добавляет типизированную XML/XSD-поддержку обычного
   `ActiveXControl`, включая CLSID и state blobs, и сохраняет PDF ActiveX
   control в прямой проверке `Form.bin` dump/build.

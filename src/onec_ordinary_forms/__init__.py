@@ -14,7 +14,7 @@ __all__ = [
     "validate_form_xml",
 ]
 
-__version__ = "0.4.3"
+__version__ = "0.4.4"
 
 
 def dump_form_bin(form_bin: str | Path, out_xml: str | Path, metadata_json: str | Path | None = None) -> None:

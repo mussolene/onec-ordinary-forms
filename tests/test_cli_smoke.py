@@ -214,6 +214,44 @@ class CliSmokeTest(unittest.TestCase):
         payload = controls[1][2][8][0].replace("#base64:", "").replace("\r", "").replace("\n", "")
         self.assertEqual(base64.b64decode(payload)[:4], b"\x01\x00\x09\x00")
 
+    def test_panel_info_uses_platform_page_capacity_profile(self) -> None:
+        root = ET.fromstring(
+            """
+            <Form version="1" containerCreatedTicks="0" containerModifiedTicks="0">
+              <Title><Item lang="ru">Тест</Item></Title>
+              <Width>800</Width>
+              <Height>600</Height>
+              <Pages>
+                <Page name="Страница1">
+                  <Panel name="Панель1" id="4">
+                    <Position left="8" top="33" right="760" bottom="560" width="752" height="527"/>
+                    <Pages>
+                      <Page name="Страница1">
+                        <ActiveXControl name="ЭлементУправления1" id="42">
+                          <Position left="16" top="48" right="360" bottom="260"/>
+                          <Clsid>ca8a9780-280d-11cf-a24d-444553540000</Clsid>
+                        </ActiveXControl>
+                      </Page>
+                    </Pages>
+                  </Panel>
+                </Page>
+              </Pages>
+            </Form>
+            """
+        )
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        panel_info = stream[1][2][2][1][2][1]
+
+        self.assertEqual(panel_info[0][17], "1")
+        self.assertEqual(panel_info[2], "1")
+        self.assertEqual(panel_info[3], ["0", "25", "1"])
+        self.assertEqual(panel_info[42][1], "25")
+        self.assertEqual(panel_info[46], "100")
+        self.assertEqual(panel_info[49][7], "4")
+        self.assertEqual(panel_info[50][7], "4")
+        tail_start = panel_info.index("5") - 25
+        self.assertEqual(panel_info[tail_start : tail_start + 25], ["4294967295"] * 25)
+
     def test_platform_control_guids_drive_item_types(self) -> None:
         self.assertEqual(ordinary_control_type("0fc7e20d-f241-460c-bdf4-5ad88e5474a5"), "Label")
         self.assertEqual(ordinary_control_type("6ff79819-710e-4145-97cd-1618da79e3e2"), "Button")
@@ -1087,13 +1125,14 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertEqual(panel[2][0], descriptor.info_kind)
         self.assertEqual(body[1], "26")
-        self.assertEqual(body[3], "12")
-        self.assertEqual(body[descriptor.slot_index("PageStates")][0:2], ["1", "2"])
-        self.assertEqual(body[descriptor.slot_index("PageStates")][2][0], "6")
-        self.assertEqual(body[descriptor.slot_index("PagePositions")], "8")
+        self.assertEqual(body[2], "1")
+        self.assertEqual(body[3], ["0", "25", "1"])
+        self.assertEqual(body[42][0:2], ["1", "25"])
+        self.assertEqual(body[42][2][0], "6")
+        self.assertEqual(body[46], "100")
         self.assertEqual(body[47], ["2", "6", "1", "1", "1", "0", "0", "0", "0"])
-        self.assertEqual(body[49], ["2", "1220", "1", "1", "3", "0", "0", "6", "0"])
-        self.assertEqual(body[50], ["2", "1028", "0", "1", "4", "0", "0", "6", "0"])
+        self.assertEqual(body[49], ["2", "1222", "1", "1", "3", "0", "0", "4", "0"])
+        self.assertEqual(body[50], ["2", "1030", "0", "1", "4", "0", "0", "4", "0"])
 
     def test_add_read_only_uses_input_field_info_slot(self) -> None:
         from onec_ordinary_forms.cli import add_read_only

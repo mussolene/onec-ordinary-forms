@@ -578,6 +578,12 @@ def root_panel_base_info_record() -> list[object]:
     ]
 
 
+def regular_panel_base_info_record() -> list[object]:
+    record = root_panel_base_info_record()
+    record[17] = "1"
+    return record
+
+
 def compact_root_panel_base_info_record() -> list[object]:
     return [
         "10",
@@ -1135,19 +1141,21 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object],
     pages = element.find("Pages")
     page_nodes = pages.findall("Page") if pages is not None else []
     page_count = len(page_nodes) or 1
+    page_capacity = panel_page_capacity(page_count)
     position = element.find("Position")
     raw_width = position.get("width", "1228") if position is not None else "1228"
     raw_height = position.get("height", "1054") if position is not None else "1054"
-    width = panel_extent_value(raw_width, 8)
-    height = panel_extent_value(raw_height, 26)
-    state_table = panel_state_table(element, title_record, extended=True)
-    position_records = panel_position_records(page_count, width, height, mode="6")
+    width = panel_extent_value(raw_width, 6)
+    height = panel_extent_value(raw_height, 24)
+    state_table = panel_state_table(element, title_record, extended=True, capacity=page_capacity)
+    position_records = panel_position_records(page_capacity, width, height, mode="4")
     return [
         descriptor.info_kind,
         [
-            root_panel_base_info_record(),
+            regular_panel_base_info_record(),
             "26",
-            "0",
+            "1",
+            ["0", str(page_capacity), "1"],
             *panel_control_slot_profile(),
             "0",
             "0",
@@ -1161,30 +1169,7 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object],
             str(len(position_records)),
             *position_records,
             "0",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
-            "4294967295",
+            *panel_page_tail_markers(page_capacity),
             "5",
             "64",
             "0",
@@ -1214,8 +1199,7 @@ def panel_control_slot_profile() -> list[object]:
         ["0", "39", "1"],
         ["0", "40", "1"],
         ["0", "41", "1"],
-        "1",
-        ["0", "25", "3"],
+        "0",
         "18",
         ["0", "7", "3"],
         ["0", "8", "3"],
@@ -1238,19 +1222,37 @@ def panel_control_slot_profile() -> list[object]:
     ]
 
 
-def panel_state_table(element: ET.Element, fallback_title: list[object], *, extended: bool = False) -> list[object]:
+def panel_page_capacity(page_count: int) -> int:
+    return max(page_count, 25)
+
+
+def panel_page_tail_markers(page_capacity: int) -> list[str]:
+    return ["4294967295"] * page_capacity
+
+
+def panel_state_table(
+    element: ET.Element,
+    fallback_title: list[object],
+    *,
+    extended: bool = False,
+    capacity: int | None = None,
+) -> list[object]:
     pages = element.find("Pages")
     page_nodes = pages.findall("Page") if pages is not None else []
     if not page_nodes:
         name = element.get("name", "Страница1")
-        if extended:
-            return ["1", "1", panel_state_record("6", fallback_title, name)]
-        return ["1", "1", panel_state_record("3", fallback_title, name)]
-    states: list[object] = []
-    for page in page_nodes:
-        name = page.get("name", "Страница1")
-        title = get_multilang_text(page, "Title") or name
-        states.append(panel_state_record("6" if extended else "3", localized_text_record(title), name))
+        page_nodes = []
+        states = [panel_state_record("6" if extended else "3", fallback_title, name)]
+    else:
+        states = []
+        for page in page_nodes:
+            name = page.get("name", "Страница1")
+            title = get_multilang_text(page, "Title") or name
+            states.append(panel_state_record("6" if extended else "3", localized_text_record(title), name))
+    if capacity is not None and capacity > len(states):
+        for index in range(len(states), capacity):
+            name = f"Страница{index + 1}"
+            states.append(panel_state_record("6" if extended else "3", localized_text_record(name), name))
     return ["1", str(len(states)), *states]
 
 
