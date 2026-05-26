@@ -25,6 +25,7 @@ from onec_ordinary_forms.liststream import parse_list_stream_document
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
 from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
+from onec_ordinary_forms.ui_values import ORDINARY_STYLE_COLOR_NAMES
 from onec_ordinary_forms.value_codec import (
     TYPE_CODE_NAMES,
     clean_atom,
@@ -1314,14 +1315,20 @@ def add_border_color(parent: ET.Element, item_data: object) -> None:
 
 def add_color(parent: ET.Element, tag: str, item_data: object, slot: int) -> None:
     base = base_info_from_item_data(item_data)
-    if base is None or len(base) <= slot or base[slot] == ["3", "4", ["0"]]:
+    if base is None or len(base) <= slot or is_default_color_record(base[slot]):
         return
     value = base[slot]
     if isinstance(value, list) and len(value) >= 3 and isinstance(value[2], list) and value[2]:
         color_value = clean_token(value[2][0])
         node = ET.SubElement(parent, tag)
-        node.set("kind", "Absolute")
         node.set("value", color_value)
+        style_name = ORDINARY_STYLE_COLOR_NAMES.get(color_value)
+        if style_name:
+            node.set("kind", "StyleItem")
+            node.set("name", style_name)
+            node.text = f"style:{style_name}"
+            return
+        node.set("kind", "Absolute")
         rgb = color_decimal_to_rgb(color_value)
         if rgb:
             node.set("rgb", rgb)
@@ -1340,6 +1347,10 @@ def color_decimal_to_rgb(value: str) -> str | None:
     return f"#{number:06X}"
 
 
+def is_default_color_record(value: object) -> bool:
+    return value in (["3", "4", ["0"]], ["4", "4", ["0"], "4"])
+
+
 def base_info_from_item_data(item_data: object) -> list[object] | None:
     if not isinstance(item_data, dict):
         return None
@@ -1352,7 +1363,7 @@ def base_info_from_item_data(item_data: object) -> list[object] | None:
 def find_base_info_record(value: object) -> list[object] | None:
     if not isinstance(value, list):
         return None
-    if len(value) >= 13 and clean_token(value[0]) == "10":
+    if len(value) >= 13 and clean_token(value[0]) in {"10", "19"}:
         return value
     for child in value:
         found = find_base_info_record(child)

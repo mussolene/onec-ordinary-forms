@@ -22,6 +22,7 @@ from onec_ordinary_forms.ordinary_platform import (
     ORDINARY_CONTROL_GUID_BY_TYPE,
 )
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
+from onec_ordinary_forms.ui_values import ordinary_color_code_from_style_ref
 from onec_ordinary_forms.value_codec import clean_atom, is_integer_atom, localized_text_record, quote_atom
 
 
@@ -682,6 +683,10 @@ def color_record_from_xml(element: ET.Element | None, tag: str) -> list[object]:
 def font_record_from_xml(font: ET.Element | None) -> list[object]:
     if font is None:
         return ["6", "3", "0", "1"]
+    platform_kind = font.get("kind", "")
+    if platform_kind == "AutoFont":
+        height = font.get("height") or font.get("size")
+        return ["6", "3", "0", ["0"], height] if height else ["6", "3", "0", "1"]
     result: list[object] = [font.get("kind", "6"), font.get("family", "3"), font.get("style", "0")]
     deltas = [delta.text or "0" for delta in font.findall("Delta")]
     result.append(deltas if deltas else ["0"])
@@ -699,11 +704,18 @@ def color_value_from_xml_node(node: ET.Element) -> str:
         value = (node.get(key) or "").strip()
         if value:
             return value
+    if (node.get("kind") or "") == "StyleItem":
+        style_code = ordinary_color_code_from_style_ref(node.get("name") or node.get("ref") or "")
+        if style_code is not None:
+            return style_code
     rgb = (node.get("rgb") or "").strip()
     if not rgb and node.text:
         rgb = node.text.strip()
     if rgb.lower() == "auto":
         return ""
+    style_code = ordinary_color_code_from_style_ref(rgb)
+    if style_code is not None:
+        return style_code
     if rgb.startswith("#") and len(rgb) == 7:
         try:
             return str(int(rgb[1:], 16))

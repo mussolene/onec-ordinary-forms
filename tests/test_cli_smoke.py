@@ -10,6 +10,8 @@ from tempfile import TemporaryDirectory
 from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
 from onec_ordinary_forms.cli import (
+    add_back_color,
+    add_border_color,
     add_chart_properties,
     add_font,
     add_text_color,
@@ -1180,6 +1182,53 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(button[2][1][1], "14")
         self.assertEqual(base[12][2], ['"ru"', '"Run tooltip"'])
 
+    def test_build_bin_maps_platform_style_colors_to_ordinary_codes(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Button name="Run" id="26">
+                    <TextColor>style:ButtonTextColor</TextColor>
+                    <BackColor name="ButtonBackColor">auto</BackColor>
+                    <BorderColor>style:BorderColor</BorderColor>
+                  </Button>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        button = self._find_control(stream, "6ff79819-710e-4145-97cd-1618da79e3e2")
+
+        self.assertIsNotNone(button)
+        base = button[2][1][0]
+        self.assertEqual(base[2], ["3", "3", ["-7"]])
+        self.assertEqual(base[3], ["3", "4", ["0"]])
+        self.assertEqual(base[6], ["3", "3", ["-22"]])
+
+    def test_build_bin_maps_platform_autofont_height_to_ordinary_font(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Button name="Run" id="26">
+                    <Font kind="AutoFont" height="14"/>
+                  </Button>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        button = self._find_control(stream, "6ff79819-710e-4145-97cd-1618da79e3e2")
+
+        self.assertIsNotNone(button)
+        self.assertEqual(button[2][1][0][4], ["6", "3", "0", ["0"], "14"])
+
     def test_dump_writes_platform_readable_font_and_color_values(self) -> None:
         base = [
             "10",
@@ -1215,6 +1264,63 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(font.get("style"), "0")
         self.assertEqual(font.get("size"), "100")
         self.assertEqual(font.get("height"), "100")
+
+    def test_dump_writes_platform_style_color_names_for_known_codes(self) -> None:
+        base = [
+            "10",
+            "1",
+            ["3", "3", ["-22"]],
+            ["3", "4", ["0"]],
+            ["6", "3", "0", "1"],
+            "0",
+            ["3", "4", ["0"]],
+            ["3", "4", ["0"]],
+            ["3", "4", ["0"]],
+            ["3", "3", ["-7"]],
+            ["3", "3", ["-21"]],
+            ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+            ["1", "0"],
+        ]
+        node = ET.Element("Button")
+        item_data = {"raw": ["6ff79819-710e-4145-97cd-1618da79e3e2", "26", ["1", [base]]]}
+
+        add_text_color(node, item_data)
+
+        color = node.find("TextColor")
+        self.assertIsNotNone(color)
+        self.assertEqual(color.text, "style:BorderColor")
+        self.assertEqual(color.get("kind"), "StyleItem")
+        self.assertEqual(color.get("name"), "BorderColor")
+        self.assertEqual(color.get("value"), "-22")
+
+    def test_dump_reads_extended_base_info_after_rebuild(self) -> None:
+        base = [
+            "19",
+            "1",
+            ["3", "3", ["-1"]],
+            ["4", "4", ["0"], "4"],
+            ["6", "2", "0", ["-20"], "0"],
+            "0",
+            ["3", "3", ["-22"]],
+            ["4", "4", ["0"], "4"],
+            ["4", "4", ["0"], "4"],
+            ["4", "3", ["-7"], "3"],
+            ["4", "3", ["-21"], "3"],
+            ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+            ["1", "0"],
+        ]
+        node = ET.Element("LabelDecoration")
+        item_data = {"raw": ["0fc7e20d-f241-460c-bdf4-5ad88e5474a5", "111", ["3", [[base]]]]}
+
+        add_text_color(node, item_data)
+        add_back_color(node, item_data)
+        add_border_color(node, item_data)
+        add_font(node, item_data)
+
+        self.assertEqual(node.findtext("TextColor"), "style:TextColor")
+        self.assertIsNone(node.find("BackColor"))
+        self.assertEqual(node.findtext("BorderColor"), "style:BorderColor")
+        self.assertIsNotNone(node.find("Font"))
 
     def test_schema_accepts_platform_style_font_and_color_values(self) -> None:
         with TemporaryDirectory() as temp_dir:
