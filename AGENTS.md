@@ -19,20 +19,13 @@ Required sequence:
    Local development stores may use OACS `local_unlocked` key material.
 3. Check the OACS consumer pack before substantial OACS-dependent work:
    `acs --version`.
-4. Ask the reference context gate before building context:
-   `acs context gate --intent repo_development --scope project --task "<task>" --json`.
-   Treat `decision=build` as the signal to run `acs context build`. Treat
-   `decision=skip` as valid only for tiny visible-file edits that do not depend
-   on prior parser/platform decisions. If unsure, build context anyway.
-5. Query durable memory first, then build or inspect fresh context when the gate
-   says `build`, when prior project memory/evidence may matter, or when in
-   doubt:
+4. Query durable memory first, then build or inspect fresh context:
    `acs memory query --query "<task intent>" --scope project --json` and
    `acs context build --intent "<task intent>" --scope project --json`.
-6. Treat command outputs, Docker checks, OACS/MCP results, runtime checks,
+5. Treat command outputs, Docker checks, OACS/MCP results, runtime checks,
    failed experiments, and rejected hypotheses as evidence with
    `acs tool ingest-result ...`.
-7. Promote verified reusable conclusions with `acs memory propose`,
+6. Promote verified reusable conclusions with `acs memory propose`,
    `acs memory commit`, and `acs memory sharpen`.
    Evidence refs must be attached to the memory record with
    `acs memory sharpen <mem_...> --evidence <ev_...> --json`; writing
@@ -40,16 +33,16 @@ Required sequence:
    tool-result evidence and text-only evidence mentions do not enter future
    `ContextCapsule.evidence_refs`, so later agents may lose proof and repeat
    already-settled investigations.
-8. Record a checkpoint for each completed, partial, or blocked iteration with
+7. Record a checkpoint for each completed, partial, or blocked iteration with
    outcome, PASS/FAIL/PARTIAL acceptance criteria, evidence refs, remaining
    risk, and next step:
    `acs checkpoint add ... --evidence <ev_...> --json`.
-9. Before every commit, inspect staged changes and generated files for
+8. Before every commit, inspect staged changes and generated files for
    non-project information and
    sensitive data: no private EPF/ERF files, customer dumps, local host paths,
    `.env`, OACS DB files, `nethasp.ini` contents, credentials, tokens, license
    data, platform archives, local volumes, or unrelated artifacts.
-10. Close each completed work iteration with a focused commit after checks pass.
+9. Close each completed work iteration with a focused commit after checks pass.
     If there are unrelated dirty files, leave them unstaged and mention that
     they were not part of the iteration.
 
