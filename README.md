@@ -367,7 +367,7 @@ python3 tools/vendor_platform_schemas.py \
 
 ## Status / Статус
 
-Current release: `0.4.3`.
+Current release: `0.4.5`.
 
 Current implementation status:
 
@@ -377,8 +377,8 @@ Current implementation status:
 - validate `Form.xml` against bundled schemas;
 - build ordinary `Form.bin` from the named XML package without a source
   `Form.bin` fallback in the public package;
-- preserve compact platform profile metadata in sidecars for no-op byte
-  round-trips while keeping public `Form.xml` object-only;
+- preserve module payloads and typed Color/Font properties through repeated
+  build/dump cycles without public raw sidecars;
 - scan local EPF/ERF corpora without committing private artifacts.
 
 Текущий статус реализации:
@@ -389,12 +389,16 @@ Current implementation status:
 - проверка `Form.xml` по встроенным схемам обычных форм;
 - сборка обычного `Form.bin` из именованного XML-пакета без исходного
   `Form.bin` как публичного резервного источника;
-- сохранение компактных платформенных профилей в файлах рядом для обратной
-  сборки без изменений, при этом публичный `Form.xml` остается объектным;
+- сохранение данных модуля и типизированных свойств Color/Font при повторных
+  циклах сборки/разборки без публичных raw-sidecar файлов;
 - сканирование локальных EPF/ERF-корпусов без коммита приватных артефактов.
 
 Validation status:
 
+- `v0.4.5` stabilizes typed ordinary-form `Color` and `Font` round-trips:
+  rebuilt extended base-info records are dumped again without losing
+  `TextColor`, `BackColor`, `BorderColor`, or `Font`, and the first 100 UT
+  forms with Color/Font are stable across repeated build/dump cycles.
 - `v0.4.4` writes regular `Panel` page metadata with the platform 25-page
   capacity profile, fixing strict Designer load for XML-writer rebuilt forms
   that contain nested panel pages and typed `ActiveXControl` payloads.
@@ -414,6 +418,10 @@ Validation status:
 
 Статус проверок:
 
+- `v0.4.5` стабилизирует обратную сборку типизированных `Color` и `Font` для
+  обычных форм: расширенные base-info записи после rebuild снова выгружаются
+  без потери `TextColor`, `BackColor`, `BorderColor` и `Font`, а первые 100 UT
+  форм с Color/Font стабильны на повторных циклах build/dump.
 - `v0.4.4` пишет metadata страниц обычного `Panel` через платформенный
   capacity-профиль на 25 страниц, что чинит строгую загрузку Designer для форм,
   пересобранных XML-writer-ом, с вложенными страницами панели и типизированным
