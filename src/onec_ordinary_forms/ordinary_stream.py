@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -418,6 +419,8 @@ def form_serialization_profile_from_xml(root: ET.Element) -> FormRootLayout | No
             result["rootPageLayoutHeader"] = [value for value in root_panel.get("pageLayoutHeader", "").split(" ") if value != ""]
         if root_panel.get("dependencyTail"):
             result["rootPanelDependencyTail"] = [value for value in root_panel.get("dependencyTail", "").split(" ") if value != ""]
+        if root_panel.get("pageStateFlag"):
+            result["rootPanelPageStateFlag"] = root_panel.get("pageStateFlag")
         if root_panel.get("postLayoutTailBeforeColor"):
             result["rootPanelPostLayoutTailBeforeColor"] = [
                 value for value in root_panel.get("postLayoutTailBeforeColor", "").split(" ") if value != ""
@@ -441,6 +444,11 @@ def form_root_panel_dependency_profile_from_xml(root_panel: ET.Element) -> list[
         return None
     result: list[object] = []
     for group in groups:
+        prefix = [value for value in (group.get("prefix") or "").split(" ") if value != ""]
+        result.extend(prefix)
+        header = [value for value in (group.get("header") or "").split(" ") if value != ""]
+        if header:
+            result.append(header)
         records: list[list[object]] = []
         for dependency in group.findall("Dependency"):
             target_id = dependency.get("targetId", "0")
@@ -583,7 +591,7 @@ def root_panel_info(
             ]),
             *dependency_tail,
             page_style_group_record("1"),
-            "0",
+            str((root_layout or {}).get("rootPanelPageStateFlag", "0")),
             current_page_index,
             ["1", "1", ["6", page_title, root_page_state_style_group_record(page_style_mode), "-1", "1", "1", quoted_atom(page_name), "1", default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"]],
             "1",
@@ -658,7 +666,7 @@ def root_panel_info_from_control_extent(
         [
             *(dependency_tail if isinstance(dependency_tail, list) else ([] if dependency_profile is not None else ["0", "0"])),
             page_style_group_record("1"),
-            "0",
+            str((root_layout or {}).get("rootPanelPageStateFlag", "0")),
             current_page_index,
             ["1", str(len(page_states)), *page_states],
             *layout_header,
@@ -1013,22 +1021,21 @@ def attributes_table(
 
 
 def attribute_link_table(attributes: list[object], controls: list[object]) -> list[object]:
-    controls_by_name: dict[str, str] = {}
+    slots_by_name: dict[str, str] = {}
+    for attribute in attributes:
+        if not isinstance(attribute, list) or len(attribute) < 5 or not isinstance(attribute[0], list) or not attribute[0]:
+            continue
+        slots_by_name[str(attribute[4])] = str(attribute[0][0])
+    links: list[object] = []
     for control in iter_control_records(controls):
         if not isinstance(control, list) or len(control) < 5:
             continue
         metadata = control[-2]
         if not isinstance(metadata, list) or len(metadata) < 2 or metadata[0] != "14":
             continue
-        controls_by_name[str(metadata[1])] = str(control[1])
-    links: list[object] = []
-    for attribute in attributes:
-        if not isinstance(attribute, list) or len(attribute) < 5 or not isinstance(attribute[0], list) or not attribute[0]:
-            continue
-        slot = str(attribute[0][0])
-        control_id = controls_by_name.get(str(attribute[4]))
-        if control_id:
-            links.append([control_id, ["1", [slot]]])
+        slot = slots_by_name.get(str(metadata[1]))
+        if slot:
+            links.append([str(control[1]), ["1", [slot]]])
     return [str(len(links)), *links]
 
 
@@ -1261,7 +1268,10 @@ def control_stream_from_xml_with_page(
         parent_size,
     )
     metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
-    if control_type == "CommandBar" and name not in {"КоманднаяПанель1", "КоманднаяПанель3", "ОсновныеДействияФормы"}:
+    command_bar_graph = command_bar_action_graph_from_xml(element) if control_type == "CommandBar" else {}
+    if command_bar_graph.get("metadataScope"):
+        metadata_scope = command_bar_graph["metadataScope"]
+    elif control_type == "CommandBar" and name not in {"КоманднаяПанель1", "КоманднаяПанель3", "ОсновныеДействияФормы"}:
         metadata_scope = "8"
     elif control_type == "CommandBar" and name == "КоманднаяПанель3":
         metadata_scope = CONTROL_METADATA_SCOPE["default"]
@@ -3317,6 +3327,7 @@ def list_box_base_info_record_from_xml(element: ET.Element) -> list[object]:
 def command_bar_control_info(element: ET.Element) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["CommandBar"]
     title = get_multilang_text(element, "Title")
+    graph = command_bar_action_graph_from_xml(element)
     record = [
         command_bar_base_info_record(element),
         "9",
@@ -3325,17 +3336,24 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
         "0",
         "0",
         "1",
-        command_bar_items_record(element, title),
+        command_bar_items_record(element, title, graph),
         "b78f2e80-ec68-11d4-9dcf-0050bae2bc79",
         "4",
-        "ccbe7ec8-cb04-45b3-9722-2a58bf1ae4ed"
-        if element.get("name") == "ОсновныеДействияФормы" or title
-        else "9d0a2e40-b978-11d4-84b6-008048da06df",
+        graph.get(
+            "profileUuid",
+            "7aa39d8b-4bb3-4d97-9cd8-89b07dc4c30d"
+            if element.get("name") == "ОсновныеДействияФормы" or title
+            else "bf009aa1-86de-4918-8876-74f65410b0d9"
+            if element.get("name") == "КоманднаяПанель1"
+            else "9d0a2e40-b978-11d4-84b6-008048da06df",
+        ),
         "0",
         "0",
         "0",
     ]
-    if element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None:
+    if element.find("Buttons") is not None:
+        record[3] = "0"
+    elif element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None:
         record[3] = "0"
         record[4] = "2"
         record[11] = "1"
@@ -3351,11 +3369,22 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
     ]
 
 
-def command_bar_items_record(element: ET.Element, title: str) -> list[object]:
+def command_bar_action_graph_from_xml(element: ET.Element) -> dict[str, str]:
+    graph = element.find("./SerializationProfile/ActionGraph")
+    return dict(graph.attrib) if graph is not None else {}
+
+
+def command_bar_items_record(element: ET.Element, title: str, graph: dict[str, str] | None = None) -> list[object]:
+    graph = graph or {}
+    buttons = element.find("Buttons")
+    if buttons is not None:
+        record = command_bar_items_record_from_xml(buttons)
+        if record:
+            return record
     if element.get("name") != "ОсновныеДействияФормы" and not title:
         if element.get("name") == "КоманднаяПанель1":
-            palette_uuid = "6013c551-1c48-4ef4-a466-6fbe824675ca"
-            palette_kind = "9"
+            palette_uuid = "be9879c8-ccdc-422b-bbcf-5ad790df187d"
+            palette_kind = "3"
             placement = ["0", "0", ["0"]]
         elif element.get("name") == "КоманднаяПанель3":
             palette_uuid = "db776490-56d2-4c30-80a3-9cab0228ae12"
@@ -3367,57 +3396,170 @@ def command_bar_items_record(element: ET.Element, title: str) -> list[object]:
             placement = ["0", "0", ["0"]]
         return [
             "5",
-            palette_uuid,
-            palette_kind,
+            graph.get("rootUuid", palette_uuid),
+            graph.get("rootKind", palette_kind),
             "1",
             "0",
             "1",
-            ["5", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79", "4", "0", "0", placement],
+            [
+                "5",
+                graph.get("branchUuid", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
+                "4",
+                graph.get("branchKind", "0"),
+                graph.get("branchMode", "0"),
+                placement,
+            ],
         ]
     action_name = compact_identifier(title) or "КнопкаВыполнитьНажатие"
+    root_uuid = graph.get("rootUuid", "87a7828f-3ea2-4ed5-9afd-292b4728c926")
+    separator_uuid = graph.get("separatorUuid", "ab4be893-7c76-4903-a6fa-9922b4bd863a")
+    close_uuid = graph.get("closeUuid", "de61b328-43e2-4c0b-9dd8-f3d146ef7a54")
+    action_uuid = graph.get("actionUuid", "9eaf9ed0-41fc-4f23-b9cc-f9051ee23274")
+    branch_uuid = graph.get("branchUuid", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79")
     return [
         "5",
-        "b0931d44-c134-43ba-9852-f9690e20b460",
+        root_uuid,
         "3",
         "1",
         "3",
         [
             "8",
-            "04ccea6f-37da-4ac5-9cb1-6965c01cd2d3",
+            separator_uuid,
             "1",
             "fbe38877-b914-4fd5-8540-07dde06ba2e1",
             ["6", "2", "00000000-0000-0000-0000-000000000000", "142", ["1", "0", "357c6a54-357d-425d-a2bd-22f4f6e86c87", "2147483647", "0"], "0", "1"],
             "0",
-            "2",
+            graph.get("actionMode", "1"),
             "1",
         ],
-        ["8", "70d8a1ee-a609-43ad-9f3e-2e573ca60a7a", "1", "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6", ["1", "9d0a2e40-b978-11d4-84b6-008048da06df", "0"], "0", "2", "1"],
+        ["8", close_uuid, "1", "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6", ["1", "9d0a2e40-b978-11d4-84b6-008048da06df", "0"], "0", graph.get("actionMode", "1"), "1"],
         [
             "8",
-            "e4ede41c-fdd1-4120-a053-d6044264d385",
+            action_uuid,
             "1",
             DEFAULT_CONTROL_EVENT_UUID,
             ["3", quoted_atom(action_name), command_bar_action_descriptor(action_name, title or action_name)],
             "0",
-            "2",
+            graph.get("actionMode", "1"),
             "1",
         ],
         "1",
         [
             "5",
-            "b78f2e80-ec68-11d4-9dcf-0050bae2bc79",
+            branch_uuid,
             "4",
             "0",
             "3",
-            "e4ede41c-fdd1-4120-a053-d6044264d385",
-            ["8", quoted_atom("ОсновныеДействияФормыВыполнить"), "0", "1", localized_text_record("Выполнить"), "1", "b0931d44-c134-43ba-9852-f9690e20b460", "1", "1e2", "0", "1", "1", "0", "1", "0", "0"],
-            "70d8a1ee-a609-43ad-9f3e-2e573ca60a7a",
-            ["8", quoted_atom("Разделитель"), "0", "1", ["1", "0"], "0", "b0931d44-c134-43ba-9852-f9690e20b460", "2", "1e2", "2", "1", "1", "0", "1", "0", "0"],
-            "04ccea6f-37da-4ac5-9cb1-6965c01cd2d3",
-            ["8", quoted_atom("ОсновныеДействияФормыЗакрыть"), "0", "1", localized_text_record("Закрыть"), "1", "b0931d44-c134-43ba-9852-f9690e20b460", "3", "1e2", "0", "1", "1", "0", "1", "0", "0"],
+            action_uuid,
+            ["8", quoted_atom("ОсновныеДействияФормыВыполнить"), "0", "1", localized_text_record("Выполнить"), "1", root_uuid, "1", "1e2", "0", "1", "1", "0", "1", "0", "0"],
+            close_uuid,
+            ["8", quoted_atom("Разделитель"), "0", "1", ["1", "0"], "0", root_uuid, "2", "1e2", "2", "1", "1", "0", "1", "0", "0"],
+            separator_uuid,
+            ["8", quoted_atom("ОсновныеДействияФормыЗакрыть"), "0", "1", localized_text_record("Закрыть"), "1", root_uuid, "3", "1e2", "0", "1", "1", "0", "1", "0", "0"],
             ["-1", "0", ["0"]],
         ],
     ]
+
+
+def command_bar_items_record_from_xml(buttons: ET.Element) -> list[object]:
+    root_uuid = buttons.get("rootUuid")
+    root_kind = buttons.get("rootKind")
+    if not root_uuid or not root_kind:
+        return []
+    actions = []
+    for action in sorted(buttons.findall("./Actions/Action"), key=lambda node: int(node.get("order") or "0")):
+        actions.append(command_bar_action_record_from_xml(action))
+    groups = []
+    for group in sorted(buttons.findall("./Groups/Group"), key=lambda node: int(node.get("order") or "0")):
+        groups.append(command_bar_group_record_from_xml(group))
+    return [
+        "5",
+        root_uuid,
+        root_kind,
+        buttons.get("rootFlag") or "1",
+        str(len(actions)),
+        *actions,
+        str(len(groups)),
+        *groups,
+    ]
+
+
+def command_bar_action_record_from_xml(action: ET.Element) -> list[object]:
+    record = [
+        "8",
+        action.get("uuid") or "",
+        action.get("enabled") or "1",
+        action.get("eventUuid") or DEFAULT_CONTROL_EVENT_UUID,
+        command_bar_value_from_attr(action.get("kind"), default=command_bar_action_payload_from_xml(action)),
+    ]
+    index = 5
+    while action.get(f"field{index}") is not None:
+        record.append(command_bar_value_from_attr(action.get(f"field{index}"), default="0"))
+        index += 1
+    return record
+
+
+def command_bar_action_payload_from_xml(action: ET.Element) -> list[object]:
+    handler = action.get("handler") or action.get("title") or ""
+    title = action.get("title") or handler
+    return ["3", quoted_atom(handler), command_bar_action_descriptor(handler, title)]
+
+
+def command_bar_group_record_from_xml(group: ET.Element) -> list[object]:
+    buttons = sorted(group.findall("Button"), key=lambda node: int(node.get("order") or "0"))
+    record: list[object] = [
+        "5",
+        group.get("uuid") or "",
+        group.get("kind") or "4",
+        group.get("mode") or "0",
+        str(len(buttons)),
+    ]
+    for button in buttons:
+        record.append(button.get("actionUuid") or "")
+        record.append(command_bar_button_descriptor_from_xml(button))
+    placement = group.find("Placement")
+    if placement is not None:
+        record.append(command_bar_value_from_attr(placement.get("value"), default=["-1", "0", ["0"]]))
+    else:
+        record.append(["-1", "0", ["0"]])
+    return record
+
+
+def command_bar_button_descriptor_from_xml(button: ET.Element) -> list[object]:
+    descriptor = button.get("descriptor")
+    if descriptor:
+        value = command_bar_value_from_attr(descriptor, default=[])
+        if isinstance(value, list):
+            return value
+    title = get_multilang_text(button, "Title")
+    title_record: object = localized_text_record(title) if title else ["1", "0"]
+    return [
+        "8",
+        quoted_atom(button.get("name") or ""),
+        button.get("state") or "0",
+        button.get("visible") or "1",
+        title_record,
+        button.get("hasAction") or "1",
+        button.get("ownerUuid") or "",
+        button.get("position") or "1",
+        button.get("style") or "1e2",
+        button.get("kind") or "0",
+        button.get("groupMode") or "1",
+        button.get("enabled") or "1",
+        button.get("checked") or "0",
+        button.get("showText") or "1",
+        button.get("shortcut") or "0",
+        button.get("default") or "0",
+    ]
+
+
+def command_bar_value_from_attr(value: str | None, *, default: object) -> object:
+    if not value:
+        return copy.deepcopy(default)
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
 
 
 def compact_identifier(value: str) -> str:
@@ -3438,20 +3580,23 @@ def command_bar_action_descriptor(name: str, title: str) -> list[object]:
 
 def command_bar_base_info_record(element: ET.Element) -> list[object]:
     tooltip = tooltip_record_from_xml(element)
-    if element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None:
+    has_button_graph = element.find("Buttons") is not None
+    if has_button_graph:
+        command_scope = "0"
+    elif element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None:
         command_scope = "7"
     elif element.get("name") == "КоманднаяПанель1":
         command_scope = "4"
     else:
         command_scope = "0"
-    return [
+    record = [
         "19",
         visible_record_from_xml(element),
         default_color_record(),
         default_color_record(),
-        ["8", "3", "0", "1", "100"],
+        font_record_from_xml(element.find("Font")),
         "0",
-        ["4", "3", ["-22"], "3"],
+        color_record_from_xml(element, "BorderColor") if element.find("BorderColor") is not None else (default_color_record() if has_button_graph else ["4", "3", ["-22"], "3"]),
         default_color_record(),
         default_color_record(),
         default_color_record(),
@@ -3469,12 +3614,17 @@ def command_bar_base_info_record(element: ET.Element) -> list[object]:
         "0",
         "0",
         "100",
-        "2",
-        "2",
-        "1",
-        "2",
+        "2" if has_button_graph else "0",
+        "1" if has_button_graph else "0",
+        "1" if has_button_graph else "0",
+        "2" if has_button_graph else "0",
         default_color_record(),
     ]
+    if has_button_graph and element.find("TextColor") is not None:
+        record[2] = color_record_from_xml(element, "TextColor")
+    if has_button_graph and element.find("BackColor") is not None:
+        record[3] = color_record_from_xml(element, "BackColor")
+    return record
 
 
 def table_control_info(element: ET.Element, actions: list[object], type_pattern: list[object], asset_root: Path | None = None) -> list[object]:
@@ -3629,9 +3779,12 @@ def table_column_record(column: ET.Element, index: int, asset_root: Path | None 
     font = font_record_from_xml(column.find("Font")) if column.find("Font") is not None else ["8", "3", "0", "1", "100"]
     text_color = color_record_from_xml(column, "TextColor") if column.find("TextColor") is not None else default_color_record()
     format_record = localized_text_record(get_multilang_text(column, "Format")) if column.find("Format") is not None else ["1", "0"]
-    pattern = type_pattern_from_xml(column) or [quoted_atom("S")]
+    pattern = table_column_type_pattern_from_xml(column)
+    pattern_record = table_column_pattern_record_from_xml(column, pattern)
     payload = table_column_value_payload_from_xml(column, pattern)
     picture_payload = picture_payload_from_xml(column.find("Picture"), asset_root)
+    editor_control = text_or_default(column, "EditorControl", "InputField")
+    editor_guid = ORDINARY_CONTROL_GUID_BY_TYPE.get(editor_control, ORDINARY_CONTROL_GUID_BY_TYPE["InputField"])
     body = [
         "23",
         localized_text_record(title),
@@ -3668,10 +3821,10 @@ def table_column_record(column: ET.Element, index: int, asset_root: Path | None 
         presentation_index,
         use_picture,
         format_record,
-        [quoted_atom("Pattern"), pattern],
+        pattern_record,
         "0",
         data_path_mode,
-        ORDINARY_CONTROL_GUID_BY_TYPE["InputField"],
+        editor_guid,
         [[payload], "0"],
         "0",
         "0",
@@ -3690,6 +3843,20 @@ def table_column_record(column: ET.Element, index: int, asset_root: Path | None 
         "737535a4-21e6-4971-8513-3e3173a9fedd",
         ["8", ["8", body, ["-1"], ["-1"], ["-1"]], quoted_atom(data_path), '""' if data_path else quoted_atom(title), '""', "0"],
     ]
+
+
+def table_column_type_pattern_from_xml(column: ET.Element) -> list[object]:
+    pattern_node = column.find("./Type/Pattern")
+    if pattern_node is not None and not pattern_node.findall("PatternItem"):
+        return []
+    return type_pattern_from_xml(column) or [quoted_atom("S")]
+
+
+def table_column_pattern_record_from_xml(column: ET.Element, pattern: list[object]) -> list[object]:
+    pattern_node = column.find("./Type/Pattern")
+    if pattern_node is not None and not pattern_node.findall("PatternItem"):
+        return [quoted_atom("Pattern")]
+    return [quoted_atom("Pattern"), pattern]
 
 
 def table_column_value_payload_from_xml(column: ET.Element, pattern: list[object]) -> str:

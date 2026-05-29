@@ -22,6 +22,7 @@ from onec_ordinary_forms.formbin import (
     unpack_form_bin,
 )
 from onec_ordinary_forms.liststream import parse_list_stream_document
+from onec_ordinary_forms.ordinary_platform import ORDINARY_CONTROL_CLASS_BY_GUID
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
 from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml, root_panel_base_info_record
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
@@ -1049,6 +1050,7 @@ def add_semantic_item(
     add_font(node, item_data)
     add_geometry(node, item_data, element_index)
     add_panel_serialization_profile(node, public_type, item_data)
+    add_command_bar_serialization_profile(node, public_type, item_data)
     if public_type == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
         add_picture_decoration_properties(node, item_data)
@@ -1193,6 +1195,177 @@ def add_panel_serialization_profile(parent: ET.Element, public_type: str, item_d
         page = ET.SubElement(profile, "PageLayout")
         for key, value in layout.items():
             page.set(key, value)
+
+
+def add_command_bar_serialization_profile(parent: ET.Element, public_type: str, item_data: object) -> None:
+    if public_type != "CommandBar" or not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2][1] if len(raw[2]) > 1 and isinstance(raw[2][1], list) else None
+    if not isinstance(info, list) or len(info) <= 10:
+        return
+    items = info[7] if len(info) > 7 and isinstance(info[7], list) else None
+    if not isinstance(items, list) or len(items) < 2:
+        return
+    profile = ET.SubElement(parent, "SerializationProfile")
+    graph = ET.SubElement(profile, "ActionGraph")
+    graph.set("rootUuid", clean_token(items[1]))
+    if len(items) > 2:
+        graph.set("rootKind", clean_token(items[2]))
+    if len(info) > 10:
+        graph.set("profileUuid", clean_token(info[10]))
+    metadata = raw[4] if len(raw) > 4 and isinstance(raw[4], list) else None
+    if isinstance(metadata, list) and len(metadata) > 2:
+        graph.set("metadataScope", clean_token(metadata[2]))
+    branch = items[9] if len(items) > 9 and isinstance(items[9], list) else items[6] if len(items) > 6 and isinstance(items[6], list) else None
+    if isinstance(branch, list):
+        if len(branch) > 1:
+            graph.set("branchUuid", clean_token(branch[1]))
+        if len(branch) > 3:
+            graph.set("branchKind", clean_token(branch[3]))
+        if len(branch) > 4:
+            graph.set("branchMode", clean_token(branch[4]))
+    action = items[7] if len(items) > 7 and isinstance(items[7], list) else None
+    if isinstance(action, list):
+        if len(action) > 1:
+            graph.set("actionUuid", clean_token(action[1]))
+        if len(action) > 3:
+            graph.set("actionTargetUuid", clean_token(action[3]))
+        if len(action) > 6:
+            graph.set("actionMode", clean_token(action[6]))
+    if len(items) > 9 and isinstance(items[9], list):
+        children = items[9]
+        if len(children) > 5:
+            graph.set("defaultActionUuid", clean_token(children[5]))
+    if len(items) > 6 and isinstance(items[6], list) and len(items[6]) > 1:
+        graph.set("closeUuid", clean_token(items[6][1]))
+    if len(items) > 5 and isinstance(items[5], list) and len(items[5]) > 1:
+        graph.set("separatorUuid", clean_token(items[5][1]))
+    if not graph.attrib:
+        parent.remove(profile)
+    add_command_bar_buttons(parent, items)
+
+
+def add_command_bar_buttons(parent: ET.Element, items: list[object]) -> None:
+    if len(items) < 5 or clean_token(items[0]) != "5":
+        return
+    action_count = safe_int_token(items[4])
+    if action_count < 0:
+        return
+    actions_start = 5
+    actions_end = actions_start + action_count
+    if len(items) < actions_end + 1:
+        return
+    group_count = safe_int_token(items[actions_end])
+    if group_count < 0:
+        return
+    groups_start = actions_end + 1
+    groups = [group for group in items[groups_start : groups_start + group_count] if isinstance(group, list)]
+    if not action_count and not groups:
+        return
+    buttons = ET.SubElement(parent, "Buttons")
+    buttons.set("rootUuid", clean_token(items[1]))
+    buttons.set("rootKind", clean_token(items[2]))
+    buttons.set("rootFlag", clean_token(items[3]))
+    actions_node = ET.SubElement(buttons, "Actions")
+    for order, action in enumerate(items[actions_start:actions_end], start=1):
+        if not isinstance(action, list) or len(action) < 8 or clean_token(action[0]) != "8":
+            continue
+        action_node = ET.SubElement(actions_node, "Action")
+        action_node.set("order", str(order))
+        action_node.set("uuid", clean_token(action[1]))
+        action_node.set("enabled", clean_token(action[2]))
+        action_node.set("eventUuid", clean_token(action[3]))
+        handler, title = command_bar_action_handler_and_title(action[4])
+        if handler:
+            action_node.set("handler", handler)
+        if title:
+            action_node.set("title", title)
+        action_node.set("kind", command_bar_value_to_attr(action[4]))
+        for index, value in enumerate(action[5:], start=5):
+            action_node.set(f"field{index}", command_bar_value_to_attr(value))
+    groups_node = ET.SubElement(buttons, "Groups")
+    for order, group in enumerate(groups, start=1):
+        if len(group) < 6 or clean_token(group[0]) != "5":
+            continue
+        group_node = ET.SubElement(groups_node, "Group")
+        group_node.set("order", str(order))
+        group_node.set("uuid", clean_token(group[1]))
+        group_node.set("kind", clean_token(group[2]))
+        group_node.set("mode", clean_token(group[3]))
+        button_count = safe_int_token(group[4])
+        group_node.set("buttonCount", str(max(button_count, 0)))
+        cursor = 5
+        for button_order in range(max(button_count, 0)):
+            if cursor + 1 >= len(group):
+                break
+            action_uuid = clean_token(group[cursor])
+            descriptor = group[cursor + 1] if isinstance(group[cursor + 1], list) else []
+            cursor += 2
+            button_node = ET.SubElement(group_node, "Button")
+            button_node.set("order", str(button_order + 1))
+            button_node.set("actionUuid", action_uuid)
+            if isinstance(descriptor, list):
+                add_command_bar_button_descriptor(button_node, descriptor)
+        if cursor < len(group):
+            placement = ET.SubElement(group_node, "Placement")
+            placement.set("value", command_bar_value_to_attr(group[cursor]))
+
+
+def add_command_bar_button_descriptor(button_node: ET.Element, descriptor: list[object]) -> None:
+    if len(descriptor) < 16:
+        button_node.set("descriptor", command_bar_value_to_attr(descriptor))
+        return
+    button_node.set("name", clean_token(descriptor[1]))
+    button_node.set("state", clean_token(descriptor[2]))
+    button_node.set("visible", clean_token(descriptor[3]))
+    title = localized_title_from_record(descriptor[4])
+    if title:
+        add_multilang_text(button_node, "Title", title)
+    button_node.set("hasAction", clean_token(descriptor[5]))
+    button_node.set("ownerUuid", clean_token(descriptor[6]))
+    button_node.set("position", clean_token(descriptor[7]))
+    button_node.set("style", clean_token(descriptor[8]))
+    button_node.set("kind", clean_token(descriptor[9]))
+    button_node.set("groupMode", clean_token(descriptor[10]))
+    button_node.set("enabled", clean_token(descriptor[11]))
+    button_node.set("checked", clean_token(descriptor[12]))
+    button_node.set("showText", clean_token(descriptor[13]))
+    button_node.set("shortcut", clean_token(descriptor[14]))
+    button_node.set("default", clean_token(descriptor[15]))
+
+
+def command_bar_action_handler_and_title(value: object) -> tuple[str, str]:
+    if not isinstance(value, list) or len(value) < 3:
+        return "", ""
+    handler = clean_token(value[1]) if clean_token(value[0]) in {"1", "3"} else ""
+    title = localized_title_from_record(value[2]) if isinstance(value[2], list) else ""
+    return handler, title
+
+
+def localized_title_from_record(value: object) -> str:
+    if (
+        isinstance(value, list)
+        and len(value) >= 3
+        and clean_token(value[0]) == "1"
+        and isinstance(value[2], list)
+        and len(value[2]) >= 2
+    ):
+        return clean_token(value[2][1])
+    return ""
+
+
+def command_bar_value_to_attr(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def safe_int_token(value: object) -> int:
+    try:
+        return int(clean_token(value))
+    except (TypeError, ValueError):
+        return -1
 
 
 def panel_dependency_groups_from_info(info: list[object]) -> tuple[list[list[list[object]]], int]:
@@ -1487,6 +1660,8 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_r
             set_text(column_node, "OutputMode", column["output_mode"])
         set_text(column_node, "DataPathMode", column["data_path_mode"])
         set_text(column_node, "PresentationIndex", column["presentation_index"])
+        if column["editor_control"] and column["editor_control"] != "InputField":
+            set_text(column_node, "EditorControl", column["editor_control"])
         if column["use_picture"] == "1":
             set_text(column_node, "UsePicture", "true")
         if column["format"]:
@@ -1533,6 +1708,7 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
         pattern_record = body[35]
         pattern = pattern_record[1] if isinstance(pattern_record, list) and len(pattern_record) > 1 and isinstance(pattern_record[1], list) else []
         data_path_mode = clean_token(body[37]) if len(body) > 37 else "1"
+        editor_control = ORDINARY_CONTROL_CLASS_BY_GUID.get(clean_token(body[38]).lower(), "") if len(body) > 38 else ""
         font = body[22] if len(body) > 22 and isinstance(body[22], list) and body[22] != ["8", "3", "0", "1", "100"] else []
         picture = find_base64_payload(body[11]) if len(body) > 11 else ""
         value_descriptor = ""
@@ -1561,6 +1737,7 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
                     "use_picture": use_picture,
                     "format": format_text,
                     "data_path_mode": data_path_mode,
+                    "editor_control": editor_control,
                     "font": font,
                     "picture": picture,
                     "pattern": pattern,
@@ -2247,14 +2424,16 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
     root_panel = ET.SubElement(profile, "RootPanel")
     if info and isinstance(info[0], list):
         add_form_root_panel_base_style(root_panel, info[0])
-    if len(info) > 13:
-        current_page_index = clean_token(info[13])
-        if current_page_index.lstrip("-").isdigit():
-            root_panel.set("currentPageIndex", current_page_index)
     dependencies, cursor = form_root_panel_dependency_groups_and_cursor(info)
+    dependency_prefix = form_root_panel_dependency_prefix(info)
     for order, records in enumerate(dependencies, start=1):
         group = ET.SubElement(root_panel, "DependencyGroup")
         group.set("order", str(order))
+        if order == 1 and dependency_prefix:
+            group.set("prefix", " ".join(dependency_prefix))
+        if records and isinstance(records[0], list) and len(records[0]) == 1 and isinstance(records[0][0], list):
+            group.set("header", " ".join(clean_token(value) for value in records[0][0]))
+            records = records[1:]
         for record in records:
             dependency = ET.SubElement(group, "Dependency")
             dependency.set("targetId", clean_token(record[1]))
@@ -2263,6 +2442,11 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
     dependency_tail = form_root_panel_dependency_tail(info, cursor)
     if dependency_tail:
         root_panel.set("dependencyTail", " ".join(dependency_tail))
+    page_state_flag, current_page_index = form_root_panel_page_state_scalars(info, cursor)
+    if page_state_flag:
+        root_panel.set("pageStateFlag", page_state_flag)
+    if current_page_index:
+        root_panel.set("currentPageIndex", current_page_index)
     pages = form_root_panel_pages_from_info(info)
     for page_descriptor in pages:
         state = ET.SubElement(root_panel, "PageState")
@@ -2321,8 +2505,77 @@ def form_root_panel_dependency_groups_from_info(info: list[object]) -> list[list
     return groups
 
 
+def form_root_panel_dependency_prefix(info: list[object]) -> list[str]:
+    try:
+        first_count = int(clean_token(info[2]))
+    except (IndexError, ValueError):
+        first_count = -1
+    if first_count >= 0 and len(info) >= 3 + first_count and all(isinstance(value, list) for value in info[3 : 3 + first_count]):
+        return []
+    cursor = 2
+    result: list[str] = []
+    while cursor < len(info) and not isinstance(info[cursor], list):
+        result.append(clean_token(info[cursor]))
+        cursor += 1
+    return result if cursor > 2 and cursor < len(info) else []
+
+
 def form_root_panel_dependency_groups_and_cursor(info: list[object]) -> tuple[list[list[list[object]]], int]:
     groups: list[list[list[object]]] = []
+    cursor = 2
+    try:
+        first_count = int(clean_token(info[cursor]))
+    except (IndexError, ValueError):
+        first_count = -1
+    if first_count >= 0 and len(info) >= cursor + 1 + first_count and all(isinstance(value, list) for value in info[cursor + 1 : cursor + 1 + first_count]):
+        while cursor < len(info):
+            try:
+                count = int(clean_token(info[cursor]))
+            except ValueError:
+                break
+            if count == 0:
+                break
+            cursor += 1
+            records: list[list[object]] = []
+            for _index in range(count):
+                if cursor >= len(info) or not isinstance(info[cursor], list):
+                    return groups, cursor
+                record = info[cursor]
+                if len(record) >= 3:
+                    records.append(record)
+                cursor += 1
+            groups.append(records)
+        return groups, cursor
+    while cursor < len(info) and not isinstance(info[cursor], list):
+        cursor += 1
+    if cursor > 2 and cursor < len(info):
+        while cursor < len(info):
+            records: list[list[object]] = []
+            if isinstance(info[cursor], list):
+                header = info[cursor]
+                try:
+                    count = int(clean_token(info[cursor + 1]))
+                except (IndexError, ValueError):
+                    break
+                cursor += 2
+                records.append([header])
+            else:
+                try:
+                    count = int(clean_token(info[cursor]))
+                except ValueError:
+                    break
+                if count <= 0:
+                    break
+                cursor += 1
+            for _index in range(count):
+                if cursor >= len(info) or not isinstance(info[cursor], list):
+                    return groups, cursor
+                record = info[cursor]
+                if len(record) >= 3:
+                    records.append(record)
+                cursor += 1
+            groups.append(records)
+        return groups, cursor
     cursor = 2
     while cursor < len(info):
         try:
@@ -2355,6 +2608,16 @@ def form_root_panel_page_layout_header(info: list[object], cursor: int) -> list[
     if cursor + 4 >= len(info):
         return []
     return [clean_token(value) for value in info[cursor + 1 : cursor + 4] if not isinstance(value, list)]
+
+
+def form_root_panel_page_state_scalars(info: list[object], cursor: int) -> tuple[str, str]:
+    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+        cursor += 1
+    if cursor + 2 >= len(info):
+        return "", ""
+    page_state_flag = clean_token(info[cursor + 1]) if not isinstance(info[cursor + 1], list) else ""
+    current_page_index = clean_token(info[cursor + 2]) if not isinstance(info[cursor + 2], list) else ""
+    return page_state_flag, current_page_index
 
 
 def form_root_panel_dependency_tail(info: list[object], cursor: int) -> list[str]:

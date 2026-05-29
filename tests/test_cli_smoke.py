@@ -1942,6 +1942,38 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(first_column_body[35], ['"Pattern"', ['"S"']])
         self.assertEqual(first_column_body[38], "381ed624-9217-4e63-85db-c4c3cb87daae")
 
+    def test_table_column_preserves_arbitrary_type_and_editor_control(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="1">
+                    <Columns>
+                      <Column name="ПроизвольнаяКолонка" order="0">
+                        <Title><Item lang="ru">Произвольная колонка</Item></Title>
+                        <EditorControl>ChoiceField</EditorControl>
+                        <Type source="emptyPattern">
+                          <Pattern encoding="TypeDomainPattern" itemCount="0"/>
+                        </Type>
+                      </Column>
+                    </Columns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        control_index = extract_control_index_from_bracket(form_text)
+        item = next(item for item in control_index["tree"] if item.get("type") == "Table")
+        key = item.get("rawKey") or f"{item.get('page', '')}/{item.get('name', '')}"
+        view = control_index["data"][key]["raw"][2][2][1]
+        first_column_body = view[23][1][1][1][1]
+
+        self.assertEqual(first_column_body[35], ['"Pattern"'])
+        self.assertEqual(first_column_body[38], "64483e7f-3833-48e2-8c75-2c31aac49f6e")
+
     def test_platform_current_root_profile_for_table_value_edit(self) -> None:
         root = ET.fromstring(
             """<Form>

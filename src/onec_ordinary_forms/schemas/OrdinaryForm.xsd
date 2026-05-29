@@ -738,6 +738,7 @@
     <xs:attribute name="pageCapacity" type="xs:integer"/>
     <xs:attribute name="currentPageIndex" type="xs:integer"/>
     <xs:attribute name="dependencyTail" type="xs:string"/>
+    <xs:attribute name="pageStateFlag" type="xs:string"/>
     <xs:attribute name="pageLayoutHeader" type="xs:string"/>
     <xs:attribute name="postLayoutTailBeforeColor" type="xs:string"/>
     <xs:attribute name="postLayoutTailAfterColor" type="xs:string"/>
@@ -1317,6 +1318,8 @@
       <xs:element name="Dependency" type="PanelDependencyType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attribute name="order" type="xs:integer" use="required"/>
+    <xs:attribute name="prefix" type="xs:string"/>
+    <xs:attribute name="header" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PanelDependencyType">
     <xs:attribute name="targetId" type="xs:integer" use="required"/>
@@ -1530,16 +1533,80 @@
           <xs:element name="Auxiliary" type="xs:boolean"/>
           <xs:element name="Autofill" type="xs:boolean"/>
           <xs:element name="ButtonAlignment" type="xs:string"/>
-          <xs:element name="Buttons" type="OpenElementType"/>
+          <xs:element name="Buttons" type="CommandBarButtonsType"/>
           <xs:element name="Orientation" type="xs:string"/>
           <xs:element name="TransparentBackColor" type="xs:boolean"/>
           <xs:element name="Border" type="xs:string"/>
           <xs:element name="ButtonTextColor" type="ColorType"/>
           <xs:element name="ButtonBackColor" type="ColorType"/>
+          <xs:element name="SerializationProfile" type="CommandBarSerializationProfileType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
     </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="CommandBarSerializationProfileType">
+    <xs:sequence>
+      <xs:element name="ActionGraph" type="CommandBarActionGraphType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="CommandBarActionGraphType">
+    <xs:attribute name="rootUuid" type="xs:string"/>
+    <xs:attribute name="rootKind" type="xs:string"/>
+    <xs:attribute name="profileUuid" type="xs:string"/>
+    <xs:attribute name="metadataScope" type="xs:string"/>
+    <xs:attribute name="branchUuid" type="xs:string"/>
+    <xs:attribute name="branchKind" type="xs:string"/>
+    <xs:attribute name="branchMode" type="xs:string"/>
+    <xs:attribute name="actionUuid" type="xs:string"/>
+    <xs:attribute name="actionTargetUuid" type="xs:string"/>
+    <xs:attribute name="actionMode" type="xs:string"/>
+    <xs:attribute name="defaultActionUuid" type="xs:string"/>
+    <xs:attribute name="closeUuid" type="xs:string"/>
+    <xs:attribute name="separatorUuid" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="CommandBarButtonsType">
+    <xs:sequence>
+      <xs:element name="Actions" type="CommandBarActionsType" minOccurs="0"/>
+      <xs:element name="Groups" type="CommandBarGroupsType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="rootUuid" type="xs:string" use="required"/>
+    <xs:attribute name="rootKind" type="xs:string" use="required"/>
+    <xs:attribute name="rootFlag" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="CommandBarActionsType">
+    <xs:sequence>
+      <xs:element name="Action" type="CommandBarActionType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="CommandBarActionType">
+    <xs:attribute name="order" type="xs:integer"/>
+    <xs:attribute name="uuid" type="xs:string" use="required"/>
+    <xs:attribute name="enabled" type="xs:string"/>
+    <xs:attribute name="eventUuid" type="xs:string"/>
+    <xs:attribute name="handler" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
+    <xs:attribute name="kind" type="xs:string"/>
+    <xs:anyAttribute processContents="lax"/>
+  </xs:complexType>
+  <xs:complexType name="CommandBarGroupsType">
+    <xs:sequence>
+      <xs:element name="Group" type="CommandBarButtonGroupType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="CommandBarButtonGroupType">
+    <xs:sequence>
+      <xs:element name="Button" type="CommandBarButtonType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Placement" type="CommandBarPlacementType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="order" type="xs:integer"/>
+    <xs:attribute name="uuid" type="xs:string" use="required"/>
+    <xs:attribute name="kind" type="xs:string"/>
+    <xs:attribute name="mode" type="xs:string"/>
+    <xs:attribute name="buttonCount" type="xs:integer"/>
+  </xs:complexType>
+  <xs:complexType name="CommandBarPlacementType">
+    <xs:attribute name="value" type="xs:string" use="required"/>
   </xs:complexType>
   <xs:complexType name="CheckBoxType">
     <xs:complexContent>
@@ -1777,6 +1844,7 @@
       <xs:element name="OutputMode" type="xs:integer" minOccurs="0"/>
       <xs:element name="DataPathMode" type="xs:integer" minOccurs="0"/>
       <xs:element name="PresentationIndex" type="xs:integer" minOccurs="0"/>
+      <xs:element name="EditorControl" type="ControlElementNameType" minOccurs="0"/>
       <xs:element name="UsePicture" type="xs:boolean" minOccurs="0"/>
       <xs:element name="Format" type="LocalizedTextType" minOccurs="0"/>
       <xs:element name="Font" type="FontType" minOccurs="0"/>
@@ -2233,6 +2301,22 @@
           <xs:element name="CommandName" type="xs:string"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
+        <xs:attribute name="order" type="xs:integer"/>
+        <xs:attribute name="actionUuid" type="xs:string"/>
+        <xs:attribute name="state" type="xs:string"/>
+        <xs:attribute name="visible" type="xs:string"/>
+        <xs:attribute name="hasAction" type="xs:string"/>
+        <xs:attribute name="ownerUuid" type="xs:string"/>
+        <xs:attribute name="position" type="xs:string"/>
+        <xs:attribute name="style" type="xs:string"/>
+        <xs:attribute name="kind" type="xs:string"/>
+        <xs:attribute name="groupMode" type="xs:string"/>
+        <xs:attribute name="enabled" type="xs:string"/>
+        <xs:attribute name="checked" type="xs:string"/>
+        <xs:attribute name="showText" type="xs:string"/>
+        <xs:attribute name="shortcut" type="xs:string"/>
+        <xs:attribute name="default" type="xs:string"/>
+        <xs:attribute name="descriptor" type="xs:string"/>
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
