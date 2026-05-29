@@ -677,6 +677,8 @@ def color_record_from_xml(element: ET.Element | None, tag: str) -> list[object]:
     value = color_value_from_xml_node(node)
     if not value:
         return ["3", "4", ["0"]]
+    if node.get("recordKind") == "4":
+        return ["4", node.get("recordSubKind") or "3", [value], node.get("tailKind") or "3"]
     return ["3", "3", [value]]
 
 
@@ -689,9 +691,9 @@ def font_record_from_xml(font: ET.Element | None) -> list[object]:
         return ["6", "3", "0", ["0"], height] if height else ["6", "3", "0", "1"]
     result: list[object] = [font.get("kind", "6"), font.get("family", "3"), font.get("style", "0")]
     deltas = [delta.text or "0" for delta in font.findall("Delta")]
-    result.append(deltas if deltas else ["0"])
+    result.append(font.get("delta") or (deltas if deltas else ["0"]))
     for value in font.findall("Value"):
-        result.append(value.text or "0")
+        result.append(value.get("atom") or value.text or "0")
     if len(result) == 4 and font.get("size"):
         result.append(font.get("size") or "0")
     elif len(result) == 4 and font.get("height"):
@@ -1011,7 +1013,7 @@ def control_stream_from_xml_with_page(
         children.extend(child for _, child in sorted(page_children, key=lambda item: item[0]))
     child_table: list[object] = [str(len(children)), *children]
     if control_type == "Chart":
-        return [class_id, object_id, info, chart_presentation_record(element, title_record, control_actions_from_xml(element)), geometry, metadata, child_table]
+        return [class_id, object_id, info, chart_presentation_record(element, title_record, control_actions_from_xml(element, control_type)), geometry, metadata, child_table]
     if control_type == "GeographicalSchemaField":
         return [class_id, object_id, info, geographical_schema_settings_record(element), geometry, metadata, child_table]
     return [class_id, object_id, info, geometry, metadata, child_table]
@@ -1101,7 +1103,7 @@ def control_info_from_xml(
 ) -> list[object]:
     title = get_multilang_text(element, "Title")
     title_record = localized_text_record(title or name)
-    actions = control_actions_from_xml(element)
+    actions = control_actions_from_xml(element, control_type)
     template_info = (control_template or {}).get("info")
     if isinstance(template_info, list):
         info = copy.deepcopy(template_info)
@@ -1191,11 +1193,11 @@ def active_x_control_info(element: ET.Element) -> list[object]:
     ]
 
 
-def control_actions_from_xml(element: ET.Element) -> list[object]:
+def control_actions_from_xml(element: ET.Element, control_type: str = "") -> list[object]:
     actions = action_table_from_xml(element.find("Action"))
     if actions:
         return actions
-    return event_table_from_xml(element.find("Events"))
+    return event_table_from_xml(element.find("Events"), control_type)
 
 
 def panel_control_info_from_xml(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
@@ -1436,7 +1438,7 @@ def input_field_info_record_from_xml(element: ET.Element, type_pattern: list[obj
         "0",
         "0",
         "0",
-        "0",
+        bool_record_from_xml(element, "ReadOnly", default=False),
         "0",
         "0",
         "1",
@@ -1545,9 +1547,9 @@ def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
     return [
         choice_field_base_info_record_from_xml(element),
         "31",
-        "0",
-        "0",
-        "1",
+        text_or_default(element, "LeftFixedColumns", "0"),
+        text_or_default(element, "RightFixedColumns", "0"),
+        bool_record_from_xml(element, "AutoMarkIncomplete", default=True),
         "0",
         "1",
         "0",
@@ -3009,6 +3011,7 @@ def table_control_info(element: ET.Element, actions: list[object], type_pattern:
     pattern = type_pattern or [quoted_atom("#"), "00000000-0000-0000-0000-000000000000"]
     base = extended_base_info_record_from_xml(element)
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
+    base[17] = "1"
     return [
         descriptor.info_kind,
         [quoted_atom("Pattern"), pattern],
@@ -3021,9 +3024,17 @@ def table_control_info(element: ET.Element, actions: list[object], type_pattern:
     ]
 
 
+TABLE_EVENT_ID_BY_NAME = {
+    "Выбор": "34",
+    "ПриИзмененииФлажка": "45",
+    "ПриВыводеСтроки": "47",
+    "ПриПолученииДанных": "53",
+}
+
+
 def table_data_source_record(element: ET.Element) -> list[object]:
     if table_columns_from_xml(element):
-        return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "1"]]
+        return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "0"]]
     return ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]]
 
 
@@ -3033,7 +3044,7 @@ def table_view_record_from_xml(element: ET.Element) -> list[object]:
     rows_count = element.findtext("RowsCount") or "0"
     columns = table_columns_from_xml(element)
     if columns:
-        return extended_table_view_record(columns)
+        return extended_table_view_record(element, columns)
     record = [
         "12",
         "100801549",
@@ -3077,10 +3088,10 @@ def table_columns_from_xml(element: ET.Element) -> list[ET.Element]:
     return columns.findall("Column")
 
 
-def extended_table_view_record(columns: list[ET.Element]) -> list[object]:
-    return [
+def extended_table_view_record(element: ET.Element, columns: list[ET.Element]) -> list[object]:
+    record = [
         "23",
-        "117644289",
+        text_or_default(element, "ViewProfile", "117644289"),
         default_color_record(),
         default_color_record(),
         default_color_record(),
@@ -3119,12 +3130,31 @@ def extended_table_view_record(columns: list[ET.Element]) -> list[object]:
         "0",
         "2",
     ]
+    record[14] = bool_record_from_xml(element, "ReadOnly", default=False)
+    if element.find("FieldBackColor") is not None:
+        record[6] = color_record_from_xml(element, "FieldBackColor")
+    record[20] = text_or_default(element, "LeftFixedColumns", "0")
+    record[21] = text_or_default(element, "RightFixedColumns", "0")
+    record[22] = bool_record_from_xml(element, "AutoMarkIncomplete", default=True)
+    record[35] = text_or_default(element, "ViewSetupMode", "1")
+    return record
 
 
 def table_column_record(column: ET.Element, index: int) -> list[object]:
     title = get_multilang_text(column, "Title") or column.get("name") or f"Колонка{index + 1}"
     name = column.get("name") or title
     order = column.get("order") or str(index)
+    width = text_or_default(column, "Width", "1e2")
+    style = text_or_default(column, "Style", "12590592")
+    visible = bool_text_as_record(column, "Visible", default=True)
+    read_only = bool_text_as_record(column, "ReadOnly", default=False)
+    column_kind = text_or_default(column, "ColumnKind", "0")
+    check_mode = text_or_default(column, "CheckMode", "4")
+    output_mode = text_or_default(column, "OutputMode", "0")
+    data_path_mode = text_or_default(column, "DataPathMode", "1")
+    presentation_index = text_or_default(column, "PresentationIndex", "15")
+    use_picture = bool_text_as_record(column, "UsePicture", default=False)
+    font = font_record_from_xml(column.find("Font")) if column.find("Font") is not None else ["8", "3", "0", "1", "100"]
     pattern = type_pattern_from_xml(column) or [quoted_atom("S")]
     payload = TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN.get(tuple(pattern), TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN[(quoted_atom("S"),)])
     body = [
@@ -3132,12 +3162,12 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
         localized_text_record(title),
         ["1", "0"],
         ["1", "0"],
-        "1e2",
+        width,
         order,
         "-1",
         "-1",
         "-1",
-        "12590592",
+        style,
         empty_page_style_record(),
         empty_page_style_record(),
         empty_page_style_record(),
@@ -3150,22 +3180,22 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
         default_color_record(),
         default_color_record(),
         default_color_record(),
+        font,
         ["8", "3", "0", "1", "100"],
         ["8", "3", "0", "1", "100"],
-        ["8", "3", "0", "1", "100"],
-        "1",
-        "0",
-        "0",
-        "4",
-        "0",
+        visible,
+        read_only,
+        column_kind,
+        check_mode,
+        output_mode,
         quoted_atom(name),
         [],
-        "15",
-        "0",
+        presentation_index,
+        use_picture,
         ["1", "0"],
         [quoted_atom("Pattern"), pattern],
         "0",
-        "1",
+        data_path_mode,
         ORDINARY_CONTROL_GUID_BY_TYPE["InputField"],
         [[payload], "0"],
         "0",
@@ -3173,9 +3203,9 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
         "0",
         "0",
         "0",
-        "1e2",
+        width,
         "0",
-        "1",
+        visible,
         "0",
         "0",
         "2",
@@ -3183,7 +3213,7 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
     ]
     return [
         "737535a4-21e6-4971-8513-3e3173a9fedd",
-        ["8", ["8", body, ["-1"], ["-1"], ["-1"]], quoted_atom(title), '""', '""', "0"],
+        ["8", ["8", body, ["-1"], ["-1"], ["-1"]], '""', quoted_atom(title), '""', "0"],
     ]
 
 
@@ -3388,10 +3418,14 @@ def button_base_info_record(element: ET.Element) -> list[object]:
 def extended_base_info_record_from_xml(element: ET.Element) -> list[object]:
     base = root_panel_base_info_record()
     base[1] = visible_record_from_xml(element)
-    base[2] = color_record_from_xml(element, "TextColor")
-    base[3] = color_record_from_xml(element, "BackColor")
-    base[4] = font_record_from_xml(element.find("Font") if element is not None else None)
-    base[6] = color_record_from_xml(element, "BorderColor")
+    if element.find("TextColor") is not None:
+        base[2] = color_record_from_xml(element, "TextColor")
+    if element.find("BackColor") is not None:
+        base[3] = color_record_from_xml(element, "BackColor")
+    if element.find("Font") is not None:
+        base[4] = font_record_from_xml(element.find("Font"))
+    if element.find("BorderColor") is not None:
+        base[6] = color_record_from_xml(element, "BorderColor")
     base[12] = tooltip_record_from_xml(element)
     return base
 
@@ -3416,7 +3450,7 @@ def action_table_from_xml(action: ET.Element | None) -> list[object]:
     return [["0", uuid, ["3", quoted_atom(name), event_descriptor(name, title)]]]
 
 
-def event_table_from_xml(events: ET.Element | None) -> list[object]:
+def event_table_from_xml(events: ET.Element | None, control_type: str = "") -> list[object]:
     if events is None:
         return []
     result: list[object] = []
@@ -3424,8 +3458,30 @@ def event_table_from_xml(events: ET.Element | None) -> list[object]:
         event_name = event.get("name", "")
         handler = (event.text or "").strip() or event_name
         uuid = event.get("uuid") or DEFAULT_CONTROL_EVENT_UUID
-        result.append(["2147483647", uuid, ["3", quoted_atom(handler), event_descriptor(handler, event_name)]])
+        event_id = event_platform_id(event, control_type)
+        result.append([event_id, uuid, ["3", quoted_atom(handler), event_descriptor(handler, event_name)]])
     return result
+
+
+def event_platform_id(event: ET.Element, control_type: str = "") -> str:
+    event_name = event.get("name", "")
+    if control_type != "Table":
+        return event.get("id") or "2147483647"
+    return event.get("id") or TABLE_EVENT_ID_BY_NAME.get(event_name, "2147483647")
+
+
+def text_or_default(element: ET.Element, tag: str, default: str) -> str:
+    value = (element.findtext(tag) or "").strip()
+    return value or default
+
+
+def bool_text_as_record(element: ET.Element, tag: str, *, default: bool) -> str:
+    value = (element.findtext(tag) or "").strip().lower()
+    if value in {"true", "1"}:
+        return "1"
+    if value in {"false", "0"}:
+        return "0"
+    return "1" if default else "0"
 
 
 def picture_payload_from_xml(picture: ET.Element | None, asset_root: Path | None) -> str:

@@ -768,6 +768,7 @@ def add_semantic_item(
     add_first_in_group(node, item, item_data)
     add_visible(node, item_data)
     add_read_only(node, item, item_data)
+    add_table_view_properties(node, item, item_data)
     add_table_columns(node, item, item_data)
     add_chart_properties(node, item, item_data)
     add_pivot_chart_properties(node, item, item_data)
@@ -926,6 +927,28 @@ def add_read_only(parent: ET.Element, item: dict, item_data: object) -> None:
         set_text(parent, "ReadOnly", "true")
 
 
+def add_table_view_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "Table":
+        return
+    view = table_view_from_item_data(item_data)
+    if view is None:
+        return
+    if len(view) > 1 and clean_token(view[1]) != "117644289":
+        set_text(parent, "ViewProfile", clean_token(view[1]))
+    if len(view) > 14 and clean_token(view[14]) == "1":
+        set_text(parent, "ReadOnly", "true")
+    if len(view) > 20 and clean_token(view[20]) != "0":
+        set_text(parent, "LeftFixedColumns", clean_token(view[20]))
+    if len(view) > 21 and clean_token(view[21]) != "0":
+        set_text(parent, "RightFixedColumns", clean_token(view[21]))
+    if len(view) > 22 and clean_token(view[22]) == "0":
+        set_text(parent, "AutoMarkIncomplete", "false")
+    if len(view) > 35 and clean_token(view[35]) != "1":
+        set_text(parent, "ViewSetupMode", clean_token(view[35]))
+    if len(view) > 6 and not is_default_color_record(view[6]):
+        add_color_node_from_record(parent, "FieldBackColor", view[6])
+
+
 def add_table_columns(parent: ET.Element, item: dict, item_data: object) -> None:
     if str(item.get("type", "")) != "Table":
         return
@@ -938,19 +961,29 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object) -> None
         column_node.set("name", column["name"])
         column_node.set("order", column["order"])
         add_multilang_text(column_node, "Title", column["title"])
+        set_text(column_node, "Width", column["width"])
+        if column["style"] != "12590592":
+            set_text(column_node, "Style", column["style"])
+        if column["visible"] == "0":
+            set_text(column_node, "Visible", "false")
+        if column["read_only"] == "1":
+            set_text(column_node, "ReadOnly", "true")
+        if column["column_kind"] != "0":
+            set_text(column_node, "ColumnKind", column["column_kind"])
+        set_text(column_node, "CheckMode", column["check_mode"])
+        if column["output_mode"] != "0":
+            set_text(column_node, "OutputMode", column["output_mode"])
+        set_text(column_node, "DataPathMode", column["data_path_mode"])
+        set_text(column_node, "PresentationIndex", column["presentation_index"])
+        if column["use_picture"] == "1":
+            set_text(column_node, "UsePicture", "true")
+        if column["font"]:
+            add_font_node_from_record(column_node, column["font"])
         add_type(column_node, column["pattern"], {})
 
 
 def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
-    if not isinstance(item_data, dict):
-        return []
-    raw = item_data.get("raw")
-    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
-        return []
-    info = raw[2]
-    if len(info) <= 2 or not isinstance(info[2], list) or len(info[2]) <= 1:
-        return []
-    view = info[2][1]
+    view = table_view_from_item_data(item_data)
     if not isinstance(view, list) or len(view) <= 23 or not isinstance(view[23], list):
         return []
     result: list[dict[str, object]] = []
@@ -963,15 +996,57 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
         if not isinstance(body, list) or len(body) <= 35:
             continue
         title = first_localized_text(body[1]) if len(body) > 1 else ""
+        width = clean_token(body[4]) if len(body) > 4 else "1e2"
         order = clean_token(body[5]) if len(body) > 5 else str(len(result))
+        style = clean_token(body[9]) if len(body) > 9 else "12590592"
+        visible = clean_token(body[25]) if len(body) > 25 else "1"
+        read_only = clean_token(body[26]) if len(body) > 26 else "0"
+        column_kind = clean_token(body[27]) if len(body) > 27 else "0"
+        check_mode = clean_token(body[28]) if len(body) > 28 else "4"
+        output_mode = clean_token(body[29]) if len(body) > 29 else "0"
         name = clean_token(body[30]) if len(body) > 30 else title
+        presentation_index = clean_token(body[32]) if len(body) > 32 else "15"
+        use_picture = clean_token(body[33]) if len(body) > 33 else "0"
         pattern_record = body[35]
         pattern = pattern_record[1] if isinstance(pattern_record, list) and len(pattern_record) > 1 and isinstance(pattern_record[1], list) else []
+        data_path_mode = clean_token(body[37]) if len(body) > 37 else "1"
+        font = body[22] if len(body) > 22 and isinstance(body[22], list) and body[22] != ["8", "3", "0", "1", "100"] else []
         if not title and name:
             title = name
         if title:
-            result.append({"name": name or title, "title": title, "order": order, "pattern": pattern})
+            result.append(
+                {
+                    "name": name or title,
+                    "title": title,
+                    "width": width,
+                    "order": order,
+                    "style": style,
+                    "visible": visible,
+                    "read_only": read_only,
+                    "column_kind": column_kind,
+                    "check_mode": check_mode,
+                    "output_mode": output_mode,
+                    "presentation_index": presentation_index,
+                    "use_picture": use_picture,
+                    "data_path_mode": data_path_mode,
+                    "font": font,
+                    "pattern": pattern,
+                }
+            )
     return result
+
+
+def table_view_from_item_data(item_data: object) -> list[object] | None:
+    if not isinstance(item_data, dict):
+        return None
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return None
+    info = raw[2]
+    if len(info) <= 2 or not isinstance(info[2], list) or len(info[2]) <= 1:
+        return None
+    view = info[2][1]
+    return view if isinstance(view, list) else None
 
 
 def add_pivot_chart_properties(parent: ET.Element, item: dict, item_data: object) -> None:
@@ -1181,6 +1256,8 @@ def add_control_events(parent: ET.Element, control_type: str, item_data: object)
         seen.add(key)
         node = ET.SubElement(events_node, "Event")
         node.set("name", event["name"])
+        if event.get("uuid"):
+            node.set("uuid", event["uuid"])
         node.text = event["handler"]
 
 
@@ -1325,6 +1402,10 @@ def add_font(parent: ET.Element, item_data: object) -> None:
     font = base[4]
     if font == ["6", "3", "0", "1"] or len(font) < 4:
         return
+    add_font_node_from_record(parent, font)
+
+
+def add_font_node_from_record(parent: ET.Element, font: list[object]) -> None:
     node = ET.SubElement(parent, "Font")
     node.set("kind", clean_token(font[0]))
     node.set("family", clean_token(font[1]))
@@ -1333,10 +1414,14 @@ def add_font(parent: ET.Element, item_data: object) -> None:
         for value in font[3]:
             delta = ET.SubElement(node, "Delta")
             delta.text = clean_token(value)
+    else:
+        node.set("delta", clean_token(font[3]))
     for index, value in enumerate(font[4:], start=1):
         extra = ET.SubElement(node, "Value")
         extra.set("index", str(index))
         clean_value = clean_token(value)
+        if isinstance(value, str) and value.startswith('"'):
+            extra.set("atom", value)
         if index == 1:
             node.set("size", clean_value)
             node.set("height", clean_value)
@@ -1359,11 +1444,19 @@ def add_color(parent: ET.Element, tag: str, item_data: object, slot: int) -> Non
     base = base_info_from_item_data(item_data)
     if base is None or len(base) <= slot or is_default_color_record(base[slot]):
         return
-    value = base[slot]
+    add_color_node_from_record(parent, tag, base[slot])
+
+
+def add_color_node_from_record(parent: ET.Element, tag: str, value: object) -> None:
     if isinstance(value, list) and len(value) >= 3 and isinstance(value[2], list) and value[2]:
         color_value = clean_token(value[2][0])
         node = ET.SubElement(parent, tag)
         node.set("value", color_value)
+        node.set("recordKind", clean_token(value[0]))
+        if len(value) > 1:
+            node.set("recordSubKind", clean_token(value[1]))
+        if len(value) > 3:
+            node.set("tailKind", clean_token(value[3]))
         style_name = ORDINARY_STYLE_COLOR_NAMES.get(color_value)
         if style_name:
             node.set("kind", "StyleItem")
