@@ -3516,6 +3516,9 @@ def geometry_stream_from_xml(
     if compact_scalar_geometry(position, bindings, dimensions):
         compact_order = str(page_order) if page_order is not None else "3"
         return ["3", left, top, right, bottom, compact_order, *bindings, "0", *dimensions[:2]]
+    counted_geometry = counted_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
+    if counted_geometry is not None:
+        return counted_geometry
     if control_type == "Splitter":
         default_group = str(page_order) if page_order is not None else "0"
         default_order = str(page_index) if page_index is not None else "0"
@@ -3556,6 +3559,12 @@ def geometry_stream_from_xml(
         dimension_flag = "1" if any(dimension != "0" for dimension in dimensions) else "0"
         return ["8", left, top, right, bottom, "1", *bindings, dimension_flag, *dimensions, *trailer]
     if control_type == "Table":
+        group_tail = layout_group_tail(
+            layout_group,
+            layout_order,
+            str(page_order) if page_order is not None else "0",
+            str(page_index) if page_index is not None else "0",
+        )
         return [
             "8",
             left,
@@ -3570,9 +3579,9 @@ def geometry_stream_from_xml(
             "0",
             "0",
             "0",
-            str(page_index),
+            group_tail[0],
+            group_tail[1],
             "1",
-            str(page_index),
             "0",
             "0",
         ]
@@ -3709,6 +3718,48 @@ def layout_group_tail(
     except ValueError:
         next_order = "0"
     return [group, order, next_order, "0", "0"]
+
+
+def counted_dimension_geometry_from_xml(
+    position: ET.Element | None,
+    left: str,
+    top: str,
+    right: str,
+    bottom: str,
+    bindings: list[object],
+) -> list[object] | None:
+    if position is None or position.get("dimensionProfile") != "counted":
+        return None
+    binding_container = position.find("Bindings")
+    if binding_container is None:
+        return None
+    primary: list[object] = []
+    secondary: list[object] = []
+    for binding in binding_container.findall("DimensionBinding"):
+        section = binding.get("section") or "primary"
+        if section == "secondary":
+            secondary.append(dimension_binding_to_raw(binding))
+        elif section == "primary":
+            primary.append(dimension_binding_to_raw(binding))
+    if not primary:
+        return None
+    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
+    return [
+        "8",
+        left,
+        top,
+        right,
+        bottom,
+        "1",
+        *bindings,
+        position.get("primaryDimensionMarker", "0"),
+        str(len(primary)),
+        *primary,
+        position.get("secondaryDimensionMarker", "0"),
+        str(len(secondary)),
+        *secondary,
+        *tail,
+    ]
 
 
 def compact_scalar_geometry(

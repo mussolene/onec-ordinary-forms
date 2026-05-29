@@ -2270,6 +2270,67 @@ class CliSmokeTest(unittest.TestCase):
         second_page = root.findall(".//Page")[1]
         self.assertIsNotNone(second_page.find("./InputField[@name='RepeatedName']"))
 
+    def test_dump_preserves_counted_dimension_geometry_profile(self) -> None:
+        from onec_ordinary_forms.cli import add_semantic_item
+
+        geometry = [
+            "8", "6", "78", "975", "441", "1",
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "0", "1", "-42"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "0", "3", "-4"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            "0", "8",
+            ["0", "159", "0"], ["0", "160", "0"], ["0", "161", "0"], ["0", "162", "0"],
+            ["0", "139", "0"], ["0", "140", "0"], ["0", "141", "0"], ["0", "142", "0"],
+            "0", "4",
+            ["0", "160", "2"], ["0", "160", "3"], ["0", "140", "2"], ["0", "140", "3"],
+            "0", "0", "0", "0", "5", "1", "0",
+        ]
+        item = {
+            "id": "120",
+            "name": "Pages",
+            "type": "Panel",
+            "rawKey": "Pages",
+            "raw": [
+                "e5cabe59-d992-4d31-8086-3116931aff81",
+                "120",
+                ["1"],
+                geometry,
+                ["14", '"Pages"', "4294967295", "0", "0", "0"],
+                ["0"],
+            ],
+        }
+        root = ET.Element("Root")
+
+        add_semantic_item(root, item, {"Pages": item}, "Pages", {}, Path("/tmp"))
+        position = root.find("./Panel/Position")
+        self.assertIsNotNone(position)
+        rebuilt = geometry_stream_from_xml("Panel", position, object_id="120")
+
+        self.assertEqual(rebuilt, geometry)
+
+    def test_table_geometry_uses_table_tail_even_when_data_bound(self) -> None:
+        position = ET.fromstring(
+            """
+            <Position left="6" top="9" right="969" bottom="356" layoutGroup="0" layoutOrder="0">
+              <Bindings>
+                <Binding coordinate="top" mode="0"><From relation="targetEdgeOffset" target="none" side="none" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="bottom" mode="0"><From relation="targetEdgeOffset" target="parent" side="bottom" offset="-7"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="left" mode="0"><From relation="targetEdgeOffset" target="none" side="none" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="right" mode="0"><From relation="targetEdgeOffset" target="parent" side="right" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="verticalCenter" mode="0"><From relation="targetEdgeOffset" target="none" side="none" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="horizontalCenter" mode="0"><From relation="targetEdgeOffset" target="none" side="none" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+              </Bindings>
+            </Position>
+            """
+        )
+
+        geometry = geometry_stream_from_xml("Table", position, page_index=0, page_order=0, data_slot="47")
+
+        self.assertEqual(geometry[-5:], ["0", "0", "1", "0", "0"])
+
     def test_form_bin_pipeline_keeps_cli_out_of_section_details(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

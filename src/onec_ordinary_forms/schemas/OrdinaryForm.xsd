@@ -2174,6 +2174,10 @@
     <xs:attribute name="layoutGroup" type="xs:integer"/>
     <xs:attribute name="layoutOrder" type="xs:integer"/>
     <xs:attribute name="unit" type="xs:string"/>
+    <xs:attribute name="dimensionProfile" type="xs:string"/>
+    <xs:attribute name="primaryDimensionMarker" type="xs:integer"/>
+    <xs:attribute name="secondaryDimensionMarker" type="xs:integer"/>
+    <xs:attribute name="layoutTail" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="BindingsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
@@ -2207,6 +2211,7 @@
       <xs:element name="Extra6" type="AnchorType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="dimension" type="xs:string" use="required"/>
+    <xs:attribute name="section" type="xs:string"/>
     <xs:attribute name="value" type="xs:string"/>
     <xs:attribute name="mode" type="xs:string"/>
     <xs:attribute name="modeName" type="xs:string"/>

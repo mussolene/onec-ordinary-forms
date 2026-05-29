@@ -616,8 +616,50 @@ def add_geometry(
     if isinstance(geometry_raw, list):
         for index, binding in enumerate(geometry_raw[6:12], start=1):
             add_binding(anchors, "Binding", index, binding, current_id, element_index)
+        if add_counted_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
+            return
         for index, binding in enumerate(geometry_raw[13:17], start=1):
             add_binding(anchors, "DimensionBinding", index, binding, current_id, element_index)
+
+
+def add_counted_dimension_bindings(
+    position: ET.Element,
+    bindings: ET.Element,
+    geometry_raw: list[object],
+    current_id: str,
+    element_index: dict[str, dict[str, str]],
+) -> bool:
+    if len(geometry_raw) < 15:
+        return False
+    try:
+        primary_count = int(clean_token(geometry_raw[13]))
+    except ValueError:
+        return False
+    primary_start = 14
+    primary_end = primary_start + primary_count
+    if primary_count <= 4 or primary_end >= len(geometry_raw):
+        return False
+    try:
+        secondary_count = int(clean_token(geometry_raw[primary_end + 1]))
+    except (IndexError, ValueError):
+        return False
+    secondary_start = primary_end + 2
+    secondary_end = secondary_start + secondary_count
+    if secondary_end > len(geometry_raw):
+        return False
+    position.set("dimensionProfile", "counted")
+    position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
+    position.set("secondaryDimensionMarker", clean_token(geometry_raw[primary_end]))
+    tail = [clean_token(value) for value in geometry_raw[secondary_end:]]
+    if tail:
+        position.set("layoutTail", " ".join(tail))
+    for index, binding in enumerate(geometry_raw[primary_start:primary_end], start=1):
+        add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
+        bindings[-1].set("section", "primary")
+    for index, binding in enumerate(geometry_raw[secondary_start:secondary_end], start=1):
+        add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
+        bindings[-1].set("section", "secondary")
+    return True
 
 
 def add_layout_group(node: ET.Element, geometry_raw: list[object]) -> None:
