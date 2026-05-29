@@ -909,6 +909,7 @@ class CliSmokeTest(unittest.TestCase):
         event = field.find("./Events/Event")
         self.assertIsNotNone(event)
         self.assertEqual(event.get("name"), "ПриИзменении")
+        self.assertEqual(event.get("id"), "2147483647")
         self.assertEqual(event.text, "DateOnChange")
 
     def test_build_bin_writes_tooltip_to_base_info_slot_12(self) -> None:
@@ -962,6 +963,32 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertIn('"DateOnChange"', form_text)
         self.assertIn("e1692cc2-605b-4535-84dd-28440238746c", form_text)
+
+    def test_build_bin_merges_action_and_extra_events(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <ChoiceField name="Selected" id="44">
+                    <Action id="2147483647" name="SelectedOpen" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Selected open"/>
+                    <Events>
+                      <Event id="2147483647" name="Открытие" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Selected open">SelectedOpen</Event>
+                      <Event id="2147483647" name="ПриИзменении" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Selected changed">SelectedChanged</Event>
+                    </Events>
+                  </ChoiceField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        choice = self._find_control(stream, "64483e7f-3833-48e2-8c75-2c31aac49f6e")
+
+        self.assertIsNotNone(choice)
+        self.assertEqual(choice[2][2][0], "2")
+        self.assertIn('"SelectedChanged"', form_text)
 
     def test_build_bin_writes_panel_events_to_action_table(self) -> None:
         root = ET.fromstring(

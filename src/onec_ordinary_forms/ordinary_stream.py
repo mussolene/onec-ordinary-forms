@@ -1375,9 +1375,24 @@ def active_x_control_info(element: ET.Element) -> list[object]:
 
 def control_actions_from_xml(element: ET.Element, control_type: str = "") -> list[object]:
     actions = action_table_from_xml(element.find("Action"))
-    if actions:
-        return actions
-    return event_table_from_xml(element.find("Events"), control_type)
+    events = event_table_from_xml(element.find("Events"), control_type)
+    if not actions:
+        return events
+    seen = {action_record_key(action) for action in actions}
+    for event in events:
+        key = action_record_key(event)
+        if key not in seen:
+            actions.append(event)
+            seen.add(key)
+    return actions
+
+
+def action_record_key(record: object) -> tuple[str, str, str]:
+    if not isinstance(record, list) or len(record) < 3:
+        return ("", "", "")
+    payload = record[2]
+    handler = clean_atom(payload[1]) if isinstance(payload, list) and len(payload) > 1 else ""
+    return (clean_atom(record[0]), clean_atom(record[1]), handler)
 
 
 def panel_control_info_from_xml(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:

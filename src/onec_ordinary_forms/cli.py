@@ -1835,6 +1835,8 @@ def add_control_events(parent: ET.Element, control_type: str, item_data: object)
         node.set("name", event["name"])
         if event.get("uuid"):
             node.set("uuid", event["uuid"])
+        if event.get("id"):
+            node.set("id", event["id"])
         if event.get("title"):
             node.set("title", event["title"])
         node.text = event["handler"]
@@ -1872,7 +1874,7 @@ def event_binding_from_record(record: object, control_type: str) -> dict[str, st
     event_name = infer_platform_event_name(control_type, handler, title)
     if not event_name:
         return {}
-    return {"name": event_name, "handler": handler, "uuid": uuid, "title": title}
+    return {"name": event_name, "handler": handler, "uuid": uuid, "id": clean_token(record[0]), "title": title}
 
 
 def infer_platform_event_name(control_type: str, handler: str, title: str = "") -> str:
@@ -2536,7 +2538,7 @@ def container_file_times_from_xml(root: ET.Element) -> dict[str, tuple[int | Non
 
 def semantic_model_hash(root: ET.Element) -> str:
     model = ET.Element("SemanticModel")
-    for tag in ("Title", "Attributes", "Pages"):
+    for tag in ("Title", "Events", "Attributes", "Pages"):
         child = root.find(tag)
         if child is not None:
             model.append(clone_without_blank_text(child))

@@ -889,6 +889,7 @@
   <xs:complexType name="PanelEventType" mixed="true">
     <xs:attribute name="name" type="PanelEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PanelEventsType">
@@ -904,6 +905,7 @@
   <xs:complexType name="LabelDecorationEventType" mixed="true">
     <xs:attribute name="name" type="LabelDecorationEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="LabelDecorationEventsType">
@@ -923,6 +925,7 @@
   <xs:complexType name="PictureDecorationEventType" mixed="true">
     <xs:attribute name="name" type="PictureDecorationEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PictureDecorationEventsType">
@@ -938,6 +941,7 @@
   <xs:complexType name="ButtonEventType" mixed="true">
     <xs:attribute name="name" type="ButtonEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ButtonEventsType">
@@ -961,6 +965,7 @@
   <xs:complexType name="InputFieldEventType" mixed="true">
     <xs:attribute name="name" type="InputFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="InputFieldEventsType">
@@ -976,6 +981,7 @@
   <xs:complexType name="CheckBoxEventType" mixed="true">
     <xs:attribute name="name" type="CheckBoxEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="CheckBoxEventsType">
@@ -1012,8 +1018,8 @@
   <xs:complexType name="TableEventType" mixed="true">
     <xs:attribute name="name" type="TableEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
-    <xs:attribute name="id" type="xs:integer"/>
   </xs:complexType>
   <xs:complexType name="TableEventsType">
     <xs:sequence>
@@ -1034,6 +1040,7 @@
   <xs:complexType name="ChoiceFieldEventType" mixed="true">
     <xs:attribute name="name" type="ChoiceFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ChoiceFieldEventsType">
@@ -1056,6 +1063,7 @@
   <xs:complexType name="SpreadsheetDocumentFieldEventType" mixed="true">
     <xs:attribute name="name" type="SpreadsheetDocumentFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="SpreadsheetDocumentFieldEventsType">
@@ -1071,6 +1079,7 @@
   <xs:complexType name="RadioButtonEventType" mixed="true">
     <xs:attribute name="name" type="RadioButtonEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="RadioButtonEventsType">
@@ -1087,6 +1096,7 @@
   <xs:complexType name="ChartEventType" mixed="true">
     <xs:attribute name="name" type="ChartEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ChartEventsType">
@@ -1103,6 +1113,7 @@
   <xs:complexType name="PivotChartEventType" mixed="true">
     <xs:attribute name="name" type="PivotChartEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PivotChartEventsType">
@@ -1118,6 +1129,7 @@
   <xs:complexType name="GeographicalSchemaFieldEventType" mixed="true">
     <xs:attribute name="name" type="GeographicalSchemaFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="GeographicalSchemaFieldEventsType">
@@ -1134,6 +1146,7 @@
   <xs:complexType name="GraphicalSchemaFieldEventType" mixed="true">
     <xs:attribute name="name" type="GraphicalSchemaFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="GraphicalSchemaFieldEventsType">
@@ -1151,6 +1164,7 @@
   <xs:complexType name="ListBoxEventType" mixed="true">
     <xs:attribute name="name" type="ListBoxEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ListBoxEventsType">
@@ -1166,6 +1180,7 @@
   <xs:complexType name="HTMLDocumentFieldEventType" mixed="true">
     <xs:attribute name="name" type="HTMLDocumentFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="HTMLDocumentFieldEventsType">
@@ -1181,6 +1196,7 @@
   <xs:complexType name="TrackBarEventType" mixed="true">
     <xs:attribute name="name" type="TrackBarEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="TrackBarEventsType">
@@ -1203,6 +1219,7 @@
   <xs:complexType name="CalendarFieldEventType" mixed="true">
     <xs:attribute name="name" type="CalendarFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="CalendarFieldEventsType">
@@ -1218,6 +1235,7 @@
   <xs:complexType name="GanttChartEventType" mixed="true">
     <xs:attribute name="name" type="GanttChartEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="GanttChartEventsType">
@@ -1234,6 +1252,7 @@
   <xs:complexType name="DendrogramEventType" mixed="true">
     <xs:attribute name="name" type="DendrogramEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="DendrogramEventsType">
