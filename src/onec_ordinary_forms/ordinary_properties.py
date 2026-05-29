@@ -99,6 +99,7 @@ TEXT_CONTROL_PROPERTIES = (
     "VerticalAlign",
     "TextPosition",
     "PicturePosition",
+    "PictureSize",
     "AutoMaxWidth",
     "HorizontalStretch",
     "Hyperlink",
@@ -106,6 +107,8 @@ TEXT_CONTROL_PROPERTIES = (
 
 INPUT_CONTROL_PROPERTIES = (
     "ValueType",
+    "DataBindingMode",
+    "DataBindingFlag",
     "EditMode",
     "ChoiceMode",
     "MaxLength",
@@ -143,19 +146,20 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "LabelDecoration",
         "Надпись",
         "LabelDecoration",
-        COMMON_CONTROL_PROPERTIES + TEXT_CONTROL_PROPERTIES,
+        COMMON_CONTROL_PROPERTIES + TEXT_CONTROL_PROPERTIES + ("DefaultAction",),
     ),
     "Image": OrdinaryControlDescriptor(
         "PictureDecoration",
         "ПолеКартинки",
         "PictureDecoration",
-        COMMON_CONTROL_PROPERTIES + ("Picture", "PicturePosition", "Border"),
+        COMMON_CONTROL_PROPERTIES + ("Picture", "PicturePosition", "PictureSize", "ScalePicture", "PictureRendering", "Border"),
     ),
     "Button": OrdinaryControlDescriptor(
         "Button",
         "Кнопка",
         "Button",
-        COMMON_CONTROL_PROPERTIES + ("ButtonType", "Action", "CommandName", "DefaultButton", "CancelButton", "Picture", "PicturePosition"),
+        COMMON_CONTROL_PROPERTIES
+        + ("ButtonType", "Action", "CommandName", "DefaultButton", "CancelButton", "DefaultAction", "Picture", "PicturePosition", "ButtonTextColor", "ButtonBackColor"),
     ),
     "InputField": OrdinaryControlDescriptor(
         "InputField",

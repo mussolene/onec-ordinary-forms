@@ -687,6 +687,7 @@
       <xs:element name="Width" type="xs:integer" minOccurs="0"/>
       <xs:element name="Height" type="xs:integer" minOccurs="0"/>
       <xs:element name="SerializationCounter" type="xs:nonNegativeInteger" minOccurs="0"/>
+      <xs:element name="SerializationProfile" type="FormSerializationProfileType" minOccurs="0"/>
       <xs:element name="WindowOpeningMode" type="xs:string" minOccurs="0"/>
       <xs:element name="AutoTitle" type="xs:boolean" minOccurs="0"/>
       <xs:element name="Group" type="xs:string" minOccurs="0"/>
@@ -701,6 +702,56 @@
     <xs:attribute name="version" type="xs:string" use="required"/>
     <xs:attribute name="containerCreatedTicks" type="xs:unsignedLong" use="required"/>
     <xs:attribute name="containerModifiedTicks" type="xs:unsignedLong" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="FormSerializationProfileType">
+    <xs:sequence>
+      <xs:element name="RootRecord" type="FormRootRecordProfileType" minOccurs="0"/>
+      <xs:element name="RootPanel" type="FormRootPanelProfileType" minOccurs="0"/>
+      <xs:element name="FormObject" type="FormObjectProfileType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="FormObjectProfileType">
+    <xs:attribute name="uuid" type="xs:string" use="required"/>
+    <xs:attribute name="kind" type="xs:string"/>
+    <xs:attribute name="stateKind" type="xs:string"/>
+    <xs:attribute name="stateMode" type="xs:string"/>
+    <xs:attribute name="stateFlag" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="FormRootRecordProfileType">
+    <xs:attribute name="recordKind" type="xs:string"/>
+    <xs:attribute name="titleMarker" type="xs:string"/>
+    <xs:attribute name="titleScope" type="xs:string"/>
+    <xs:attribute name="slot5" type="xs:string"/>
+    <xs:attribute name="slot6" type="xs:string"/>
+    <xs:attribute name="slot7" type="xs:string"/>
+    <xs:attribute name="slot8" type="xs:string"/>
+    <xs:attribute name="slot9" type="xs:string"/>
+    <xs:attribute name="slot10" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="FormRootPanelProfileType">
+    <xs:sequence>
+      <xs:element name="BaseStyle" type="FormRootPanelBaseStyleType" minOccurs="0"/>
+      <xs:element name="DependencyGroup" type="PanelDependencyGroupType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="PageState" type="FormRootPageStateType" minOccurs="0"/>
+      <xs:element name="PageLayout" type="PanelPageLayoutType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="pageCapacity" type="xs:integer"/>
+    <xs:attribute name="currentPageIndex" type="xs:integer"/>
+  </xs:complexType>
+  <xs:complexType name="FormRootPanelBaseStyleType">
+    <xs:sequence>
+      <xs:element name="Font" type="FontType" minOccurs="0"/>
+      <xs:element name="TextColor" type="ColorType" minOccurs="0"/>
+      <xs:element name="BackColor" type="ColorType" minOccurs="0"/>
+      <xs:element name="BorderColor" type="ColorType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="FormRootPageStateType">
+    <xs:sequence>
+      <xs:element name="Title" type="LocalizedTextType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="styleMode" type="xs:integer"/>
   </xs:complexType>
   <xs:simpleType name="Sha256Type">
     <xs:restriction base="xs:string">
@@ -739,6 +790,7 @@
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="id" type="xs:integer"/>
     <xs:attribute name="slot" type="xs:integer"/>
+    <xs:attribute name="controlData" type="xs:boolean"/>
   </xs:complexType>
   <xs:complexType name="PagesType">
     <xs:sequence>
@@ -813,6 +865,8 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="DataBindingMode" type="xs:string"/>
+          <xs:element name="DataBindingFlag" type="xs:string"/>
           <xs:element name="Font" type="FontType"/>
           <xs:element name="TextColor" type="ColorType"/>
           <xs:element name="BackColor" type="ColorType"/>
@@ -835,6 +889,7 @@
   <xs:complexType name="PanelEventType" mixed="true">
     <xs:attribute name="name" type="PanelEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PanelEventsType">
     <xs:sequence>
@@ -849,6 +904,7 @@
   <xs:complexType name="LabelDecorationEventType" mixed="true">
     <xs:attribute name="name" type="LabelDecorationEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="LabelDecorationEventsType">
     <xs:sequence>
@@ -867,6 +923,7 @@
   <xs:complexType name="PictureDecorationEventType" mixed="true">
     <xs:attribute name="name" type="PictureDecorationEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PictureDecorationEventsType">
     <xs:sequence>
@@ -881,6 +938,7 @@
   <xs:complexType name="ButtonEventType" mixed="true">
     <xs:attribute name="name" type="ButtonEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ButtonEventsType">
     <xs:sequence>
@@ -903,6 +961,7 @@
   <xs:complexType name="InputFieldEventType" mixed="true">
     <xs:attribute name="name" type="InputFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="InputFieldEventsType">
     <xs:sequence>
@@ -917,6 +976,7 @@
   <xs:complexType name="CheckBoxEventType" mixed="true">
     <xs:attribute name="name" type="CheckBoxEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="CheckBoxEventsType">
     <xs:sequence>
@@ -952,6 +1012,7 @@
   <xs:complexType name="TableEventType" mixed="true">
     <xs:attribute name="name" type="TableEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
     <xs:attribute name="id" type="xs:integer"/>
   </xs:complexType>
   <xs:complexType name="TableEventsType">
@@ -973,6 +1034,7 @@
   <xs:complexType name="ChoiceFieldEventType" mixed="true">
     <xs:attribute name="name" type="ChoiceFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ChoiceFieldEventsType">
     <xs:sequence>
@@ -994,6 +1056,7 @@
   <xs:complexType name="SpreadsheetDocumentFieldEventType" mixed="true">
     <xs:attribute name="name" type="SpreadsheetDocumentFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="SpreadsheetDocumentFieldEventsType">
     <xs:sequence>
@@ -1008,6 +1071,7 @@
   <xs:complexType name="RadioButtonEventType" mixed="true">
     <xs:attribute name="name" type="RadioButtonEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="RadioButtonEventsType">
     <xs:sequence>
@@ -1023,6 +1087,7 @@
   <xs:complexType name="ChartEventType" mixed="true">
     <xs:attribute name="name" type="ChartEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ChartEventsType">
     <xs:sequence>
@@ -1038,6 +1103,7 @@
   <xs:complexType name="PivotChartEventType" mixed="true">
     <xs:attribute name="name" type="PivotChartEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PivotChartEventsType">
     <xs:sequence>
@@ -1052,6 +1118,7 @@
   <xs:complexType name="GeographicalSchemaFieldEventType" mixed="true">
     <xs:attribute name="name" type="GeographicalSchemaFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="GeographicalSchemaFieldEventsType">
     <xs:sequence>
@@ -1067,6 +1134,7 @@
   <xs:complexType name="GraphicalSchemaFieldEventType" mixed="true">
     <xs:attribute name="name" type="GraphicalSchemaFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="GraphicalSchemaFieldEventsType">
     <xs:sequence>
@@ -1083,6 +1151,7 @@
   <xs:complexType name="ListBoxEventType" mixed="true">
     <xs:attribute name="name" type="ListBoxEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ListBoxEventsType">
     <xs:sequence>
@@ -1097,6 +1166,7 @@
   <xs:complexType name="HTMLDocumentFieldEventType" mixed="true">
     <xs:attribute name="name" type="HTMLDocumentFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="HTMLDocumentFieldEventsType">
     <xs:sequence>
@@ -1111,6 +1181,7 @@
   <xs:complexType name="TrackBarEventType" mixed="true">
     <xs:attribute name="name" type="TrackBarEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="TrackBarEventsType">
     <xs:sequence>
@@ -1132,6 +1203,7 @@
   <xs:complexType name="CalendarFieldEventType" mixed="true">
     <xs:attribute name="name" type="CalendarFieldEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="CalendarFieldEventsType">
     <xs:sequence>
@@ -1146,6 +1218,7 @@
   <xs:complexType name="GanttChartEventType" mixed="true">
     <xs:attribute name="name" type="GanttChartEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="GanttChartEventsType">
     <xs:sequence>
@@ -1161,6 +1234,7 @@
   <xs:complexType name="DendrogramEventType" mixed="true">
     <xs:attribute name="name" type="DendrogramEventNameType" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="DendrogramEventsType">
     <xs:sequence>
@@ -1180,6 +1254,8 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="DataBindingMode" type="xs:string"/>
+          <xs:element name="DataBindingFlag" type="xs:string"/>
           <xs:element name="Font" type="FontType"/>
           <xs:element name="TextColor" type="ColorType"/>
           <xs:element name="BackColor" type="ColorType"/>
@@ -1256,9 +1332,11 @@
           <xs:element name="VerticalAlign" type="xs:string"/>
           <xs:element name="TextPosition" type="xs:string"/>
           <xs:element name="PicturePosition" type="xs:string"/>
+          <xs:element name="PictureSize" type="xs:string"/>
           <xs:element name="AutoMaxWidth" type="xs:boolean"/>
           <xs:element name="HorizontalStretch" type="xs:boolean"/>
           <xs:element name="Hyperlink" type="xs:boolean"/>
+          <xs:element name="DefaultAction" type="xs:boolean"/>
           <xs:element name="Events" type="LabelDecorationEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1286,12 +1364,19 @@
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="Picture" type="FileRefType"/>
           <xs:element name="PicturePosition" type="xs:string"/>
+          <xs:element name="PictureSize" type="xs:string"/>
+          <xs:element name="ScalePicture" type="xs:boolean"/>
+          <xs:element name="PictureRendering" type="PictureRenderingType"/>
           <xs:element name="Border" type="xs:string"/>
           <xs:element name="Events" type="PictureDecorationEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
     </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="PictureRenderingType">
+    <xs:attribute name="horizontalMode" type="xs:integer"/>
+    <xs:attribute name="verticalMode" type="xs:integer"/>
   </xs:complexType>
   <xs:complexType name="ButtonType">
     <xs:complexContent>
@@ -1317,8 +1402,11 @@
           <xs:element name="CommandName" type="xs:string"/>
           <xs:element name="DefaultButton" type="xs:boolean"/>
           <xs:element name="CancelButton" type="xs:boolean"/>
+          <xs:element name="DefaultAction" type="xs:boolean"/>
           <xs:element name="Picture" type="FileRefType"/>
           <xs:element name="PicturePosition" type="xs:string"/>
+          <xs:element name="ButtonTextColor" type="ColorType"/>
+          <xs:element name="ButtonBackColor" type="ColorType"/>
           <xs:element name="Events" type="ButtonEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1337,6 +1425,8 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="DataBindingMode" type="xs:string"/>
+          <xs:element name="DataBindingFlag" type="xs:string"/>
           <xs:element name="Font" type="FontType"/>
           <xs:element name="TextColor" type="ColorType"/>
           <xs:element name="BackColor" type="ColorType"/>
@@ -1666,10 +1756,19 @@
       <xs:element name="UsePicture" type="xs:boolean" minOccurs="0"/>
       <xs:element name="Format" type="LocalizedTextType" minOccurs="0"/>
       <xs:element name="Font" type="FontType" minOccurs="0"/>
+      <xs:element name="Picture" type="FileRefType" minOccurs="0"/>
       <xs:element name="Type" type="OpenElementType" minOccurs="0"/>
+      <xs:element name="ValueDescriptor" type="TableColumnValueDescriptorType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="order" type="xs:integer"/>
+  </xs:complexType>
+  <xs:complexType name="TableColumnValueDescriptorType">
+    <xs:simpleContent>
+      <xs:extension base="xs:base64Binary">
+        <xs:attribute name="encoding" type="xs:string" fixed="base64"/>
+      </xs:extension>
+    </xs:simpleContent>
   </xs:complexType>
   <xs:complexType name="SplitterType">
     <xs:complexContent>
@@ -2229,6 +2328,8 @@
   <xs:complexType name="EventType" mixed="true">
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="uuid" type="xs:string"/>
+    <xs:attribute name="id" type="xs:string"/>
+    <xs:attribute name="title" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PositionType">
     <xs:sequence>
@@ -2240,10 +2341,16 @@
     <xs:attribute name="bottom" type="xs:integer"/>
     <xs:attribute name="width" type="xs:integer"/>
     <xs:attribute name="height" type="xs:integer"/>
+    <xs:attribute name="layoutMode" type="xs:string"/>
     <xs:attribute name="layoutGroup" type="xs:integer"/>
     <xs:attribute name="layoutOrder" type="xs:integer"/>
+    <xs:attribute name="layoutNextOrder" type="xs:integer"/>
+    <xs:attribute name="layoutFlag1" type="xs:string"/>
+    <xs:attribute name="layoutFlag2" type="xs:string"/>
+    <xs:attribute name="layoutPreTail" type="xs:string"/>
     <xs:attribute name="unit" type="xs:string"/>
     <xs:attribute name="dimensionProfile" type="xs:string"/>
+    <xs:attribute name="dimensionSegments" type="xs:string"/>
     <xs:attribute name="primaryDimensionMarker" type="xs:integer"/>
     <xs:attribute name="secondaryDimensionMarker" type="xs:integer"/>
     <xs:attribute name="layoutTail" type="xs:string"/>

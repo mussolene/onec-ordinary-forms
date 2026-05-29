@@ -1221,6 +1221,55 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(button[2][1][1], "14")
         self.assertEqual(base[12][2], ['"ru"', '"Run tooltip"'])
 
+    def test_build_bin_writes_button_picture_from_xml(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            asset_root = Path(temp_dir)
+            picture = asset_root / "Items" / "Run" / "Picture.png"
+            picture.parent.mkdir(parents=True)
+            picture.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mNg+M8AAAAEAAH/6G3fAAAAAElFTkSuQmCC"))
+            root = ET.fromstring(
+                """<Form>
+                  <Title><Item lang="ru">Main</Item></Title>
+                  <Pages>
+                    <Page name="Main">
+                      <Button name="Run" id="26">
+                        <Title><Item lang="ru">Run</Item></Title>
+                        <Picture file="Items/Run/Picture.png"/>
+                      </Button>
+                    </Page>
+                  </Pages>
+                </Form>"""
+            )
+
+            form_text = form_stream_from_object_xml(root, asset_root).decode("utf-8-sig")
+            stream = parse_list_stream_document(form_text).value
+            button = self._find_control(stream, "6ff79819-710e-4145-97cd-1618da79e3e2")
+
+        self.assertIsNotNone(button)
+        picture_record = button[2][1][8]
+        self.assertEqual(picture_record[:7], ["4", "3", ["0"], '""', "-1", "-1", "0"])
+        self.assertTrue(picture_record[7][0][0].startswith("#base64:"))
+
+    def test_attribute_control_data_flag_roundtrips_from_xml(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Attributes>
+                <Attribute name="Detached" id="10" slot="3" controlData="false">
+                  <Type><Pattern encoding="TypeDomainPattern"><PatternItem code="S"/></Pattern></Type>
+                </Attribute>
+              </Attributes>
+              <Pages><Page name="Main"/></Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        attribute = stream[2][2][1]
+
+        self.assertEqual(attribute[0], ["3"])
+        self.assertEqual(attribute[1], "0")
+
     def test_build_bin_maps_platform_style_colors_to_ordinary_codes(self) -> None:
         root = ET.fromstring(
             """<Form>
@@ -1954,6 +2003,73 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(root_record[0], "18")
         self.assertEqual(len(root_record) - 1, 13)
         self.assertEqual(root_record[10:], ["3", "1244", "1120", "96"])
+
+    def test_form_serialization_profile_preserves_root_record_and_page_state(self) -> None:
+        root = ET.fromstring(
+            """<Form version="0.1">
+              <Title><Item lang="ru">Main</Item></Title>
+              <Width>995</Width>
+              <Height>503</Height>
+              <SerializationCounter>2</SerializationCounter>
+              <SerializationProfile>
+                <RootRecord recordKind="18" titleMarker="163" titleScope="4294967295" slot5="1" slot6="0" slot7="1" slot8="4" slot9="4" slot10="2"/>
+                <RootPanel pageCapacity="2" currentPageIndex="0">
+                  <BaseStyle>
+                    <TextColor value="143" recordKind="4" recordSubKind="2" tailKind="2">143</TextColor>
+                    <BackColor value="-11" recordKind="4" recordSubKind="3" tailKind="3">-11</BackColor>
+                    <BorderColor value="0" recordKind="4" recordSubKind="4" tailKind="4">auto</BorderColor>
+                  </BaseStyle>
+                  <DependencyGroup order="1">
+                    <Dependency targetId="47" dimension="bottom"/>
+                    <Dependency targetId="119" dimension="bottom"/>
+                  </DependencyGroup>
+                  <DependencyGroup order="2"/>
+                  <DependencyGroup order="3">
+                    <Dependency targetId="119" dimension="right"/>
+                  </DependencyGroup>
+                  <DependencyGroup order="4"/>
+                  <DependencyGroup order="5"/>
+                  <PageState name="СтраницаСтраницаНетОрганизаций" styleMode="2">
+                    <Title><Item lang="ru">Пустой список организаций</Item></Title>
+                  </PageState>
+                  <PageLayout page="0" left="8" top="8" width="987" height="495" horizontalMode="8" verticalMode="8"/>
+                </RootPanel>
+              </SerializationProfile>
+              <Pages><Page name="Main"/></Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        root_record = stream[1]
+        root_panel_info = root_record[2][1][1]
+        page_state = root_panel_info[14][2]
+
+        self.assertEqual(root_record[1][1:], ["163", "4294967295"])
+        self.assertEqual(root_record[10:], ["2", "995", "503", "96"])
+        self.assertEqual(root_panel_info[0][2], ["4", "2", ["143"], "2"])
+        self.assertEqual(root_panel_info[0][3], ["4", "3", ["-11"], "3"])
+        self.assertEqual(root_panel_info[0][6], ["4", "4", ["0"], "4"])
+        self.assertEqual(root_panel_info[3:11], [
+            "2",
+            ["0", "47", "1"],
+            ["0", "119", "1"],
+            "0",
+            "1",
+            ["0", "119", "3"],
+            "0",
+            "0",
+        ])
+        self.assertEqual(root_panel_info[13], "0")
+        self.assertEqual(root_panel_info[19:23], [
+            ["2", "8", "1", "1", "1", "0", "0", "0", "0"],
+            ["2", "8", "0", "1", "2", "0", "0", "0", "0"],
+            ["2", "987", "1", "1", "3", "0", "0", "8", "0"],
+            ["2", "495", "0", "1", "4", "0", "0", "8", "0"],
+        ])
+        self.assertEqual(page_state[1][2][1], '"Пустой список организаций"')
+        self.assertEqual(page_state[2][6], "2")
+        self.assertEqual(page_state[6], '"СтраницаСтраницаНетОрганизаций"')
 
     def test_default_command_bar_geometry_uses_platform_name_profile(self) -> None:
         root = ET.fromstring(

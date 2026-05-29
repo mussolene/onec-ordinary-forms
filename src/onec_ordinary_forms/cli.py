@@ -23,7 +23,7 @@ from onec_ordinary_forms.formbin import (
 )
 from onec_ordinary_forms.liststream import parse_list_stream_document
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
-from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
+from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml, root_panel_base_info_record
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 from onec_ordinary_forms.ui_values import ORDINARY_STYLE_COLOR_NAMES
 from onec_ordinary_forms.value_codec import (
@@ -609,6 +609,8 @@ def add_geometry(
     node = ET.SubElement(parent, "Position")
     for key, value in geometry.items():
         node.set(key, value)
+    if len(geometry_raw) > 5 and clean_token(geometry_raw[5]) != "1":
+        node.set("layoutMode", clean_token(geometry_raw[5]))
     add_layout_group(node, geometry_raw)
     node.set("unit", "form")
 
@@ -616,6 +618,12 @@ def add_geometry(
     if isinstance(geometry_raw, list):
         for index, binding in enumerate(geometry_raw[6:12], start=1):
             add_binding(anchors, "Binding", index, binding, current_id, element_index)
+        if add_inline_segmented_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
+            return
+        if add_inline_dual_counted_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
+            return
+        if add_inline_counted_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
+            return
         if add_counted_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
             return
         for index, binding in enumerate(geometry_raw[13:17], start=1):
@@ -637,7 +645,9 @@ def add_counted_dimension_bindings(
         return False
     primary_start = 14
     primary_end = primary_start + primary_count
-    if primary_count <= 4 or primary_end >= len(geometry_raw):
+    if primary_count <= 0 or primary_end >= len(geometry_raw):
+        return False
+    if not all(isinstance(record, list) for record in geometry_raw[primary_start:primary_end]):
         return False
     try:
         secondary_count = int(clean_token(geometry_raw[primary_end + 1]))
@@ -646,6 +656,8 @@ def add_counted_dimension_bindings(
     secondary_start = primary_end + 2
     secondary_end = secondary_start + secondary_count
     if secondary_end > len(geometry_raw):
+        return False
+    if secondary_count > 0 and not all(isinstance(record, list) for record in geometry_raw[secondary_start:secondary_end]):
         return False
     position.set("dimensionProfile", "counted")
     position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
@@ -662,19 +674,204 @@ def add_counted_dimension_bindings(
     return True
 
 
+def add_inline_counted_dimension_bindings(
+    position: ET.Element,
+    bindings: ET.Element,
+    geometry_raw: list[object],
+    current_id: str,
+    element_index: dict[str, dict[str, str]],
+) -> bool:
+    if len(geometry_raw) < 14:
+        return False
+    try:
+        count = int(clean_token(geometry_raw[12]))
+    except ValueError:
+        return False
+    if count <= 0:
+        return False
+    start = 13
+    end = start + count
+    if end > len(geometry_raw):
+        return False
+    records = geometry_raw[start:end]
+    if any(not isinstance(record, list) for record in records):
+        return False
+    tail_values = geometry_raw[end:]
+    if any(isinstance(value, list) for value in tail_values):
+        return False
+    position.set("dimensionProfile", "inlineCounted")
+    position.set("primaryDimensionMarker", str(count))
+    tail = [clean_token(value) for value in tail_values]
+    if tail:
+        position.set("layoutTail", " ".join(tail))
+    for index, binding in enumerate(records, start=1):
+        add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
+        bindings[-1].set("section", "primary")
+    return True
+
+
+def add_inline_segmented_dimension_bindings(
+    position: ET.Element,
+    bindings: ET.Element,
+    geometry_raw: list[object],
+    current_id: str,
+    element_index: dict[str, dict[str, str]],
+) -> bool:
+    if len(geometry_raw) < 16:
+        return False
+    try:
+        count = int(clean_token(geometry_raw[12]))
+    except ValueError:
+        return False
+    if count <= 0:
+        return False
+    cursor = 13
+    first_end = cursor + count
+    if first_end > len(geometry_raw) or not all(isinstance(record, list) for record in geometry_raw[cursor:first_end]):
+        return False
+    segments: list[tuple[str, list[object]]] = [("", geometry_raw[cursor:first_end])]
+    cursor = first_end
+    while cursor < len(geometry_raw):
+        marker = clean_token(geometry_raw[cursor])
+        if isinstance(geometry_raw[cursor], list):
+            return False
+        try:
+            marker_count = int(marker)
+        except ValueError:
+            break
+        if cursor + 1 < len(geometry_raw) and isinstance(geometry_raw[cursor + 1], list):
+            count = marker_count
+            marker = ""
+            cursor += 1
+        elif cursor + 2 < len(geometry_raw) and isinstance(geometry_raw[cursor + 2], list):
+            try:
+                count = int(clean_token(geometry_raw[cursor + 1]))
+            except ValueError:
+                break
+            cursor += 2
+        else:
+            break
+        end = cursor + count
+        if count <= 0 or end > len(geometry_raw):
+            return False
+        records = geometry_raw[cursor:end]
+        if not all(isinstance(record, list) for record in records):
+            return False
+        segments.append((marker, records))
+        cursor = end
+    if len(segments) <= 2:
+        return False
+    tail_values = geometry_raw[cursor:]
+    if any(isinstance(value, list) for value in tail_values):
+        return False
+    position.set("dimensionProfile", "inlineSegmented")
+    position.set("dimensionSegments", " ".join(segment_spec(marker, len(records)) for marker, records in segments))
+    tail = [clean_token(value) for value in tail_values]
+    if tail:
+        position.set("layoutTail", " ".join(tail))
+    for segment_index, (_marker, records) in enumerate(segments):
+        section = "primary" if segment_index == 0 else f"segment{segment_index + 1}"
+        for index, binding in enumerate(records, start=1):
+            add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
+            bindings[-1].set("section", section)
+    return True
+
+
+def segment_spec(marker: str, count: int) -> str:
+    return f"{marker}:{count}" if marker else str(count)
+
+
+def add_inline_dual_counted_dimension_bindings(
+    position: ET.Element,
+    bindings: ET.Element,
+    geometry_raw: list[object],
+    current_id: str,
+    element_index: dict[str, dict[str, str]],
+) -> bool:
+    if len(geometry_raw) < 17:
+        return False
+    try:
+        primary_count = int(clean_token(geometry_raw[12]))
+    except ValueError:
+        return False
+    if primary_count <= 0:
+        return False
+    primary_start = 13
+    primary_end = primary_start + primary_count
+    if primary_end + 1 >= len(geometry_raw):
+        return False
+    primary = geometry_raw[primary_start:primary_end]
+    if not all(isinstance(record, list) for record in primary):
+        return False
+    secondary_marker = clean_token(geometry_raw[primary_end])
+    try:
+        secondary_count = int(clean_token(geometry_raw[primary_end + 1]))
+    except ValueError:
+        return False
+    secondary_start = primary_end + 2
+    secondary_end = secondary_start + secondary_count
+    if secondary_count <= 0 or secondary_end > len(geometry_raw):
+        return False
+    secondary = geometry_raw[secondary_start:secondary_end]
+    if not all(isinstance(record, list) for record in secondary):
+        return False
+    tail_values = geometry_raw[secondary_end:]
+    if any(isinstance(value, list) for value in tail_values):
+        return False
+    position.set("dimensionProfile", "inlineDualCounted")
+    position.set("primaryDimensionMarker", str(primary_count))
+    position.set("secondaryDimensionMarker", secondary_marker)
+    tail = [clean_token(value) for value in tail_values]
+    if tail:
+        position.set("layoutTail", " ".join(tail))
+    for index, binding in enumerate(primary, start=1):
+        add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
+        bindings[-1].set("section", "primary")
+    for index, binding in enumerate(secondary, start=1):
+        add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
+        bindings[-1].set("section", "secondary")
+    return True
+
+
 def add_layout_group(node: ET.Element, geometry_raw: list[object]) -> None:
     if len(geometry_raw) < 5:
         return
+    if any(isinstance(value, list) for value in geometry_raw[-5:]):
+        return
     group, order, next_order, flag1, flag2 = [clean_token(value) for value in geometry_raw[-5:]]
-    if flag1 != "0" or flag2 != "0":
-        return
-    try:
-        if int(next_order) != int(order) + 1:
-            return
-    except ValueError:
-        return
+    prefix = layout_group_prefix_tail(geometry_raw)
+    if prefix:
+        node.set("layoutPreTail", " ".join(prefix))
     node.set("layoutGroup", group)
     node.set("layoutOrder", order)
+    if flag1 != "0":
+        node.set("layoutFlag1", flag1)
+    if flag2 != "0":
+        node.set("layoutFlag2", flag2)
+    try:
+        if int(next_order) != int(order) + 1:
+            node.set("layoutNextOrder", next_order)
+    except ValueError:
+        node.set("layoutNextOrder", next_order)
+
+
+def layout_group_prefix_tail(geometry_raw: list[object]) -> list[str]:
+    if len(geometry_raw) <= 22:
+        return []
+    if not all(not isinstance(value, list) for value in geometry_raw[-5:]):
+        return []
+    cursor = 17
+    if len(geometry_raw) > 12:
+        try:
+            count = int(clean_token(geometry_raw[12]))
+        except ValueError:
+            count = 0
+        if count > 0:
+            cursor = 13 + count
+    prefix = geometry_raw[cursor:-5]
+    if any(isinstance(value, list) for value in prefix):
+        return []
+    return [clean_token(value) for value in prefix]
 
 
 def find_base64_payload(value: object) -> str:
@@ -696,11 +893,23 @@ def add_picture(parent: ET.Element, item_data: dict | None, item_name: str, asse
     payload = find_base64_payload(item_data.get("raw"))
     if not payload:
         return
+    add_picture_node_from_payload(parent, payload, item_name, asset_root)
+
+
+def add_picture_node_from_payload(parent: ET.Element, payload: str, item_name: str, asset_root: Path) -> None:
     try:
         data = base64.b64decode(payload)
     except Exception:
         data = b""
-    ext = "gif" if data.startswith(b"GIF") else "bin"
+    if data.startswith(b"GIF"):
+        ext = "gif"
+        mime = "image/gif"
+    elif data.startswith(b"\x89PNG\r\n\x1a\n"):
+        ext = "png"
+        mime = "image/png"
+    else:
+        ext = "bin"
+        mime = ""
     rel_path = Path("Items") / item_name / f"Picture.{ext}"
     asset_path = asset_root / rel_path
     asset_path.parent.mkdir(parents=True, exist_ok=True)
@@ -711,8 +920,27 @@ def add_picture(parent: ET.Element, item_data: dict | None, item_name: str, asse
     node.set("size", str(len(data)))
     if data:
         node.set("sha256", sha256_bytes(data))
-        if data.startswith(b"GIF"):
-            node.set("mime", "image/gif")
+        if mime:
+            node.set("mime", mime)
+
+
+def add_button_picture(parent: ET.Element, item: dict, item_data: object, asset_root: Path) -> None:
+    if str(item.get("type", "")) != "Button":
+        return
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    if len(info) <= 1 or not isinstance(info[1], list):
+        return
+    button_info = info[1]
+    if len(button_info) <= 8:
+        return
+    payload = find_base64_payload(button_info[8])
+    if payload:
+        add_picture_node_from_payload(parent, payload, str(item.get("name", "Button")), asset_root)
 
 
 def add_activex_properties(parent: ET.Element, item: dict, item_data: object) -> None:
@@ -768,13 +996,17 @@ def add_semantic_item(
     add_first_in_group(node, item, item_data)
     add_visible(node, item_data)
     add_read_only(node, item, item_data)
+    add_input_field_properties(node, item, item_data)
     add_table_view_properties(node, item, item_data)
-    add_table_columns(node, item, item_data)
+    add_table_columns(node, item, item_data, asset_root)
     add_chart_properties(node, item, item_data)
     add_pivot_chart_properties(node, item, item_data)
     add_geographical_schema_properties(node, item, item_data)
     add_activex_properties(node, item, item_data)
+    add_button_picture(node, item, item_data, asset_root)
     add_label_properties(node, item, item_data)
+    add_button_style_properties(node, item, item_data)
+    add_default_action(node, public_type, item_data)
     add_text_color(node, item_data)
     add_back_color(node, item_data)
     add_border_color(node, item_data)
@@ -783,6 +1015,7 @@ def add_semantic_item(
     add_panel_serialization_profile(node, public_type, item_data)
     if public_type == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
+        add_picture_decoration_properties(node, item_data)
     action = action_binding(item_data) if public_type in {"Button", "Label"} else {}
     if action:
         action_node = ET.SubElement(node, "Action")
@@ -1005,6 +1238,20 @@ def add_first_in_group(parent: ET.Element, item: dict, item_data: object) -> Non
         set_text(parent, "FirstInGroup", "true")
 
 
+def add_default_action(parent: ET.Element, control_type: str, item_data: object) -> None:
+    if control_type not in {"Label", "Button"}:
+        return
+    if not isinstance(item_data, dict):
+        return
+    metadata = control_metadata_record(item_data.get("raw"))
+    if metadata is None:
+        return
+    if control_type == "Label" and len(metadata) > 4 and clean_token(metadata[4]) == "1":
+        set_text(parent, "DefaultAction", "true")
+    if control_type == "Button" and len(metadata) > 5 and clean_token(metadata[5]) == "1":
+        set_text(parent, "DefaultAction", "true")
+
+
 def add_visible(parent: ET.Element, item_data: object) -> None:
     base = base_info_from_item_data(item_data)
     if base is None or len(base) <= 1:
@@ -1033,6 +1280,38 @@ def add_read_only(parent: ET.Element, item: dict, item_data: object) -> None:
         set_text(parent, "ReadOnly", "true")
 
 
+def add_input_field_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "InputField":
+        return
+    input_info = input_field_info_record(item_data)
+    if input_info is None:
+        return
+    if len(input_info) > 3 and clean_token(input_info[3]) != "0":
+        set_text(parent, "EditMode", clean_token(input_info[3]))
+    if len(input_info) > 4 and clean_token(input_info[4]) != "1":
+        set_text(parent, "ChoiceMode", clean_token(input_info[4]))
+    if len(input_info) > 5 and clean_token(input_info[5]) == "1":
+        set_text(parent, "PasswordMode", "true")
+    if len(input_info) > 26 and clean_token(input_info[26]) == "1":
+        set_text(parent, "MultiLine", "true")
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    if len(info) <= 3 or not isinstance(info[3], list) or len(info[3]) <= 1:
+        return
+    data_link = info[3][1]
+    if not isinstance(data_link, list) or len(data_link) <= 1 or not isinstance(data_link[1], list):
+        return
+    payload = data_link[1]
+    if len(payload) > 3 and clean_token(payload[3]) != "0":
+        set_text(parent, "DataBindingMode", clean_token(payload[3]))
+    if len(payload) > 5 and clean_token(payload[5]) != "0":
+        set_text(parent, "DataBindingFlag", clean_token(payload[5]))
+
+
 def add_table_view_properties(parent: ET.Element, item: dict, item_data: object) -> None:
     if str(item.get("type", "")) != "Table":
         return
@@ -1055,7 +1334,7 @@ def add_table_view_properties(parent: ET.Element, item: dict, item_data: object)
         add_color_node_from_record(parent, "FieldBackColor", view[6])
 
 
-def add_table_columns(parent: ET.Element, item: dict, item_data: object) -> None:
+def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_root: Path) -> None:
     if str(item.get("type", "")) != "Table":
         return
     columns = table_columns_from_item_data(item_data)
@@ -1091,7 +1370,13 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object) -> None
             add_multilang_text(column_node, "Format", column["format"])
         if column["font"]:
             add_font_node_from_record(column_node, column["font"])
+        if column["picture"]:
+            add_picture_node_from_payload(column_node, column["picture"], f"{item.get('name', 'Table')}/{column['name']}", asset_root)
         add_type(column_node, column["pattern"], {})
+        if column["value_descriptor"]:
+            descriptor = ET.SubElement(column_node, "ValueDescriptor")
+            descriptor.set("encoding", "base64")
+            descriptor.text = column["value_descriptor"]
 
 
 def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
@@ -1126,6 +1411,12 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
         pattern = pattern_record[1] if isinstance(pattern_record, list) and len(pattern_record) > 1 and isinstance(pattern_record[1], list) else []
         data_path_mode = clean_token(body[37]) if len(body) > 37 else "1"
         font = body[22] if len(body) > 22 and isinstance(body[22], list) and body[22] != ["8", "3", "0", "1", "100"] else []
+        picture = find_base64_payload(body[11]) if len(body) > 11 else ""
+        value_descriptor = ""
+        if len(body) > 39 and isinstance(body[39], list) and body[39] and isinstance(body[39][0], list) and body[39][0]:
+            payload = clean_token(body[39][0][0])
+            if payload.startswith("#base64:"):
+                value_descriptor = "".join(payload.removeprefix("#base64:").split())
         if not title and name:
             title = name
         if title:
@@ -1148,7 +1439,9 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
                     "format": format_text,
                     "data_path_mode": data_path_mode,
                     "font": font,
+                    "picture": picture,
                     "pattern": pattern,
+                    "value_descriptor": value_descriptor,
                 }
             )
     return result
@@ -1343,6 +1636,25 @@ def add_geographical_schema_properties(parent: ET.Element, item: dict, item_data
         set_text(parent, "ScaleSupport", clean_token(settings[1]))
 
 
+def add_picture_decoration_properties(parent: ET.Element, item_data: object) -> None:
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    if len(info) <= 1 or not isinstance(info[1], list) or len(info[1]) <= 4:
+        return
+    picture_group = info[1][4]
+    if not isinstance(picture_group, list) or len(picture_group) <= 10 or clean_token(picture_group[0]) != "10":
+        return
+    set_text(parent, "PictureSize", clean_token(picture_group[6]))
+    set_text(parent, "ScalePicture", bool_text_from_record(picture_group[7], default=True))
+    rendering = ET.SubElement(parent, "PictureRendering")
+    rendering.set("horizontalMode", clean_token(picture_group[9]))
+    rendering.set("verticalMode", clean_token(picture_group[10]))
+
+
 def add_label_properties(parent: ET.Element, item: dict, item_data: object) -> None:
     if str(item.get("type", "")) != "Label":
         return
@@ -1352,8 +1664,32 @@ def add_label_properties(parent: ET.Element, item: dict, item_data: object) -> N
     if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
         return
     info = raw[2]
-    if len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 3:
-        set_text(parent, "TextPosition", clean_token(info[1][3]))
+    if len(info) <= 1 or not isinstance(info[1], list):
+        return
+    label_info = info[1]
+    if len(label_info) > 3:
+        set_text(parent, "HorizontalAlign", clean_token(label_info[3]))
+        set_text(parent, "TextPosition", clean_token(label_info[3]))
+    if len(label_info) > 4:
+        set_text(parent, "VerticalAlign", clean_token(label_info[4]))
+    if len(label_info) > 5:
+        set_text(parent, "Hyperlink", bool_text_from_record(label_info[5], default=False))
+    if len(label_info) > 11:
+        set_text(parent, "PictureSize", clean_token(label_info[11]))
+    if len(label_info) > 12 and isinstance(label_info[12], list) and len(label_info[12]) > 1:
+        set_text(parent, "PicturePosition", clean_token(label_info[12][1]))
+
+
+def add_button_style_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "Button":
+        return
+    base = base_info_from_item_data(item_data)
+    if base is None:
+        return
+    if len(base) > 9 and not is_default_button_text_color_record(base[9]):
+        add_color_node_from_record(parent, "ButtonTextColor", base[9])
+    if len(base) > 10 and not is_default_button_back_color_record(base[10]):
+        add_color_node_from_record(parent, "ButtonBackColor", base[10])
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:
@@ -1376,6 +1712,8 @@ def add_control_events(parent: ET.Element, control_type: str, item_data: object)
         node.set("name", event["name"])
         if event.get("uuid"):
             node.set("uuid", event["uuid"])
+        if event.get("title"):
+            node.set("title", event["title"])
         node.text = event["handler"]
 
 
@@ -1411,7 +1749,7 @@ def event_binding_from_record(record: object, control_type: str) -> dict[str, st
     event_name = infer_platform_event_name(control_type, handler, title)
     if not event_name:
         return {}
-    return {"name": event_name, "handler": handler, "uuid": uuid}
+    return {"name": event_name, "handler": handler, "uuid": uuid, "title": title}
 
 
 def infer_platform_event_name(control_type: str, handler: str, title: str = "") -> str:
@@ -1607,6 +1945,14 @@ def is_default_color_record(value: object) -> bool:
     return value in (["3", "4", ["0"]], ["4", "4", ["0"], "4"])
 
 
+def is_default_button_text_color_record(value: object) -> bool:
+    return value in (["3", "3", ["-7"]], ["4", "3", ["-7"], "3"])
+
+
+def is_default_button_back_color_record(value: object) -> bool:
+    return value in (["3", "3", ["-21"]], ["4", "3", ["-21"], "3"])
+
+
 def base_info_from_item_data(item_data: object) -> list[object] | None:
     if not isinstance(item_data, dict):
         return None
@@ -1692,6 +2038,8 @@ def dump_xml_from_paths(
         attr.set("id", str(prop.get("id", "")))
         if prop_name in attribute_slots:
             attr.set("slot", attribute_slots[prop_name])
+        if attribute_control_data_flag(form_root, prop_name) == "0":
+            attr.set("controlData", "false")
         pattern_node = pattern_node_from_prop(prop)
         add_type(attr, pattern_node, object_types)
 
@@ -1719,6 +2067,175 @@ def add_form_properties(parent: ET.Element, form_root: object) -> None:
         counter = clean_token(form_record[10])
         if counter.isdigit():
             set_text(parent, "SerializationCounter", counter)
+    add_form_serialization_profile(parent, form_record, form_root)
+
+
+def add_form_serialization_profile(parent: ET.Element, form_record: list[object], form_root: list[object]) -> None:
+    profile = ET.SubElement(parent, "SerializationProfile")
+    root_record = ET.SubElement(profile, "RootRecord")
+    root_record.set("recordKind", clean_token(form_record[0]))
+    if len(form_record) > 1 and isinstance(form_record[1], list) and len(form_record[1]) > 2:
+        root_record.set("titleMarker", clean_token(form_record[1][1]))
+        root_record.set("titleScope", clean_token(form_record[1][2]))
+    for index in range(5, min(len(form_record), 11)):
+        root_record.set(f"slot{index}", clean_token(form_record[index]))
+    root_panel_info = form_root_panel_info(form_record)
+    if root_panel_info is not None:
+        add_form_root_panel_profile(profile, root_panel_info)
+    add_form_object_profile(profile, form_root)
+    if not list(profile):
+        parent.remove(profile)
+
+
+def add_form_object_profile(profile: ET.Element, form_root: list[object]) -> None:
+    if len(form_root) <= 3 or not isinstance(form_root[3], list):
+        return
+    object_info = form_root[3]
+    if object_info == ["00000000-0000-0000-0000-000000000000", "0"] or len(object_info) < 2:
+        return
+    node = ET.SubElement(profile, "FormObject")
+    node.set("uuid", clean_token(object_info[0]))
+    node.set("kind", clean_token(object_info[1]))
+    if len(object_info) > 2 and isinstance(object_info[2], list):
+        state = object_info[2]
+        if len(state) > 0:
+            node.set("stateKind", clean_token(state[0]))
+        if len(state) > 1:
+            node.set("stateMode", clean_token(state[1]))
+        if len(state) > 4:
+            node.set("stateFlag", clean_token(state[4]))
+
+
+def form_root_panel_info(form_record: list[object]) -> list[object] | None:
+    try:
+        root_panel = form_record[2]
+        info_record = root_panel[1]
+        info = info_record[1]
+    except (IndexError, TypeError):
+        return None
+    return info if isinstance(info, list) else None
+
+
+def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None:
+    if len(info) < 2 or clean_token(info[1]) != "26":
+        return
+    root_panel = ET.SubElement(profile, "RootPanel")
+    if info and isinstance(info[0], list):
+        add_form_root_panel_base_style(root_panel, info[0])
+    if len(info) > 3:
+        page_capacity = clean_token(info[3])
+        if page_capacity.lstrip("-").isdigit():
+            root_panel.set("pageCapacity", page_capacity)
+    if len(info) > 13:
+        current_page_index = clean_token(info[13])
+        if current_page_index.lstrip("-").isdigit():
+            root_panel.set("currentPageIndex", current_page_index)
+    dependencies = form_root_panel_dependency_groups_from_info(info)
+    for order, records in enumerate(dependencies, start=1):
+        group = ET.SubElement(root_panel, "DependencyGroup")
+        group.set("order", str(order))
+        for record in records:
+            dependency = ET.SubElement(group, "Dependency")
+            dependency.set("targetId", clean_token(record[1]))
+            dimension = clean_token(record[2])
+            dependency.set("dimension", PANEL_PROFILE_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
+    pages = form_root_panel_pages_from_info(info)
+    if pages:
+        state = ET.SubElement(root_panel, "PageState")
+        state.set("name", pages[0]["name"])
+        if pages[0].get("styleMode") is not None:
+            state.set("styleMode", pages[0]["styleMode"])
+        add_multilang_text(state, "Title", pages[0].get("title") or pages[0]["name"])
+    _dependencies, cursor = panel_dependency_groups_from_info(info)
+    layouts = panel_page_layouts_from_info(info, cursor)
+    if layouts:
+        layout = ET.SubElement(root_panel, "PageLayout")
+        for key, value in layouts[0].items():
+            layout.set(key, value)
+    if not list(root_panel) and not root_panel.attrib:
+        profile.remove(root_panel)
+
+
+def add_form_root_panel_base_style(root_panel: ET.Element, base: list[object]) -> None:
+    if base == root_panel_base_info_record():
+        return
+    style = ET.SubElement(root_panel, "BaseStyle")
+    if len(base) > 4 and isinstance(base[4], list) and base[4] != ["8", "3", "0", "1", "100"]:
+        add_font_node_from_record(style, base[4])
+    if len(base) > 2:
+        add_root_panel_base_color_node(style, "TextColor", base[2])
+    if len(base) > 3:
+        add_root_panel_base_color_node(style, "BackColor", base[3])
+    if len(base) > 6:
+        add_root_panel_base_color_node(style, "BorderColor", base[6])
+    if not list(style):
+        root_panel.remove(style)
+
+
+def add_root_panel_base_color_node(parent: ET.Element, tag: str, value: object) -> None:
+    if is_default_color_record(value) and isinstance(value, list) and len(value) >= 4:
+        node = ET.SubElement(parent, tag)
+        node.set("kind", "Auto")
+        node.set("value", clean_token(value[2][0]))
+        node.set("recordKind", clean_token(value[0]))
+        node.set("recordSubKind", clean_token(value[1]))
+        node.set("tailKind", clean_token(value[3]))
+        node.text = "auto"
+        return
+    add_color_node_from_record(parent, tag, value)
+
+
+def form_root_panel_dependency_groups_from_info(info: list[object]) -> list[list[list[object]]]:
+    groups: list[list[list[object]]] = []
+    cursor = 3
+    while cursor < len(info):
+        try:
+            count = int(clean_token(info[cursor]))
+        except ValueError:
+            break
+        cursor += 1
+        records: list[list[object]] = []
+        for _ in range(count):
+            if cursor >= len(info) or not isinstance(info[cursor], list):
+                return groups
+            record = info[cursor]
+            if len(record) < 3 or clean_token(record[0]) != "0":
+                return groups
+            records.append(record)
+            cursor += 1
+        groups.append(records)
+        if cursor < len(info) and isinstance(info[cursor], list) and clean_token(info[cursor][0] if info[cursor] else "") != "0":
+            break
+    return groups
+
+
+def form_root_panel_pages_from_info(info: list[object]) -> list[dict[str, str]]:
+    for child in info:
+        if not isinstance(child, list) or len(child) < 3 or clean_token(child[0]) != "1":
+            continue
+        try:
+            count = int(clean_token(child[1]))
+        except ValueError:
+            continue
+        states = [
+            state
+            for state in child[2:]
+            if isinstance(state, list) and state and clean_token(state[0]) in {"3", "6"}
+        ]
+        if count != len(states) or not states:
+            continue
+        result: list[dict[str, str]] = []
+        for state in states:
+            name = clean_token(state[6]) if len(state) > 6 else ""
+            title = first_localized_text(state)
+            if name:
+                descriptor = {"name": name, "title": title or name}
+                if len(state) > 2 and isinstance(state[2], list) and len(state[2]) > 6:
+                    descriptor["styleMode"] = clean_token(state[2][6])
+                result.append(descriptor)
+        if result:
+            return result
+    return []
 
 
 def attribute_record_name(record: list[object]) -> str:
@@ -1742,6 +2259,10 @@ def add_form_events(parent: ET.Element, form_root: object) -> None:
             node = ET.SubElement(events_node, "Event")
             node.set("name", event["name"])
             node.set("uuid", event["uuid"])
+            if event.get("id"):
+                node.set("id", event["id"])
+            if event.get("title"):
+                node.set("title", event["title"])
     if len(events_node) == 0:
         parent.remove(events_node)
 
@@ -1764,6 +2285,25 @@ def attribute_slots_from_form_root(form_root: object) -> dict[str, str]:
     return result
 
 
+def attribute_control_data_flag(form_root: object, name: str) -> str:
+    record = attribute_record_from_form_root(form_root, name)
+    if record is None or len(record) <= 1:
+        return "1"
+    return clean_token(record[1])
+
+
+def attribute_record_from_form_root(form_root: object, name: str) -> list[object] | None:
+    if not isinstance(form_root, list) or len(form_root) <= 2 or not isinstance(form_root[2], list):
+        return None
+    table = form_root[2]
+    if len(table) <= 2 or not isinstance(table[2], list):
+        return None
+    for record in table[2][1:]:
+        if isinstance(record, list) and attribute_record_name(record) == name:
+            return record
+    return None
+
+
 def event_from_record(record: object) -> dict[str, str]:
     if not isinstance(record, list) or len(record) < 3:
         return {}
@@ -1777,7 +2317,8 @@ def event_from_record(record: object) -> dict[str, str]:
         uuid,
     ):
         return {}
-    return {"name": name, "uuid": uuid}
+    title = first_localized_text(payload[2]) if len(payload) > 2 else ""
+    return {"name": name, "uuid": uuid, "title": title, "id": clean_token(record[0])}
 
 
 XML_TEXT_NEWLINE_SENTINEL = "__ONEC_ORDINARY_FORMS_XML_TEXT_LF_8F6F0B2194AA4F0C__"
