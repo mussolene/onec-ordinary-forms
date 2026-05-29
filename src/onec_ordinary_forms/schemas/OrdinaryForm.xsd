@@ -732,11 +732,15 @@
     <xs:sequence>
       <xs:element name="BaseStyle" type="FormRootPanelBaseStyleType" minOccurs="0"/>
       <xs:element name="DependencyGroup" type="PanelDependencyGroupType" minOccurs="0" maxOccurs="unbounded"/>
-      <xs:element name="PageState" type="FormRootPageStateType" minOccurs="0"/>
-      <xs:element name="PageLayout" type="PanelPageLayoutType" minOccurs="0"/>
+      <xs:element name="PageState" type="FormRootPageStateType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="PageLayout" type="PanelPageLayoutType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attribute name="pageCapacity" type="xs:integer"/>
     <xs:attribute name="currentPageIndex" type="xs:integer"/>
+    <xs:attribute name="dependencyTail" type="xs:string"/>
+    <xs:attribute name="pageLayoutHeader" type="xs:string"/>
+    <xs:attribute name="postLayoutTailBeforeColor" type="xs:string"/>
+    <xs:attribute name="postLayoutTailAfterColor" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="FormRootPanelBaseStyleType">
     <xs:sequence>

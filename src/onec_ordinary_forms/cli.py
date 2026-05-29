@@ -794,7 +794,7 @@ def add_inline_segmented_dimension_bindings(
             return False
         segments.append((marker, records))
         cursor = end
-    if len(segments) <= 2:
+    if len(segments) <= 1:
         return False
     tail_values = geometry_raw[cursor:]
     if any(isinstance(value, list) for value in tail_values):
@@ -2247,15 +2247,11 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
     root_panel = ET.SubElement(profile, "RootPanel")
     if info and isinstance(info[0], list):
         add_form_root_panel_base_style(root_panel, info[0])
-    if len(info) > 3:
-        page_capacity = clean_token(info[3])
-        if page_capacity.lstrip("-").isdigit():
-            root_panel.set("pageCapacity", page_capacity)
     if len(info) > 13:
         current_page_index = clean_token(info[13])
         if current_page_index.lstrip("-").isdigit():
             root_panel.set("currentPageIndex", current_page_index)
-    dependencies = form_root_panel_dependency_groups_from_info(info)
+    dependencies, cursor = form_root_panel_dependency_groups_and_cursor(info)
     for order, records in enumerate(dependencies, start=1):
         group = ET.SubElement(root_panel, "DependencyGroup")
         group.set("order", str(order))
@@ -2264,19 +2260,29 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
             dependency.set("targetId", clean_token(record[1]))
             dimension = clean_token(record[2])
             dependency.set("dimension", PANEL_PROFILE_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
+    dependency_tail = form_root_panel_dependency_tail(info, cursor)
+    if dependency_tail:
+        root_panel.set("dependencyTail", " ".join(dependency_tail))
     pages = form_root_panel_pages_from_info(info)
-    if pages:
+    for page_descriptor in pages:
         state = ET.SubElement(root_panel, "PageState")
-        state.set("name", pages[0]["name"])
-        if pages[0].get("styleMode") is not None:
-            state.set("styleMode", pages[0]["styleMode"])
-        add_multilang_text(state, "Title", pages[0].get("title") or pages[0]["name"])
-    _dependencies, cursor = panel_dependency_groups_from_info(info)
+        state.set("name", page_descriptor["name"])
+        if page_descriptor.get("styleMode") is not None:
+            state.set("styleMode", page_descriptor["styleMode"])
+        add_multilang_text(state, "Title", page_descriptor.get("title") or page_descriptor["name"])
+    header = form_root_panel_page_layout_header(info, cursor)
+    if header:
+        root_panel.set("pageLayoutHeader", " ".join(header))
     layouts = panel_page_layouts_from_info(info, cursor)
-    if layouts:
+    for layout_descriptor in layouts:
         layout = ET.SubElement(root_panel, "PageLayout")
-        for key, value in layouts[0].items():
+        for key, value in layout_descriptor.items():
             layout.set(key, value)
+    before_color, after_color = form_root_panel_post_layout_tail(info, cursor)
+    if before_color:
+        root_panel.set("postLayoutTailBeforeColor", " ".join(before_color))
+    if after_color:
+        root_panel.set("postLayoutTailAfterColor", " ".join(after_color))
     if not list(root_panel) and not root_panel.attrib:
         profile.remove(root_panel)
 
@@ -2311,27 +2317,76 @@ def add_root_panel_base_color_node(parent: ET.Element, tag: str, value: object) 
 
 
 def form_root_panel_dependency_groups_from_info(info: list[object]) -> list[list[list[object]]]:
+    groups, _cursor = form_root_panel_dependency_groups_and_cursor(info)
+    return groups
+
+
+def form_root_panel_dependency_groups_and_cursor(info: list[object]) -> tuple[list[list[list[object]]], int]:
     groups: list[list[list[object]]] = []
-    cursor = 3
+    cursor = 2
     while cursor < len(info):
         try:
             count = int(clean_token(info[cursor]))
         except ValueError:
             break
+        if count <= 0:
+            break
         cursor += 1
         records: list[list[object]] = []
-        for _ in range(count):
+        for _index in range(count):
             if cursor >= len(info) or not isinstance(info[cursor], list):
-                return groups
+                return groups, cursor
             record = info[cursor]
-            if len(record) < 3 or clean_token(record[0]) != "0":
-                return groups
-            records.append(record)
+            if len(record) >= 3:
+                records.append(record)
             cursor += 1
         groups.append(records)
-        if cursor < len(info) and isinstance(info[cursor], list) and clean_token(info[cursor][0] if info[cursor] else "") != "0":
-            break
-    return groups
+    return groups, cursor
+
+
+def form_root_panel_page_layout_header(info: list[object], cursor: int) -> list[str]:
+    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+        cursor += 1
+    if cursor >= len(info):
+        return []
+    cursor += 1
+    while cursor < len(info) and not (isinstance(info[cursor], list) and clean_token(info[cursor][0]) == "1"):
+        cursor += 1
+    if cursor + 4 >= len(info):
+        return []
+    return [clean_token(value) for value in info[cursor + 1 : cursor + 4] if not isinstance(value, list)]
+
+
+def form_root_panel_dependency_tail(info: list[object], cursor: int) -> list[str]:
+    result: list[str] = []
+    while cursor < len(info) and not isinstance(info[cursor], list):
+        result.append(clean_token(info[cursor]))
+        cursor += 1
+    return result
+
+
+def form_root_panel_post_layout_tail(info: list[object], cursor: int) -> tuple[list[str], list[str]]:
+    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+        cursor += 1
+    if cursor >= len(info):
+        return [], []
+    cursor += 1
+    while cursor < len(info) and not (isinstance(info[cursor], list) and clean_token(info[cursor][0]) == "1"):
+        cursor += 1
+    if cursor + 4 >= len(info):
+        return [], []
+    cursor += 4
+    try:
+        record_count = int(clean_token(info[cursor]))
+    except ValueError:
+        return [], []
+    tail = info[cursor + 1 + record_count :]
+    color_index = next((index for index, value in enumerate(tail) if isinstance(value, list) and is_default_color_record(value)), -1)
+    if color_index < 0:
+        return [], []
+    before = [clean_token(value) for value in tail[:color_index] if not isinstance(value, list)]
+    after = [clean_token(value) for value in tail[color_index + 1 :] if not isinstance(value, list)]
+    return before, after
 
 
 def form_root_panel_pages_from_info(info: list[object]) -> list[dict[str, str]]:

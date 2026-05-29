@@ -13,6 +13,7 @@ from onec_ordinary_forms.cli import (
     add_back_color,
     add_border_color,
     add_chart_properties,
+    add_geometry,
     add_font,
     add_text_color,
     add_pivot_chart_properties,
@@ -2204,6 +2205,46 @@ class CliSmokeTest(unittest.TestCase):
             controls["126"][3],
             ["3", "2", "18", "102", "36", "3", "20", "6", "21", "0", "0", "0", "0", "0", "4"],
         )
+
+    def test_dump_preserves_two_segment_command_bar_dimension_profile(self) -> None:
+        geometry = [
+            "8",
+            "0",
+            "267",
+            "400",
+            "292",
+            "1",
+            ["0", ["2", "3", "1", "-25"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "0", "1", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "0", "2", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "0", "3", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            "1",
+            ["0", "3", "1"],
+            "1",
+            ["0", "3", "0"],
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "1",
+            "2",
+            "1",
+            "1",
+        ]
+        parent = ET.Element("CommandBar")
+
+        add_geometry(parent, {"id": "3", "raw": [geometry]}, {"3": {"name": "ОсновныеДействияФормы"}})
+
+        position = parent.find("Position")
+        self.assertIsNotNone(position)
+        assert position is not None
+        self.assertEqual(position.get("dimensionProfile"), "inlineSegmented")
+        self.assertEqual(position.get("dimensionSegments"), "1 1")
+        self.assertEqual(position.get("layoutTail"), "0 0 0 0 0 1 2 1 1")
+        self.assertEqual(geometry_stream_from_xml("CommandBar", position), geometry)
 
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):

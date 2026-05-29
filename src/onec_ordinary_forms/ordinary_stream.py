@@ -390,18 +390,42 @@ def form_serialization_profile_from_xml(root: ET.Element) -> FormRootLayout | No
             result["rootPanelPageCapacity"] = root_panel.get("pageCapacity", "")
         if root_panel.get("currentPageIndex"):
             result["rootPanelCurrentPageIndex"] = root_panel.get("currentPageIndex", "")
-        page_state = root_panel.find("PageState")
-        if page_state is not None:
+        page_states: list[dict[str, str]] = []
+        for page_state in root_panel.findall("PageState"):
+            descriptor: dict[str, str] = {}
             if page_state.get("name"):
-                result["rootPageName"] = page_state.get("name", "")
+                descriptor["name"] = page_state.get("name", "")
             title = get_multilang_text(page_state, "Title")
             if title:
-                result["rootPageTitle"] = title
+                descriptor["title"] = title
             if page_state.get("styleMode"):
-                result["rootPageStyleMode"] = page_state.get("styleMode", "")
-        page_layout = root_panel.find("PageLayout")
-        if page_layout is not None:
-            result["rootPageLayout"] = {key: page_layout.get(key, "") for key in ("left", "top", "width", "height", "horizontalMode", "verticalMode")}
+                descriptor["styleMode"] = page_state.get("styleMode", "")
+            if descriptor:
+                page_states.append(descriptor)
+        if page_states:
+            result["rootPageStates"] = page_states
+            result["rootPageName"] = page_states[0].get("name", "")
+            result["rootPageTitle"] = page_states[0].get("title", "")
+            result["rootPageStyleMode"] = page_states[0].get("styleMode", "")
+        page_layouts = [
+            {key: page_layout.get(key, "") for key in ("page", "left", "top", "width", "height", "horizontalMode", "verticalMode")}
+            for page_layout in root_panel.findall("PageLayout")
+        ]
+        if page_layouts:
+            result["rootPageLayouts"] = page_layouts
+            result["rootPageLayout"] = page_layouts[0]
+        if root_panel.get("pageLayoutHeader"):
+            result["rootPageLayoutHeader"] = [value for value in root_panel.get("pageLayoutHeader", "").split(" ") if value != ""]
+        if root_panel.get("dependencyTail"):
+            result["rootPanelDependencyTail"] = [value for value in root_panel.get("dependencyTail", "").split(" ") if value != ""]
+        if root_panel.get("postLayoutTailBeforeColor"):
+            result["rootPanelPostLayoutTailBeforeColor"] = [
+                value for value in root_panel.get("postLayoutTailBeforeColor", "").split(" ") if value != ""
+            ]
+        if root_panel.get("postLayoutTailAfterColor"):
+            result["rootPanelPostLayoutTailAfterColor"] = [
+                value for value in root_panel.get("postLayoutTailAfterColor", "").split(" ") if value != ""
+            ]
         dependencies = form_root_panel_dependency_profile_from_xml(root_panel)
         if dependencies is not None:
             result["rootPanelDependencies"] = dependencies
@@ -600,19 +624,25 @@ def root_panel_info_from_control_extent(
 ) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["FormRootPanel"]
     page_title = page_title or localized_text_record("Страница1")
-    position_records = [
-        ["2", margin_left, "1", "1", "1", "0", "0", "0", "0"],
-        ["2", margin_top, "0", "1", "2", "0", "0", "0", "0"],
-        ["2", page_width, "1", "1", "3", "0", "0", right_offset, "0"],
-        ["2", page_height, "0", "1", "4", "0", "0", bottom_offset, "0"],
+    page_states = root_page_state_records(root_layout, page_title, page_name, page_style_mode)
+    position_records = root_page_layout_records(
+        root_layout,
+        margin_left,
+        margin_top,
+        page_width,
+        page_height,
+        right_offset,
+        bottom_offset,
+    )
+    layout_header = root_page_layout_header(root_layout)
+    body: list[object] = [
+        root_panel_base_info_record(root_layout),
+        "26",
     ]
-    return [
-        descriptor.info_kind,
-        [
-            root_panel_base_info_record(root_layout),
-            "26",
-            "0",
-            *(dependency_profile or [
+    if dependency_profile is None:
+        body.append(str((root_layout or {}).get("rootPanelPageCapacity", "0")))
+    body.extend(
+        dependency_profile or [
                 "1",
                 ["0", "1", "1"],
                 "1",
@@ -621,48 +651,129 @@ def root_panel_info_from_control_extent(
                 ["0", "1", "3"],
                 ["0", "2", "3"],
                 ["0", "4", "3"],
-            ]),
-            *([] if dependency_profile is not None else ["0", "0"]),
+            ]
+    )
+    dependency_tail = (root_layout or {}).get("rootPanelDependencyTail")
+    body.extend(
+        [
+            *(dependency_tail if isinstance(dependency_tail, list) else ([] if dependency_profile is not None else ["0", "0"])),
             page_style_group_record("1"),
             "0",
             current_page_index,
-            [
-                "1",
-                "1",
-                [
-                    "6",
-                    page_title,
-                    root_page_state_style_group_record(page_style_mode),
-                    "-1",
-                    "1",
-                    "1",
-                    quoted_atom(page_name),
-                    "1",
-                    default_color_record(),
-                    default_color_record(),
-                    ["8", "3", "0", "1", "100"],
-                    "1",
-                ],
-            ],
-            "1",
-            "1",
-            "0",
-            "4",
+            ["1", str(len(page_states)), *page_states],
+            *layout_header,
+            str(len(position_records)),
             *position_records,
-            "0",
-            "4294967295",
-            "5",
-            "64",
-            "0",
+            *root_panel_post_layout_tail_before_color(root_layout),
             default_color_record(),
-            "0",
-            "0",
-            "57",
-            "0",
-            "0",
-        ],
+            *root_panel_post_layout_tail_after_color(root_layout),
+        ]
+    )
+    return [
+        descriptor.info_kind,
+        body,
         ["0"],
     ]
+
+
+def root_page_state_records(
+    root_layout: FormRootLayout | None,
+    default_title: list[object],
+    default_name: str,
+    default_style_mode: str,
+) -> list[list[object]]:
+    states = (root_layout or {}).get("rootPageStates")
+    if not isinstance(states, list) or not states:
+        states = [{"name": default_name, "title": default_name, "styleMode": default_style_mode}]
+    result: list[list[object]] = []
+    for state in states:
+        if not isinstance(state, dict):
+            continue
+        name = str(state.get("name", default_name))
+        title = localized_text_record(str(state.get("title", name)))
+        style_mode = str(state.get("styleMode", default_style_mode))
+        result.append(
+            [
+                "6",
+                title,
+                root_page_state_style_group_record(style_mode),
+                "-1",
+                "1",
+                "1",
+                quoted_atom(name),
+                "1",
+                default_color_record(),
+                default_color_record(),
+                ["8", "3", "0", "1", "100"],
+                "1",
+            ]
+        )
+    return result or [["6", default_title, root_page_state_style_group_record(default_style_mode), "-1", "1", "1", quoted_atom(default_name), "1", default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"]]
+
+
+def root_page_layout_header(root_layout: FormRootLayout | None) -> list[str]:
+    value = (root_layout or {}).get("rootPageLayoutHeader")
+    if isinstance(value, list) and value:
+        return [str(item) for item in value]
+    return ["1", "1", "0"]
+
+
+def root_page_layout_records(
+    root_layout: FormRootLayout | None,
+    margin_left: str,
+    margin_top: str,
+    page_width: str,
+    page_height: str,
+    right_offset: str,
+    bottom_offset: str,
+) -> list[list[object]]:
+    layouts = (root_layout or {}).get("rootPageLayouts")
+    if not isinstance(layouts, list) or not layouts:
+        layouts = [
+            {
+                "page": "0",
+                "left": margin_left,
+                "top": margin_top,
+                "width": page_width,
+                "height": page_height,
+                "horizontalMode": right_offset,
+                "verticalMode": bottom_offset,
+            }
+        ]
+    records: list[list[object]] = []
+    for layout in layouts:
+        if not isinstance(layout, dict):
+            continue
+        page = str(layout.get("page", "0"))
+        left = str(layout.get("left", margin_left))
+        top = str(layout.get("top", margin_top))
+        width = str(layout.get("width", page_width))
+        height = str(layout.get("height", page_height))
+        horizontal_mode = str(layout.get("horizontalMode", right_offset))
+        vertical_mode = str(layout.get("verticalMode", bottom_offset))
+        records.extend(
+            [
+                ["2", left, "1", "1", "1", page, "0", "0", "0"],
+                ["2", top, "0", "1", "2", page, "0", "0", "0"],
+                ["2", width, "1", "1", "3", page, "0", horizontal_mode, "0"],
+                ["2", height, "0", "1", "4", page, "0", vertical_mode, "0"],
+            ]
+        )
+    return records
+
+
+def root_panel_post_layout_tail_before_color(root_layout: FormRootLayout | None) -> list[str]:
+    value = (root_layout or {}).get("rootPanelPostLayoutTailBeforeColor")
+    if isinstance(value, list) and value:
+        return [str(item) for item in value]
+    return ["0", "4294967295", "5", "64", "0"]
+
+
+def root_panel_post_layout_tail_after_color(root_layout: FormRootLayout | None) -> list[str]:
+    value = (root_layout or {}).get("rootPanelPostLayoutTailAfterColor")
+    if isinstance(value, list) and value:
+        return [str(item) for item in value]
+    return ["0", "0", "57", "0", "0"]
 
 
 def controls_extent(controls: list[object]) -> tuple[int, int]:
