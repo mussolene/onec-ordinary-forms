@@ -780,6 +780,7 @@ def add_semantic_item(
     add_border_color(node, item_data)
     add_font(node, item_data)
     add_geometry(node, item_data, element_index)
+    add_panel_serialization_profile(node, public_type, item_data)
     if public_type == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
     action = action_binding(item_data) if public_type in {"Button", "Label"} else {}
@@ -814,6 +815,8 @@ def add_semantic_item(
             page_path = f"{raw_key}/{page_name}"
             page = ET.SubElement(pages, "Page")
             page.set("name", str(page_name))
+            if page_descriptor.get("styleMode") is not None:
+                page.set("styleMode", str(page_descriptor["styleMode"]))
             title = page_descriptor.get("title") or page_title(data.get(page_path))
             if title:
                 add_multilang_text(page, "Title", title)
@@ -882,6 +885,109 @@ def add_data_path(parent: ET.Element, item: dict, item_data: object) -> None:
     if not data_path:
         return
     set_text(parent, "DataPath", data_path)
+
+
+PANEL_PROFILE_DIMENSION_NAMES = {
+    "0": "top",
+    "1": "bottom",
+    "2": "left",
+    "3": "right",
+}
+
+
+def add_panel_serialization_profile(parent: ET.Element, public_type: str, item_data: object) -> None:
+    if public_type != "Panel" or not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2][1] if len(raw[2]) > 1 and isinstance(raw[2][1], list) else None
+    if not isinstance(info, list) or len(info) < 3 or clean_token(info[1]) != "26":
+        return
+    dependencies, cursor = panel_dependency_groups_from_info(info)
+    page_layouts = panel_page_layouts_from_info(info, cursor)
+    page_capacity = len(page_layouts)
+    if not dependencies and not page_layouts:
+        return
+    profile = ET.SubElement(parent, "SerializationProfile")
+    if page_capacity:
+        profile.set("pageCapacity", str(page_capacity))
+    for order, records in enumerate(dependencies, start=1):
+        group = ET.SubElement(profile, "DependencyGroup")
+        group.set("order", str(order))
+        for record in records:
+            dependency = ET.SubElement(group, "Dependency")
+            dependency.set("targetId", clean_token(record[1]))
+            dimension = clean_token(record[2])
+            dependency.set("dimension", PANEL_PROFILE_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
+    for layout in page_layouts:
+        page = ET.SubElement(profile, "PageLayout")
+        for key, value in layout.items():
+            page.set(key, value)
+
+
+def panel_dependency_groups_from_info(info: list[object]) -> tuple[list[list[list[object]]], int]:
+    groups: list[list[list[object]]] = []
+    cursor = 2
+    while cursor < len(info):
+        try:
+            count = int(clean_token(info[cursor]))
+        except ValueError:
+            break
+        cursor += 1
+        if count == 0:
+            if cursor < len(info) and clean_token(info[cursor]) == "0":
+                cursor += 1
+            break
+        records: list[list[object]] = []
+        for _index in range(count):
+            if cursor >= len(info) or not isinstance(info[cursor], list):
+                return groups, cursor
+            record = info[cursor]
+            if len(record) >= 3:
+                records.append(record)
+            cursor += 1
+        groups.append(records)
+    return groups, cursor
+
+
+def panel_page_layouts_from_info(info: list[object], cursor: int) -> list[dict[str, str]]:
+    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+        cursor += 1
+    if cursor >= len(info):
+        return []
+    cursor += 1
+    while cursor < len(info) and not (isinstance(info[cursor], list) and clean_token(info[cursor][0]) == "1"):
+        cursor += 1
+    if cursor + 4 >= len(info):
+        return []
+    cursor += 4
+    try:
+        record_count = int(clean_token(info[cursor]))
+    except ValueError:
+        return []
+    cursor += 1
+    records = info[cursor : cursor + record_count]
+    if record_count <= 0 or len(records) != record_count:
+        return []
+    layouts: list[dict[str, str]] = []
+    for offset in range(0, len(records), 4):
+        chunk = records[offset : offset + 4]
+        if len(chunk) != 4 or not all(isinstance(record, list) and len(record) >= 9 for record in chunk):
+            break
+        page_index = clean_token(chunk[0][5])
+        layouts.append(
+            {
+                "page": page_index,
+                "left": clean_token(chunk[0][1]),
+                "top": clean_token(chunk[1][1]),
+                "width": clean_token(chunk[2][1]),
+                "height": clean_token(chunk[3][1]),
+                "horizontalMode": clean_token(chunk[2][7]),
+                "verticalMode": clean_token(chunk[3][7]),
+            }
+        )
+    return layouts
 
 
 def add_first_in_group(parent: ET.Element, item: dict, item_data: object) -> None:
@@ -961,9 +1067,13 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object) -> None
         column_node.set("name", column["name"])
         column_node.set("order", column["order"])
         add_multilang_text(column_node, "Title", column["title"])
+        if column["data_path"]:
+            set_text(column_node, "DataPath", column["data_path"])
         set_text(column_node, "Width", column["width"])
         if column["style"] != "12590592":
             set_text(column_node, "Style", column["style"])
+        if column["text_color"]:
+            add_color_node_from_record(column_node, "TextColor", column["text_color"])
         if column["visible"] == "0":
             set_text(column_node, "Visible", "false")
         if column["read_only"] == "1":
@@ -977,6 +1087,8 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object) -> None
         set_text(column_node, "PresentationIndex", column["presentation_index"])
         if column["use_picture"] == "1":
             set_text(column_node, "UsePicture", "true")
+        if column["format"]:
+            add_multilang_text(column_node, "Format", column["format"])
         if column["font"]:
             add_font_node_from_record(column_node, column["font"])
         add_type(column_node, column["pattern"], {})
@@ -996,9 +1108,11 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
         if not isinstance(body, list) or len(body) <= 35:
             continue
         title = first_localized_text(body[1]) if len(body) > 1 else ""
+        data_path = clean_token(column[1][2]) if len(column[1]) > 2 else ""
         width = clean_token(body[4]) if len(body) > 4 else "1e2"
         order = clean_token(body[5]) if len(body) > 5 else str(len(result))
         style = clean_token(body[9]) if len(body) > 9 else "12590592"
+        text_color = body[17] if len(body) > 17 and isinstance(body[17], list) and not is_default_color_record(body[17]) else []
         visible = clean_token(body[25]) if len(body) > 25 else "1"
         read_only = clean_token(body[26]) if len(body) > 26 else "0"
         column_kind = clean_token(body[27]) if len(body) > 27 else "0"
@@ -1007,6 +1121,7 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
         name = clean_token(body[30]) if len(body) > 30 else title
         presentation_index = clean_token(body[32]) if len(body) > 32 else "15"
         use_picture = clean_token(body[33]) if len(body) > 33 else "0"
+        format_text = localized_text_from_record(body[34]) if len(body) > 34 else ""
         pattern_record = body[35]
         pattern = pattern_record[1] if isinstance(pattern_record, list) and len(pattern_record) > 1 and isinstance(pattern_record[1], list) else []
         data_path_mode = clean_token(body[37]) if len(body) > 37 else "1"
@@ -1018,9 +1133,11 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
                 {
                     "name": name or title,
                     "title": title,
+                    "data_path": data_path,
                     "width": width,
                     "order": order,
                     "style": style,
+                    "text_color": text_color,
                     "visible": visible,
                     "read_only": read_only,
                     "column_kind": column_kind,
@@ -1028,6 +1145,7 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
                     "output_mode": output_mode,
                     "presentation_index": presentation_index,
                     "use_picture": use_picture,
+                    "format": format_text,
                     "data_path_mode": data_path_mode,
                     "font": font,
                     "pattern": pattern,
@@ -1354,7 +1472,10 @@ def panel_pages_from_raw(raw: object) -> list[dict[str, str]]:
             name = clean_token(state[6]) if len(state) > 6 else ""
             title = first_localized_text(state)
             if name:
-                result.append({"name": name, "title": title or name})
+                descriptor = {"name": name, "title": title or name}
+                if len(state) > 2 and isinstance(state[2], list) and len(state[2]) > 6:
+                    descriptor["styleMode"] = clean_token(state[2][6])
+                result.append(descriptor)
         if result:
             return result
     return []

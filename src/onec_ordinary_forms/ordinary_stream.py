@@ -598,6 +598,14 @@ def regular_panel_base_info_record() -> list[object]:
     return record
 
 
+def panel_base_info_record_for_serialization(serialization: ET.Element | None) -> list[object]:
+    record = regular_panel_base_info_record()
+    if serialization is not None:
+        record[6] = default_color_record()
+        record[17] = "2"
+    return record
+
+
 def compact_root_panel_base_info_record() -> list[object]:
     return [
         "10",
@@ -983,15 +991,14 @@ def control_stream_from_xml_with_page(
     metadata = copy.deepcopy(template_metadata) if isinstance(template_metadata, list) else ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
     if control_type == "RadioButton":
         metadata[5] = bool_record_from_xml(element, "FirstInGroup", default=False)
-    children: list[object] = []
+    children_by_id: list[tuple[int, list[object]]] = []
     for child in element:
         child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, control_templates, None, None)
         if child_stream:
-            children.append(child_stream)
+            children_by_id.append((int(child_stream[1]), child_stream))
     pages = element.find("Pages")
     if pages is not None:
         child_parent_size = position_size(element.find("Position"))
-        page_children: list[tuple[int, list[object]]] = []
         for page_number, page in enumerate(pages.findall("Page")):
             page_child_order = 0
             for child in page:
@@ -1008,9 +1015,9 @@ def control_stream_from_xml_with_page(
                     child_parent_size,
                 )
                 if child_stream:
-                    page_children.append((int(child_stream[1]), child_stream))
+                    children_by_id.append((int(child_stream[1]), child_stream))
                     page_child_order += 1
-        children.extend(child for _, child in sorted(page_children, key=lambda item: item[0]))
+    children = [child for _, child in sorted(children_by_id, key=lambda item: item[0])]
     child_table: list[object] = [str(len(children)), *children]
     if control_type == "Chart":
         return [class_id, object_id, info, chart_presentation_record(element, title_record, control_actions_from_xml(element, control_type)), geometry, metadata, child_table]
@@ -1205,26 +1212,27 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object],
     pages = element.find("Pages")
     page_nodes = pages.findall("Page") if pages is not None else []
     page_count = len(page_nodes) or 1
-    page_capacity = panel_page_capacity(page_count)
+    serialization = element.find("SerializationProfile")
+    explicit_page_capacity = panel_serialization_page_capacity(serialization)
+    page_capacity = explicit_page_capacity or panel_page_capacity(page_count)
     position = element.find("Position")
     raw_width = position.get("width", "1228") if position is not None else "1228"
     raw_height = position.get("height", "1054") if position is not None else "1054"
     width = panel_extent_value(raw_width, 6)
     height = panel_extent_value(raw_height, 24)
     state_table = panel_state_table(element, title_record, extended=True, capacity=page_capacity)
-    position_records = panel_position_records(page_capacity, width, height, mode="4")
+    position_records = panel_page_layout_records(serialization) or panel_position_records(page_capacity, width, height, mode="4")
+    dependency_profile = panel_dependency_profile_from_xml(serialization, page_capacity)
     return [
         descriptor.info_kind,
         [
-            regular_panel_base_info_record(),
+            panel_base_info_record_for_serialization(serialization),
             "26",
-            "1",
-            ["0", str(page_capacity), "1"],
-            *panel_control_slot_profile(),
+            *dependency_profile,
             "0",
             "0",
             page_style_group_record("1"),
-            "1",
+            "0" if serialization is not None else "1",
             "1",
             state_table,
             "1",
@@ -1286,6 +1294,71 @@ def panel_control_slot_profile() -> list[object]:
     ]
 
 
+PANEL_PROFILE_DIMENSION_CODES = {
+    "top": "0",
+    "bottom": "1",
+    "left": "2",
+    "right": "3",
+}
+
+
+def panel_serialization_page_capacity(serialization: ET.Element | None) -> int | None:
+    if serialization is None:
+        return None
+    value = serialization.get("pageCapacity")
+    if value is None:
+        return None
+    try:
+        page_capacity = int(value)
+    except ValueError:
+        return None
+    return page_capacity if page_capacity > 0 else None
+
+
+def panel_dependency_profile_from_xml(serialization: ET.Element | None, page_capacity: int) -> list[object]:
+    if serialization is None:
+        return ["1", ["0", str(page_capacity), "1"], *panel_control_slot_profile()]
+    groups = sorted(serialization.findall("DependencyGroup"), key=lambda node: int(node.get("order", "0") or "0"))
+    if not groups:
+        return ["1", ["0", str(page_capacity), "1"], *panel_control_slot_profile()]
+    result: list[object] = []
+    for group in groups:
+        dependencies: list[list[object]] = []
+        for dependency in group.findall("Dependency"):
+            target_id = dependency.get("targetId", "0")
+            dimension = dependency.get("dimension", "top")
+            dimension_code = PANEL_PROFILE_DIMENSION_CODES.get(dimension)
+            if dimension_code is None and dimension.startswith("dimension"):
+                dimension_code = dimension.removeprefix("dimension")
+            dependencies.append(["0", target_id, dimension_code or "0"])
+        result.extend([str(len(dependencies)), *dependencies])
+    return result
+
+
+def panel_page_layout_records(serialization: ET.Element | None) -> list[list[object]]:
+    if serialization is None:
+        return []
+    layouts = sorted(serialization.findall("PageLayout"), key=lambda node: int(node.get("page", "0") or "0"))
+    records: list[list[object]] = []
+    for layout in layouts:
+        page = layout.get("page", "0")
+        left = layout.get("left", "6")
+        top = layout.get("top", "6")
+        width = layout.get("width", "0")
+        height = layout.get("height", "0")
+        horizontal_mode = layout.get("horizontalMode", "4")
+        vertical_mode = layout.get("verticalMode", "4")
+        records.extend(
+            [
+                ["2", left, "1", "1", "1", page, "0", "0", "0"],
+                ["2", top, "0", "1", "2", page, "0", "0", "0"],
+                ["2", width, "1", "1", "3", page, "0", horizontal_mode, "0"],
+                ["2", height, "0", "1", "4", page, "0", vertical_mode, "0"],
+            ]
+        )
+    return records
+
+
 def panel_page_capacity(page_count: int) -> int:
     return max(page_count, 25)
 
@@ -1312,7 +1385,7 @@ def panel_state_table(
         for page in page_nodes:
             name = page.get("name", "Страница1")
             title = get_multilang_text(page, "Title") or name
-            states.append(panel_state_record("6" if extended else "3", localized_text_record(title), name))
+            states.append(panel_state_record("6" if extended else "3", localized_text_record(title), name, style_mode=page.get("styleMode")))
     if capacity is not None and capacity > len(states):
         for index in range(len(states), capacity):
             name = f"Страница{index + 1}"
@@ -1320,7 +1393,7 @@ def panel_state_table(
     return ["1", str(len(states)), *states]
 
 
-def panel_state_record(record_kind: str, title: list[object], name: str) -> list[object]:
+def panel_state_record(record_kind: str, title: list[object], name: str, *, style_mode: str | None = None) -> list[object]:
     record = [
         record_kind,
         title,
@@ -1333,6 +1406,8 @@ def panel_state_record(record_kind: str, title: list[object], name: str) -> list
     ]
     if record_kind == "6":
         record[2] = page_style_group_record("0")
+        if style_mode is not None and len(record[2]) > 6:
+            record[2][6] = style_mode
         record.extend([default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"])
     return record
 
@@ -3143,6 +3218,7 @@ def extended_table_view_record(element: ET.Element, columns: list[ET.Element]) -
 def table_column_record(column: ET.Element, index: int) -> list[object]:
     title = get_multilang_text(column, "Title") or column.get("name") or f"Колонка{index + 1}"
     name = column.get("name") or title
+    data_path = text_or_default(column, "DataPath", "")
     order = column.get("order") or str(index)
     width = text_or_default(column, "Width", "1e2")
     style = text_or_default(column, "Style", "12590592")
@@ -3155,6 +3231,8 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
     presentation_index = text_or_default(column, "PresentationIndex", "15")
     use_picture = bool_text_as_record(column, "UsePicture", default=False)
     font = font_record_from_xml(column.find("Font")) if column.find("Font") is not None else ["8", "3", "0", "1", "100"]
+    text_color = color_record_from_xml(column, "TextColor") if column.find("TextColor") is not None else default_color_record()
+    format_record = localized_text_record(get_multilang_text(column, "Format")) if column.find("Format") is not None else ["1", "0"]
     pattern = type_pattern_from_xml(column) or [quoted_atom("S")]
     payload = TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN.get(tuple(pattern), TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN[(quoted_atom("S"),)])
     body = [
@@ -3175,7 +3253,7 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
         "16",
         "d2314b5d-8da4-4e0f-822b-45e7500eae09",
         default_color_record(),
-        default_color_record(),
+        text_color,
         default_color_record(),
         default_color_record(),
         default_color_record(),
@@ -3192,7 +3270,7 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
         [],
         presentation_index,
         use_picture,
-        ["1", "0"],
+        format_record,
         [quoted_atom("Pattern"), pattern],
         "0",
         data_path_mode,
@@ -3213,7 +3291,7 @@ def table_column_record(column: ET.Element, index: int) -> list[object]:
     ]
     return [
         "737535a4-21e6-4971-8513-3e3173a9fedd",
-        ["8", ["8", body, ["-1"], ["-1"], ["-1"]], '""', quoted_atom(title), '""', "0"],
+        ["8", ["8", body, ["-1"], ["-1"], ["-1"]], quoted_atom(data_path), '""' if data_path else quoted_atom(title), '""', "0"],
     ]
 
 
