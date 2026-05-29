@@ -367,7 +367,7 @@ python3 tools/vendor_platform_schemas.py \
 
 ## Status / Статус
 
-Current release: `0.4.5`.
+Current release: `0.4.6`.
 
 Current implementation status:
 

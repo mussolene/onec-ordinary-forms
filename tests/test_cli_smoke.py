@@ -14,6 +14,7 @@ from onec_ordinary_forms.cli import (
     add_border_color,
     add_chart_properties,
     add_geometry,
+    add_picture_decoration_serialization_profile,
     add_font,
     add_text_color,
     add_pivot_chart_properties,
@@ -2277,6 +2278,128 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(position.get("dimensionSegments"), "1 1")
         self.assertEqual(position.get("layoutTail"), "0 0 0 0 0 1 2 1 1")
         self.assertEqual(geometry_stream_from_xml("CommandBar", position), geometry)
+
+    def test_picture_decoration_serialization_profile_roundtrips_named_slots(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            asset_root = Path(temp_dir)
+            (asset_root / "Items" / "Image1").mkdir(parents=True)
+            (asset_root / "Items" / "Image1" / "Picture.gif").write_bytes(b"GIF89a")
+            root = ET.fromstring(
+                """<Form>
+                  <Title><Item lang="ru">Main</Item></Title>
+                  <Pages>
+                    <Page name="Main">
+                      <PictureDecoration name="Image1" id="5">
+                        <Picture file="Items/Image1/Picture.gif"/>
+                        <SerializationProfile displayMode="4" displayState="1" pictureStyleMode="4">
+                          <StyleProfile mode="2" state="1" visible="1" defaultMode="2"/>
+                        </SerializationProfile>
+                      </PictureDecoration>
+                    </Page>
+                  </Pages>
+                </Form>"""
+            )
+
+            stream = parse_list_stream_document(form_stream_from_object_xml(root, asset_root).decode("utf-8-sig")).value
+        image = self._find_control(stream, "151ef23e-6bb2-4681-83d0-35bc2217230c")
+
+        self.assertIsNotNone(image)
+        assert image is not None
+        info = image[2][1]
+        self.assertEqual(info[2], "4")
+        self.assertEqual(info[3], "1")
+        self.assertEqual(info[4][1], "4")
+        self.assertEqual(info[0][16:20], ["2", "1", "1", "2"])
+
+    def test_dump_writes_picture_decoration_serialization_profile(self) -> None:
+        base = [
+            "19",
+            "1",
+            ["3", "3", ["-1"]],
+            ["4", "4", ["0"], "4"],
+            ["6", "2", "0", ["-20"], "0"],
+            "0",
+            ["4", "3", ["-22"], "3"],
+            ["4", "4", ["0"], "4"],
+            ["4", "4", ["0"], "4"],
+            ["4", "3", ["-7"], "3"],
+            ["4", "3", ["-21"], "3"],
+            ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+            ["1", "0"],
+            "0",
+            "0",
+            "100",
+            "2",
+            "1",
+            "1",
+            "2",
+        ]
+        picture_style = ["10", "4"]
+        node = ET.Element("PictureDecoration")
+        item_data = {"raw": ["151ef23e-6bb2-4681-83d0-35bc2217230c", "5", ["1", [base, "20", "4", "1", picture_style]]]}
+
+        add_picture_decoration_serialization_profile(node, "Image", item_data)
+
+        profile = node.find("SerializationProfile")
+        self.assertIsNotNone(profile)
+        assert profile is not None
+        self.assertEqual(profile.get("displayMode"), "4")
+        self.assertEqual(profile.get("displayState"), "1")
+        self.assertEqual(profile.get("pictureStyleMode"), "4")
+        style = profile.find("StyleProfile")
+        self.assertIsNotNone(style)
+        assert style is not None
+        self.assertEqual(style.get("mode"), "2")
+        self.assertEqual(style.get("state"), "1")
+        self.assertEqual(style.get("visible"), "1")
+        self.assertEqual(style.get("defaultMode"), "2")
+
+    def test_command_bar_action_graph_preserves_platform_profile_flags(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <CommandBar name="Commands" id="6">
+                    <SerializationProfile>
+                      <ActionGraph
+                        actionPlacement="3"
+                        actionAlignment="4"
+                        commandSource="5"
+                        actionProfileState="11"
+                        actionProfileFlag1="12"
+                        actionProfileFlag2="13"
+                        presentationScope="7"
+                        presentationScopeEnabled="0"
+                        presentationScopeUuid="00000000-0000-0000-0000-000000000000"
+                        buttonPanelMode="0"
+                        buttonPanelState="0"
+                        buttonPanelVisible="0"
+                        buttonPanelDefaultMode="0"/>
+                    </SerializationProfile>
+                    <Buttons rootUuid="48312c09-257f-4b29-b280-284dd89efc1e" rootKind="3" rootFlag="1">
+                      <Actions/>
+                      <Groups/>
+                    </Buttons>
+                  </CommandBar>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        bar = self._find_control(stream, "e69bf21d-97b2-4f37-86db-675aea9ec2cb")
+
+        self.assertIsNotNone(bar)
+        assert bar is not None
+        record = bar[2][1]
+        self.assertEqual(record[3], "3")
+        self.assertEqual(record[4], "4")
+        self.assertEqual(record[5], "5")
+        self.assertEqual(record[11:14], ["11", "12", "13"])
+        base = record[0]
+        self.assertEqual(base[11][3:7], ["7", "0", "0", "00000000-0000-0000-0000-000000000000"])
+        self.assertEqual(base[16:20], ["0", "0", "0", "0"])
 
     def _find_control(self, value: object, class_id: str) -> list[object] | None:
         if isinstance(value, list):

@@ -1393,12 +1393,27 @@
           <xs:element name="PictureSize" type="xs:string"/>
           <xs:element name="ScalePicture" type="xs:boolean"/>
           <xs:element name="PictureRendering" type="PictureRenderingType"/>
+          <xs:element name="SerializationProfile" type="PictureDecorationSerializationProfileType"/>
           <xs:element name="Border" type="xs:string"/>
           <xs:element name="Events" type="PictureDecorationEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
     </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="PictureDecorationSerializationProfileType">
+    <xs:sequence>
+      <xs:element name="StyleProfile" type="PictureDecorationStyleProfileType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="displayMode" type="xs:string"/>
+    <xs:attribute name="displayState" type="xs:string"/>
+    <xs:attribute name="pictureStyleMode" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="PictureDecorationStyleProfileType">
+    <xs:attribute name="mode" type="xs:string"/>
+    <xs:attribute name="state" type="xs:string"/>
+    <xs:attribute name="visible" type="xs:string"/>
+    <xs:attribute name="defaultMode" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PictureRenderingType">
     <xs:attribute name="horizontalMode" type="xs:integer"/>
@@ -1555,6 +1570,19 @@
     <xs:attribute name="rootKind" type="xs:string"/>
     <xs:attribute name="profileUuid" type="xs:string"/>
     <xs:attribute name="metadataScope" type="xs:string"/>
+    <xs:attribute name="actionPlacement" type="xs:string"/>
+    <xs:attribute name="actionAlignment" type="xs:string"/>
+    <xs:attribute name="commandSource" type="xs:string"/>
+    <xs:attribute name="actionProfileState" type="xs:string"/>
+    <xs:attribute name="actionProfileFlag1" type="xs:string"/>
+    <xs:attribute name="actionProfileFlag2" type="xs:string"/>
+    <xs:attribute name="presentationScope" type="xs:string"/>
+    <xs:attribute name="presentationScopeEnabled" type="xs:string"/>
+    <xs:attribute name="presentationScopeUuid" type="xs:string"/>
+    <xs:attribute name="buttonPanelMode" type="xs:string"/>
+    <xs:attribute name="buttonPanelState" type="xs:string"/>
+    <xs:attribute name="buttonPanelVisible" type="xs:string"/>
+    <xs:attribute name="buttonPanelDefaultMode" type="xs:string"/>
     <xs:attribute name="branchUuid" type="xs:string"/>
     <xs:attribute name="branchKind" type="xs:string"/>
     <xs:attribute name="branchMode" type="xs:string"/>

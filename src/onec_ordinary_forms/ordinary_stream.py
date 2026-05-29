@@ -860,10 +860,9 @@ def regular_panel_base_info_record() -> list[object]:
     return record
 
 
-def panel_base_info_record_for_serialization(serialization: ET.Element | None) -> list[object]:
-    record = regular_panel_base_info_record()
+def panel_base_info_record_for_serialization(element: ET.Element, serialization: ET.Element | None) -> list[object]:
+    record = extended_base_info_record_from_xml(element)
     if serialization is not None:
-        record[6] = default_color_record()
         record[17] = "2"
     return record
 
@@ -1535,7 +1534,7 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object],
     return [
         descriptor.info_kind,
         [
-            panel_base_info_record_for_serialization(serialization),
+            panel_base_info_record_for_serialization(element, serialization),
             "26",
             *dependency_profile,
             "0",
@@ -2100,13 +2099,14 @@ def checkbox_control_inner_info(element: ET.Element, title_record: list[object])
 
 def image_control_info(element: ET.Element, title_record: list[object], picture_payload: str, actions: list[object]) -> list[object]:
     picture_record = image_picture_style_group_record(element, picture_payload) if picture_payload else page_style_group_record("0")
+    profile = element.find("SerializationProfile")
     return [
         "1",
         [
             image_base_info_record_from_xml(element),
             "20",
-            "0",
-            "0",
+            profile.get("displayMode", "0") if profile is not None else "0",
+            profile.get("displayState", "0") if profile is not None else "0",
             picture_record,
             ["0", "0", "0"],
             "1",
@@ -2127,15 +2127,23 @@ def image_base_info_record_from_xml(element: ET.Element) -> list[object]:
     base = extended_base_info_record_from_xml(element)
     if element.find("BorderColor") is None:
         base[6] = default_color_record()
-    base[17] = "1"
+    style = element.find("./SerializationProfile/StyleProfile")
+    if style is not None:
+        base[16] = style.get("mode", base[16])
+        base[17] = style.get("state", base[17])
+        base[18] = style.get("visible", base[18])
+        base[19] = style.get("defaultMode", base[19])
+    else:
+        base[17] = "1"
     return base
 
 
 def image_picture_style_group_record(element: ET.Element, picture_payload: str) -> list[object]:
     rendering = element.find("PictureRendering")
+    profile = element.find("SerializationProfile")
     return [
         "10",
-        "0",
+        profile.get("pictureStyleMode", "0") if profile is not None else "0",
         ["4", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload]], "0", '""'],
         empty_page_style_record(),
         empty_page_style_record(),
@@ -3362,6 +3370,16 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
         record[5] = "1"
     else:
         record[5] = "1"
+    for index, attr_name in (
+        (3, "actionPlacement"),
+        (4, "actionAlignment"),
+        (5, "commandSource"),
+        (11, "actionProfileState"),
+        (12, "actionProfileFlag1"),
+        (13, "actionProfileFlag2"),
+    ):
+        if graph.get(attr_name) is not None:
+            record[index] = graph[attr_name]
     record[descriptor.slot_index("Autofill")] = bool_record_from_xml(element, "Autofill", default=True)
     return [
         descriptor.info_kind,
@@ -3581,6 +3599,7 @@ def command_bar_action_descriptor(name: str, title: str) -> list[object]:
 def command_bar_base_info_record(element: ET.Element) -> list[object]:
     tooltip = tooltip_record_from_xml(element)
     has_button_graph = element.find("Buttons") is not None
+    graph = command_bar_action_graph_from_xml(element)
     if has_button_graph:
         command_scope = "0"
     elif element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None:
@@ -3605,19 +3624,22 @@ def command_bar_base_info_record(element: ET.Element) -> list[object]:
             "3",
             "0",
             ["0"],
-            command_scope,
-            "0" if command_scope == "0" else "1",
+            graph.get("presentationScope", command_scope),
+            graph.get("presentationScopeEnabled", "0" if command_scope == "0" else "1"),
             "0",
-            "48312c09-257f-4b29-b280-284dd89efc1e" if command_scope == "0" else "00000000-0000-0000-0000-000000000000",
+            graph.get(
+                "presentationScopeUuid",
+                "48312c09-257f-4b29-b280-284dd89efc1e" if command_scope == "0" else "00000000-0000-0000-0000-000000000000",
+            ),
         ],
         tooltip,
         "0",
         "0",
         "100",
-        "2" if has_button_graph else "0",
-        "1" if has_button_graph else "0",
-        "1" if has_button_graph else "0",
-        "2" if has_button_graph else "0",
+        graph.get("buttonPanelMode", "2" if has_button_graph else "0"),
+        graph.get("buttonPanelState", "1" if has_button_graph else "0"),
+        graph.get("buttonPanelVisible", "1" if has_button_graph else "0"),
+        graph.get("buttonPanelDefaultMode", "2" if has_button_graph else "0"),
         default_color_record(),
     ]
     if has_button_graph and element.find("TextColor") is not None:

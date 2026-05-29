@@ -1051,6 +1051,7 @@ def add_semantic_item(
     add_geometry(node, item_data, element_index)
     add_panel_serialization_profile(node, public_type, item_data)
     add_command_bar_serialization_profile(node, public_type, item_data)
+    add_picture_decoration_serialization_profile(node, public_type, item_data)
     if public_type == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
         add_picture_decoration_properties(node, item_data)
@@ -1216,6 +1217,34 @@ def add_command_bar_serialization_profile(parent: ET.Element, public_type: str, 
         graph.set("rootKind", clean_token(items[2]))
     if len(info) > 10:
         graph.set("profileUuid", clean_token(info[10]))
+    for source_index, attr_name in (
+        (3, "actionPlacement"),
+        (4, "actionAlignment"),
+        (5, "commandSource"),
+        (11, "actionProfileState"),
+        (12, "actionProfileFlag1"),
+        (13, "actionProfileFlag2"),
+    ):
+        if len(info) > source_index:
+            graph.set(attr_name, clean_token(info[source_index]))
+    base = info[0] if info and isinstance(info[0], list) else None
+    if isinstance(base, list):
+        presentation = base[11] if len(base) > 11 and isinstance(base[11], list) else None
+        if isinstance(presentation, list):
+            if len(presentation) > 3:
+                graph.set("presentationScope", clean_token(presentation[3]))
+            if len(presentation) > 4:
+                graph.set("presentationScopeEnabled", clean_token(presentation[4]))
+            if len(presentation) > 6:
+                graph.set("presentationScopeUuid", clean_token(presentation[6]))
+        for source_index, attr_name in (
+            (16, "buttonPanelMode"),
+            (17, "buttonPanelState"),
+            (18, "buttonPanelVisible"),
+            (19, "buttonPanelDefaultMode"),
+        ):
+            if len(base) > source_index:
+                graph.set(attr_name, clean_token(base[source_index]))
     metadata = raw[4] if len(raw) > 4 and isinstance(raw[4], list) else None
     if isinstance(metadata, list) and len(metadata) > 2:
         graph.set("metadataScope", clean_token(metadata[2]))
@@ -1246,6 +1275,35 @@ def add_command_bar_serialization_profile(parent: ET.Element, public_type: str, 
     if not graph.attrib:
         parent.remove(profile)
     add_command_bar_buttons(parent, items)
+
+
+def add_picture_decoration_serialization_profile(parent: ET.Element, public_type: str, item_data: object) -> None:
+    if public_type != "Image":
+        return
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2][1] if len(raw[2]) > 1 and isinstance(raw[2][1], list) else None
+    if not isinstance(info, list) or not info:
+        return
+    base = info[0] if isinstance(info[0], list) else None
+    if base is None or len(base) <= 19:
+        return
+    profile = ET.SubElement(parent, "SerializationProfile")
+    if len(info) > 2:
+        profile.set("displayMode", clean_token(info[2]))
+    if len(info) > 3:
+        profile.set("displayState", clean_token(info[3]))
+    picture_style = info[4] if len(info) > 4 and isinstance(info[4], list) else None
+    if isinstance(picture_style, list) and len(picture_style) > 1:
+        profile.set("pictureStyleMode", clean_token(picture_style[1]))
+    style = ET.SubElement(profile, "StyleProfile")
+    style.set("mode", clean_token(base[16]))
+    style.set("state", clean_token(base[17]))
+    style.set("visible", clean_token(base[18]))
+    style.set("defaultMode", clean_token(base[19]))
 
 
 def add_command_bar_buttons(parent: ET.Element, items: list[object]) -> None:
@@ -2510,7 +2568,7 @@ def form_root_panel_dependency_prefix(info: list[object]) -> list[str]:
         first_count = int(clean_token(info[2]))
     except (IndexError, ValueError):
         first_count = -1
-    if first_count >= 0 and len(info) >= 3 + first_count and all(isinstance(value, list) for value in info[3 : 3 + first_count]):
+    if first_count > 0 and len(info) >= 3 + first_count and all(isinstance(value, list) for value in info[3 : 3 + first_count]):
         return []
     cursor = 2
     result: list[str] = []
@@ -2527,7 +2585,7 @@ def form_root_panel_dependency_groups_and_cursor(info: list[object]) -> tuple[li
         first_count = int(clean_token(info[cursor]))
     except (IndexError, ValueError):
         first_count = -1
-    if first_count >= 0 and len(info) >= cursor + 1 + first_count and all(isinstance(value, list) for value in info[cursor + 1 : cursor + 1 + first_count]):
+    if first_count > 0 and len(info) >= cursor + 1 + first_count and all(isinstance(value, list) for value in info[cursor + 1 : cursor + 1 + first_count]):
         while cursor < len(info):
             try:
                 count = int(clean_token(info[cursor]))
