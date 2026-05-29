@@ -1808,6 +1808,15 @@ def choice_field_control_info(element: ET.Element, actions: list[object]) -> lis
 
 
 def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
+    choice_list = choice_list_record_from_xml(element.find("ChoiceList"))
+    choice_list_tail: list[object] = (
+        [choice_list, "0", "0"]
+        if choice_list is not None
+        else [
+            bool_record_from_xml(element, "CreateButton", default=False),
+            bool_record_from_xml(element, "EditButton", default=False),
+        ]
+    )
     return [
         choice_field_base_info_record_from_xml(element),
         "31",
@@ -1835,8 +1844,7 @@ def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
         bool_record_from_xml(element, "ChoiceButton", default=True),
         bool_record_from_xml(element, "ClearButton", default=True),
         bool_record_from_xml(element, "OpenButton", default=False),
-        bool_record_from_xml(element, "CreateButton", default=False),
-        bool_record_from_xml(element, "EditButton", default=False),
+        *choice_list_tail,
         empty_page_style_record(),
         empty_page_style_record(),
         "0",
@@ -1858,9 +1866,61 @@ def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
     ]
 
 
+def choice_list_record_from_xml(element: ET.Element | None) -> list[object] | None:
+    if element is None:
+        return None
+    row_records = [choice_list_item_record_from_xml(index, item) for index, item in enumerate(element.findall("Item"))]
+    selection_index = element.get("selectionIndex") or str(max(len(row_records) - 1, 0))
+    presentation_type = element.get("presentationType") or "87024738-fc2a-4436-ada1-df79d395c424"
+    return [
+        "9",
+        [
+            "2",
+            ["0", quoted_atom("Value"), [quoted_atom("Pattern")], quoted_atom("Значение"), "10"],
+            [
+                "1",
+                quoted_atom("Presentation"),
+                [quoted_atom("Pattern"), [quoted_atom("#"), presentation_type]],
+                quoted_atom("Представление"),
+                "10",
+            ],
+        ],
+        [
+            "2",
+            "2",
+            "0",
+            "0",
+            "1",
+            "1",
+            ["1", str(len(row_records)), *row_records],
+            element.get("currentIndex") or "-1",
+            selection_index,
+        ],
+        ["0", "0"],
+    ]
+
+
+def choice_list_item_record_from_xml(index: int, element: ET.Element) -> list[object]:
+    presentation_type = element.get("presentationType") or "87024738-fc2a-4436-ada1-df79d395c424"
+    return [
+        "2",
+        element.get("index") or str(index),
+        "2",
+        [quoted_atom(element.get("valueType") or "N"), element.get("value") or "0"],
+        [quoted_atom("#"), presentation_type, choice_list_presentation_record(get_multilang_text(element, "Presentation"))],
+        "0",
+    ]
+
+
+def choice_list_presentation_record(text: str) -> list[object]:
+    return ["1", quoted_atom("ru"), quoted_atom(text)]
+
+
 def choice_field_base_info_record_from_xml(element: ET.Element) -> list[object]:
     base = extended_base_info_record_from_xml(element)
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
+    if element.find("ChoiceList") is not None:
+        base[16:20] = ["0", "0", "0", "0"]
     return base
 
 
@@ -3756,7 +3816,7 @@ def action_table_from_xml(action: ET.Element | None) -> list[object]:
     name = action.get("name", "")
     uuid = action.get("uuid", "")
     title = action.get("title") or name
-    return [["0", uuid, ["3", quoted_atom(name), event_descriptor(name, title)]]]
+    return [[action.get("id") or "0", uuid, ["3", quoted_atom(name), event_descriptor(name, title)]]]
 
 
 def event_table_from_xml(events: ET.Element | None, control_type: str = "") -> list[object]:
@@ -3894,6 +3954,10 @@ def geometry_stream_from_xml(
     if counted_geometry is not None:
         counted_geometry[5] = layout_mode
         return counted_geometry
+    flagged_height_width_geometry = flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
+    if flagged_height_width_geometry is not None:
+        flagged_height_width_geometry[5] = layout_mode
+        return flagged_height_width_geometry
     inline_dual_counted_geometry = inline_dual_counted_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
     if inline_dual_counted_geometry is not None:
         inline_dual_counted_geometry[5] = layout_mode
@@ -4205,6 +4269,50 @@ def counted_dimension_geometry_from_xml(
         position.get("secondaryDimensionMarker", "0"),
         str(len(secondary)),
         *secondary,
+        *tail,
+    ]
+
+
+def flagged_height_width_dimension_geometry_from_xml(
+    position: ET.Element | None,
+    left: str,
+    top: str,
+    right: str,
+    bottom: str,
+    bindings: list[object],
+) -> list[object] | None:
+    if position is None or position.get("dimensionProfile") != "flaggedHeightWidth":
+        return None
+    binding_container = position.find("Bindings")
+    if binding_container is None:
+        return None
+    height: object | None = None
+    width: object | None = None
+    for binding in binding_container.findall("DimensionBinding"):
+        dimension = binding.get("dimension")
+        if dimension == "height":
+            height = dimension_binding_to_raw(binding)
+        elif dimension == "width":
+            width = dimension_binding_to_raw(binding)
+    if height is None or width is None:
+        return None
+    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
+    return [
+        "8",
+        left,
+        top,
+        right,
+        bottom,
+        "1",
+        *bindings,
+        "1",
+        height,
+        "0",
+        "0",
+        "1",
+        width,
+        "0",
+        "0",
         *tail,
     ]
 

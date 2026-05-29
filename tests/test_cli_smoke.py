@@ -1525,6 +1525,43 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(choice_info[24], "0")
         self.assertEqual(choice_info[25], "1")
 
+    def test_build_bin_uses_choice_field_choice_list_and_action(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <ChoiceField name="Period" id="44">
+                    <DataPath>Period</DataPath>
+                    <OpenButton>true</OpenButton>
+                    <Action id="2147483647" name="FillPeriod" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Fill period"/>
+                    <ChoiceList currentIndex="-1" selectionIndex="1">
+                      <Item index="0" valueType="N" value="1" presentationType="87024738-fc2a-4436-ada1-df79d395c424">
+                        <Presentation><Item lang="ru">January</Item></Presentation>
+                      </Item>
+                      <Item index="1" valueType="N" value="2" presentationType="87024738-fc2a-4436-ada1-df79d395c424">
+                        <Presentation><Item lang="ru">February</Item></Presentation>
+                      </Item>
+                    </ChoiceList>
+                  </ChoiceField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        choice = self._find_control(stream, "64483e7f-3833-48e2-8c75-2c31aac49f6e")
+
+        self.assertIsNotNone(choice)
+        info = choice[2]
+        choice_info = info[1]
+        self.assertEqual(choice_info[25], "1")
+        self.assertEqual(choice_info[26][0], "9")
+        self.assertEqual(choice_info[26][2][6][1], "2")
+        self.assertEqual(choice_info[26][2][6][2][4][2], ["1", '"ru"', '"January"'])
+        self.assertEqual(info[2][1][0], "2147483647")
+
     def test_build_bin_uses_radio_button_info_kind_and_named_title(self) -> None:
         root = ET.fromstring(
             """<Form>

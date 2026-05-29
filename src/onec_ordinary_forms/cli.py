@@ -358,6 +358,7 @@ def action_binding(item_data: dict | None) -> dict[str, str]:
             and len(value[2]) >= 2
             and value[2][0] == "3"
         ):
+            result["id"] = clean_token(value[0])
             result["uuid"] = value[1]
             result["name"] = clean_token(value[2][1])
             title = first_localized_text(value[2])
@@ -618,6 +619,8 @@ def add_geometry(
     if isinstance(geometry_raw, list):
         for index, binding in enumerate(geometry_raw[6:12], start=1):
             add_binding(anchors, "Binding", index, binding, current_id, element_index)
+        if add_flagged_height_width_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
+            return
         if add_inline_segmented_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
             return
         if add_inline_dual_counted_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
@@ -671,6 +674,38 @@ def add_counted_dimension_bindings(
     for index, binding in enumerate(geometry_raw[secondary_start:secondary_end], start=1):
         add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
         bindings[-1].set("section", "secondary")
+    return True
+
+
+def add_flagged_height_width_dimension_bindings(
+    position: ET.Element,
+    bindings: ET.Element,
+    geometry_raw: list[object],
+    current_id: str,
+    element_index: dict[str, dict[str, str]],
+) -> bool:
+    if len(geometry_raw) < 20:
+        return False
+    if not (
+        clean_token(geometry_raw[12]) == "1"
+        and isinstance(geometry_raw[13], list)
+        and clean_token(geometry_raw[14]) == "0"
+        and clean_token(geometry_raw[15]) == "0"
+        and clean_token(geometry_raw[16]) == "1"
+        and isinstance(geometry_raw[17], list)
+        and clean_token(geometry_raw[18]) == "0"
+        and clean_token(geometry_raw[19]) == "0"
+    ):
+        return False
+    tail_values = geometry_raw[20:]
+    if any(isinstance(value, list) for value in tail_values):
+        return False
+    position.set("dimensionProfile", "flaggedHeightWidth")
+    tail = [clean_token(value) for value in tail_values]
+    if tail:
+        position.set("layoutTail", " ".join(tail))
+    add_binding(bindings, "DimensionBinding", 1, geometry_raw[13], current_id, element_index)
+    add_binding(bindings, "DimensionBinding", 4, geometry_raw[17], current_id, element_index)
     return True
 
 
@@ -997,6 +1032,7 @@ def add_semantic_item(
     add_visible(node, item_data)
     add_read_only(node, item, item_data)
     add_input_field_properties(node, item, item_data)
+    add_choice_field_properties(node, item, item_data)
     add_table_view_properties(node, item, item_data)
     add_table_columns(node, item, item_data, asset_root)
     add_chart_properties(node, item, item_data)
@@ -1016,7 +1052,7 @@ def add_semantic_item(
     if public_type == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
         add_picture_decoration_properties(node, item_data)
-    action = action_binding(item_data) if public_type in {"Button", "Label"} else {}
+    action = action_binding(item_data) if public_type in {"Button", "Label", "ChoiceField"} else {}
     if action:
         action_node = ET.SubElement(node, "Action")
         for key, value in action.items():
@@ -1310,6 +1346,93 @@ def add_input_field_properties(parent: ET.Element, item: dict, item_data: object
         set_text(parent, "DataBindingMode", clean_token(payload[3]))
     if len(payload) > 5 and clean_token(payload[5]) != "0":
         set_text(parent, "DataBindingFlag", clean_token(payload[5]))
+
+
+def add_choice_field_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "ChoiceField":
+        return
+    choice_info = choice_field_info_record(item_data)
+    if choice_info is None:
+        return
+    if len(choice_info) > 23 and clean_token(choice_info[23]) == "0":
+        set_text(parent, "ChoiceButton", "false")
+    if len(choice_info) > 24 and clean_token(choice_info[24]) == "0":
+        set_text(parent, "ClearButton", "false")
+    if len(choice_info) > 25 and clean_token(choice_info[25]) == "1":
+        set_text(parent, "OpenButton", "true")
+    if len(choice_info) > 26:
+        add_choice_list(parent, choice_info[26])
+
+
+def choice_field_info_record(item_data: object) -> list[object] | None:
+    if not isinstance(item_data, dict):
+        return None
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return None
+    info = raw[2]
+    if not info or clean_token(info[0]) != "2" or len(info) <= 1 or not isinstance(info[1], list):
+        return None
+    return info[1]
+
+
+def add_choice_list(parent: ET.Element, value: object) -> None:
+    if not isinstance(value, list) or len(value) < 4 or clean_token(value[0]) != "9":
+        return
+    table = value[2]
+    if not isinstance(table, list) or len(table) < 9 or clean_token(table[0]) != "2":
+        return
+    rows = table[6]
+    if not isinstance(rows, list) or len(rows) < 2 or clean_token(rows[0]) != "1":
+        return
+    choice_list = ET.SubElement(parent, "ChoiceList")
+    choice_list.set("currentIndex", clean_token(table[7]))
+    choice_list.set("selectionIndex", clean_token(table[8]))
+    try:
+        declared_count = int(clean_token(rows[1]))
+    except ValueError:
+        declared_count = max(len(rows) - 2, 0)
+    for row in rows[2 : 2 + declared_count]:
+        parsed = choice_list_item(row)
+        if parsed is None:
+            continue
+        item = ET.SubElement(choice_list, "Item")
+        item.set("index", parsed["index"])
+        item.set("valueType", parsed["valueType"])
+        item.set("value", parsed["value"])
+        item.set("presentationType", parsed["presentationType"])
+        add_multilang_text(item, "Presentation", parsed["presentation"])
+    if not list(choice_list):
+        parent.remove(choice_list)
+
+
+def choice_list_item(row: object) -> dict[str, str] | None:
+    if not isinstance(row, list) or len(row) < 6 or clean_token(row[0]) != "2":
+        return None
+    value = row[3]
+    presentation = row[4]
+    if not isinstance(value, list) or len(value) < 2:
+        return None
+    if not isinstance(presentation, list) or len(presentation) < 3:
+        return None
+    return {
+        "index": clean_token(row[1]),
+        "valueType": clean_token(value[0]),
+        "value": clean_token(value[1]),
+        "presentationType": clean_token(presentation[1]),
+        "presentation": choice_list_presentation_text(presentation[2]),
+    }
+
+
+def choice_list_presentation_text(value: object) -> str:
+    if (
+        isinstance(value, list)
+        and len(value) >= 3
+        and clean_token(value[0]) == "1"
+        and clean_token(value[1]) == "ru"
+    ):
+        return clean_token(value[2])
+    return localized_text_from_record(value)
 
 
 def add_table_view_properties(parent: ET.Element, item: dict, item_data: object) -> None:

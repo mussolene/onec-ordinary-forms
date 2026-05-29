@@ -1467,7 +1467,7 @@
           <xs:element name="CreateButton" type="xs:boolean"/>
           <xs:element name="EditButton" type="xs:boolean"/>
           <xs:element name="RegulationButton" type="xs:boolean"/>
-          <xs:element name="ChoiceList" type="OpenElementType"/>
+          <xs:element name="ChoiceList" type="ChoiceListType"/>
           <xs:element name="ChoiceListMode" type="xs:boolean"/>
           <xs:element name="ChoiceListHeight" type="xs:integer"/>
           <xs:element name="ChoiceListWidth" type="xs:integer"/>
@@ -1624,6 +1624,7 @@
           <xs:element name="Title" type="LocalizedTextType"/>
           <xs:element name="ToolTip" type="LocalizedTextType"/>
           <xs:element name="Position" type="PositionType"/>
+          <xs:element name="Action" type="OpenElementType"/>
           <xs:element name="Visible" type="xs:boolean"/>
           <xs:element name="Enabled" type="xs:boolean"/>
           <xs:element name="ReadOnly" type="xs:boolean"/>
@@ -1648,7 +1649,7 @@
           <xs:element name="CreateButton" type="xs:boolean"/>
           <xs:element name="EditButton" type="xs:boolean"/>
           <xs:element name="RegulationButton" type="xs:boolean"/>
-          <xs:element name="ChoiceList" type="OpenElementType"/>
+          <xs:element name="ChoiceList" type="ChoiceListType"/>
           <xs:element name="Events" type="ChoiceFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -2418,6 +2419,23 @@
     <xs:attribute name="kind" type="xs:string"/>
     <xs:attribute name="atom" type="xs:string"/>
     <xs:attribute name="count" type="xs:nonNegativeInteger"/>
+  </xs:complexType>
+  <xs:complexType name="ChoiceListType">
+    <xs:sequence>
+      <xs:element name="Item" type="ChoiceListItemType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="currentIndex" type="xs:integer"/>
+    <xs:attribute name="selectionIndex" type="xs:integer"/>
+    <xs:attribute name="presentationType" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="ChoiceListItemType">
+    <xs:sequence>
+      <xs:element name="Presentation" type="LocalizedTextType"/>
+    </xs:sequence>
+    <xs:attribute name="index" type="xs:nonNegativeInteger"/>
+    <xs:attribute name="valueType" type="xs:string" use="required"/>
+    <xs:attribute name="value" type="xs:string" use="required"/>
+    <xs:attribute name="presentationType" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="OpenElementType" mixed="true">
     <xs:sequence>
