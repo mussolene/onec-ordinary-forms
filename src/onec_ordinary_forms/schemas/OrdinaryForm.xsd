@@ -721,6 +721,8 @@
     <xs:attribute name="recordKind" type="xs:string"/>
     <xs:attribute name="titleMarker" type="xs:string"/>
     <xs:attribute name="titleScope" type="xs:string"/>
+    <xs:attribute name="titleItemCount" type="xs:string"/>
+    <xs:attribute name="titleLang" type="PlatformLanguageType"/>
     <xs:attribute name="slot5" type="xs:string"/>
     <xs:attribute name="slot6" type="xs:string"/>
     <xs:attribute name="slot7" type="xs:string"/>
@@ -775,8 +777,17 @@
     <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
   <xs:complexType name="LocalizedTextItemType" mixed="true">
-    <xs:attribute name="lang" type="xs:language"/>
+    <xs:attribute name="lang" type="PlatformLanguageType"/>
   </xs:complexType>
+  <xs:simpleType name="PlatformLanguageType">
+    <xs:union memberTypes="xs:language">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="#"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:union>
+  </xs:simpleType>
   <xs:complexType name="FileRefType">
     <xs:attribute name="file" type="xs:string" use="required"/>
     <xs:attribute name="sha256" type="Sha256Type"/>
@@ -848,6 +859,10 @@
   <xs:complexType name="ControlIdentityType">
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="id" type="xs:integer"/>
+    <xs:attribute name="baseStyleMode" type="xs:string"/>
+    <xs:attribute name="baseStyleState" type="xs:string"/>
+    <xs:attribute name="baseStyleVisible" type="xs:string"/>
+    <xs:attribute name="baseStyleDefaultMode" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ActiveXStateBlobType" mixed="true">
     <xs:attribute name="slot" type="xs:positiveInteger" use="required"/>

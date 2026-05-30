@@ -5,6 +5,7 @@ from onec_ordinary_forms.value_codec import (
     clean_atom,
     dump_type_domain_pattern,
     localized_text_from_record,
+    localized_text_item_from_record,
     localized_text_record,
     parse_composite_id,
     parse_type_domain_pattern,
@@ -68,3 +69,10 @@ def test_localized_text_record_roundtrip() -> None:
     record = localized_text_record("Заголовок")
     assert record == ["1", "1", ['"ru"', '"Заголовок"']]
     assert localized_text_from_record(record) == "Заголовок"
+
+
+def test_localized_text_record_preserves_platform_default_language_marker() -> None:
+    record = localized_text_record("Отправить", lang="#")
+    assert record == ["1", "1", ['"#"', '"Отправить"']]
+    assert localized_text_item_from_record(record) == ("#", "Отправить")
+    assert localized_text_item_from_record(["1", "1", ["0", '"not text"']]) is None

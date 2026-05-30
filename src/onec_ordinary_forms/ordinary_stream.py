@@ -232,7 +232,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         raise ValueError("Expected public ordinary form XML root <Form>")
 
     title = form_title_from_xml(root)
-    if not title:
+    if not title and root.find("SerializationProfile") is None:
         pages = top_level_pages(root)
         first_page = pages[0] if pages else None
         title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
@@ -259,7 +259,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
 
     root_layout = form_serialization_profile_from_xml(root)
     stream = ordinary_form_stream(
-        title or "Main",
+        title if title or root_layout is not None else "Main",
         attributes,
         controls,
         events_from_xml(root),
@@ -331,10 +331,12 @@ def form_root_record(
         root_panel_info_record,
         ["1", *controls] if len(controls) == 1 else [str(len(controls)), *controls],
     ]
+    title_lang = (root_layout or {}).get("titleLang", "ru")
+    title_record = ["1", "0"] if root_layout is not None and root_layout.get("titleItemCount") == "0" and not title else localized_text_record(title, lang=title_lang)
     if compact_root:
         return [
             "16",
-            [localized_text_record(title), root_layout.get("titleMarker", "2"), root_layout.get("titleScope", "4294967295")],
+            [title_record, root_layout.get("titleMarker", "2"), root_layout.get("titleScope", "4294967295")],
             root_panel,
             width,
             height,
@@ -348,7 +350,7 @@ def form_root_record(
     record = [
         str((root_layout or {}).get("recordKind", "16")),
         [
-            localized_text_record(title),
+            title_record,
             str((root_layout or {}).get("titleMarker", "52")),
             str((root_layout or {}).get("titleScope", "4294967295")),
         ],
@@ -378,7 +380,7 @@ def form_serialization_profile_from_xml(root: ET.Element) -> FormRootLayout | No
     result: FormRootLayout = {}
     root_record = serialization.find("RootRecord")
     if root_record is not None:
-        for key in ("recordKind", "titleMarker", "titleScope", "slot5", "slot6", "slot7", "slot8", "slot9", "slot10"):
+        for key in ("recordKind", "titleMarker", "titleScope", "titleItemCount", "titleLang", "slot5", "slot6", "slot7", "slot8", "slot9", "slot10"):
             value = root_record.get(key)
             if value is not None and value != "":
                 result[key] = value
@@ -399,6 +401,7 @@ def form_serialization_profile_from_xml(root: ET.Element) -> FormRootLayout | No
             title = get_multilang_text(page_state, "Title")
             if title:
                 descriptor["title"] = title
+                descriptor["titleLang"] = get_multilang_lang(page_state, "Title")
             if page_state.get("styleMode"):
                 descriptor["styleMode"] = page_state.get("styleMode", "")
             if descriptor:
@@ -698,7 +701,7 @@ def root_page_state_records(
         if not isinstance(state, dict):
             continue
         name = str(state.get("name", default_name))
-        title = localized_text_record(str(state.get("title", name)))
+        title = localized_text_record(str(state.get("title", name)), lang=str(state.get("titleLang", "ru")))
         style_mode = str(state.get("styleMode", default_style_mode))
         result.append(
             [
@@ -934,7 +937,7 @@ def visible_record_from_xml(element: ET.Element | None) -> str:
 
 def tooltip_record_from_xml(element: ET.Element | None) -> list[object]:
     text = get_multilang_text(element, "ToolTip")
-    return localized_text_record(text) if text else ["1", "0"]
+    return localized_text_record_from_xml(element, "ToolTip") if text else ["1", "0"]
 
 
 def color_record_from_xml(element: ET.Element | None, tag: str) -> list[object]:
@@ -1181,7 +1184,7 @@ def is_localized_text_record(value: list[object]) -> bool:
     if clean_atom(value[0]) != "1" or clean_atom(value[1]) != "1":
         return False
     items = value[2]
-    return isinstance(items, list) and len(items) >= 2 and clean_atom(items[0]) == "ru" and isinstance(items[1], str)
+    return isinstance(items, list) and len(items) >= 2 and isinstance(items[1], str)
 
 
 def top_level_pages(root: ET.Element) -> list[ET.Element]:
@@ -1199,6 +1202,26 @@ def get_multilang_text(parent: ET.Element | None, tag: str) -> str:
             return item.text or ""
     first = node.find("Item")
     return "" if first is None else (first.text or "")
+
+
+def get_multilang_lang(parent: ET.Element | None, tag: str) -> str:
+    if parent is None:
+        return "ru"
+    node = parent.find(tag)
+    if node is None:
+        return "ru"
+    for item in node.findall("Item"):
+        if item.get("lang") in (None, "ru"):
+            return item.get("lang") or "ru"
+    first = node.find("Item")
+    return "ru" if first is None else (first.get("lang") or "ru")
+
+
+def localized_text_record_from_xml(parent: ET.Element | None, tag: str, *, default: str = "") -> list[object]:
+    text = get_multilang_text(parent, tag)
+    if not text:
+        text = default
+    return localized_text_record(text, lang=get_multilang_lang(parent, tag))
 
 
 def type_pattern_from_xml(attribute: ET.Element) -> list[object]:
@@ -1247,7 +1270,7 @@ def control_stream_from_xml_with_page(
     name = required_control_name(element)
     control_template = control_templates.get((control_type, object_id)) or control_templates.get((control_type, name))
     title = get_multilang_text(element, "Title")
-    title_record = localized_text_record(title or name)
+    title_record = localized_text_record_from_xml(element, "Title", default=name)
     info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns, control_template)
     data_path = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else ""
     data_slot = attribute_slots.get(data_path, "")
@@ -1402,7 +1425,7 @@ def control_info_from_xml(
     control_template: dict[str, object] | None = None,
 ) -> list[object]:
     title = get_multilang_text(element, "Title")
-    title_record = localized_text_record(title or name)
+    title_record = localized_text_record_from_xml(element, "Title", default=name)
     actions = control_actions_from_xml(element, control_type)
     template_info = (control_template or {}).get("info")
     if isinstance(template_info, list):
@@ -1692,8 +1715,8 @@ def panel_state_table(
         states = []
         for page in page_nodes:
             name = page.get("name", "Страница1")
-            title = get_multilang_text(page, "Title") or name
-            states.append(panel_state_record("6" if extended else "3", localized_text_record(title), name, style_mode=page.get("styleMode")))
+            title_record = localized_text_record_from_xml(page, "Title", default=name)
+            states.append(panel_state_record("6" if extended else "3", title_record, name, style_mode=page.get("styleMode")))
     if capacity is not None and capacity > len(states):
         for index in range(len(states), capacity):
             name = f"Страница{index + 1}"
@@ -1751,7 +1774,10 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
     picture_position = text_or_default(element, "PicturePosition", "0" if title.endswith(":") else horizontal_align)
     hyperlink = bool_record_from_xml(element, "Hyperlink", default=bool(actions))
     base = extended_base_info_record_from_xml(element)
-    base[6] = default_color_record()
+    if element.find("BorderColor") is None:
+        base[6] = default_color_record()
+    if element.get("baseStyleMode") is None:
+        base[16:20] = ["0", "0", "0", "0"]
     return [
         "3",
         [
@@ -1822,6 +1848,8 @@ def input_field_info_record_from_xml(element: ET.Element, type_pattern: list[obj
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
     base = extended_base_info_record_from_xml(element)
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
+    if element.get("baseStyleMode") is None:
+        base[16:20] = ["0", "0", "0", "0"]
     record = [
         base,
         "31",
@@ -3550,7 +3578,7 @@ def command_bar_button_descriptor_from_xml(button: ET.Element) -> list[object]:
         if isinstance(value, list):
             return value
     title = get_multilang_text(button, "Title")
-    title_record: object = localized_text_record(title) if title else ["1", "0"]
+    title_record: object = localized_text_record_from_xml(button, "Title") if title else ["1", "0"]
     return [
         "8",
         quoted_atom(button.get("name") or ""),
@@ -3800,7 +3828,7 @@ def table_column_record(column: ET.Element, index: int, asset_root: Path | None 
     use_picture = bool_text_as_record(column, "UsePicture", default=False)
     font = font_record_from_xml(column.find("Font")) if column.find("Font") is not None else ["8", "3", "0", "1", "100"]
     text_color = color_record_from_xml(column, "TextColor") if column.find("TextColor") is not None else default_color_record()
-    format_record = localized_text_record(get_multilang_text(column, "Format")) if column.find("Format") is not None else ["1", "0"]
+    format_record = localized_text_record_from_xml(column, "Format") if column.find("Format") is not None else ["1", "0"]
     pattern = table_column_type_pattern_from_xml(column)
     pattern_record = table_column_pattern_record_from_xml(column, pattern)
     payload = table_column_value_payload_from_xml(column, pattern)
@@ -3809,7 +3837,7 @@ def table_column_record(column: ET.Element, index: int, asset_root: Path | None 
     editor_guid = ORDINARY_CONTROL_GUID_BY_TYPE.get(editor_control, ORDINARY_CONTROL_GUID_BY_TYPE["InputField"])
     body = [
         "23",
-        localized_text_record(title),
+        localized_text_record_from_xml(column, "Title", default=title),
         ["1", "0"],
         ["1", "0"],
         width,
@@ -4111,6 +4139,14 @@ def extended_base_info_record_from_xml(element: ET.Element) -> list[object]:
     if element.find("BorderColor") is not None:
         base[6] = color_record_from_xml(element, "BorderColor")
     base[12] = tooltip_record_from_xml(element)
+    for index, attr_name in (
+        (16, "baseStyleMode"),
+        (17, "baseStyleState"),
+        (18, "baseStyleVisible"),
+        (19, "baseStyleDefaultMode"),
+    ):
+        if element.get(attr_name) is not None:
+            base[index] = element.get(attr_name, base[index])
     return base
 
 

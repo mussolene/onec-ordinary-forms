@@ -11,6 +11,7 @@ from onec_ordinary_forms import __version__
 from onec_ordinary_forms.corpus import build_corpus_report, classify_exported_forms
 from onec_ordinary_forms.cli import (
     add_back_color,
+    add_base_style_attributes,
     add_border_color,
     add_chart_properties,
     add_geometry,
@@ -1258,7 +1259,7 @@ class CliSmokeTest(unittest.TestCase):
             picture.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mNg+M8AAAAEAAH/6G3fAAAAAElFTkSuQmCC"))
             root = ET.fromstring(
                 """<Form>
-                  <Title><Item lang="ru">Main</Item></Title>
+                  <Title><Item lang="#">Main</Item></Title>
                   <Pages>
                     <Page name="Main">
                       <Button name="Run" id="26">
@@ -1459,6 +1460,57 @@ class CliSmokeTest(unittest.TestCase):
             )
 
             validate_xml_file(xml)
+
+    def test_base_style_attributes_roundtrip_control_style_slots(self) -> None:
+        base = [
+            "19",
+            "1",
+            ["4", "4", ["0"], "4"],
+            ["4", "4", ["0"], "4"],
+            ["8", "3", "0", "1", "100"],
+            "0",
+            ["4", "3", ["-22"], "3"],
+            ["4", "4", ["0"], "4"],
+            ["4", "4", ["0"], "4"],
+            ["4", "3", ["-7"], "3"],
+            ["4", "3", ["-21"], "3"],
+            ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+            ["1", "0"],
+            "0",
+            "0",
+            "100",
+            "2",
+            "1",
+            "1",
+            "2",
+        ]
+        node = ET.Element("LabelDecoration")
+        item_data = {"raw": ["0fc7e20d-f241-460c-bdf4-5ad88e5474a5", "111", ["3", [[base]]]]}
+
+        add_base_style_attributes(node, item_data)
+
+        self.assertEqual(node.get("baseStyleMode"), "2")
+        self.assertEqual(node.get("baseStyleState"), "1")
+        self.assertEqual(node.get("baseStyleVisible"), "1")
+        self.assertEqual(node.get("baseStyleDefaultMode"), "2")
+
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <LabelDecoration name="Label1" id="111" baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2">
+                    <Title><Item lang="ru">Label</Item></Title>
+                  </LabelDecoration>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig"), allow_trailing=True).value
+        label = self._find_control(stream, "0fc7e20d-f241-460c-bdf4-5ad88e5474a5")
+
+        self.assertIsNotNone(label)
+        assert label is not None
+        self.assertEqual(label[2][1][0][16:20], ["2", "1", "1", "2"])
 
     def test_build_bin_writes_default_paged_button_geometry_bindings(self) -> None:
         root = ET.fromstring(

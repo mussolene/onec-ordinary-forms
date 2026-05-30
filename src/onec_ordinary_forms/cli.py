@@ -31,6 +31,7 @@ from onec_ordinary_forms.value_codec import (
     TYPE_CODE_NAMES,
     clean_atom,
     localized_text_from_record as decode_localized_text_record,
+    localized_text_item_from_record,
     parse_type_domain_pattern,
 )
 
@@ -231,10 +232,10 @@ def add_type(parent: ET.Element, pattern: list | None, object_types: dict[str, s
         item_node.text = "xs:anyType"
 
 
-def add_multilang_text(parent: ET.Element, tag: str, value: str) -> ET.Element:
+def add_multilang_text(parent: ET.Element, tag: str, value: str, *, lang: str = "ru") -> ET.Element:
     node = ET.SubElement(parent, tag)
     item = ET.SubElement(node, "Item")
-    item.set("lang", "ru")
+    item.set("lang", lang)
     item.text = value
     return node
 
@@ -257,17 +258,32 @@ def quote_form_string(value: str) -> str:
 
 
 def page_title(page_data: dict | None) -> str:
+    return page_title_parts(page_data)[1]
+
+
+def page_title_parts(page_data: dict | None) -> tuple[str, str]:
     if not isinstance(page_data, dict):
-        return ""
+        return "ru", ""
     raw = page_data.get("raw") or []
     try:
-        return clean_token(raw[1][2][1])
+        item = raw[1][2]
+        if isinstance(item, list) and len(item) >= 2:
+            lang = clean_token(item[0])
+            if lang == "#" or re.match(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$", lang):
+                return lang, clean_token(item[1])
+            return "ru", clean_token(item[1])
     except (IndexError, TypeError):
-        return ""
+        pass
+    return "ru", ""
 
 
 def localized_text_from_record(value: object) -> str:
     return decode_localized_text_record(value)
+
+
+def localized_text_parts_from_record(value: object) -> tuple[str, str]:
+    item = localized_text_item_from_record(value)
+    return item if item is not None else ("ru", "")
 
 
 def item_title(item_data: dict | None, control_type: str) -> str:
@@ -292,22 +308,47 @@ def item_title(item_data: dict | None, control_type: str) -> str:
     return first_localized_text_without_base_tooltip(raw, control_type)
 
 
+def item_title_parts(item_data: dict | None, control_type: str) -> tuple[str, str]:
+    if not isinstance(item_data, dict):
+        return "ru", ""
+    raw = item_data.get("raw") or []
+    if not isinstance(raw, list):
+        return "ru", ""
+    if len(raw) > 2 and isinstance(raw[2], list):
+        info = raw[2]
+        if clean_token(info[0]) == "3" and len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 2:
+            return localized_text_parts_from_record(info[1][2])
+        if clean_token(info[0]) == "1" and len(info) > 1 and isinstance(info[1], list):
+            if len(info[1]) > 2:
+                lang, title = localized_text_parts_from_record(info[1][2])
+                if title:
+                    return lang, title
+            if control_type == "Panel":
+                pages = panel_pages_from_raw(raw)
+                return (pages[0].get("titleLang", "ru"), pages[0]["title"]) if pages else ("ru", "")
+    return first_localized_text_parts_without_base_tooltip(raw, control_type)
+
+
 def first_localized_text_without_base_tooltip(value: object, control_type: str = "") -> str:
+    return first_localized_text_parts_without_base_tooltip(value, control_type)[1]
+
+
+def first_localized_text_parts_without_base_tooltip(value: object, control_type: str = "") -> tuple[str, str]:
     if not isinstance(value, list):
-        return ""
+        return "ru", ""
     if event_binding_from_record(value, control_type):
-        return ""
-    text = localized_text_from_record(value)
+        return "ru", ""
+    lang, text = localized_text_parts_from_record(value)
     if text:
-        return text
+        return lang, text
     base = value if len(value) >= 13 and clean_token(value[0]) == "10" else None
     for index, child in enumerate(value):
         if base is not None and index == 12:
             continue
-        found = first_localized_text_without_base_tooltip(child, control_type)
+        found_lang, found = first_localized_text_parts_without_base_tooltip(child, control_type)
         if found:
-            return found
-    return ""
+            return found_lang, found
+    return "ru", ""
 
 
 def build_element_index(control_index: dict) -> dict[str, dict[str, str]]:
@@ -1024,9 +1065,9 @@ def add_semantic_item(
         item_data = item
     if isinstance(item_data, dict) and item_data.get("id") is not None:
         node.set("id", str(item_data["id"]))
-    title = item_title(item_data, public_type)
+    title_lang, title = item_title_parts(item_data, public_type)
     if title:
-        add_multilang_text(node, "Title", title)
+        add_multilang_text(node, "Title", title, lang=title_lang)
     add_tooltip(node, item_data)
     add_data_path(node, {**item, "type": public_type}, item_data)
     add_first_in_group(node, item, item_data)
@@ -1047,6 +1088,7 @@ def add_semantic_item(
     add_text_color(node, item_data)
     add_back_color(node, item_data)
     add_border_color(node, item_data)
+    add_base_style_attributes(node, item_data)
     add_font(node, item_data)
     add_geometry(node, item_data, element_index)
     add_panel_serialization_profile(node, public_type, item_data)
@@ -1089,9 +1131,10 @@ def add_semantic_item(
             page.set("name", str(page_name))
             if page_descriptor.get("styleMode") is not None:
                 page.set("styleMode", str(page_descriptor["styleMode"]))
-            title = page_descriptor.get("title") or page_title(data.get(page_path))
+            title_lang, fallback_title = page_title_parts(data.get(page_path))
+            title = page_descriptor.get("title") or fallback_title
             if title:
-                add_multilang_text(page, "Title", title)
+                add_multilang_text(page, "Title", title, lang=title_lang)
             page_items = [
                 child
                 for child in children
@@ -1379,9 +1422,9 @@ def add_command_bar_button_descriptor(button_node: ET.Element, descriptor: list[
     button_node.set("name", clean_token(descriptor[1]))
     button_node.set("state", clean_token(descriptor[2]))
     button_node.set("visible", clean_token(descriptor[3]))
-    title = localized_title_from_record(descriptor[4])
+    title_lang, title = localized_title_parts_from_record(descriptor[4])
     if title:
-        add_multilang_text(button_node, "Title", title)
+        add_multilang_text(button_node, "Title", title, lang=title_lang)
     button_node.set("hasAction", clean_token(descriptor[5]))
     button_node.set("ownerUuid", clean_token(descriptor[6]))
     button_node.set("position", clean_token(descriptor[7]))
@@ -1404,6 +1447,10 @@ def command_bar_action_handler_and_title(value: object) -> tuple[str, str]:
 
 
 def localized_title_from_record(value: object) -> str:
+    return localized_title_parts_from_record(value)[1]
+
+
+def localized_title_parts_from_record(value: object) -> tuple[str, str]:
     if (
         isinstance(value, list)
         and len(value) >= 3
@@ -1411,8 +1458,11 @@ def localized_title_from_record(value: object) -> str:
         and isinstance(value[2], list)
         and len(value[2]) >= 2
     ):
-        return clean_token(value[2][1])
-    return ""
+        lang = clean_token(value[2][0])
+        if lang == "#" or re.match(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$", lang):
+            return lang, clean_token(value[2][1])
+        return "ru", clean_token(value[2][1])
+    return "ru", ""
 
 
 def command_bar_value_to_attr(value: object) -> str:
@@ -1699,7 +1749,7 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_r
         column_node = ET.SubElement(columns_node, "Column")
         column_node.set("name", column["name"])
         column_node.set("order", column["order"])
-        add_multilang_text(column_node, "Title", column["title"])
+        add_multilang_text(column_node, "Title", column["title"], lang=str(column.get("title_lang") or "ru"))
         if column["data_path"]:
             set_text(column_node, "DataPath", column["data_path"])
         set_text(column_node, "Width", column["width"])
@@ -1723,7 +1773,7 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_r
         if column["use_picture"] == "1":
             set_text(column_node, "UsePicture", "true")
         if column["format"]:
-            add_multilang_text(column_node, "Format", column["format"])
+            add_multilang_text(column_node, "Format", column["format"], lang=str(column.get("format_lang") or "ru"))
         if column["font"]:
             add_font_node_from_record(column_node, column["font"])
         if column["picture"]:
@@ -1748,7 +1798,7 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
         body = column[1][1][1]
         if not isinstance(body, list) or len(body) <= 35:
             continue
-        title = first_localized_text(body[1]) if len(body) > 1 else ""
+        title_lang, title = localized_text_parts_from_record(body[1]) if len(body) > 1 else ("ru", "")
         data_path = clean_token(column[1][2]) if len(column[1]) > 2 else ""
         width = clean_token(body[4]) if len(body) > 4 else "1e2"
         order = clean_token(body[5]) if len(body) > 5 else str(len(result))
@@ -1762,7 +1812,7 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
         name = clean_token(body[30]) if len(body) > 30 else title
         presentation_index = clean_token(body[32]) if len(body) > 32 else "15"
         use_picture = clean_token(body[33]) if len(body) > 33 else "0"
-        format_text = localized_text_from_record(body[34]) if len(body) > 34 else ""
+        format_lang, format_text = localized_text_parts_from_record(body[34]) if len(body) > 34 else ("ru", "")
         pattern_record = body[35]
         pattern = pattern_record[1] if isinstance(pattern_record, list) and len(pattern_record) > 1 and isinstance(pattern_record[1], list) else []
         data_path_mode = clean_token(body[37]) if len(body) > 37 else "1"
@@ -1781,6 +1831,7 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
                 {
                     "name": name or title,
                     "title": title,
+                    "title_lang": title_lang,
                     "data_path": data_path,
                     "width": width,
                     "order": order,
@@ -1794,6 +1845,7 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
                     "presentation_index": presentation_index,
                     "use_picture": use_picture,
                     "format": format_text,
+                    "format_lang": format_lang,
                     "data_path_mode": data_path_mode,
                     "editor_control": editor_control,
                     "font": font,
@@ -2168,9 +2220,9 @@ def panel_pages_from_raw(raw: object) -> list[dict[str, str]]:
         result: list[dict[str, str]] = []
         for state in states:
             name = clean_token(state[6]) if len(state) > 6 else ""
-            title = first_localized_text(state)
+            title_lang, title = first_localized_text_parts_without_base_tooltip(state)
             if name:
-                descriptor = {"name": name, "title": title or name}
+                descriptor = {"name": name, "title": title or name, "titleLang": title_lang}
                 if len(state) > 2 and isinstance(state[2], list) and len(state[2]) > 6:
                     descriptor["styleMode"] = clean_token(state[2][6])
                 result.append(descriptor)
@@ -2257,6 +2309,16 @@ def add_text_color(parent: ET.Element, item_data: object) -> None:
 
 def add_border_color(parent: ET.Element, item_data: object) -> None:
     add_color(parent, "BorderColor", item_data, 6)
+
+
+def add_base_style_attributes(parent: ET.Element, item_data: object) -> None:
+    base = base_info_from_item_data(item_data)
+    if base is None or len(base) <= 19:
+        return
+    parent.set("baseStyleMode", clean_token(base[16]))
+    parent.set("baseStyleState", clean_token(base[17]))
+    parent.set("baseStyleVisible", clean_token(base[18]))
+    parent.set("baseStyleDefaultMode", clean_token(base[19]))
 
 
 def add_color(parent: ET.Element, tag: str, item_data: object, slot: int) -> None:
@@ -2346,9 +2408,9 @@ def add_semantic_pages(
         page_path = str(page_name)
         page = ET.SubElement(pages, "Page")
         page.set("name", page_path)
-        title = page_title(data.get(page_path))
+        title_lang, title = page_title_parts(data.get(page_path))
         if title:
-            add_multilang_text(page, "Title", title)
+            add_multilang_text(page, "Title", title, lang=title_lang)
         for item in control_index.get("tree", []):
             if str(item.get("page", "")) != page_path:
                 continue
@@ -2371,7 +2433,7 @@ def dump_xml_from_paths(
     container_file_times = container_file_times_from_metadata(container_metadata_for_form(form_path))
     object_types = metadata_object_type_map(metadata)
     element_index = build_element_index(control_index)
-    root_title = str((control_index.get("data", {}).get("-pages-") or [""])[0])
+    root_title_lang, root_title = form_root_title_parts(form_root)
 
     root = ET.Element("Form")
     root.set("version", SCHEMA_VERSION)
@@ -2379,7 +2441,7 @@ def dump_xml_from_paths(
     set_container_time_attributes(root, container_file_times)
 
     if root_title:
-        add_multilang_text(root, "Title", root_title)
+        add_multilang_text(root, "Title", root_title, lang=root_title_lang)
     add_form_properties(root, form_root)
     if module_path and module_bytes:
         module_out = asset_root / "Module.bsl"
@@ -2430,11 +2492,30 @@ def add_form_properties(parent: ET.Element, form_root: object) -> None:
     add_form_serialization_profile(parent, form_record, form_root)
 
 
+def form_root_title(form_root: object) -> str:
+    return form_root_title_parts(form_root)[1]
+
+
+def form_root_title_parts(form_root: object) -> tuple[str, str]:
+    if not isinstance(form_root, list) or len(form_root) <= 1 or not isinstance(form_root[1], list):
+        return "ru", ""
+    form_record = form_root[1]
+    try:
+        return localized_text_parts_from_record(form_record[1][0])
+    except (IndexError, TypeError):
+        return "ru", ""
+
+
 def add_form_serialization_profile(parent: ET.Element, form_record: list[object], form_root: list[object]) -> None:
     profile = ET.SubElement(parent, "SerializationProfile")
     root_record = ET.SubElement(profile, "RootRecord")
     root_record.set("recordKind", clean_token(form_record[0]))
     if len(form_record) > 1 and isinstance(form_record[1], list) and len(form_record[1]) > 2:
+        if isinstance(form_record[1][0], list) and len(form_record[1][0]) > 1:
+            root_record.set("titleItemCount", clean_token(form_record[1][0][1]))
+            title_lang, title_text = localized_text_parts_from_record(form_record[1][0])
+            if title_text:
+                root_record.set("titleLang", title_lang)
         root_record.set("titleMarker", clean_token(form_record[1][1]))
         root_record.set("titleScope", clean_token(form_record[1][2]))
     for index in range(5, min(len(form_record), 11)):
@@ -2482,13 +2563,14 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
     root_panel = ET.SubElement(profile, "RootPanel")
     if info and isinstance(info[0], list):
         add_form_root_panel_base_style(root_panel, info[0])
-    dependencies, cursor = form_root_panel_dependency_groups_and_cursor(info)
-    dependency_prefix = form_root_panel_dependency_prefix(info)
-    for order, records in enumerate(dependencies, start=1):
+    dependencies, cursor = form_root_panel_dependency_group_descriptors_and_cursor(info)
+    for order, descriptor in enumerate(dependencies, start=1):
+        records = descriptor["records"]
         group = ET.SubElement(root_panel, "DependencyGroup")
         group.set("order", str(order))
-        if order == 1 and dependency_prefix:
-            group.set("prefix", " ".join(dependency_prefix))
+        prefix = descriptor.get("prefix", [])
+        if prefix:
+            group.set("prefix", " ".join(prefix))
         if records and isinstance(records[0], list) and len(records[0]) == 1 and isinstance(records[0][0], list):
             group.set("header", " ".join(clean_token(value) for value in records[0][0]))
             records = records[1:]
@@ -2511,7 +2593,7 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
         state.set("name", page_descriptor["name"])
         if page_descriptor.get("styleMode") is not None:
             state.set("styleMode", page_descriptor["styleMode"])
-        add_multilang_text(state, "Title", page_descriptor.get("title") or page_descriptor["name"])
+        add_multilang_text(state, "Title", page_descriptor.get("title") or page_descriptor["name"], lang=page_descriptor.get("titleLang") or "ru")
     header = form_root_panel_page_layout_header(info, cursor)
     if header:
         root_panel.set("pageLayoutHeader", " ".join(header))
@@ -2564,82 +2646,32 @@ def form_root_panel_dependency_groups_from_info(info: list[object]) -> list[list
 
 
 def form_root_panel_dependency_prefix(info: list[object]) -> list[str]:
-    try:
-        first_count = int(clean_token(info[2]))
-    except (IndexError, ValueError):
-        first_count = -1
-    if first_count > 0 and len(info) >= 3 + first_count and all(isinstance(value, list) for value in info[3 : 3 + first_count]):
+    cursor = form_root_panel_first_dependency_count_cursor(info)
+    if cursor == 2:
         return []
-    cursor = 2
-    result: list[str] = []
-    while cursor < len(info) and not isinstance(info[cursor], list):
-        result.append(clean_token(info[cursor]))
-        cursor += 1
-    return result if cursor > 2 and cursor < len(info) else []
+    return [clean_token(value) for value in info[2:cursor] if not isinstance(value, list)]
 
 
 def form_root_panel_dependency_groups_and_cursor(info: list[object]) -> tuple[list[list[list[object]]], int]:
-    groups: list[list[list[object]]] = []
-    cursor = 2
-    try:
-        first_count = int(clean_token(info[cursor]))
-    except (IndexError, ValueError):
-        first_count = -1
-    if first_count > 0 and len(info) >= cursor + 1 + first_count and all(isinstance(value, list) for value in info[cursor + 1 : cursor + 1 + first_count]):
-        while cursor < len(info):
-            try:
-                count = int(clean_token(info[cursor]))
-            except ValueError:
-                break
-            if count == 0:
-                break
-            cursor += 1
-            records: list[list[object]] = []
-            for _index in range(count):
-                if cursor >= len(info) or not isinstance(info[cursor], list):
-                    return groups, cursor
-                record = info[cursor]
-                if len(record) >= 3:
-                    records.append(record)
-                cursor += 1
-            groups.append(records)
-        return groups, cursor
-    while cursor < len(info) and not isinstance(info[cursor], list):
-        cursor += 1
-    if cursor > 2 and cursor < len(info):
-        while cursor < len(info):
-            records: list[list[object]] = []
-            if isinstance(info[cursor], list):
-                header = info[cursor]
-                try:
-                    count = int(clean_token(info[cursor + 1]))
-                except (IndexError, ValueError):
-                    break
-                cursor += 2
-                records.append([header])
-            else:
-                try:
-                    count = int(clean_token(info[cursor]))
-                except ValueError:
-                    break
-                if count <= 0:
-                    break
-                cursor += 1
-            for _index in range(count):
-                if cursor >= len(info) or not isinstance(info[cursor], list):
-                    return groups, cursor
-                record = info[cursor]
-                if len(record) >= 3:
-                    records.append(record)
-                cursor += 1
-            groups.append(records)
-        return groups, cursor
+    descriptors, cursor = form_root_panel_dependency_group_descriptors_and_cursor(info)
+    return [descriptor["records"] for descriptor in descriptors], cursor
+
+
+def form_root_panel_dependency_group_descriptors_and_cursor(info: list[object]) -> tuple[list[dict[str, object]], int]:
+    groups: list[dict[str, object]] = []
     cursor = 2
     while cursor < len(info):
+        prefix: list[str] = []
+        prefix_start = cursor
+        while cursor < len(info) and not form_root_panel_dependency_count_at(info, cursor):
+            if isinstance(info[cursor], list):
+                return groups, prefix_start
+            prefix.append(clean_token(info[cursor]))
+            cursor += 1
         try:
             count = int(clean_token(info[cursor]))
-        except ValueError:
-            break
+        except (IndexError, ValueError):
+            return groups, prefix_start
         if count <= 0:
             break
         cursor += 1
@@ -2651,8 +2683,27 @@ def form_root_panel_dependency_groups_and_cursor(info: list[object]) -> tuple[li
             if len(record) >= 3:
                 records.append(record)
             cursor += 1
-        groups.append(records)
+        groups.append({"prefix": prefix, "records": records})
     return groups, cursor
+
+
+def form_root_panel_first_dependency_count_cursor(info: list[object]) -> int:
+    cursor = 2
+    while cursor < len(info):
+        if form_root_panel_dependency_count_at(info, cursor):
+            return cursor
+        if isinstance(info[cursor], list):
+            break
+        cursor += 1
+    return len(info)
+
+
+def form_root_panel_dependency_count_at(info: list[object], cursor: int) -> bool:
+    try:
+        count = int(clean_token(info[cursor]))
+    except (IndexError, ValueError):
+        return False
+    return count > 0 and len(info) >= cursor + 1 + count and all(isinstance(value, list) for value in info[cursor + 1 : cursor + 1 + count])
 
 
 def form_root_panel_page_layout_header(info: list[object], cursor: int) -> list[str]:

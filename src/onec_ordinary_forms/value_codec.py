@@ -17,6 +17,8 @@ COMPOSITE_ID_RE = re.compile(
     r"^-?[0-9]+(?::[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$"
 )
 
+LOCALIZED_LANG_RE = re.compile(r"^(#|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*)$")
+
 TYPE_CODE_NAMES = PLATFORM_TYPE_DOMAIN_CODE_NAMES
 
 
@@ -134,6 +136,11 @@ def localized_text_record(text: str, *, lang: str = "ru") -> list[object]:
 
 
 def localized_text_from_record(value: object, *, lang: str = "ru") -> str:
+    item = localized_text_item_from_record(value, preferred_lang=lang)
+    return item[1] if item else ""
+
+
+def localized_text_item_from_record(value: object, *, preferred_lang: str = "ru") -> tuple[str, str] | None:
     if (
         isinstance(value, list)
         and len(value) >= 3
@@ -141,7 +148,12 @@ def localized_text_from_record(value: object, *, lang: str = "ru") -> str:
         and clean_atom(value[1]) == "1"
         and isinstance(value[2], list)
         and len(value[2]) >= 2
-        and clean_atom(value[2][0]) == lang
     ):
-        return clean_atom(value[2][1])
-    return ""
+        item_lang = clean_atom(value[2][0])
+        if not LOCALIZED_LANG_RE.match(item_lang):
+            return None
+        item_text = clean_atom(value[2][1])
+        if item_lang == preferred_lang:
+            return item_lang, item_text
+        return item_lang, item_text
+    return None
