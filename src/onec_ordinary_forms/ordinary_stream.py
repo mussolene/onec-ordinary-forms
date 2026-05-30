@@ -457,6 +457,14 @@ def form_serialization_profile_from_xml(root: ET.Element) -> FormRootLayout | No
         dependencies = form_root_panel_dependency_profile_from_xml(root_panel)
         if dependencies is not None:
             result["rootPanelDependencies"] = dependencies
+        elif (
+            root_panel.get("dependencyTail")
+            or root_panel.get("pageStateFlag")
+            or root_panel.get("pageLayoutHeader")
+            or root_panel.findall("PageState")
+            or root_panel.findall("PageLayout")
+        ):
+            result["rootPanelDependencies"] = []
     attribute_layout = serialization.find("AttributeLayout")
     if attribute_layout is not None:
         layout: dict[str, object] = {}
@@ -611,7 +619,7 @@ def root_panel_info(
             root_panel_base_info_record(root_layout),
             "26",
             "0",
-            *(dependency_profile if isinstance(dependency_profile, list) else [
+            *((dependency_profile if isinstance(dependency_profile, list) else [
                 "2",
                 ["0", "3", "1"],
                 ["0", "4", "1"],
@@ -622,7 +630,7 @@ def root_panel_info(
                 ["0", "2", "3"],
                 ["0", "3", "3"],
                 ["0", "4", "3"],
-            ]),
+            ])),
             *dependency_tail,
             page_style_group_record("1"),
             str((root_layout or {}).get("rootPanelPageStateFlag", "0")),
@@ -683,8 +691,10 @@ def root_panel_info_from_control_extent(
     ]
     if dependency_profile is None:
         body.append(str((root_layout or {}).get("rootPanelPageCapacity", "0")))
-    body.extend(
-        dependency_profile or [
+    if isinstance(dependency_profile, list):
+        body.extend(dependency_profile)
+    else:
+        body.extend([
                 "1",
                 ["0", "1", "1"],
                 "1",
@@ -693,8 +703,7 @@ def root_panel_info_from_control_extent(
                 ["0", "1", "3"],
                 ["0", "2", "3"],
                 ["0", "4", "3"],
-            ]
-    )
+            ])
     dependency_tail = (root_layout or {}).get("rootPanelDependencyTail")
     body.extend(
         [
@@ -3611,7 +3620,7 @@ def command_bar_items_record_from_xml(buttons: ET.Element) -> list[object]:
 
 def command_bar_action_record_from_xml(action: ET.Element) -> list[object]:
     record = [
-        "8",
+        action.get("recordKind") or "8",
         action.get("uuid") or "",
         action.get("enabled") or "1",
         action.get("eventUuid") or DEFAULT_CONTROL_EVENT_UUID,

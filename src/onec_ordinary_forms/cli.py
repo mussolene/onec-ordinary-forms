@@ -1441,10 +1441,11 @@ def add_command_bar_buttons(parent: ET.Element, items: list[object]) -> None:
     buttons.set("rootFlag", clean_token(items[3]))
     actions_node = ET.SubElement(buttons, "Actions")
     for order, action in enumerate(items[actions_start:actions_end], start=1):
-        if not isinstance(action, list) or len(action) < 8 or clean_token(action[0]) != "8":
+        if not isinstance(action, list) or len(action) < 8 or clean_token(action[0]) not in {"7", "8"}:
             continue
         action_node = ET.SubElement(actions_node, "Action")
         action_node.set("order", str(order))
+        action_node.set("recordKind", clean_token(action[0]))
         action_node.set("uuid", clean_token(action[1]))
         action_node.set("enabled", clean_token(action[2]))
         action_node.set("eventUuid", clean_token(action[3]))
@@ -1585,8 +1586,16 @@ def panel_dependency_count_at(info: list[object], cursor: int) -> bool:
     return count > 0 and len(info) >= cursor + 1 + count and all(isinstance(value, list) for value in info[cursor + 1 : cursor + 1 + count])
 
 
+def is_page_style_group_record(value: object) -> bool:
+    return isinstance(value, list) and len(value) >= 5 and clean_token(value[0]) in {"8", "10"}
+
+
+def is_page_state_record(value: object) -> bool:
+    return isinstance(value, list) and bool(value) and clean_token(value[0]) in {"3", "5", "6"}
+
+
 def panel_page_state_scalars(info: list[object], cursor: int) -> tuple[str, str]:
-    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+    while cursor < len(info) and not is_page_style_group_record(info[cursor]):
         cursor += 1
     if cursor + 2 >= len(info):
         return "", ""
@@ -1596,7 +1605,7 @@ def panel_page_state_scalars(info: list[object], cursor: int) -> tuple[str, str]
 
 
 def panel_page_layouts_from_info(info: list[object], cursor: int) -> list[dict[str, str]]:
-    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+    while cursor < len(info) and not is_page_style_group_record(info[cursor]):
         cursor += 1
     if cursor >= len(info):
         return []
@@ -2378,7 +2387,7 @@ def panel_pages_from_raw(raw: object) -> list[dict[str, str]]:
         states = [
             state
             for state in child[2:]
-            if isinstance(state, list) and state and clean_token(state[0]) in {"3", "6"}
+            if is_page_state_record(state)
         ]
         if count != len(states) or not states:
             continue
@@ -2552,7 +2561,7 @@ def base_info_from_item_data(item_data: object) -> list[object] | None:
 def find_base_info_record(value: object) -> list[object] | None:
     if not isinstance(value, list):
         return None
-    if len(value) >= 13 and clean_token(value[0]) in {"10", "19"}:
+    if len(value) >= 13 and clean_token(value[0]) in {"10", "16", "19"}:
         return value
     for child in value:
         found = find_base_info_record(child)
@@ -2919,7 +2928,7 @@ def form_root_panel_dependency_count_at(info: list[object], cursor: int) -> bool
 
 
 def form_root_panel_page_layout_header(info: list[object], cursor: int) -> list[str]:
-    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+    while cursor < len(info) and not is_page_style_group_record(info[cursor]):
         cursor += 1
     if cursor >= len(info):
         return []
@@ -2932,7 +2941,7 @@ def form_root_panel_page_layout_header(info: list[object], cursor: int) -> list[
 
 
 def form_root_panel_page_state_scalars(info: list[object], cursor: int) -> tuple[str, str]:
-    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+    while cursor < len(info) and not is_page_style_group_record(info[cursor]):
         cursor += 1
     if cursor + 2 >= len(info):
         return "", ""
@@ -2950,7 +2959,7 @@ def form_root_panel_dependency_tail(info: list[object], cursor: int) -> list[str
 
 
 def form_root_panel_post_layout_tail(info: list[object], cursor: int) -> tuple[list[str], list[str]]:
-    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+    while cursor < len(info) and not is_page_style_group_record(info[cursor]):
         cursor += 1
     if cursor >= len(info):
         return [], []
@@ -2984,7 +2993,7 @@ def form_root_panel_pages_from_info(info: list[object]) -> list[dict[str, str]]:
         states = [
             state
             for state in child[2:]
-            if isinstance(state, list) and state and clean_token(state[0]) in {"3", "6"}
+            if is_page_state_record(state)
         ]
         if count != len(states) or not states:
             continue

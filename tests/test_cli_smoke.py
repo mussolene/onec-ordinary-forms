@@ -3157,6 +3157,88 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertEqual(geometry[-5:], ["0", "0", "1", "0", "0"])
 
+    def test_old_root_panel_page_profile_is_decoded_as_typed_layout(self) -> None:
+        from onec_ordinary_forms.cli import (
+            form_root_panel_page_layout_header,
+            form_root_panel_page_state_scalars,
+            form_root_panel_pages_from_info,
+            panel_page_layouts_from_info,
+        )
+
+        info = [
+            ["16", "1"],
+            "26",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            ["8", "1", ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'], ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'], ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'], "100", "0", "0", "0"],
+            "0",
+            "1",
+            ["1", "1", ["5", ["1", "1", ['"ru"', '"Страница1"']], ["8", "0", ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'], ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'], ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'], "100", "2", "0", "0"], "-1", "1", "1", '"Страница1"', "1"]],
+            "1",
+            "1",
+            "0",
+            "4",
+            ["2", "8", "1", "1", "1", "0", "0", "0", "0"],
+            ["2", "8", "0", "1", "2", "0", "0", "0", "0"],
+            ["2", "392", "1", "1", "3", "0", "0", "8", "0"],
+            ["2", "292", "0", "1", "4", "0", "0", "8", "0"],
+        ]
+
+        self.assertEqual(form_root_panel_page_state_scalars(info, 2), ("0", "1"))
+        self.assertEqual(form_root_panel_page_layout_header(info, 2), ["1", "1", "0"])
+        self.assertEqual(form_root_panel_pages_from_info(info)[0]["name"], "Страница1")
+        self.assertEqual(panel_page_layouts_from_info(info, 2)[0]["width"], "392")
+
+    def test_old_base_info_and_command_bar_action_records_are_typed(self) -> None:
+        from onec_ordinary_forms.cli import add_command_bar_buttons, find_base_info_record
+        from onec_ordinary_forms.ordinary_stream import command_bar_items_record_from_xml
+
+        old_base = [
+            "16",
+            "1",
+            ["3", "4", ["0"]],
+            ["3", "4", ["0"]],
+            ["7", "3", "0", "1", "100"],
+            "0",
+            ["3", "3", ["-22"]],
+            ["3", "4", ["0"]],
+            ["3", "4", ["0"]],
+            ["3", "4", ["0"]],
+            ["3", "3", ["-21"]],
+            ["3", "0", ["0"], "7", "1", "0", "00000000-0000-0000-0000-000000000000"],
+            ["1", "0"],
+            "0",
+            "0",
+            "100",
+            "0",
+            "0",
+        ]
+        self.assertIs(find_base_info_record(["2", [old_base]]), old_base)
+
+        items = [
+            "5",
+            "root",
+            "3",
+            "1",
+            "1",
+            ["7", "action", "1", "event", ["3", '"Handler"', ["1", "1", ['"ru"', '"Title"']]], "6", ["1", "0"], ["1", "0"], "1"],
+            "1",
+            ["5", "group", "4", "0", "1", "action", ["8", '"Button"', "0", "2", ["1", "1", ['"ru"', '"Title"']], "1", "root", "1", "1e2", "0", "1", "1", "0", "1", "0", "0"], ["-1", "0", ["0"]]],
+        ]
+        root = ET.Element("CommandBar")
+        add_command_bar_buttons(root, items)
+
+        action = root.find("./Buttons/Actions/Action")
+        self.assertIsNotNone(action)
+        assert action is not None
+        self.assertEqual(action.get("recordKind"), "7")
+        rebuilt = command_bar_items_record_from_xml(root.find("Buttons"))
+        self.assertEqual(rebuilt[5][0], "7")
+
     def test_form_bin_pipeline_keeps_cli_out_of_section_details(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
