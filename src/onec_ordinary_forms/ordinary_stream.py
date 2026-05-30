@@ -258,6 +258,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
                 controls.append(control)
 
     root_layout = form_serialization_profile_from_xml(root)
+    attributes_layout = root_layout.get("attributesLayout") if root_layout is not None else None
     stream = ordinary_form_stream(
         title if title or root_layout is not None else "Main",
         attributes,
@@ -265,6 +266,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         events_from_xml(root),
         form_size_from_xml(root, root_layout),
         root_layout=root_layout,
+        attributes_layout=attributes_layout if isinstance(attributes_layout, dict) else None,
         object_info=form_object_info_from_xml(root),
         serialization_counter=form_serialization_counter_from_xml(root),
     )
@@ -286,7 +288,7 @@ def ordinary_form_stream(
     root_style: list[object] | None = None,
     serialization_counter: str = "",
 ) -> list[object]:
-    return [
+    stream = [
         "27",
         form_root_record(title, controls, form_size, root_layout, serialization_counter),
         attributes_table(attributes, controls, attributes_layout),
@@ -308,6 +310,17 @@ def ordinary_form_stream(
         "1",
         "1",
     ]
+    if root_layout is not None and isinstance(root_layout.get("topLevel"), dict):
+        for key, value in root_layout["topLevel"].items():
+            if not key.startswith("slot"):
+                continue
+            try:
+                index = int(key[4:])
+            except ValueError:
+                continue
+            if 0 <= index < len(stream):
+                stream[index] = str(value)
+    return stream
 
 
 def form_root_record(
@@ -378,6 +391,15 @@ def form_serialization_profile_from_xml(root: ET.Element) -> FormRootLayout | No
     if serialization is None:
         return None
     result: FormRootLayout = {}
+    top_level = serialization.find("TopLevel")
+    if top_level is not None:
+        values = {
+            key: top_level.get(key, "")
+            for key in ("slot5", "slot6", "slot7", "slot8", "slot9", "slot10", "slot14", "slot15", "slot16", "slot17", "slot18", "slot19")
+            if top_level.get(key) is not None
+        }
+        if values:
+            result["topLevel"] = values
     root_record = serialization.find("RootRecord")
     if root_record is not None:
         for key in ("recordKind", "titleMarker", "titleScope", "titleItemCount", "titleLang", "slot5", "slot6", "slot7", "slot8", "slot9", "slot10"):
@@ -435,6 +457,15 @@ def form_serialization_profile_from_xml(root: ET.Element) -> FormRootLayout | No
         dependencies = form_root_panel_dependency_profile_from_xml(root_panel)
         if dependencies is not None:
             result["rootPanelDependencies"] = dependencies
+    attribute_layout = serialization.find("AttributeLayout")
+    if attribute_layout is not None:
+        layout: dict[str, object] = {}
+        if attribute_layout.get("marker") is not None:
+            layout["marker"] = attribute_layout.get("marker", "")
+        if attribute_layout.get("slotCount") is not None:
+            layout["slotCount"] = attribute_layout.get("slotCount", "")
+        if layout:
+            result["attributesLayout"] = layout
     form_object = serialization.find("FormObject")
     if form_object is not None:
         result["formObject"] = form_object
@@ -1853,6 +1884,8 @@ def input_field_info_record_from_xml(element: ET.Element, type_pattern: list[obj
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
     base = extended_base_info_record_from_xml(element)
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
+    if element.find("BorderColor") is None:
+        base[6] = default_color_record()
     if element.get("baseStyleMode") is None:
         base[16:20] = ["0", "0", "0", "0"]
     record = [
@@ -1906,6 +1939,10 @@ def input_field_info_record_from_xml(element: ET.Element, type_pattern: list[obj
     if type_pattern == [quoted_atom("D"), quoted_atom("D")]:
         record[4] = "0"
         record[7] = "1"
+    max_length = text_or_default(element, "MaxLength", "0")
+    if max_length != "0":
+        record[13] = "1"
+        record[14] = max_length
     record[descriptor.slot_index("ReadOnly")] = bool_record_from_xml(element, "ReadOnly", default=False)
     record[26] = bool_record_from_xml(element, "MultiLine", default=False)
     return record
@@ -4340,6 +4377,10 @@ def geometry_stream_from_xml(
     if flagged_height_width_geometry is not None:
         flagged_height_width_geometry[5] = layout_mode
         return flagged_height_width_geometry
+    prefixed_flagged_height_width_geometry = prefixed_flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
+    if prefixed_flagged_height_width_geometry is not None:
+        prefixed_flagged_height_width_geometry[5] = layout_mode
+        return prefixed_flagged_height_width_geometry
     inline_dual_counted_geometry = inline_dual_counted_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
     if inline_dual_counted_geometry is not None:
         inline_dual_counted_geometry[5] = layout_mode
@@ -4695,6 +4736,47 @@ def flagged_height_width_dimension_geometry_from_xml(
         width,
         "0",
         "0",
+        *tail,
+    ]
+
+
+def prefixed_flagged_height_width_dimension_geometry_from_xml(
+    position: ET.Element | None,
+    left: str,
+    top: str,
+    right: str,
+    bottom: str,
+    bindings: list[object],
+) -> list[object] | None:
+    if position is None or position.get("dimensionProfile") != "prefixedFlaggedHeightWidth":
+        return None
+    binding_container = position.find("Bindings")
+    if binding_container is None:
+        return None
+    height: object | None = None
+    width: object | None = None
+    for binding in binding_container.findall("DimensionBinding"):
+        dimension = binding.get("dimension")
+        if dimension == "height":
+            height = dimension_binding_to_raw(binding)
+        elif dimension == "width":
+            width = dimension_binding_to_raw(binding)
+    if height is None or width is None:
+        return None
+    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
+    return [
+        "8",
+        left,
+        top,
+        right,
+        bottom,
+        "1",
+        *bindings,
+        position.get("primaryDimensionMarker", "0"),
+        "1",
+        height,
+        "1",
+        width,
         *tail,
     ]
 

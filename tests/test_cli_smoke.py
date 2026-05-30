@@ -1244,6 +1244,7 @@ class CliSmokeTest(unittest.TestCase):
                 <Page name="Main">
                   <InputField name="Number" id="159">
                     <ReadOnly>true</ReadOnly>
+                    <MaxLength>10</MaxLength>
                     <ToolTip><Item lang="ru">Номер документа</Item></ToolTip>
                   </InputField>
                 </Page>
@@ -1261,6 +1262,9 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(info[0], descriptor.info_kind)
         input_info = info[2][0]
         self.assertEqual(input_info[descriptor.slot_index("ReadOnly")], "1")
+        self.assertEqual(input_info[0][6], ["4", "4", ["0"], "4"])
+        self.assertEqual(input_info[13], "1")
+        self.assertEqual(input_info[14], "10")
         self.assertEqual(input_info[0][12][2], ['"ru"', '"Номер документа"'])
 
     def test_core_control_info_descriptors_record_platform_slots(self) -> None:
@@ -2501,6 +2505,55 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(position.get("dimensionSegments"), "1 1")
         self.assertEqual(position.get("layoutTail"), "0 0 0 0 0 1 2 1 1")
         self.assertEqual(geometry_stream_from_xml("CommandBar", position), geometry)
+
+    def test_dump_preserves_prefixed_flagged_height_width_dimension_profile(self) -> None:
+        empty_anchor = ["2", "-1", "6", "0"]
+        geometry = [
+            "8",
+            "8",
+            "217",
+            "493",
+            "426",
+            "1",
+            ["0", empty_anchor, empty_anchor],
+            ["0", ["2", "0", "1", "-33"], empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", ["2", "15", "2", "485"], empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            "0",
+            "1",
+            ["0", "14", "0"],
+            "1",
+            ["0", "15", "3"],
+            "0",
+            "0",
+            "0",
+            "2",
+            "6",
+            "6",
+            "0",
+            "0",
+        ]
+        parent = ET.Element("InputField")
+
+        add_geometry(
+            parent,
+            {"id": "15", "raw": [geometry]},
+            {
+                "14": {"name": "НетНужногоСертификата1"},
+                "15": {"name": "НетСертификатовПодробности"},
+            },
+        )
+
+        position = parent.find("Position")
+        self.assertIsNotNone(position)
+        assert position is not None
+        self.assertEqual(position.get("dimensionProfile"), "prefixedFlaggedHeightWidth")
+        self.assertEqual(position.get("primaryDimensionMarker"), "0")
+        self.assertIsNone(position.get("layoutPreTail"))
+        self.assertEqual(position.get("layoutTail"), "0 0 0 2 6 6 0 0")
+        self.assertEqual(geometry_stream_from_xml("InputField", position), geometry)
 
     def test_picture_decoration_serialization_profile_roundtrips_named_slots(self) -> None:
         with TemporaryDirectory() as temp_dir:

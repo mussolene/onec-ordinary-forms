@@ -661,6 +661,8 @@ def add_geometry(
     if isinstance(geometry_raw, list):
         for index, binding in enumerate(geometry_raw[6:12], start=1):
             add_binding(anchors, "Binding", index, binding, current_id, element_index)
+        if add_prefixed_flagged_height_width_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
+            return
         if add_flagged_height_width_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
             return
         if add_inline_segmented_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
@@ -748,6 +750,37 @@ def add_flagged_height_width_dimension_bindings(
         position.set("layoutTail", " ".join(tail))
     add_binding(bindings, "DimensionBinding", 1, geometry_raw[13], current_id, element_index)
     add_binding(bindings, "DimensionBinding", 4, geometry_raw[17], current_id, element_index)
+    return True
+
+
+def add_prefixed_flagged_height_width_dimension_bindings(
+    position: ET.Element,
+    bindings: ET.Element,
+    geometry_raw: list[object],
+    current_id: str,
+    element_index: dict[str, dict[str, str]],
+) -> bool:
+    if len(geometry_raw) < 17:
+        return False
+    if not (
+        not isinstance(geometry_raw[12], list)
+        and clean_token(geometry_raw[13]) == "1"
+        and isinstance(geometry_raw[14], list)
+        and clean_token(geometry_raw[15]) == "1"
+        and isinstance(geometry_raw[16], list)
+    ):
+        return False
+    tail_values = geometry_raw[17:]
+    if any(isinstance(value, list) for value in tail_values):
+        return False
+    position.set("dimensionProfile", "prefixedFlaggedHeightWidth")
+    position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
+    position.attrib.pop("layoutPreTail", None)
+    tail = [clean_token(value) for value in tail_values]
+    if tail:
+        position.set("layoutTail", " ".join(tail))
+    add_binding(bindings, "DimensionBinding", 1, geometry_raw[14], current_id, element_index)
+    add_binding(bindings, "DimensionBinding", 4, geometry_raw[16], current_id, element_index)
     return True
 
 
@@ -1677,6 +1710,8 @@ def add_input_field_properties(parent: ET.Element, item: dict, item_data: object
         set_text(parent, "ChoiceMode", clean_token(input_info[4]))
     if len(input_info) > 5 and clean_token(input_info[5]) == "1":
         set_text(parent, "PasswordMode", "true")
+    if len(input_info) > 14 and clean_token(input_info[13]) == "1" and clean_token(input_info[14]) != "0":
+        set_text(parent, "MaxLength", clean_token(input_info[14]))
     if len(input_info) > 26 and clean_token(input_info[26]) == "1":
         set_text(parent, "MultiLine", "true")
     if not isinstance(item_data, dict):
@@ -2600,6 +2635,7 @@ def form_root_title_parts(form_root: object) -> tuple[str, str]:
 
 def add_form_serialization_profile(parent: ET.Element, form_record: list[object], form_root: list[object]) -> None:
     profile = ET.SubElement(parent, "SerializationProfile")
+    add_form_top_level_profile(profile, form_root)
     root_record = ET.SubElement(profile, "RootRecord")
     root_record.set("recordKind", clean_token(form_record[0]))
     if len(form_record) > 1 and isinstance(form_record[1], list) and len(form_record[1]) > 2:
@@ -2615,9 +2651,55 @@ def add_form_serialization_profile(parent: ET.Element, form_record: list[object]
     root_panel_info = form_root_panel_info(form_record)
     if root_panel_info is not None:
         add_form_root_panel_profile(profile, root_panel_info)
+    add_form_attribute_layout_profile(profile, form_root)
     add_form_object_profile(profile, form_root)
     if not list(profile):
         parent.remove(profile)
+
+
+def add_form_top_level_profile(profile: ET.Element, form_root: list[object]) -> None:
+    defaults = {
+        5: "1",
+        6: "4",
+        7: "1",
+        8: "0",
+        9: "0",
+        10: "0",
+        14: "1",
+        15: "2",
+        16: "0",
+        17: "0",
+        18: "1",
+        19: "1",
+    }
+    node = ET.Element("TopLevel")
+    for index, default in defaults.items():
+        if len(form_root) <= index:
+            continue
+        value = clean_token(form_root[index])
+        if value != default:
+            node.set(f"slot{index}", value)
+    if node.attrib:
+        profile.append(node)
+
+
+def add_form_attribute_layout_profile(profile: ET.Element, form_root: list[object]) -> None:
+    if len(form_root) <= 2 or not isinstance(form_root[2], list):
+        return
+    attributes = form_root[2]
+    if len(attributes) < 2:
+        return
+    marker = ""
+    if isinstance(attributes[0], list) and attributes[0]:
+        marker = clean_token(attributes[0][0])
+    slot_count = clean_token(attributes[1])
+    if marker == "1" and not slot_count:
+        return
+    node = ET.SubElement(profile, "AttributeLayout")
+    if marker:
+        node.set("marker", marker)
+    if slot_count:
+        node.set("slotCount", slot_count)
 
 
 def add_form_object_profile(profile: ET.Element, form_root: list[object]) -> None:

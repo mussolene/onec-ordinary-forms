@@ -705,10 +705,30 @@
   </xs:complexType>
   <xs:complexType name="FormSerializationProfileType">
     <xs:sequence>
+      <xs:element name="TopLevel" type="FormTopLevelProfileType" minOccurs="0"/>
       <xs:element name="RootRecord" type="FormRootRecordProfileType" minOccurs="0"/>
       <xs:element name="RootPanel" type="FormRootPanelProfileType" minOccurs="0"/>
+      <xs:element name="AttributeLayout" type="FormAttributeLayoutProfileType" minOccurs="0"/>
       <xs:element name="FormObject" type="FormObjectProfileType" minOccurs="0"/>
     </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="FormTopLevelProfileType">
+    <xs:attribute name="slot5" type="xs:string"/>
+    <xs:attribute name="slot6" type="xs:string"/>
+    <xs:attribute name="slot7" type="xs:string"/>
+    <xs:attribute name="slot8" type="xs:string"/>
+    <xs:attribute name="slot9" type="xs:string"/>
+    <xs:attribute name="slot10" type="xs:string"/>
+    <xs:attribute name="slot14" type="xs:string"/>
+    <xs:attribute name="slot15" type="xs:string"/>
+    <xs:attribute name="slot16" type="xs:string"/>
+    <xs:attribute name="slot17" type="xs:string"/>
+    <xs:attribute name="slot18" type="xs:string"/>
+    <xs:attribute name="slot19" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="FormAttributeLayoutProfileType">
+    <xs:attribute name="marker" type="xs:string"/>
+    <xs:attribute name="slotCount" type="xs:integer"/>
   </xs:complexType>
   <xs:complexType name="FormObjectProfileType">
     <xs:attribute name="uuid" type="xs:string" use="required"/>
