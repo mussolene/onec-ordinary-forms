@@ -1224,6 +1224,12 @@ def localized_text_record_from_xml(parent: ET.Element | None, tag: str, *, defau
     return localized_text_record(text, lang=get_multilang_lang(parent, tag))
 
 
+def control_title_record_from_xml(element: ET.Element) -> list[object]:
+    if element.find("Title") is None:
+        return ["1", "0"]
+    return localized_text_record_from_xml(element, "Title")
+
+
 def type_pattern_from_xml(attribute: ET.Element) -> list[object]:
     pattern = attribute.find("./Type/Pattern")
     if pattern is None:
@@ -1269,8 +1275,7 @@ def control_stream_from_xml_with_page(
     object_id = required_control_id(element)
     name = required_control_name(element)
     control_template = control_templates.get((control_type, object_id)) or control_templates.get((control_type, name))
-    title = get_multilang_text(element, "Title")
-    title_record = localized_text_record_from_xml(element, "Title", default=name)
+    title_record = control_title_record_from_xml(element)
     info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns, control_template)
     data_path = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else ""
     data_slot = attribute_slots.get(data_path, "")
@@ -1424,8 +1429,7 @@ def control_info_from_xml(
     attribute_type_patterns: dict[str, list[object]],
     control_template: dict[str, object] | None = None,
 ) -> list[object]:
-    title = get_multilang_text(element, "Title")
-    title_record = localized_text_record_from_xml(element, "Title", default=name)
+    title_record = control_title_record_from_xml(element)
     actions = control_actions_from_xml(element, control_type)
     template_info = (control_template or {}).get("info")
     if isinstance(template_info, list):

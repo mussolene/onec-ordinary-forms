@@ -1080,6 +1080,7 @@ def add_semantic_item(
     add_chart_properties(node, item, item_data)
     add_pivot_chart_properties(node, item, item_data)
     add_geographical_schema_properties(node, item, item_data)
+    add_progress_bar_properties(node, public_type, item_data)
     add_activex_properties(node, item, item_data)
     add_button_picture(node, item, item_data, asset_root)
     add_label_properties(node, item, item_data)
@@ -1567,6 +1568,41 @@ def add_default_action(parent: ET.Element, control_type: str, item_data: object)
         set_text(parent, "DefaultAction", "true")
     if control_type == "Button" and len(metadata) > 5 and clean_token(metadata[5]) == "1":
         set_text(parent, "DefaultAction", "true")
+
+
+def add_progress_bar_properties(parent: ET.Element, control_type: str, item_data: object) -> None:
+    if control_type != "ProgressBar" or not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    if clean_token(info[0]) != "0" or len(info) <= 1 or not isinstance(info[1], list):
+        return
+    record = info[1]
+    if len(record) <= 7:
+        return
+    orientation = clean_token(record[1])
+    minimum = clean_token(record[2])
+    maximum = clean_token(record[3])
+    step = clean_token(record[4])
+    big_step = clean_token(record[5])
+    show_percent = clean_token(record[6])
+    display_style = clean_token(record[7])
+    if orientation != "3":
+        set_text(parent, "Orientation", orientation)
+    if minimum != "0":
+        set_text(parent, "MinimumValue", minimum)
+    if maximum != "100":
+        set_text(parent, "MaximumValue", maximum)
+    if step != "1":
+        set_text(parent, "Step", step)
+    if big_step != "1":
+        set_text(parent, "BigStep", big_step)
+    if show_percent != "0":
+        set_text(parent, "ShowPercent", "true")
+    if display_style != "2":
+        set_text(parent, "DisplayStyle", display_style)
 
 
 def add_visible(parent: ET.Element, item_data: object) -> None:

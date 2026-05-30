@@ -17,6 +17,7 @@ from onec_ordinary_forms.cli import (
     add_geometry,
     add_picture_decoration_serialization_profile,
     add_font,
+    add_progress_bar_properties,
     add_text_color,
     add_pivot_chart_properties,
     format_xml_file,
@@ -1511,6 +1512,34 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(label)
         assert label is not None
         self.assertEqual(label[2][1][0][16:20], ["2", "1", "1", "2"])
+
+    def test_build_bin_uses_default_title_marker_when_title_is_absent(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <LabelDecoration name="НадписьКомментарий1" id="13"/>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig"), allow_trailing=True).value
+        label = self._find_control(stream, "0fc7e20d-f241-460c-bdf4-5ad88e5474a5")
+
+        self.assertIsNotNone(label)
+        assert label is not None
+        self.assertEqual(label[2][1][2], ["1", "0"])
+
+    def test_dump_bin_exposes_progress_bar_percent_property(self) -> None:
+        node = ET.Element("ProgressBar")
+        base = ["19", "1", ["4", "4", ["0"], "4"], ["4", "4", ["0"], "4"], ["8", "3", "0", "1", "100"]]
+        item_data = {"raw": ["b1db1f86-abbb-4cf0-8852-fe6ae21650c2", "15", ["0", [base, "3", "0", "100", "1", "1", "1", "2"]]]}
+
+        add_progress_bar_properties(node, "ProgressBar", item_data)
+
+        self.assertEqual(node.findtext("ShowPercent"), "true")
+        self.assertIsNone(node.find("BigStep"))
 
     def test_build_bin_writes_default_paged_button_geometry_bindings(self) -> None:
         root = ET.fromstring(
