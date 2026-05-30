@@ -1094,6 +1094,148 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn('"ВидСравнения"', form_text)
         self.assertIn('"Тип сравнения"', form_text)
 
+    def test_table_column_without_title_uses_platform_default_title_marker(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="6">
+                    <Columns>
+                      <Column name="ИнформацияОбСертификате" order="9">
+                        <DataPath>ИнформацияОбСертификате</DataPath>
+                      </Column>
+                    </Columns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+
+        self.assertIsNotNone(table)
+        assert table is not None
+        column_body = table[2][2][1][23][1][1][1][1]
+        self.assertEqual(column_body[1], ["1", "0"])
+        self.assertEqual(column_body[30], '"ИнформацияОбСертификате"')
+
+    def test_table_column_value_descriptor_restores_trailing_line_break(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="6">
+                    <Columns>
+                      <Column name="Hash" order="0">
+                        <ValueDescriptor encoding="base64" trailingLineBreak="true">QUJD</ValueDescriptor>
+                      </Column>
+                    </Columns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+
+        self.assertIsNotNone(table)
+        assert table is not None
+        column_body = table[2][2][1][23][1][1][1][1]
+        self.assertEqual(column_body[39][0][0], "#base64:QUJD\r\r\n")
+
+    def test_table_default_border_color_uses_platform_default_color_record(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="6">
+                    <Columns>
+                      <Column name="Name" order="0"/>
+                    </Columns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+
+        self.assertIsNotNone(table)
+        assert table is not None
+        self.assertEqual(table[2][2][0][6], ["4", "4", ["0"], "4"])
+
+    def test_table_data_source_profile_link_mode_is_written(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="6">
+                    <DataSourceProfile linkMode="1"/>
+                    <Columns>
+                      <Column name="Name" order="0"/>
+                    </Columns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+
+        self.assertIsNotNone(table)
+        assert table is not None
+        self.assertEqual(table[2][3], ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "1"]])
+
+    def test_button_enabled_false_and_default_border_are_written(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Button name="Choose" id="8">
+                    <Title><Item lang="ru">Выбрать</Item></Title>
+                    <Enabled>false</Enabled>
+                  </Button>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        button = self._find_control(stream, "6ff79819-710e-4145-97cd-1618da79e3e2")
+
+        self.assertIsNotNone(button)
+        assert button is not None
+        base = button[2][1][0]
+        self.assertEqual(base[5], "0")
+        self.assertEqual(base[6], ["4", "4", ["0"], "4"])
+
+    def test_label_picture_position_updates_rendering_slot(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <LabelDecoration name="Logo" id="13">
+                    <Title><Item lang="ru">Нужна помощь</Item></Title>
+                    <PicturePosition>2</PicturePosition>
+                    <PictureSize>2</PictureSize>
+                  </LabelDecoration>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        label = self._find_control(stream, "0fc7e20d-f241-460c-bdf4-5ad88e5474a5")
+
+        self.assertIsNotNone(label)
+        assert label is not None
+        self.assertEqual(label[2][1][12][1], "2")
+        self.assertEqual(label[2][1][13], "2")
+
     def test_build_bin_uses_input_field_info_kind_and_read_only_slot(self) -> None:
         root = ET.fromstring(
             """<Form>
@@ -2392,6 +2534,47 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(info[4][1], "4")
         self.assertEqual(info[0][16:20], ["2", "1", "1", "2"])
 
+    def test_picture_decoration_keeps_style_group_without_picture_payload(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <PictureDecoration name="Image1" id="5">
+                    <SerializationProfile displayMode="0" displayState="0" pictureStyleMode="0" renderingProfileFlag="1">
+                      <StyleProfile mode="2" state="1" visible="1" defaultMode="2"/>
+                    </SerializationProfile>
+                    <PictureSize>2</PictureSize>
+                    <ScalePicture>false</ScalePicture>
+                    <PictureRendering horizontalMode="1" verticalMode="2"/>
+                  </PictureDecoration>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        image = self._find_control(stream, "151ef23e-6bb2-4681-83d0-35bc2217230c")
+
+        self.assertIsNotNone(image)
+        assert image is not None
+        self.assertEqual(
+            image[2][1][4],
+            [
+                "10",
+                "0",
+                ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'],
+                ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'],
+                ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'],
+                "100",
+                "2",
+                "0",
+                "0",
+                "1",
+                "2",
+            ],
+        )
+        self.assertEqual(image[2][1][13], "1")
+
     def test_dump_writes_picture_decoration_serialization_profile(self) -> None:
         base = [
             "19",
@@ -2417,7 +2600,13 @@ class CliSmokeTest(unittest.TestCase):
         ]
         picture_style = ["10", "4"]
         node = ET.Element("PictureDecoration")
-        item_data = {"raw": ["151ef23e-6bb2-4681-83d0-35bc2217230c", "5", ["1", [base, "20", "4", "1", picture_style]]]}
+        item_data = {
+            "raw": [
+                "151ef23e-6bb2-4681-83d0-35bc2217230c",
+                "5",
+                ["1", [base, "20", "4", "1", picture_style, ["0", "0", "0"], "1", "1", "0", "0", ["1", "0"], "0", "1", "1", "1"]],
+            ]
+        }
 
         add_picture_decoration_serialization_profile(node, "Image", item_data)
 
@@ -2427,6 +2616,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(profile.get("displayMode"), "4")
         self.assertEqual(profile.get("displayState"), "1")
         self.assertEqual(profile.get("pictureStyleMode"), "4")
+        self.assertEqual(profile.get("renderingProfileFlag"), "1")
         style = profile.find("StyleProfile")
         self.assertIsNotNone(style)
         assert style is not None

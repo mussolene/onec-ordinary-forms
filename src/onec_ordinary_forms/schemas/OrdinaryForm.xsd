@@ -1372,6 +1372,7 @@
           <xs:element name="HorizontalAlign" type="xs:string"/>
           <xs:element name="VerticalAlign" type="xs:string"/>
           <xs:element name="TextPosition" type="xs:string"/>
+          <xs:element name="Picture" type="FileRefType"/>
           <xs:element name="PicturePosition" type="xs:string"/>
           <xs:element name="PictureSize" type="xs:string"/>
           <xs:element name="AutoMaxWidth" type="xs:boolean"/>
@@ -1423,6 +1424,7 @@
     <xs:attribute name="displayMode" type="xs:string"/>
     <xs:attribute name="displayState" type="xs:string"/>
     <xs:attribute name="pictureStyleMode" type="xs:string"/>
+    <xs:attribute name="renderingProfileFlag" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PictureDecorationStyleProfileType">
     <xs:attribute name="mode" type="xs:string"/>
@@ -1690,6 +1692,7 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="DataSourceProfile" type="TableDataSourceProfileType"/>
           <xs:element name="ViewProfile" type="xs:integer"/>
           <xs:element name="ViewSetupMode" type="xs:integer"/>
           <xs:element name="Font" type="FontType"/>
@@ -1749,6 +1752,9 @@
         </xs:choice>
       </xs:extension>
     </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="TableDataSourceProfileType">
+    <xs:attribute name="linkMode" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ChoiceFieldType">
     <xs:complexContent>
@@ -1902,6 +1908,7 @@
     <xs:simpleContent>
       <xs:extension base="xs:base64Binary">
         <xs:attribute name="encoding" type="xs:string" fixed="base64"/>
+        <xs:attribute name="trailingLineBreak" type="xs:boolean"/>
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>

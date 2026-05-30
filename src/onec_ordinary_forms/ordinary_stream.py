@@ -1496,7 +1496,7 @@ def control_info_from_xml(
     if control_type == "SpreadsheetDocumentField":
         return spreadsheet_document_field_control_info(element, actions)
     if control_type == "Label":
-        return label_control_info(element, title_record, actions)
+        return label_control_info(element, title_record, actions, asset_root)
     raise ValueError(f"Unsupported ordinary form control type for stream writer: {control_type}")
 
 
@@ -1770,12 +1770,13 @@ def panel_position_records(page_count: int, width: str, height: str, *, mode: st
     return records
 
 
-def label_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
+def label_control_info(element: ET.Element, title_record: list[object], actions: list[object], asset_root: Path | None = None) -> list[object]:
     title = get_multilang_text(element, "Title") or element.get("name", "")
     horizontal_align = text_or_default(element, "HorizontalAlign", element.findtext("TextPosition") or ("0" if title.endswith(":") else "4"))
     vertical_align = text_or_default(element, "VerticalAlign", "1")
     picture_size = text_or_default(element, "PictureSize", "1")
     picture_position = text_or_default(element, "PicturePosition", "0" if title.endswith(":") else horizontal_align)
+    picture_payload = picture_payload_from_xml(element.find("Picture"), asset_root)
     hyperlink = bool_record_from_xml(element, "Hyperlink", default=bool(actions))
     base = extended_base_info_record_from_xml(element)
     if element.find("BorderColor") is None:
@@ -1797,8 +1798,8 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
             "0",
             ["1", "0"],
             picture_size,
-            ["10", picture_position, empty_page_style_record(), empty_page_style_record(), empty_page_style_record(), "100", "2", "0", "0", "1", "2"],
-            "4",
+            ["10", picture_position, column_picture_record(picture_payload), empty_page_style_record(), empty_page_style_record(), "100", "2", "0", "0", "1", "2"],
+            picture_position,
             "0",
             "0",
             "0",
@@ -2130,7 +2131,7 @@ def checkbox_control_inner_info(element: ET.Element, title_record: list[object])
 
 
 def image_control_info(element: ET.Element, title_record: list[object], picture_payload: str, actions: list[object]) -> list[object]:
-    picture_record = image_picture_style_group_record(element, picture_payload) if picture_payload else page_style_group_record("0")
+    picture_record = image_picture_style_group_record(element, picture_payload) if image_has_picture_style_group(element, picture_payload) else page_style_group_record("0")
     profile = element.find("SerializationProfile")
     return [
         "1",
@@ -2148,11 +2149,21 @@ def image_control_info(element: ET.Element, title_record: list[object], picture_
             ["1", "0"],
             "0",
             "1",
-            "0",
+            profile.get("renderingProfileFlag", "0") if profile is not None else "0",
             "1",
         ],
         action_records(actions),
     ]
+
+
+def image_has_picture_style_group(element: ET.Element, picture_payload: str) -> bool:
+    return bool(
+        picture_payload
+        or element.find("SerializationProfile") is not None
+        or element.find("PictureSize") is not None
+        or element.find("ScalePicture") is not None
+        or element.find("PictureRendering") is not None
+    )
 
 
 def image_base_info_record_from_xml(element: ET.Element) -> list[object]:
@@ -2173,10 +2184,15 @@ def image_base_info_record_from_xml(element: ET.Element) -> list[object]:
 def image_picture_style_group_record(element: ET.Element, picture_payload: str) -> list[object]:
     rendering = element.find("PictureRendering")
     profile = element.find("SerializationProfile")
+    picture_record = (
+        ["4", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload]], "0", '""']
+        if picture_payload
+        else empty_page_style_record()
+    )
     return [
         "10",
         profile.get("pictureStyleMode", "0") if profile is not None else "0",
-        ["4", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload]], "0", '""'],
+        picture_record,
         empty_page_style_record(),
         empty_page_style_record(),
         "100",
@@ -3687,6 +3703,8 @@ def table_control_info(element: ET.Element, actions: list[object], type_pattern:
     base = extended_base_info_record_from_xml(element)
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
     base[17] = "1"
+    if element.find("BorderColor") is None:
+        base[6] = default_color_record()
     return [
         descriptor.info_kind,
         [quoted_atom("Pattern"), pattern],
@@ -3708,8 +3726,10 @@ TABLE_EVENT_ID_BY_NAME = {
 
 
 def table_data_source_record(element: ET.Element) -> list[object]:
+    profile = element.find("DataSourceProfile")
+    link_mode = profile.get("linkMode", "0") if profile is not None else "0"
     if table_columns_from_xml(element):
-        return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "0"]]
+        return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", link_mode]]
     return ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]]
 
 
@@ -3816,7 +3836,8 @@ def extended_table_view_record(element: ET.Element, columns: list[ET.Element], a
 
 
 def table_column_record(column: ET.Element, index: int, asset_root: Path | None = None) -> list[object]:
-    title = get_multilang_text(column, "Title") or column.get("name") or f"Колонка{index + 1}"
+    explicit_title = get_multilang_text(column, "Title")
+    title = explicit_title or column.get("name") or f"Колонка{index + 1}"
     name = column.get("name") or title
     data_path = text_or_default(column, "DataPath", "")
     order = column.get("order") or str(index)
@@ -3841,7 +3862,7 @@ def table_column_record(column: ET.Element, index: int, asset_root: Path | None 
     editor_guid = ORDINARY_CONTROL_GUID_BY_TYPE.get(editor_control, ORDINARY_CONTROL_GUID_BY_TYPE["InputField"])
     body = [
         "23",
-        localized_text_record_from_xml(column, "Title", default=title),
+        localized_text_record_from_xml(column, "Title") if explicit_title else ["1", "0"],
         ["1", "0"],
         ["1", "0"],
         width,
@@ -3918,7 +3939,10 @@ def table_column_value_payload_from_xml(column: ET.Element, pattern: list[object
     if descriptor is not None and descriptor.text:
         payload = "".join(descriptor.text.split())
         if payload:
-            return wrap_base64_payload(payload)
+            wrapped = wrap_base64_payload(payload)
+            if descriptor.get("trailingLineBreak") == "true":
+                wrapped += "\r\r\n"
+            return wrapped
     return TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN.get(tuple(pattern), TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN[(quoted_atom("S"),)])
 
 
@@ -4122,7 +4146,9 @@ def extended_list_box_view_record_from_xml(element: ET.Element) -> list[object]:
 
 def button_base_info_record(element: ET.Element) -> list[object]:
     base = extended_base_info_record_from_xml(element)
-    base[5] = "1"
+    base[5] = bool_text_as_record(element, "Enabled", default=True)
+    if element.find("BorderColor") is None:
+        base[6] = default_color_record()
     if element.find("ButtonTextColor") is not None:
         base[9] = color_record_from_xml(element, "ButtonTextColor")
     if element.find("ButtonBackColor") is not None:
@@ -4134,6 +4160,7 @@ def extended_base_info_record_from_xml(element: ET.Element) -> list[object]:
     base = root_panel_base_info_record()
     base[17] = "1"
     base[1] = visible_record_from_xml(element)
+    base[5] = bool_text_as_record(element, "Enabled", default=True)
     if element.find("TextColor") is not None:
         base[2] = color_record_from_xml(element, "TextColor")
     if element.find("BackColor") is not None:

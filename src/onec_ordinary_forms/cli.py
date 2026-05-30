@@ -1020,6 +1020,25 @@ def add_button_picture(parent: ET.Element, item: dict, item_data: object, asset_
         add_picture_node_from_payload(parent, payload, str(item.get("name", "Button")), asset_root)
 
 
+def add_label_picture(parent: ET.Element, item: dict, item_data: object, asset_root: Path) -> None:
+    if str(item.get("type", "")) != "Label":
+        return
+    if not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    if len(info) <= 1 or not isinstance(info[1], list):
+        return
+    label_info = info[1]
+    if len(label_info) <= 12 or not isinstance(label_info[12], list):
+        return
+    payload = find_base64_payload(label_info[12])
+    if payload:
+        add_picture_node_from_payload(parent, payload, str(item.get("name", "Label")), asset_root)
+
+
 def add_activex_properties(parent: ET.Element, item: dict, item_data: object) -> None:
     if str(item.get("type", "")) != "ActiveXControl":
         return
@@ -1072,6 +1091,7 @@ def add_semantic_item(
     add_data_path(node, {**item, "type": public_type}, item_data)
     add_first_in_group(node, item, item_data)
     add_visible(node, item_data)
+    add_enabled(node, item_data)
     add_read_only(node, item, item_data)
     add_input_field_properties(node, item, item_data)
     add_choice_field_properties(node, item, item_data)
@@ -1084,6 +1104,7 @@ def add_semantic_item(
     add_activex_properties(node, item, item_data)
     add_button_picture(node, item, item_data, asset_root)
     add_label_properties(node, item, item_data)
+    add_label_picture(node, item, item_data, asset_root)
     add_button_style_properties(node, item, item_data)
     add_default_action(node, public_type, item_data)
     add_text_color(node, item_data)
@@ -1343,6 +1364,8 @@ def add_picture_decoration_serialization_profile(parent: ET.Element, public_type
     picture_style = info[4] if len(info) > 4 and isinstance(info[4], list) else None
     if isinstance(picture_style, list) and len(picture_style) > 1:
         profile.set("pictureStyleMode", clean_token(picture_style[1]))
+    if len(info) > 13 and clean_token(info[13]) != "0":
+        profile.set("renderingProfileFlag", clean_token(info[13]))
     style = ET.SubElement(profile, "StyleProfile")
     style.set("mode", clean_token(base[16]))
     style.set("state", clean_token(base[17]))
@@ -1614,6 +1637,15 @@ def add_visible(parent: ET.Element, item_data: object) -> None:
         set_text(parent, "Visible", "false")
 
 
+def add_enabled(parent: ET.Element, item_data: object) -> None:
+    base = base_info_from_item_data(item_data)
+    if base is None or len(base) <= 5:
+        return
+    value = clean_token(base[5])
+    if value == "0":
+        set_text(parent, "Enabled", "false")
+
+
 def add_tooltip(parent: ET.Element, item_data: object) -> None:
     base = base_info_from_item_data(item_data)
     if base is None or len(base) <= 12:
@@ -1772,6 +1804,12 @@ def add_table_view_properties(parent: ET.Element, item: dict, item_data: object)
         set_text(parent, "ViewSetupMode", clean_token(view[35]))
     if len(view) > 6 and not is_default_color_record(view[6]):
         add_color_node_from_record(parent, "FieldBackColor", view[6])
+    data_source = table_data_source_from_item_data(item_data)
+    if data_source is not None and len(data_source) > 1 and isinstance(data_source[1], list) and len(data_source[1]) > 3:
+        flag = clean_token(data_source[1][3])
+        if flag != "0":
+            profile = ET.SubElement(parent, "DataSourceProfile")
+            profile.set("linkMode", flag)
 
 
 def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_root: Path) -> None:
@@ -1785,7 +1823,8 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_r
         column_node = ET.SubElement(columns_node, "Column")
         column_node.set("name", column["name"])
         column_node.set("order", column["order"])
-        add_multilang_text(column_node, "Title", column["title"], lang=str(column.get("title_lang") or "ru"))
+        if column["title"]:
+            add_multilang_text(column_node, "Title", column["title"], lang=str(column.get("title_lang") or "ru"))
         if column["data_path"]:
             set_text(column_node, "DataPath", column["data_path"])
         set_text(column_node, "Width", column["width"])
@@ -1818,6 +1857,8 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_r
         if column["value_descriptor"]:
             descriptor = ET.SubElement(column_node, "ValueDescriptor")
             descriptor.set("encoding", "base64")
+            if column.get("value_descriptor_trailing_line_break") == "true":
+                descriptor.set("trailingLineBreak", "true")
             descriptor.text = column["value_descriptor"]
 
 
@@ -1859,10 +1900,14 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
         if len(body) > 39 and isinstance(body[39], list) and body[39] and isinstance(body[39][0], list) and body[39][0]:
             payload = clean_token(body[39][0][0])
             if payload.startswith("#base64:"):
-                value_descriptor = "".join(payload.removeprefix("#base64:").split())
-        if not title and name:
-            title = name
-        if title:
+                raw_payload = payload.removeprefix("#base64:")
+                value_descriptor = "".join(raw_payload.split())
+                value_descriptor_trailing_line_break = "true" if raw_payload.endswith(("\r", "\n")) else "false"
+            else:
+                value_descriptor_trailing_line_break = "false"
+        else:
+            value_descriptor_trailing_line_break = "false"
+        if name or title:
             result.append(
                 {
                     "name": name or title,
@@ -1888,6 +1933,7 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
                     "picture": picture,
                     "pattern": pattern,
                     "value_descriptor": value_descriptor,
+                    "value_descriptor_trailing_line_break": value_descriptor_trailing_line_break,
                 }
             )
     return result
@@ -1904,6 +1950,16 @@ def table_view_from_item_data(item_data: object) -> list[object] | None:
         return None
     view = info[2][1]
     return view if isinstance(view, list) else None
+
+
+def table_data_source_from_item_data(item_data: object) -> list[object] | None:
+    if not isinstance(item_data, dict):
+        return None
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return None
+    info = raw[2]
+    return info[3] if len(info) > 3 and isinstance(info[3], list) else None
 
 
 def add_pivot_chart_properties(parent: ET.Element, item: dict, item_data: object) -> None:
