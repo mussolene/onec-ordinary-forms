@@ -1282,9 +1282,21 @@ def add_panel_serialization_profile(parent: ET.Element, public_type: str, item_d
     profile = ET.SubElement(parent, "SerializationProfile")
     if page_capacity:
         profile.set("pageCapacity", str(page_capacity))
-    for order, records in enumerate(dependencies, start=1):
+    page_state_flag, current_page_index = panel_page_state_scalars(info, cursor)
+    if page_state_flag:
+        profile.set("pageStateFlag", page_state_flag)
+    if current_page_index:
+        profile.set("currentPageIndex", current_page_index)
+    for order, descriptor in enumerate(dependencies, start=1):
+        records = descriptor["records"]
         group = ET.SubElement(profile, "DependencyGroup")
         group.set("order", str(order))
+        prefix = descriptor.get("prefix", [])
+        if prefix:
+            group.set("prefix", " ".join(prefix))
+        header = descriptor.get("header", [])
+        if header:
+            group.set("header", " ".join(header))
         for record in records:
             dependency = ET.SubElement(group, "Dependency")
             dependency.set("targetId", clean_token(record[1]))
@@ -1533,19 +1545,22 @@ def safe_int_token(value: object) -> int:
         return -1
 
 
-def panel_dependency_groups_from_info(info: list[object]) -> tuple[list[list[list[object]]], int]:
-    groups: list[list[list[object]]] = []
+def panel_dependency_groups_from_info(info: list[object]) -> tuple[list[dict[str, object]], int]:
+    groups: list[dict[str, object]] = []
     cursor = 2
     while cursor < len(info):
+        prefix: list[str] = []
+        prefix_start = cursor
+        while cursor < len(info) and not panel_dependency_count_at(info, cursor):
+            if isinstance(info[cursor], list):
+                return groups, prefix_start
+            prefix.append(clean_token(info[cursor]))
+            cursor += 1
         try:
             count = int(clean_token(info[cursor]))
-        except ValueError:
-            break
+        except (IndexError, ValueError):
+            return groups, prefix_start
         cursor += 1
-        if count == 0:
-            if cursor < len(info) and clean_token(info[cursor]) == "0":
-                cursor += 1
-            break
         records: list[list[object]] = []
         for _index in range(count):
             if cursor >= len(info) or not isinstance(info[cursor], list):
@@ -1554,8 +1569,30 @@ def panel_dependency_groups_from_info(info: list[object]) -> tuple[list[list[lis
             if len(record) >= 3:
                 records.append(record)
             cursor += 1
-        groups.append(records)
+        header: list[str] = []
+        if records and len(records[0]) == 1 and isinstance(records[0][0], list):
+            header = [clean_token(value) for value in records[0][0]]
+            records = records[1:]
+        groups.append({"prefix": prefix, "header": header, "records": records})
     return groups, cursor
+
+
+def panel_dependency_count_at(info: list[object], cursor: int) -> bool:
+    try:
+        count = int(clean_token(info[cursor]))
+    except (IndexError, ValueError):
+        return False
+    return count > 0 and len(info) >= cursor + 1 + count and all(isinstance(value, list) for value in info[cursor + 1 : cursor + 1 + count])
+
+
+def panel_page_state_scalars(info: list[object], cursor: int) -> tuple[str, str]:
+    while cursor < len(info) and not (isinstance(info[cursor], list) and len(info[cursor]) >= 5 and clean_token(info[cursor][0]) == "10"):
+        cursor += 1
+    if cursor + 2 >= len(info):
+        return "", ""
+    page_state_flag = clean_token(info[cursor + 1]) if not isinstance(info[cursor + 1], list) else ""
+    current_page_index = clean_token(info[cursor + 2]) if not isinstance(info[cursor + 2], list) else ""
+    return page_state_flag, current_page_index
 
 
 def panel_page_layouts_from_info(info: list[object], cursor: int) -> list[dict[str, str]]:
@@ -2206,7 +2243,6 @@ def add_label_properties(parent: ET.Element, item: dict, item_data: object) -> N
     label_info = info[1]
     if len(label_info) > 3:
         set_text(parent, "HorizontalAlign", clean_token(label_info[3]))
-        set_text(parent, "TextPosition", clean_token(label_info[3]))
     if len(label_info) > 4:
         set_text(parent, "VerticalAlign", clean_token(label_info[4]))
     if len(label_info) > 5:
@@ -2215,6 +2251,8 @@ def add_label_properties(parent: ET.Element, item: dict, item_data: object) -> N
         set_text(parent, "PictureSize", clean_token(label_info[11]))
     if len(label_info) > 12 and isinstance(label_info[12], list) and len(label_info[12]) > 1:
         set_text(parent, "PicturePosition", clean_token(label_info[12][1]))
+    if len(label_info) > 13:
+        set_text(parent, "TextPosition", clean_token(label_info[13]))
 
 
 def add_button_style_properties(parent: ET.Element, item: dict, item_data: object) -> None:

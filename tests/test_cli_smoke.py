@@ -1236,6 +1236,93 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(label[2][1][12][1], "2")
         self.assertEqual(label[2][1][13], "2")
 
+    def test_label_text_position_is_independent_from_picture_position(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <LabelDecoration name="FieldCaption" id="13">
+                    <Title><Item lang="ru">Поле ввода1:</Item></Title>
+                    <PicturePosition>0</PicturePosition>
+                    <TextPosition>4</TextPosition>
+                  </LabelDecoration>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        label = self._find_control(stream, "0fc7e20d-f241-460c-bdf4-5ad88e5474a5")
+
+        self.assertIsNotNone(label)
+        assert label is not None
+        self.assertEqual(label[2][1][12][1], "0")
+        self.assertEqual(label[2][1][13], "4")
+
+    def test_panel_serialization_profile_preserves_dependency_prefix_and_page_state(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Panel name="Панель1" id="4">
+                    <SerializationProfile pageCapacity="1" pageStateFlag="1" currentPageIndex="1">
+                      <DependencyGroup order="1">
+                        <Dependency targetId="25" dimension="bottom"/>
+                      </DependencyGroup>
+                      <DependencyGroup order="2" prefix="0">
+                        <Dependency targetId="7" dimension="right"/>
+                        <Dependency targetId="8" dimension="right"/>
+                      </DependencyGroup>
+                      <PageLayout page="0" left="6" top="6" width="1222" height="1030" horizontalMode="4" verticalMode="4"/>
+                    </SerializationProfile>
+                    <Pages><Page name="Страница1"/></Pages>
+                  </Panel>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        panel = next(
+            control
+            for control in self._find_controls(stream, "09ccdc77-ea1a-4a6d-ab1c-3435eada2433")
+            if len(control) > 1 and control[1] == "4"
+        )
+
+        self.assertIsNotNone(panel)
+        assert panel is not None
+        body = panel[2][1]
+        self.assertEqual(body[2:8], ["1", ["0", "25", "1"], "0", "2", ["0", "7", "3"], ["0", "8", "3"]])
+        self.assertEqual(body[11:13], ["1", "1"])
+
+    def test_table_geometry_uses_layout_next_order(self) -> None:
+        position = ET.fromstring(
+            '<Position left="6" top="43" right="579" bottom="326" layoutGroup="2" layoutOrder="1"/>'
+        )
+
+        geometry = geometry_stream_from_xml("Table", position, page_index=0, page_order=1, object_id="8")
+
+        self.assertEqual(geometry[-5:], ["2", "1", "2", "0", "0"])
+
+    def test_geographical_schema_preserves_base_style_slots(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <GeographicalSchemaField name="ПолеГеографическойСхемы1" id="31"
+                    baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2"/>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        field = self._find_control(stream, "ad37194e-555e-4305-b718-5dca84baf145")
+
+        self.assertIsNotNone(field)
+        assert field is not None
+        self.assertEqual(field[2][16:20], ["2", "1", "1", "2"])
+
     def test_build_bin_uses_input_field_info_kind_and_read_only_slot(self) -> None:
         root = ET.fromstring(
             """<Form>

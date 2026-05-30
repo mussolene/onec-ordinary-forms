@@ -1347,6 +1347,8 @@
       <xs:element name="PageLayout" type="PanelPageLayoutType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attribute name="pageCapacity" type="xs:integer"/>
+    <xs:attribute name="pageStateFlag" type="xs:string"/>
+    <xs:attribute name="currentPageIndex" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PanelDependencyGroupType">
     <xs:sequence>

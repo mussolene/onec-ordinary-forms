@@ -1598,8 +1598,8 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object],
             "0",
             "0",
             page_style_group_record("1"),
-            "0" if serialization is not None else "1",
-            "1",
+            panel_page_state_flag(serialization),
+            panel_current_page_index(serialization),
             state_table,
             "1",
             "1",
@@ -1681,6 +1681,18 @@ def panel_serialization_page_capacity(serialization: ET.Element | None) -> int |
     return page_capacity if page_capacity > 0 else None
 
 
+def panel_page_state_flag(serialization: ET.Element | None) -> str:
+    if serialization is None:
+        return "1"
+    return serialization.get("pageStateFlag", "0")
+
+
+def panel_current_page_index(serialization: ET.Element | None) -> str:
+    if serialization is None:
+        return "1"
+    return serialization.get("currentPageIndex", "1")
+
+
 def panel_dependency_profile_from_xml(serialization: ET.Element | None, page_capacity: int) -> list[object]:
     if serialization is None:
         return ["1", ["0", str(page_capacity), "1"], *panel_control_slot_profile()]
@@ -1689,7 +1701,13 @@ def panel_dependency_profile_from_xml(serialization: ET.Element | None, page_cap
         return ["1", ["0", str(page_capacity), "1"], *panel_control_slot_profile()]
     result: list[object] = []
     for group in groups:
+        prefix = group.get("prefix")
+        if prefix:
+            result.extend(value for value in prefix.split(" ") if value != "")
+        header = group.get("header")
         dependencies: list[list[object]] = []
+        if header:
+            dependencies.append([[value for value in header.split(" ") if value != ""]])
         for dependency in group.findall("Dependency"):
             target_id = dependency.get("targetId", "0")
             dimension = dependency.get("dimension", "top")
@@ -1803,7 +1821,8 @@ def panel_position_records(page_count: int, width: str, height: str, *, mode: st
 
 def label_control_info(element: ET.Element, title_record: list[object], actions: list[object], asset_root: Path | None = None) -> list[object]:
     title = get_multilang_text(element, "Title") or element.get("name", "")
-    horizontal_align = text_or_default(element, "HorizontalAlign", element.findtext("TextPosition") or ("0" if title.endswith(":") else "4"))
+    horizontal_align = text_or_default(element, "HorizontalAlign", "0" if title.endswith(":") else "4")
+    text_position = text_or_default(element, "TextPosition", element.findtext("PicturePosition") or ("4" if title.endswith(":") else horizontal_align))
     vertical_align = text_or_default(element, "VerticalAlign", "1")
     picture_size = text_or_default(element, "PictureSize", "1")
     picture_position = text_or_default(element, "PicturePosition", "0" if title.endswith(":") else horizontal_align)
@@ -1830,7 +1849,7 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
             ["1", "0"],
             picture_size,
             ["10", picture_position, column_picture_record(picture_payload), empty_page_style_record(), empty_page_style_record(), "100", "2", "0", "0", "1", "2"],
-            picture_position,
+            text_position,
             "0",
             "0",
             "0",
@@ -2288,6 +2307,8 @@ def chart_presentation_record(element: ET.Element, title_record: list[object], a
 
 
 def pivot_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
+    if title_record == ["1", "0"]:
+        title_record = localized_text_record(element.get("name", ""))
     body = DIAGRAM_BODY_DESCRIPTOR.build({2: diagram_presentation_record(element, title_record, kind="pivot")})
     return PIVOT_CHART_INFO_DESCRIPTOR.build({1: body, 2: pivot_chart_info_secondary_record()})
 
@@ -3056,7 +3077,7 @@ def pivot_chart_final_trailer_head() -> list[object]:
         "2",
         "255",
         "0",
-        "8392496",
+        "8095515",
         "00000000-0000-0000-0000-000000000000",
         "0",
         ["0", "0"],
@@ -3271,6 +3292,7 @@ def text_document_field_control_info(element: ET.Element) -> list[object]:
 
 
 def geographical_schema_field_control_info(element: ET.Element) -> list[object]:
+    base = extended_base_info_record_from_xml(element)
     return [
         "19",
         element.findtext("Output") or "1",
@@ -3288,10 +3310,10 @@ def geographical_schema_field_control_info(element: ET.Element) -> list[object]:
         "0",
         "0",
         element.findtext("Scale") or "100",
-        "0",
-        "0",
-        "0",
-        "0",
+        base[16],
+        base[17],
+        base[18],
+        base[19],
         ["4", "4", ["0"], "4"],
     ]
 
@@ -4502,7 +4524,7 @@ def geometry_stream_from_xml(
             "0",
             group_tail[0],
             group_tail[1],
-            "1",
+            group_tail[2],
             "0",
             "0",
         ]
