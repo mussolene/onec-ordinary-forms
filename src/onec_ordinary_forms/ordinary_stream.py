@@ -5160,13 +5160,14 @@ def counted_dimension_geometry_from_xml(
             primary.append(dimension_binding_to_raw(binding))
     if not primary or not secondary:
         return None
+    primary_marker = position.get("primaryDimensionMarker")
+    if primary_marker is None:
+        return None
     try:
-        if int(position.get("primaryDimensionMarker", "")) == len(primary):
+        if int(primary_marker) == len(primary):
             return None
     except ValueError:
         pass
-    if position.get("secondaryDimensionMarker") is None:
-        return None
     tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
         "8",
@@ -5176,10 +5177,10 @@ def counted_dimension_geometry_from_xml(
         bottom,
         "1",
         *bindings,
-        position.get("primaryDimensionMarker", "0"),
+        primary_marker,
         str(len(primary)),
         *primary,
-        position.get("secondaryDimensionMarker", "0"),
+        "0",
         str(len(secondary)),
         *secondary,
         *tail,
@@ -5423,7 +5424,7 @@ def inline_dual_counted_dimension_geometry_from_xml(
         *bindings,
         str(len(primary)),
         *primary,
-        position.get("secondaryDimensionMarker", "0"),
+        "0",
         str(len(secondary)),
         *secondary,
         *tail,

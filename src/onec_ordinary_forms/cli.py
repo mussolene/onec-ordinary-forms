@@ -792,7 +792,6 @@ def add_counted_dimension_bindings(
     if secondary_count > 0 and not all(isinstance(record, list) for record in geometry_raw[secondary_start:secondary_end]):
         return False
     position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
-    position.set("secondaryDimensionMarker", clean_token(geometry_raw[primary_end]))
     tail = [clean_token(value) for value in geometry_raw[secondary_end:]]
     if tail:
         position.set("layoutTail", " ".join(tail))
@@ -987,7 +986,6 @@ def add_inline_dual_counted_dimension_bindings(
     primary = geometry_raw[primary_start:primary_end]
     if not all(isinstance(record, list) for record in primary):
         return False
-    secondary_marker = clean_token(geometry_raw[primary_end])
     try:
         secondary_count = int(clean_token(geometry_raw[primary_end + 1]))
     except ValueError:
@@ -1002,7 +1000,6 @@ def add_inline_dual_counted_dimension_bindings(
     tail_values = geometry_raw[secondary_end:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("secondaryDimensionMarker", secondary_marker)
     tail = [clean_token(value) for value in tail_values]
     if tail:
         position.set("layoutTail", " ".join(tail))

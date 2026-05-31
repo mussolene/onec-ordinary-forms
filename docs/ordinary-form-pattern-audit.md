@@ -183,6 +183,8 @@ Done after this audit:
   longer has a `slotN` fallback for the six named coordinate slots;
 - `Position/@dimensionSegments` is no longer public XML; segmented dimension
   geometry is derived from the `DimensionBinding section` order by the writer.
+- `Position/@secondaryDimensionMarker` is no longer public XML; the writer uses
+  the canonical secondary marker for counted/dual dimension groups.
 - schema tests now guard against reintroducing the removed public raw-shape
   vocabulary.
 - semantic graph digest support was added as `digest-xml`; it hashes the
@@ -196,9 +198,8 @@ Done after this audit:
 Remaining next steps:
 
 1. Convert the remaining position/layout raw-shaped names, especially
-   `layoutTail`, `layoutPreTail`, `primaryDimensionMarker`, and
-   `secondaryDimensionMarker`, into named concepts or internal descriptor
-   rules.
+   `layoutTail`, `layoutPreTail`, and `primaryDimensionMarker`, into named
+   concepts or internal descriptor rules.
 2. Extend property-slot coverage so the audit reports dump/build mapping for
    each public XSD property, not only per-control writer coverage.
 3. Re-run the small all-controls fixture and Diadoc fixture.
