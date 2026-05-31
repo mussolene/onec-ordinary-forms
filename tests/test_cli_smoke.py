@@ -1300,6 +1300,35 @@ class CliSmokeTest(unittest.TestCase):
         assert table is not None
         self.assertEqual(table[2][3], ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "1"]])
 
+    def test_table_data_source_profile_preserves_platform_storage_shape(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="6">
+                    <DataSourceProfile
+                      storageUuid="9ab3fa70-d2e0-4e44-baac-730682272ed2"
+                      profileKind="4"
+                      stateKind="1"
+                      stateMode="0"
+                      linkMode="0"
+                      linkModeShape="list"/>
+                    <Columns>
+                      <Column name="Name" order="0"/>
+                    </Columns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+
+        self.assertIsNotNone(table)
+        assert table is not None
+        self.assertEqual(table[2][3], ["9ab3fa70-d2e0-4e44-baac-730682272ed2", ["4", "1", "0", ["0"]]])
+
     def test_table_extended_profile_without_columns_is_written(self) -> None:
         root = ET.fromstring(
             """<Form>
@@ -1467,6 +1496,7 @@ class CliSmokeTest(unittest.TestCase):
                 <Page name="Main">
                   <InputField name="Number" id="159">
                     <ReadOnly>true</ReadOnly>
+                    <ExtendedEdit>true</ExtendedEdit>
                     <MaxLength>10</MaxLength>
                     <ToolTip><Item lang="ru">Номер документа</Item></ToolTip>
                   </InputField>
@@ -1484,6 +1514,8 @@ class CliSmokeTest(unittest.TestCase):
         descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
         self.assertEqual(info[0], descriptor.info_kind)
         input_info = info[2][0]
+        self.assertEqual(input_info[7], "1")
+        self.assertEqual(input_info[8], "0")
         self.assertEqual(input_info[descriptor.slot_index("ReadOnly")], "1")
         self.assertEqual(input_info[0][6], ["4", "4", ["0"], "4"])
         self.assertEqual(input_info[13], "1")
@@ -2149,6 +2181,88 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(radios[0][4][5], "1")
         self.assertEqual(radios[1][4][5], "0")
         self.assertEqual(radios[1][2][1], ['"Pattern"', ['"N"', "1", "0", "1"]])
+
+    def test_input_field_input_mask_roundtrips_to_info_and_data_source(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <InputField name="TaxId" id="35">
+                    <DataPath>TaxId</DataPath>
+                    <Type source="TypeDomainPattern">
+                      <Pattern encoding="TypeDomainPattern" itemCount="2">
+                        <PatternItem code="D" typeName="xs:dateTime"/>
+                        <PatternItem code="D" typeName="xs:dateTime"/>
+                      </Pattern>
+                    </Type>
+                    <Mask>999999999999</Mask>
+                  </InputField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        field = self._find_control(stream, "381ed624-9217-4e63-85db-c4c3cb87daae")
+
+        self.assertIsNotNone(field)
+        assert field is not None
+        self.assertEqual(field[2][1], ['"Pattern"', ['"D"', '"D"']])
+        self.assertEqual(field[2][2][0][21], '"999999999999"')
+        self.assertEqual(field[2][3][1][1][4], '"999999999999"')
+
+    def test_input_field_empty_type_pattern_is_not_defaulted_to_string(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <InputField name="Value" id="35">
+                    <DataPath>Value</DataPath>
+                    <Type source="emptyPattern">
+                      <Pattern encoding="TypeDomainPattern" itemCount="0"/>
+                    </Type>
+                  </InputField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        field = self._find_control(stream, "381ed624-9217-4e63-85db-c4c3cb87daae")
+
+        self.assertIsNotNone(field)
+        assert field is not None
+        self.assertEqual(field[2][1], ['"Pattern"'])
+
+    def test_radio_button_type_and_data_value_are_written(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <RadioButton name="ByFile" id="46">
+                    <DataPath>ImportMode</DataPath>
+                    <Type source="TypeDomainPattern">
+                      <Pattern encoding="TypeDomainPattern" itemCount="4">
+                        <PatternItem code="N" typeName="xs:decimal"/>
+                        <PatternItem code="1" typeName="unknown:1"/>
+                        <PatternItem code="0" typeName="unknown:0"/>
+                        <PatternItem code="1" typeName="unknown:1"/>
+                      </Pattern>
+                    </Type>
+                    <DataValue typeCode="N">1</DataValue>
+                  </RadioButton>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        radio = self._find_control(stream, "782e569a-79a7-4a4f-a936-b48d013936ec")
+
+        self.assertIsNotNone(radio)
+        assert radio is not None
+        self.assertEqual(radio[2][1], ['"Pattern"', ['"N"', "1", "0", "1"]])
+        self.assertEqual(radio[2][4], ['"N"', "1"])
 
     def test_build_bin_uses_simple_remaining_control_info_kinds(self) -> None:
         root = ET.fromstring(
@@ -3412,6 +3526,84 @@ class CliSmokeTest(unittest.TestCase):
         rebuilt = geometry_stream_from_xml("Panel", position, object_id="120")
 
         self.assertEqual(rebuilt, geometry)
+
+    def test_panel_position_preserves_paged_dimension_marker(self) -> None:
+        from onec_ordinary_forms.cli import add_semantic_item
+
+        geometry = [
+            "8", "4", "60", "494", "168", "1",
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "0", "1", "-13"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "0", "3", "-4"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+            "0", "0", "0", "0", "0", "0", "0", "2", "3", "0", "0",
+        ]
+        item = {
+            "id": "33",
+            "name": "Panel1",
+            "type": "Panel",
+            "rawKey": "Panel1",
+            "raw": [
+                "e5cabe59-d992-4d31-8086-3116931aff81",
+                "33",
+                ["1"],
+                geometry,
+                ["14", '"Panel1"', "4294967295", "0", "0", "0"],
+                ["0"],
+            ],
+        }
+        root = ET.Element("Root")
+
+        add_semantic_item(root, item, {"Panel1": item}, "Panel1", {}, Path("/tmp"))
+        position = root.find("./Panel/Position")
+
+        self.assertIsNotNone(position)
+        assert position is not None
+        self.assertEqual(position.get("primaryDimensionMarker"), "0")
+        self.assertEqual(geometry_stream_from_xml("Panel", position, page_index=1, page_order=2), geometry)
+
+    def test_panel_page_layout_writer_preserves_xml_order(self) -> None:
+        from onec_ordinary_forms.ordinary_stream import panel_page_layout_records
+
+        serialization = ET.fromstring(
+            """
+            <SerializationProfile>
+              <PageLayout page="1" left="0" top="0" width="549" height="255" horizontalMode="0" verticalMode="0"/>
+              <PageLayout page="2" left="0" top="0" width="548" height="239" horizontalMode="1" verticalMode="16"/>
+              <PageLayout page="3" left="0" top="0" width="547" height="255" horizontalMode="2" verticalMode="0"/>
+              <PageLayout page="0" left="0" top="0" width="549" height="233" horizontalMode="0" verticalMode="22"/>
+            </SerializationProfile>
+            """
+        )
+
+        records = panel_page_layout_records(serialization)
+
+        self.assertEqual([records[index][5] for index in (0, 4, 8, 12)], ["1", "2", "3", "0"])
+
+    def test_panel_empty_dependency_profile_preserves_platform_padding(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Panel name="ModePanel" id="29">
+                    <SerializationProfile pageCapacity="1" pageStateFlag="0" currentPageIndex="1">
+                      <PageLayout page="0" left="6" top="6" width="303" height="29" horizontalMode="22" verticalMode="4"/>
+                    </SerializationProfile>
+                  </Panel>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        panel = self._find_controls(stream, "09ccdc77-ea1a-4a6d-ab1c-3435eada2433")[-1]
+
+        self.assertIsNotNone(panel)
+        assert panel is not None
+        info = panel[2][1]
+        self.assertEqual(info[2:8], ["0", "0", "0", "0", "0", "0"])
 
     def test_table_geometry_uses_table_tail_even_when_data_bound(self) -> None:
         position = ET.fromstring(

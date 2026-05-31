@@ -479,7 +479,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         name = attribute.get("name", "")
         if not name:
             continue
-        type_pattern = type_pattern_from_xml(attribute)
+        type_pattern = type_domain_pattern_from_xml(attribute)
         attribute_type_patterns[name] = type_pattern
         if attribute.get("slot"):
             attribute_slots[name] = attribute.get("slot", "")
@@ -801,6 +801,7 @@ def root_panel_info(
     page_layout = (root_layout or {}).get("rootPageLayout")
     dependency_profile = (root_layout or {}).get("rootPanelDependencies")
     dependency_tail = [] if isinstance(dependency_profile, list) else ["0", "0"]
+    explicit_dependency_tail = (root_layout or {}).get("rootPanelDependencyTail")
     current_page_index = str((root_layout or {}).get("rootPanelCurrentPageIndex", "1"))
     max_right, max_bottom = controls_extent(controls or [])
     if max_right and max_bottom:
@@ -849,25 +850,33 @@ def root_panel_info(
         ["2", page_width, "1", "1", "3", "0", "0", right_offset, "0"],
         ["2", page_height, "0", "1", "4", "0", "0", bottom_offset, "0"],
     ]
+    if isinstance(dependency_profile, list):
+        dependency_sequence = (
+            [str((root_layout or {}).get("rootPanelPageCapacity", "0")), *dependency_profile]
+            if dependency_profile
+            else (explicit_dependency_tail if isinstance(explicit_dependency_tail, list) else dependency_tail)
+        )
+    else:
+        dependency_sequence = [
+            "0",
+            "2",
+            ["0", "3", "1"],
+            ["0", "4", "1"],
+            "2",
+            ["0", "2", "2"],
+            ["0", "3", "2"],
+            "3",
+            ["0", "2", "3"],
+            ["0", "3", "3"],
+            ["0", "4", "3"],
+            *dependency_tail,
+        ]
     return [
         descriptor.info_kind,
         [
             root_panel_base_info_record(root_layout),
             "26",
-            "0",
-            *((dependency_profile if isinstance(dependency_profile, list) else [
-                "2",
-                ["0", "3", "1"],
-                ["0", "4", "1"],
-                "2",
-                ["0", "2", "2"],
-                ["0", "3", "2"],
-                "3",
-                ["0", "2", "3"],
-                ["0", "3", "3"],
-                ["0", "4", "3"],
-            ])),
-            *dependency_tail,
+            *dependency_sequence,
             page_style_group_record("1"),
             str((root_layout or {}).get("rootPanelPageStateFlag", "0")),
             current_page_index,
@@ -1343,10 +1352,7 @@ def attribute_record_from_xml(
     visible_id = attribute.get("slot") or object_id
     if record_flag is None and (attribute.get("controlData") or "").strip().lower() in {"false", "0"}:
         record_flag = "0"
-    pattern = type_pattern_from_xml(attribute)
-    type_record: list[object] = [quoted_atom("Pattern")]
-    if pattern:
-        type_record.append(pattern)
+    type_record = type_domain_record_from_xml(attribute)
     if template is not None and len(template) >= 5:
         result = copy.deepcopy(template)
         if attribute.get("slot"):
@@ -1525,6 +1531,20 @@ def type_pattern_from_xml(attribute: ET.Element) -> list[object]:
         if code == "#" and uuid:
             result.append(uuid)
     return result
+
+
+def type_domain_pattern_from_xml(element: ET.Element, default_pattern: list[object] | None = None) -> list[object]:
+    if element.find("./Type/Pattern") is None:
+        return copy.deepcopy(default_pattern) if default_pattern is not None else []
+    return type_pattern_from_xml(element)
+
+
+def type_domain_record_from_pattern(pattern: list[object]) -> list[object]:
+    return [quoted_atom("Pattern"), pattern] if pattern else [quoted_atom("Pattern")]
+
+
+def type_domain_record_from_xml(element: ET.Element, default_pattern: list[object] | None = None) -> list[object]:
+    return type_domain_record_from_pattern(type_domain_pattern_from_xml(element, default_pattern))
 
 
 def control_stream_from_xml(
@@ -1760,18 +1780,27 @@ def build_choice_field_control_info(context: ControlInfoBuildContext) -> list[ob
 
 def build_radio_button_control_info(context: ControlInfoBuildContext) -> list[object]:
     data_path = data_path_from_xml(context.element)
+    default_pattern = (
+        context.attribute_type_patterns.get(data_path, [])
+        or context.attribute_type_patterns.get(radio_group_data_path(data_path), [])
+        or [quoted_atom("B")]
+    )
     return radio_button_control_info(
         context.element,
         context.title_record,
         context.actions,
-        context.attribute_type_patterns.get(data_path, [])
-        or context.attribute_type_patterns.get(radio_group_data_path(data_path), []),
+        type_domain_pattern_from_xml(context.element, default_pattern),
     )
 
 
 def build_input_field_control_info(context: ControlInfoBuildContext) -> list[object]:
     data_path = data_path_from_xml(context.element)
-    return input_field_control_info(context.element, context.actions, context.attribute_type_patterns.get(data_path, []))
+    type_pattern = type_domain_pattern_from_xml(context.element, context.attribute_type_patterns.get(data_path, [quoted_atom("S")]))
+    return input_field_control_info(
+        context.element,
+        context.actions,
+        type_pattern,
+    )
 
 
 def build_group_box_control_info(context: ControlInfoBuildContext) -> list[object]:
@@ -1839,7 +1868,7 @@ def build_table_control_info(context: ControlInfoBuildContext) -> list[object]:
     return table_control_info(
         context.element,
         context.actions,
-        context.attribute_type_patterns.get(data_path, []),
+        type_domain_pattern_from_xml(context.element, context.attribute_type_patterns.get(data_path, [])),
         context.asset_root,
     )
 
@@ -2057,7 +2086,7 @@ def panel_dependency_profile_from_xml(serialization: ET.Element | None, page_cap
         return ["1", ["0", str(page_capacity), "1"], *panel_control_slot_profile()]
     groups = sorted(serialization.findall("DependencyGroup"), key=lambda node: int(node.get("order", "0") or "0"))
     if not groups:
-        return []
+        return ["0", "0", "0", "0"] if page_capacity == 1 else []
     result: list[object] = []
     for group in groups:
         prefix = group.get("prefix")
@@ -2081,7 +2110,7 @@ def panel_dependency_profile_from_xml(serialization: ET.Element | None, page_cap
 def panel_page_layout_records(serialization: ET.Element | None) -> list[list[object]]:
     if serialization is None:
         return []
-    layouts = sorted(serialization.findall("PageLayout"), key=lambda node: int(node.get("page", "0") or "0"))
+    layouts = serialization.findall("PageLayout")
     records: list[list[object]] = []
     for layout in layouts:
         page = layout.get("page", "0")
@@ -2244,10 +2273,10 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
 
 def input_field_control_info(element: ET.Element, actions: list[object], type_pattern: list[object] | None = None) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["InputField"]
-    pattern = type_pattern or [quoted_atom("S")]
+    pattern = type_pattern if type_pattern is not None else [quoted_atom("S")]
     return [
         descriptor.info_kind,
-        [quoted_atom("Pattern"), pattern],
+        type_domain_record_from_pattern(pattern),
         [input_field_info_record_from_xml(element, pattern)],
         input_field_data_source_record(element),
         action_records(actions),
@@ -2261,6 +2290,7 @@ def input_field_control_info(element: ET.Element, actions: list[object], type_pa
 
 def input_field_data_source_record(element: ET.Element) -> list[object]:
     if element.findtext("DataPath"):
+        input_mask = text_or_default(element, "Mask", text_or_default(element, "InputMask", ""))
         return [
             "1",
             [
@@ -2270,7 +2300,7 @@ def input_field_data_source_record(element: ET.Element) -> list[object]:
                     [quoted_atom("U")],
                     [quoted_atom("U")],
                     text_or_default(element, "DataBindingMode", "0"),
-                    '""',
+                    quoted_atom(input_mask),
                     text_or_default(element, "DataBindingFlag", "0"),
                     "0",
                 ],
@@ -2295,8 +2325,8 @@ def input_field_info_record_from_xml(element: ET.Element, type_pattern: list[obj
         text_or_default(element, "ChoiceMode", "1"),
         bool_record_from_xml(element, "PasswordMode", default=False),
         "0",
+        bool_record_from_xml(element, "ExtendedEdit", default=False),
         "0",
-        bool_record_from_xml(element, "ReadOnly", default=False),
         "0",
         "0",
         "1",
@@ -2309,7 +2339,7 @@ def input_field_info_record_from_xml(element: ET.Element, type_pattern: list[obj
         "0",
         [quoted_atom("U")],
         [quoted_atom("U")],
-        '""',
+        quoted_atom(text_or_default(element, "Mask", text_or_default(element, "InputMask", ""))),
         "0",
         "1",
         "0",
@@ -2551,8 +2581,9 @@ def radio_button_control_info(
     type_pattern: list[object] | None = None,
 ) -> list[object]:
     descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["RadioButton"]
-    pattern = type_pattern or [quoted_atom("B")]
+    pattern = type_pattern if type_pattern is not None else [quoted_atom("B")]
     action_table = action_records(actions)
+    data_value = radio_button_data_value_from_xml(element, pattern)
     inner_info = [
         checkbox_control_inner_info(element, title_record),
         "4",
@@ -2563,17 +2594,31 @@ def radio_button_control_info(
     ]
     info = [
         descriptor.info_kind,
-        [quoted_atom("Pattern"), pattern],
+        type_domain_record_from_pattern(pattern),
         inner_info,
         "0",
-        [pattern[0], "0"] if pattern else [quoted_atom("B"), "0"],
+        data_value,
         action_table,
     ]
-    info[descriptor.slot_index("TypeDomainPattern")] = [quoted_atom("Pattern"), pattern]
+    info[descriptor.slot_index("TypeDomainPattern")] = type_domain_record_from_pattern(pattern)
     info[descriptor.slot_index("InnerInfo")] = inner_info
-    info[descriptor.slot_index("DataValue")] = [pattern[0], "0"] if pattern else [quoted_atom("B"), "0"]
+    info[descriptor.slot_index("DataValue")] = data_value
     info[descriptor.slot_index("Actions")] = action_table
     return info
+
+
+def radio_button_data_value_from_xml(element: ET.Element, pattern: list[object]) -> list[object]:
+    data_value = element.find("DataValue")
+    if data_value is not None:
+        type_code = data_value.get("typeCode", clean_atom(pattern[0]) if pattern else "B")
+        return [quoted_atom(type_code), typed_scalar_value_from_xml(type_code, data_value.text or "0")]
+    return [pattern[0], "0"] if pattern else [quoted_atom("B"), "0"]
+
+
+def typed_scalar_value_from_xml(type_code: str, value: str) -> object:
+    if type_code == "S":
+        return quoted_atom(value)
+    return value
 
 
 def checkbox_control_inner_info(element: ET.Element, title_record: list[object]) -> list[object]:
@@ -4324,7 +4369,7 @@ def table_control_info(element: ET.Element, actions: list[object], type_pattern:
         base[6] = default_color_record()
     return [
         descriptor.info_kind,
-        [quoted_atom("Pattern"), pattern],
+        type_domain_record_from_pattern(pattern),
         [
             base,
             table_view_record_from_xml(element, asset_root),
@@ -4344,9 +4389,21 @@ TABLE_EVENT_ID_BY_NAME = {
 
 def table_data_source_record(element: ET.Element) -> list[object]:
     profile = element.find("DataSourceProfile")
-    link_mode = profile.get("linkMode", "0") if profile is not None else "0"
-    if profile is not None or table_columns_from_xml(element):
-        return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", link_mode]]
+    if profile is not None:
+        link_mode: object = profile.get("linkMode", "0")
+        if profile.get("linkModeShape") == "list":
+            link_mode = [str(link_mode)]
+        return [
+            profile.get("storageUuid") or "342cf854-134c-42bb-8af9-a2103d5d9723",
+            [
+                profile.get("profileKind") or "5",
+                profile.get("stateKind") or "0",
+                profile.get("stateMode") or "0",
+                link_mode,
+            ],
+        ]
+    if table_columns_from_xml(element):
+        return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "0"]]
     return ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]]
 
 
@@ -4553,17 +4610,11 @@ def table_column_record(column: ET.Element, index: int, asset_root: Path | None 
 
 
 def table_column_type_pattern_from_xml(column: ET.Element) -> list[object]:
-    pattern_node = column.find("./Type/Pattern")
-    if pattern_node is not None and not pattern_node.findall("PatternItem"):
-        return []
-    return type_pattern_from_xml(column) or [quoted_atom("S")]
+    return type_domain_pattern_from_xml(column, [quoted_atom("S")])
 
 
 def table_column_pattern_record_from_xml(column: ET.Element, pattern: list[object]) -> list[object]:
-    pattern_node = column.find("./Type/Pattern")
-    if pattern_node is not None and not pattern_node.findall("PatternItem"):
-        return [quoted_atom("Pattern")]
-    return [quoted_atom("Pattern"), pattern]
+    return type_domain_record_from_pattern(pattern)
 
 
 def table_column_value_payload_from_xml(column: ET.Element, pattern: list[object]) -> str:
@@ -5220,6 +5271,7 @@ def geometry_stream_from_xml(
             "0",
         ]
     paged_trailer = ["0", "0"] if control_type == "CommandBar" else GEOMETRY_TRAILER_PROFILE["paged"]
+    paged_trailer = layout_pre_tail(position) or paged_trailer
     group_tail = layout_group_tail(layout_group, layout_order, str(page_order), str(page_index), layout_next_order)
     return [
         "8",
@@ -5227,9 +5279,9 @@ def geometry_stream_from_xml(
         top,
             right,
             bottom,
-            layout_mode,
+        layout_mode,
         *bindings,
-        "1",
+        position.get("primaryDimensionMarker", "1") if position is not None else "1",
         *dimensions,
         *paged_trailer,
         *group_tail[:3],

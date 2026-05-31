@@ -1498,6 +1498,7 @@
           <xs:element name="ReadOnly" type="xs:boolean"/>
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
+          <xs:element name="Type" type="OpenElementType"/>
           <xs:element name="DataBindingMode" type="xs:string"/>
           <xs:element name="DataBindingFlag" type="xs:string"/>
           <xs:element name="Font" type="FontType"/>
@@ -1769,7 +1770,12 @@
     </xs:complexContent>
   </xs:complexType>
   <xs:complexType name="TableDataSourceProfileType">
+    <xs:attribute name="storageUuid" type="xs:string"/>
+    <xs:attribute name="profileKind" type="xs:string"/>
+    <xs:attribute name="stateKind" type="xs:string"/>
+    <xs:attribute name="stateMode" type="xs:string"/>
     <xs:attribute name="linkMode" type="xs:string"/>
+    <xs:attribute name="linkModeShape" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="ChoiceFieldType">
     <xs:complexContent>
@@ -1874,6 +1880,8 @@
           <xs:element name="SkipOnInput" type="xs:boolean"/>
           <xs:element name="DataPath" type="xs:string"/>
           <xs:element name="FirstInGroup" type="xs:boolean"/>
+          <xs:element name="Type" type="OpenElementType"/>
+          <xs:element name="DataValue" type="RadioButtonDataValueType"/>
           <xs:element name="Font" type="FontType"/>
           <xs:element name="TextColor" type="ColorType"/>
           <xs:element name="BackColor" type="ColorType"/>
@@ -1888,6 +1896,9 @@
         </xs:choice>
       </xs:extension>
     </xs:complexContent>
+  </xs:complexType>
+  <xs:complexType name="RadioButtonDataValueType" mixed="true">
+    <xs:attribute name="typeCode" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="TableColumnsType">
     <xs:sequence>

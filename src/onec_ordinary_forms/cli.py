@@ -125,6 +125,12 @@ def clean_token(value: object) -> str:
     return clean_atom(value)
 
 
+def clean_scalar_token(value: object) -> str:
+    if isinstance(value, list) and len(value) == 1:
+        return clean_scalar_token(value[0])
+    return clean_token(value)
+
+
 def scalar_kind(value: object) -> str:
     text = clean_token(value)
     if text in ("true", "false"):
@@ -234,6 +240,16 @@ def add_type(parent: ET.Element, pattern: list | None, object_types: dict[str, s
         item_node.set("kind", "any")
         item_node.set("code", "")
         item_node.text = "xs:anyType"
+
+
+def add_type_from_domain_record(parent: ET.Element, record: object, object_types: dict[str, str]) -> None:
+    if not isinstance(record, list) or not record or clean_token(record[0]) != "Pattern":
+        return
+    if len(record) == 1:
+        add_type(parent, [], object_types)
+        return
+    pattern = record[1]
+    add_type(parent, pattern if isinstance(pattern, list) else [pattern], object_types)
 
 
 def add_multilang_text(parent: ET.Element, tag: str, value: str, *, lang: str = "ru") -> ET.Element:
@@ -1012,6 +1028,10 @@ def add_layout_group(node: ET.Element, geometry_raw: list[object]) -> None:
         return
     if any(isinstance(value, list) for value in geometry_raw[-5:]):
         return
+    if len(geometry_raw) > 12 and not isinstance(geometry_raw[12], list):
+        marker = clean_token(geometry_raw[12])
+        if marker != "1":
+            node.set("primaryDimensionMarker", marker)
     group, order, next_order, flag1, flag2 = [clean_token(value) for value in geometry_raw[-5:]]
     prefix = layout_group_prefix_tail(geometry_raw)
     if prefix:
@@ -1187,6 +1207,7 @@ def add_semantic_item(
     add_tooltip(node, item_data)
     add_data_path(node, {**item, "type": public_type}, item_data)
     add_first_in_group(node, item, item_data)
+    add_radio_button_properties(node, public_type, item_data)
     add_visible(node, item_data)
     add_enabled(node, item_data)
     add_read_only(node, item, item_data)
@@ -1728,6 +1749,25 @@ def add_first_in_group(parent: ET.Element, item: dict, item_data: object) -> Non
         set_text(parent, "FirstInGroup", "true")
 
 
+def add_radio_button_properties(parent: ET.Element, control_type: str, item_data: object) -> None:
+    if control_type != "RadioButton" or not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    info = raw[2]
+    type_record = info[1] if len(info) > 1 else None
+    if isinstance(type_record, list):
+        pattern = type_record[1] if len(type_record) > 1 and isinstance(type_record[1], list) else []
+        if pattern and pattern != ['"B"']:
+            add_type_from_domain_record(parent, type_record, {})
+    data_value = info[4] if len(info) > 4 and isinstance(info[4], list) and len(info[4]) > 1 else None
+    if data_value is not None:
+        value = ET.SubElement(parent, "DataValue")
+        value.set("typeCode", clean_token(data_value[0]))
+        value.text = clean_token(data_value[1])
+
+
 def add_default_action(parent: ET.Element, control_type: str, item_data: object) -> None:
     if control_type not in {"Label", "Button"}:
         return
@@ -1826,8 +1866,14 @@ def add_input_field_properties(parent: ET.Element, item: dict, item_data: object
         set_text(parent, "ChoiceMode", clean_token(input_info[4]))
     if len(input_info) > 5 and clean_token(input_info[5]) == "1":
         set_text(parent, "PasswordMode", "true")
+    if len(input_info) > 7 and clean_token(input_info[7]) == "1":
+        set_text(parent, "ExtendedEdit", "true")
     if len(input_info) > 14 and clean_token(input_info[13]) == "1" and clean_token(input_info[14]) != "0":
         set_text(parent, "MaxLength", clean_token(input_info[14]))
+    if len(input_info) > 21 and not isinstance(input_info[21], list):
+        mask = clean_token(input_info[21])
+        if mask:
+            set_text(parent, "Mask", mask)
     if len(input_info) > 26 and clean_token(input_info[26]) == "1":
         set_text(parent, "MultiLine", "true")
     if not isinstance(item_data, dict):
@@ -1838,6 +1884,8 @@ def add_input_field_properties(parent: ET.Element, item: dict, item_data: object
     info = raw[2]
     if len(info) <= 3 or not isinstance(info[3], list) or len(info[3]) <= 1:
         return
+    if len(info) > 1:
+        add_type_from_domain_record(parent, info[1], {})
     data_link = info[3][1]
     if not isinstance(data_link, list) or len(data_link) <= 1 or not isinstance(data_link[1], list):
         return
@@ -1958,10 +2006,22 @@ def add_table_view_properties(parent: ET.Element, item: dict, item_data: object)
         add_color_node_from_record(parent, "FieldBackColor", view[6])
     data_source = table_data_source_from_item_data(item_data)
     if data_source is not None and len(data_source) > 1 and isinstance(data_source[1], list) and len(data_source[1]) > 3:
-        flag = clean_token(data_source[1][3])
-        if flag != "0":
+        record_uuid = clean_token(data_source[0]) if data_source else ""
+        payload = data_source[1]
+        flag = clean_scalar_token(payload[3])
+        default_uuid = "342cf854-134c-42bb-8af9-a2103d5d9723"
+        default_payload = ["5", "0", "0", "0"]
+        is_default_profile = record_uuid == default_uuid and [clean_scalar_token(item) for item in payload[:4]] == default_payload
+        if flag != "0" or not is_default_profile:
             profile = ET.SubElement(parent, "DataSourceProfile")
+            if record_uuid:
+                profile.set("storageUuid", record_uuid)
+            profile.set("profileKind", clean_token(payload[0]))
+            profile.set("stateKind", clean_token(payload[1]))
+            profile.set("stateMode", clean_token(payload[2]))
             profile.set("linkMode", flag)
+            if isinstance(payload[3], list):
+                profile.set("linkModeShape", "list")
 
 
 def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_root: Path) -> None:
@@ -2704,19 +2764,37 @@ def dump_xml_from_paths(
 
     attrs = ET.SubElement(root, "Attributes")
     attribute_slots = attribute_slots_from_form_root(form_root)
-    for prop in control_index.get("props", []):
-        prop_name = str(prop.get("name", ""))
-        if re.fullmatch(r"Attribute\d+", prop_name):
-            continue
-        attr = ET.SubElement(attrs, "Attribute")
-        attr.set("name", prop_name)
-        attr.set("id", str(prop.get("id", "")))
-        if prop_name in attribute_slots:
-            attr.set("slot", attribute_slots[prop_name])
-        if attribute_control_data_flag(form_root, prop_name) == "0":
-            attr.set("controlData", "false")
-        pattern_node = pattern_node_from_prop(prop)
-        add_type(attr, pattern_node, object_types)
+    props_by_name = {str(prop.get("name", "")): prop for prop in control_index.get("props", [])}
+    form_attribute_records = attribute_records_from_form_root(form_root)
+    if form_attribute_records:
+        for record in form_attribute_records:
+            prop_name = attribute_record_name(record)
+            if not prop_name or re.fullmatch(r"Attribute\d+", prop_name):
+                continue
+            prop = props_by_name.get(prop_name, {})
+            attr = ET.SubElement(attrs, "Attribute")
+            attr.set("name", prop_name)
+            attr.set("id", str(prop.get("id", "")))
+            if prop_name in attribute_slots:
+                attr.set("slot", attribute_slots[prop_name])
+            if len(record) > 1 and clean_token(record[1]) == "0":
+                attr.set("controlData", "false")
+            if len(record) >= 2:
+                add_type_from_domain_record(attr, record[-1], object_types)
+    else:
+        for prop in control_index.get("props", []):
+            prop_name = str(prop.get("name", ""))
+            if re.fullmatch(r"Attribute\d+", prop_name):
+                continue
+            attr = ET.SubElement(attrs, "Attribute")
+            attr.set("name", prop_name)
+            attr.set("id", str(prop.get("id", "")))
+            if prop_name in attribute_slots:
+                attr.set("slot", attribute_slots[prop_name])
+            if attribute_control_data_flag(form_root, prop_name) == "0":
+                attr.set("controlData", "false")
+            pattern_node = pattern_node_from_prop(prop)
+            add_type(attr, pattern_node, object_types)
 
     add_semantic_pages(root, control_index, element_index, asset_root)
 
@@ -3136,6 +3214,15 @@ def attribute_slots_from_form_root(form_root: object) -> dict[str, str]:
             if name:
                 result[name] = clean_token(slot_record[0])
     return result
+
+
+def attribute_records_from_form_root(form_root: object) -> list[list[object]]:
+    if not isinstance(form_root, list) or len(form_root) <= 2 or not isinstance(form_root[2], list):
+        return []
+    table = form_root[2]
+    if len(table) <= 2 or not isinstance(table[2], list):
+        return []
+    return [record for record in table[2][1:] if isinstance(record, list)]
 
 
 def attribute_control_data_flag(form_root: object, name: str) -> str:
