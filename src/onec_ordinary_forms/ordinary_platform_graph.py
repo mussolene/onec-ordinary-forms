@@ -10,7 +10,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from onec_ordinary_forms.ordinary_model import OrdinaryControl, OrdinaryFormModel
+from onec_ordinary_forms.liststream import parse_list_stream_document
+from onec_ordinary_forms.ordinary_model import (
+    OrdinaryControl,
+    OrdinaryFormModel,
+    parse_ordinary_form_model,
+)
 from onec_ordinary_forms.ordinary_platform import (
     CF_FORM_CONTROLS8_FORMAT_ID,
     CF_FORM_CONTROLS_INFO8_FORMAT_ID,
@@ -141,6 +146,15 @@ def platform_graph_from_model(model: OrdinaryFormModel) -> OrdinaryFormPlatformG
         persistence_records=tuple(persistence_records),
         call_edges=skeleton.call_edges,
     )
+
+
+def platform_graph_from_list_stream_root(root: object) -> OrdinaryFormPlatformGraph:
+    return platform_graph_from_model(parse_ordinary_form_model(root))
+
+
+def platform_graph_from_list_stream_text(text: str) -> OrdinaryFormPlatformGraph:
+    document = parse_list_stream_document(text, allow_trailing=True)
+    return platform_graph_from_list_stream_root(document.value)
 
 
 def all_controls_skeleton_graph() -> OrdinaryFormPlatformGraph:
