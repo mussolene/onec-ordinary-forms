@@ -578,7 +578,11 @@ def add_binding(
     if tag == "Binding":
         node.set("coordinate", BINDING_SLOT_ROLE.get(slot, f"slot{slot}"))
     elif tag == "DimensionBinding":
-        node.set("dimension", DIMENSION_SLOT_ROLE.get(slot, f"slot{slot}"))
+        if slot in DIMENSION_SLOT_ROLE:
+            node.set("dimension", DIMENSION_SLOT_ROLE[slot])
+        else:
+            node.set("dimension", "extra")
+            node.set("extraIndex", str(slot - len(DIMENSION_SLOT_ROLE)))
         if isinstance(binding, list):
             if binding:
                 int_attr(node, "mode", binding[0])
@@ -745,7 +749,6 @@ def add_flagged_dimension_bindings_with_extra_records(
     tail_values = geometry_raw[cursor:]
     if not tail_values or any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("dimensionProfile", "flaggedWithExtraRecords")
     position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
     position.set("layoutTail", " ".join(clean_token(value) for value in tail_values))
     for index, binding in enumerate(geometry_raw[13:17], start=1):
@@ -786,7 +789,6 @@ def add_counted_dimension_bindings(
         return False
     if secondary_count > 0 and not all(isinstance(record, list) for record in geometry_raw[secondary_start:secondary_end]):
         return False
-    position.set("dimensionProfile", "counted")
     position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
     position.set("secondaryDimensionMarker", clean_token(geometry_raw[primary_end]))
     tail = [clean_token(value) for value in geometry_raw[secondary_end:]]
@@ -824,7 +826,6 @@ def add_flagged_height_width_dimension_bindings(
     tail_values = geometry_raw[20:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("dimensionProfile", "flaggedHeightWidth")
     tail = [clean_token(value) for value in tail_values]
     if tail:
         position.set("layoutTail", " ".join(tail))
@@ -853,7 +854,6 @@ def add_prefixed_flagged_height_width_dimension_bindings(
     tail_values = geometry_raw[17:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("dimensionProfile", "prefixedFlaggedHeightWidth")
     position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
     position.attrib.pop("layoutPreTail", None)
     tail = [clean_token(value) for value in tail_values]
@@ -889,7 +889,6 @@ def add_inline_counted_dimension_bindings(
     tail_values = geometry_raw[end:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("dimensionProfile", "inlineCounted")
     position.set("primaryDimensionMarker", str(count))
     tail = [clean_token(value) for value in tail_values]
     if tail:
@@ -954,7 +953,6 @@ def add_inline_segmented_dimension_bindings(
     tail_values = geometry_raw[cursor:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("dimensionProfile", "inlineSegmented")
     position.set("dimensionSegments", " ".join(segment_spec(marker, len(records)) for marker, records in segments))
     tail = [clean_token(value) for value in tail_values]
     if tail:
@@ -1008,7 +1006,6 @@ def add_inline_dual_counted_dimension_bindings(
     tail_values = geometry_raw[secondary_end:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("dimensionProfile", "inlineDualCounted")
     position.set("primaryDimensionMarker", str(primary_count))
     position.set("secondaryDimensionMarker", secondary_marker)
     tail = [clean_token(value) for value in tail_values]

@@ -199,6 +199,7 @@ def test_public_xsd_has_no_raw_or_extension_pockets() -> None:
         "SerializationProfile",
         "RootRecord",
         "TopLevel",
+        "dimensionProfile",
     }
     root = ET.parse(ORDINARY_FORM_XSD).getroot()
     names = {node.get("name", "") for node in root.iter() if node.get("name")}

@@ -5145,7 +5145,7 @@ def counted_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if position is None or position.get("dimensionProfile") != "counted":
+    if position is None:
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:
@@ -5158,7 +5158,14 @@ def counted_dimension_geometry_from_xml(
             secondary.append(dimension_binding_to_raw(binding))
         elif section == "primary":
             primary.append(dimension_binding_to_raw(binding))
-    if not primary:
+    if not primary or not secondary:
+        return None
+    try:
+        if int(position.get("primaryDimensionMarker", "")) == len(primary):
+            return None
+    except ValueError:
+        pass
+    if position.get("secondaryDimensionMarker") is None:
         return None
     tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
@@ -5187,7 +5194,11 @@ def flagged_height_width_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if position is None or position.get("dimensionProfile") != "flaggedHeightWidth":
+    if (
+        position is None
+        or position.get("primaryDimensionMarker") is not None
+        or position.get("layoutTail") is None
+    ):
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:
@@ -5195,6 +5206,8 @@ def flagged_height_width_dimension_geometry_from_xml(
     height: object | None = None
     width: object | None = None
     for binding in binding_container.findall("DimensionBinding"):
+        if binding.get("section"):
+            return None
         dimension = binding.get("dimension")
         if dimension == "height":
             height = dimension_binding_to_raw(binding)
@@ -5231,7 +5244,11 @@ def prefixed_flagged_height_width_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if position is None or position.get("dimensionProfile") != "prefixedFlaggedHeightWidth":
+    if (
+        position is None
+        or position.get("primaryDimensionMarker") is None
+        or position.get("layoutTail") is None
+    ):
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:
@@ -5239,6 +5256,8 @@ def prefixed_flagged_height_width_dimension_geometry_from_xml(
     height: object | None = None
     width: object | None = None
     for binding in binding_container.findall("DimensionBinding"):
+        if binding.get("section"):
+            return None
         dimension = binding.get("dimension")
         if dimension == "height":
             height = dimension_binding_to_raw(binding)
@@ -5272,16 +5291,20 @@ def inline_counted_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if position is None or position.get("dimensionProfile") != "inlineCounted":
+    if position is None:
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:
         return None
     dimensions: list[object] = []
+    saw_primary_section = False
     for binding in binding_container.findall("DimensionBinding"):
-        if (binding.get("section") or "primary") == "primary":
+        if binding.get("section") == "primary":
+            saw_primary_section = True
             dimensions.append(dimension_binding_to_raw(binding))
-    if not dimensions:
+        elif binding.get("section"):
+            return None
+    if not dimensions or not saw_primary_section:
         return None
     tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
@@ -5300,13 +5323,16 @@ def inline_counted_dimension_geometry_from_xml(
 
 def dimension_binding_slot(binding: ET.Element) -> int | None:
     slot = binding.get("slot")
+    if not slot and binding.get("dimension") == "extra":
+        try:
+            return len(DIMENSION_NAME_SLOT) + int(binding.get("extraIndex", ""))
+        except ValueError:
+            return None
     if not slot and binding.get("dimension"):
         dimension = binding.get("dimension", "")
         mapped = DIMENSION_NAME_SLOT.get(dimension)
         if mapped is not None:
             slot = str(mapped)
-        elif dimension.startswith("slot"):
-            slot = dimension.removeprefix("slot")
     if not slot:
         return None
     try:
@@ -5323,7 +5349,7 @@ def flagged_extra_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if position is None or position.get("dimensionProfile") != "flaggedWithExtraRecords":
+    if position is None:
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:
@@ -5365,7 +5391,7 @@ def inline_dual_counted_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if position is None or position.get("dimensionProfile") != "inlineDualCounted":
+    if position is None:
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:
@@ -5379,6 +5405,11 @@ def inline_dual_counted_dimension_geometry_from_xml(
         elif section == "primary":
             primary.append(dimension_binding_to_raw(binding))
     if not primary or not secondary:
+        return None
+    try:
+        if int(position.get("primaryDimensionMarker", "")) != len(primary):
+            return None
+    except ValueError:
         return None
     tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
@@ -5406,7 +5437,7 @@ def inline_segmented_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if position is None or position.get("dimensionProfile") != "inlineSegmented":
+    if position is None:
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:

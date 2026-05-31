@@ -52,6 +52,9 @@ The repository now has the right foundation:
 - public control-level raw profile leaks were already reduced for CommandBar,
   PictureDecoration, and Panel by promoting them into named concepts such as
   `CommandSource`, `PictureStyle`, and `PanelLayout`.
+- the public position `dimensionProfile` selector and extra dimension
+  `slotN` names were removed; writer profile selection now uses named
+  dimensions, sections, and internal descriptor checks.
 
 The current loop comes from the remaining mixed model:
 
@@ -109,7 +112,8 @@ If a low-level value is required for rebuild, it must be classified:
 
 ## What To Delete
 
-- Public form-level `SerializationProfile` and all public `slotN` fields.
+- Public form-level `SerializationProfile`, position `dimensionProfile`, and
+  all public `slotN` fields.
 - Tests that require `RootRecord slot5..slot10`, `TopLevel slotN`, or other raw
   stream shape names in public XML.
 - Any new sidecar/profile/fallback mechanism whose only purpose is to keep an
@@ -132,9 +136,9 @@ If a low-level value is required for rebuild, it must be classified:
 - Treat table column `ElementControl` as a nested typed control/editor concept.
   It can be an InputField, ChoiceField, etc.; do not infer it from only the
   parent table branch.
-- Convert remaining position `dimensionProfile` and `DimensionBinding
-  dimension="slotN"` names into named layout/binding concepts or internal
-  descriptor profiles.
+- Convert remaining position/layout marker names such as `layoutTail`,
+  `dimensionSegments`, and dimension markers into named layout/binding
+  concepts or internal descriptor profiles.
 
 ## What To Add
 
@@ -167,6 +171,9 @@ Done after this audit:
 - root panel state/layout now uses the named `RootPanelLayout` XML node;
 - root/top record generation is no longer read from public XML and is handled
   as canonical writer logic;
+- position `dimensionProfile` is no longer public XML, and dimensions above
+  the named height/minHeight/stretch/width set are emitted as
+  `dimension="extra" extraIndex="N"` instead of `dimension="slotN"`;
 - schema tests now guard against reintroducing the removed public raw-shape
   vocabulary.
 
@@ -174,8 +181,9 @@ Remaining next steps:
 
 1. Add semantic graph digest comparison and use it before corpus byte reports.
 2. Convert the remaining position/layout raw-shaped names, especially
-   `dimensionProfile` and `DimensionBinding dimension="slotN"`, into named
-   concepts or internal descriptor rules.
+   `layoutTail`, `dimensionSegments`, `primaryDimensionMarker`, and
+   `secondaryDimensionMarker`, into named concepts or internal descriptor
+   rules.
 3. Extend property-slot coverage so the audit reports dump/build mapping for
    each public XSD property, not only per-control writer coverage.
 4. Re-run the small all-controls fixture and Diadoc fixture.

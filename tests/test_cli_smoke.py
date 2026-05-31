@@ -116,14 +116,14 @@ class CliSmokeTest(unittest.TestCase):
     def test_geometry_writer_preserves_flagged_extra_dimension_records(self) -> None:
         position = ET.fromstring(
             """
-            <Position left="8" top="8" right="160" bottom="30" dimensionProfile="flaggedWithExtraRecords" primaryDimensionMarker="1" layoutTail="0 0 0 1 1 0 0">
+            <Position left="8" top="8" right="160" bottom="30" primaryDimensionMarker="1" layoutTail="0 0 0 1 1 0 0">
               <Bindings>
                 <DimensionBinding dimension="height" section="primary" mode="0" target="self" targetId="6" side="bottom"/>
                 <DimensionBinding dimension="minHeight" section="primary" value="0"/>
                 <DimensionBinding dimension="stretch" section="primary" value="0"/>
                 <DimensionBinding dimension="width" section="primary" value="2"/>
-                <DimensionBinding dimension="slot5" section="extra" mode="0" target="element" targetId="16" side="left"/>
-                <DimensionBinding dimension="slot6" section="extra" mode="0" target="element" targetId="17" side="left"/>
+                <DimensionBinding dimension="extra" extraIndex="1" section="extra" mode="0" target="element" targetId="16" side="left"/>
+                <DimensionBinding dimension="extra" extraIndex="2" section="extra" mode="0" target="element" targetId="17" side="left"/>
               </Bindings>
             </Position>
             """
@@ -2890,7 +2890,7 @@ class CliSmokeTest(unittest.TestCase):
         position = parent.find("Position")
         self.assertIsNotNone(position)
         assert position is not None
-        self.assertEqual(position.get("dimensionProfile"), "inlineSegmented")
+        self.assertIsNone(position.get("dimensionProfile"))
         self.assertEqual(position.get("dimensionSegments"), "1 1")
         self.assertEqual(position.get("layoutTail"), "0 0 0 0 0 1 2 1 1")
         self.assertEqual(geometry_stream_from_xml("CommandBar", position), geometry)
@@ -2938,7 +2938,7 @@ class CliSmokeTest(unittest.TestCase):
         position = parent.find("Position")
         self.assertIsNotNone(position)
         assert position is not None
-        self.assertEqual(position.get("dimensionProfile"), "prefixedFlaggedHeightWidth")
+        self.assertIsNone(position.get("dimensionProfile"))
         self.assertEqual(position.get("primaryDimensionMarker"), "0")
         self.assertIsNone(position.get("layoutPreTail"))
         self.assertEqual(position.get("layoutTail"), "0 0 0 2 6 6 0 0")
