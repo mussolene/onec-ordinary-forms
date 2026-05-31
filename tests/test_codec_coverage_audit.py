@@ -21,8 +21,11 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     assert summary["writerBranchesWithoutXsdControl"] == []
     assert summary["controlsWithoutWriterDescriptor"] == ["PeriodChooser"]
     assert "Button" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "CheckBox" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "ChoiceField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "LabelDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "PictureDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "RadioButton" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert set(summary["controlsWithoutSharedInfoDescriptor"]) >= {"ActiveXControl", "PeriodChooser"}
 
 

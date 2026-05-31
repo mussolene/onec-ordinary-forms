@@ -125,6 +125,37 @@ CONTROL_INFO_SLOT_DESCRIPTORS = {
             InfoSlotDescriptor("ReadOnly", 12),
         ),
     ),
+    "CheckBox": ControlInfoDescriptor(
+        control_type="CheckBox",
+        info_kind="1",
+        slots=(
+            InfoSlotDescriptor("InnerInfo", 0),
+            InfoSlotDescriptor("BodyKind", 1),
+        ),
+    ),
+    "ChoiceField": ControlInfoDescriptor(
+        control_type="ChoiceField",
+        info_kind="2",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("ReadOnly", 12),
+            InfoSlotDescriptor("ChoiceButton", 23),
+            InfoSlotDescriptor("ClearButton", 24),
+            InfoSlotDescriptor("OpenButton", 25),
+            InfoSlotDescriptor("ChoiceListOrCreateButton", 26),
+            InfoSlotDescriptor("EditButton", 27),
+        ),
+    ),
+    "RadioButton": ControlInfoDescriptor(
+        control_type="RadioButton",
+        info_kind="4",
+        slots=(
+            InfoSlotDescriptor("TypeDomainPattern", 1),
+            InfoSlotDescriptor("InnerInfo", 2),
+            InfoSlotDescriptor("DataValue", 4),
+            InfoSlotDescriptor("Actions", 5),
+        ),
+    ),
     "Button": ControlInfoDescriptor(
         control_type="Button",
         info_kind="1",
@@ -2195,40 +2226,38 @@ def button_picture_record(picture_payload: str) -> list[object]:
 
 
 def checkbox_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["CheckBox"]
+    inner_info = checkbox_control_inner_info(element, title_record)
+    info_record = [
+        inner_info,
+        "4",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+    ]
+    info_record[descriptor.slot_index("InnerInfo")] = inner_info
+    info_record[descriptor.slot_index("BodyKind")] = "4"
     return [
-        "1",
-        [
-            [
-                extended_base_info_record_from_xml(element),
-                "7",
-                title_record,
-                "1",
-                "0",
-                "1",
-                "0",
-                "100",
-                "1",
-            ],
-            "4",
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-        ],
+        descriptor.info_kind,
+        info_record,
         action_records(actions),
     ]
 
 
 def choice_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["ChoiceField"]
     return [
-        "2",
+        descriptor.info_kind,
         choice_field_info_record_from_xml(element),
         action_records(actions),
     ]
 
 
 def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["ChoiceField"]
+    base = choice_field_base_info_record_from_xml(element)
     choice_list = choice_list_record_from_xml(element.find("ChoiceList"))
     choice_list_tail: list[object] = (
         [choice_list, "0", "0"]
@@ -2238,8 +2267,8 @@ def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
             bool_record_from_xml(element, "EditButton", default=False),
         ]
     )
-    return [
-        choice_field_base_info_record_from_xml(element),
+    record = [
+        base,
         "31",
         text_or_default(element, "LeftFixedColumns", "0"),
         text_or_default(element, "RightFixedColumns", "0"),
@@ -2285,6 +2314,17 @@ def choice_field_info_record_from_xml(element: ET.Element) -> list[object]:
         "0",
         "0",
     ]
+    record[descriptor.slot_index("BaseInfo")] = base
+    record[descriptor.slot_index("ReadOnly")] = bool_record_from_xml(element, "ReadOnly", default=False)
+    record[descriptor.slot_index("ChoiceButton")] = bool_record_from_xml(element, "ChoiceButton", default=True)
+    record[descriptor.slot_index("ClearButton")] = bool_record_from_xml(element, "ClearButton", default=True)
+    record[descriptor.slot_index("OpenButton")] = bool_record_from_xml(element, "OpenButton", default=False)
+    if choice_list is not None:
+        record[descriptor.slot_index("ChoiceListOrCreateButton")] = choice_list
+    else:
+        record[descriptor.slot_index("ChoiceListOrCreateButton")] = bool_record_from_xml(element, "CreateButton", default=False)
+        record[descriptor.slot_index("EditButton")] = bool_record_from_xml(element, "EditButton", default=False)
+    return record
 
 
 def choice_list_record_from_xml(element: ET.Element | None) -> list[object] | None:
@@ -2351,22 +2391,30 @@ def radio_button_control_info(
     actions: list[object],
     type_pattern: list[object] | None = None,
 ) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["RadioButton"]
     pattern = type_pattern or [quoted_atom("B")]
-    return [
+    action_table = action_records(actions)
+    inner_info = [
+        checkbox_control_inner_info(element, title_record),
         "4",
+        "0",
+        "0",
+        "0",
+        "0",
+    ]
+    info = [
+        descriptor.info_kind,
         [quoted_atom("Pattern"), pattern],
-        [
-            checkbox_control_inner_info(element, title_record),
-            "4",
-            "0",
-            "0",
-            "0",
-            "0",
-        ],
+        inner_info,
         "0",
         [pattern[0], "0"] if pattern else [quoted_atom("B"), "0"],
-        action_records(actions),
+        action_table,
     ]
+    info[descriptor.slot_index("TypeDomainPattern")] = [quoted_atom("Pattern"), pattern]
+    info[descriptor.slot_index("InnerInfo")] = inner_info
+    info[descriptor.slot_index("DataValue")] = [pattern[0], "0"] if pattern else [quoted_atom("B"), "0"]
+    info[descriptor.slot_index("Actions")] = action_table
+    return info
 
 
 def checkbox_control_inner_info(element: ET.Element, title_record: list[object]) -> list[object]:
