@@ -40,6 +40,49 @@ codec internals.
   validation infobase can make platform redump lose table/attribute/control
   semantics even when the stream loads.
 
+## Compare/Merge Boundary
+
+Current platform evidence does not support routing ordinary form persistence
+through the Designer compare/merge UI.
+
+The compare/merge stack is present, but it is a separate `LogForm` mechanism:
+
+- `frntend.so` contains `ConfigCompareService`, `ConfigMerge`,
+  `mergeform.cpp`, `IDS_CMD_COMPARECONFIGS`, `IDS_CMD_MERGEFORMREPORT`,
+  `CompareReportGenerateTools<...FormEditHelper>`, and
+  `IMDMergeHelperImpl<...FormEditHelper>`;
+- `mngdsgn.so` contains `LogFormComparatorReport`,
+  `LogFormMergeSettings`, `SWINComparator`, `LogFormDocumentFactory`, and
+  merge-module UI interfaces;
+- `mngbase.so` contains `LogFormComparator`, `LogFormECComparator`,
+  `FormVectorComparator`, `LogFormMerger3`, and imports `core::create_diff`;
+- `mngcore.so` contains the `LogForm` object family itself, including
+  `LogForm`, `LogFormButton`, `LogFormCommand`, `LogFormElementsChangesFlow`,
+  and `LFLFormComparator`.
+
+The ordinary form persistence stack remains in `dsgnfrm`:
+
+- `dsgnfrm.so` contains `CustomFormLoader`, `FormDesignerService`,
+  `FormDocument`, `FormDocumentFactory`, and `FormDocumentView`;
+- `dsgnfrm.so` imports `core::ListInStream`, `core::ListOutStream`,
+  `core::CompositeID`, `core::TypeDomainPattern`, and the ordinary-control
+  format ids `wbase::cf_form_controls8`,
+  `wbase::cf_form_controls_position8`, and `wbase::cf_form_controls_info8`;
+- the 8.2 PE libraries show the same split: `dsgnfrm.dll` imports
+  `cf_form_controls*`, while `frntend.dll`, `mngbase.dll`, `mngcore.dll`, and
+  `mngdsgn.dll` carry the `LogForm`/merge categories without directly
+  importing `dsgnfrm.dll`.
+
+`LD_DEBUG` on a successful 8.5 ordinary-form
+`/DumpExternalDataProcessorOrReportToFiles` run loads both families
+(`dsgnfrm` and the merge-capable `frntend`/`mngbase`/`mngdsgn` modules), but
+that only proves they are resident in Designer. It does not prove that
+`LogFormComparator` or `LogFormMerger3` serialize ordinary `Form.bin`.
+Therefore compare/merge can be useful as vocabulary evidence for form-shaped
+concepts, but it is not the writer path for ordinary forms unless a future
+call-path trace proves a concrete bridge from `LogForm` into
+`cf_form_controls*`.
+
 ## Current Product Pattern
 
 The repository now has the right foundation:
