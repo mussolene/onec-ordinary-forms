@@ -2461,9 +2461,6 @@
     <xs:attribute name="layoutNextOrder" type="xs:integer"/>
     <xs:attribute name="layoutFlag1" type="xs:string"/>
     <xs:attribute name="layoutFlag2" type="xs:string"/>
-    <xs:attribute name="layoutPreTail" type="xs:string"/>
-    <xs:attribute name="primaryDimensionMarker" type="xs:integer"/>
-    <xs:attribute name="layoutTail" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="BindingsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">

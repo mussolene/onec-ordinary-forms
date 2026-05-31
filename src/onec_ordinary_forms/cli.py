@@ -749,10 +749,6 @@ def add_flagged_dimension_bindings_with_extra_records(
     tail_values = geometry_raw[cursor:]
     if not tail_values or any(isinstance(value, list) for value in tail_values):
         return False
-    marker = clean_token(geometry_raw[12])
-    if marker != "1":
-        position.set("primaryDimensionMarker", marker)
-    position.set("layoutTail", " ".join(clean_token(value) for value in tail_values))
     for index, binding in enumerate(geometry_raw[13:17], start=1):
         add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
         bindings[-1].set("section", "primary")
@@ -791,10 +787,6 @@ def add_counted_dimension_bindings(
         return False
     if secondary_count > 0 and not all(isinstance(record, list) for record in geometry_raw[secondary_start:secondary_end]):
         return False
-    position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
-    tail = [clean_token(value) for value in geometry_raw[secondary_end:]]
-    if tail:
-        position.set("layoutTail", " ".join(tail))
     for index, binding in enumerate(geometry_raw[primary_start:primary_end], start=1):
         add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
         bindings[-1].set("section", "primary")
@@ -827,9 +819,6 @@ def add_flagged_height_width_dimension_bindings(
     tail_values = geometry_raw[20:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    tail = [clean_token(value) for value in tail_values]
-    if tail:
-        position.set("layoutTail", " ".join(tail))
     add_binding(bindings, "DimensionBinding", 1, geometry_raw[13], current_id, element_index)
     add_binding(bindings, "DimensionBinding", 4, geometry_raw[17], current_id, element_index)
     return True
@@ -855,11 +844,6 @@ def add_prefixed_flagged_height_width_dimension_bindings(
     tail_values = geometry_raw[17:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
-    position.attrib.pop("layoutPreTail", None)
-    tail = [clean_token(value) for value in tail_values]
-    if tail:
-        position.set("layoutTail", " ".join(tail))
     add_binding(bindings, "DimensionBinding", 1, geometry_raw[14], current_id, element_index)
     add_binding(bindings, "DimensionBinding", 4, geometry_raw[16], current_id, element_index)
     return True
@@ -890,9 +874,6 @@ def add_inline_counted_dimension_bindings(
     tail_values = geometry_raw[end:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    tail = [clean_token(value) for value in tail_values]
-    if tail:
-        position.set("layoutTail", " ".join(tail))
     for index, binding in enumerate(records, start=1):
         add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
         bindings[-1].set("section", "primary")
@@ -953,9 +934,6 @@ def add_inline_segmented_dimension_bindings(
     tail_values = geometry_raw[cursor:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    tail = [clean_token(value) for value in tail_values]
-    if tail:
-        position.set("layoutTail", " ".join(tail))
     for segment_index, (_marker, records) in enumerate(segments):
         section = "primary" if segment_index == 0 else f"segment{segment_index + 1}"
         for index, binding in enumerate(records, start=1):
@@ -1000,9 +978,6 @@ def add_inline_dual_counted_dimension_bindings(
     tail_values = geometry_raw[secondary_end:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    tail = [clean_token(value) for value in tail_values]
-    if tail:
-        position.set("layoutTail", " ".join(tail))
     for index, binding in enumerate(primary, start=1):
         add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
         bindings[-1].set("section", "primary")
@@ -1017,14 +992,7 @@ def add_layout_group(node: ET.Element, geometry_raw: list[object]) -> None:
         return
     if any(isinstance(value, list) for value in geometry_raw[-5:]):
         return
-    if len(geometry_raw) > 12 and not isinstance(geometry_raw[12], list):
-        marker = clean_token(geometry_raw[12])
-        if marker != "1":
-            node.set("primaryDimensionMarker", marker)
     group, order, next_order, flag1, flag2 = [clean_token(value) for value in geometry_raw[-5:]]
-    prefix = layout_group_prefix_tail(geometry_raw)
-    if prefix:
-        node.set("layoutPreTail", " ".join(prefix))
     node.set("layoutGroup", group)
     node.set("layoutOrder", order)
     if flag1 != "0":
@@ -1036,25 +1004,6 @@ def add_layout_group(node: ET.Element, geometry_raw: list[object]) -> None:
             node.set("layoutNextOrder", next_order)
     except ValueError:
         node.set("layoutNextOrder", next_order)
-
-
-def layout_group_prefix_tail(geometry_raw: list[object]) -> list[str]:
-    if len(geometry_raw) <= 22:
-        return []
-    if not all(not isinstance(value, list) for value in geometry_raw[-5:]):
-        return []
-    cursor = 17
-    if len(geometry_raw) > 12:
-        try:
-            count = int(clean_token(geometry_raw[12]))
-        except ValueError:
-            count = 0
-        if count > 0:
-            cursor = 13 + count
-    prefix = geometry_raw[cursor:-5]
-    if any(isinstance(value, list) for value in prefix):
-        return []
-    return [clean_token(value) for value in prefix]
 
 
 def find_base64_payload(value: object) -> str:

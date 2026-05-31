@@ -116,7 +116,7 @@ class CliSmokeTest(unittest.TestCase):
     def test_geometry_writer_preserves_flagged_extra_dimension_records(self) -> None:
         position = ET.fromstring(
             """
-            <Position left="8" top="8" right="160" bottom="30" layoutTail="0 0 0 1 1 0 0">
+            <Position left="8" top="8" right="160" bottom="30">
               <Bindings>
                 <DimensionBinding dimension="height" section="primary" mode="0" target="self" targetId="6" side="bottom"/>
                 <DimensionBinding dimension="minHeight" section="primary" value="0"/>
@@ -2957,7 +2957,11 @@ class CliSmokeTest(unittest.TestCase):
         assert position is not None
         self.assertIsNone(position.get("dimensionProfile"))
         self.assertIsNone(position.get("dimensionSegments"))
-        self.assertEqual(position.get("layoutTail"), "0 0 0 0 0 1 2 1 1")
+        self.assertIsNone(position.get("layoutTail"))
+        self.assertEqual(position.get("layoutGroup"), "0")
+        self.assertEqual(position.get("layoutOrder"), "1")
+        self.assertEqual(position.get("layoutFlag1"), "1")
+        self.assertEqual(position.get("layoutFlag2"), "1")
         self.assertEqual(geometry_stream_from_xml("CommandBar", position), geometry)
 
     def test_dump_preserves_prefixed_flagged_height_width_dimension_profile(self) -> None:
@@ -3004,9 +3008,12 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(position)
         assert position is not None
         self.assertIsNone(position.get("dimensionProfile"))
-        self.assertEqual(position.get("primaryDimensionMarker"), "0")
+        self.assertIsNone(position.get("primaryDimensionMarker"))
         self.assertIsNone(position.get("layoutPreTail"))
-        self.assertEqual(position.get("layoutTail"), "0 0 0 2 6 6 0 0")
+        self.assertIsNone(position.get("layoutTail"))
+        self.assertEqual(position.get("layoutGroup"), "2")
+        self.assertEqual(position.get("layoutOrder"), "6")
+        self.assertEqual(position.get("layoutNextOrder"), "6")
         self.assertEqual(geometry_stream_from_xml("InputField", position), geometry)
 
     def test_picture_decoration_picture_style_roundtrips_named_slots(self) -> None:
@@ -3618,7 +3625,10 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertIsNotNone(position)
         assert position is not None
-        self.assertEqual(position.get("primaryDimensionMarker"), "0")
+        self.assertIsNone(position.get("primaryDimensionMarker"))
+        self.assertEqual(position.get("layoutGroup"), "0")
+        self.assertEqual(position.get("layoutOrder"), "2")
+        self.assertIsNone(position.get("layoutNextOrder"))
         self.assertEqual(geometry_stream_from_xml("Panel", position, page_index=1, page_order=2), geometry)
 
     def test_panel_page_layout_writer_preserves_xml_order(self) -> None:

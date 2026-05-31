@@ -4851,14 +4851,14 @@ def geometry_stream_from_xml(
     if counted_geometry is not None:
         counted_geometry[5] = layout_mode
         return counted_geometry
-    flagged_height_width_geometry = flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
-    if flagged_height_width_geometry is not None:
-        flagged_height_width_geometry[5] = layout_mode
-        return flagged_height_width_geometry
     prefixed_flagged_height_width_geometry = prefixed_flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
     if prefixed_flagged_height_width_geometry is not None:
         prefixed_flagged_height_width_geometry[5] = layout_mode
         return prefixed_flagged_height_width_geometry
+    flagged_height_width_geometry = flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
+    if flagged_height_width_geometry is not None:
+        flagged_height_width_geometry[5] = layout_mode
+        return flagged_height_width_geometry
     flagged_extra_dimension_geometry = flagged_extra_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
     if flagged_extra_dimension_geometry is not None:
         flagged_extra_dimension_geometry[5] = layout_mode
@@ -4934,7 +4934,6 @@ def geometry_stream_from_xml(
             *bindings,
             "0",
             *dimensions,
-            *layout_pre_tail(position),
             *layout_group_tail(layout_group, layout_order, str(page_order) if page_order is not None else "0", str(page_index) if page_index is not None else "0", layout_next_order, layout_flag1, layout_flag2),
         ]
     if page_index is None or page_order is None:
@@ -5090,18 +5089,23 @@ def geometry_stream_from_xml(
             "0",
             "0",
         ]
-    paged_trailer = ["0", "0"] if control_type == "CommandBar" else GEOMETRY_TRAILER_PROFILE["paged"]
-    paged_trailer = layout_pre_tail(position) or paged_trailer
+    if control_type == "CommandBar":
+        paged_trailer = ["0", "0"]
+    elif control_type == "Panel":
+        paged_trailer = ["0"]
+    else:
+        paged_trailer = GEOMETRY_TRAILER_PROFILE["paged"]
     group_tail = layout_group_tail(layout_group, layout_order, str(page_order), str(page_index), layout_next_order)
+    marker = "0" if control_type == "Panel" and not any(dimension != "0" for dimension in dimensions) else "1"
     return [
         "8",
         left,
         top,
-            right,
-            bottom,
+        right,
+        bottom,
         layout_mode,
         *bindings,
-        position.get("primaryDimensionMarker", "1") if position is not None else "1",
+        marker,
         *dimensions,
         *paged_trailer,
         *group_tail[:3],
@@ -5131,10 +5135,31 @@ def layout_group_tail(
     return [group, order, next_order, flag1, flag2]
 
 
-def layout_pre_tail(position: ET.Element | None) -> list[str]:
+def has_named_layout_group(position: ET.Element | None) -> bool:
     if position is None:
+        return False
+    return any(
+        position.get(name) is not None
+        for name in ("layoutGroup", "layoutOrder", "layoutNextOrder", "layoutFlag1", "layoutFlag2")
+    )
+
+
+def descriptor_layout_tail(position: ET.Element | None, prefix_size: int) -> list[str]:
+    if not has_named_layout_group(position):
         return []
-    return [value for value in (position.get("layoutPreTail") or "").split(" ") if value != ""]
+    assert position is not None
+    return [
+        *(["0"] * prefix_size),
+        *layout_group_tail(
+            position.get("layoutGroup"),
+            position.get("layoutOrder"),
+            "0",
+            "0",
+            position.get("layoutNextOrder"),
+            position.get("layoutFlag1", "0"),
+            position.get("layoutFlag2", "0"),
+        ),
+    ]
 
 
 def counted_dimension_geometry_from_xml(
@@ -5160,15 +5185,6 @@ def counted_dimension_geometry_from_xml(
             primary.append(dimension_binding_to_raw(binding))
     if not primary or not secondary:
         return None
-    primary_marker = position.get("primaryDimensionMarker")
-    if primary_marker is None:
-        return None
-    try:
-        if int(primary_marker) == len(primary):
-            return None
-    except ValueError:
-        pass
-    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
         "8",
         left,
@@ -5177,13 +5193,13 @@ def counted_dimension_geometry_from_xml(
         bottom,
         "1",
         *bindings,
-        primary_marker,
+        "0",
         str(len(primary)),
         *primary,
         "0",
         str(len(secondary)),
         *secondary,
-        *tail,
+        *descriptor_layout_tail(position, 2),
     ]
 
 
@@ -5195,11 +5211,7 @@ def flagged_height_width_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if (
-        position is None
-        or position.get("primaryDimensionMarker") is not None
-        or position.get("layoutTail") is None
-    ):
+    if position is None:
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:
@@ -5214,9 +5226,10 @@ def flagged_height_width_dimension_geometry_from_xml(
             height = dimension_binding_to_raw(binding)
         elif dimension == "width":
             width = dimension_binding_to_raw(binding)
+        else:
+            return None
     if height is None or width is None:
         return None
-    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
         "8",
         left,
@@ -5233,7 +5246,6 @@ def flagged_height_width_dimension_geometry_from_xml(
         width,
         "0",
         "0",
-        *tail,
     ]
 
 
@@ -5245,11 +5257,7 @@ def prefixed_flagged_height_width_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if (
-        position is None
-        or position.get("primaryDimensionMarker") is None
-        or position.get("layoutTail") is None
-    ):
+    if position is None or not has_named_layout_group(position):
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:
@@ -5264,9 +5272,10 @@ def prefixed_flagged_height_width_dimension_geometry_from_xml(
             height = dimension_binding_to_raw(binding)
         elif dimension == "width":
             width = dimension_binding_to_raw(binding)
+        else:
+            return None
     if height is None or width is None:
         return None
-    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
         "8",
         left,
@@ -5275,12 +5284,12 @@ def prefixed_flagged_height_width_dimension_geometry_from_xml(
         bottom,
         "1",
         *bindings,
-        position.get("primaryDimensionMarker", "0"),
+        "0",
         "1",
         height,
         "1",
         width,
-        *tail,
+        *descriptor_layout_tail(position, 3),
     ]
 
 
@@ -5307,7 +5316,6 @@ def inline_counted_dimension_geometry_from_xml(
             return None
     if not dimensions or not saw_primary_section:
         return None
-    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
         "8",
         left,
@@ -5318,7 +5326,6 @@ def inline_counted_dimension_geometry_from_xml(
         *bindings,
         str(len(dimensions)),
         *dimensions,
-        *tail,
     ]
 
 
@@ -5368,7 +5375,6 @@ def flagged_extra_dimension_geometry_from_xml(
             extra.append((slot, raw))
     if not extra:
         return None
-    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
         "8",
         left,
@@ -5377,10 +5383,9 @@ def flagged_extra_dimension_geometry_from_xml(
         bottom,
         "1",
         *bindings,
-        position.get("primaryDimensionMarker", "1"),
+        "1",
         *dimensions,
         *(raw for _slot, raw in sorted(extra, key=lambda item: item[0])),
-        *tail,
     ]
 
 
@@ -5407,13 +5412,6 @@ def inline_dual_counted_dimension_geometry_from_xml(
             primary.append(dimension_binding_to_raw(binding))
     if not primary or not secondary:
         return None
-    try:
-        marker = position.get("primaryDimensionMarker")
-        if marker is not None and int(marker) != len(primary):
-            return None
-    except ValueError:
-        return None
-    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     return [
         "8",
         left,
@@ -5427,7 +5425,6 @@ def inline_dual_counted_dimension_geometry_from_xml(
         "0",
         str(len(secondary)),
         *secondary,
-        *tail,
     ]
 
 
@@ -5464,8 +5461,7 @@ def inline_segmented_dimension_geometry_from_xml(
         else:
             result.append(str(count))
         result.extend(records)
-    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
-    result.extend(tail)
+    result.extend(descriptor_layout_tail(position, 4))
     return result
 
 

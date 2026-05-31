@@ -17,7 +17,6 @@ def form_xml(*, left: str = "8", noise: bool = False) -> str:
         if noise
         else ""
     )
-    marker_attrs = ' layoutTail="0 0 0 1" primaryDimensionMarker="1"' if noise else ""
     return f"""<Form{noise_attrs}>
       <Title><Item lang="en">Main</Item></Title>
       <Events>
@@ -39,7 +38,7 @@ def form_xml(*, left: str = "8", noise: bool = False) -> str:
           </CommandBar>
           <InputField name="Input" id="2" uuid="11111111-1111-1111-1111-111111111111">
             <Title><Item lang="en">Input</Item></Title>
-            <Position left="{left}" top="8" right="120" bottom="28"{marker_attrs}>
+            <Position left="{left}" top="8" right="120" bottom="28">
               <Bindings>
                 <Binding coordinate="left" mode="1"/>
                 <DimensionBinding dimension="height" section="primary" value="0"/>

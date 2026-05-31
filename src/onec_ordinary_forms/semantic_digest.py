@@ -18,9 +18,6 @@ NOISE_ATTRIBUTES = frozenset(
     {
         "containerCreatedTicks",
         "containerModifiedTicks",
-        "layoutPreTail",
-        "primaryDimensionMarker",
-        "layoutTail",
     }
 )
 
