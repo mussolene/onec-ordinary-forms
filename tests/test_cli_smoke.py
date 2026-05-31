@@ -2748,6 +2748,41 @@ class CliSmokeTest(unittest.TestCase):
         )
         self.assertEqual(image[2][1][13], "1")
 
+    def test_picture_decoration_writes_legacy_style_group_kind(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <PictureDecoration name="Image1" id="5">
+                    <SerializationProfile pictureStyleGroupKind="8" pictureStyleMode="2"/>
+                  </PictureDecoration>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        image = self._find_control(stream, "151ef23e-6bb2-4681-83d0-35bc2217230c")
+
+        self.assertIsNotNone(image)
+        assert image is not None
+        self.assertEqual(
+            image[2][1][4],
+            [
+                "8",
+                "2",
+                ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'],
+                ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'],
+                ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'],
+                "100",
+                "0",
+                "0",
+                "0",
+            ],
+        )
+        self.assertEqual(image[2][1][0][0], "16")
+        self.assertEqual(len(image[2][1][0]), 18)
+
     def test_dump_writes_picture_decoration_serialization_profile(self) -> None:
         base = [
             "19",
@@ -2797,6 +2832,53 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(style.get("state"), "1")
         self.assertEqual(style.get("visible"), "1")
         self.assertEqual(style.get("defaultMode"), "2")
+
+    def test_dump_writes_legacy_picture_decoration_style_group_kind(self) -> None:
+        node = ET.Element("PictureDecoration")
+        item_data = {
+            "raw": [
+                "151ef23e-6bb2-4681-83d0-35bc2217230c",
+                "5",
+                [
+                    "1",
+                    [
+                        [
+                            "16",
+                            "1",
+                            ["3", "4", ["0"]],
+                            ["3", "4", ["0"]],
+                            ["7", "3", "0", "1", "100"],
+                            "0",
+                            ["3", "4", ["0"]],
+                            ["3", "4", ["0"]],
+                            ["3", "4", ["0"]],
+                            ["3", "3", ["-7"]],
+                            ["3", "3", ["-21"]],
+                            ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+                            ["1", "0"],
+                            "0",
+                            "0",
+                            "100",
+                            "0",
+                            "0",
+                        ],
+                        "20",
+                        "0",
+                        "0",
+                        ["8", "2", ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""']],
+                    ],
+                ],
+            ],
+        }
+
+        add_picture_decoration_serialization_profile(node, "Image", item_data)
+
+        profile = node.find("SerializationProfile")
+        self.assertIsNotNone(profile)
+        assert profile is not None
+        self.assertEqual(profile.get("pictureStyleGroupKind"), "8")
+        self.assertEqual(profile.get("pictureStyleMode"), "2")
+        self.assertIsNone(profile.find("StyleProfile"))
 
     def test_command_bar_action_graph_preserves_platform_profile_flags(self) -> None:
         root = ET.fromstring(

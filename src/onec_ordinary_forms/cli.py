@@ -1398,23 +1398,30 @@ def add_picture_decoration_serialization_profile(parent: ET.Element, public_type
     if not isinstance(info, list) or not info:
         return
     base = info[0] if isinstance(info[0], list) else None
-    if base is None or len(base) <= 19:
+    picture_style = info[4] if len(info) > 4 and isinstance(info[4], list) else None
+    if base is None and picture_style is None:
         return
     profile = ET.SubElement(parent, "SerializationProfile")
-    if len(info) > 2:
+    if len(info) > 2 and (clean_token(info[2]) != "0" or (picture_style and clean_token(picture_style[0]) == "10")):
         profile.set("displayMode", clean_token(info[2]))
-    if len(info) > 3:
+    if len(info) > 3 and (clean_token(info[3]) != "0" or (picture_style and clean_token(picture_style[0]) == "10")):
         profile.set("displayState", clean_token(info[3]))
-    picture_style = info[4] if len(info) > 4 and isinstance(info[4], list) else None
-    if isinstance(picture_style, list) and len(picture_style) > 1:
-        profile.set("pictureStyleMode", clean_token(picture_style[1]))
+    if isinstance(picture_style, list):
+        style_kind = clean_token(picture_style[0])
+        if style_kind != "10":
+            profile.set("pictureStyleGroupKind", style_kind)
+        if len(picture_style) > 1 and (clean_token(picture_style[1]) != "0" or style_kind == "10"):
+            profile.set("pictureStyleMode", clean_token(picture_style[1]))
     if len(info) > 13 and clean_token(info[13]) != "0":
         profile.set("renderingProfileFlag", clean_token(info[13]))
-    style = ET.SubElement(profile, "StyleProfile")
-    style.set("mode", clean_token(base[16]))
-    style.set("state", clean_token(base[17]))
-    style.set("visible", clean_token(base[18]))
-    style.set("defaultMode", clean_token(base[19]))
+    if base is not None and len(base) > 19:
+        style = ET.SubElement(profile, "StyleProfile")
+        style.set("mode", clean_token(base[16]))
+        style.set("state", clean_token(base[17]))
+        style.set("visible", clean_token(base[18]))
+        style.set("defaultMode", clean_token(base[19]))
+    if not profile.attrib and len(profile) == 0:
+        parent.remove(profile)
 
 
 def add_command_bar_buttons(parent: ET.Element, items: list[object]) -> None:

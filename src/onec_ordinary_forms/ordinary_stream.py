@@ -2634,10 +2634,13 @@ def image_has_picture_style_group(element: ET.Element, picture_payload: str) -> 
 
 
 def image_base_info_record_from_xml(element: ET.Element) -> list[object]:
+    profile = element.find("SerializationProfile")
+    style = element.find("./SerializationProfile/StyleProfile")
+    if profile is not None and profile.get("pictureStyleGroupKind") == "8" and style is None:
+        return legacy_image_base_info_record_from_xml(element)
     base = extended_base_info_record_from_xml(element)
     if element.find("BorderColor") is None:
         base[6] = default_color_record()
-    style = element.find("./SerializationProfile/StyleProfile")
     if style is not None:
         base[16] = style.get("mode", base[16])
         base[17] = style.get("state", base[17])
@@ -2648,14 +2651,59 @@ def image_base_info_record_from_xml(element: ET.Element) -> list[object]:
     return base
 
 
+def legacy_image_base_info_record_from_xml(element: ET.Element) -> list[object]:
+    base = [
+        "16",
+        visible_record_from_xml(element),
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["7", "3", "0", "1", "100"],
+        bool_text_as_record(element, "Enabled", default=True),
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "4", ["0"]],
+        ["3", "3", ["-7"]],
+        ["3", "3", ["-21"]],
+        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
+        tooltip_record_from_xml(element),
+        "0",
+        "0",
+        "100",
+        "0",
+        "0",
+    ]
+    if element.find("TextColor") is not None:
+        base[2] = color_record_from_xml(element, "TextColor")
+    if element.find("BackColor") is not None:
+        base[3] = color_record_from_xml(element, "BackColor")
+    if element.find("Font") is not None:
+        base[4] = font_record_from_xml(element.find("Font"))
+    if element.find("BorderColor") is not None:
+        base[6] = color_record_from_xml(element, "BorderColor")
+    return base
+
+
 def image_picture_style_group_record(element: ET.Element, picture_payload: str) -> list[object]:
     rendering = element.find("PictureRendering")
     profile = element.find("SerializationProfile")
+    style_group_kind = profile.get("pictureStyleGroupKind", "10") if profile is not None else "10"
     picture_record = (
         ["4", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload]], "0", '""']
         if picture_payload
         else empty_page_style_record()
     )
+    if style_group_kind == "8":
+        return [
+            "8",
+            profile.get("pictureStyleMode", "0") if profile is not None else "0",
+            picture_record,
+            empty_page_style_record(),
+            empty_page_style_record(),
+            "100",
+            "0",
+            "0",
+            "0",
+        ]
     return [
         "10",
         profile.get("pictureStyleMode", "0") if profile is not None else "0",

@@ -1437,6 +1437,7 @@
     </xs:sequence>
     <xs:attribute name="displayMode" type="xs:string"/>
     <xs:attribute name="displayState" type="xs:string"/>
+    <xs:attribute name="pictureStyleGroupKind" type="xs:string"/>
     <xs:attribute name="pictureStyleMode" type="xs:string"/>
     <xs:attribute name="renderingProfileFlag" type="xs:string"/>
   </xs:complexType>
