@@ -1881,9 +1881,10 @@ def add_table_view_properties(parent: ET.Element, item: dict, item_data: object)
         set_text(parent, "ViewProfile", clean_token(view[1]))
     if len(view) > 14 and clean_token(view[14]) == "1":
         set_text(parent, "ReadOnly", "true")
-    if len(view) > 20 and clean_token(view[20]) != "0":
+    extended_view = len(view) > 0 and clean_token(view[0]) == "23"
+    if extended_view and len(view) > 20 and clean_token(view[20]) != "0":
         set_text(parent, "LeftFixedColumns", clean_token(view[20]))
-    if len(view) > 21 and clean_token(view[21]) != "0":
+    if extended_view and len(view) > 21 and clean_token(view[21]) != "0":
         set_text(parent, "RightFixedColumns", clean_token(view[21]))
     if len(view) > 22 and clean_token(view[22]) == "0":
         set_text(parent, "AutoMarkIncomplete", "false")

@@ -663,8 +663,8 @@ def form_serialization_profile_from_xml(root: ET.Element) -> FormRootLayout | No
                 descriptor["styleMode"] = page_state.get("styleMode", "")
             if descriptor:
                 page_states.append(descriptor)
+        result["rootPageStates"] = page_states
         if page_states:
-            result["rootPageStates"] = page_states
             result["rootPageName"] = page_states[0].get("name", "")
             result["rootPageTitle"] = page_states[0].get("title", "")
             result["rootPageStyleMode"] = page_states[0].get("styleMode", "")
@@ -842,6 +842,7 @@ def root_panel_info(
     else:
         right_offset = margin_left
         bottom_offset = margin_top
+    page_states = root_page_state_records(root_layout, page_title, page_name, page_style_mode)
     position_records = [
         ["2", margin_left, "1", "1", "1", "0", "0", "0", "0"],
         ["2", margin_top, "0", "1", "2", "0", "0", "0", "0"],
@@ -870,7 +871,7 @@ def root_panel_info(
             page_style_group_record("1"),
             str((root_layout or {}).get("rootPanelPageStateFlag", "0")),
             current_page_index,
-            ["1", "1", ["6", page_title, root_page_state_style_group_record(page_style_mode), "-1", "1", "1", quoted_atom(page_name), "1", default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"]],
+            ["1", str(len(page_states)), *page_states],
             "1",
             "1",
             "0",
@@ -969,7 +970,8 @@ def root_page_state_records(
     default_style_mode: str,
 ) -> list[list[object]]:
     states = (root_layout or {}).get("rootPageStates")
-    if not isinstance(states, list) or not states:
+    preserve_empty_states = isinstance(states, list)
+    if not preserve_empty_states:
         states = [{"name": default_name, "title": default_name, "styleMode": default_style_mode}]
     result: list[list[object]] = []
     for state in states:
@@ -994,7 +996,9 @@ def root_page_state_records(
                 "1",
             ]
         )
-    return result or [["6", default_title, root_page_state_style_group_record(default_style_mode), "-1", "1", "1", quoted_atom(default_name), "1", default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"]]
+    if result or preserve_empty_states:
+        return result
+    return [["6", default_title, root_page_state_style_group_record(default_style_mode), "-1", "1", "1", quoted_atom(default_name), "1", default_color_record(), default_color_record(), ["8", "3", "0", "1", "100"], "1"]]
 
 
 def root_page_layout_header(root_layout: FormRootLayout | None) -> list[str]:
@@ -4276,7 +4280,7 @@ def command_bar_base_info_record(element: ET.Element) -> list[object]:
         default_color_record(),
         default_color_record(),
         font_record_from_xml(element.find("Font")),
-        "0",
+        bool_text_as_record(element, "Enabled", default=True),
         color_record_from_xml(element, "BorderColor") if element.find("BorderColor") is not None else (default_color_record() if has_button_graph else ["4", "3", ["-22"], "3"]),
         default_color_record(),
         default_color_record(),
@@ -4342,7 +4346,7 @@ TABLE_EVENT_ID_BY_NAME = {
 def table_data_source_record(element: ET.Element) -> list[object]:
     profile = element.find("DataSourceProfile")
     link_mode = profile.get("linkMode", "0") if profile is not None else "0"
-    if table_columns_from_xml(element):
+    if profile is not None or table_columns_from_xml(element):
         return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", link_mode]]
     return ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]]
 
@@ -4352,7 +4356,7 @@ def table_view_record_from_xml(element: ET.Element, asset_root: Path | None = No
     columns_count = element.findtext("ColumnsCount") or "0"
     rows_count = element.findtext("RowsCount") or "0"
     columns = table_columns_from_xml(element)
-    if columns:
+    if table_needs_extended_view_record(element, columns):
         return extended_table_view_record(element, columns, asset_root)
     record = [
         "12",
@@ -4382,12 +4386,27 @@ def table_view_record_from_xml(element: ET.Element, asset_root: Path | None = No
     ]
     record[descriptor.slot_index("RowsCount")] = rows_count.strip() or "0"
     record[descriptor.slot_index("ColumnsCount")] = columns_count.strip() or "0"
+    record[1] = text_or_default(element, "ViewProfile", "100801549")
+    if element.find("FieldBackColor") is not None:
+        record[6] = color_record_from_xml(element, "FieldBackColor")
     record[descriptor.slot_index("AutoMarkIncomplete")] = bool_record_from_xml(
         element,
         "AutoMarkIncomplete",
         default=True,
     )
     return record
+
+
+def table_needs_extended_view_record(element: ET.Element, columns: list[ET.Element]) -> bool:
+    if columns:
+        return True
+    view_profile = text_or_default(element, "ViewProfile", "100801549")
+    return (
+        view_profile != "100801549"
+        or element.find("DataSourceProfile") is not None
+        or element.find("LeftFixedColumns") is not None
+        or element.find("RightFixedColumns") is not None
+    )
 
 
 def table_columns_from_xml(element: ET.Element) -> list[ET.Element]:

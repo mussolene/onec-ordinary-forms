@@ -1190,6 +1190,32 @@ class CliSmokeTest(unittest.TestCase):
         assert table is not None
         self.assertEqual(table[2][3], ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "1"]])
 
+    def test_table_extended_profile_without_columns_is_written(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="6">
+                    <DataSourceProfile linkMode="1"/>
+                    <ViewProfile>117644301</ViewProfile>
+                    <LeftFixedColumns>2</LeftFixedColumns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+
+        self.assertIsNotNone(table)
+        assert table is not None
+        view = table[2][2][1]
+        self.assertEqual(view[0:2], ["23", "117644301"])
+        self.assertEqual(view[20], "2")
+        self.assertEqual(view[23], ["0"])
+        self.assertEqual(table[2][3], ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "1"]])
+
     def test_button_enabled_false_and_default_border_are_written(self) -> None:
         root = ET.fromstring(
             """<Form>
@@ -2515,6 +2541,31 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(page_state[1][2][1], '"Пустой список организаций"')
         self.assertEqual(page_state[2][6], "2")
         self.assertEqual(page_state[6], '"СтраницаСтраницаНетОрганизаций"')
+
+    def test_form_root_panel_profile_preserves_empty_page_states(self) -> None:
+        root = ET.fromstring(
+            """<Form version="0.1">
+              <Title><Item lang="ru">Main</Item></Title>
+              <Width>1058</Width>
+              <Height>424</Height>
+              <SerializationProfile>
+                <RootRecord recordKind="18" titleMarker="4" titleScope="4294967295" slot5="1" slot6="0" slot7="1" slot8="4" slot9="4" slot10="3"/>
+                <RootPanel dependencyTail="0 0" pageStateFlag="0" currentPageIndex="1" pageLayoutHeader="1 1 0">
+                  <DependencyGroup order="1">
+                    <Dependency targetId="76" dimension="right"/>
+                  </DependencyGroup>
+                  <PageLayout page="0" left="8" top="33" width="1050" height="391" horizontalMode="8" verticalMode="9"/>
+                </RootPanel>
+              </SerializationProfile>
+              <Pages><Page name="Main"/></Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        root_panel_info = stream[1][2][1][1]
+
+        self.assertEqual(root_panel_info[5], ["10", "1", ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'], ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'], ["4", "0", ["0"], '""', "-1", "-1", "1", "0", '""'], "100", "0", "0", "0", "0", "0"])
+        self.assertEqual(root_panel_info[6:9], ["0", "1", ["1", "0"]])
 
     def test_default_command_bar_geometry_uses_platform_name_profile(self) -> None:
         root = ET.fromstring(
