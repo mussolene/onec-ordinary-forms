@@ -1424,22 +1424,22 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(label[2][1][12][1], "0")
         self.assertEqual(label[2][1][13], "4")
 
-    def test_panel_serialization_profile_preserves_dependency_prefix_and_page_state(self) -> None:
+    def test_panel_layout_preserves_dependency_prefix_and_page_state(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Pages>
                 <Page name="Main">
                   <Panel name="Панель1" id="4">
-                    <SerializationProfile pageCapacity="1" pageStateFlag="1" currentPageIndex="1">
-                      <DependencyGroup order="1">
-                        <Dependency targetId="25" dimension="bottom"/>
-                      </DependencyGroup>
-                      <DependencyGroup order="2" prefix="0">
-                        <Dependency targetId="7" dimension="right"/>
-                        <Dependency targetId="8" dimension="right"/>
-                      </DependencyGroup>
+                    <PanelLayout pageCapacity="1" pageStateFlag="1" currentPageIndex="1">
+                      <LayoutDependencyGroup order="1">
+                        <LayoutDependency targetId="25" dimension="bottom"/>
+                      </LayoutDependencyGroup>
+                      <LayoutDependencyGroup order="2" prefix="0">
+                        <LayoutDependency targetId="7" dimension="right"/>
+                        <LayoutDependency targetId="8" dimension="right"/>
+                      </LayoutDependencyGroup>
                       <PageLayout page="0" left="6" top="6" width="1222" height="1030" horizontalMode="4" verticalMode="4"/>
-                    </SerializationProfile>
+                    </PanelLayout>
                     <Pages><Page name="Страница1"/></Pages>
                   </Panel>
                 </Page>
@@ -1570,7 +1570,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(body[49], ["2", "1222", "1", "1", "3", "0", "0", "4", "0"])
         self.assertEqual(body[50], ["2", "1030", "0", "1", "4", "0", "0", "4", "0"])
 
-    def test_build_bin_uses_typed_panel_serialization_profile(self) -> None:
+    def test_build_bin_uses_typed_panel_layout(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
@@ -1578,15 +1578,15 @@ class CliSmokeTest(unittest.TestCase):
                 <Page name="Main">
                   <Panel name="Панель1" id="4">
                     <Position left="8" top="33" right="760" bottom="560" width="752" height="527"/>
-                    <SerializationProfile pageCapacity="2">
-                      <DependencyGroup order="1">
-                        <Dependency targetId="12" dimension="top"/>
-                        <Dependency targetId="13" dimension="left"/>
-                      </DependencyGroup>
-                      <DependencyGroup order="2"/>
+                    <PanelLayout pageCapacity="2">
+                      <LayoutDependencyGroup order="1">
+                        <LayoutDependency targetId="12" dimension="top"/>
+                        <LayoutDependency targetId="13" dimension="left"/>
+                      </LayoutDependencyGroup>
+                      <LayoutDependencyGroup order="2"/>
                       <PageLayout page="0" left="6" top="6" width="752" height="527" horizontalMode="4" verticalMode="8"/>
                       <PageLayout page="1" left="6" top="6" width="750" height="529" horizontalMode="6" verticalMode="6"/>
-                    </SerializationProfile>
+                    </PanelLayout>
                     <Pages>
                       <Page name="Страница1" styleMode="2"><Title><Item lang="ru">Страница1</Item></Title></Page>
                       <Page name="Страница2" styleMode="0"><Title><Item lang="ru">Страница2</Item></Title></Page>
@@ -1609,7 +1609,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(body[19][7], "8")
         self.assertEqual(body[23][7], "6")
 
-    def test_panel_serialization_profile_can_have_layout_without_dependencies(self) -> None:
+    def test_panel_layout_can_have_layout_without_dependencies(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
@@ -1617,10 +1617,10 @@ class CliSmokeTest(unittest.TestCase):
                 <Page name="Main">
                   <Panel name="Панель1" id="4" baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2">
                     <Position left="8" top="33" right="760" bottom="560" width="752" height="527"/>
-                    <SerializationProfile pageCapacity="2" pageStateFlag="0" currentPageIndex="1">
+                    <PanelLayout pageCapacity="2" pageStateFlag="0" currentPageIndex="1">
                       <PageLayout page="0" left="6" top="6" width="752" height="527" horizontalMode="4" verticalMode="8"/>
                       <PageLayout page="1" left="6" top="6" width="750" height="529" horizontalMode="6" verticalMode="6"/>
-                    </SerializationProfile>
+                    </PanelLayout>
                     <Pages>
                       <Page name="Страница1" styleMode="2"><Title><Item lang="ru">Страница1</Item></Title></Page>
                       <Page name="Страница2" styleMode="0"><Title><Item lang="ru">Страница2</Item></Title></Page>
@@ -3565,30 +3565,30 @@ class CliSmokeTest(unittest.TestCase):
     def test_panel_page_layout_writer_preserves_xml_order(self) -> None:
         from onec_ordinary_forms.ordinary_stream import panel_page_layout_records
 
-        serialization = ET.fromstring(
+        layout_node = ET.fromstring(
             """
-            <SerializationProfile>
+            <PanelLayout>
               <PageLayout page="1" left="0" top="0" width="549" height="255" horizontalMode="0" verticalMode="0"/>
               <PageLayout page="2" left="0" top="0" width="548" height="239" horizontalMode="1" verticalMode="16"/>
               <PageLayout page="3" left="0" top="0" width="547" height="255" horizontalMode="2" verticalMode="0"/>
               <PageLayout page="0" left="0" top="0" width="549" height="233" horizontalMode="0" verticalMode="22"/>
-            </SerializationProfile>
+            </PanelLayout>
             """
         )
 
-        records = panel_page_layout_records(serialization)
+        records = panel_page_layout_records(layout_node)
 
         self.assertEqual([records[index][5] for index in (0, 4, 8, 12)], ["1", "2", "3", "0"])
 
-    def test_panel_empty_dependency_profile_preserves_platform_padding(self) -> None:
+    def test_panel_layout_empty_dependencies_preserve_platform_padding(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Pages>
                 <Page name="Main">
                   <Panel name="ModePanel" id="29">
-                    <SerializationProfile pageCapacity="1" pageStateFlag="0" currentPageIndex="1">
+                    <PanelLayout pageCapacity="1" pageStateFlag="0" currentPageIndex="1">
                       <PageLayout page="0" left="6" top="6" width="303" height="29" horizontalMode="22" verticalMode="4"/>
-                    </SerializationProfile>
+                    </PanelLayout>
                   </Panel>
                 </Page>
               </Pages>

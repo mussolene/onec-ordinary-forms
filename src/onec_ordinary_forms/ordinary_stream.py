@@ -730,7 +730,7 @@ def form_root_panel_dependency_profile_from_xml(root_panel: ET.Element) -> list[
         for dependency in group.findall("Dependency"):
             target_id = dependency.get("targetId", "0")
             dimension = dependency.get("dimension", "top")
-            dimension_code = PANEL_PROFILE_DIMENSION_CODES.get(dimension)
+            dimension_code = PANEL_LAYOUT_DIMENSION_CODES.get(dimension)
             if dimension_code is None and dimension.startswith("dimension"):
                 dimension_code = dimension.removeprefix("dimension")
             records.append(["0", target_id, dimension_code or "0"])
@@ -1151,11 +1151,11 @@ def regular_panel_base_info_record() -> list[object]:
     return record
 
 
-def panel_base_info_record_for_serialization(element: ET.Element, serialization: ET.Element | None) -> list[object]:
+def panel_base_info_record_for_layout(element: ET.Element, layout_node: ET.Element | None) -> list[object]:
     record = extended_base_info_record_from_xml(element)
     if element.find("BorderColor") is None:
         record[6] = default_color_record()
-    if serialization is not None and element.get("baseStyleState") is None:
+    if layout_node is not None and element.get("baseStyleState") is None:
         record[17] = "2"
     return record
 
@@ -1941,8 +1941,8 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object],
     pages = element.find("Pages")
     page_nodes = pages.findall("Page") if pages is not None else []
     page_count = len(page_nodes) or 1
-    serialization = element.find("SerializationProfile")
-    explicit_page_capacity = panel_serialization_page_capacity(serialization)
+    layout_node = element.find("PanelLayout")
+    explicit_page_capacity = panel_layout_page_capacity(layout_node)
     page_capacity = explicit_page_capacity or panel_page_capacity(page_count)
     position = element.find("Position")
     raw_width = position.get("width", "1228") if position is not None else "1228"
@@ -1950,19 +1950,19 @@ def panel_control_info_from_xml(element: ET.Element, title_record: list[object],
     width = panel_extent_value(raw_width, 6)
     height = panel_extent_value(raw_height, 24)
     state_table = panel_state_table(element, title_record, extended=True, capacity=page_capacity)
-    position_records = panel_page_layout_records(serialization) or panel_position_records(page_capacity, width, height, mode="4")
-    dependency_profile = panel_dependency_profile_from_xml(serialization, page_capacity)
+    position_records = panel_page_layout_records(layout_node) or panel_position_records(page_capacity, width, height, mode="4")
+    dependency_records = panel_layout_dependency_records_from_xml(layout_node, page_capacity)
     return [
         descriptor.info_kind,
         [
-            panel_base_info_record_for_serialization(element, serialization),
+            panel_base_info_record_for_layout(element, layout_node),
             "26",
-            *dependency_profile,
+            *dependency_records,
             "0",
             "0",
             page_style_group_record("1"),
-            panel_page_state_flag(serialization),
-            panel_current_page_index(serialization),
+            panel_page_state_flag(layout_node),
+            panel_current_page_index(layout_node),
             state_table,
             "1",
             "1",
@@ -2023,7 +2023,7 @@ def panel_control_slot_profile() -> list[object]:
     ]
 
 
-PANEL_PROFILE_DIMENSION_CODES = {
+PANEL_LAYOUT_DIMENSION_CODES = {
     "top": "0",
     "bottom": "1",
     "left": "2",
@@ -2031,10 +2031,10 @@ PANEL_PROFILE_DIMENSION_CODES = {
 }
 
 
-def panel_serialization_page_capacity(serialization: ET.Element | None) -> int | None:
-    if serialization is None:
+def panel_layout_page_capacity(layout_node: ET.Element | None) -> int | None:
+    if layout_node is None:
         return None
-    value = serialization.get("pageCapacity")
+    value = layout_node.get("pageCapacity")
     if value is None:
         return None
     try:
@@ -2044,22 +2044,22 @@ def panel_serialization_page_capacity(serialization: ET.Element | None) -> int |
     return page_capacity if page_capacity > 0 else None
 
 
-def panel_page_state_flag(serialization: ET.Element | None) -> str:
-    if serialization is None:
+def panel_page_state_flag(layout_node: ET.Element | None) -> str:
+    if layout_node is None:
         return "1"
-    return serialization.get("pageStateFlag", "0")
+    return layout_node.get("pageStateFlag", "0")
 
 
-def panel_current_page_index(serialization: ET.Element | None) -> str:
-    if serialization is None:
+def panel_current_page_index(layout_node: ET.Element | None) -> str:
+    if layout_node is None:
         return "1"
-    return serialization.get("currentPageIndex", "1")
+    return layout_node.get("currentPageIndex", "1")
 
 
-def panel_dependency_profile_from_xml(serialization: ET.Element | None, page_capacity: int) -> list[object]:
-    if serialization is None:
+def panel_layout_dependency_records_from_xml(layout_node: ET.Element | None, page_capacity: int) -> list[object]:
+    if layout_node is None:
         return ["1", ["0", str(page_capacity), "1"], *panel_control_slot_profile()]
-    groups = sorted(serialization.findall("DependencyGroup"), key=lambda node: int(node.get("order", "0") or "0"))
+    groups = sorted(layout_node.findall("LayoutDependencyGroup"), key=lambda node: int(node.get("order", "0") or "0"))
     if not groups:
         return ["0", "0", "0", "0"] if page_capacity == 1 else []
     result: list[object] = []
@@ -2071,10 +2071,10 @@ def panel_dependency_profile_from_xml(serialization: ET.Element | None, page_cap
         dependencies: list[list[object]] = []
         if header:
             dependencies.append([[value for value in header.split(" ") if value != ""]])
-        for dependency in group.findall("Dependency"):
+        for dependency in group.findall("LayoutDependency"):
             target_id = dependency.get("targetId", "0")
             dimension = dependency.get("dimension", "top")
-            dimension_code = PANEL_PROFILE_DIMENSION_CODES.get(dimension)
+            dimension_code = PANEL_LAYOUT_DIMENSION_CODES.get(dimension)
             if dimension_code is None and dimension.startswith("dimension"):
                 dimension_code = dimension.removeprefix("dimension")
             dependencies.append(["0", target_id, dimension_code or "0"])
@@ -2082,10 +2082,10 @@ def panel_dependency_profile_from_xml(serialization: ET.Element | None, page_cap
     return result
 
 
-def panel_page_layout_records(serialization: ET.Element | None) -> list[list[object]]:
-    if serialization is None:
+def panel_page_layout_records(layout_node: ET.Element | None) -> list[list[object]]:
+    if layout_node is None:
         return []
-    layouts = serialization.findall("PageLayout")
+    layouts = layout_node.findall("PageLayout")
     records: list[list[object]] = []
     for layout in layouts:
         page = layout.get("page", "0")

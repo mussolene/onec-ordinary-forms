@@ -1231,7 +1231,7 @@ def add_semantic_item(
     add_base_style_attributes(node, item_data)
     add_font(node, item_data)
     add_geometry(node, item_data, element_index)
-    add_panel_serialization_profile(node, public_type, item_data)
+    add_panel_layout(node, public_type, item_data)
     add_command_bar_command_source(node, public_type, item_data)
     add_picture_decoration_picture_style(node, public_type, item_data)
     if public_type == "Image":
@@ -1341,7 +1341,7 @@ def add_data_path(parent: ET.Element, item: dict, item_data: object) -> None:
     set_text(parent, "DataPath", data_path)
 
 
-PANEL_PROFILE_DIMENSION_NAMES = {
+PANEL_LAYOUT_DIMENSION_NAMES = {
     "0": "top",
     "1": "bottom",
     "2": "left",
@@ -1349,7 +1349,7 @@ PANEL_PROFILE_DIMENSION_NAMES = {
 }
 
 
-def add_panel_serialization_profile(parent: ET.Element, public_type: str, item_data: object) -> None:
+def add_panel_layout(parent: ET.Element, public_type: str, item_data: object) -> None:
     if public_type != "Panel" or not isinstance(item_data, dict):
         return
     raw = item_data.get("raw")
@@ -1363,17 +1363,17 @@ def add_panel_serialization_profile(parent: ET.Element, public_type: str, item_d
     page_capacity = len(page_layouts)
     if not dependencies and not page_layouts:
         return
-    profile = ET.SubElement(parent, "SerializationProfile")
+    layout_node = ET.SubElement(parent, "PanelLayout")
     if page_capacity:
-        profile.set("pageCapacity", str(page_capacity))
+        layout_node.set("pageCapacity", str(page_capacity))
     page_state_flag, current_page_index = panel_page_state_scalars(info, cursor)
     if page_state_flag:
-        profile.set("pageStateFlag", page_state_flag)
+        layout_node.set("pageStateFlag", page_state_flag)
     if current_page_index:
-        profile.set("currentPageIndex", current_page_index)
+        layout_node.set("currentPageIndex", current_page_index)
     for order, descriptor in enumerate(dependencies, start=1):
         records = descriptor["records"]
-        group = ET.SubElement(profile, "DependencyGroup")
+        group = ET.SubElement(layout_node, "LayoutDependencyGroup")
         group.set("order", str(order))
         prefix = descriptor.get("prefix", [])
         if prefix:
@@ -1382,12 +1382,12 @@ def add_panel_serialization_profile(parent: ET.Element, public_type: str, item_d
         if header:
             group.set("header", " ".join(header))
         for record in records:
-            dependency = ET.SubElement(group, "Dependency")
+            dependency = ET.SubElement(group, "LayoutDependency")
             dependency.set("targetId", clean_token(record[1]))
             dimension = clean_token(record[2])
-            dependency.set("dimension", PANEL_PROFILE_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
+            dependency.set("dimension", PANEL_LAYOUT_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
     for layout in page_layouts:
-        page = ET.SubElement(profile, "PageLayout")
+        page = ET.SubElement(layout_node, "PageLayout")
         for key, value in layout.items():
             page.set(key, value)
 
@@ -2955,7 +2955,7 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
             dependency = ET.SubElement(group, "Dependency")
             dependency.set("targetId", clean_token(record[1]))
             dimension = clean_token(record[2])
-            dependency.set("dimension", PANEL_PROFILE_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
+            dependency.set("dimension", PANEL_LAYOUT_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
     dependency_tail = form_root_panel_dependency_tail(info, cursor)
     if dependency_tail:
         root_panel.set("dependencyTail", " ".join(dependency_tail))

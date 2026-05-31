@@ -82,3 +82,14 @@ def test_picture_decoration_picture_style_is_public_descriptor_property() -> Non
 
     assert "PictureStyle" not in picture["xsdOnlyProperties"]
     assert "SerializationProfile" not in picture["xsdOnlyProperties"]
+
+
+def test_panel_layout_is_public_descriptor_property() -> None:
+    report = audit_codec_coverage.audit(
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
+    )
+    panel = {item["control"]: item for item in report["controls"]}["Panel"]
+
+    assert "PanelLayout" not in panel["xsdOnlyProperties"]
+    assert "SerializationProfile" not in panel["xsdOnlyProperties"]

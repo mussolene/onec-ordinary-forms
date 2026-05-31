@@ -141,7 +141,7 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "ActiveXControl",
         COMMON_CONTROL_PROPERTIES + ("Clsid", "State"),
     ),
-    "Panel": OrdinaryControlDescriptor("Panel", "Панель", "Pages", COMMON_CONTROL_PROPERTIES + ("Pages", "PagesRepresentation")),
+    "Panel": OrdinaryControlDescriptor("Panel", "Панель", "Pages", COMMON_CONTROL_PROPERTIES + ("PanelLayout", "Pages", "PagesRepresentation")),
     "Label": OrdinaryControlDescriptor(
         "LabelDecoration",
         "Надпись",

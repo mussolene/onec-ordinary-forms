@@ -232,3 +232,20 @@ def test_picture_decoration_schema_has_typed_picture_style_not_profile_pocket() 
     assert "SerializationProfile" not in public_elements
     assert root.find("xs:complexType[@name='PictureDecorationSerializationProfileType']", ns) is None
     assert root.find("xs:complexType[@name='PictureDecorationStyleProfileType']", ns) is None
+
+
+def test_panel_schema_has_typed_panel_layout_not_profile_pocket() -> None:
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
+    choice = root.find(
+        "xs:complexType[@name='PanelType']/xs:complexContent/xs:extension/xs:choice",
+        ns,
+    )
+    assert choice is not None
+    public_elements = {node.get("name") for node in choice.findall("xs:element", ns)}
+
+    assert "PanelLayout" in public_elements
+    assert "SerializationProfile" not in public_elements
+    assert root.find("xs:complexType[@name='PanelSerializationProfileType']", ns) is None
+    assert root.find("xs:complexType[@name='PanelLayoutType']", ns) is not None
+    assert root.find("xs:complexType[@name='PanelLayoutDependencyGroupType']", ns) is not None

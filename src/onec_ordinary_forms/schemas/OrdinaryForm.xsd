@@ -1323,7 +1323,7 @@
           <xs:element name="PictureSize" type="xs:string"/>
           <xs:element name="DistributeByPages" type="xs:boolean"/>
           <xs:element name="ScrollablePagesMode" type="xs:boolean"/>
-          <xs:element name="SerializationProfile" type="PanelSerializationProfileType"/>
+          <xs:element name="PanelLayout" type="PanelLayoutType"/>
           <xs:element name="Pages" type="PagesType"/>
           <xs:element name="CurrentPage" type="NamedRefType"/>
           <xs:element name="PagesRepresentation" type="xs:string"/>
@@ -1333,14 +1333,22 @@
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
-  <xs:complexType name="PanelSerializationProfileType">
+  <xs:complexType name="PanelLayoutType">
     <xs:sequence>
-      <xs:element name="DependencyGroup" type="PanelDependencyGroupType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="LayoutDependencyGroup" type="PanelLayoutDependencyGroupType" minOccurs="0" maxOccurs="unbounded"/>
       <xs:element name="PageLayout" type="PanelPageLayoutType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attribute name="pageCapacity" type="xs:integer"/>
     <xs:attribute name="pageStateFlag" type="xs:string"/>
     <xs:attribute name="currentPageIndex" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="PanelLayoutDependencyGroupType">
+    <xs:sequence>
+      <xs:element name="LayoutDependency" type="PanelDependencyType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="order" type="xs:integer" use="required"/>
+    <xs:attribute name="prefix" type="xs:string"/>
+    <xs:attribute name="header" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PanelDependencyGroupType">
     <xs:sequence>
