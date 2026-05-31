@@ -174,6 +174,9 @@ Done after this audit:
 - position `dimensionProfile` is no longer public XML, and dimensions above
   the named height/minHeight/stretch/width set are emitted as
   `dimension="extra" extraIndex="N"` instead of `dimension="slotN"`;
+- simple inline dimension segment counts and default primary dimension markers
+  are now derived from `DimensionBinding` sections instead of being written as
+  public marker attributes;
 - schema tests now guard against reintroducing the removed public raw-shape
   vocabulary.
 
@@ -181,9 +184,9 @@ Remaining next steps:
 
 1. Add semantic graph digest comparison and use it before corpus byte reports.
 2. Convert the remaining position/layout raw-shaped names, especially
-   `layoutTail`, `dimensionSegments`, `primaryDimensionMarker`, and
-   `secondaryDimensionMarker`, into named concepts or internal descriptor
-   rules.
+   `layoutTail`, `layoutPreTail`, marker-bearing `dimensionSegments`,
+   `primaryDimensionMarker`, and `secondaryDimensionMarker`, into named
+   concepts or internal descriptor rules.
 3. Extend property-slot coverage so the audit reports dump/build mapping for
    each public XSD property, not only per-control writer coverage.
 4. Re-run the small all-controls fixture and Diadoc fixture.

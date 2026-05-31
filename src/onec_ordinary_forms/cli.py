@@ -749,7 +749,9 @@ def add_flagged_dimension_bindings_with_extra_records(
     tail_values = geometry_raw[cursor:]
     if not tail_values or any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
+    marker = clean_token(geometry_raw[12])
+    if marker != "1":
+        position.set("primaryDimensionMarker", marker)
     position.set("layoutTail", " ".join(clean_token(value) for value in tail_values))
     for index, binding in enumerate(geometry_raw[13:17], start=1):
         add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
@@ -889,7 +891,6 @@ def add_inline_counted_dimension_bindings(
     tail_values = geometry_raw[end:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("primaryDimensionMarker", str(count))
     tail = [clean_token(value) for value in tail_values]
     if tail:
         position.set("layoutTail", " ".join(tail))
@@ -953,7 +954,8 @@ def add_inline_segmented_dimension_bindings(
     tail_values = geometry_raw[cursor:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("dimensionSegments", " ".join(segment_spec(marker, len(records)) for marker, records in segments))
+    if any(marker for marker, _records in segments):
+        position.set("dimensionSegments", " ".join(segment_spec(marker, len(records)) for marker, records in segments))
     tail = [clean_token(value) for value in tail_values]
     if tail:
         position.set("layoutTail", " ".join(tail))
@@ -1006,7 +1008,6 @@ def add_inline_dual_counted_dimension_bindings(
     tail_values = geometry_raw[secondary_end:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    position.set("primaryDimensionMarker", str(primary_count))
     position.set("secondaryDimensionMarker", secondary_marker)
     tail = [clean_token(value) for value in tail_values]
     if tail:

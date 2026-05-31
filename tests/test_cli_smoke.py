@@ -116,7 +116,7 @@ class CliSmokeTest(unittest.TestCase):
     def test_geometry_writer_preserves_flagged_extra_dimension_records(self) -> None:
         position = ET.fromstring(
             """
-            <Position left="8" top="8" right="160" bottom="30" primaryDimensionMarker="1" layoutTail="0 0 0 1 1 0 0">
+            <Position left="8" top="8" right="160" bottom="30" layoutTail="0 0 0 1 1 0 0">
               <Bindings>
                 <DimensionBinding dimension="height" section="primary" mode="0" target="self" targetId="6" side="bottom"/>
                 <DimensionBinding dimension="minHeight" section="primary" value="0"/>
@@ -2891,7 +2891,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(position)
         assert position is not None
         self.assertIsNone(position.get("dimensionProfile"))
-        self.assertEqual(position.get("dimensionSegments"), "1 1")
+        self.assertIsNone(position.get("dimensionSegments"))
         self.assertEqual(position.get("layoutTail"), "0 0 0 0 0 1 2 1 1")
         self.assertEqual(geometry_stream_from_xml("CommandBar", position), geometry)
 

@@ -5407,7 +5407,8 @@ def inline_dual_counted_dimension_geometry_from_xml(
     if not primary or not secondary:
         return None
     try:
-        if int(position.get("primaryDimensionMarker", "")) != len(primary):
+        marker = position.get("primaryDimensionMarker")
+        if marker is not None and int(marker) != len(primary):
             return None
     except ValueError:
         return None
@@ -5443,6 +5444,22 @@ def inline_segmented_dimension_geometry_from_xml(
     if binding_container is None:
         return None
     segment_specs = [value for value in (position.get("dimensionSegments") or "").split(" ") if value]
+    derived_section_order: list[str] = []
+    if not segment_specs:
+        for binding in binding_container.findall("DimensionBinding"):
+            section = binding.get("section") or "primary"
+            if section not in derived_section_order:
+                derived_section_order.append(section)
+        if len(derived_section_order) <= 1 or not any(section.startswith("segment") for section in derived_section_order):
+            return None
+        segment_specs = []
+        for section in derived_section_order:
+            count = sum(
+                1
+                for binding in binding_container.findall("DimensionBinding")
+                if (binding.get("section") or "primary") == section
+            )
+            segment_specs.append(str(count))
     if not segment_specs:
         return None
     records_by_section: dict[str, list[object]] = {}
