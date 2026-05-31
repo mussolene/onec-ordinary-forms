@@ -24,7 +24,11 @@ from onec_ordinary_forms.formbin import (
 from onec_ordinary_forms.liststream import parse_list_stream_document
 from onec_ordinary_forms.ordinary_platform import ORDINARY_CONTROL_CLASS_BY_GUID
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
-from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml, root_panel_base_info_record
+from onec_ordinary_forms.ordinary_stream import (
+    TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN,
+    form_stream_from_object_xml,
+    root_panel_base_info_record,
+)
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 from onec_ordinary_forms.ui_values import ORDINARY_STYLE_COLOR_NAMES
 from onec_ordinary_forms.value_codec import (
@@ -286,6 +290,15 @@ def localized_text_parts_from_record(value: object) -> tuple[str, str]:
     return item if item is not None else ("ru", "")
 
 
+NO_FALLBACK_TITLE_CONTROL_TYPES = {
+    "HTMLDocumentField",
+    "Image",
+    "InputField",
+    "SpreadsheetDocumentField",
+    "Table",
+}
+
+
 def item_title(item_data: dict | None, control_type: str) -> str:
     if not isinstance(item_data, dict):
         return ""
@@ -293,6 +306,12 @@ def item_title(item_data: dict | None, control_type: str) -> str:
     if not isinstance(raw, list):
         return ""
     if len(raw) <= 2 or not isinstance(raw[2], list):
+        if control_type == "Image" and len(raw) > 5 and isinstance(raw[5], list) and len(raw[5]) > 2:
+            title = localized_text_from_record(raw[5][2])
+            if title:
+                return title
+        if control_type in NO_FALLBACK_TITLE_CONTROL_TYPES:
+            return ""
         return first_localized_text_without_base_tooltip(raw, control_type)
     info = raw[2]
     if clean_token(info[0]) == "3" and len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 2:
@@ -305,6 +324,8 @@ def item_title(item_data: dict | None, control_type: str) -> str:
         if control_type == "Panel":
             pages = panel_pages_from_raw(raw)
             return pages[0]["title"] if pages else ""
+    if control_type in NO_FALLBACK_TITLE_CONTROL_TYPES:
+        return ""
     return first_localized_text_without_base_tooltip(raw, control_type)
 
 
@@ -313,6 +334,12 @@ def item_title_parts(item_data: dict | None, control_type: str) -> tuple[str, st
         return "ru", ""
     raw = item_data.get("raw") or []
     if not isinstance(raw, list):
+        return "ru", ""
+    if control_type == "Image" and (len(raw) <= 2 or not isinstance(raw[2], list)):
+        if len(raw) > 5 and isinstance(raw[5], list) and len(raw[5]) > 2:
+            lang, title = localized_text_parts_from_record(raw[5][2])
+            if title:
+                return lang, title
         return "ru", ""
     if len(raw) > 2 and isinstance(raw[2], list):
         info = raw[2]
@@ -326,6 +353,8 @@ def item_title_parts(item_data: dict | None, control_type: str) -> tuple[str, st
             if control_type == "Panel":
                 pages = panel_pages_from_raw(raw)
                 return (pages[0].get("titleLang", "ru"), pages[0]["title"]) if pages else ("ru", "")
+    if control_type in NO_FALLBACK_TITLE_CONTROL_TYPES:
+        return "ru", ""
     return first_localized_text_parts_without_base_tooltip(raw, control_type)
 
 
@@ -665,6 +694,8 @@ def add_geometry(
             return
         if add_flagged_height_width_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
             return
+        if add_flagged_dimension_bindings_with_extra_records(node, anchors, geometry_raw, current_id, element_index):
+            return
         if add_inline_segmented_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
             return
         if add_inline_dual_counted_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
@@ -675,6 +706,39 @@ def add_geometry(
             return
         for index, binding in enumerate(geometry_raw[13:17], start=1):
             add_binding(anchors, "DimensionBinding", index, binding, current_id, element_index)
+
+
+def add_flagged_dimension_bindings_with_extra_records(
+    position: ET.Element,
+    bindings: ET.Element,
+    geometry_raw: list[object],
+    current_id: str,
+    element_index: dict[str, dict[str, str]],
+) -> bool:
+    if len(geometry_raw) < 23:
+        return False
+    if isinstance(geometry_raw[12], list):
+        return False
+    cursor = 17
+    extra_records: list[object] = []
+    while cursor < len(geometry_raw) and isinstance(geometry_raw[cursor], list):
+        extra_records.append(geometry_raw[cursor])
+        cursor += 1
+    if not extra_records:
+        return False
+    tail_values = geometry_raw[cursor:]
+    if not tail_values or any(isinstance(value, list) for value in tail_values):
+        return False
+    position.set("dimensionProfile", "flaggedWithExtraRecords")
+    position.set("primaryDimensionMarker", clean_token(geometry_raw[12]))
+    position.set("layoutTail", " ".join(clean_token(value) for value in tail_values))
+    for index, binding in enumerate(geometry_raw[13:17], start=1):
+        add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
+        bindings[-1].set("section", "primary")
+    for index, binding in enumerate(extra_records, start=5):
+        add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
+        bindings[-1].set("section", "extra")
+    return True
 
 
 def add_counted_dimension_bindings(
@@ -1989,7 +2053,15 @@ def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:
             payload = clean_token(body[39][0][0])
             if payload.startswith("#base64:"):
                 raw_payload = payload.removeprefix("#base64:")
-                value_descriptor = "".join(raw_payload.split())
+                compact_payload = "".join(raw_payload.split())
+                default_payload = TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN.get(tuple(pattern))
+                default_compact = (
+                    "".join(default_payload.removeprefix("#base64:").split())
+                    if isinstance(default_payload, str) and default_payload.startswith("#base64:")
+                    else None
+                )
+                if compact_payload != default_compact:
+                    value_descriptor = compact_payload
                 value_descriptor_trailing_line_break = "true" if raw_payload.endswith(("\r", "\n")) else "false"
             else:
                 value_descriptor_trailing_line_break = "false"
@@ -2840,16 +2912,17 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
 
 
 def add_form_root_panel_base_style(root_panel: ET.Element, base: list[object]) -> None:
-    if base == root_panel_base_info_record():
+    default_base = root_panel_base_info_record()
+    if base == default_base:
         return
     style = ET.SubElement(root_panel, "BaseStyle")
-    if len(base) > 4 and isinstance(base[4], list) and base[4] != ["8", "3", "0", "1", "100"]:
+    if len(base) > 4 and isinstance(base[4], list) and base[4] != default_base[4]:
         add_font_node_from_record(style, base[4])
-    if len(base) > 2:
+    if len(base) > 2 and base[2] != default_base[2]:
         add_root_panel_base_color_node(style, "TextColor", base[2])
-    if len(base) > 3:
+    if len(base) > 3 and base[3] != default_base[3]:
         add_root_panel_base_color_node(style, "BackColor", base[3])
-    if len(base) > 6:
+    if len(base) > 6 and base[6] != default_base[6]:
         add_root_panel_base_color_node(style, "BorderColor", base[6])
     if not list(style):
         root_panel.remove(style)

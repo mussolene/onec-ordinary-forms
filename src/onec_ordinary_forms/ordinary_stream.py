@@ -2766,7 +2766,6 @@ def splitter_control_info(element: ET.Element) -> list[object]:
 
 def splitter_base_info_record_from_xml(element: ET.Element) -> list[object]:
     base = extended_base_info_record_from_xml(element)
-    base[5] = "1"
     base[11] = ["3", "0", ["-18"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"]
     return base
 
@@ -4989,6 +4988,10 @@ def geometry_stream_from_xml(
     if prefixed_flagged_height_width_geometry is not None:
         prefixed_flagged_height_width_geometry[5] = layout_mode
         return prefixed_flagged_height_width_geometry
+    flagged_extra_dimension_geometry = flagged_extra_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
+    if flagged_extra_dimension_geometry is not None:
+        flagged_extra_dimension_geometry[5] = layout_mode
+        return flagged_extra_dimension_geometry
     inline_dual_counted_geometry = inline_dual_counted_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
     if inline_dual_counted_geometry is not None:
         inline_dual_counted_geometry[5] = layout_mode
@@ -5419,6 +5422,65 @@ def inline_counted_dimension_geometry_from_xml(
         *bindings,
         str(len(dimensions)),
         *dimensions,
+        *tail,
+    ]
+
+
+def dimension_binding_slot(binding: ET.Element) -> int | None:
+    slot = binding.get("slot")
+    if not slot and binding.get("dimension"):
+        dimension = binding.get("dimension", "")
+        mapped = DIMENSION_NAME_SLOT.get(dimension)
+        if mapped is not None:
+            slot = str(mapped)
+        elif dimension.startswith("slot"):
+            slot = dimension.removeprefix("slot")
+    if not slot:
+        return None
+    try:
+        return int(slot)
+    except ValueError:
+        return None
+
+
+def flagged_extra_dimension_geometry_from_xml(
+    position: ET.Element | None,
+    left: str,
+    top: str,
+    right: str,
+    bottom: str,
+    bindings: list[object],
+) -> list[object] | None:
+    if position is None or position.get("dimensionProfile") != "flaggedWithExtraRecords":
+        return None
+    binding_container = position.find("Bindings")
+    if binding_container is None:
+        return None
+    dimensions: list[object] = ["0"] * 4
+    extra: list[tuple[int, object]] = []
+    for binding in binding_container.findall("DimensionBinding"):
+        slot = dimension_binding_slot(binding)
+        if slot is None:
+            continue
+        raw = dimension_binding_to_raw(binding)
+        if 1 <= slot <= 4:
+            dimensions[slot - 1] = raw
+        elif slot >= 5:
+            extra.append((slot, raw))
+    if not extra:
+        return None
+    tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
+    return [
+        "8",
+        left,
+        top,
+        right,
+        bottom,
+        "1",
+        *bindings,
+        position.get("primaryDimensionMarker", "1"),
+        *dimensions,
+        *(raw for _slot, raw in sorted(extra, key=lambda item: item[0])),
         *tail,
     ]
 

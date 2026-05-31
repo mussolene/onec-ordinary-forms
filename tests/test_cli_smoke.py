@@ -113,6 +113,46 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertEqual(geometry[8], ["3", "1", ["3", ["0"], "Anchor"]])
 
+    def test_geometry_writer_preserves_flagged_extra_dimension_records(self) -> None:
+        position = ET.fromstring(
+            """
+            <Position left="8" top="8" right="160" bottom="30" dimensionProfile="flaggedWithExtraRecords" primaryDimensionMarker="1" layoutTail="0 0 0 1 1 0 0">
+              <Bindings>
+                <DimensionBinding dimension="height" section="primary" mode="0" target="self" targetId="6" side="bottom"/>
+                <DimensionBinding dimension="minHeight" section="primary" value="0"/>
+                <DimensionBinding dimension="stretch" section="primary" value="0"/>
+                <DimensionBinding dimension="width" section="primary" value="2"/>
+                <DimensionBinding dimension="slot5" section="extra" mode="0" target="element" targetId="16" side="left"/>
+                <DimensionBinding dimension="slot6" section="extra" mode="0" target="element" targetId="17" side="left"/>
+              </Bindings>
+            </Position>
+            """
+        )
+
+        geometry = geometry_stream_from_xml("CommandBar", position)
+
+        self.assertEqual(geometry[12:19], ["1", ["0", "6", "1"], "0", "0", "2", ["0", "16", "2"], ["0", "17", "2"]])
+
+    def test_splitter_writer_preserves_enabled_false(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Splitter name="Разделитель2" id="16">
+                    <Enabled>false</Enabled>
+                  </Splitter>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        splitter = self._find_control(stream, "36e52348-5d60-4770-8e89-a16ed50a2006")
+
+        self.assertEqual(splitter[2][1][0][5], "0")
+
     def test_gantt_chart_and_track_bar_events_are_serialized(self) -> None:
         root = ET.fromstring(
             """<Form>
@@ -915,6 +955,76 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(event.get("name"), "ПриИзменении")
         self.assertEqual(event.get("id"), "2147483647")
         self.assertEqual(event.text, "DateOnChange")
+
+    def test_dump_bin_emits_html_document_events_without_fake_title(self) -> None:
+        from onec_ordinary_forms.cli import item_title
+
+        event_uuid = "e1692cc2-605b-4535-84dd-28440238746c"
+        item_data = {
+            "raw": [
+                "d92a805c-98ae-4750-9158-d9ce7cec2f20",
+                "43",
+                [
+                    "5",
+                    "0",
+                    "0",
+                    [
+                        "1",
+                        [
+                            "2147483647",
+                            event_uuid,
+                            [
+                                "3",
+                                '"HTMLДокументonclick"',
+                                [
+                                    "1",
+                                    '"HTMLДокументonclick"',
+                                    ["1", "1", ['"ru"', '"HTMLДокументonclick"']],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ]
+        }
+        self.assertEqual(item_title(item_data, "HTMLDocumentField"), "")
+
+    def test_item_title_ignores_fallback_localized_text_for_input_field(self) -> None:
+        from onec_ordinary_forms.cli import item_title
+
+        item_data = {
+            "raw": [
+                "381ed624-9217-4e63-85db-c4c3cb87daae",
+                "70",
+                [
+                    "9",
+                    ['"Pattern"', ['"S"']],
+                    [],
+                    ["1", "1", ['"ru"', '"ЧН=; ЧГ="']],
+                ],
+            ]
+        }
+
+        self.assertEqual(item_title(item_data, "InputField"), "")
+
+    def test_item_title_ignores_fallback_localized_text_for_image(self) -> None:
+        from onec_ordinary_forms.cli import item_title
+
+        item_data = {
+            "raw": [
+                "151ef23e-6bb2-4681-83d0-35bc2217230c",
+                "125",
+                [
+                    "3",
+                    [
+                        ["16"],
+                        ["1", "1", ['"ru"', '"Первая страница"']],
+                    ],
+                ],
+            ]
+        }
+
+        self.assertEqual(item_title(item_data, "Image"), "")
 
     def test_build_bin_writes_tooltip_to_base_info_slot_12(self) -> None:
         root = ET.fromstring(
