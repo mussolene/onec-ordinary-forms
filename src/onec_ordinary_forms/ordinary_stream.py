@@ -156,6 +156,52 @@ CONTROL_INFO_SLOT_DESCRIPTORS = {
             InfoSlotDescriptor("Actions", 5),
         ),
     ),
+    "ProgressBar": ControlInfoDescriptor(
+        control_type="ProgressBar",
+        info_kind="0",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("Orientation", 1),
+            InfoSlotDescriptor("MinimumValue", 2),
+            InfoSlotDescriptor("MaximumValue", 3),
+            InfoSlotDescriptor("Step", 4),
+            InfoSlotDescriptor("BigStep", 5),
+            InfoSlotDescriptor("ShowPercent", 6),
+            InfoSlotDescriptor("DisplayStyle", 7),
+        ),
+    ),
+    "TrackBar": ControlInfoDescriptor(
+        control_type="TrackBar",
+        info_kind="1",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("MinimumValue", 2),
+            InfoSlotDescriptor("MaximumValue", 3),
+            InfoSlotDescriptor("Step", 4),
+            InfoSlotDescriptor("BigStep", 5),
+            InfoSlotDescriptor("Orientation", 6),
+            InfoSlotDescriptor("MarkStep", 8),
+            InfoSlotDescriptor("CurrentValue", 9),
+        ),
+    ),
+    "CalendarField": ControlInfoDescriptor(
+        control_type="CalendarField",
+        info_kind="1",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("PeriodStart", 5),
+            InfoSlotDescriptor("PeriodEnd", 6),
+        ),
+    ),
+    "ListBox": ControlInfoDescriptor(
+        control_type="ListBox",
+        info_kind="1",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("View", 1),
+            InfoSlotDescriptor("ViewKind", 2),
+        ),
+    ),
     "Button": ControlInfoDescriptor(
         control_type="Button",
         info_kind="1",
@@ -3463,18 +3509,36 @@ def html_document_field_control_info(actions: list[object]) -> list[object]:
 
 
 def progress_bar_control_info(element: ET.Element) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["ProgressBar"]
+    base = progress_bar_base_info_record(element)
+    orientation = element.findtext("Orientation") or "3"
+    minimum = element.findtext("MinimumValue") or "0"
+    maximum = element.findtext("MaximumValue") or "100"
+    step = element.findtext("Step") or "1"
+    big_step = element.findtext("BigStep") or "1"
+    show_percent = bool_record_from_xml(element, "ShowPercent", default=False)
+    display_style = element.findtext("DisplayStyle") or "2"
+    info_record = [
+        base,
+        orientation,
+        minimum,
+        maximum,
+        step,
+        big_step,
+        show_percent,
+        display_style,
+    ]
+    info_record[descriptor.slot_index("BaseInfo")] = base
+    info_record[descriptor.slot_index("Orientation")] = orientation
+    info_record[descriptor.slot_index("MinimumValue")] = minimum
+    info_record[descriptor.slot_index("MaximumValue")] = maximum
+    info_record[descriptor.slot_index("Step")] = step
+    info_record[descriptor.slot_index("BigStep")] = big_step
+    info_record[descriptor.slot_index("ShowPercent")] = show_percent
+    info_record[descriptor.slot_index("DisplayStyle")] = display_style
     return [
-        "0",
-        [
-            progress_bar_base_info_record(element),
-            element.findtext("Orientation") or "3",
-            element.findtext("MinimumValue") or "0",
-            element.findtext("MaximumValue") or "100",
-            element.findtext("Step") or "1",
-            element.findtext("BigStep") or "1",
-            bool_record_from_xml(element, "ShowPercent", default=False),
-            element.findtext("DisplayStyle") or "2",
-        ],
+        descriptor.info_kind,
+        info_record,
     ]
 
 
@@ -3492,45 +3556,68 @@ def progress_bar_base_info_record(element: ET.Element) -> list[object]:
 
 
 def track_bar_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["TrackBar"]
+    base = extended_base_info_record_from_xml(element)
+    minimum = element.findtext("MinimumValue") or "0"
+    maximum = element.findtext("MaximumValue") or "100"
+    step = element.findtext("Step") or "1"
+    big_step = element.findtext("BigStep") or "10"
+    orientation = element.findtext("Orientation") or "2"
+    mark_step = element.findtext("MarkStep") or "5"
+    current_value = element.findtext("CurrentValue") or "100"
+    info_record = [
+        base,
+        "5",
+        minimum,
+        maximum,
+        step,
+        big_step,
+        orientation,
+        "2",
+        mark_step,
+        current_value,
+    ]
+    info_record[descriptor.slot_index("BaseInfo")] = base
+    info_record[descriptor.slot_index("MinimumValue")] = minimum
+    info_record[descriptor.slot_index("MaximumValue")] = maximum
+    info_record[descriptor.slot_index("Step")] = step
+    info_record[descriptor.slot_index("BigStep")] = big_step
+    info_record[descriptor.slot_index("Orientation")] = orientation
+    info_record[descriptor.slot_index("MarkStep")] = mark_step
+    info_record[descriptor.slot_index("CurrentValue")] = current_value
     return [
-        "1",
-        [
-            extended_base_info_record_from_xml(element),
-            "5",
-            element.findtext("MinimumValue") or "0",
-            element.findtext("MaximumValue") or "100",
-            element.findtext("Step") or "1",
-            element.findtext("BigStep") or "10",
-            element.findtext("Orientation") or "2",
-            "2",
-            element.findtext("MarkStep") or "5",
-            element.findtext("CurrentValue") or "100",
-        ],
+        descriptor.info_kind,
+        info_record,
         action_records(actions),
     ]
 
 
 def calendar_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["CalendarField"]
     base = extended_base_info_record_from_xml(element)
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
-    return [
+    info_record = [
+        base,
+        "9",
+        ["4", "3", ["-16"], "3"],
+        ["4", "3", ["-14"], "3"],
+        ["4", "3", ["-15"], "3"],
+        element.findtext("PeriodStart") or "00010101000000",
+        element.findtext("PeriodEnd") or "00010101000000",
         "1",
-        [
-            base,
-            "9",
-            ["4", "3", ["-16"], "3"],
-            ["4", "3", ["-14"], "3"],
-            ["4", "3", ["-15"], "3"],
-            element.findtext("PeriodStart") or "00010101000000",
-            element.findtext("PeriodEnd") or "00010101000000",
-            "1",
-            "1",
-            "0",
-            "0",
-            "0",
-            "0",
-            "1",
-        ],
+        "1",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+    ]
+    info_record[descriptor.slot_index("BaseInfo")] = base
+    info_record[descriptor.slot_index("PeriodStart")] = element.findtext("PeriodStart") or "00010101000000"
+    info_record[descriptor.slot_index("PeriodEnd")] = element.findtext("PeriodEnd") or "00010101000000"
+    return [
+        descriptor.info_kind,
+        info_record,
         action_records(actions),
     ]
 
@@ -3674,17 +3761,24 @@ def graphical_schema_base_info_record(element: ET.Element) -> list[object]:
 
 
 def list_box_control_info(element: ET.Element, actions: list[object]) -> list[object]:
-    return [
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["ListBox"]
+    base = list_box_base_info_record_from_xml(element)
+    view = extended_list_box_view_record_from_xml(element)
+    info_record = [
+        base,
+        view,
+        "6",
+        "0",
+        "0",
         "1",
-        [
-            list_box_base_info_record_from_xml(element),
-            extended_list_box_view_record_from_xml(element),
-            "6",
-            "0",
-            "0",
-            "1",
-            "0",
-        ],
+        "0",
+    ]
+    info_record[descriptor.slot_index("BaseInfo")] = base
+    info_record[descriptor.slot_index("View")] = view
+    info_record[descriptor.slot_index("ViewKind")] = "6"
+    return [
+        descriptor.info_kind,
+        info_record,
         action_records(actions),
     ]
 
