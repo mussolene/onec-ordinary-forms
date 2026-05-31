@@ -905,7 +905,9 @@ def regular_panel_base_info_record() -> list[object]:
 
 def panel_base_info_record_for_serialization(element: ET.Element, serialization: ET.Element | None) -> list[object]:
     record = extended_base_info_record_from_xml(element)
-    if serialization is not None:
+    if element.find("BorderColor") is None:
+        record[6] = default_color_record()
+    if serialization is not None and element.get("baseStyleState") is None:
         record[17] = "2"
     return record
 
@@ -1707,7 +1709,7 @@ def panel_dependency_profile_from_xml(serialization: ET.Element | None, page_cap
         return ["1", ["0", str(page_capacity), "1"], *panel_control_slot_profile()]
     groups = sorted(serialization.findall("DependencyGroup"), key=lambda node: int(node.get("order", "0") or "0"))
     if not groups:
-        return ["1", ["0", str(page_capacity), "1"], *panel_control_slot_profile()]
+        return []
     result: list[object] = []
     for group in groups:
         prefix = group.get("prefix")
@@ -4237,6 +4239,8 @@ def extended_base_info_record_from_xml(element: ET.Element) -> list[object]:
         base[4] = font_record_from_xml(element.find("Font"))
     if element.find("BorderColor") is not None:
         base[6] = color_record_from_xml(element, "BorderColor")
+    else:
+        base[6] = default_color_record()
     base[12] = tooltip_record_from_xml(element)
     for index, attr_name in (
         (16, "baseStyleMode"),

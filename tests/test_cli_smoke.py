@@ -1441,6 +1441,39 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(body[19][7], "8")
         self.assertEqual(body[23][7], "6")
 
+    def test_panel_serialization_profile_can_have_layout_without_dependencies(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Panel name="Панель1" id="4" baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2">
+                    <Position left="8" top="33" right="760" bottom="560" width="752" height="527"/>
+                    <SerializationProfile pageCapacity="2" pageStateFlag="0" currentPageIndex="1">
+                      <PageLayout page="0" left="6" top="6" width="752" height="527" horizontalMode="4" verticalMode="8"/>
+                      <PageLayout page="1" left="6" top="6" width="750" height="529" horizontalMode="6" verticalMode="6"/>
+                    </SerializationProfile>
+                    <Pages>
+                      <Page name="Страница1" styleMode="2"><Title><Item lang="ru">Страница1</Item></Title></Page>
+                      <Page name="Страница2" styleMode="0"><Title><Item lang="ru">Страница2</Item></Title></Page>
+                    </Pages>
+                  </Panel>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        panel = self._find_controls(stream, "09ccdc77-ea1a-4a6d-ab1c-3435eada2433")[-1]
+        body = panel[2][1]
+
+        self.assertEqual(body[0][17], "1")
+        self.assertEqual(body[2:4], ["0", "0"])
+        self.assertEqual(body[11], "8")
+        self.assertEqual(body[15][7], "8")
+        self.assertEqual(body[19][7], "6")
+
     def test_add_read_only_uses_input_field_info_slot(self) -> None:
         from onec_ordinary_forms.cli import add_read_only
 
