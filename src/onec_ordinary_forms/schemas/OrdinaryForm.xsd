@@ -2462,7 +2462,6 @@
     <xs:attribute name="layoutFlag1" type="xs:string"/>
     <xs:attribute name="layoutFlag2" type="xs:string"/>
     <xs:attribute name="layoutPreTail" type="xs:string"/>
-    <xs:attribute name="unit" type="xs:string"/>
     <xs:attribute name="dimensionSegments" type="xs:string"/>
     <xs:attribute name="primaryDimensionMarker" type="xs:integer"/>
     <xs:attribute name="secondaryDimensionMarker" type="xs:integer"/>

@@ -576,7 +576,7 @@ def add_binding(
 ) -> None:
     node = ET.SubElement(parent, tag)
     if tag == "Binding":
-        node.set("coordinate", BINDING_SLOT_ROLE.get(slot, f"slot{slot}"))
+        node.set("coordinate", BINDING_SLOT_ROLE[slot])
     elif tag == "DimensionBinding":
         if slot in DIMENSION_SLOT_ROLE:
             node.set("dimension", DIMENSION_SLOT_ROLE[slot])
@@ -704,7 +704,6 @@ def add_geometry(
     if len(geometry_raw) > 5 and clean_token(geometry_raw[5]) != "1":
         node.set("layoutMode", clean_token(geometry_raw[5]))
     add_layout_group(node, geometry_raw)
-    node.set("unit", "form")
 
     anchors = ET.SubElement(node, "Bindings")
     if isinstance(geometry_raw, list):

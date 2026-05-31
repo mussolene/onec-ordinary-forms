@@ -55,6 +55,8 @@ The repository now has the right foundation:
 - the public position `dimensionProfile` selector and extra dimension
   `slotN` names were removed; writer profile selection now uses named
   dimensions, sections, and internal descriptor checks.
+- the constant position `unit="form"` marker and coordinate `slotN` fallback
+  were removed from the public position/binding dump path.
 
 The current loop comes from the remaining mixed model:
 
@@ -177,6 +179,8 @@ Done after this audit:
 - simple inline dimension segment counts and default primary dimension markers
   are now derived from `DimensionBinding` sections instead of being written as
   public marker attributes;
+- `Position/@unit` is no longer public XML, and `Binding/@coordinate` no
+  longer has a `slotN` fallback for the six named coordinate slots;
 - schema tests now guard against reintroducing the removed public raw-shape
   vocabulary.
 
