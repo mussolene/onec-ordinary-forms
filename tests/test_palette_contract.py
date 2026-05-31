@@ -200,3 +200,19 @@ def test_public_xsd_has_no_raw_or_extension_pockets() -> None:
     names = {node.get("name", "") for node in root.iter() if node.get("name")}
 
     assert forbidden.isdisjoint(names)
+
+
+def test_command_bar_schema_has_typed_command_source_not_profile_pocket() -> None:
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
+    choice = root.find(
+        "xs:complexType[@name='CommandBarType']/xs:complexContent/xs:extension/xs:choice",
+        ns,
+    )
+    assert choice is not None
+    public_elements = {node.get("name") for node in choice.findall("xs:element", ns)}
+
+    assert "CommandSource" in public_elements
+    assert "SerializationProfile" not in public_elements
+    assert root.find("xs:complexType[@name='CommandBarSerializationProfileType']", ns) is None
+    assert root.find("xs:complexType[@name='CommandBarActionGraphType']", ns) is None

@@ -167,7 +167,12 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "InputField",
         COMMON_CONTROL_PROPERTIES + INPUT_CONTROL_PROPERTIES,
     ),
-    "CommandBar": OrdinaryControlDescriptor("CommandBar", "КоманднаяПанель", "CommandBar", COMMON_CONTROL_PROPERTIES + ("Autofill",)),
+    "CommandBar": OrdinaryControlDescriptor(
+        "CommandBar",
+        "КоманднаяПанель",
+        "CommandBar",
+        COMMON_CONTROL_PROPERTIES + ("Autofill", "CommandSource", "Buttons"),
+    ),
     "CheckBox": OrdinaryControlDescriptor("CheckBox", "Флажок", "CheckBoxField", COMMON_CONTROL_PROPERTIES + ("ValueType", "TextPosition")),
     "Table": OrdinaryControlDescriptor(
         "Table",

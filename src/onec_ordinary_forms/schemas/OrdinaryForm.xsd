@@ -1587,18 +1587,13 @@
           <xs:element name="Border" type="xs:string"/>
           <xs:element name="ButtonTextColor" type="ColorType"/>
           <xs:element name="ButtonBackColor" type="ColorType"/>
-          <xs:element name="SerializationProfile" type="CommandBarSerializationProfileType"/>
+          <xs:element name="CommandSource" type="CommandBarCommandSourceType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
-  <xs:complexType name="CommandBarSerializationProfileType">
-    <xs:sequence>
-      <xs:element name="ActionGraph" type="CommandBarActionGraphType" minOccurs="0"/>
-    </xs:sequence>
-  </xs:complexType>
-  <xs:complexType name="CommandBarActionGraphType">
+  <xs:complexType name="CommandBarCommandSourceType">
     <xs:attribute name="rootUuid" type="xs:string"/>
     <xs:attribute name="rootKind" type="xs:string"/>
     <xs:attribute name="profileUuid" type="xs:string"/>

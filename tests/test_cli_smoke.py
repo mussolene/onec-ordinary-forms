@@ -3155,29 +3155,27 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(profile.get("pictureStyleMode"), "2")
         self.assertIsNone(profile.find("StyleProfile"))
 
-    def test_command_bar_action_graph_preserves_platform_profile_flags(self) -> None:
+    def test_command_bar_command_source_preserves_platform_flags(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
               <Pages>
                 <Page name="Main">
                   <CommandBar name="Commands" id="6">
-                    <SerializationProfile>
-                      <ActionGraph
-                        actionPlacement="3"
-                        actionAlignment="4"
-                        commandSource="5"
-                        actionProfileState="11"
-                        actionProfileFlag1="12"
-                        actionProfileFlag2="13"
-                        presentationScope="7"
-                        presentationScopeEnabled="0"
-                        presentationScopeUuid="00000000-0000-0000-0000-000000000000"
-                        buttonPanelMode="0"
-                        buttonPanelState="0"
-                        buttonPanelVisible="0"
-                        buttonPanelDefaultMode="0"/>
-                    </SerializationProfile>
+                    <CommandSource
+                      actionPlacement="3"
+                      actionAlignment="4"
+                      commandSource="5"
+                      actionProfileState="11"
+                      actionProfileFlag1="12"
+                      actionProfileFlag2="13"
+                      presentationScope="7"
+                      presentationScopeEnabled="0"
+                      presentationScopeUuid="00000000-0000-0000-0000-000000000000"
+                      buttonPanelMode="0"
+                      buttonPanelState="0"
+                      buttonPanelVisible="0"
+                      buttonPanelDefaultMode="0"/>
                     <Buttons rootUuid="48312c09-257f-4b29-b280-284dd89efc1e" rootKind="3" rootFlag="1">
                       <Actions/>
                       <Groups/>

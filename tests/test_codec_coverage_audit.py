@@ -59,3 +59,15 @@ def test_codec_coverage_audit_normalizes_public_control_aliases() -> None:
     assert controls["PictureDecoration"]["streamControl"] == "Image"
     assert controls["PictureDecoration"]["writerDescriptor"] is True
     assert controls["PictureDecoration"]["sharedInfoDescriptor"] is True
+
+
+def test_command_bar_command_source_is_public_descriptor_property() -> None:
+    report = audit_codec_coverage.audit(
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
+    )
+    command_bar = {item["control"]: item for item in report["controls"]}["CommandBar"]
+
+    assert "CommandSource" not in command_bar["xsdOnlyProperties"]
+    assert "Buttons" not in command_bar["xsdOnlyProperties"]
+    assert "SerializationProfile" not in command_bar["xsdOnlyProperties"]

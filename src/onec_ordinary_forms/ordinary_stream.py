@@ -1580,9 +1580,9 @@ def control_stream_from_xml_with_page(
         parent_size,
     )
     metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
-    command_bar_graph = command_bar_action_graph_from_xml(element) if control_type == "CommandBar" else {}
-    if command_bar_graph.get("metadataScope"):
-        metadata_scope = command_bar_graph["metadataScope"]
+    command_bar_source = command_bar_command_source_from_xml(element) if control_type == "CommandBar" else {}
+    if command_bar_source.get("metadataScope"):
+        metadata_scope = command_bar_source["metadataScope"]
     elif control_type == "CommandBar" and name not in {"КоманднаяПанель1", "КоманднаяПанель3", "ОсновныеДействияФормы"}:
         metadata_scope = "8"
     elif control_type == "CommandBar" and name == "КоманднаяПанель3":
@@ -4020,7 +4020,7 @@ def list_box_base_info_record_from_xml(element: ET.Element) -> list[object]:
 def command_bar_control_info(element: ET.Element) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["CommandBar"]
     title = get_multilang_text(element, "Title")
-    graph = command_bar_action_graph_from_xml(element)
+    source = command_bar_command_source_from_xml(element)
     record = [
         command_bar_base_info_record(element),
         "9",
@@ -4029,10 +4029,10 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
         "0",
         "0",
         "1",
-        command_bar_items_record(element, title, graph),
+        command_bar_items_record(element, title, source),
         "b78f2e80-ec68-11d4-9dcf-0050bae2bc79",
         "4",
-        graph.get(
+        source.get(
             "profileUuid",
             "7aa39d8b-4bb3-4d97-9cd8-89b07dc4c30d"
             if element.get("name") == "ОсновныеДействияФормы" or title
@@ -4063,8 +4063,8 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
         (12, "actionProfileFlag1"),
         (13, "actionProfileFlag2"),
     ):
-        if graph.get(attr_name) is not None:
-            record[index] = graph[attr_name]
+        if source.get(attr_name) is not None:
+            record[index] = source[attr_name]
     record[descriptor.slot_index("Autofill")] = bool_record_from_xml(element, "Autofill", default=True)
     return [
         descriptor.info_kind,
@@ -4072,13 +4072,13 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
     ]
 
 
-def command_bar_action_graph_from_xml(element: ET.Element) -> dict[str, str]:
-    graph = element.find("./SerializationProfile/ActionGraph")
-    return dict(graph.attrib) if graph is not None else {}
+def command_bar_command_source_from_xml(element: ET.Element) -> dict[str, str]:
+    source = element.find("CommandSource")
+    return dict(source.attrib) if source is not None else {}
 
 
-def command_bar_items_record(element: ET.Element, title: str, graph: dict[str, str] | None = None) -> list[object]:
-    graph = graph or {}
+def command_bar_items_record(element: ET.Element, title: str, source: dict[str, str] | None = None) -> list[object]:
+    source = source or {}
     buttons = element.find("Buttons")
     if buttons is not None:
         record = command_bar_items_record_from_xml(buttons)
@@ -4099,26 +4099,26 @@ def command_bar_items_record(element: ET.Element, title: str, graph: dict[str, s
             placement = ["0", "0", ["0"]]
         return [
             "5",
-            graph.get("rootUuid", palette_uuid),
-            graph.get("rootKind", palette_kind),
+            source.get("rootUuid", palette_uuid),
+            source.get("rootKind", palette_kind),
             "1",
             "0",
             "1",
             [
                 "5",
-                graph.get("branchUuid", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
+                source.get("branchUuid", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
                 "4",
-                graph.get("branchKind", "0"),
-                graph.get("branchMode", "0"),
+                source.get("branchKind", "0"),
+                source.get("branchMode", "0"),
                 placement,
             ],
         ]
     action_name = compact_identifier(title) or "КнопкаВыполнитьНажатие"
-    root_uuid = graph.get("rootUuid", "87a7828f-3ea2-4ed5-9afd-292b4728c926")
-    separator_uuid = graph.get("separatorUuid", "ab4be893-7c76-4903-a6fa-9922b4bd863a")
-    close_uuid = graph.get("closeUuid", "de61b328-43e2-4c0b-9dd8-f3d146ef7a54")
-    action_uuid = graph.get("actionUuid", "9eaf9ed0-41fc-4f23-b9cc-f9051ee23274")
-    branch_uuid = graph.get("branchUuid", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79")
+    root_uuid = source.get("rootUuid", "87a7828f-3ea2-4ed5-9afd-292b4728c926")
+    separator_uuid = source.get("separatorUuid", "ab4be893-7c76-4903-a6fa-9922b4bd863a")
+    close_uuid = source.get("closeUuid", "de61b328-43e2-4c0b-9dd8-f3d146ef7a54")
+    action_uuid = source.get("actionUuid", "9eaf9ed0-41fc-4f23-b9cc-f9051ee23274")
+    branch_uuid = source.get("branchUuid", "b78f2e80-ec68-11d4-9dcf-0050bae2bc79")
     return [
         "5",
         root_uuid,
@@ -4132,10 +4132,10 @@ def command_bar_items_record(element: ET.Element, title: str, graph: dict[str, s
             "fbe38877-b914-4fd5-8540-07dde06ba2e1",
             ["6", "2", "00000000-0000-0000-0000-000000000000", "142", ["1", "0", "357c6a54-357d-425d-a2bd-22f4f6e86c87", "2147483647", "0"], "0", "1"],
             "0",
-            graph.get("actionMode", "1"),
+            source.get("actionMode", "1"),
             "1",
         ],
-        ["8", close_uuid, "1", "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6", ["1", "9d0a2e40-b978-11d4-84b6-008048da06df", "0"], "0", graph.get("actionMode", "1"), "1"],
+        ["8", close_uuid, "1", "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6", ["1", "9d0a2e40-b978-11d4-84b6-008048da06df", "0"], "0", source.get("actionMode", "1"), "1"],
         [
             "8",
             action_uuid,
@@ -4143,7 +4143,7 @@ def command_bar_items_record(element: ET.Element, title: str, graph: dict[str, s
             DEFAULT_CONTROL_EVENT_UUID,
             ["3", quoted_atom(action_name), command_bar_action_descriptor(action_name, title or action_name)],
             "0",
-            graph.get("actionMode", "1"),
+            source.get("actionMode", "1"),
             "1",
         ],
         "1",
@@ -4284,7 +4284,7 @@ def command_bar_action_descriptor(name: str, title: str) -> list[object]:
 def command_bar_base_info_record(element: ET.Element) -> list[object]:
     tooltip = tooltip_record_from_xml(element)
     has_button_graph = element.find("Buttons") is not None
-    graph = command_bar_action_graph_from_xml(element)
+    source = command_bar_command_source_from_xml(element)
     if has_button_graph:
         command_scope = "0"
     elif element.get("name") == "ОсновныеДействияФормы" or element.find("Title") is not None:
@@ -4309,10 +4309,10 @@ def command_bar_base_info_record(element: ET.Element) -> list[object]:
             "3",
             "0",
             ["0"],
-            graph.get("presentationScope", command_scope),
-            graph.get("presentationScopeEnabled", "0" if command_scope == "0" else "1"),
+            source.get("presentationScope", command_scope),
+            source.get("presentationScopeEnabled", "0" if command_scope == "0" else "1"),
             "0",
-            graph.get(
+            source.get(
                 "presentationScopeUuid",
                 "48312c09-257f-4b29-b280-284dd89efc1e" if command_scope == "0" else "00000000-0000-0000-0000-000000000000",
             ),
@@ -4321,10 +4321,10 @@ def command_bar_base_info_record(element: ET.Element) -> list[object]:
         "0",
         "0",
         "100",
-        graph.get("buttonPanelMode", "2" if has_button_graph else "0"),
-        graph.get("buttonPanelState", "1" if has_button_graph else "0"),
-        graph.get("buttonPanelVisible", "1" if has_button_graph else "0"),
-        graph.get("buttonPanelDefaultMode", "2" if has_button_graph else "0"),
+        source.get("buttonPanelMode", "2" if has_button_graph else "0"),
+        source.get("buttonPanelState", "1" if has_button_graph else "0"),
+        source.get("buttonPanelVisible", "1" if has_button_graph else "0"),
+        source.get("buttonPanelDefaultMode", "2" if has_button_graph else "0"),
         default_color_record(),
     ]
     if has_button_graph and element.find("TextColor") is not None:

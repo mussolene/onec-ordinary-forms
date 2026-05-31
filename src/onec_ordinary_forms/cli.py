@@ -1232,7 +1232,7 @@ def add_semantic_item(
     add_font(node, item_data)
     add_geometry(node, item_data, element_index)
     add_panel_serialization_profile(node, public_type, item_data)
-    add_command_bar_serialization_profile(node, public_type, item_data)
+    add_command_bar_command_source(node, public_type, item_data)
     add_picture_decoration_serialization_profile(node, public_type, item_data)
     if public_type == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
@@ -1392,7 +1392,7 @@ def add_panel_serialization_profile(parent: ET.Element, public_type: str, item_d
             page.set(key, value)
 
 
-def add_command_bar_serialization_profile(parent: ET.Element, public_type: str, item_data: object) -> None:
+def add_command_bar_command_source(parent: ET.Element, public_type: str, item_data: object) -> None:
     if public_type != "CommandBar" or not isinstance(item_data, dict):
         return
     raw = item_data.get("raw")
@@ -1404,13 +1404,12 @@ def add_command_bar_serialization_profile(parent: ET.Element, public_type: str, 
     items = info[7] if len(info) > 7 and isinstance(info[7], list) else None
     if not isinstance(items, list) or len(items) < 2:
         return
-    profile = ET.SubElement(parent, "SerializationProfile")
-    graph = ET.SubElement(profile, "ActionGraph")
-    graph.set("rootUuid", clean_token(items[1]))
+    source = ET.SubElement(parent, "CommandSource")
+    source.set("rootUuid", clean_token(items[1]))
     if len(items) > 2:
-        graph.set("rootKind", clean_token(items[2]))
+        source.set("rootKind", clean_token(items[2]))
     if len(info) > 10:
-        graph.set("profileUuid", clean_token(info[10]))
+        source.set("profileUuid", clean_token(info[10]))
     for source_index, attr_name in (
         (3, "actionPlacement"),
         (4, "actionAlignment"),
@@ -1420,17 +1419,17 @@ def add_command_bar_serialization_profile(parent: ET.Element, public_type: str, 
         (13, "actionProfileFlag2"),
     ):
         if len(info) > source_index:
-            graph.set(attr_name, clean_token(info[source_index]))
+            source.set(attr_name, clean_token(info[source_index]))
     base = info[0] if info and isinstance(info[0], list) else None
     if isinstance(base, list):
         presentation = base[11] if len(base) > 11 and isinstance(base[11], list) else None
         if isinstance(presentation, list):
             if len(presentation) > 3:
-                graph.set("presentationScope", clean_token(presentation[3]))
+                source.set("presentationScope", clean_token(presentation[3]))
             if len(presentation) > 4:
-                graph.set("presentationScopeEnabled", clean_token(presentation[4]))
+                source.set("presentationScopeEnabled", clean_token(presentation[4]))
             if len(presentation) > 6:
-                graph.set("presentationScopeUuid", clean_token(presentation[6]))
+                source.set("presentationScopeUuid", clean_token(presentation[6]))
         for source_index, attr_name in (
             (16, "buttonPanelMode"),
             (17, "buttonPanelState"),
@@ -1438,36 +1437,36 @@ def add_command_bar_serialization_profile(parent: ET.Element, public_type: str, 
             (19, "buttonPanelDefaultMode"),
         ):
             if len(base) > source_index:
-                graph.set(attr_name, clean_token(base[source_index]))
+                source.set(attr_name, clean_token(base[source_index]))
     metadata = raw[4] if len(raw) > 4 and isinstance(raw[4], list) else None
     if isinstance(metadata, list) and len(metadata) > 2:
-        graph.set("metadataScope", clean_token(metadata[2]))
+        source.set("metadataScope", clean_token(metadata[2]))
     branch = items[9] if len(items) > 9 and isinstance(items[9], list) else items[6] if len(items) > 6 and isinstance(items[6], list) else None
     if isinstance(branch, list):
         if len(branch) > 1:
-            graph.set("branchUuid", clean_token(branch[1]))
+            source.set("branchUuid", clean_token(branch[1]))
         if len(branch) > 3:
-            graph.set("branchKind", clean_token(branch[3]))
+            source.set("branchKind", clean_token(branch[3]))
         if len(branch) > 4:
-            graph.set("branchMode", clean_token(branch[4]))
+            source.set("branchMode", clean_token(branch[4]))
     action = items[7] if len(items) > 7 and isinstance(items[7], list) else None
     if isinstance(action, list):
         if len(action) > 1:
-            graph.set("actionUuid", clean_token(action[1]))
+            source.set("actionUuid", clean_token(action[1]))
         if len(action) > 3:
-            graph.set("actionTargetUuid", clean_token(action[3]))
+            source.set("actionTargetUuid", clean_token(action[3]))
         if len(action) > 6:
-            graph.set("actionMode", clean_token(action[6]))
+            source.set("actionMode", clean_token(action[6]))
     if len(items) > 9 and isinstance(items[9], list):
         children = items[9]
         if len(children) > 5:
-            graph.set("defaultActionUuid", clean_token(children[5]))
+            source.set("defaultActionUuid", clean_token(children[5]))
     if len(items) > 6 and isinstance(items[6], list) and len(items[6]) > 1:
-        graph.set("closeUuid", clean_token(items[6][1]))
+        source.set("closeUuid", clean_token(items[6][1]))
     if len(items) > 5 and isinstance(items[5], list) and len(items[5]) > 1:
-        graph.set("separatorUuid", clean_token(items[5][1]))
-    if not graph.attrib:
-        parent.remove(profile)
+        source.set("separatorUuid", clean_token(items[5][1]))
+    if not source.attrib:
+        parent.remove(source)
     add_command_bar_buttons(parent, items)
 
 
