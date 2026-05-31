@@ -138,9 +138,9 @@ If a low-level value is required for rebuild, it must be classified:
 - Treat table column `ElementControl` as a nested typed control/editor concept.
   It can be an InputField, ChoiceField, etc.; do not infer it from only the
   parent table branch.
-- Convert remaining position/layout marker names such as `layoutTail`,
-  `dimensionSegments`, and dimension markers into named layout/binding
-  concepts or internal descriptor profiles.
+- Convert remaining position/layout marker names such as `layoutTail` and
+  dimension markers into named layout/binding concepts or internal descriptor
+  profiles.
 
 ## What To Add
 
@@ -181,6 +181,8 @@ Done after this audit:
   public marker attributes;
 - `Position/@unit` is no longer public XML, and `Binding/@coordinate` no
   longer has a `slotN` fallback for the six named coordinate slots;
+- `Position/@dimensionSegments` is no longer public XML; segmented dimension
+  geometry is derived from the `DimensionBinding section` order by the writer.
 - schema tests now guard against reintroducing the removed public raw-shape
   vocabulary.
 - semantic graph digest support was added as `digest-xml`; it hashes the
@@ -194,9 +196,9 @@ Done after this audit:
 Remaining next steps:
 
 1. Convert the remaining position/layout raw-shaped names, especially
-   `layoutTail`, `layoutPreTail`, marker-bearing `dimensionSegments`,
-   `primaryDimensionMarker`, and `secondaryDimensionMarker`, into named
-   concepts or internal descriptor rules.
+   `layoutTail`, `layoutPreTail`, `primaryDimensionMarker`, and
+   `secondaryDimensionMarker`, into named concepts or internal descriptor
+   rules.
 2. Extend property-slot coverage so the audit reports dump/build mapping for
    each public XSD property, not only per-control writer coverage.
 3. Re-run the small all-controls fixture and Diadoc fixture.

@@ -954,8 +954,6 @@ def add_inline_segmented_dimension_bindings(
     tail_values = geometry_raw[cursor:]
     if any(isinstance(value, list) for value in tail_values):
         return False
-    if any(marker for marker, _records in segments):
-        position.set("dimensionSegments", " ".join(segment_spec(marker, len(records)) for marker, records in segments))
     tail = [clean_token(value) for value in tail_values]
     if tail:
         position.set("layoutTail", " ".join(tail))
@@ -965,10 +963,6 @@ def add_inline_segmented_dimension_bindings(
             add_binding(bindings, "DimensionBinding", index, binding, current_id, element_index)
             bindings[-1].set("section", section)
     return True
-
-
-def segment_spec(marker: str, count: int) -> str:
-    return f"{marker}:{count}" if marker else str(count)
 
 
 def add_inline_dual_counted_dimension_bindings(

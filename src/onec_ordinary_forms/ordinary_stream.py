@@ -5443,53 +5443,29 @@ def inline_segmented_dimension_geometry_from_xml(
     binding_container = position.find("Bindings")
     if binding_container is None:
         return None
-    segment_specs = [value for value in (position.get("dimensionSegments") or "").split(" ") if value]
     derived_section_order: list[str] = []
-    if not segment_specs:
-        for binding in binding_container.findall("DimensionBinding"):
-            section = binding.get("section") or "primary"
-            if section not in derived_section_order:
-                derived_section_order.append(section)
-        if len(derived_section_order) <= 1 or not any(section.startswith("segment") for section in derived_section_order):
-            return None
-        segment_specs = []
-        for section in derived_section_order:
-            count = sum(
-                1
-                for binding in binding_container.findall("DimensionBinding")
-                if (binding.get("section") or "primary") == section
-            )
-            segment_specs.append(str(count))
-    if not segment_specs:
+    for binding in binding_container.findall("DimensionBinding"):
+        section = binding.get("section") or "primary"
+        if section not in derived_section_order:
+            derived_section_order.append(section)
+    if len(derived_section_order) <= 1 or not any(section.startswith("segment") for section in derived_section_order):
         return None
     records_by_section: dict[str, list[object]] = {}
     for binding in binding_container.findall("DimensionBinding"):
         section = binding.get("section") or "primary"
         records_by_section.setdefault(section, []).append(dimension_binding_to_raw(binding))
     result: list[object] = ["8", left, top, right, bottom, "1", *bindings]
-    for segment_index, spec in enumerate(segment_specs):
-        section = "primary" if segment_index == 0 else f"segment{segment_index + 1}"
+    for segment_index, section in enumerate(derived_section_order):
         records = records_by_section.get(section, [])
-        marker, count = parse_dimension_segment_spec(spec)
-        if count != len(records):
-            return None
+        count = len(records)
         if segment_index == 0:
             result.append(str(count))
-        elif marker:
-            result.extend([marker, str(count)])
         else:
             result.append(str(count))
         result.extend(records)
     tail = [value for value in (position.get("layoutTail") or "").split(" ") if value != ""]
     result.extend(tail)
     return result
-
-
-def parse_dimension_segment_spec(spec: str) -> tuple[str, int]:
-    if ":" in spec:
-        marker, count = spec.split(":", 1)
-        return marker, int(count)
-    return "", int(spec)
 
 
 def compact_scalar_geometry(

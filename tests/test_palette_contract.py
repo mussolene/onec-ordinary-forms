@@ -221,6 +221,17 @@ def test_position_schema_does_not_expose_constant_unit_marker() -> None:
     assert "unit" not in attrs
 
 
+def test_position_schema_does_not_expose_dimension_segments_marker() -> None:
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
+    position_type = root.find("xs:complexType[@name='PositionType']", ns)
+    assert position_type is not None
+
+    attrs = {node.get("name", "") for node in position_type.findall("xs:attribute", ns)}
+
+    assert "dimensionSegments" not in attrs
+
+
 def test_form_schema_has_root_panel_layout_not_serialization_profile() -> None:
     root = ET.parse(ORDINARY_FORM_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
