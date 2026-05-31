@@ -1640,7 +1640,6 @@ DATA_BOUND_CONTROL_TYPES = {
     "ProgressBar",
     "TrackBar",
     "CalendarField",
-    "PeriodChooser",
     "TextDocumentField",
     "GanttChart",
     "Dendrogram",

@@ -39,7 +39,6 @@ CONTROL_CANDIDATES = {
     "ProgressBar": ("Индикатор", "LogFormProgressBar"),
     "TrackBar": ("ПолосаРегулирования", "LogFormTrackBar"),
     "CalendarField": ("ПолеКалендаря", "LogFormCalendarWnd"),
-    "PeriodChooser": ("ПолеПериода",),
     "TextDocumentField": ("ПолеТекстовогоДокумента", "LogFormTxtEdt"),
     "GanttChart": ("ДиаграммаГанта",),
     "Dendrogram": ("Дендрограмма",),

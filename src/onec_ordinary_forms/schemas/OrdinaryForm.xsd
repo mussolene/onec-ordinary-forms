@@ -479,13 +479,6 @@
             <Event platformName="ПроверкаПеретаскивания"/>
           </Events>
         </Control>
-        <Control name="PeriodChooser" platformName="ПолеПериода">
-          <Properties>
-            <Property platformName="АвтоМаксимальнаяШирина" platformType="Булево"/>
-            <Property platformName="МаксимальнаяШирина" platformType="Число"/>
-          </Properties>
-          <Events/>
-        </Control>
         <Control name="ProgressBar" platformName="Индикатор">
           <Properties>
             <Property platformName="Доступность" platformType="Булево"/>
@@ -870,7 +863,6 @@
       <xs:element name="ProgressBar" type="ProgressBarType"/>
       <xs:element name="TrackBar" type="TrackBarType"/>
       <xs:element name="CalendarField" type="CalendarFieldType"/>
-      <xs:element name="PeriodChooser" type="PeriodChooserType"/>
       <xs:element name="TextDocumentField" type="TextDocumentFieldType"/>
       <xs:element name="GanttChart" type="GanttChartType"/>
       <xs:element name="Dendrogram" type="DendrogramType"/>
@@ -2277,32 +2269,6 @@
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
-  <xs:complexType name="PeriodChooserType">
-    <xs:complexContent>
-      <xs:extension base="ControlIdentityType">
-        <xs:choice minOccurs="0" maxOccurs="unbounded">
-          <xs:element name="Title" type="LocalizedTextType"/>
-          <xs:element name="ToolTip" type="LocalizedTextType"/>
-          <xs:element name="Position" type="PositionType"/>
-          <xs:element name="Visible" type="xs:boolean"/>
-          <xs:element name="Enabled" type="xs:boolean"/>
-          <xs:element name="ReadOnly" type="xs:boolean"/>
-          <xs:element name="SkipOnInput" type="xs:boolean"/>
-          <xs:element name="DataPath" type="xs:string"/>
-          <xs:element name="Font" type="FontType"/>
-          <xs:element name="TextColor" type="ColorType"/>
-          <xs:element name="BackColor" type="ColorType"/>
-          <xs:element name="BorderColor" type="ColorType"/>
-          <xs:element name="ContextMenu" type="NamedRefType"/>
-          <xs:element name="AutoContextMenu" type="xs:boolean"/>
-          <xs:element name="ExtendedTooltip" type="NamedRefType"/>
-          <xs:element name="AutoMaxWidth" type="xs:boolean"/>
-          <xs:element name="MaxWidth" type="xs:integer"/>
-          <xs:group ref="ControlElementGroup"/>
-        </xs:choice>
-      </xs:extension>
-    </xs:complexContent>
-  </xs:complexType>
   <xs:complexType name="GanttChartType">
     <xs:complexContent>
       <xs:extension base="ControlIdentityType">
@@ -2415,7 +2381,6 @@
       <xs:enumeration value="LabelDecoration"/>
       <xs:enumeration value="ListBox"/>
       <xs:enumeration value="Panel"/>
-      <xs:enumeration value="PeriodChooser"/>
       <xs:enumeration value="PictureDecoration"/>
       <xs:enumeration value="PivotChart"/>
       <xs:enumeration value="ProgressBar"/>

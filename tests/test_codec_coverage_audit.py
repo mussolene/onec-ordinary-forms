@@ -16,10 +16,10 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     )
 
     summary = report["summary"]
-    assert summary["xsdControls"] == summary["paletteControls"] == 27
+    assert summary["xsdControls"] == summary["paletteControls"] == 26
     assert summary["legacyWriterBranches"] == 0
     assert summary["writerBranchesWithoutXsdControl"] == []
-    assert summary["controlsWithoutWriterDescriptor"] == ["PeriodChooser"]
+    assert summary["controlsWithoutWriterDescriptor"] == []
     assert "ActiveXControl" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "Button" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "Chart" not in summary["controlsWithoutSharedInfoDescriptor"]
@@ -42,7 +42,7 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     assert "SpreadsheetDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "TextDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "TrackBar" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert summary["controlsWithoutSharedInfoDescriptor"] == ["PeriodChooser"]
+    assert summary["controlsWithoutSharedInfoDescriptor"] == []
 
 
 def test_codec_coverage_audit_normalizes_public_control_aliases() -> None:

@@ -33,7 +33,6 @@ ORDINARY_CONTROLS = {
     "ProgressBar": "Индикатор",
     "TrackBar": "ПолосаРегулирования",
     "CalendarField": "ПолеКалендаря",
-    "PeriodChooser": "ПолеПериода",
     "TextDocumentField": "ПолеТекстовогоДокумента",
     "GanttChart": "ДиаграммаГанта",
     "Dendrogram": "Дендрограмма",

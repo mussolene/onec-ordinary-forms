@@ -169,7 +169,7 @@ class CliSmokeTest(unittest.TestCase):
             self.assertEqual(files["module"].modified, ticks)
 
     def test_ordinary_palette_describes_all_known_controls(self) -> None:
-        self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 27)
+        self.assertEqual(len(ORDINARY_CONTROL_DESCRIPTORS), 26)
         self.assertEqual(ORDINARY_CONTROL_DESCRIPTORS["ActiveXControl"].platform_name, "ЭлементУправленияActiveX")
         self.assertIn("Title", ORDINARY_CONTROL_DESCRIPTORS["Label"].properties)
         self.assertIn("ChoiceButton", ORDINARY_CONTROL_DESCRIPTORS["InputField"].properties)

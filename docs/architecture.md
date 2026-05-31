@@ -72,11 +72,10 @@ properties rather than raw sidecars.
 Use `tools/audit_codec_coverage.py` before and after serializer work. It reports
 the current gap between the public palette/XSD, legacy writer branches, writer
 descriptor coverage, and shared slot descriptor coverage. The writer dispatch is
-now registry-based for all supported ordinary controls; `PeriodChooser` remains
-the explicit unsupported writer descriptor until platform evidence gives its
-ordinary-control class id and record shape. Only a small core is backed by the
-shared slot descriptor table so far, and that is the measured reason small
-hardcoded fixes were moving the corpus slowly.
+now registry-based for all supported ordinary controls. Controls found only in
+managed-form documentation, such as `ПолеПериода`, are not part of the public
+ordinary-form schema until platform evidence gives an ordinary-control class id
+and record shape.
 
 ## Schema Boundary
 
