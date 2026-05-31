@@ -516,6 +516,71 @@ class CliSmokeTest(unittest.TestCase):
         self.assertTrue(forms[0].module)
         self.assertEqual(forms[0].picture_files, ["Items/Image/Picture.gif"])
 
+    def test_scan_corpus_can_include_semantic_digest_for_exported_form_xml(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            form_dir = root / "ExternalDataProcessors" / "Tool" / "Forms" / "Form" / "Ext" / "Form"
+            form_dir.mkdir(parents=True)
+            (form_dir / "form").write_text('{"ru","Title"}', encoding="utf-8")
+            (form_dir / "Form.bin").write_bytes(b"bin")
+            (form_dir.parent / "Form.xml").write_text(
+                """<Form>
+                  <Pages>
+                    <Page name="Main">
+                      <InputField name="Input" id="1">
+                        <Position left="1" top="2" right="3" bottom="4"/>
+                      </InputField>
+                    </Page>
+                  </Pages>
+                </Form>""",
+                encoding="utf-8",
+            )
+
+            report = build_corpus_report(root, exported_root=root, include_semantic_digest=True)
+
+        form = report["exportedForms"][0]
+        self.assertEqual(report["summary"]["formsWithSemanticDigest"], 1)
+        self.assertEqual(form["semanticDigest"]["status"], "ok")
+        self.assertEqual(form["semanticDigest"]["summary"]["controls"], 1)
+        self.assertEqual(len(form["semanticDigest"]["hash"]), 64)
+        self.assertNotIn(str(root), json.dumps(report, ensure_ascii=False))
+
+    def test_scan_corpus_compares_semantic_digest_between_exported_roots(self) -> None:
+        def write_export(root: Path, left: str) -> None:
+            form_dir = root / "ExternalDataProcessors" / "Tool" / "Forms" / "Form" / "Ext" / "Form"
+            form_dir.mkdir(parents=True)
+            (form_dir / "form").write_text('{"ru","Title"}', encoding="utf-8")
+            (form_dir / "Form.bin").write_bytes(b"bin")
+            (form_dir.parent / "Form.xml").write_text(
+                f"""<Form>
+                  <Pages>
+                    <Page name="Main">
+                      <InputField name="Input" id="1">
+                        <Position left="{left}" top="2" right="3" bottom="4"/>
+                      </InputField>
+                    </Page>
+                  </Pages>
+                </Form>""",
+                encoding="utf-8",
+            )
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            source = root / "source"
+            target = root / "target"
+            write_export(source, "1")
+            write_export(target, "9")
+
+            report = build_corpus_report(
+                root,
+                exported_root=source,
+                compare_exported_root=target,
+            )
+
+        form = report["exportedForms"][0]
+        self.assertEqual(report["summary"]["semanticDigestDifferences"], 1)
+        self.assertEqual(form["comparisonSemanticDigest"]["status"], "different")
+
     def test_form_bin_unpack_pack_round_trip(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -3349,6 +3349,8 @@ def scan_corpus(args: argparse.Namespace) -> None:
         name_regex=args.name_regex,
         limit=args.limit,
         exported_root=Path(args.exported_root) if args.exported_root else None,
+        include_semantic_digest=args.semantic_digest,
+        compare_exported_root=Path(args.compare_exported_root) if args.compare_exported_root else None,
     )
     write_report(report, Path(args.out_json) if args.out_json else None)
 
@@ -3402,6 +3404,8 @@ def main() -> None:
     scan_parser.add_argument("--name-regex", help="Optional regex filter for relative paths")
     scan_parser.add_argument("--limit", type=int, help="Limit selected files after sorting/filtering")
     scan_parser.add_argument("--exported-root", help="Optional ibcmd-exported directory to classify")
+    scan_parser.add_argument("--semantic-digest", action="store_true", help="Add Form.xml semantic graph hashes to exported forms")
+    scan_parser.add_argument("--compare-exported-root", help="Compare exported Form.xml semantic hashes with another exported tree")
     scan_parser.add_argument("--out-json", help="Write JSON report instead of stdout")
     scan_parser.set_defaults(func=scan_corpus)
 

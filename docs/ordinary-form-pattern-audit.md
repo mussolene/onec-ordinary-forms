@@ -188,19 +188,19 @@ Done after this audit:
   attributes, table columns/editor controls, pictures, fonts, colors, and
   command sources while ignoring container timestamps and current codec-shaped
   position noise.
+- `scan-corpus` can now attach semantic digest summaries to exported forms and
+  compare matching forms across two exported trees before byte-level analysis.
 
 Remaining next steps:
 
-1. Use semantic graph digest comparison in corpus/platform redump reports
-   before byte-level diff summaries.
-2. Convert the remaining position/layout raw-shaped names, especially
+1. Convert the remaining position/layout raw-shaped names, especially
    `layoutTail`, `layoutPreTail`, marker-bearing `dimensionSegments`,
    `primaryDimensionMarker`, and `secondaryDimensionMarker`, into named
    concepts or internal descriptor rules.
-3. Extend property-slot coverage so the audit reports dump/build mapping for
+2. Extend property-slot coverage so the audit reports dump/build mapping for
    each public XSD property, not only per-control writer coverage.
-4. Re-run the small all-controls fixture and Diadoc fixture.
-5. Re-run UT/Enterprise-style corpus checks only in a matching configured
+3. Re-run the small all-controls fixture and Diadoc fixture.
+4. Re-run UT/Enterprise-style corpus checks only in a matching configured
    infobase to avoid type-loss noise.
 
 The goal is not to make every old source byte-identical. The goal is to make
