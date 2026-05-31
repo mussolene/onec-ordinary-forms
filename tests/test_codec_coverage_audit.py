@@ -24,11 +24,18 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     assert "CheckBox" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "ChoiceField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "CalendarField" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "GeographicalSchemaField" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "GraphicalSchemaField" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "GroupBox" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "HTMLDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "LabelDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "ListBox" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "PictureDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "ProgressBar" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "RadioButton" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "Splitter" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "SpreadsheetDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "TextDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "TrackBar" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert set(summary["controlsWithoutSharedInfoDescriptor"]) >= {"ActiveXControl", "PeriodChooser"}
 

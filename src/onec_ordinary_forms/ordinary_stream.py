@@ -202,6 +202,76 @@ CONTROL_INFO_SLOT_DESCRIPTORS = {
             InfoSlotDescriptor("ViewKind", 2),
         ),
     ),
+    "GroupBox": ControlInfoDescriptor(
+        control_type="GroupBox",
+        info_kind="0",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("Title", 2),
+            InfoSlotDescriptor("Decoration", 3),
+        ),
+    ),
+    "Splitter": ControlInfoDescriptor(
+        control_type="Splitter",
+        info_kind="0",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("Orientation", 2),
+        ),
+    ),
+    "HTMLDocumentField": ControlInfoDescriptor(
+        control_type="HTMLDocumentField",
+        info_kind="5",
+        slots=(
+            InfoSlotDescriptor("Actions", 2),
+            InfoSlotDescriptor("BackColor", 3),
+            InfoSlotDescriptor("Border", 4),
+        ),
+    ),
+    "TextDocumentField": ControlInfoDescriptor(
+        control_type="TextDocumentField",
+        info_kind="6",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("Uuid", 3),
+        ),
+    ),
+    "GeographicalSchemaField": ControlInfoDescriptor(
+        control_type="GeographicalSchemaField",
+        info_kind="19",
+        slots=(
+            InfoSlotDescriptor("Output", 1),
+            InfoSlotDescriptor("Visible", 11),
+            InfoSlotDescriptor("ToolTip", 12),
+            InfoSlotDescriptor("Scale", 15),
+            InfoSlotDescriptor("BaseStyleMode", 16),
+            InfoSlotDescriptor("BaseStyleState", 17),
+            InfoSlotDescriptor("BaseStyleVisible", 18),
+            InfoSlotDescriptor("BaseStyleDefaultMode", 19),
+        ),
+    ),
+    "GraphicalSchemaField": ControlInfoDescriptor(
+        control_type="GraphicalSchemaField",
+        info_kind="5",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("Settings", 2),
+            InfoSlotDescriptor("Actions", 3),
+            InfoSlotDescriptor("HasActions", 4),
+        ),
+    ),
+    "SpreadsheetDocumentField": ControlInfoDescriptor(
+        control_type="SpreadsheetDocumentField",
+        info_kind="18",
+        slots=(
+            InfoSlotDescriptor("Left", 1),
+            InfoSlotDescriptor("Top", 2),
+            InfoSlotDescriptor("Right", 3),
+            InfoSlotDescriptor("Bottom", 4),
+            InfoSlotDescriptor("BackColor", 9),
+            InfoSlotDescriptor("Actions", 17),
+        ),
+    ),
     "Button": ControlInfoDescriptor(
         control_type="Button",
         info_kind="1",
@@ -2563,15 +2633,20 @@ def image_picture_style_group_record(element: ET.Element, picture_payload: str) 
 
 
 def group_box_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
-    return [
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["GroupBox"]
+    base = group_box_base_info_record_from_xml(element)
+    info_record = [
+        base,
+        "8",
+        title_record,
+        ["3", "0", ["0"], "6", "1", "0", "cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2"],
         "0",
-        [
-            group_box_base_info_record_from_xml(element),
-            "8",
-            title_record,
-            ["3", "0", ["0"], "6", "1", "0", "cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2"],
-            "0",
-        ],
+    ]
+    info_record[descriptor.slot_index("BaseInfo")] = base
+    info_record[descriptor.slot_index("Title")] = title_record
+    return [
+        descriptor.info_kind,
+        info_record,
     ]
 
 
@@ -2582,14 +2657,19 @@ def group_box_base_info_record_from_xml(element: ET.Element) -> list[object]:
 
 
 def splitter_control_info(element: ET.Element) -> list[object]:
-    return [
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["Splitter"]
+    base = splitter_base_info_record_from_xml(element)
+    info_record = [
+        base,
+        "2",
+        "2",
         "0",
-        [
-            splitter_base_info_record_from_xml(element),
-            "2",
-            "2",
-            "0",
-        ],
+    ]
+    info_record[descriptor.slot_index("BaseInfo")] = base
+    info_record[descriptor.slot_index("Orientation")] = "2"
+    return [
+        descriptor.info_kind,
+        info_record,
     ]
 
 
@@ -3497,15 +3577,19 @@ def bool_attribute_record_from_xml(element: ET.Element, name: str, *, default: b
 
 
 def html_document_field_control_info(actions: list[object]) -> list[object]:
-    return [
-        "5",
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["HTMLDocumentField"]
+    action_list = [str(len(actions)), *actions] if actions else ["0"]
+    info = [
+        descriptor.info_kind,
         "0",
-        [str(len(actions)), *actions] if actions else ["0"],
+        action_list,
         ["3", "3", ["-22"]],
         ["3", "1", ["-18"], "0", "0", "0"],
         "1",
         "0",
     ]
+    info[descriptor.slot_index("Actions")] = action_list
+    return info
 
 
 def progress_bar_control_info(element: ET.Element) -> list[object]:
@@ -3623,8 +3707,10 @@ def calendar_field_control_info(element: ET.Element, actions: list[object]) -> l
 
 
 def text_document_field_control_info(element: ET.Element) -> list[object]:
-    return [
-        extended_base_info_record_from_xml(element),
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["TextDocumentField"]
+    base = extended_base_info_record_from_xml(element)
+    info = [
+        base,
         "6",
         "1",
         "00000000-0000-0000-0000-000000000000",
@@ -3632,13 +3718,18 @@ def text_document_field_control_info(element: ET.Element) -> list[object]:
         "0",
         "0",
     ]
+    info[descriptor.slot_index("BaseInfo")] = base
+    return info
 
 
 def geographical_schema_field_control_info(element: ET.Element) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["GeographicalSchemaField"]
     base = extended_base_info_record_from_xml(element)
-    return [
-        "19",
-        element.findtext("Output") or "1",
+    output = element.findtext("Output") or "1"
+    scale = element.findtext("Scale") or "100"
+    info = [
+        descriptor.info_kind,
+        output,
         ["4", "3", ["-10"], "3"],
         ["4", "4", ["0"], "4"],
         ["8", "3", "0", "1", "100"],
@@ -3652,13 +3743,20 @@ def geographical_schema_field_control_info(element: ET.Element) -> list[object]:
         tooltip_record_from_xml(element),
         "0",
         "0",
-        element.findtext("Scale") or "100",
+        scale,
         base[16],
         base[17],
         base[18],
         base[19],
         ["4", "4", ["0"], "4"],
     ]
+    info[descriptor.slot_index("Output")] = output
+    info[descriptor.slot_index("Scale")] = scale
+    info[descriptor.slot_index("BaseStyleMode")] = base[16]
+    info[descriptor.slot_index("BaseStyleState")] = base[17]
+    info[descriptor.slot_index("BaseStyleVisible")] = base[18]
+    info[descriptor.slot_index("BaseStyleDefaultMode")] = base[19]
+    return info
 
 
 def geographical_schema_settings_record(element: ET.Element) -> list[object]:
@@ -3715,43 +3813,52 @@ def geographical_schema_settings_record(element: ET.Element) -> list[object]:
 
 
 def graphical_schema_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
-    return [
-        graphical_schema_base_info_record(element),
-        "5",
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["GraphicalSchemaField"]
+    base = graphical_schema_base_info_record(element)
+    settings = [
         [
+            "5",
             [
-                "5",
                 [
-                    [
-                        "1",
-                        ["4", "3", ["-10"], "3"],
-                        "1",
-                        "20",
-                        "20",
-                        "3",
-                        "6",
-                        "6",
-                        [quoted_atom("N"), "10"],
-                        "7",
-                        [quoted_atom("N"), "10"],
-                        "8",
-                        [quoted_atom("N"), "10"],
-                        "9",
-                        [quoted_atom("N"), "10"],
-                        "13",
-                        [quoted_atom("N"), "0"],
-                        "16",
-                        [quoted_atom("N"), "0"],
-                    ]
-                ],
-                "0",
-                "0",
-            ]
-        ],
-        action_records(actions),
+                    "1",
+                    ["4", "3", ["-10"], "3"],
+                    "1",
+                    "20",
+                    "20",
+                    "3",
+                    "6",
+                    "6",
+                    [quoted_atom("N"), "10"],
+                    "7",
+                    [quoted_atom("N"), "10"],
+                    "8",
+                    [quoted_atom("N"), "10"],
+                    "9",
+                    [quoted_atom("N"), "10"],
+                    "13",
+                    [quoted_atom("N"), "0"],
+                    "16",
+                    [quoted_atom("N"), "0"],
+                ]
+            ],
+            "0",
+            "0",
+        ]
+    ]
+    action_table = action_records(actions)
+    info = [
+        base,
+        "5",
+        settings,
+        action_table,
         "1" if actions else "0",
         "0",
     ]
+    info[descriptor.slot_index("BaseInfo")] = base
+    info[descriptor.slot_index("Settings")] = settings
+    info[descriptor.slot_index("Actions")] = action_table
+    info[descriptor.slot_index("HasActions")] = "1" if actions else "0"
+    return info
 
 
 def graphical_schema_base_info_record(element: ET.Element) -> list[object]:
@@ -4362,13 +4469,16 @@ def column_picture_record(picture_payload: str) -> list[object]:
 
 
 def spreadsheet_document_field_control_info(element: ET.Element, actions: list[object]) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["SpreadsheetDocumentField"]
     position = element.find("Position")
     left = position.get("left", "0") if position is not None else "0"
     top = position.get("top", "0") if position is not None else "0"
     right = position.get("right", "100") if position is not None else "100"
     bottom = position.get("bottom", "100") if position is not None else "100"
-    return [
-        "18",
+    back_color = spreadsheet_back_color_record_from_xml(element)
+    action_table = action_records(actions)
+    info = [
+        descriptor.info_kind,
         left,
         top,
         right,
@@ -4377,7 +4487,7 @@ def spreadsheet_document_field_control_info(element: ET.Element, actions: list[o
         "5",
         "0",
         "1",
-        spreadsheet_back_color_record_from_xml(element),
+        back_color,
         ["3", "1", ["-18"], "0", "0", "0"],
         spreadsheet_settings_record(),
         "0",
@@ -4385,7 +4495,7 @@ def spreadsheet_document_field_control_info(element: ET.Element, actions: list[o
         ["3", "0", "0", "100", "0", "0", "0", "1", "1", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", quoted_atom("ru"), "0", "1", ["3", "0", "0", "0", "0", "00000000-0000-0000-0000-000000000000"], "0", "0", "0", "0", "0"],
         "1",
         "1",
-        action_records(actions),
+        action_table,
         "0",
         "0",
         "0",
@@ -4402,6 +4512,13 @@ def spreadsheet_document_field_control_info(element: ET.Element, actions: list[o
         "1",
         "1",
     ]
+    info[descriptor.slot_index("Left")] = left
+    info[descriptor.slot_index("Top")] = top
+    info[descriptor.slot_index("Right")] = right
+    info[descriptor.slot_index("Bottom")] = bottom
+    info[descriptor.slot_index("BackColor")] = back_color
+    info[descriptor.slot_index("Actions")] = action_table
+    return info
 
 
 def spreadsheet_back_color_record_from_xml(element: ET.Element) -> list[object]:
