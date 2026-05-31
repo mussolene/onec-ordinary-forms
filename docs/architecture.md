@@ -70,11 +70,13 @@ consistent current graph, and keep compatibility details as named schema-backed
 properties rather than raw sidecars.
 
 Use `tools/audit_codec_coverage.py` before and after serializer work. It reports
-the current gap between the public palette/XSD, writer branches, and descriptor
-coverage. At the time this note was added, XSD and palette both covered 27
-controls, the writer had branches for all except `PeriodChooser`, and only four
-public controls were backed by the shared info descriptor table. That is the
-measured reason small hardcoded fixes were moving the corpus slowly.
+the current gap between the public palette/XSD, legacy writer branches, writer
+descriptor coverage, and shared slot descriptor coverage. The writer dispatch is
+now registry-based for all supported ordinary controls; `PeriodChooser` remains
+the explicit unsupported writer descriptor until platform evidence gives its
+ordinary-control class id and record shape. Only a small core is backed by the
+shared slot descriptor table so far, and that is the measured reason small
+hardcoded fixes were moving the corpus slowly.
 
 ## Schema Boundary
 

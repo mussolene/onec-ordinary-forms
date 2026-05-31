@@ -17,7 +17,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS  # noqa: E402
-from onec_ordinary_forms.ordinary_stream import CORE_CONTROL_INFO_DESCRIPTORS  # noqa: E402
+from onec_ordinary_forms.ordinary_stream import CORE_CONTROL_INFO_DESCRIPTORS, CONTROL_INFO_WRITER_DESCRIPTORS  # noqa: E402
 
 
 XS = {"xs": "http://www.w3.org/2001/XMLSchema"}
@@ -128,7 +128,8 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
     xsd_control_set = xsd_controls(root)
     palette = palette_controls(root)
     branches = writer_branches(stream_path)
-    descriptor_controls = {
+    writer_descriptor_controls = set(CONTROL_INFO_WRITER_DESCRIPTORS)
+    shared_info_descriptor_controls = {
         descriptor.control_type
         for descriptor in CORE_CONTROL_INFO_DESCRIPTORS.values()
         if descriptor.control_type != "FormRootPanel"
@@ -149,7 +150,8 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
                 "inXsd": control in xsd_control_set,
                 "inPalette": control in palette,
                 "writerBranch": branches.get(stream_control, ""),
-                "descriptorBacked": stream_control in descriptor_controls,
+                "writerDescriptor": stream_control in writer_descriptor_controls,
+                "sharedInfoDescriptor": stream_control in shared_info_descriptor_controls,
                 "xsdPropertyCount": len(xsd_props),
                 "publicDescriptorPropertyCount": len(descriptor_props),
                 "platformPropertyCount": len(palette_item.get("platformProperties", [])),
@@ -163,16 +165,17 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
         "summary": {
             "xsdControls": len(xsd_control_set),
             "paletteControls": len(palette),
-            "writerControlInfoBranches": len(branches),
-            "descriptorBackedControls": len(descriptor_controls),
-            "controlsWithoutWriterBranch": sorted(
-                control for control in xsd_control_set if XML_TO_STREAM_CONTROL_TYPE.get(control, control) not in branches
+            "legacyWriterBranches": len(branches),
+            "writerDescriptorControls": len(writer_descriptor_controls),
+            "sharedInfoDescriptorControls": len(shared_info_descriptor_controls),
+            "controlsWithoutWriterDescriptor": sorted(
+                control for control in xsd_control_set if XML_TO_STREAM_CONTROL_TYPE.get(control, control) not in writer_descriptor_controls
             ),
             "writerBranchesWithoutXsdControl": sorted(
                 control for control in set(branches) - {XML_TO_STREAM_CONTROL_TYPE.get(item, item) for item in xsd_control_set}
             ),
-            "controlsWithoutInfoDescriptor": sorted(
-                control for control in xsd_control_set if XML_TO_STREAM_CONTROL_TYPE.get(control, control) not in descriptor_controls
+            "controlsWithoutSharedInfoDescriptor": sorted(
+                control for control in xsd_control_set if XML_TO_STREAM_CONTROL_TYPE.get(control, control) not in shared_info_descriptor_controls
             ),
         },
         "controls": controls,

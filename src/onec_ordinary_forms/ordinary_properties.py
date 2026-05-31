@@ -224,7 +224,12 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         COMMON_CONTROL_PROPERTIES + ("Orientation", "MinWidth", "MaxWidth"),
     ),
     "CalendarField": OrdinaryControlDescriptor("CalendarField", "ПолеКалендаря", "CalendarField", COMMON_CONTROL_PROPERTIES + ("ValueType",)),
-    "PeriodChooser": OrdinaryControlDescriptor("PeriodChooser", "ПолеПериода", "PeriodChooser", DIAGRAM_CONTROL_PROPERTIES),
+    "PeriodChooser": OrdinaryControlDescriptor(
+        "PeriodChooser",
+        "ПолеПериода",
+        "PeriodChooser",
+        COMMON_CONTROL_PROPERTIES + ("AutoMaxWidth", "MaxWidth"),
+    ),
     "TextDocumentField": OrdinaryControlDescriptor(
         "TextDocumentField",
         "ПолеТекстовогоДокумента",

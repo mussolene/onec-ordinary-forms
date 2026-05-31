@@ -14,6 +14,7 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from onec_ordinary_forms.liststream import dumps_list_out_stream
 from onec_ordinary_forms.ordinary_platform import (
@@ -70,6 +71,23 @@ class PlatformListRecordDescriptor:
                 raise IndexError(f"{self.name} slot index out of range: {index}")
             record[index] = value
         return record
+
+
+@dataclass(frozen=True)
+class ControlInfoBuildContext:
+    element: ET.Element
+    name: str
+    control_type: str
+    asset_root: Path | None
+    attribute_type_patterns: dict[str, list[object]]
+    title_record: list[object]
+    actions: list[object]
+
+
+@dataclass(frozen=True)
+class ControlInfoWriterDescriptor:
+    control_type: str
+    builder: Callable[[ControlInfoBuildContext], list[object]]
 
 
 CORE_CONTROL_INFO_DESCRIPTORS = {
@@ -1478,68 +1496,173 @@ def control_info_from_xml(
         info = copy.deepcopy(template_info)
         replace_first_localized_text_record(info, title_record)
         return info
-    if control_type == "Panel":
-        return panel_control_info_from_xml(element, title_record, actions)
-    if control_type == "ActiveXControl":
-        return active_x_control_info(element)
-    if control_type == "Button":
-        return button_control_info(element, title_record, actions, asset_root)
-    if control_type == "Image":
-        picture_payload = picture_payload_from_xml(element.find("Picture"), asset_root)
-        return image_control_info(element, title_record, picture_payload, actions)
-    if control_type == "CheckBox":
-        return checkbox_control_info(element, title_record, actions)
-    if control_type == "ChoiceField":
-        return choice_field_control_info(element, actions)
-    if control_type == "RadioButton":
-        data_path = data_path_from_xml(element)
-        return radio_button_control_info(
-            element,
-            title_record,
-            actions,
-            attribute_type_patterns.get(data_path, []) or attribute_type_patterns.get(radio_group_data_path(data_path), []),
+
+    descriptor = CONTROL_INFO_WRITER_DESCRIPTORS.get(control_type)
+    if descriptor is None:
+        raise ValueError(f"Unsupported ordinary form control type for stream writer: {control_type}")
+    return descriptor.builder(
+        ControlInfoBuildContext(
+            element=element,
+            name=name,
+            control_type=control_type,
+            asset_root=asset_root,
+            attribute_type_patterns=attribute_type_patterns,
+            title_record=title_record,
+            actions=actions,
         )
-    if control_type == "InputField":
-        data_path = data_path_from_xml(element)
-        return input_field_control_info(element, actions, attribute_type_patterns.get(data_path, []))
-    if control_type == "GroupBox":
-        return group_box_control_info(element, title_record)
-    if control_type == "Splitter":
-        return splitter_control_info(element)
-    if control_type == "Chart":
-        return chart_control_info()
-    if control_type == "PivotChart":
-        return pivot_chart_control_info(element, title_record)
-    if control_type == "GanttChart":
-        return gantt_chart_control_info(element, title_record, actions)
-    if control_type == "Dendrogram":
-        return dendrogram_control_info(element, title_record)
-    if control_type == "HTMLDocumentField":
-        return html_document_field_control_info(actions)
-    if control_type == "ListBox":
-        return list_box_control_info(element, actions)
-    if control_type == "ProgressBar":
-        return progress_bar_control_info(element)
-    if control_type == "TrackBar":
-        return track_bar_control_info(element, actions)
-    if control_type == "CalendarField":
-        return calendar_field_control_info(element, actions)
-    if control_type == "TextDocumentField":
-        return text_document_field_control_info(element)
-    if control_type == "GeographicalSchemaField":
-        return geographical_schema_field_control_info(element)
-    if control_type == "GraphicalSchemaField":
-        return graphical_schema_field_control_info(element, actions)
-    if control_type == "CommandBar":
-        return command_bar_control_info(element)
-    if control_type == "Table":
-        data_path = data_path_from_xml(element)
-        return table_control_info(element, actions, attribute_type_patterns.get(data_path, []), asset_root)
-    if control_type == "SpreadsheetDocumentField":
-        return spreadsheet_document_field_control_info(element, actions)
-    if control_type == "Label":
-        return label_control_info(element, title_record, actions, asset_root)
-    raise ValueError(f"Unsupported ordinary form control type for stream writer: {control_type}")
+    )
+
+
+def build_panel_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return panel_control_info_from_xml(context.element, context.title_record, context.actions)
+
+
+def build_active_x_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return active_x_control_info(context.element)
+
+
+def build_button_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return button_control_info(context.element, context.title_record, context.actions, context.asset_root)
+
+
+def build_image_control_info(context: ControlInfoBuildContext) -> list[object]:
+    picture_payload = picture_payload_from_xml(context.element.find("Picture"), context.asset_root)
+    return image_control_info(context.element, context.title_record, picture_payload, context.actions)
+
+
+def build_checkbox_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return checkbox_control_info(context.element, context.title_record, context.actions)
+
+
+def build_choice_field_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return choice_field_control_info(context.element, context.actions)
+
+
+def build_radio_button_control_info(context: ControlInfoBuildContext) -> list[object]:
+    data_path = data_path_from_xml(context.element)
+    return radio_button_control_info(
+        context.element,
+        context.title_record,
+        context.actions,
+        context.attribute_type_patterns.get(data_path, [])
+        or context.attribute_type_patterns.get(radio_group_data_path(data_path), []),
+    )
+
+
+def build_input_field_control_info(context: ControlInfoBuildContext) -> list[object]:
+    data_path = data_path_from_xml(context.element)
+    return input_field_control_info(context.element, context.actions, context.attribute_type_patterns.get(data_path, []))
+
+
+def build_group_box_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return group_box_control_info(context.element, context.title_record)
+
+
+def build_splitter_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return splitter_control_info(context.element)
+
+
+def build_chart_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return chart_control_info()
+
+
+def build_pivot_chart_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return pivot_chart_control_info(context.element, context.title_record)
+
+
+def build_gantt_chart_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return gantt_chart_control_info(context.element, context.title_record, context.actions)
+
+
+def build_dendrogram_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return dendrogram_control_info(context.element, context.title_record)
+
+
+def build_html_document_field_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return html_document_field_control_info(context.actions)
+
+
+def build_list_box_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return list_box_control_info(context.element, context.actions)
+
+
+def build_progress_bar_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return progress_bar_control_info(context.element)
+
+
+def build_track_bar_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return track_bar_control_info(context.element, context.actions)
+
+
+def build_calendar_field_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return calendar_field_control_info(context.element, context.actions)
+
+
+def build_text_document_field_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return text_document_field_control_info(context.element)
+
+
+def build_geographical_schema_field_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return geographical_schema_field_control_info(context.element)
+
+
+def build_graphical_schema_field_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return graphical_schema_field_control_info(context.element, context.actions)
+
+
+def build_command_bar_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return command_bar_control_info(context.element)
+
+
+def build_table_control_info(context: ControlInfoBuildContext) -> list[object]:
+    data_path = data_path_from_xml(context.element)
+    return table_control_info(
+        context.element,
+        context.actions,
+        context.attribute_type_patterns.get(data_path, []),
+        context.asset_root,
+    )
+
+
+def build_spreadsheet_document_field_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return spreadsheet_document_field_control_info(context.element, context.actions)
+
+
+def build_label_control_info(context: ControlInfoBuildContext) -> list[object]:
+    return label_control_info(context.element, context.title_record, context.actions, context.asset_root)
+
+
+CONTROL_INFO_WRITER_DESCRIPTORS = {
+    descriptor.control_type: descriptor
+    for descriptor in (
+        ControlInfoWriterDescriptor("Panel", build_panel_control_info),
+        ControlInfoWriterDescriptor("ActiveXControl", build_active_x_control_info),
+        ControlInfoWriterDescriptor("Button", build_button_control_info),
+        ControlInfoWriterDescriptor("Image", build_image_control_info),
+        ControlInfoWriterDescriptor("CheckBox", build_checkbox_control_info),
+        ControlInfoWriterDescriptor("ChoiceField", build_choice_field_control_info),
+        ControlInfoWriterDescriptor("RadioButton", build_radio_button_control_info),
+        ControlInfoWriterDescriptor("InputField", build_input_field_control_info),
+        ControlInfoWriterDescriptor("GroupBox", build_group_box_control_info),
+        ControlInfoWriterDescriptor("Splitter", build_splitter_control_info),
+        ControlInfoWriterDescriptor("Chart", build_chart_control_info),
+        ControlInfoWriterDescriptor("PivotChart", build_pivot_chart_control_info),
+        ControlInfoWriterDescriptor("GanttChart", build_gantt_chart_control_info),
+        ControlInfoWriterDescriptor("Dendrogram", build_dendrogram_control_info),
+        ControlInfoWriterDescriptor("HTMLDocumentField", build_html_document_field_control_info),
+        ControlInfoWriterDescriptor("ListBox", build_list_box_control_info),
+        ControlInfoWriterDescriptor("ProgressBar", build_progress_bar_control_info),
+        ControlInfoWriterDescriptor("TrackBar", build_track_bar_control_info),
+        ControlInfoWriterDescriptor("CalendarField", build_calendar_field_control_info),
+        ControlInfoWriterDescriptor("TextDocumentField", build_text_document_field_control_info),
+        ControlInfoWriterDescriptor("GeographicalSchemaField", build_geographical_schema_field_control_info),
+        ControlInfoWriterDescriptor("GraphicalSchemaField", build_graphical_schema_field_control_info),
+        ControlInfoWriterDescriptor("CommandBar", build_command_bar_control_info),
+        ControlInfoWriterDescriptor("Table", build_table_control_info),
+        ControlInfoWriterDescriptor("SpreadsheetDocumentField", build_spreadsheet_document_field_control_info),
+        ControlInfoWriterDescriptor("Label", build_label_control_info),
+    )
+}
 
 
 def active_x_control_info(element: ET.Element) -> list[object]:
