@@ -25,6 +25,14 @@ XML_TO_STREAM_CONTROL_TYPE = {
     "LabelDecoration": "Label",
     "PictureDecoration": "Image",
 }
+FORBIDDEN_WRITER_FALLBACK_TOKENS = (
+    "control_templates",
+    "control_template",
+    "template_info",
+    "template_metadata",
+    "template_geometry",
+    "geometry_stream_from_template",
+)
 
 
 def xsd_root(path: Path) -> ET.Element:
@@ -123,11 +131,17 @@ def writer_branches(path: Path) -> dict[str, str]:
     return visitor.branches
 
 
+def writer_fallback_tokens(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    return sorted(token for token in FORBIDDEN_WRITER_FALLBACK_TOKENS if token in text)
+
+
 def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
     root = xsd_root(xsd_path)
     xsd_control_set = xsd_controls(root)
     palette = palette_controls(root)
     branches = writer_branches(stream_path)
+    fallback_tokens = writer_fallback_tokens(stream_path)
     writer_descriptor_controls = set(CONTROL_INFO_WRITER_DESCRIPTORS)
     shared_info_descriptor_controls = {
         descriptor.control_type
@@ -177,6 +191,7 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
             "controlsWithoutSharedInfoDescriptor": sorted(
                 control for control in xsd_control_set if XML_TO_STREAM_CONTROL_TYPE.get(control, control) not in shared_info_descriptor_controls
             ),
+            "writerFallbackTokens": fallback_tokens,
         },
         "controls": controls,
     }

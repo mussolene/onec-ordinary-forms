@@ -488,7 +488,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
     controls: list[object] = []
     for page in top_level_pages(root):
         for child in page:
-            control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots, {})
+            control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots)
             if control:
                 controls.append(control)
 
@@ -1453,18 +1453,6 @@ def form_serialization_counter_from_xml(root: ET.Element) -> str:
     return value if value.isdigit() else ""
 
 
-def replace_first_localized_text_record(value: object, replacement: list[object]) -> bool:
-    if not isinstance(value, list):
-        return False
-    if is_localized_text_record(value):
-        value[:] = copy.deepcopy(replacement)
-        return True
-    for item in value:
-        if replace_first_localized_text_record(item, replacement):
-            return True
-    return False
-
-
 def is_localized_text_record(value: list[object]) -> bool:
     if len(value) != 3:
         return False
@@ -1552,9 +1540,8 @@ def control_stream_from_xml(
     asset_root: Path | None,
     attribute_type_patterns: dict[str, list[object]] | None = None,
     attribute_slots: dict[str, str] | None = None,
-    control_templates: dict[tuple[str, str], dict[str, object]] | None = None,
 ) -> list[object] | None:
-    return control_stream_from_xml_with_page(element, asset_root, attribute_type_patterns or {}, attribute_slots or {}, control_templates or {}, None, None)
+    return control_stream_from_xml_with_page(element, asset_root, attribute_type_patterns or {}, attribute_slots or {}, None, None)
 
 
 def control_stream_from_xml_with_page(
@@ -1562,7 +1549,6 @@ def control_stream_from_xml_with_page(
     asset_root: Path | None,
     attribute_type_patterns: dict[str, list[object]],
     attribute_slots: dict[str, str],
-    control_templates: dict[tuple[str, str], dict[str, object]],
     page_index: int | None,
     page_order: int | None,
     parent_size: tuple[str, str] | None = None,
@@ -1575,9 +1561,8 @@ def control_stream_from_xml_with_page(
         raise ValueError(f"Unsupported ordinary form control type for stream writer: {element.tag}")
     object_id = required_control_id(element)
     name = required_control_name(element)
-    control_template = control_templates.get((control_type, object_id)) or control_templates.get((control_type, name))
     title_record = control_title_record_from_xml(element)
-    info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns, control_template)
+    info = control_info_from_xml(element, name, control_type, asset_root, attribute_type_patterns)
     data_path = data_path_from_xml(element) if control_type in DATA_BOUND_CONTROL_TYPES else ""
     data_slot = attribute_slots.get(data_path, "")
     if not data_slot and control_type == "RadioButton":
@@ -1590,7 +1575,6 @@ def control_stream_from_xml_with_page(
         page_order,
         data_slot,
         radio_ordinal,
-        control_template,
         object_id,
         name,
         parent_size,
@@ -1605,8 +1589,7 @@ def control_stream_from_xml_with_page(
         metadata_scope = CONTROL_METADATA_SCOPE["default"]
     else:
         metadata_scope = CONTROL_METADATA_SCOPE.get(control_type, CONTROL_METADATA_SCOPE["default"])
-    template_metadata = (control_template or {}).get("metadata")
-    metadata = copy.deepcopy(template_metadata) if isinstance(template_metadata, list) else ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
+    metadata = ["14", quoted_atom(metadata_name), metadata_scope, "0", "0", "0"]
     if control_type == "RadioButton":
         metadata[5] = bool_record_from_xml(element, "FirstInGroup", default=False)
     if control_type == "Label" and bool_record_from_xml(element, "DefaultAction", default=False) == "1":
@@ -1615,7 +1598,7 @@ def control_stream_from_xml_with_page(
         metadata[5] = "1"
     children_by_id: list[tuple[int, list[object]]] = []
     for child in element:
-        child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, control_templates, None, None)
+        child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, None, None)
         if child_stream:
             children_by_id.append((int(child_stream[1]), child_stream))
     pages = element.find("Pages")
@@ -1631,7 +1614,6 @@ def control_stream_from_xml_with_page(
                     asset_root,
                     attribute_type_patterns,
                     attribute_slots,
-                    control_templates,
                     page_number,
                     page_child_order,
                     child_parent_size,
@@ -1727,16 +1709,9 @@ def control_info_from_xml(
     control_type: str,
     asset_root: Path | None,
     attribute_type_patterns: dict[str, list[object]],
-    control_template: dict[str, object] | None = None,
 ) -> list[object]:
     title_record = control_title_record_from_xml(element)
     actions = control_actions_from_xml(element, control_type)
-    template_info = (control_template or {}).get("info")
-    if isinstance(template_info, list):
-        info = copy.deepcopy(template_info)
-        replace_first_localized_text_record(info, title_record)
-        return info
-
     descriptor = CONTROL_INFO_WRITER_DESCRIPTORS.get(control_type)
     if descriptor is None:
         raise ValueError(f"Unsupported ordinary form control type for stream writer: {control_type}")
@@ -4960,14 +4935,10 @@ def geometry_stream_from_xml(
     page_order: int | None = None,
     data_slot: str = "",
     radio_ordinal: int = 0,
-    control_template: dict[str, object] | None = None,
     object_id: str = "0",
     control_name: str = "",
     parent_size: tuple[str, str] | None = None,
 ) -> list[object]:
-    template_geometry = (control_template or {}).get("geometry")
-    if isinstance(template_geometry, list):
-        return geometry_stream_from_template(template_geometry, position)
     left = position.get("left", "0") if position is not None else "0"
     top = position.get("top", "0") if position is not None else "0"
     right = position.get("right", "0") if position is not None else "0"
@@ -5717,48 +5688,6 @@ def geometry_delta(end: str, start: str) -> str:
         return str(int(end) - int(start))
     except ValueError:
         return "0"
-
-
-def geometry_stream_from_template(template_geometry: list[object], position: ET.Element | None) -> list[object]:
-    result = copy.deepcopy(template_geometry)
-    if len(result) < 5 or position is None:
-        return result
-    for index, key in enumerate(("left", "top", "right", "bottom"), start=1):
-        value = position.get(key)
-        if value is not None:
-            result[index] = value
-    binding_container = position.find("Bindings")
-    if binding_container is None:
-        return result
-    for binding in binding_container.findall("Binding"):
-        slot = binding.get("slot")
-        if not slot and binding.get("coordinate"):
-            mapped = BINDING_COORDINATE_SLOT.get(binding.get("coordinate", ""))
-            slot = str(mapped) if mapped is not None else None
-        if not slot:
-            continue
-        try:
-            index = int(slot) - 1
-        except ValueError:
-            continue
-        target = 6 + index
-        if 0 <= index < 6 and target < len(result):
-            result[target] = binding_to_raw(binding)
-    for binding in binding_container.findall("DimensionBinding"):
-        slot = binding.get("slot")
-        if not slot and binding.get("dimension"):
-            mapped = DIMENSION_NAME_SLOT.get(binding.get("dimension", ""))
-            slot = str(mapped) if mapped is not None else None
-        if not slot:
-            continue
-        try:
-            index = int(slot) - 1
-        except ValueError:
-            continue
-        target = 13 + index
-        if 0 <= index < 4 and target < len(result):
-            result[target] = dimension_binding_to_raw(binding)
-    return result
 
 
 def apply_geometry_bindings_to_raw(geometry: ET.Element, raw_geometry: list[object]) -> None:

@@ -18,6 +18,7 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     summary = report["summary"]
     assert summary["xsdControls"] == summary["paletteControls"] == 26
     assert summary["legacyWriterBranches"] == 0
+    assert summary["writerFallbackTokens"] == []
     assert summary["writerBranchesWithoutXsdControl"] == []
     assert summary["controlsWithoutWriterDescriptor"] == []
     assert "ActiveXControl" not in summary["controlsWithoutSharedInfoDescriptor"]
