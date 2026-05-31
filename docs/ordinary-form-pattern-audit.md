@@ -159,14 +159,27 @@ If a low-level value is required for rebuild, it must be classified:
 
 ## Correct Next Steps
 
-1. Remove form-level `SerializationProfile` from public XSD/dump/build/tests.
-2. Promote the root panel subset into a named layout object or reuse the panel
-   layout concept at the form root.
-3. Make root/top record generation an internal canonical descriptor rule.
-4. Add the raw-vocabulary schema/test guard.
-5. Add semantic graph digest comparison and use it before corpus byte reports.
-6. Re-run the small all-controls fixture and Diadoc fixture.
-7. Re-run UT/Enterprise-style corpus checks only in a matching configured
+Done after this audit:
+
+- form-level `SerializationProfile`, `RootRecord`, `TopLevel`, and public
+  `slotN` schema fields were removed from `OrdinaryForm.xsd`, dump, build, and
+  focused tests;
+- root panel state/layout now uses the named `RootPanelLayout` XML node;
+- root/top record generation is no longer read from public XML and is handled
+  as canonical writer logic;
+- schema tests now guard against reintroducing the removed public raw-shape
+  vocabulary.
+
+Remaining next steps:
+
+1. Add semantic graph digest comparison and use it before corpus byte reports.
+2. Convert the remaining position/layout raw-shaped names, especially
+   `dimensionProfile` and `DimensionBinding dimension="slotN"`, into named
+   concepts or internal descriptor rules.
+3. Extend property-slot coverage so the audit reports dump/build mapping for
+   each public XSD property, not only per-control writer coverage.
+4. Re-run the small all-controls fixture and Diadoc fixture.
+5. Re-run UT/Enterprise-style corpus checks only in a matching configured
    infobase to avoid type-loss noise.
 
 The goal is not to make every old source byte-identical. The goal is to make

@@ -467,7 +467,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         raise ValueError("Expected public ordinary form XML root <Form>")
 
     title = form_title_from_xml(root)
-    if not title and root.find("SerializationProfile") is None:
+    if not title:
         pages = top_level_pages(root)
         first_page = pages[0] if pages else None
         title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
@@ -492,17 +492,14 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
             if control:
                 controls.append(control)
 
-    root_layout = form_serialization_profile_from_xml(root)
-    attributes_layout = root_layout.get("attributesLayout") if root_layout is not None else None
+    root_layout = form_root_layout_from_xml(root)
     stream = ordinary_form_stream(
-        title if title or root_layout is not None else "Main",
+        title or "Main",
         attributes,
         controls,
         events_from_xml(root),
         form_size_from_xml(root, root_layout),
         root_layout=root_layout,
-        attributes_layout=attributes_layout if isinstance(attributes_layout, dict) else None,
-        object_info=form_object_info_from_xml(root),
         serialization_counter=form_serialization_counter_from_xml(root),
     )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
@@ -545,16 +542,6 @@ def ordinary_form_stream(
         "1",
         "1",
     ]
-    if root_layout is not None and isinstance(root_layout.get("topLevel"), dict):
-        for key, value in root_layout["topLevel"].items():
-            if not key.startswith("slot"):
-                continue
-            try:
-                index = int(key[4:])
-            except ValueError:
-                continue
-            if 0 <= index < len(stream):
-                stream[index] = str(value)
     return stream
 
 
@@ -566,157 +553,106 @@ def form_root_record(
     serialization_counter: str = "",
 ) -> list[object]:
     width, height, explicit_size = form_size
-    compact_root = root_layout is not None and root_layout.get("recordKind") == "16" and root_layout.get("rootPanelInfoProfile") == "21"
-    root_panel_info_template = (root_layout or {}).get("rootPanelInfo")
-    if isinstance(root_panel_info_template, list):
-        root_panel_info_record = copy.deepcopy(root_panel_info_template)
-    else:
-        root_panel_info_record = (
-            compact_root_panel_info(title, width, height) if compact_root else root_panel_info(title, width, height, controls, root_layout)
-        )
+    root_panel_info_record = root_panel_info(title, width, height, controls, root_layout)
     root_panel = [
         ORDINARY_CONTROL_GUID_BY_TYPE["Panel"],
         root_panel_info_record,
         ["1", *controls] if len(controls) == 1 else [str(len(controls)), *controls],
     ]
-    title_lang = (root_layout or {}).get("titleLang", "ru")
-    title_record = ["1", "0"] if root_layout is not None and root_layout.get("titleItemCount") == "0" and not title else localized_text_record(title, lang=title_lang)
-    if compact_root:
-        return [
-            "16",
-            [title_record, root_layout.get("titleMarker", "2"), root_layout.get("titleScope", "4294967295")],
-            root_panel,
-            width,
-            height,
-            str(root_layout.get("slot5", "1")),
-            str(root_layout.get("slot6", "1")),
-            str(root_layout.get("slot7", "1")),
-            str(root_layout.get("slot8", "4")),
-            str(root_layout.get("slot9", "4")),
-            str(root_layout.get("slot10", "38")),
-        ]
+    title_record = localized_text_record(title)
     record = [
-        str((root_layout or {}).get("recordKind", "16")),
+        "16",
         [
             title_record,
-            str((root_layout or {}).get("titleMarker", "52")),
-            str((root_layout or {}).get("titleScope", "4294967295")),
+            "52",
+            "4294967295",
         ],
         root_panel,
         width,
         height,
-        str((root_layout or {}).get("slot5", "1")),
-        str((root_layout or {}).get("slot6", "0")),
-        str((root_layout or {}).get("slot7", "1")),
-        str((root_layout or {}).get("slot8", "4")),
-        str((root_layout or {}).get("slot9", "4")),
-        str((root_layout or {}).get("slot10", "6")),
+        "1",
+        "0",
+        "1",
+        "4",
+        "4",
+        "6",
     ]
     if explicit_size:
         record[0] = "18"
-        record[1][1] = str((root_layout or {}).get("titleMarker", "4" if controls else "41"))
-        record[1][2] = str((root_layout or {}).get("titleScope", "4294967295" if controls else "3"))
-        record[-1] = serialization_counter or str((root_layout or {}).get("slot10", "3"))
+        record[1][1] = "4" if controls else "41"
+        record[1][2] = "4294967295" if controls else "3"
+        record[-1] = serialization_counter or "3"
         record.extend([width, height, "96"])
     return record
 
 
-def form_serialization_profile_from_xml(root: ET.Element) -> FormRootLayout | None:
-    serialization = root.find("SerializationProfile")
-    if serialization is None:
+def form_root_layout_from_xml(root: ET.Element) -> FormRootLayout | None:
+    root_panel = root.find("RootPanelLayout")
+    if root_panel is None:
         return None
     result: FormRootLayout = {}
-    top_level = serialization.find("TopLevel")
-    if top_level is not None:
-        values = {
-            key: top_level.get(key, "")
-            for key in ("slot5", "slot6", "slot7", "slot8", "slot9", "slot10", "slot14", "slot15", "slot16", "slot17", "slot18", "slot19")
-            if top_level.get(key) is not None
-        }
-        if values:
-            result["topLevel"] = values
-    root_record = serialization.find("RootRecord")
-    if root_record is not None:
-        for key in ("recordKind", "titleMarker", "titleScope", "titleItemCount", "titleLang", "slot5", "slot6", "slot7", "slot8", "slot9", "slot10"):
-            value = root_record.get(key)
-            if value is not None and value != "":
-                result[key] = value
-    root_panel = serialization.find("RootPanel")
-    if root_panel is not None:
-        base_style = root_panel.find("BaseStyle")
-        if base_style is not None:
-            result["rootPanelBaseStyle"] = base_style
-        if root_panel.get("pageCapacity"):
-            result["rootPanelPageCapacity"] = root_panel.get("pageCapacity", "")
-        if root_panel.get("currentPageIndex"):
-            result["rootPanelCurrentPageIndex"] = root_panel.get("currentPageIndex", "")
-        page_states: list[dict[str, str]] = []
-        for page_state in root_panel.findall("PageState"):
-            descriptor: dict[str, str] = {}
-            if page_state.get("name"):
-                descriptor["name"] = page_state.get("name", "")
-            title = get_multilang_text(page_state, "Title")
-            if title:
-                descriptor["title"] = title
-                descriptor["titleLang"] = get_multilang_lang(page_state, "Title")
-            if page_state.get("styleMode"):
-                descriptor["styleMode"] = page_state.get("styleMode", "")
-            if descriptor:
-                page_states.append(descriptor)
-        result["rootPageStates"] = page_states
-        if page_states:
-            result["rootPageName"] = page_states[0].get("name", "")
-            result["rootPageTitle"] = page_states[0].get("title", "")
-            result["rootPageStyleMode"] = page_states[0].get("styleMode", "")
-        page_layouts = [
-            {key: page_layout.get(key, "") for key in ("page", "left", "top", "width", "height", "horizontalMode", "verticalMode")}
-            for page_layout in root_panel.findall("PageLayout")
+    base_style = root_panel.find("BaseStyle")
+    if base_style is not None:
+        result["rootPanelBaseStyle"] = base_style
+    if root_panel.get("pageCapacity"):
+        result["rootPanelPageCapacity"] = root_panel.get("pageCapacity", "")
+    if root_panel.get("currentPageIndex"):
+        result["rootPanelCurrentPageIndex"] = root_panel.get("currentPageIndex", "")
+    page_states: list[dict[str, str]] = []
+    for page_state in root_panel.findall("PageState"):
+        descriptor: dict[str, str] = {}
+        if page_state.get("name"):
+            descriptor["name"] = page_state.get("name", "")
+        title = get_multilang_text(page_state, "Title")
+        if title:
+            descriptor["title"] = title
+            descriptor["titleLang"] = get_multilang_lang(page_state, "Title")
+        if page_state.get("styleMode"):
+            descriptor["styleMode"] = page_state.get("styleMode", "")
+        if descriptor:
+            page_states.append(descriptor)
+    result["rootPageStates"] = page_states
+    if page_states:
+        result["rootPageName"] = page_states[0].get("name", "")
+        result["rootPageTitle"] = page_states[0].get("title", "")
+        result["rootPageStyleMode"] = page_states[0].get("styleMode", "")
+    page_layouts = [
+        {key: page_layout.get(key, "") for key in ("page", "left", "top", "width", "height", "horizontalMode", "verticalMode")}
+        for page_layout in root_panel.findall("PageLayout")
+    ]
+    if page_layouts:
+        result["rootPageLayouts"] = page_layouts
+        result["rootPageLayout"] = page_layouts[0]
+    if root_panel.get("pageLayoutHeader"):
+        result["rootPageLayoutHeader"] = [value for value in root_panel.get("pageLayoutHeader", "").split(" ") if value != ""]
+    if root_panel.get("dependencyTail"):
+        result["rootPanelDependencyTail"] = [value for value in root_panel.get("dependencyTail", "").split(" ") if value != ""]
+    if root_panel.get("pageStateFlag"):
+        result["rootPanelPageStateFlag"] = root_panel.get("pageStateFlag")
+    if root_panel.get("postLayoutTailBeforeColor"):
+        result["rootPanelPostLayoutTailBeforeColor"] = [
+            value for value in root_panel.get("postLayoutTailBeforeColor", "").split(" ") if value != ""
         ]
-        if page_layouts:
-            result["rootPageLayouts"] = page_layouts
-            result["rootPageLayout"] = page_layouts[0]
-        if root_panel.get("pageLayoutHeader"):
-            result["rootPageLayoutHeader"] = [value for value in root_panel.get("pageLayoutHeader", "").split(" ") if value != ""]
-        if root_panel.get("dependencyTail"):
-            result["rootPanelDependencyTail"] = [value for value in root_panel.get("dependencyTail", "").split(" ") if value != ""]
-        if root_panel.get("pageStateFlag"):
-            result["rootPanelPageStateFlag"] = root_panel.get("pageStateFlag")
-        if root_panel.get("postLayoutTailBeforeColor"):
-            result["rootPanelPostLayoutTailBeforeColor"] = [
-                value for value in root_panel.get("postLayoutTailBeforeColor", "").split(" ") if value != ""
-            ]
-        if root_panel.get("postLayoutTailAfterColor"):
-            result["rootPanelPostLayoutTailAfterColor"] = [
-                value for value in root_panel.get("postLayoutTailAfterColor", "").split(" ") if value != ""
-            ]
-        dependencies = form_root_panel_dependency_profile_from_xml(root_panel)
-        if dependencies is not None:
-            result["rootPanelDependencies"] = dependencies
-        elif (
-            root_panel.get("dependencyTail")
-            or root_panel.get("pageStateFlag")
-            or root_panel.get("pageLayoutHeader")
-            or root_panel.findall("PageState")
-            or root_panel.findall("PageLayout")
-        ):
-            result["rootPanelDependencies"] = []
-    attribute_layout = serialization.find("AttributeLayout")
-    if attribute_layout is not None:
-        layout: dict[str, object] = {}
-        if attribute_layout.get("marker") is not None:
-            layout["marker"] = attribute_layout.get("marker", "")
-        if attribute_layout.get("slotCount") is not None:
-            layout["slotCount"] = attribute_layout.get("slotCount", "")
-        if layout:
-            result["attributesLayout"] = layout
-    form_object = serialization.find("FormObject")
-    if form_object is not None:
-        result["formObject"] = form_object
+    if root_panel.get("postLayoutTailAfterColor"):
+        result["rootPanelPostLayoutTailAfterColor"] = [
+            value for value in root_panel.get("postLayoutTailAfterColor", "").split(" ") if value != ""
+        ]
+    dependencies = form_root_panel_dependency_profile_from_xml(root_panel)
+    if dependencies is not None:
+        result["rootPanelDependencies"] = dependencies
+    elif (
+        root_panel.get("dependencyTail")
+        or root_panel.get("pageStateFlag")
+        or root_panel.get("pageLayoutHeader")
+        or root_panel.findall("PageState")
+        or root_panel.findall("PageLayout")
+    ):
+        result["rootPanelDependencies"] = []
     return result or None
 
 
 def form_root_panel_dependency_profile_from_xml(root_panel: ET.Element) -> list[object] | None:
-    groups = sorted(root_panel.findall("DependencyGroup"), key=lambda node: int(node.get("order", "0") or "0"))
+    groups = sorted(root_panel.findall("LayoutDependencyGroup"), key=lambda node: int(node.get("order", "0") or "0"))
     if not groups:
         return None
     result: list[object] = []
@@ -727,7 +663,7 @@ def form_root_panel_dependency_profile_from_xml(root_panel: ET.Element) -> list[
         if header:
             result.append(header)
         records: list[list[object]] = []
-        for dependency in group.findall("Dependency"):
+        for dependency in group.findall("LayoutDependency"):
             target_id = dependency.get("targetId", "0")
             dimension = dependency.get("dimension", "top")
             dimension_code = PANEL_LAYOUT_DIMENSION_CODES.get(dimension)
@@ -736,52 +672,6 @@ def form_root_panel_dependency_profile_from_xml(root_panel: ET.Element) -> list[
             records.append(["0", target_id, dimension_code or "0"])
         result.extend([str(len(records)), *records])
     return result
-
-
-def compact_root_panel_info(title: str, form_width: str, form_height: str) -> list[object]:
-    descriptor = CORE_CONTROL_INFO_DESCRIPTORS["FormRootPanel"]
-    margin_left = "8"
-    margin_top = "33"
-    page_width = panel_extent_value(form_width, 8)
-    page_title = localized_text_record("Страница1")
-    position_records = [
-        ["2", margin_left, "1", "1", "1", "0", "0", "0", "0"],
-        ["2", margin_top, "0", "1", "2", "0", "0", "0", "0"],
-        ["2", page_width, "1", "1", "3", "0", "0", margin_left, "0"],
-        ["2", form_height, "0", "1", "4", "0", "0", "0", "0"],
-    ]
-    return [
-        descriptor.info_kind,
-        [
-            compact_root_panel_base_info_record(),
-            "21",
-            "0",
-            "1",
-            ["0", "1", "1"],
-            "1",
-            ["0", "2", "2"],
-            "2",
-            ["0", "1", "3"],
-            ["0", "2", "3"],
-            "0",
-            "0",
-            ["3", "1", compact_empty_page_style_record()],
-            "0",
-            "1",
-            ["1", "1", ["3", page_title, ["3", "0", compact_empty_page_style_record()], "-1", "1", "1", quoted_atom("Страница1"), "1"]],
-            "1",
-            "1",
-            "0",
-            "4",
-            *position_records,
-            "0",
-            "4294967295",
-            "5",
-            "64",
-            "0",
-        ],
-        ["0"],
-    ]
 
 
 def root_panel_info(
@@ -1160,24 +1050,6 @@ def panel_base_info_record_for_layout(element: ET.Element, layout_node: ET.Eleme
     return record
 
 
-def compact_root_panel_base_info_record() -> list[object]:
-    return [
-        "10",
-        "1",
-        ["3", "4", ["0"]],
-        ["3", "4", ["0"]],
-        ["6", "3", "0", "1"],
-        "0",
-        ["3", "3", ["-22"]],
-        ["3", "4", ["0"]],
-        ["3", "4", ["0"]],
-        ["3", "3", ["-7"]],
-        ["3", "3", ["-21"]],
-        ["3", "0", ["0"], "0", "0", "0", "48312c09-257f-4b29-b280-284dd89efc1e"],
-        ["1", "0"],
-    ]
-
-
 def default_color_record() -> list[object]:
     return ["4", "4", ["0"], "4"]
 
@@ -1383,29 +1255,6 @@ def attribute_record_from_xml(
 
 def form_object_info_record() -> list[object]:
     return ["00000000-0000-0000-0000-000000000000", "0"]
-
-
-def form_object_info_from_xml(root: ET.Element) -> list[object] | None:
-    serialization = root.find("SerializationProfile")
-    form_object = serialization.find("FormObject") if serialization is not None else None
-    if form_object is None:
-        return None
-    uuid = form_object.get("uuid") or "00000000-0000-0000-0000-000000000000"
-    kind = form_object.get("kind") or "0"
-    state_kind = form_object.get("stateKind")
-    if state_kind is None:
-        return [uuid, kind]
-    return [
-        uuid,
-        kind,
-        [
-            state_kind,
-            form_object.get("stateMode") or "0",
-            ["0", "0"],
-            ["0"],
-            form_object.get("stateFlag") or "0",
-        ],
-    ]
 
 
 def events_from_xml(root: ET.Element, style_profile: str = "extended") -> list[object]:

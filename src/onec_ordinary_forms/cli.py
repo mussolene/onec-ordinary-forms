@@ -2819,7 +2819,9 @@ def add_form_properties(parent: ET.Element, form_root: object) -> None:
         counter = clean_token(form_record[10])
         if counter.isdigit():
             set_text(parent, "SerializationCounter", counter)
-    add_form_serialization_profile(parent, form_record, form_root)
+    root_panel_info = form_root_panel_info(form_record)
+    if root_panel_info is not None:
+        add_form_root_panel_layout(parent, root_panel_info)
 
 
 def form_root_title(form_root: object) -> str:
@@ -2836,94 +2838,6 @@ def form_root_title_parts(form_root: object) -> tuple[str, str]:
         return "ru", ""
 
 
-def add_form_serialization_profile(parent: ET.Element, form_record: list[object], form_root: list[object]) -> None:
-    profile = ET.SubElement(parent, "SerializationProfile")
-    add_form_top_level_profile(profile, form_root)
-    root_record = ET.SubElement(profile, "RootRecord")
-    root_record.set("recordKind", clean_token(form_record[0]))
-    if len(form_record) > 1 and isinstance(form_record[1], list) and len(form_record[1]) > 2:
-        if isinstance(form_record[1][0], list) and len(form_record[1][0]) > 1:
-            root_record.set("titleItemCount", clean_token(form_record[1][0][1]))
-            title_lang, title_text = localized_text_parts_from_record(form_record[1][0])
-            if title_text:
-                root_record.set("titleLang", title_lang)
-        root_record.set("titleMarker", clean_token(form_record[1][1]))
-        root_record.set("titleScope", clean_token(form_record[1][2]))
-    for index in range(5, min(len(form_record), 11)):
-        root_record.set(f"slot{index}", clean_token(form_record[index]))
-    root_panel_info = form_root_panel_info(form_record)
-    if root_panel_info is not None:
-        add_form_root_panel_profile(profile, root_panel_info)
-    add_form_attribute_layout_profile(profile, form_root)
-    add_form_object_profile(profile, form_root)
-    if not list(profile):
-        parent.remove(profile)
-
-
-def add_form_top_level_profile(profile: ET.Element, form_root: list[object]) -> None:
-    defaults = {
-        5: "1",
-        6: "4",
-        7: "1",
-        8: "0",
-        9: "0",
-        10: "0",
-        14: "1",
-        15: "2",
-        16: "0",
-        17: "0",
-        18: "1",
-        19: "1",
-    }
-    node = ET.Element("TopLevel")
-    for index, default in defaults.items():
-        if len(form_root) <= index:
-            continue
-        value = clean_token(form_root[index])
-        if value != default:
-            node.set(f"slot{index}", value)
-    if node.attrib:
-        profile.append(node)
-
-
-def add_form_attribute_layout_profile(profile: ET.Element, form_root: list[object]) -> None:
-    if len(form_root) <= 2 or not isinstance(form_root[2], list):
-        return
-    attributes = form_root[2]
-    if len(attributes) < 2:
-        return
-    marker = ""
-    if isinstance(attributes[0], list) and attributes[0]:
-        marker = clean_token(attributes[0][0])
-    slot_count = clean_token(attributes[1])
-    if marker == "1" and not slot_count:
-        return
-    node = ET.SubElement(profile, "AttributeLayout")
-    if marker:
-        node.set("marker", marker)
-    if slot_count:
-        node.set("slotCount", slot_count)
-
-
-def add_form_object_profile(profile: ET.Element, form_root: list[object]) -> None:
-    if len(form_root) <= 3 or not isinstance(form_root[3], list):
-        return
-    object_info = form_root[3]
-    if object_info == ["00000000-0000-0000-0000-000000000000", "0"] or len(object_info) < 2:
-        return
-    node = ET.SubElement(profile, "FormObject")
-    node.set("uuid", clean_token(object_info[0]))
-    node.set("kind", clean_token(object_info[1]))
-    if len(object_info) > 2 and isinstance(object_info[2], list):
-        state = object_info[2]
-        if len(state) > 0:
-            node.set("stateKind", clean_token(state[0]))
-        if len(state) > 1:
-            node.set("stateMode", clean_token(state[1]))
-        if len(state) > 4:
-            node.set("stateFlag", clean_token(state[4]))
-
-
 def form_root_panel_info(form_record: list[object]) -> list[object] | None:
     try:
         root_panel = form_record[2]
@@ -2934,16 +2848,16 @@ def form_root_panel_info(form_record: list[object]) -> list[object] | None:
     return info if isinstance(info, list) else None
 
 
-def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None:
+def add_form_root_panel_layout(parent: ET.Element, info: list[object]) -> None:
     if len(info) < 2 or clean_token(info[1]) != "26":
         return
-    root_panel = ET.SubElement(profile, "RootPanel")
+    root_panel = ET.SubElement(parent, "RootPanelLayout")
     if info and isinstance(info[0], list):
         add_form_root_panel_base_style(root_panel, info[0])
     dependencies, cursor = form_root_panel_dependency_group_descriptors_and_cursor(info)
     for order, descriptor in enumerate(dependencies, start=1):
         records = descriptor["records"]
-        group = ET.SubElement(root_panel, "DependencyGroup")
+        group = ET.SubElement(root_panel, "LayoutDependencyGroup")
         group.set("order", str(order))
         prefix = descriptor.get("prefix", [])
         if prefix:
@@ -2952,7 +2866,7 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
             group.set("header", " ".join(clean_token(value) for value in records[0][0]))
             records = records[1:]
         for record in records:
-            dependency = ET.SubElement(group, "Dependency")
+            dependency = ET.SubElement(group, "LayoutDependency")
             dependency.set("targetId", clean_token(record[1]))
             dimension = clean_token(record[2])
             dependency.set("dimension", PANEL_LAYOUT_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
@@ -2985,7 +2899,7 @@ def add_form_root_panel_profile(profile: ET.Element, info: list[object]) -> None
     if after_color:
         root_panel.set("postLayoutTailAfterColor", " ".join(after_color))
     if not list(root_panel) and not root_panel.attrib:
-        profile.remove(root_panel)
+        parent.remove(root_panel)
 
 
 def add_form_root_panel_base_style(root_panel: ET.Element, base: list[object]) -> None:

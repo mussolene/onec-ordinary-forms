@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -195,11 +196,32 @@ def test_public_xsd_has_no_raw_or_extension_pockets() -> None:
         "PlatformRecords",
         "Extensions",
         "ExtensionProperty",
+        "SerializationProfile",
+        "RootRecord",
+        "TopLevel",
     }
     root = ET.parse(ORDINARY_FORM_XSD).getroot()
     names = {node.get("name", "") for node in root.iter() if node.get("name")}
 
     assert forbidden.isdisjoint(names)
+
+    assert not any(name.startswith("FormSerializationProfile") for name in names)
+    assert not any(re.fullmatch(r"slot\d+", name or "") for name in names)
+
+
+def test_form_schema_has_root_panel_layout_not_serialization_profile() -> None:
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
+    sequence = root.find("xs:complexType[@name='FormType']/xs:sequence", ns)
+    assert sequence is not None
+    public_elements = {node.get("name") for node in sequence.findall("xs:element", ns)}
+
+    assert "RootPanelLayout" in public_elements
+    assert "SerializationProfile" not in public_elements
+    assert root.find("xs:complexType[@name='RootPanelLayoutType']", ns) is not None
+    assert root.find("xs:complexType[@name='FormSerializationProfileType']", ns) is None
+    assert root.find("xs:complexType[@name='FormTopLevelProfileType']", ns) is None
+    assert root.find("xs:complexType[@name='FormRootRecordProfileType']", ns) is None
 
 
 def test_command_bar_schema_has_typed_command_source_not_profile_pocket() -> None:

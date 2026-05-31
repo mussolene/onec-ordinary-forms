@@ -2699,37 +2699,34 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(len(root_record) - 1, 13)
         self.assertEqual(root_record[10:], ["3", "1244", "1120", "96"])
 
-    def test_form_serialization_profile_preserves_root_record_and_page_state(self) -> None:
+    def test_form_root_panel_layout_writes_page_state(self) -> None:
         root = ET.fromstring(
             """<Form version="0.1">
               <Title><Item lang="ru">Main</Item></Title>
               <Width>995</Width>
               <Height>503</Height>
               <SerializationCounter>2</SerializationCounter>
-              <SerializationProfile>
-                <RootRecord recordKind="18" titleMarker="163" titleScope="4294967295" slot5="1" slot6="0" slot7="1" slot8="4" slot9="4" slot10="2"/>
-                <RootPanel pageCapacity="2" currentPageIndex="0">
-                  <BaseStyle>
-                    <TextColor value="143" recordKind="4" recordSubKind="2" tailKind="2">143</TextColor>
-                    <BackColor value="-11" recordKind="4" recordSubKind="3" tailKind="3">-11</BackColor>
-                    <BorderColor value="0" recordKind="4" recordSubKind="4" tailKind="4">auto</BorderColor>
-                  </BaseStyle>
-                  <DependencyGroup order="1">
-                    <Dependency targetId="47" dimension="bottom"/>
-                    <Dependency targetId="119" dimension="bottom"/>
-                  </DependencyGroup>
-                  <DependencyGroup order="2"/>
-                  <DependencyGroup order="3">
-                    <Dependency targetId="119" dimension="right"/>
-                  </DependencyGroup>
-                  <DependencyGroup order="4"/>
-                  <DependencyGroup order="5"/>
-                  <PageState name="СтраницаСтраницаНетОрганизаций" styleMode="2">
-                    <Title><Item lang="ru">Пустой список организаций</Item></Title>
-                  </PageState>
-                  <PageLayout page="0" left="8" top="8" width="987" height="495" horizontalMode="8" verticalMode="8"/>
-                </RootPanel>
-              </SerializationProfile>
+              <RootPanelLayout pageCapacity="2" currentPageIndex="0">
+                <BaseStyle>
+                  <TextColor value="143" recordKind="4" recordSubKind="2" tailKind="2">143</TextColor>
+                  <BackColor value="-11" recordKind="4" recordSubKind="3" tailKind="3">-11</BackColor>
+                  <BorderColor value="0" recordKind="4" recordSubKind="4" tailKind="4">auto</BorderColor>
+                </BaseStyle>
+                <LayoutDependencyGroup order="1">
+                  <LayoutDependency targetId="47" dimension="bottom"/>
+                  <LayoutDependency targetId="119" dimension="bottom"/>
+                </LayoutDependencyGroup>
+                <LayoutDependencyGroup order="2"/>
+                <LayoutDependencyGroup order="3">
+                  <LayoutDependency targetId="119" dimension="right"/>
+                </LayoutDependencyGroup>
+                <LayoutDependencyGroup order="4"/>
+                <LayoutDependencyGroup order="5"/>
+                <PageState name="СтраницаСтраницаНетОрганизаций" styleMode="2">
+                  <Title><Item lang="ru">Пустой список организаций</Item></Title>
+                </PageState>
+                <PageLayout page="0" left="8" top="8" width="987" height="495" horizontalMode="8" verticalMode="8"/>
+              </RootPanelLayout>
               <Pages><Page name="Main"/></Pages>
             </Form>"""
         )
@@ -2740,7 +2737,7 @@ class CliSmokeTest(unittest.TestCase):
         root_panel_info = root_record[2][1][1]
         page_state = root_panel_info[14][2]
 
-        self.assertEqual(root_record[1][1:], ["163", "4294967295"])
+        self.assertEqual(root_record[1][1:], ["41", "3"])
         self.assertEqual(root_record[10:], ["2", "995", "503", "96"])
         self.assertEqual(root_panel_info[0][2], ["4", "2", ["143"], "2"])
         self.assertEqual(root_panel_info[0][3], ["4", "3", ["-11"], "3"])
@@ -2766,21 +2763,18 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(page_state[2][6], "2")
         self.assertEqual(page_state[6], '"СтраницаСтраницаНетОрганизаций"')
 
-    def test_form_root_panel_profile_preserves_empty_page_states(self) -> None:
+    def test_form_root_panel_layout_preserves_empty_page_states(self) -> None:
         root = ET.fromstring(
             """<Form version="0.1">
               <Title><Item lang="ru">Main</Item></Title>
               <Width>1058</Width>
               <Height>424</Height>
-              <SerializationProfile>
-                <RootRecord recordKind="18" titleMarker="4" titleScope="4294967295" slot5="1" slot6="0" slot7="1" slot8="4" slot9="4" slot10="3"/>
-                <RootPanel dependencyTail="0 0" pageStateFlag="0" currentPageIndex="1" pageLayoutHeader="1 1 0">
-                  <DependencyGroup order="1">
-                    <Dependency targetId="76" dimension="right"/>
-                  </DependencyGroup>
-                  <PageLayout page="0" left="8" top="33" width="1050" height="391" horizontalMode="8" verticalMode="9"/>
-                </RootPanel>
-              </SerializationProfile>
+              <RootPanelLayout dependencyTail="0 0" pageStateFlag="0" currentPageIndex="1" pageLayoutHeader="1 1 0">
+                <LayoutDependencyGroup order="1">
+                  <LayoutDependency targetId="76" dimension="right"/>
+                </LayoutDependencyGroup>
+                <PageLayout page="0" left="8" top="33" width="1050" height="391" horizontalMode="8" verticalMode="9"/>
+              </RootPanelLayout>
               <Pages><Page name="Main"/></Pages>
             </Form>"""
         )

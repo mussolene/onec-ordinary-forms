@@ -680,7 +680,7 @@
       <xs:element name="Width" type="xs:integer" minOccurs="0"/>
       <xs:element name="Height" type="xs:integer" minOccurs="0"/>
       <xs:element name="SerializationCounter" type="xs:nonNegativeInteger" minOccurs="0"/>
-      <xs:element name="SerializationProfile" type="FormSerializationProfileType" minOccurs="0"/>
+      <xs:element name="RootPanelLayout" type="RootPanelLayoutType" minOccurs="0"/>
       <xs:element name="WindowOpeningMode" type="xs:string" minOccurs="0"/>
       <xs:element name="AutoTitle" type="xs:boolean" minOccurs="0"/>
       <xs:element name="Group" type="xs:string" minOccurs="0"/>
@@ -696,57 +696,10 @@
     <xs:attribute name="containerCreatedTicks" type="xs:unsignedLong" use="required"/>
     <xs:attribute name="containerModifiedTicks" type="xs:unsignedLong" use="required"/>
   </xs:complexType>
-  <xs:complexType name="FormSerializationProfileType">
+  <xs:complexType name="RootPanelLayoutType">
     <xs:sequence>
-      <xs:element name="TopLevel" type="FormTopLevelProfileType" minOccurs="0"/>
-      <xs:element name="RootRecord" type="FormRootRecordProfileType" minOccurs="0"/>
-      <xs:element name="RootPanel" type="FormRootPanelProfileType" minOccurs="0"/>
-      <xs:element name="AttributeLayout" type="FormAttributeLayoutProfileType" minOccurs="0"/>
-      <xs:element name="FormObject" type="FormObjectProfileType" minOccurs="0"/>
-    </xs:sequence>
-  </xs:complexType>
-  <xs:complexType name="FormTopLevelProfileType">
-    <xs:attribute name="slot5" type="xs:string"/>
-    <xs:attribute name="slot6" type="xs:string"/>
-    <xs:attribute name="slot7" type="xs:string"/>
-    <xs:attribute name="slot8" type="xs:string"/>
-    <xs:attribute name="slot9" type="xs:string"/>
-    <xs:attribute name="slot10" type="xs:string"/>
-    <xs:attribute name="slot14" type="xs:string"/>
-    <xs:attribute name="slot15" type="xs:string"/>
-    <xs:attribute name="slot16" type="xs:string"/>
-    <xs:attribute name="slot17" type="xs:string"/>
-    <xs:attribute name="slot18" type="xs:string"/>
-    <xs:attribute name="slot19" type="xs:string"/>
-  </xs:complexType>
-  <xs:complexType name="FormAttributeLayoutProfileType">
-    <xs:attribute name="marker" type="xs:string"/>
-    <xs:attribute name="slotCount" type="xs:integer"/>
-  </xs:complexType>
-  <xs:complexType name="FormObjectProfileType">
-    <xs:attribute name="uuid" type="xs:string" use="required"/>
-    <xs:attribute name="kind" type="xs:string"/>
-    <xs:attribute name="stateKind" type="xs:string"/>
-    <xs:attribute name="stateMode" type="xs:string"/>
-    <xs:attribute name="stateFlag" type="xs:string"/>
-  </xs:complexType>
-  <xs:complexType name="FormRootRecordProfileType">
-    <xs:attribute name="recordKind" type="xs:string"/>
-    <xs:attribute name="titleMarker" type="xs:string"/>
-    <xs:attribute name="titleScope" type="xs:string"/>
-    <xs:attribute name="titleItemCount" type="xs:string"/>
-    <xs:attribute name="titleLang" type="PlatformLanguageType"/>
-    <xs:attribute name="slot5" type="xs:string"/>
-    <xs:attribute name="slot6" type="xs:string"/>
-    <xs:attribute name="slot7" type="xs:string"/>
-    <xs:attribute name="slot8" type="xs:string"/>
-    <xs:attribute name="slot9" type="xs:string"/>
-    <xs:attribute name="slot10" type="xs:string"/>
-  </xs:complexType>
-  <xs:complexType name="FormRootPanelProfileType">
-    <xs:sequence>
-      <xs:element name="BaseStyle" type="FormRootPanelBaseStyleType" minOccurs="0"/>
-      <xs:element name="DependencyGroup" type="PanelDependencyGroupType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="BaseStyle" type="RootPanelBaseStyleType" minOccurs="0"/>
+      <xs:element name="LayoutDependencyGroup" type="PanelLayoutDependencyGroupType" minOccurs="0" maxOccurs="unbounded"/>
       <xs:element name="PageState" type="FormRootPageStateType" minOccurs="0" maxOccurs="unbounded"/>
       <xs:element name="PageLayout" type="PanelPageLayoutType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
@@ -758,7 +711,7 @@
     <xs:attribute name="postLayoutTailBeforeColor" type="xs:string"/>
     <xs:attribute name="postLayoutTailAfterColor" type="xs:string"/>
   </xs:complexType>
-  <xs:complexType name="FormRootPanelBaseStyleType">
+  <xs:complexType name="RootPanelBaseStyleType">
     <xs:sequence>
       <xs:element name="Font" type="FontType" minOccurs="0"/>
       <xs:element name="TextColor" type="ColorType" minOccurs="0"/>
