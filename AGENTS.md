@@ -72,6 +72,9 @@ Hard rules:
   passphrases, or private agent state.
 - Keep private processors and generated exports out of git. Use ignored
   `scan-output/`, `work/`, or `/tmp` for corpus experiments.
+- Start each corpus/platform experiment iteration from a clean `scan-output/`
+  directory. Remove stale ignored artifacts before producing new reports so
+  current evidence cannot be confused with previous runs.
 - Prefer platform `ibcmd` for export/import/rebuild validation. Do not route
   this repository's parser work through `vrunner` unless a task explicitly
   requires that separate tool.
