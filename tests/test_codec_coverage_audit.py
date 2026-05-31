@@ -20,7 +20,10 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     assert summary["legacyWriterBranches"] == 0
     assert summary["writerBranchesWithoutXsdControl"] == []
     assert summary["controlsWithoutWriterDescriptor"] == ["PeriodChooser"]
-    assert set(summary["controlsWithoutSharedInfoDescriptor"]) >= {"ActiveXControl", "Button", "PeriodChooser"}
+    assert "Button" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "LabelDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "PictureDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert set(summary["controlsWithoutSharedInfoDescriptor"]) >= {"ActiveXControl", "PeriodChooser"}
 
 
 def test_codec_coverage_audit_normalizes_public_control_aliases() -> None:
@@ -32,5 +35,7 @@ def test_codec_coverage_audit_normalizes_public_control_aliases() -> None:
 
     assert controls["LabelDecoration"]["streamControl"] == "Label"
     assert controls["LabelDecoration"]["writerDescriptor"] is True
+    assert controls["LabelDecoration"]["sharedInfoDescriptor"] is True
     assert controls["PictureDecoration"]["streamControl"] == "Image"
     assert controls["PictureDecoration"]["writerDescriptor"] is True
+    assert controls["PictureDecoration"]["sharedInfoDescriptor"] is True

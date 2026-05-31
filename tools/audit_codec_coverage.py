@@ -17,7 +17,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS  # noqa: E402
-from onec_ordinary_forms.ordinary_stream import CORE_CONTROL_INFO_DESCRIPTORS, CONTROL_INFO_WRITER_DESCRIPTORS  # noqa: E402
+from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS, CONTROL_INFO_WRITER_DESCRIPTORS  # noqa: E402
 
 
 XS = {"xs": "http://www.w3.org/2001/XMLSchema"}
@@ -131,7 +131,7 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
     writer_descriptor_controls = set(CONTROL_INFO_WRITER_DESCRIPTORS)
     shared_info_descriptor_controls = {
         descriptor.control_type
-        for descriptor in CORE_CONTROL_INFO_DESCRIPTORS.values()
+        for descriptor in CONTROL_INFO_SLOT_DESCRIPTORS.values()
         if descriptor.control_type != "FormRootPanel"
     }
     public_descriptors = {descriptor.xml_tag: descriptor for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()}

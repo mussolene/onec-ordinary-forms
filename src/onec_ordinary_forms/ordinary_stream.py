@@ -90,7 +90,7 @@ class ControlInfoWriterDescriptor:
     builder: Callable[[ControlInfoBuildContext], list[object]]
 
 
-CORE_CONTROL_INFO_DESCRIPTORS = {
+CONTROL_INFO_SLOT_DESCRIPTORS = {
     "FormRootPanel": ControlInfoDescriptor(
         control_type="FormRootPanel",
         info_kind="1",
@@ -125,6 +125,39 @@ CORE_CONTROL_INFO_DESCRIPTORS = {
             InfoSlotDescriptor("ReadOnly", 12),
         ),
     ),
+    "Button": ControlInfoDescriptor(
+        control_type="Button",
+        info_kind="1",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("Title", 2),
+            InfoSlotDescriptor("Picture", 8),
+            InfoSlotDescriptor("DefaultButton", 15),
+        ),
+    ),
+    "Label": ControlInfoDescriptor(
+        control_type="Label",
+        info_kind="3",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("Title", 2),
+            InfoSlotDescriptor("Hyperlink", 5),
+            InfoSlotDescriptor("PictureSize", 11),
+            InfoSlotDescriptor("PictureStyleGroup", 12),
+            InfoSlotDescriptor("TextPosition", 13),
+        ),
+    ),
+    "Image": ControlInfoDescriptor(
+        control_type="Image",
+        info_kind="1",
+        slots=(
+            InfoSlotDescriptor("BaseInfo", 0),
+            InfoSlotDescriptor("DisplayMode", 2),
+            InfoSlotDescriptor("DisplayState", 3),
+            InfoSlotDescriptor("PictureStyleGroup", 4),
+            InfoSlotDescriptor("RenderingProfileFlag", 13),
+        ),
+    ),
     "Table": ControlInfoDescriptor(
         control_type="Table",
         info_kind="5",
@@ -137,6 +170,8 @@ CORE_CONTROL_INFO_DESCRIPTORS = {
         ),
     ),
 }
+
+CORE_CONTROL_INFO_DESCRIPTORS = CONTROL_INFO_SLOT_DESCRIPTORS
 
 DIAGRAM_BODY_DESCRIPTOR = PlatformListRecordDescriptor(
     name="DiagramBody",
@@ -1954,6 +1989,7 @@ def panel_position_records(page_count: int, width: str, height: str, *, mode: st
 
 
 def label_control_info(element: ET.Element, title_record: list[object], actions: list[object], asset_root: Path | None = None) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["Label"]
     title = get_multilang_text(element, "Title") or element.get("name", "")
     horizontal_align = text_or_default(element, "HorizontalAlign", "0" if title.endswith(":") else "4")
     text_position = text_or_default(element, "TextPosition", element.findtext("PicturePosition") or ("4" if title.endswith(":") else horizontal_align))
@@ -1967,31 +2003,51 @@ def label_control_info(element: ET.Element, title_record: list[object], actions:
         base[6] = default_color_record()
     if element.get("baseStyleMode") is None:
         base[16:20] = ["0", "0", "0", "0"]
+    picture_style_group = [
+        "10",
+        picture_position,
+        column_picture_record(picture_payload),
+        empty_page_style_record(),
+        empty_page_style_record(),
+        "100",
+        "2",
+        "0",
+        "0",
+        "1",
+        "2",
+    ]
+    info_record = [
+        base,
+        "11",
+        title_record,
+        horizontal_align,
+        vertical_align,
+        hyperlink,
+        "0",
+        "0",
+        ["0", "0", "0"],
+        "0",
+        ["1", "0"],
+        picture_size,
+        picture_style_group,
+        text_position,
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+    ]
+    info_record[descriptor.slot_index("BaseInfo")] = base
+    info_record[descriptor.slot_index("Title")] = title_record
+    info_record[descriptor.slot_index("Hyperlink")] = hyperlink
+    info_record[descriptor.slot_index("PictureSize")] = picture_size
+    info_record[descriptor.slot_index("PictureStyleGroup")] = picture_style_group
+    info_record[descriptor.slot_index("TextPosition")] = text_position
     return [
-        "3",
-        [
-            base,
-            "11",
-            title_record,
-            horizontal_align,
-            vertical_align,
-            hyperlink,
-            "0",
-            "0",
-            ["0", "0", "0"],
-            "0",
-            ["1", "0"],
-            picture_size,
-            ["10", picture_position, column_picture_record(picture_payload), empty_page_style_record(), empty_page_style_record(), "100", "2", "0", "0", "1", "2"],
-            text_position,
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-        ],
+        descriptor.info_kind,
+        info_record,
         action_records(actions),
     ]
 
@@ -2102,27 +2158,34 @@ def input_field_info_record_from_xml(element: ET.Element, type_pattern: list[obj
 
 
 def button_control_info(element: ET.Element, title_record: list[object], actions: list[object], asset_root: Path | None) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["Button"]
     picture_payload = picture_payload_from_xml(element.find("Picture"), asset_root)
-    return [
+    base = button_base_info_record(element)
+    picture_record = button_picture_record(picture_payload) if picture_payload else empty_page_style_record()
+    info_record = [
+        base,
+        "14",
+        title_record,
         "1",
-        [
-            button_base_info_record(element),
-            "14",
-            title_record,
-            "1",
-            "1",
-            "0",
-            "0",
-            "0",
-            button_picture_record(picture_payload) if picture_payload else empty_page_style_record(),
-            ["0", "0", "0"],
-            "0",
-            "0",
-            "0",
-            "0",
-            "0",
-            "1",
-        ],
+        "1",
+        "0",
+        "0",
+        "0",
+        picture_record,
+        ["0", "0", "0"],
+        "0",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1",
+    ]
+    info_record[descriptor.slot_index("BaseInfo")] = base
+    info_record[descriptor.slot_index("Title")] = title_record
+    info_record[descriptor.slot_index("Picture")] = picture_record
+    return [
+        descriptor.info_kind,
+        info_record,
         action_records(actions),
     ]
 
@@ -2321,27 +2384,38 @@ def checkbox_control_inner_info(element: ET.Element, title_record: list[object])
 
 
 def image_control_info(element: ET.Element, title_record: list[object], picture_payload: str, actions: list[object]) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["Image"]
     picture_record = image_picture_style_group_record(element, picture_payload) if image_has_picture_style_group(element, picture_payload) else page_style_group_record("0")
     profile = element.find("SerializationProfile")
-    return [
+    base = image_base_info_record_from_xml(element)
+    display_mode = profile.get("displayMode", "0") if profile is not None else "0"
+    display_state = profile.get("displayState", "0") if profile is not None else "0"
+    rendering_profile_flag = profile.get("renderingProfileFlag", "0") if profile is not None else "0"
+    info_record = [
+        base,
+        "20",
+        display_mode,
+        display_state,
+        picture_record,
+        ["0", "0", "0"],
         "1",
-        [
-            image_base_info_record_from_xml(element),
-            "20",
-            profile.get("displayMode", "0") if profile is not None else "0",
-            profile.get("displayState", "0") if profile is not None else "0",
-            picture_record,
-            ["0", "0", "0"],
-            "1",
-            "1",
-            "0",
-            "0",
-            ["1", "0"],
-            "0",
-            "1",
-            profile.get("renderingProfileFlag", "0") if profile is not None else "0",
-            "1",
-        ],
+        "1",
+        "0",
+        "0",
+        ["1", "0"],
+        "0",
+        "1",
+        rendering_profile_flag,
+        "1",
+    ]
+    info_record[descriptor.slot_index("BaseInfo")] = base
+    info_record[descriptor.slot_index("DisplayMode")] = display_mode
+    info_record[descriptor.slot_index("DisplayState")] = display_state
+    info_record[descriptor.slot_index("PictureStyleGroup")] = picture_record
+    info_record[descriptor.slot_index("RenderingProfileFlag")] = rendering_profile_flag
+    return [
+        descriptor.info_kind,
+        info_record,
         action_records(actions),
     ]
 
