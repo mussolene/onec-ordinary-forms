@@ -722,7 +722,7 @@ def root_panel_info(
     ]
     if isinstance(dependency_profile, list):
         dependency_sequence = (
-            [str((root_layout or {}).get("rootPanelPageCapacity", "0")), *dependency_profile]
+            [str((root_layout or {}).get("rootPanelPageCapacity", "0")), *dependency_profile, *dependency_tail]
             if dependency_profile
             else dependency_tail
         )
@@ -808,6 +808,7 @@ def root_panel_info_from_control_extent(
         body.append(str((root_layout or {}).get("rootPanelPageCapacity", "0")))
     if isinstance(dependency_profile, list):
         body.extend(dependency_profile)
+        body.extend(["0", "0"])
     else:
         body.extend([
                 "1",
@@ -4825,6 +4826,29 @@ def geometry_stream_from_xml(
     if counted_geometry is not None:
         counted_geometry[5] = layout_mode
         return counted_geometry
+    layout_flagged_height_width_geometry = layout_flagged_height_width_dimension_geometry_from_xml(
+        position,
+        left,
+        top,
+        right,
+        bottom,
+        bindings,
+    )
+    if layout_flagged_height_width_geometry is not None:
+        layout_flagged_height_width_geometry[5] = layout_mode
+        return layout_flagged_height_width_geometry
+    layout_prefixed_height_geometry = layout_prefixed_height_dimension_geometry_from_xml(
+        control_type,
+        position,
+        left,
+        top,
+        right,
+        bottom,
+        bindings,
+    )
+    if layout_prefixed_height_geometry is not None:
+        layout_prefixed_height_geometry[5] = layout_mode
+        return layout_prefixed_height_geometry
     prefixed_flagged_height_width_geometry = prefixed_flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
     if prefixed_flagged_height_width_geometry is not None:
         prefixed_flagged_height_width_geometry[5] = layout_mode
@@ -4833,6 +4857,10 @@ def geometry_stream_from_xml(
     if flagged_height_width_geometry is not None:
         flagged_height_width_geometry[5] = layout_mode
         return flagged_height_width_geometry
+    counted_extra_geometry = counted_extra_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
+    if counted_extra_geometry is not None:
+        counted_extra_geometry[5] = layout_mode
+        return counted_extra_geometry
     flagged_extra_dimension_geometry = flagged_extra_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
     if flagged_extra_dimension_geometry is not None:
         flagged_extra_dimension_geometry[5] = layout_mode
@@ -4897,7 +4925,11 @@ def geometry_stream_from_xml(
             "0",
             *layout_group_tail(layout_group, layout_order, str(page_order), str(page_index), layout_next_order),
         ]
-    if (layout_flag1 != "0" or layout_flag2 != "0") and any(dimension != "0" for dimension in dimensions):
+    if (
+        control_type != "CommandBar"
+        and (layout_flag1 != "0" or layout_flag2 != "0")
+        and any(dimension != "0" for dimension in dimensions)
+    ):
         return [
             "8",
             left,
@@ -4908,13 +4940,19 @@ def geometry_stream_from_xml(
             *bindings,
             "0",
             *dimensions,
+            "0",
+            "0",
             *layout_group_tail(layout_group, layout_order, str(page_order) if page_order is not None else "0", str(page_index) if page_index is not None else "0", layout_next_order, layout_flag1, layout_flag2),
         ]
     if page_index is None or page_order is None:
         trailer = GEOMETRY_TRAILER_PROFILE.get(control_type, GEOMETRY_TRAILER_PROFILE["default"])
         if control_type == "Panel" and (layout_group is not None or layout_order is not None):
             trailer = ["0", *layout_group_tail(layout_group, layout_order, "0", "0", layout_next_order)]
-        if (layout_flag1 != "0" or layout_flag2 != "0") and any(dimension != "0" for dimension in dimensions):
+        if (
+            control_type != "CommandBar"
+            and (layout_flag1 != "0" or layout_flag2 != "0")
+            and any(dimension != "0" for dimension in dimensions)
+        ):
             return [
                 "8",
                 left,
@@ -4925,6 +4963,8 @@ def geometry_stream_from_xml(
                 *bindings,
                 "0",
                 *dimensions,
+                "0",
+                "0",
                 *layout_group_tail(layout_group, layout_order, "0", "0", layout_next_order, layout_flag1, layout_flag2),
             ]
         if control_type == "CommandBar" and control_name == "КоманднаяПанель1":
@@ -5281,6 +5321,113 @@ def prefixed_flagged_height_width_dimension_geometry_from_xml(
     ]
 
 
+def layout_flagged_height_width_dimension_geometry_from_xml(
+    position: ET.Element | None,
+    left: str,
+    top: str,
+    right: str,
+    bottom: str,
+    bindings: list[object],
+) -> list[object] | None:
+    if position is None or not has_named_layout_group(position):
+        return None
+    binding_container = position.find("Bindings")
+    if binding_container is None:
+        return None
+    height: object | None = None
+    width: object | None = None
+    for binding in binding_container.findall("DimensionBinding"):
+        if binding.get("section"):
+            return None
+        dimension = binding.get("dimension")
+        if dimension == "height":
+            height = dimension_binding_to_raw(binding)
+        elif dimension == "width":
+            width = dimension_binding_to_raw(binding)
+        else:
+            return None
+    if height is None or width is None:
+        return None
+    flow = position_layout_flow(position)
+    return [
+        "8",
+        left,
+        top,
+        right,
+        bottom,
+        "1",
+        *bindings,
+        "1",
+        height,
+        "0",
+        "1",
+        width,
+        "0",
+        "0",
+        "0",
+        *layout_group_tail(
+            flow.get("group") if flow is not None else None,
+            flow.get("order") if flow is not None else None,
+            "0",
+            "0",
+            flow.get("nextOrder") if flow is not None else None,
+            platform_flag_from_xml_bool(flow.get("horizontalBoundary")) if flow is not None else "0",
+            platform_flag_from_xml_bool(flow.get("verticalBoundary")) if flow is not None else "0",
+        ),
+    ]
+
+
+def layout_prefixed_height_dimension_geometry_from_xml(
+    control_type: str,
+    position: ET.Element | None,
+    left: str,
+    top: str,
+    right: str,
+    bottom: str,
+    bindings: list[object],
+) -> list[object] | None:
+    if control_type != "Splitter" or position is None or not has_named_layout_group(position):
+        return None
+    binding_container = position.find("Bindings")
+    if binding_container is None:
+        return None
+    height: object | None = None
+    for binding in binding_container.findall("DimensionBinding"):
+        if binding.get("section"):
+            return None
+        if binding.get("dimension") != "height":
+            return None
+        height = dimension_binding_to_raw(binding)
+    if height is None:
+        return None
+    flow = position_layout_flow(position)
+    return [
+        "8",
+        left,
+        top,
+        right,
+        bottom,
+        "1",
+        *bindings,
+        "0",
+        "1",
+        height,
+        "0",
+        "0",
+        "0",
+        "0",
+        *layout_group_tail(
+            flow.get("group") if flow is not None else None,
+            flow.get("order") if flow is not None else None,
+            "0",
+            "0",
+            flow.get("nextOrder") if flow is not None else None,
+            platform_flag_from_xml_bool(flow.get("horizontalBoundary")) if flow is not None else "0",
+            platform_flag_from_xml_bool(flow.get("verticalBoundary")) if flow is not None else "0",
+        ),
+    ]
+
+
 def inline_counted_dimension_geometry_from_xml(
     position: ET.Element | None,
     left: str,
@@ -5314,6 +5461,7 @@ def inline_counted_dimension_geometry_from_xml(
         *bindings,
         str(len(dimensions)),
         *dimensions,
+        *descriptor_layout_tail(position, 5),
     ]
 
 
@@ -5374,6 +5522,65 @@ def flagged_extra_dimension_geometry_from_xml(
         "1",
         *dimensions,
         *(raw for _slot, raw in sorted(extra, key=lambda item: item[0])),
+    ]
+
+
+def counted_extra_dimension_geometry_from_xml(
+    position: ET.Element | None,
+    left: str,
+    top: str,
+    right: str,
+    bottom: str,
+    bindings: list[object],
+) -> list[object] | None:
+    if position is None or not has_named_layout_group(position):
+        return None
+    binding_container = position.find("Bindings")
+    if binding_container is None:
+        return None
+    primary_by_slot: dict[int, object] = {}
+    extra: list[tuple[int, object]] = []
+    saw_primary_section = False
+    for binding in binding_container.findall("DimensionBinding"):
+        section = binding.get("section")
+        slot = dimension_binding_slot(binding)
+        if slot is None:
+            continue
+        raw = dimension_binding_to_raw(binding)
+        if section == "primary" and 1 <= slot <= 4:
+            saw_primary_section = True
+            primary_by_slot[slot] = raw
+        elif section == "extra" and slot >= 5:
+            extra.append((slot, raw))
+        elif section:
+            return None
+    if not saw_primary_section or not extra:
+        return None
+    counted_records: list[object] = []
+    for slot in range(1, 5):
+        value = primary_by_slot.get(slot)
+        if isinstance(value, list):
+            counted_records.append(value)
+            continue
+        break
+    if not counted_records:
+        return None
+    separator = str(primary_by_slot.get(len(counted_records) + 1, "0"))
+    extra_records = [raw for _slot, raw in sorted(extra, key=lambda item: item[0])]
+    return [
+        "8",
+        left,
+        top,
+        right,
+        bottom,
+        "1",
+        *bindings,
+        str(len(counted_records)),
+        *counted_records,
+        separator,
+        str(len(extra_records)),
+        *extra_records,
+        *descriptor_layout_tail(position, 3),
     ]
 
 
@@ -5444,10 +5651,7 @@ def inline_segmented_dimension_geometry_from_xml(
     for segment_index, section in enumerate(derived_section_order):
         records = records_by_section.get(section, [])
         count = len(records)
-        if segment_index == 0:
-            result.append(str(count))
-        else:
-            result.append(str(count))
+        result.append(str(count))
         result.extend(records)
     result.extend(descriptor_layout_tail(position, 4))
     return result

@@ -708,6 +708,8 @@ def add_geometry(
     if isinstance(geometry_raw, list):
         for index, binding in enumerate(geometry_raw[6:12], start=1):
             add_binding(anchors, "Binding", index, binding, current_id, element_index)
+        if add_layout_flagged_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
+            return
         if add_prefixed_flagged_height_width_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
             return
         if add_flagged_height_width_dimension_bindings(node, anchors, geometry_raw, current_id, element_index):
@@ -724,6 +726,58 @@ def add_geometry(
             return
         for index, binding in enumerate(geometry_raw[13:17], start=1):
             add_binding(anchors, "DimensionBinding", index, binding, current_id, element_index)
+
+
+def add_layout_flagged_dimension_bindings(
+    position: ET.Element,
+    bindings: ET.Element,
+    geometry_raw: list[object],
+    current_id: str,
+    element_index: dict[str, dict[str, str]],
+) -> bool:
+    if position.find("LayoutFlow") is None or len(geometry_raw) < 20:
+        return False
+    try:
+        inline_count = int(clean_token(geometry_raw[12]))
+    except ValueError:
+        inline_count = 0
+    inline_end = 13 + inline_count
+    if (
+        inline_count > 0
+        and inline_end <= len(geometry_raw)
+        and all(isinstance(record, list) for record in geometry_raw[13:inline_end])
+        and not any(isinstance(value, list) for value in geometry_raw[inline_end:])
+    ):
+        return False
+    if not (
+        clean_token(geometry_raw[12]) == "1"
+        and isinstance(geometry_raw[13], list)
+        and clean_token(geometry_raw[14]) == "0"
+    ):
+        if not (
+            len(geometry_raw) >= 22
+            and clean_token(geometry_raw[12]) == "0"
+            and clean_token(geometry_raw[13]) == "1"
+            and isinstance(geometry_raw[14], list)
+        ):
+            return False
+        tail_values = geometry_raw[15:]
+        if any(isinstance(value, list) for value in tail_values):
+            return False
+        add_binding(bindings, "DimensionBinding", 1, geometry_raw[14], current_id, element_index)
+        return True
+    if len(geometry_raw) >= 22 and clean_token(geometry_raw[15]) == "1" and isinstance(geometry_raw[16], list):
+        tail_values = geometry_raw[17:]
+        if any(isinstance(value, list) for value in tail_values):
+            return False
+        add_binding(bindings, "DimensionBinding", 1, geometry_raw[13], current_id, element_index)
+        add_binding(bindings, "DimensionBinding", 4, geometry_raw[16], current_id, element_index)
+        return True
+    tail_values = geometry_raw[14:]
+    if any(isinstance(value, list) for value in tail_values):
+        return False
+    add_binding(bindings, "DimensionBinding", 1, geometry_raw[13], current_id, element_index)
+    return True
 
 
 def add_flagged_dimension_bindings_with_extra_records(

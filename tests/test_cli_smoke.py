@@ -2376,7 +2376,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(splitter[2][0], "0")
         self.assertIsNotNone(chart)
         self.assertEqual(chart[2], ["11"])
-        self.assertEqual(len(chart[3]), 221)
+        self.assertEqual(len(chart[3]), 222)
         self.assertEqual(chart[3][0], "75")
         self.assertEqual(chart[3][20], "6")
         self.assertEqual(chart[4][0], "8")
@@ -2555,14 +2555,14 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(len(gantt[2]), 33)
         self.assertEqual(len(gantt[2][1]), 3)
         self.assertEqual(gantt[2][1][2][0], "75")
-        self.assertEqual(len(gantt[2][1][2]), 221)
+        self.assertEqual(len(gantt[2][1][2]), 222)
         self.assertEqual(gantt[2][1][2][8][2], ['"ru"', '"Gantt title"'])
         self.assertIsNotNone(dendrogram)
         self.assertEqual(dendrogram[2][0], "0")
         self.assertEqual(len(dendrogram[2]), 11)
         self.assertEqual(len(dendrogram[2][1]), 3)
         self.assertEqual(dendrogram[2][1][2][0], "75")
-        self.assertEqual(len(dendrogram[2][1][2]), 221)
+        self.assertEqual(len(dendrogram[2][1][2]), 222)
         self.assertEqual(dendrogram[2][1][2][8][2], ['"ru"', '"Dendrogram title"'])
 
     def test_table_value_columns_use_platform_oracle_view_profile(self) -> None:
@@ -2975,7 +2975,63 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(flow.get("verticalBoundary"), "true")
         self.assertEqual(geometry_stream_from_xml("CommandBar", position), geometry)
 
-    def test_dump_preserves_prefixed_flagged_height_width_dimension_profile(self) -> None:
+    def test_dump_preserves_counted_extra_dimension_layout_profile(self) -> None:
+        empty_anchor = ["2", "-1", "6", "0"]
+        geometry = [
+            "8",
+            "318",
+            "52",
+            "423",
+            "75",
+            "1",
+            ["0", ["2", "0", "0", "52"], empty_anchor],
+            ["0", ["2", "133", "0", "23"], empty_anchor],
+            ["0", ["2", "132", "3", "-3"], empty_anchor],
+            ["0", ["2", "133", "2", "105"], empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            "2",
+            ["0", "117", "1"],
+            ["0", "133", "1"],
+            "0",
+            "2",
+            ["0", "117", "3"],
+            ["0", "133", "3"],
+            "0",
+            "0",
+            "0",
+            "0",
+            "2",
+            "4",
+            "1",
+            "1",
+        ]
+        parent = ET.Element("Button")
+
+        add_geometry(
+            parent,
+            {"id": "133", "raw": [geometry]},
+            {
+                "117": {"name": "Mode"},
+                "132": {"name": "CertificateMode"},
+                "133": {"name": "PasswordMode"},
+            },
+        )
+
+        position = parent.find("Position")
+        self.assertIsNotNone(position)
+        assert position is not None
+        flow = position.find("LayoutFlow")
+        self.assertIsNotNone(flow)
+        assert flow is not None
+        self.assertEqual(flow.get("group"), "0")
+        self.assertEqual(flow.get("order"), "2")
+        self.assertEqual(flow.get("nextOrder"), "4")
+        self.assertEqual(flow.get("horizontalBoundary"), "true")
+        self.assertEqual(flow.get("verticalBoundary"), "true")
+        self.assertEqual(geometry_stream_from_xml("Button", position), geometry)
+
+    def test_dump_canonicalizes_prefixed_flagged_height_width_dimension_profile(self) -> None:
         empty_anchor = ["2", "-1", "6", "0"]
         geometry = [
             "8",
@@ -3028,7 +3084,9 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(flow.get("group"), "2")
         self.assertEqual(flow.get("order"), "6")
         self.assertEqual(flow.get("nextOrder"), "6")
-        self.assertEqual(geometry_stream_from_xml("InputField", position), geometry)
+        canonical = geometry.copy()
+        canonical[12:17] = ["1", ["0", "14", "0"], "0", "1", ["0", "15", "3"]]
+        self.assertEqual(geometry_stream_from_xml("InputField", position), canonical)
 
     def test_picture_decoration_picture_style_roundtrips_named_slots(self) -> None:
         with TemporaryDirectory() as temp_dir:
