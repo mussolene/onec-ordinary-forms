@@ -534,12 +534,19 @@ Diagnostic commands:
 ```bash
 onec-ordinary-forms unpack-bin --bin Form.bin --out-dir scan-output/form-parts
 onec-ordinary-forms pack-bin --parts-dir scan-output/form-parts --out-bin Form.bin
+onec-ordinary-forms digest-xml --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml --out-json scan-output/form-digest.json
 onec-ordinary-forms scan-corpus --root "<private-processors-dir>" --out-json scan-output/corpus.json
 ```
 
 `unpack-bin` and `pack-bin` are diagnostics for `Form.bin` container research.
 They are not the target public source layout and should not be used as the
 editable representation of a form.
+
+`digest-xml` reports a normalized semantic graph hash for object-model
+comparisons: controls, parent order, positions, bindings, events, attributes,
+table columns/editor controls, pictures, fonts, colors, and command sources.
+Use it before byte-level corpus reports to distinguish real semantic loss from
+platform serialization noise.
 
 ## Python API
 

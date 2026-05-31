@@ -30,6 +30,7 @@ from onec_ordinary_forms.ordinary_stream import (
     root_panel_base_info_record,
 )
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
+from onec_ordinary_forms.semantic_digest import semantic_graph, semantic_graph_digest
 from onec_ordinary_forms.ui_values import ORDINARY_STYLE_COLOR_NAMES
 from onec_ordinary_forms.value_codec import (
     TYPE_CODE_NAMES,
@@ -3262,27 +3263,7 @@ def container_file_times_from_xml(root: ET.Element) -> dict[str, tuple[int | Non
 
 
 def semantic_model_hash(root: ET.Element) -> str:
-    model = ET.Element("SemanticModel")
-    for tag in ("Title", "Events", "Attributes", "Pages"):
-        child = root.find(tag)
-        if child is not None:
-            model.append(clone_without_blank_text(child))
-    return sha256_bytes(ET.tostring(model, encoding="utf-8"))
-
-
-def clone_without_blank_text(element: ET.Element) -> ET.Element:
-    clone = ET.Element(element.tag, element.attrib)
-    if element.text and element.text.strip():
-        clone.text = normalize_xml_text_for_hash(element.text)
-    for child in element:
-        clone.append(clone_without_blank_text(child))
-    if element.tail and element.tail.strip():
-        clone.tail = normalize_xml_text_for_hash(element.tail)
-    return clone
-
-
-def normalize_xml_text_for_hash(value: str) -> str:
-    return value.replace("\r\r\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
+    return semantic_graph_digest(root)
 
 
 def schema_path(name: str = ORDINARY_FORM_SCHEMA) -> Path:
@@ -3389,6 +3370,11 @@ def dump_bin(args: argparse.Namespace) -> None:
     )
 
 
+def digest_xml(args: argparse.Namespace) -> None:
+    graph = semantic_graph(ET.parse(args.xml).getroot())
+    write_report(graph, Path(args.out_json) if args.out_json else None)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -3434,6 +3420,11 @@ def main() -> None:
     dump_bin_parser.add_argument("--metadata-json")
     dump_bin_parser.add_argument("--out", required=True, help="Form.xml output path")
     dump_bin_parser.set_defaults(func=dump_bin)
+
+    digest_xml_parser = subparsers.add_parser("digest-xml")
+    digest_xml_parser.add_argument("--xml", required=True, help="Form.xml to summarize as a semantic graph")
+    digest_xml_parser.add_argument("--out-json", help="Write JSON report instead of stdout")
+    digest_xml_parser.set_defaults(func=digest_xml)
 
     args = parser.parse_args()
     args.func(args)

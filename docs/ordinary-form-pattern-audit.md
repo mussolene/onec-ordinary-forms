@@ -183,10 +183,16 @@ Done after this audit:
   longer has a `slotN` fallback for the six named coordinate slots;
 - schema tests now guard against reintroducing the removed public raw-shape
   vocabulary.
+- semantic graph digest support was added as `digest-xml`; it hashes the
+  normalized object model across controls, positions, bindings, events,
+  attributes, table columns/editor controls, pictures, fonts, colors, and
+  command sources while ignoring container timestamps and current codec-shaped
+  position noise.
 
 Remaining next steps:
 
-1. Add semantic graph digest comparison and use it before corpus byte reports.
+1. Use semantic graph digest comparison in corpus/platform redump reports
+   before byte-level diff summaries.
 2. Convert the remaining position/layout raw-shaped names, especially
    `layoutTail`, `layoutPreTail`, marker-bearing `dimensionSegments`,
    `primaryDimensionMarker`, and `secondaryDimensionMarker`, into named
