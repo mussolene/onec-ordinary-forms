@@ -134,13 +134,23 @@ class _Parser:
     def parse_list(self, close: str) -> list[object]:
         self.index += 1
         result: list[object] = []
+        expecting_value = True
+        saw_separator = False
         while self.index < len(self.tokens):
             token = self.tokens[self.index]
             if token.kind == close:
+                if expecting_value and saw_separator:
+                    result.append("")
                 self.index += 1
                 return result
             if token.kind == ",":
+                if expecting_value:
+                    result.append("")
                 self.index += 1
+                expecting_value = True
+                saw_separator = True
                 continue
             result.append(self.parse_value())
+            expecting_value = False
+            saw_separator = False
         raise ListStreamParseError(f"Missing closing {close}")

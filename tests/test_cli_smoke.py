@@ -67,6 +67,13 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertEqual(document.value, ['"A:\\\\"', ['"B:\\\\"']])
 
+    def test_list_stream_preserves_empty_atoms_between_commas(self) -> None:
+        document = parse_list_stream_document("{1,,60,{2,,}}")
+
+        self.assertEqual(document.value, ["1", "", "60", ["2", "", ""]])
+        self.assertEqual(dumps(document.value), "{1,,60,{2,,}}")
+        self.assertIn("2,,", dumps_list_out_stream(document.value))
+
     def test_bundled_schema_paths_include_configuration(self) -> None:
         self.assertTrue(schema_path("OrdinaryForm.xsd").is_file())
         self.assertTrue(schema_path("PlatformConfigStructure.xsd").is_file())
