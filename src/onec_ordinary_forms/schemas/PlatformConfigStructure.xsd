@@ -274,6 +274,34 @@
           <Class name="AutoColor"/>
           <Class name="PaletteColor"/>
         </McoreClasses>
+        <RuntimeGraph source="ghidra:dsgnfrm.so" evidence="Ghidra serializer xrefs and targeted runtime graph extraction">
+          <Node name="FormDesDoc" layer="designer" role="ordinary-form-document" evidence="frame::DocumentBase&lt;FormDesDoc, FormDesView&gt;"/>
+          <Node name="FormDesView" layer="designer" role="ordinary-form-view" evidence="frame::DocViewBase&lt;FormDesView, FormDesDoc, frame::ViewBase&lt;FormDesView&gt;, core::InterfacePtr&lt;FormDesDoc&gt;&gt;"/>
+          <Node name="CustomFormLoader" layer="designer" role="ordinary-form-loader" evidence="dsgnfrm::ICustomFormLoader and SCOM singleton RTTI"/>
+          <Node name="FormDesignerService" layer="designer" role="ordinary-form-designer-service" evidence="dsgnfrm::IFormDesignerService and SCOM service RTTI"/>
+          <Node name="FormDocument" layer="runtime" role="ordinary-form-document" evidence="frame::DocumentBase&lt;FormDocument, FormDocumentView&gt;"/>
+          <Node name="FormDocumentView" layer="runtime" role="ordinary-form-view" evidence="frame::DocViewBase&lt;FormDocumentView, FormDocument, frame::ViewBase&lt;FormDocumentView&gt;, core::InterfacePtr&lt;FormDocument&gt;&gt;"/>
+          <Node name="ControlSite" layer="bridge" role="ordinary-control-site" evidence="ControlSite and frame::IControlSite RTTI"/>
+          <Node name="IFormDocumentViewSite" layer="bridge" role="ordinary-form-view-site" evidence="IFormDocumentViewSite RTTI"/>
+          <Node name="wbase::Window" layer="render" role="window-view-surface" evidence="wbase::WindowImpl&lt;FormDesView, wbase::Window&gt; and wbase::WindowImpl&lt;FormDocumentView, wbase::Window&gt;"/>
+          <Node name="wbase::BaseWindow" layer="render" role="window-layout-paint-redraw-api" evidence="BaseWindow paint/layout/redraw imports"/>
+          <Edge from="CustomFormLoader" to="FormDesDoc" kind="loads-document" evidence="CustomFormLoader and FormDesDoc SCOM graph"/>
+          <Edge from="FormDesignerService" to="FormDesDoc" kind="designer-service-document" evidence="FormDesignerService and FormDesDoc SCOM graph"/>
+          <Edge from="FormDesDoc" to="FormDesView" kind="document-view" evidence="frame::DocumentBase&lt;FormDesDoc, FormDesView&gt;"/>
+          <Edge from="FormDesView" to="wbase::Window" kind="window-implementation" evidence="wbase::WindowImpl&lt;FormDesView, wbase::Window&gt;"/>
+          <Edge from="FormDocument" to="FormDocumentView" kind="document-view" evidence="frame::DocumentBase&lt;FormDocument, FormDocumentView&gt;"/>
+          <Edge from="FormDocumentView" to="wbase::Window" kind="window-implementation" evidence="wbase::WindowImpl&lt;FormDocumentView, wbase::Window&gt;"/>
+          <Edge from="FormDocumentView" to="IFormDocumentViewSite" kind="view-site" evidence="IFormDocumentViewSite RTTI"/>
+          <Edge from="IFormDocumentViewSite" to="ControlSite" kind="control-site-bridge" evidence="ControlSite and IFormDocumentViewSite RTTI"/>
+          <Edge from="wbase::Window" to="wbase::BaseWindow" kind="render-api" evidence="Window paint handler and BaseWindow layout/redraw imports"/>
+          <CallEdge source="persistence-write" target="core::ListOutStream::ListOutStream" role="platform-list-stream-writer" evidence="FUN_00255f70 xref"/>
+          <CallEdge source="persistence-read" target="core::ListInStream::ListInStream" role="platform-list-stream-reader" evidence="FUN_00256510 xref"/>
+          <CallEdge source="ordinary-control-format" target="wbase::cf_form_controls8" role="control-payload-format" evidence="FUN_002709e0/FUN_00270da0/FUN_00270fe0 xrefs"/>
+          <CallEdge source="ordinary-control-format" target="wbase::cf_form_controls_position8" role="control-position-format" evidence="FUN_002709e0/FUN_00270da0/FUN_00270fe0 xrefs"/>
+          <CallEdge source="ordinary-control-format" target="wbase::cf_form_controls_info8" role="control-info-format" evidence="FUN_002709e0/FUN_00270da0/FUN_00270fe0/FUN_002c9430 xrefs"/>
+          <CallEdge source="render-invalidation" target="wbase::BaseWindow::V8RedrawWindow" role="redraw" evidence="runtime graph V8RedrawWindow xrefs"/>
+          <CallEdge source="paint-dispatch" target="wbase::Window::onPaint_handler" role="paint-event-dispatch" evidence="runtime graph onPaint_handler xref"/>
+        </RuntimeGraph>
       </PlatformObjectModel>
       <PlatformSerializers>
         <Serializer name="ListInStream" direction="read" role="platform bracket/list-stream reader"/>

@@ -5,10 +5,15 @@ from onec_ordinary_forms.platform_model import (
     PLATFORM_EDT_MCORE_CLASSES,
     PLATFORM_EDT_METADATA_CLASSES,
     PLATFORM_METADATA_OBJECT_KINDS,
+    PLATFORM_RUNTIME_CALL_EDGES,
+    PLATFORM_RUNTIME_EDGES,
+    PLATFORM_RUNTIME_NODES,
     PLATFORM_SCHEMA_RESOURCES,
     PLATFORM_SERIALIZERS,
     PLATFORM_TYPE_DOMAIN_CODES,
     PLATFORM_TYPE_TREE_KINDS,
+    runtime_call_edges_by_source,
+    runtime_edges_from,
 )
 
 
@@ -61,6 +66,43 @@ def test_platform_model_contains_confirmed_value_and_metadata_vocabulary() -> No
     assert "TypeDescription" in PLATFORM_EDT_MCORE_CLASSES
     assert "ColorValue" in PLATFORM_EDT_MCORE_CLASSES
     assert len(PLATFORM_EDT_METADATA_CLASSES) > 100
+
+
+def test_platform_model_contains_ordinary_form_runtime_graph() -> None:
+    nodes = {node.name: node for node in PLATFORM_RUNTIME_NODES}
+    edges = {(edge.source, edge.target, edge.kind) for edge in PLATFORM_RUNTIME_EDGES}
+
+    assert nodes["FormDesDoc"].layer == "designer"
+    assert nodes["FormDocument"].layer == "runtime"
+    assert nodes["ControlSite"].layer == "bridge"
+    assert nodes["wbase::BaseWindow"].role == "window-layout-paint-redraw-api"
+    assert ("FormDesDoc", "FormDesView", "document-view") in edges
+    assert ("FormDocument", "FormDocumentView", "document-view") in edges
+    assert ("FormDesView", "wbase::Window", "window-implementation") in edges
+    assert ("FormDocumentView", "wbase::Window", "window-implementation") in edges
+    assert ("IFormDocumentViewSite", "ControlSite", "control-site-bridge") in edges
+    assert runtime_edges_from("FormDocument", kind="document-view")[0].target == "FormDocumentView"
+
+
+def test_platform_runtime_graph_keeps_persistence_and_render_edges_separate() -> None:
+    call_edges = {(edge.source, edge.target, edge.role) for edge in PLATFORM_RUNTIME_CALL_EDGES}
+
+    assert (
+        "persistence-write",
+        "core::ListOutStream::ListOutStream",
+        "platform-list-stream-writer",
+    ) in call_edges
+    assert (
+        "ordinary-control-format",
+        "wbase::cf_form_controls_info8",
+        "control-info-format",
+    ) in call_edges
+    assert (
+        "render-invalidation",
+        "wbase::BaseWindow::V8RedrawWindow",
+        "redraw",
+    ) in call_edges
+    assert runtime_call_edges_by_source("paint-dispatch")[0].target == "wbase::Window::onPaint_handler"
 
 
 def test_configuration_schema_contains_configuration_tree() -> None:

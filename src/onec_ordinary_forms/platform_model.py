@@ -35,6 +35,30 @@ class PlatformTypeDomainCode:
     kind: str
 
 
+@dataclass(frozen=True)
+class PlatformRuntimeNode:
+    name: str
+    layer: str
+    role: str
+    evidence: str
+
+
+@dataclass(frozen=True)
+class PlatformRuntimeEdge:
+    source: str
+    target: str
+    kind: str
+    evidence: str
+
+
+@dataclass(frozen=True)
+class PlatformRuntimeCallEdge:
+    source: str
+    target: str
+    role: str
+    evidence: str
+
+
 XS_NS = {"xs": "http://www.w3.org/2001/XMLSchema"}
 
 
@@ -70,6 +94,39 @@ PLATFORM_TYPE_DOMAIN_CODES = tuple(
 )
 
 
+PLATFORM_RUNTIME_NODES = tuple(
+    PlatformRuntimeNode(
+        str(node.get("name")),
+        str(node.get("layer")),
+        str(node.get("role")),
+        str(node.get("evidence")),
+    )
+    for node in _SCHEMA_ROOT.findall(".//PlatformObjectModel/RuntimeGraph/Node")
+)
+
+
+PLATFORM_RUNTIME_EDGES = tuple(
+    PlatformRuntimeEdge(
+        str(node.get("from")),
+        str(node.get("to")),
+        str(node.get("kind")),
+        str(node.get("evidence")),
+    )
+    for node in _SCHEMA_ROOT.findall(".//PlatformObjectModel/RuntimeGraph/Edge")
+)
+
+
+PLATFORM_RUNTIME_CALL_EDGES = tuple(
+    PlatformRuntimeCallEdge(
+        str(node.get("source")),
+        str(node.get("target")),
+        str(node.get("role")),
+        str(node.get("evidence")),
+    )
+    for node in _SCHEMA_ROOT.findall(".//PlatformObjectModel/RuntimeGraph/CallEdge")
+)
+
+
 PLATFORM_TYPE_DOMAIN_CODE_NAMES = {item.code: item.type_name for item in PLATFORM_TYPE_DOMAIN_CODES}
 
 
@@ -89,3 +146,15 @@ PLATFORM_EDT_METADATA_CLASSES = tuple(str(node.get("name")) for node in _SCHEMA_
 
 
 PLATFORM_EDT_MCORE_CLASSES = tuple(str(node.get("name")) for node in _SCHEMA_ROOT.findall(".//McoreClasses/Class"))
+
+
+def runtime_edges_from(source: str, *, kind: str | None = None) -> tuple[PlatformRuntimeEdge, ...]:
+    return tuple(
+        edge
+        for edge in PLATFORM_RUNTIME_EDGES
+        if edge.source == source and (kind is None or edge.kind == kind)
+    )
+
+
+def runtime_call_edges_by_source(source: str) -> tuple[PlatformRuntimeCallEdge, ...]:
+    return tuple(edge for edge in PLATFORM_RUNTIME_CALL_EDGES if edge.source == source)
