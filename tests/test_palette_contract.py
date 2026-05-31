@@ -216,3 +216,19 @@ def test_command_bar_schema_has_typed_command_source_not_profile_pocket() -> Non
     assert "SerializationProfile" not in public_elements
     assert root.find("xs:complexType[@name='CommandBarSerializationProfileType']", ns) is None
     assert root.find("xs:complexType[@name='CommandBarActionGraphType']", ns) is None
+
+
+def test_picture_decoration_schema_has_typed_picture_style_not_profile_pocket() -> None:
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
+    choice = root.find(
+        "xs:complexType[@name='PictureDecorationType']/xs:complexContent/xs:extension/xs:choice",
+        ns,
+    )
+    assert choice is not None
+    public_elements = {node.get("name") for node in choice.findall("xs:element", ns)}
+
+    assert "PictureStyle" in public_elements
+    assert "SerializationProfile" not in public_elements
+    assert root.find("xs:complexType[@name='PictureDecorationSerializationProfileType']", ns) is None
+    assert root.find("xs:complexType[@name='PictureDecorationStyleProfileType']", ns) is None

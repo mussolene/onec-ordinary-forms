@@ -71,3 +71,14 @@ def test_command_bar_command_source_is_public_descriptor_property() -> None:
     assert "CommandSource" not in command_bar["xsdOnlyProperties"]
     assert "Buttons" not in command_bar["xsdOnlyProperties"]
     assert "SerializationProfile" not in command_bar["xsdOnlyProperties"]
+
+
+def test_picture_decoration_picture_style_is_public_descriptor_property() -> None:
+    report = audit_codec_coverage.audit(
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
+    )
+    picture = {item["control"]: item for item in report["controls"]}["PictureDecoration"]
+
+    assert "PictureStyle" not in picture["xsdOnlyProperties"]
+    assert "SerializationProfile" not in picture["xsdOnlyProperties"]

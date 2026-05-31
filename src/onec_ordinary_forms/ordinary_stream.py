@@ -2613,11 +2613,11 @@ def checkbox_control_inner_info(element: ET.Element, title_record: list[object])
 def image_control_info(element: ET.Element, title_record: list[object], picture_payload: str, actions: list[object]) -> list[object]:
     descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["Image"]
     picture_record = image_picture_style_group_record(element, picture_payload) if image_has_picture_style_group(element, picture_payload) else page_style_group_record("0")
-    profile = element.find("SerializationProfile")
+    picture_style_node = element.find("PictureStyle")
     base = image_base_info_record_from_xml(element)
-    display_mode = profile.get("displayMode", "0") if profile is not None else "0"
-    display_state = profile.get("displayState", "0") if profile is not None else "0"
-    rendering_profile_flag = profile.get("renderingProfileFlag", "0") if profile is not None else "0"
+    display_mode = picture_style_node.get("displayMode", "0") if picture_style_node is not None else "0"
+    display_state = picture_style_node.get("displayState", "0") if picture_style_node is not None else "0"
+    rendering_profile_flag = picture_style_node.get("renderingFlag", "0") if picture_style_node is not None else "0"
     info_record = [
         base,
         "20",
@@ -2650,7 +2650,7 @@ def image_control_info(element: ET.Element, title_record: list[object], picture_
 def image_has_picture_style_group(element: ET.Element, picture_payload: str) -> bool:
     return bool(
         picture_payload
-        or element.find("SerializationProfile") is not None
+        or element.find("PictureStyle") is not None
         or element.find("PictureSize") is not None
         or element.find("ScalePicture") is not None
         or element.find("PictureRendering") is not None
@@ -2658,10 +2658,10 @@ def image_has_picture_style_group(element: ET.Element, picture_payload: str) -> 
 
 
 def image_base_info_record_from_xml(element: ET.Element) -> list[object]:
-    profile = element.find("SerializationProfile")
-    style = element.find("./SerializationProfile/StyleProfile")
-    if profile is not None and profile.get("pictureStyleGroupKind") == "8" and style is None:
-        return legacy_image_base_info_record_from_xml(element)
+    picture_style_node = element.find("PictureStyle")
+    style = element.find("./PictureStyle/BaseStyle")
+    if picture_style_node is not None and picture_style_node.get("groupKind") == "8" and style is None:
+        return image_base_info_record_kind8_from_xml(element)
     base = extended_base_info_record_from_xml(element)
     if element.find("BorderColor") is None:
         base[6] = default_color_record()
@@ -2675,7 +2675,7 @@ def image_base_info_record_from_xml(element: ET.Element) -> list[object]:
     return base
 
 
-def legacy_image_base_info_record_from_xml(element: ET.Element) -> list[object]:
+def image_base_info_record_kind8_from_xml(element: ET.Element) -> list[object]:
     base = [
         "16",
         visible_record_from_xml(element),
@@ -2709,8 +2709,8 @@ def legacy_image_base_info_record_from_xml(element: ET.Element) -> list[object]:
 
 def image_picture_style_group_record(element: ET.Element, picture_payload: str) -> list[object]:
     rendering = element.find("PictureRendering")
-    profile = element.find("SerializationProfile")
-    style_group_kind = profile.get("pictureStyleGroupKind", "10") if profile is not None else "10"
+    picture_style_node = element.find("PictureStyle")
+    style_group_kind = picture_style_node.get("groupKind", "10") if picture_style_node is not None else "10"
     picture_record = (
         ["4", "3", ["0"], '""', "-1", "-1", "0", [[picture_payload]], "0", '""']
         if picture_payload
@@ -2719,7 +2719,7 @@ def image_picture_style_group_record(element: ET.Element, picture_payload: str) 
     if style_group_kind == "8":
         return [
             "8",
-            profile.get("pictureStyleMode", "0") if profile is not None else "0",
+            picture_style_node.get("mode", "0") if picture_style_node is not None else "0",
             picture_record,
             empty_page_style_record(),
             empty_page_style_record(),
@@ -2730,7 +2730,7 @@ def image_picture_style_group_record(element: ET.Element, picture_payload: str) 
         ]
     return [
         "10",
-        profile.get("pictureStyleMode", "0") if profile is not None else "0",
+        picture_style_node.get("mode", "0") if picture_style_node is not None else "0",
         picture_record,
         empty_page_style_record(),
         empty_page_style_record(),

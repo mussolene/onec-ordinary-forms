@@ -1233,7 +1233,7 @@ def add_semantic_item(
     add_geometry(node, item_data, element_index)
     add_panel_serialization_profile(node, public_type, item_data)
     add_command_bar_command_source(node, public_type, item_data)
-    add_picture_decoration_serialization_profile(node, public_type, item_data)
+    add_picture_decoration_picture_style(node, public_type, item_data)
     if public_type == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
         add_picture_decoration_properties(node, item_data)
@@ -1470,7 +1470,7 @@ def add_command_bar_command_source(parent: ET.Element, public_type: str, item_da
     add_command_bar_buttons(parent, items)
 
 
-def add_picture_decoration_serialization_profile(parent: ET.Element, public_type: str, item_data: object) -> None:
+def add_picture_decoration_picture_style(parent: ET.Element, public_type: str, item_data: object) -> None:
     if public_type != "Image":
         return
     if not isinstance(item_data, dict):
@@ -1485,27 +1485,27 @@ def add_picture_decoration_serialization_profile(parent: ET.Element, public_type
     picture_style = info[4] if len(info) > 4 and isinstance(info[4], list) else None
     if base is None and picture_style is None:
         return
-    profile = ET.SubElement(parent, "SerializationProfile")
+    picture_style_node = ET.SubElement(parent, "PictureStyle")
     if len(info) > 2 and (clean_token(info[2]) != "0" or (picture_style and clean_token(picture_style[0]) == "10")):
-        profile.set("displayMode", clean_token(info[2]))
+        picture_style_node.set("displayMode", clean_token(info[2]))
     if len(info) > 3 and (clean_token(info[3]) != "0" or (picture_style and clean_token(picture_style[0]) == "10")):
-        profile.set("displayState", clean_token(info[3]))
+        picture_style_node.set("displayState", clean_token(info[3]))
     if isinstance(picture_style, list):
         style_kind = clean_token(picture_style[0])
         if style_kind != "10":
-            profile.set("pictureStyleGroupKind", style_kind)
+            picture_style_node.set("groupKind", style_kind)
         if len(picture_style) > 1 and (clean_token(picture_style[1]) != "0" or style_kind == "10"):
-            profile.set("pictureStyleMode", clean_token(picture_style[1]))
+            picture_style_node.set("mode", clean_token(picture_style[1]))
     if len(info) > 13 and clean_token(info[13]) != "0":
-        profile.set("renderingProfileFlag", clean_token(info[13]))
+        picture_style_node.set("renderingFlag", clean_token(info[13]))
     if base is not None and len(base) > 19:
-        style = ET.SubElement(profile, "StyleProfile")
+        style = ET.SubElement(picture_style_node, "BaseStyle")
         style.set("mode", clean_token(base[16]))
         style.set("state", clean_token(base[17]))
         style.set("visible", clean_token(base[18]))
         style.set("defaultMode", clean_token(base[19]))
-    if not profile.attrib and len(profile) == 0:
-        parent.remove(profile)
+    if not picture_style_node.attrib and len(picture_style_node) == 0:
+        parent.remove(picture_style_node)
 
 
 def add_command_bar_buttons(parent: ET.Element, items: list[object]) -> None:

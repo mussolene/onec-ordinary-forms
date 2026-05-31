@@ -152,7 +152,7 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "PictureDecoration",
         "ПолеКартинки",
         "PictureDecoration",
-        COMMON_CONTROL_PROPERTIES + ("Picture", "PicturePosition", "PictureSize", "ScalePicture", "PictureRendering", "Border"),
+        COMMON_CONTROL_PROPERTIES + ("Picture", "PicturePosition", "PictureSize", "ScalePicture", "PictureRendering", "PictureStyle", "Border"),
     ),
     "Button": OrdinaryControlDescriptor(
         "Button",

@@ -15,7 +15,7 @@ from onec_ordinary_forms.cli import (
     add_border_color,
     add_chart_properties,
     add_geometry,
-    add_picture_decoration_serialization_profile,
+    add_picture_decoration_picture_style,
     add_font,
     add_progress_bar_properties,
     add_text_color,
@@ -2950,7 +2950,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(position.get("layoutTail"), "0 0 0 2 6 6 0 0")
         self.assertEqual(geometry_stream_from_xml("InputField", position), geometry)
 
-    def test_picture_decoration_serialization_profile_roundtrips_named_slots(self) -> None:
+    def test_picture_decoration_picture_style_roundtrips_named_slots(self) -> None:
         with TemporaryDirectory() as temp_dir:
             asset_root = Path(temp_dir)
             (asset_root / "Items" / "Image1").mkdir(parents=True)
@@ -2962,9 +2962,9 @@ class CliSmokeTest(unittest.TestCase):
                     <Page name="Main">
                       <PictureDecoration name="Image1" id="5">
                         <Picture file="Items/Image1/Picture.gif"/>
-                        <SerializationProfile displayMode="4" displayState="1" pictureStyleMode="4">
-                          <StyleProfile mode="2" state="1" visible="1" defaultMode="2"/>
-                        </SerializationProfile>
+                        <PictureStyle displayMode="4" displayState="1" mode="4">
+                          <BaseStyle mode="2" state="1" visible="1" defaultMode="2"/>
+                        </PictureStyle>
                       </PictureDecoration>
                     </Page>
                   </Pages>
@@ -2988,9 +2988,9 @@ class CliSmokeTest(unittest.TestCase):
               <Pages>
                 <Page name="Main">
                   <PictureDecoration name="Image1" id="5">
-                    <SerializationProfile displayMode="0" displayState="0" pictureStyleMode="0" renderingProfileFlag="1">
-                      <StyleProfile mode="2" state="1" visible="1" defaultMode="2"/>
-                    </SerializationProfile>
+                    <PictureStyle displayMode="0" displayState="0" mode="0" renderingFlag="1">
+                      <BaseStyle mode="2" state="1" visible="1" defaultMode="2"/>
+                    </PictureStyle>
                     <PictureSize>2</PictureSize>
                     <ScalePicture>false</ScalePicture>
                     <PictureRendering horizontalMode="1" verticalMode="2"/>
@@ -3023,13 +3023,13 @@ class CliSmokeTest(unittest.TestCase):
         )
         self.assertEqual(image[2][1][13], "1")
 
-    def test_picture_decoration_writes_legacy_style_group_kind(self) -> None:
+    def test_picture_decoration_writes_style_group_kind8(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Pages>
                 <Page name="Main">
                   <PictureDecoration name="Image1" id="5">
-                    <SerializationProfile pictureStyleGroupKind="8" pictureStyleMode="2"/>
+                    <PictureStyle groupKind="8" mode="2"/>
                   </PictureDecoration>
                 </Page>
               </Pages>
@@ -3058,7 +3058,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(image[2][1][0][0], "16")
         self.assertEqual(len(image[2][1][0]), 18)
 
-    def test_dump_writes_picture_decoration_serialization_profile(self) -> None:
+    def test_dump_writes_picture_decoration_picture_style(self) -> None:
         base = [
             "19",
             "1",
@@ -3091,16 +3091,16 @@ class CliSmokeTest(unittest.TestCase):
             ]
         }
 
-        add_picture_decoration_serialization_profile(node, "Image", item_data)
+        add_picture_decoration_picture_style(node, "Image", item_data)
 
-        profile = node.find("SerializationProfile")
-        self.assertIsNotNone(profile)
-        assert profile is not None
-        self.assertEqual(profile.get("displayMode"), "4")
-        self.assertEqual(profile.get("displayState"), "1")
-        self.assertEqual(profile.get("pictureStyleMode"), "4")
-        self.assertEqual(profile.get("renderingProfileFlag"), "1")
-        style = profile.find("StyleProfile")
+        picture_style = node.find("PictureStyle")
+        self.assertIsNotNone(picture_style)
+        assert picture_style is not None
+        self.assertEqual(picture_style.get("displayMode"), "4")
+        self.assertEqual(picture_style.get("displayState"), "1")
+        self.assertEqual(picture_style.get("mode"), "4")
+        self.assertEqual(picture_style.get("renderingFlag"), "1")
+        style = picture_style.find("BaseStyle")
         self.assertIsNotNone(style)
         assert style is not None
         self.assertEqual(style.get("mode"), "2")
@@ -3108,7 +3108,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(style.get("visible"), "1")
         self.assertEqual(style.get("defaultMode"), "2")
 
-    def test_dump_writes_legacy_picture_decoration_style_group_kind(self) -> None:
+    def test_dump_writes_picture_decoration_style_group_kind8(self) -> None:
         node = ET.Element("PictureDecoration")
         item_data = {
             "raw": [
@@ -3146,14 +3146,14 @@ class CliSmokeTest(unittest.TestCase):
             ],
         }
 
-        add_picture_decoration_serialization_profile(node, "Image", item_data)
+        add_picture_decoration_picture_style(node, "Image", item_data)
 
-        profile = node.find("SerializationProfile")
-        self.assertIsNotNone(profile)
-        assert profile is not None
-        self.assertEqual(profile.get("pictureStyleGroupKind"), "8")
-        self.assertEqual(profile.get("pictureStyleMode"), "2")
-        self.assertIsNone(profile.find("StyleProfile"))
+        picture_style = node.find("PictureStyle")
+        self.assertIsNotNone(picture_style)
+        assert picture_style is not None
+        self.assertEqual(picture_style.get("groupKind"), "8")
+        self.assertEqual(picture_style.get("mode"), "2")
+        self.assertIsNone(picture_style.find("BaseStyle"))
 
     def test_command_bar_command_source_preserves_platform_flags(self) -> None:
         root = ET.fromstring(

@@ -1423,7 +1423,7 @@
           <xs:element name="PictureSize" type="xs:string"/>
           <xs:element name="ScalePicture" type="xs:boolean"/>
           <xs:element name="PictureRendering" type="PictureRenderingType"/>
-          <xs:element name="SerializationProfile" type="PictureDecorationSerializationProfileType"/>
+          <xs:element name="PictureStyle" type="PictureDecorationPictureStyleType"/>
           <xs:element name="Border" type="xs:string"/>
           <xs:element name="Events" type="PictureDecorationEventsType"/>
           <xs:group ref="ControlElementGroup"/>
@@ -1431,17 +1431,17 @@
       </xs:extension>
     </xs:complexContent>
   </xs:complexType>
-  <xs:complexType name="PictureDecorationSerializationProfileType">
+  <xs:complexType name="PictureDecorationPictureStyleType">
     <xs:sequence>
-      <xs:element name="StyleProfile" type="PictureDecorationStyleProfileType" minOccurs="0"/>
+      <xs:element name="BaseStyle" type="PictureDecorationBaseStyleType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="displayMode" type="xs:string"/>
     <xs:attribute name="displayState" type="xs:string"/>
-    <xs:attribute name="pictureStyleGroupKind" type="xs:string"/>
-    <xs:attribute name="pictureStyleMode" type="xs:string"/>
-    <xs:attribute name="renderingProfileFlag" type="xs:string"/>
+    <xs:attribute name="groupKind" type="xs:string"/>
+    <xs:attribute name="mode" type="xs:string"/>
+    <xs:attribute name="renderingFlag" type="xs:string"/>
   </xs:complexType>
-  <xs:complexType name="PictureDecorationStyleProfileType">
+  <xs:complexType name="PictureDecorationBaseStyleType">
     <xs:attribute name="mode" type="xs:string"/>
     <xs:attribute name="state" type="xs:string"/>
     <xs:attribute name="visible" type="xs:string"/>
