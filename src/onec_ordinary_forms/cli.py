@@ -702,9 +702,7 @@ def add_geometry(
     node = ET.SubElement(parent, "Position")
     for key, value in geometry.items():
         node.set(key, value)
-    if len(geometry_raw) > 5 and clean_token(geometry_raw[5]) != "1":
-        node.set("layoutMode", clean_token(geometry_raw[5]))
-    add_layout_group(node, geometry_raw)
+    add_layout_flow(node, geometry_raw)
 
     anchors = ET.SubElement(node, "Bindings")
     if isinstance(geometry_raw, list):
@@ -987,23 +985,34 @@ def add_inline_dual_counted_dimension_bindings(
     return True
 
 
-def add_layout_group(node: ET.Element, geometry_raw: list[object]) -> None:
+def add_layout_flow(node: ET.Element, geometry_raw: list[object]) -> None:
     if len(geometry_raw) < 5:
         return
+    flow = ET.SubElement(node, "LayoutFlow")
+    if len(geometry_raw) > 5 and clean_token(geometry_raw[5]) != "1":
+        flow.set("placementMode", clean_token(geometry_raw[5]))
     if any(isinstance(value, list) for value in geometry_raw[-5:]):
+        if not flow.attrib:
+            node.remove(flow)
         return
     group, order, next_order, flag1, flag2 = [clean_token(value) for value in geometry_raw[-5:]]
-    node.set("layoutGroup", group)
-    node.set("layoutOrder", order)
+    flow.set("group", group)
+    flow.set("order", order)
     if flag1 != "0":
-        node.set("layoutFlag1", flag1)
+        flow.set("horizontalBoundary", xml_bool_from_platform_flag(flag1))
     if flag2 != "0":
-        node.set("layoutFlag2", flag2)
+        flow.set("verticalBoundary", xml_bool_from_platform_flag(flag2))
     try:
         if int(next_order) != int(order) + 1:
-            node.set("layoutNextOrder", next_order)
+            flow.set("nextOrder", next_order)
     except ValueError:
-        node.set("layoutNextOrder", next_order)
+        flow.set("nextOrder", next_order)
+    if not flow.attrib:
+        node.remove(flow)
+
+
+def xml_bool_from_platform_flag(value: str) -> str:
+    return "true" if value not in {"", "0", "false", "False"} else "false"
 
 
 def find_base64_payload(value: object) -> str:
@@ -1309,25 +1318,34 @@ def add_panel_layout(parent: ET.Element, public_type: str, item_data: object) ->
         layout_node.set("pageStateFlag", page_state_flag)
     if current_page_index:
         layout_node.set("currentPageIndex", current_page_index)
-    for order, descriptor in enumerate(dependencies, start=1):
-        records = descriptor["records"]
-        group = ET.SubElement(layout_node, "LayoutDependencyGroup")
+    add_layout_dependency_group_nodes(layout_node, dependencies)
+    for layout in page_layouts:
+        page = ET.SubElement(layout_node, "PageLayout")
+        for key, value in layout.items():
+            page.set(key, value)
+
+
+def add_layout_dependency_group_nodes(parent: ET.Element, descriptors: list[dict[str, object]]) -> None:
+    order = 1
+    for descriptor in descriptors:
+        for value in descriptor.get("prefix", []):
+            if clean_token(value) == "0":
+                group = ET.SubElement(parent, "LayoutDependencyGroup")
+                group.set("order", str(order))
+                order += 1
+        records = [
+            record
+            for record in descriptor.get("records", [])
+            if isinstance(record, list) and len(record) >= 3
+        ]
+        group = ET.SubElement(parent, "LayoutDependencyGroup")
         group.set("order", str(order))
-        prefix = descriptor.get("prefix", [])
-        if prefix:
-            group.set("prefix", " ".join(prefix))
-        header = descriptor.get("header", [])
-        if header:
-            group.set("header", " ".join(header))
+        order += 1
         for record in records:
             dependency = ET.SubElement(group, "LayoutDependency")
             dependency.set("targetId", clean_token(record[1]))
             dimension = clean_token(record[2])
             dependency.set("dimension", PANEL_LAYOUT_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
-    for layout in page_layouts:
-        page = ET.SubElement(layout_node, "PageLayout")
-        for key, value in layout.items():
-            page.set(key, value)
 
 
 def add_command_bar_command_source(parent: ET.Element, public_type: str, item_data: object) -> None:
@@ -2793,24 +2811,7 @@ def add_form_root_panel_layout(parent: ET.Element, info: list[object]) -> None:
     if info and isinstance(info[0], list):
         add_form_root_panel_base_style(root_panel, info[0])
     dependencies, cursor = form_root_panel_dependency_group_descriptors_and_cursor(info)
-    for order, descriptor in enumerate(dependencies, start=1):
-        records = descriptor["records"]
-        group = ET.SubElement(root_panel, "LayoutDependencyGroup")
-        group.set("order", str(order))
-        prefix = descriptor.get("prefix", [])
-        if prefix:
-            group.set("prefix", " ".join(prefix))
-        if records and isinstance(records[0], list) and len(records[0]) == 1 and isinstance(records[0][0], list):
-            group.set("header", " ".join(clean_token(value) for value in records[0][0]))
-            records = records[1:]
-        for record in records:
-            dependency = ET.SubElement(group, "LayoutDependency")
-            dependency.set("targetId", clean_token(record[1]))
-            dimension = clean_token(record[2])
-            dependency.set("dimension", PANEL_LAYOUT_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
-    dependency_tail = form_root_panel_dependency_tail(info, cursor)
-    if dependency_tail:
-        root_panel.set("dependencyTail", " ".join(dependency_tail))
+    add_layout_dependency_group_nodes(root_panel, dependencies)
     page_state_flag, current_page_index = form_root_panel_page_state_scalars(info, cursor)
     if page_state_flag:
         root_panel.set("pageStateFlag", page_state_flag)
@@ -2823,19 +2824,11 @@ def add_form_root_panel_layout(parent: ET.Element, info: list[object]) -> None:
         if page_descriptor.get("styleMode") is not None:
             state.set("styleMode", page_descriptor["styleMode"])
         add_multilang_text(state, "Title", page_descriptor.get("title") or page_descriptor["name"], lang=page_descriptor.get("titleLang") or "ru")
-    header = form_root_panel_page_layout_header(info, cursor)
-    if header:
-        root_panel.set("pageLayoutHeader", " ".join(header))
     layouts = panel_page_layouts_from_info(info, cursor)
     for layout_descriptor in layouts:
         layout = ET.SubElement(root_panel, "PageLayout")
         for key, value in layout_descriptor.items():
             layout.set(key, value)
-    before_color, after_color = form_root_panel_post_layout_tail(info, cursor)
-    if before_color:
-        root_panel.set("postLayoutTailBeforeColor", " ".join(before_color))
-    if after_color:
-        root_panel.set("postLayoutTailAfterColor", " ".join(after_color))
     if not list(root_panel) and not root_panel.attrib:
         parent.remove(root_panel)
 

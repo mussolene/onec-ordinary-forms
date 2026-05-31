@@ -623,27 +623,13 @@ def form_root_layout_from_xml(root: ET.Element) -> FormRootLayout | None:
     if page_layouts:
         result["rootPageLayouts"] = page_layouts
         result["rootPageLayout"] = page_layouts[0]
-    if root_panel.get("pageLayoutHeader"):
-        result["rootPageLayoutHeader"] = [value for value in root_panel.get("pageLayoutHeader", "").split(" ") if value != ""]
-    if root_panel.get("dependencyTail"):
-        result["rootPanelDependencyTail"] = [value for value in root_panel.get("dependencyTail", "").split(" ") if value != ""]
     if root_panel.get("pageStateFlag"):
         result["rootPanelPageStateFlag"] = root_panel.get("pageStateFlag")
-    if root_panel.get("postLayoutTailBeforeColor"):
-        result["rootPanelPostLayoutTailBeforeColor"] = [
-            value for value in root_panel.get("postLayoutTailBeforeColor", "").split(" ") if value != ""
-        ]
-    if root_panel.get("postLayoutTailAfterColor"):
-        result["rootPanelPostLayoutTailAfterColor"] = [
-            value for value in root_panel.get("postLayoutTailAfterColor", "").split(" ") if value != ""
-        ]
     dependencies = form_root_panel_dependency_profile_from_xml(root_panel)
     if dependencies is not None:
         result["rootPanelDependencies"] = dependencies
     elif (
-        root_panel.get("dependencyTail")
-        or root_panel.get("pageStateFlag")
-        or root_panel.get("pageLayoutHeader")
+        root_panel.get("pageStateFlag")
         or root_panel.findall("PageState")
         or root_panel.findall("PageLayout")
     ):
@@ -657,11 +643,6 @@ def form_root_panel_dependency_profile_from_xml(root_panel: ET.Element) -> list[
         return None
     result: list[object] = []
     for group in groups:
-        prefix = [value for value in (group.get("prefix") or "").split(" ") if value != ""]
-        result.extend(prefix)
-        header = [value for value in (group.get("header") or "").split(" ") if value != ""]
-        if header:
-            result.append(header)
         records: list[list[object]] = []
         for dependency in group.findall("LayoutDependency"):
             target_id = dependency.get("targetId", "0")
@@ -691,7 +672,6 @@ def root_panel_info(
     page_layout = (root_layout or {}).get("rootPageLayout")
     dependency_profile = (root_layout or {}).get("rootPanelDependencies")
     dependency_tail = [] if isinstance(dependency_profile, list) else ["0", "0"]
-    explicit_dependency_tail = (root_layout or {}).get("rootPanelDependencyTail")
     current_page_index = str((root_layout or {}).get("rootPanelCurrentPageIndex", "1"))
     max_right, max_bottom = controls_extent(controls or [])
     if max_right and max_bottom:
@@ -744,7 +724,7 @@ def root_panel_info(
         dependency_sequence = (
             [str((root_layout or {}).get("rootPanelPageCapacity", "0")), *dependency_profile]
             if dependency_profile
-            else (explicit_dependency_tail if isinstance(explicit_dependency_tail, list) else dependency_tail)
+            else dependency_tail
         )
     else:
         dependency_sequence = [
@@ -839,10 +819,9 @@ def root_panel_info_from_control_extent(
                 ["0", "2", "3"],
                 ["0", "4", "3"],
             ])
-    dependency_tail = (root_layout or {}).get("rootPanelDependencyTail")
     body.extend(
         [
-            *(dependency_tail if isinstance(dependency_tail, list) else ([] if dependency_profile is not None else ["0", "0"])),
+            *([] if dependency_profile is not None else ["0", "0"]),
             page_style_group_record("1"),
             str((root_layout or {}).get("rootPanelPageStateFlag", "0")),
             current_page_index,
@@ -1913,13 +1892,7 @@ def panel_layout_dependency_records_from_xml(layout_node: ET.Element | None, pag
         return ["0", "0", "0", "0"] if page_capacity == 1 else []
     result: list[object] = []
     for group in groups:
-        prefix = group.get("prefix")
-        if prefix:
-            result.extend(value for value in prefix.split(" ") if value != "")
-        header = group.get("header")
         dependencies: list[list[object]] = []
-        if header:
-            dependencies.append([[value for value in header.split(" ") if value != ""]])
         for dependency in group.findall("LayoutDependency"):
             target_id = dependency.get("targetId", "0")
             dimension = dependency.get("dimension", "top")
@@ -4792,12 +4765,13 @@ def geometry_stream_from_xml(
     top = position.get("top", "0") if position is not None else "0"
     right = position.get("right", "0") if position is not None else "0"
     bottom = position.get("bottom", "0") if position is not None else "0"
-    layout_group = position.get("layoutGroup") if position is not None else None
-    layout_order = position.get("layoutOrder") if position is not None else None
-    layout_next_order = position.get("layoutNextOrder") if position is not None else None
-    layout_mode = position.get("layoutMode", "1") if position is not None else "1"
-    layout_flag1 = position.get("layoutFlag1", "0") if position is not None else "0"
-    layout_flag2 = position.get("layoutFlag2", "0") if position is not None else "0"
+    layout_flow = position_layout_flow(position)
+    layout_group = layout_flow.get("group") if layout_flow is not None else None
+    layout_order = layout_flow.get("order") if layout_flow is not None else None
+    layout_next_order = layout_flow.get("nextOrder") if layout_flow is not None else None
+    layout_mode = layout_flow.get("placementMode", "1") if layout_flow is not None else "1"
+    layout_flag1 = platform_flag_from_xml_bool(layout_flow.get("horizontalBoundary")) if layout_flow is not None else "0"
+    layout_flag2 = platform_flag_from_xml_bool(layout_flow.get("verticalBoundary")) if layout_flow is not None else "0"
     bindings: list[object] = ["0"] * 6
     dimensions: list[object] = ["0"] * 4
     has_explicit_geometry_bindings = False
@@ -5135,29 +5109,43 @@ def layout_group_tail(
     return [group, order, next_order, flag1, flag2]
 
 
+def position_layout_flow(position: ET.Element | None) -> ET.Element | None:
+    if position is None:
+        return None
+    return position.find("LayoutFlow")
+
+
+def platform_flag_from_xml_bool(value: str | None) -> str:
+    if value is None:
+        return "0"
+    return "1" if value.lower() in {"1", "true"} else "0"
+
+
 def has_named_layout_group(position: ET.Element | None) -> bool:
     if position is None:
         return False
-    return any(
-        position.get(name) is not None
-        for name in ("layoutGroup", "layoutOrder", "layoutNextOrder", "layoutFlag1", "layoutFlag2")
-    )
+    flow = position_layout_flow(position)
+    if flow is None:
+        return False
+    return any(flow.get(name) is not None for name in ("group", "order", "nextOrder", "horizontalBoundary", "verticalBoundary"))
 
 
 def descriptor_layout_tail(position: ET.Element | None, prefix_size: int) -> list[str]:
     if not has_named_layout_group(position):
         return []
     assert position is not None
+    flow = position_layout_flow(position)
+    assert flow is not None
     return [
         *(["0"] * prefix_size),
         *layout_group_tail(
-            position.get("layoutGroup"),
-            position.get("layoutOrder"),
+            flow.get("group"),
+            flow.get("order"),
             "0",
             "0",
-            position.get("layoutNextOrder"),
-            position.get("layoutFlag1", "0"),
-            position.get("layoutFlag2", "0"),
+            flow.get("nextOrder"),
+            platform_flag_from_xml_bool(flow.get("horizontalBoundary")),
+            platform_flag_from_xml_bool(flow.get("verticalBoundary")),
         ),
     ]
 
@@ -5470,7 +5458,7 @@ def compact_scalar_geometry(
     bindings: list[object],
     dimensions: list[object],
 ) -> bool:
-    if position is None or position.get("layoutGroup") is not None or position.get("layoutOrder") is not None:
+    if position is None or position_layout_flow(position) is not None:
         return False
     binding_container = position.find("Bindings")
     if binding_container is None:

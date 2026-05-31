@@ -85,21 +85,23 @@ Current facts:
   coverage audit reports 26 public controls, 26 writer descriptors, 26 shared
   info descriptors, zero legacy writer branches, and zero template fallback
   tokens.
-- The remaining problem is property and graph coverage. The same audit still
-  reports many `xsdOnlyProperties`, especially on `InputField`, `Table`,
-  `Panel`, `CommandBar`, `ProgressBar`, and chart/schema controls. That means
-  "control is supported" is not the same as "all public platform properties of
-  this control are round-tripped".
+- The remaining problem is full property-slot implementation. The same audit no
+  longer reports `xsdOnlyProperties` for the core editable controls
+  `InputField`, `Table`, `Panel`, and `CommandBar`, so their public descriptor
+  vocabulary now matches the XSD. Other controls still have smaller descriptor
+  gaps, and a descriptor entry is not the same as proven slot read/write
+  support.
 - `PositionType` used to expose codec-shaped attributes:
-  `layoutPreTail`, `primaryDimensionMarker`, and `layoutTail`. These are now
-  removed from public schema/dump/build; the writer derives the required record
-  shape from named bindings/sections/layout order and internal descriptor
-  defaults.
-- `RootPanelLayout` and `PanelLayout` are better than a generic
-  `SerializationProfile`, but they still contain raw-shaped residues such as
+  `layoutPreTail`, `primaryDimensionMarker`, `layoutTail`, `layoutMode`,
+  `layoutGroup`, `layoutOrder`, `layoutNextOrder`, `layoutFlag1`, and
+  `layoutFlag2`. These are now removed from public schema/dump/build. The
+  remaining editable layout-order data lives in named `Position/LayoutFlow`,
+  while record markers and tails are internal descriptor defaults.
+- `RootPanelLayout` and `PanelLayout` no longer expose the raw layout residues
   `dependencyTail`, `pageLayoutHeader`, `postLayoutTailBeforeColor`,
-  `postLayoutTailAfterColor`, and dependency group `prefix`/`header`. These
-  must be classified before they are allowed to remain public.
+  `postLayoutTailAfterColor`, or dependency group `prefix`/`header`. Empty
+  platform dependency counts are represented, where needed, as empty
+  `LayoutDependencyGroup` elements.
 - Platform evidence in OACS keeps pointing to the same persistence mechanism:
   ordinary forms are serialized through `ListInStream`/`ListOutStream`,
   `TypeDomainPattern`, `CompositeID`, and the `cf_form_controls8`,
@@ -212,14 +214,13 @@ If a low-level value is required for rebuild, it must be classified:
 
 - Public form-level `SerializationProfile`, position `dimensionProfile`, and
   all public `slotN` fields.
-- Public position shape attributes that only select internal geometry layouts.
-  The first removed set is `layoutTail`, `layoutPreTail`, and
-  `primaryDimensionMarker`.
-- Root/panel layout tail/header/prefix attributes unless platform evidence
-  proves a real object-model meaning. Candidates to remove or rename after
-  classification are `dependencyTail`, `pageLayoutHeader`,
-  `postLayoutTailBeforeColor`, `postLayoutTailAfterColor`, and dependency group
-  `prefix`/`header`.
+- Public position shape attributes that only select internal geometry layouts:
+  `layoutTail`, `layoutPreTail`, `primaryDimensionMarker`, `layoutMode`,
+  `layoutGroup`, `layoutOrder`, `layoutNextOrder`, `layoutFlag1`, and
+  `layoutFlag2`.
+- Root/panel layout tail/header/prefix attributes:
+  `dependencyTail`, `pageLayoutHeader`, `postLayoutTailBeforeColor`,
+  `postLayoutTailAfterColor`, and dependency group `prefix`/`header`.
 - Tests that require `RootRecord slot5..slot10`, `TopLevel slotN`, or other raw
   stream shape names in public XML. The same applies to tests that assert
   position tail strings instead of named layout semantics.
@@ -243,10 +244,9 @@ If a low-level value is required for rebuild, it must be classified:
 - Treat table column `ElementControl` as a nested typed control/editor concept.
   It can be an InputField, ChoiceField, etc.; do not infer it from only the
   parent table branch.
-- Continue classifying position layout metadata such as `layoutMode`,
-  `layoutGroup`, `layoutOrder`, `layoutNextOrder`, `layoutFlag1`, and
-  `layoutFlag2`. Keep only real graph/layout concepts public; move pure stream
-  selectors into internal descriptor profiles.
+- Keep `Position/LayoutFlow` limited to the named graph concept: placement mode,
+  layout group, order, next order, and horizontal/vertical boundaries. Pure
+  stream selectors stay inside internal descriptor profiles.
 - Split `geometry_stream_from_xml` into a small public layout model reader and
   internal geometry descriptors. The descriptor should choose the platform
   record shape from named bindings, page ownership, parent size, data binding,
@@ -301,6 +301,20 @@ Done after this audit:
   geometry is derived from the `DimensionBinding section` order by the writer.
 - `Position/@secondaryDimensionMarker` is no longer public XML; the writer uses
   the canonical secondary marker for counted/dual dimension groups.
+- `Position/@layoutMode`, `@layoutGroup`, `@layoutOrder`, `@layoutNextOrder`,
+  `@layoutFlag1`, and `@layoutFlag2` are no longer public XML; dump/build now
+  use the named `Position/LayoutFlow` element for the editable layout graph
+  relation.
+- `RootPanelLayout` no longer exposes `dependencyTail`, `pageLayoutHeader`,
+  `postLayoutTailBeforeColor`, or `postLayoutTailAfterColor`; root layout stream
+  separators are canonical writer details.
+- `PanelLayout` and root layout dependency groups no longer expose
+  `prefix`/`header`; zero-count separators are modeled as empty
+  `LayoutDependencyGroup` elements when they have to be visible in the layout
+  graph.
+- The public descriptor vocabulary for `InputField`, `Table`, `Panel`, and
+  `CommandBar` now matches their XSD property sets; the coverage audit has a
+  regression guard for these four core controls.
 - schema tests now guard against reintroducing the removed public raw-shape
   vocabulary.
 - semantic graph digest support was added as `digest-xml`; it hashes the
@@ -313,19 +327,13 @@ Done after this audit:
 
 Remaining next steps:
 
-1. Classify the remaining `Position` layout metadata: `layoutMode`,
-   `layoutGroup`, `layoutOrder`, `layoutNextOrder`, `layoutFlag1`, and
-   `layoutFlag2`. `layoutGroup/layoutOrder` currently behave like graph/order
-   relations; the flag fields still look like raw stream selectors.
-2. Classify root/panel layout tail and group prefix/header values. Keep only
-   real layout concepts public; move pure stream separators into internal
-   descriptors.
-3. Extend property-slot coverage so the audit reports dump/build mapping for
-   each public XSD property, not only per-control writer coverage.
-4. Re-run the small all-controls fixture and Diadoc fixture.
-5. Re-run UT/Enterprise-style corpus checks only in a matching configured
+1. Extend actual dump/build slot implementation for the remaining XSD-only
+   properties on non-core controls and for core properties that are present in
+   the descriptor vocabulary but still not proven by slot-level tests.
+2. Re-run the small all-controls fixture and Diadoc fixture.
+3. Re-run UT/Enterprise-style corpus checks only in a matching configured
    infobase to avoid type-loss noise.
-6. Use the semantic graph digest as the default corpus success metric. Use
+4. Use the semantic graph digest as the default corpus success metric. Use
    byte identity only for current-generation platform-oracle fixtures and for
    localizing a strict-load failure.
 

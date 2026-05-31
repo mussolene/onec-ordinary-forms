@@ -93,3 +93,14 @@ def test_panel_layout_is_public_descriptor_property() -> None:
 
     assert "PanelLayout" not in panel["xsdOnlyProperties"]
     assert "SerializationProfile" not in panel["xsdOnlyProperties"]
+
+
+def test_core_controls_have_no_xsd_only_public_properties() -> None:
+    report = audit_codec_coverage.audit(
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
+    )
+    controls = {item["control"]: item for item in report["controls"]}
+
+    for control in ("CommandBar", "InputField", "Panel", "Table"):
+        assert controls[control]["xsdOnlyProperties"] == []

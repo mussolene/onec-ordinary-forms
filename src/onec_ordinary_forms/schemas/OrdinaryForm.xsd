@@ -705,11 +705,7 @@
     </xs:sequence>
     <xs:attribute name="pageCapacity" type="xs:integer"/>
     <xs:attribute name="currentPageIndex" type="xs:integer"/>
-    <xs:attribute name="dependencyTail" type="xs:string"/>
     <xs:attribute name="pageStateFlag" type="xs:string"/>
-    <xs:attribute name="pageLayoutHeader" type="xs:string"/>
-    <xs:attribute name="postLayoutTailBeforeColor" type="xs:string"/>
-    <xs:attribute name="postLayoutTailAfterColor" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="RootPanelBaseStyleType">
     <xs:sequence>
@@ -1300,16 +1296,12 @@
       <xs:element name="LayoutDependency" type="PanelDependencyType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attribute name="order" type="xs:integer" use="required"/>
-    <xs:attribute name="prefix" type="xs:string"/>
-    <xs:attribute name="header" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PanelDependencyGroupType">
     <xs:sequence>
       <xs:element name="Dependency" type="PanelDependencyType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
     <xs:attribute name="order" type="xs:integer" use="required"/>
-    <xs:attribute name="prefix" type="xs:string"/>
-    <xs:attribute name="header" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="PanelDependencyType">
     <xs:attribute name="targetId" type="xs:integer" use="required"/>
@@ -2447,6 +2439,7 @@
   </xs:complexType>
   <xs:complexType name="PositionType">
     <xs:sequence>
+      <xs:element name="LayoutFlow" type="PositionLayoutFlowType" minOccurs="0"/>
       <xs:element name="Bindings" type="BindingsType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="left" type="xs:integer"/>
@@ -2455,12 +2448,14 @@
     <xs:attribute name="bottom" type="xs:integer"/>
     <xs:attribute name="width" type="xs:integer"/>
     <xs:attribute name="height" type="xs:integer"/>
-    <xs:attribute name="layoutMode" type="xs:string"/>
-    <xs:attribute name="layoutGroup" type="xs:integer"/>
-    <xs:attribute name="layoutOrder" type="xs:integer"/>
-    <xs:attribute name="layoutNextOrder" type="xs:integer"/>
-    <xs:attribute name="layoutFlag1" type="xs:string"/>
-    <xs:attribute name="layoutFlag2" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="PositionLayoutFlowType">
+    <xs:attribute name="placementMode" type="xs:string"/>
+    <xs:attribute name="group" type="xs:integer"/>
+    <xs:attribute name="order" type="xs:integer"/>
+    <xs:attribute name="nextOrder" type="xs:integer"/>
+    <xs:attribute name="horizontalBoundary" type="xs:boolean"/>
+    <xs:attribute name="verticalBoundary" type="xs:boolean"/>
   </xs:complexType>
   <xs:complexType name="BindingsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">

@@ -1499,7 +1499,8 @@ class CliSmokeTest(unittest.TestCase):
                       <LayoutDependencyGroup order="1">
                         <LayoutDependency targetId="25" dimension="bottom"/>
                       </LayoutDependencyGroup>
-                      <LayoutDependencyGroup order="2" prefix="0">
+                      <LayoutDependencyGroup order="2"/>
+                      <LayoutDependencyGroup order="3">
                         <LayoutDependency targetId="7" dimension="right"/>
                         <LayoutDependency targetId="8" dimension="right"/>
                       </LayoutDependencyGroup>
@@ -1527,7 +1528,7 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_table_geometry_uses_layout_next_order(self) -> None:
         position = ET.fromstring(
-            '<Position left="6" top="43" right="579" bottom="326" layoutGroup="2" layoutOrder="1"/>'
+            '<Position left="6" top="43" right="579" bottom="326"><LayoutFlow group="2" order="1"/></Position>'
         )
 
         geometry = geometry_stream_from_xml("Table", position, page_index=0, page_order=1, object_id="8")
@@ -2834,7 +2835,7 @@ class CliSmokeTest(unittest.TestCase):
               <Title><Item lang="ru">Main</Item></Title>
               <Width>1058</Width>
               <Height>424</Height>
-              <RootPanelLayout dependencyTail="0 0" pageStateFlag="0" currentPageIndex="1" pageLayoutHeader="1 1 0">
+              <RootPanelLayout pageStateFlag="0" currentPageIndex="1">
                 <LayoutDependencyGroup order="1">
                   <LayoutDependency targetId="76" dimension="right"/>
                 </LayoutDependencyGroup>
@@ -2958,10 +2959,13 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNone(position.get("dimensionProfile"))
         self.assertIsNone(position.get("dimensionSegments"))
         self.assertIsNone(position.get("layoutTail"))
-        self.assertEqual(position.get("layoutGroup"), "0")
-        self.assertEqual(position.get("layoutOrder"), "1")
-        self.assertEqual(position.get("layoutFlag1"), "1")
-        self.assertEqual(position.get("layoutFlag2"), "1")
+        flow = position.find("LayoutFlow")
+        self.assertIsNotNone(flow)
+        assert flow is not None
+        self.assertEqual(flow.get("group"), "0")
+        self.assertEqual(flow.get("order"), "1")
+        self.assertEqual(flow.get("horizontalBoundary"), "true")
+        self.assertEqual(flow.get("verticalBoundary"), "true")
         self.assertEqual(geometry_stream_from_xml("CommandBar", position), geometry)
 
     def test_dump_preserves_prefixed_flagged_height_width_dimension_profile(self) -> None:
@@ -3011,9 +3015,12 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNone(position.get("primaryDimensionMarker"))
         self.assertIsNone(position.get("layoutPreTail"))
         self.assertIsNone(position.get("layoutTail"))
-        self.assertEqual(position.get("layoutGroup"), "2")
-        self.assertEqual(position.get("layoutOrder"), "6")
-        self.assertEqual(position.get("layoutNextOrder"), "6")
+        flow = position.find("LayoutFlow")
+        self.assertIsNotNone(flow)
+        assert flow is not None
+        self.assertEqual(flow.get("group"), "2")
+        self.assertEqual(flow.get("order"), "6")
+        self.assertEqual(flow.get("nextOrder"), "6")
         self.assertEqual(geometry_stream_from_xml("InputField", position), geometry)
 
     def test_picture_decoration_picture_style_roundtrips_named_slots(self) -> None:
@@ -3626,9 +3633,12 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(position)
         assert position is not None
         self.assertIsNone(position.get("primaryDimensionMarker"))
-        self.assertEqual(position.get("layoutGroup"), "0")
-        self.assertEqual(position.get("layoutOrder"), "2")
-        self.assertIsNone(position.get("layoutNextOrder"))
+        flow = position.find("LayoutFlow")
+        self.assertIsNotNone(flow)
+        assert flow is not None
+        self.assertEqual(flow.get("group"), "0")
+        self.assertEqual(flow.get("order"), "2")
+        self.assertIsNone(flow.get("nextOrder"))
         self.assertEqual(geometry_stream_from_xml("Panel", position, page_index=1, page_order=2), geometry)
 
     def test_panel_page_layout_writer_preserves_xml_order(self) -> None:
@@ -3675,7 +3685,8 @@ class CliSmokeTest(unittest.TestCase):
     def test_table_geometry_uses_table_tail_even_when_data_bound(self) -> None:
         position = ET.fromstring(
             """
-            <Position left="6" top="9" right="969" bottom="356" layoutGroup="0" layoutOrder="0">
+            <Position left="6" top="9" right="969" bottom="356">
+              <LayoutFlow group="0" order="0"/>
               <Bindings>
                 <Binding coordinate="top" mode="0"><From relation="targetEdgeOffset" target="none" side="none" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
                 <Binding coordinate="bottom" mode="0"><From relation="targetEdgeOffset" target="parent" side="bottom" offset="-7"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>

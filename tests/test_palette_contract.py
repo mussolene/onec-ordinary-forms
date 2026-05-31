@@ -254,6 +254,37 @@ def test_position_schema_does_not_expose_layout_tail_markers() -> None:
     assert "layoutTail" not in attrs
     assert "layoutPreTail" not in attrs
     assert "primaryDimensionMarker" not in attrs
+    assert "layoutMode" not in attrs
+    assert "layoutGroup" not in attrs
+    assert "layoutOrder" not in attrs
+    assert "layoutNextOrder" not in attrs
+    assert "layoutFlag1" not in attrs
+    assert "layoutFlag2" not in attrs
+    assert position_type.find("xs:sequence/xs:element[@name='LayoutFlow']", ns) is not None
+
+
+def test_panel_layout_schema_does_not_expose_stream_prefixes() -> None:
+    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
+    root_layout = root.find("xs:complexType[@name='RootPanelLayoutType']", ns)
+    panel_group = root.find("xs:complexType[@name='PanelLayoutDependencyGroupType']", ns)
+    plain_group = root.find("xs:complexType[@name='PanelDependencyGroupType']", ns)
+    assert root_layout is not None
+    assert panel_group is not None
+    assert plain_group is not None
+
+    root_attrs = {node.get("name", "") for node in root_layout.findall("xs:attribute", ns)}
+    panel_group_attrs = {node.get("name", "") for node in panel_group.findall("xs:attribute", ns)}
+    plain_group_attrs = {node.get("name", "") for node in plain_group.findall("xs:attribute", ns)}
+
+    assert "dependencyTail" not in root_attrs
+    assert "pageLayoutHeader" not in root_attrs
+    assert "postLayoutTailBeforeColor" not in root_attrs
+    assert "postLayoutTailAfterColor" not in root_attrs
+    assert "prefix" not in panel_group_attrs
+    assert "header" not in panel_group_attrs
+    assert "prefix" not in plain_group_attrs
+    assert "header" not in plain_group_attrs
 
 
 def test_form_schema_has_root_panel_layout_not_serialization_profile() -> None:
