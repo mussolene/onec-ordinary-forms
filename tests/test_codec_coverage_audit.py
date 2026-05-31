@@ -20,10 +20,14 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     assert summary["legacyWriterBranches"] == 0
     assert summary["writerBranchesWithoutXsdControl"] == []
     assert summary["controlsWithoutWriterDescriptor"] == ["PeriodChooser"]
+    assert "ActiveXControl" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "Button" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "Chart" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "CheckBox" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "ChoiceField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "CalendarField" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "Dendrogram" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "GanttChart" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "GeographicalSchemaField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "GraphicalSchemaField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "GroupBox" not in summary["controlsWithoutSharedInfoDescriptor"]
@@ -31,13 +35,14 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     assert "LabelDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "ListBox" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "PictureDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
+    assert "PivotChart" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "ProgressBar" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "RadioButton" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "Splitter" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "SpreadsheetDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "TextDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "TrackBar" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert set(summary["controlsWithoutSharedInfoDescriptor"]) >= {"ActiveXControl", "PeriodChooser"}
+    assert summary["controlsWithoutSharedInfoDescriptor"] == ["PeriodChooser"]
 
 
 def test_codec_coverage_audit_normalizes_public_control_aliases() -> None:

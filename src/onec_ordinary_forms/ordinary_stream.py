@@ -272,6 +272,41 @@ CONTROL_INFO_SLOT_DESCRIPTORS = {
             InfoSlotDescriptor("Actions", 17),
         ),
     ),
+    "ActiveXControl": ControlInfoDescriptor(
+        control_type="ActiveXControl",
+        info_kind="3",
+        slots=(
+            InfoSlotDescriptor("Clsid", 1),
+            InfoSlotDescriptor("State1", 4),
+            InfoSlotDescriptor("State2", 8),
+        ),
+    ),
+    "Chart": ControlInfoDescriptor(
+        control_type="Chart",
+        info_kind="11",
+    ),
+    "PivotChart": ControlInfoDescriptor(
+        control_type="PivotChart",
+        info_kind="3",
+        slots=(
+            InfoSlotDescriptor("Body", 1),
+            InfoSlotDescriptor("Secondary", 2),
+        ),
+    ),
+    "GanttChart": ControlInfoDescriptor(
+        control_type="GanttChart",
+        info_kind="19",
+        slots=(
+            InfoSlotDescriptor("Body", 1),
+        ),
+    ),
+    "Dendrogram": ControlInfoDescriptor(
+        control_type="Dendrogram",
+        info_kind="0",
+        slots=(
+            InfoSlotDescriptor("Body", 1),
+        ),
+    ),
     "Button": ControlInfoDescriptor(
         control_type="Button",
         info_kind="1",
@@ -1848,13 +1883,14 @@ CONTROL_INFO_WRITER_DESCRIPTORS = {
 
 
 def active_x_control_info(element: ET.Element) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["ActiveXControl"]
     clsid = element.findtext("Clsid", "").strip()
     if not clsid:
         raise ValueError("ActiveXControl must contain <Clsid>")
     state_1 = active_x_state_payload(element, "1")
     state_2 = active_x_state_payload(element, "2")
-    return [
-        "3",
+    info = [
+        descriptor.info_kind,
         clsid.lower(),
         ["0"],
         "2",
@@ -1865,6 +1901,10 @@ def active_x_control_info(element: ET.Element) -> list[object]:
         [state_2] if state_2 else ["0"],
         ["0"],
     ]
+    info[descriptor.slot_index("Clsid")] = clsid.lower()
+    info[descriptor.slot_index("State1")] = [state_1] if state_1 else ["0"]
+    info[descriptor.slot_index("State2")] = [state_2] if state_2 else ["0"]
+    return info
 
 
 def control_actions_from_xml(element: ET.Element, control_type: str = "") -> list[object]:
@@ -2681,7 +2721,8 @@ def splitter_base_info_record_from_xml(element: ET.Element) -> list[object]:
 
 
 def chart_control_info() -> list[object]:
-    return ["11"]
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["Chart"]
+    return [descriptor.info_kind]
 
 
 def chart_presentation_record(element: ET.Element, title_record: list[object], actions: list[object] | None = None) -> list[object]:
@@ -2689,10 +2730,16 @@ def chart_presentation_record(element: ET.Element, title_record: list[object], a
 
 
 def pivot_chart_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["PivotChart"]
     if title_record == ["1", "0"]:
         title_record = localized_text_record(element.get("name", ""))
     body = DIAGRAM_BODY_DESCRIPTOR.build({2: diagram_presentation_record(element, title_record, kind="pivot")})
-    return PIVOT_CHART_INFO_DESCRIPTOR.build({1: body, 2: pivot_chart_info_secondary_record()})
+    secondary = pivot_chart_info_secondary_record()
+    record = PIVOT_CHART_INFO_DESCRIPTOR.build({1: body, 2: secondary})
+    record[0] = descriptor.info_kind
+    record[descriptor.slot_index("Body")] = body
+    record[descriptor.slot_index("Secondary")] = secondary
+    return record
 
 
 def pivot_chart_info_secondary_record() -> list[object]:
@@ -2731,13 +2778,15 @@ def pivot_chart_info_secondary_record() -> list[object]:
 
 
 def gantt_chart_control_info(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["GanttChart"]
+    body = [
+        "0",
+        chart_control_info(),
+        diagram_presentation_record(element, title_record, kind="gantt", actions=actions),
+    ]
     return [
-        "19",
-        [
-            "0",
-            chart_control_info(),
-            diagram_presentation_record(element, title_record, kind="gantt", actions=actions),
-        ],
+        descriptor.info_kind,
+        body,
         *gantt_chart_info_tail(),
     ]
 
@@ -2829,13 +2878,15 @@ def gantt_chart_info_tail() -> list[object]:
     ]
 
 def dendrogram_control_info(element: ET.Element, title_record: list[object]) -> list[object]:
-    return [
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["Dendrogram"]
+    body = [
         "0",
-        [
-            "0",
-            chart_control_info(),
-            diagram_presentation_record(element, title_record, kind="dendrogram"),
-        ],
+        chart_control_info(),
+        diagram_presentation_record(element, title_record, kind="dendrogram"),
+    ]
+    return [
+        descriptor.info_kind,
+        body,
         *dendrogram_info_tail(),
     ]
 
