@@ -36,6 +36,46 @@ observed, while the public XML remains object-model-only. Verified oracle cases
 should stay byte-identical; broader UT/UPP corpus work should expand profile
 coverage incrementally and record the next mismatch class in OACS.
 
+## Platform Codec Formula
+
+The current platform evidence points to one generic persistence path, not to a
+separate public raw-stream format:
+
+```text
+Form.bin -> form stream -> ListInStream -> ordinary form object graph -> Form.xml
+Form.xml -> ordinary form object graph -> ListOutStream -> form stream -> Form.bin
+```
+
+`ValueToStringInternal` and `ValueFromStringInternal` are still useful, but only
+for typed value fragments that appear inside that graph: scalar values,
+`TypeDomainPattern`, `CompositeID`, colors, fonts, and similar properties. They
+are not, by themselves, evidence of a callable whole-form XML serializer. The
+ordinary form graph is still identified by the platform `cf_form_controls8`,
+`cf_form_controls_position8`, and `cf_form_controls_info8` payload families.
+
+The implementation consequence is concrete: new fixes should not add another
+control-specific branch in `ordinary_stream.py` unless it is only an adapter
+around a descriptor. A durable fix should add or update a platform-derived
+descriptor row:
+
+- public XML control/property/event name from `OrdinaryForm.xsd`;
+- platform palette name/type from schema `appinfo`;
+- internal record family (`controls`, `position`, `info`, value fragment);
+- slot/default/write-condition evidence;
+- dump path and build path;
+- platform validation or bracket/list diff evidence.
+
+This gives us the same shape as the platform: read many old profiles, build one
+consistent current graph, and keep compatibility details as named schema-backed
+properties rather than raw sidecars.
+
+Use `tools/audit_codec_coverage.py` before and after serializer work. It reports
+the current gap between the public palette/XSD, writer branches, and descriptor
+coverage. At the time this note was added, XSD and palette both covered 27
+controls, the writer had branches for all except `PeriodChooser`, and only four
+public controls were backed by the shared info descriptor table. That is the
+measured reason small hardcoded fixes were moving the corpus slowly.
+
 ## Schema Boundary
 
 The public schema boundary is intentionally narrow:
