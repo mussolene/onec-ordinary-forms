@@ -517,6 +517,67 @@ def test_platform_object_xml_edit_writes_color_and_font_to_bracket_stream() -> N
     assert public_button.find("Font").get("size") == "120"
 
 
+def test_platform_object_xml_edit_writes_position_bindings_to_bracket_stream() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Anchor" id="7">
+                <Title><Item lang="ru">Anchor</Item></Title>
+                <Position left="20" top="20" right="120" bottom="45"/>
+              </Button>
+              <Button name="Follower" id="8">
+                <Title><Item lang="ru">Follower</Item></Title>
+                <Position left="150" top="20" right="250" bottom="45"/>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    xml_root = platform_object_to_xml(platform_object)
+    follower = xml_root.find("./Controls/Control[@nodeId='control:8']")
+    assert follower is not None
+    position = follower.find("Position")
+    assert position is not None
+    position.set("left", "130")
+    left_binding = position.find("./Bindings/Binding[@coordinate='left']")
+    assert left_binding is not None
+    left_binding[:] = []
+    left_binding.set("mode", "0")
+    ET.SubElement(
+        left_binding,
+        "From",
+        {"relation": "targetEdgeOffset", "target": "element", "targetId": "7", "side": "right", "offset": "10"},
+    )
+    ET.SubElement(left_binding, "To", {"relation": "targetEdgeOffset", "target": "none", "side": "none", "offset": "0"})
+
+    updated = platform_object_from_xml(xml_root, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    rematerialized = platform_object_to_xml(reparsed)
+    public_xml = ordinary_form_xml_from_platform_object(reparsed)
+    internal_binding = rematerialized.find(
+        "./Controls/Control[@nodeId='control:8']/Position/Bindings/Binding[@coordinate='left']/From"
+    )
+    public_binding = public_xml.find("./Pages/Page/Button[@name='Follower']/Position/Bindings/Binding[@coordinate='left']/From")
+
+    assert internal_binding is not None
+    assert internal_binding.get("targetId") == "7"
+    assert internal_binding.get("targetName") == "Anchor"
+    assert internal_binding.get("side") == "right"
+    assert internal_binding.get("offset") == "10"
+    assert public_binding is not None
+    assert public_binding.get("targetId") == "7"
+    assert public_binding.get("targetName") == "Anchor"
+    assert public_binding.get("side") == "right"
+    assert public_binding.get("offset") == "10"
+    assert public_xml.find("./Pages/Page/Button[@name='Follower']/Position").get("left") == "130"
+
+
 def test_platform_object_xml_rejects_control_identity_changes() -> None:
     root = ET.fromstring(
         """
@@ -703,6 +764,60 @@ def test_public_xsd_form_xml_dematerializes_color_and_font_to_platform_object() 
     assert public_button is not None
     assert public_button.find("BackColor").get("rgb") == "#112233"
     assert public_button.find("Font").get("size") == "140"
+
+
+def test_public_xsd_form_xml_dematerializes_position_bindings_to_platform_object() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Anchor" id="7">
+                <Title><Item lang="ru">Anchor</Item></Title>
+                <Position left="20" top="20" right="120" bottom="45"/>
+              </Button>
+              <Button name="Follower" id="8">
+                <Title><Item lang="ru">Follower</Item></Title>
+                <Position left="150" top="20" right="250" bottom="45"/>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    follower = public_xml.find("./Pages/Page/Button[@id='8']")
+    assert follower is not None
+    position = follower.find("Position")
+    assert position is not None
+    position.set("top", "32")
+    top_binding = position.find("./Bindings/Binding[@coordinate='top']")
+    assert top_binding is not None
+    top_binding[:] = []
+    top_binding.set("mode", "0")
+    ET.SubElement(
+        top_binding,
+        "From",
+        {"relation": "targetEdgeOffset", "target": "element", "targetId": "7", "side": "bottom", "offset": "5"},
+    )
+    ET.SubElement(top_binding, "To", {"relation": "targetEdgeOffset", "target": "none", "side": "none", "offset": "0"})
+
+    updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    rematerialized = ordinary_form_xml_from_platform_object(reparsed)
+    public_binding = rematerialized.find(
+        "./Pages/Page/Button[@name='Follower']/Position/Bindings/Binding[@coordinate='top']/From"
+    )
+
+    assert public_binding is not None
+    assert public_binding.get("targetId") == "7"
+    assert public_binding.get("targetName") == "Anchor"
+    assert public_binding.get("side") == "bottom"
+    assert public_binding.get("offset") == "5"
+    assert rematerialized.find("./Pages/Page/Button[@name='Follower']/Position").get("top") == "32"
 
 
 def test_public_xsd_form_xml_full_rebuild_roundtrip_is_semantically_stable() -> None:

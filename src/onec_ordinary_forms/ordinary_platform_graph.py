@@ -27,6 +27,10 @@ from onec_ordinary_forms.ordinary_platform import (
 from onec_ordinary_forms.ordinary_platform_mappings import platform_property_xml_name
 from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS
 from onec_ordinary_forms.ordinary_stream import color_record_from_xml, font_record_from_xml
+from onec_ordinary_forms.platform_position_xml import (
+    apply_position_node_to_control_record,
+    position_node_from_control_record,
+)
 from onec_ordinary_forms.platform_model import (
     PLATFORM_RUNTIME_CALL_EDGES,
     PLATFORM_RUNTIME_EDGES,
@@ -201,7 +205,7 @@ class OrdinaryPlatformObject:
         raw = _find_control_node(self.root, control)
         if raw is None:
             raise KeyError(f"Cannot find raw list-stream node for {node_id}")
-        return _control_property_value(raw, control.control_type, property_key)
+        return _control_property_value(self.root, raw, control.control_type, property_key)
 
     def with_control_property(
         self,
@@ -420,7 +424,20 @@ def _control_property_key(control_type: str, property_name: str) -> str:
     return mapped or property_name
 
 
-def _control_property_value(node: list[object], control_type: str, property_key: str) -> object:
+def _control_property_value(
+    root: object,
+    node: list[object],
+    control_type: str,
+    property_key: str,
+) -> object:
+    if property_key == "Position":
+        position = position_node_from_control_record(
+            node,
+            current_id=clean_atom(node[1]) if len(node) > 1 else "",
+            element_index=_element_index_from_root(root),
+        )
+        if position is not None:
+            return position
     if property_key in COMMON_BASE_INFO_PROPERTY_SLOTS:
         base = _control_base_info_record(node)
         slot = COMMON_BASE_INFO_PROPERTY_SLOTS[property_key]
@@ -481,6 +498,10 @@ def _set_control_property(
         if base is not None and len(base) > slot:
             base[slot] = _platform_font_record(value)
             return
+    if property_key == "Position":
+        position = _property_value_element("Position", value)
+        if apply_position_node_to_control_record(position, node):
+            return
     if property_key == "ReadOnly":
         record = _control_info_property_record(node, control_type)
         if record is not None:
@@ -527,6 +548,20 @@ def _property_value_element(tag: str, value: object) -> ET.Element:
         return element
     element.text = str(value)
     return element
+
+
+def _element_index_from_root(root: object) -> dict[str, dict[str, str]]:
+    result: dict[str, dict[str, str]] = {}
+    for node in _walk_lists(root):
+        if len(node) < 2:
+            continue
+        name = _control_metadata_name(node)
+        if not name:
+            continue
+        object_id = clean_atom(node[1])
+        if object_id:
+            result[object_id] = {"id": object_id, "name": name, "path": name}
+    return result
 
 
 def _control_base_info_record(node: list[object]) -> list[object] | None:

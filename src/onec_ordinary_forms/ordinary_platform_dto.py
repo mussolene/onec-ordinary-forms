@@ -174,7 +174,7 @@ def _public_control_property_updates(element: ET.Element) -> tuple[tuple[str, ob
         node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node.text or ""))
-    for property_name in ("TextColor", "BackColor", "BorderColor", "Font"):
+    for property_name in ("TextColor", "BackColor", "BorderColor", "Font", "Position"):
         node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node))

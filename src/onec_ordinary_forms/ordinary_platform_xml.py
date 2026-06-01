@@ -194,6 +194,9 @@ def _add_control_properties(
     font = _optional_control_property(platform_object, control.node_id, "Font")
     if font is not None and not is_default_font_record(font):
         add_font_node_from_record(element, font)
+    position = _optional_control_property(platform_object, control.node_id, "Position")
+    if isinstance(position, ET.Element):
+        element.append(copy.deepcopy(position))
 
 
 def _optional_control_property(
@@ -320,7 +323,7 @@ def _control_property_updates(element: ET.Element) -> tuple[tuple[str, object], 
         node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node.text or ""))
-    for property_name in ("TextColor", "BackColor", "BorderColor", "Font"):
+    for property_name in ("TextColor", "BackColor", "BorderColor", "Font", "Position"):
         node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node))
