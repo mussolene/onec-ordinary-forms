@@ -15,6 +15,12 @@ from onec_ordinary_forms.ordinary_platform_graph import (
     platform_object_from_model,
     runtime_skeleton_graph,
 )
+from onec_ordinary_forms.ordinary_platform_xml import (
+    platform_object_from_xml,
+    platform_object_from_xml_text,
+    platform_object_to_xml,
+    platform_object_xml_to_string,
+)
 from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
 
 
@@ -187,6 +193,115 @@ def test_platform_object_writes_control_name_and_title_to_bracket_stream() -> No
     assert "Run title changed" in emitted
     assert reparsed.control_by_name("RunChanged").node_id == "control:7"
     assert reparsed.control_by_name("Input").node_id == "control:8"
+
+
+def test_platform_object_xml_roundtrips_without_stream_payload() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+
+    xml_text = platform_object_xml_to_string(platform_object)
+    rematerialized = platform_object_from_xml_text(xml_text, platform_object)
+    reparsed = platform_object_from_list_stream_text(rematerialized.to_list_stream_text())
+
+    for forbidden in (
+        "ObjectModel",
+        "ListStream",
+        "BracketStream",
+        "FormBin",
+        "LogicalStream",
+        "RawBracket",
+        "PlatformRecords",
+        "base64",
+    ):
+        assert forbidden not in xml_text
+    assert rematerialized.to_list_stream_text() == text
+    assert [control.name for control in reparsed.flatten_controls()] == ["Run", "Input"]
+    assert reparsed.control("control:7").title == "Run"
+
+
+def test_platform_object_xml_edit_writes_control_name_and_title_to_bracket_stream() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    xml_root = platform_object_to_xml(platform_object)
+    button = xml_root.find("./Controls/Control[@nodeId='control:7']")
+    assert button is not None
+    title = button.find("./Title/Item[@lang='ru']")
+    assert title is not None
+    button.set("name", "RunXml")
+    title.text = "Run XML title"
+
+    updated = platform_object_from_xml(xml_root, platform_object)
+    emitted = updated.to_list_stream_text()
+    reparsed = platform_object_from_list_stream_text(emitted)
+    changed = reparsed.control("control:7")
+
+    assert changed.name == "RunXml"
+    assert changed.title == "Run XML title"
+    assert changed.supports_platform_format(CF_FORM_CONTROLS8_FORMAT_ID)
+    assert changed.supports_platform_format(CF_FORM_CONTROLS_INFO8_FORMAT_ID)
+    assert reparsed.control_by_name("RunXml").node_id == "control:7"
+    assert "RunXml" in emitted
+    assert "Run XML title" in emitted
+
+
+def test_platform_object_xml_rejects_control_identity_changes() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    xml_root = platform_object_to_xml(platform_object)
+    control = xml_root.find("./Controls/Control[@nodeId='control:7']")
+    assert control is not None
+    control.set("type", "InputField")
+
+    try:
+        platform_object_from_xml(xml_root, platform_object)
+    except ValueError as error:
+        assert "Immutable attribute type changed" in str(error)
+    else:
+        raise AssertionError("Expected platform object XML identity mismatch to fail")
 
 
 def test_platform_object_from_model_reports_child_count_mismatch() -> None:
