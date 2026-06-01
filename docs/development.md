@@ -45,6 +45,14 @@ Use the existing licensed container first. `NETHASP_INI_PATH` is only a
 fallback for creating a new throwaway container and should not be treated as
 the normal local workflow.
 
+If the named container is not running, start it from an ignored local
+`nethasp.ini`:
+
+```bash
+export OOF_NETHASP_INI="<ignored-local-nethasp.ini>"
+tools/platform_start_licensed_container.sh
+```
+
 The script runs 1C 8.5 and executes
 `/DumpExternalDataProcessorOrReportToFiles`. That platform command
 deserializes ordinary `Form.bin` deeply enough to reject malformed bracket/list

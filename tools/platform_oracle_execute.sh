@@ -172,7 +172,7 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
     docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "printf '' > '$container_base/input.txt'"
   fi
   set +e
-  docker exec "${docker_env[@]}" "$OOF_PLATFORM_CONTAINER" sh -lc "set -eu
+  docker exec ${docker_env[@]+"${docker_env[@]}"} "$OOF_PLATFORM_CONTAINER" sh -lc "set -eu
     base='$container_base/dbroot'
     db=db
     /opt/1cv8/x86_64/8.5.1.1343/ibcmd infobase --data=\"\$base\" --database-path=\"\$db\" create --locale=ru_RU \
@@ -206,7 +206,7 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
 fi
 
 docker run --rm --platform linux/amd64 --entrypoint sh \
-  "${docker_env[@]}" \
+  ${docker_env[@]+"${docker_env[@]}"} \
   -v "$repo_root:/workspace" \
   -v "$NETHASP_INI_PATH:/opt/1cv8/conf/nethasp.ini:ro" \
   -v "$out_abs/conf/conf.cfg:/opt/1cv8/conf/conf.cfg:ro" \

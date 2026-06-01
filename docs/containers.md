@@ -39,6 +39,21 @@ That fallback mounts the license configuration read-only, runs the platform in
 an isolated container, and writes generated output under ignored
 `scan-output/`.
 
+For local development, the preferred way to create the reusable licensed
+container is:
+
+```bash
+export OOF_NETHASP_INI="<ignored-local-nethasp.ini>"
+tools/platform_start_licensed_container.sh
+export OOF_PLATFORM_CONTAINER=oof-1c85-licensed
+```
+
+The start helper uses host networking by default, mounts the ignored
+`nethasp.ini` read-only, copies it into the version-specific platform
+configuration directory inside the container, and writes
+`DisableUnsafeActionProtection=.*` into both platform config locations. Do not
+commit the local `nethasp.ini` or record its contents.
+
 ## Validation Rule
 
 For ordinary form writer work, prefer platform Designer export/import checks.
