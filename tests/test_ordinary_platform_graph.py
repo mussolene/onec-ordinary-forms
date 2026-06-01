@@ -11,6 +11,8 @@ from onec_ordinary_forms.ordinary_platform_graph import (
     all_controls_skeleton_graph,
     platform_graph_from_list_stream_text,
     platform_graph_from_model,
+    platform_object_from_list_stream_text,
+    platform_object_from_model,
     runtime_skeleton_graph,
 )
 from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
@@ -84,6 +86,65 @@ def test_platform_graph_from_list_stream_text_uses_writer_output_controls() -> N
     assert ("control:7", "info", CF_FORM_CONTROLS_INFO8_FORMAT_ID) in records
     assert ("control:8", "controls", CF_FORM_CONTROLS8_FORMAT_ID) in records
     assert ("control:8", "info", CF_FORM_CONTROLS_INFO8_FORMAT_ID) in records
+
+
+def test_platform_object_from_list_stream_text_exposes_typed_controls() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+
+    platform_object = platform_object_from_list_stream_text(text)
+    run = platform_object.control("control:7")
+    input_field = platform_object.control_by_name("Input")
+
+    assert platform_object.can_use_object_model
+    assert platform_object.diagnostics == ()
+    assert [control.name for control in platform_object.flatten_controls()] == ["Run", "Input"]
+    assert run.control_type == "Button"
+    assert run.title == "Run"
+    assert run.supports_platform_format(CF_FORM_CONTROLS8_FORMAT_ID)
+    assert run.supports_platform_format(CF_FORM_CONTROLS_INFO8_FORMAT_ID)
+    assert input_field.control_type == "InputField"
+    assert input_field.info_kind == "9"
+    assert len(platform_object.persistence_by_family("controls")) == 2
+
+
+def test_platform_object_from_model_reports_child_count_mismatch() -> None:
+    model = OrdinaryFormModel(
+        [
+            OrdinaryControl(
+                class_id="09ccdc77-ea1a-4a6d-ab1c-3435eada2433",
+                object_id="10",
+                name="Panel1",
+                type="Panel",
+                title="",
+                raw=[],
+                declared_child_count=2,
+                children=[],
+                info_kind="1",
+            )
+        ]
+    )
+
+    platform_object = platform_object_from_model([], model)
+
+    assert not platform_object.can_use_object_model
+    assert len(platform_object.diagnostics) == 1
+    assert platform_object.diagnostics[0].code == "child-count-mismatch"
+    assert platform_object.diagnostics[0].node_id == "control:10"
 
 
 def test_all_controls_skeleton_graph_covers_known_platform_control_classes() -> None:
