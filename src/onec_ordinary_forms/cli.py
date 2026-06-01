@@ -1223,6 +1223,7 @@ def add_semantic_item(
     add_label_properties(node, item, item_data)
     add_label_picture(node, item, item_data, asset_root)
     add_button_style_properties(node, item, item_data)
+    add_button_scalar_properties(node, item, item_data)
     add_default_action(node, public_type, item_data)
     add_text_color(node, item_data)
     add_back_color(node, item_data)
@@ -2530,6 +2531,19 @@ def add_button_style_properties(parent: ET.Element, item: dict, item_data: objec
         add_color_node_from_record(parent, "ButtonTextColor", base[9])
     if len(base) > 10 and not is_default_button_back_color_record(base[10]):
         add_color_node_from_record(parent, "ButtonBackColor", base[10])
+
+
+def add_button_scalar_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+    if str(item.get("type", "")) != "Button" or not isinstance(item_data, dict):
+        return
+    raw = item_data.get("raw")
+    if not isinstance(raw, list) or len(raw) <= 2 or not isinstance(raw[2], list):
+        return
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["Button"]
+    info = control_info_payload(raw[2], descriptor.info_kind)
+    multiline = nested_list_value(info, (descriptor.slot_index("MultiLine"),))
+    if clean_token(multiline) == "1":
+        set_text(parent, "MultiLine", "true")
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:

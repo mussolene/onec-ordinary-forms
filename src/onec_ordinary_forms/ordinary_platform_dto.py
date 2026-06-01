@@ -61,7 +61,7 @@ PLATFORM_TYPE_BY_CONTROL_XML_TAG = {
     for control_type, descriptor in ORDINARY_CONTROL_DESCRIPTORS.items()
 }
 INCREMENTAL_SCALAR_PROPERTIES = {
-    "Button": {"DefaultButton"},
+    "Button": {"DefaultButton", "MultiLine"},
     "ChoiceField": {"ChoiceButton", "ClearButton", "OpenButton", "ChoiceListOrCreateButton", "EditButton"},
     "CommandBar": {"Autofill"},
     "Image": {"DisplayMode", "DisplayState", "RenderingProfileFlag"},

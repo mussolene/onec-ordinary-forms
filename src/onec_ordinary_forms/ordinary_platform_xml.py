@@ -182,7 +182,12 @@ def _add_control_properties(
         value = _optional_control_property(platform_object, control.node_id, attr_name)
         if value is not None:
             element.set(attr_name, value)
-    for property_name, default in (("Visible", "true"), ("Enabled", "true"), ("ReadOnly", "false")):
+    for property_name, default in (
+        ("Visible", "true"),
+        ("Enabled", "true"),
+        ("ReadOnly", "false"),
+        ("MultiLine", "false"),
+    ):
         value = _optional_control_property(platform_object, control.node_id, property_name)
         if value is not None and value != default:
             node = ET.SubElement(element, property_name)
@@ -319,7 +324,7 @@ def _control_property_updates(element: ET.Element) -> tuple[tuple[str, object], 
         value = element.get(attr_name)
         if value is not None:
             updates.append((attr_name, value))
-    for property_name in ("Visible", "Enabled", "ReadOnly"):
+    for property_name in ("Visible", "Enabled", "ReadOnly", "MultiLine"):
         node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node.text or ""))

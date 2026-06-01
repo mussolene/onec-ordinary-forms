@@ -121,6 +121,8 @@ def test_codec_coverage_audit_tracks_platform_property_name_mapping_matrix() -> 
     assert summary["mappedPlatformPropertyRows"] == summary["platformPropertyRows"]
     assert summary["unmappedPlatformProperties"] == []
     assert matrix[("Button", "Заголовок")]["xmlName"] == "Title"
+    assert matrix[("Button", "МногострочныйРежим")]["xmlName"] == "MultiLine"
+    assert matrix[("Button", "МногострочныйРежим")]["status"] == "mapped-descriptor"
     assert matrix[("InputField", "ТолькоПросмотр")]["xmlName"] == "ReadOnly"
     assert matrix[("InputField", "ТолькоПросмотр")]["status"] == "mapped-descriptor"
     assert matrix[("CommandBar", "АвтоЗаполнение")]["xmlName"] == "Autofill"

@@ -1423,6 +1423,7 @@
           <xs:element name="PicturePosition" type="xs:string"/>
           <xs:element name="ButtonTextColor" type="ColorType"/>
           <xs:element name="ButtonBackColor" type="ColorType"/>
+          <xs:element name="MultiLine" type="xs:boolean"/>
           <xs:element name="Events" type="ButtonEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>

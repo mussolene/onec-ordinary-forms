@@ -797,6 +797,9 @@ def test_public_xsd_form_xml_dematerializes_descriptor_scalar_properties() -> No
           <Title><Item lang="ru">Main</Item></Title>
           <Pages>
             <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
               <ChoiceField name="Choice" id="8"/>
             </Page>
           </Pages>
@@ -806,16 +809,24 @@ def test_public_xsd_form_xml_dematerializes_descriptor_scalar_properties() -> No
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    button = public_xml.find("./Pages/Page/Button[@id='7']")
     choice = public_xml.find("./Pages/Page/ChoiceField[@id='8']")
+    assert button is not None
     assert choice is not None
+    ET.SubElement(button, "MultiLine").text = "true"
     ET.SubElement(choice, "ChoiceButton").text = "false"
     ET.SubElement(choice, "ClearButton").text = "false"
 
     updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
     reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    rematerialized = ordinary_form_xml_from_platform_object(reparsed)
+    public_button = rematerialized.find("./Pages/Page/Button[@name='Run']")
 
+    assert reparsed.control_property("control:7", "MultiLine") == "1"
     assert reparsed.control_property("control:8", "ChoiceButton") == "0"
     assert reparsed.control_property("control:8", "ClearButton") == "0"
+    assert public_button is not None
+    assert public_button.findtext("MultiLine") == "true"
 
 
 def test_public_xsd_form_xml_dematerializes_color_and_font_to_platform_object() -> None:

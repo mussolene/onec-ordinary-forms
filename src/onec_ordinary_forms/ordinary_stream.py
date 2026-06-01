@@ -314,6 +314,7 @@ CONTROL_INFO_SLOT_DESCRIPTORS = {
             InfoSlotDescriptor("BaseInfo", 0),
             InfoSlotDescriptor("Title", 2),
             InfoSlotDescriptor("Picture", 8),
+            InfoSlotDescriptor("MultiLine", 10),
             InfoSlotDescriptor("DefaultButton", 15),
         ),
     ),
@@ -2267,6 +2268,7 @@ def button_control_info(element: ET.Element, title_record: list[object], actions
     info_record[descriptor.slot_index("BaseInfo")] = base
     info_record[descriptor.slot_index("Title")] = title_record
     info_record[descriptor.slot_index("Picture")] = picture_record
+    info_record[descriptor.slot_index("MultiLine")] = bool_record_from_xml(element, "MultiLine", default=False)
     return [
         descriptor.info_kind,
         info_record,
