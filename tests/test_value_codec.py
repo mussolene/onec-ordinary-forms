@@ -38,6 +38,45 @@ def test_type_domain_pattern_roundtrip_primitives_and_reference() -> None:
     assert dump_type_domain_pattern(items) == pattern
 
 
+def test_type_domain_pattern_decodes_number_qualifiers_as_single_type() -> None:
+    pattern = ['"N"', "10", "0", "1"]
+    items = parse_type_domain_pattern(pattern)
+
+    assert items == [
+        TypeDomainPatternItem(
+            code="N",
+            type_name="xs:decimal",
+            kind="primitive",
+            digits="10",
+            fraction_digits="0",
+            allowed_sign="NonNegative",
+        )
+    ]
+    assert dump_type_domain_pattern(items) == pattern
+
+
+def test_type_domain_pattern_decodes_string_and_date_qualifiers_as_facets() -> None:
+    pattern = ['"S"', "50", "1", '"D"', "2"]
+    items = parse_type_domain_pattern(pattern)
+
+    assert items == [
+        TypeDomainPatternItem(
+            code="S",
+            type_name="xs:string",
+            kind="primitive",
+            length="50",
+            allowed_length="Fixed",
+        ),
+        TypeDomainPatternItem(
+            code="D",
+            type_name="xs:dateTime",
+            kind="primitive",
+            date_parts="code:2",
+        ),
+    ]
+    assert dump_type_domain_pattern(items) == pattern
+
+
 def test_composite_id_validation_matches_platform_schema_shape() -> None:
     assert parse_composite_id("-1") == "-1"
     assert parse_composite_id("12:01234567-89ab-cdef-0123-456789abcdef").startswith("12:")

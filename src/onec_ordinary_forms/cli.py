@@ -26,6 +26,7 @@ from onec_ordinary_forms.ordinary_platform import ORDINARY_CONTROL_CLASS_BY_GUID
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
 from onec_ordinary_forms.ordinary_stream import (
     CONTROL_INFO_SLOT_DESCRIPTORS,
+    MENU_MODE_BY_CODE,
     TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN,
     form_stream_from_object_xml,
     root_panel_base_info_record,
@@ -204,6 +205,12 @@ def decoded_pattern_types(pattern: list | None, object_types: dict[str, str]) ->
             "name": item.type_name,
             "kind": item.kind,
             **({"uuid": item.uuid} if item.uuid else {}),
+            **({"digits": item.digits} if item.digits else {}),
+            **({"fractionDigits": item.fraction_digits} if item.fraction_digits else {}),
+            **({"allowedSign": item.allowed_sign} if item.allowed_sign else {}),
+            **({"length": item.length} if item.length else {}),
+            **({"allowedLength": item.allowed_length} if item.allowed_length else {}),
+            **({"dateParts": item.date_parts} if item.date_parts else {}),
         }
         for item in parse_type_domain_pattern(pattern, object_types)
     ]
@@ -222,32 +229,28 @@ def add_type(parent: ET.Element, pattern: list | None, object_types: dict[str, s
         pattern_node = ET.SubElement(type_node, "Pattern")
         pattern_node.set("encoding", "TypeDomainPattern")
         pattern_node.set("itemCount", str(len(decoded)))
-        index = 0
-        while index < len(pattern):
-            code = clean_token(pattern[index])
+        for item in decoded:
+            code = item["code"]
             item_node = ET.SubElement(pattern_node, "PatternItem")
             item_node.set("code", code)
-            if code == "#" and index + 1 < len(pattern):
-                uuid = clean_token(pattern[index + 1])
-                item_node.set("uuid", uuid)
-                item_node.set("typeName", object_types.get(uuid, f"cfg:uuid.{uuid}"))
-                index += 2
-            else:
-                item_node.set("typeName", TYPE_CODE_MAP.get(code, f"unknown:{code}"))
-                index += 1
-
-    for item in decoded:
-        item_node = ET.SubElement(type_node, "TypeName")
-        item_node.set("code", item["code"])
-        item_node.set("kind", item["kind"])
-        if item.get("uuid"):
-            item_node.set("uuid", item["uuid"])
-        item_node.text = item["name"]
+            item_node.set("typeName", item["name"])
+            item_node.set("kind", item["kind"])
+            if item.get("uuid"):
+                item_node.set("uuid", item["uuid"])
+            if item.get("digits"):
+                item_node.set("digits", item["digits"])
+            if item.get("fractionDigits"):
+                item_node.set("fractionDigits", item["fractionDigits"])
+            if item.get("allowedSign"):
+                item_node.set("allowedSign", item["allowedSign"])
+            if item.get("length"):
+                item_node.set("length", item["length"])
+            if item.get("allowedLength"):
+                item_node.set("allowedLength", item["allowedLength"])
+            if item.get("dateParts"):
+                item_node.set("dateParts", item["dateParts"])
     if pattern is not None and not decoded:
-        item_node = ET.SubElement(type_node, "TypeName")
-        item_node.set("kind", "any")
-        item_node.set("code", "")
-        item_node.text = "xs:anyType"
+        pattern_node.set("itemCount", "0")
 
 
 def add_type_from_domain_record(parent: ET.Element, record: object, object_types: dict[str, str]) -> None:
@@ -1224,7 +1227,7 @@ def add_semantic_item(
     add_label_properties(node, item, item_data)
     add_label_picture(node, item, item_data, asset_root)
     add_button_style_properties(node, item, item_data)
-    add_button_scalar_properties(node, item, item_data)
+    add_button_scalar_properties(node, item, item_data, asset_root)
     add_default_action(node, public_type, item_data)
     add_text_color(node, item_data)
     add_back_color(node, item_data)
@@ -2534,7 +2537,7 @@ def add_button_style_properties(parent: ET.Element, item: dict, item_data: objec
         add_color_node_from_record(parent, "ButtonBackColor", base[10])
 
 
-def add_button_scalar_properties(parent: ET.Element, item: dict, item_data: object) -> None:
+def add_button_scalar_properties(parent: ET.Element, item: dict, item_data: object, asset_root: Path | None = None) -> None:
     if str(item.get("type", "")) != "Button" or not isinstance(item_data, dict):
         return
     raw = item_data.get("raw")
@@ -2556,6 +2559,12 @@ def add_button_scalar_properties(parent: ET.Element, item: dict, item_data: obje
     multiline = nested_list_value(info, (descriptor.slot_index("MultiLine"),))
     if clean_token(multiline) == "1":
         set_text(parent, "MultiLine", "true")
+    menu_mode = clean_token(nested_list_value(info, (descriptor.slot_index("MenuMode"),)))
+    if menu_mode and menu_mode != "0":
+        set_text(parent, "MenuMode", MENU_MODE_BY_CODE.get(menu_mode, f"code:{menu_mode}"))
+    menu_buttons = nested_list_value(info, (descriptor.slot_index("MenuButtons"),))
+    if isinstance(menu_buttons, list):
+        add_command_bar_buttons(parent, menu_buttons, asset_root, parent.get("name") or "Button")
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:

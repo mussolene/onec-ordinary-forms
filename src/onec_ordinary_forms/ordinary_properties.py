@@ -284,6 +284,8 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
             "ButtonBackColor",
             "HorizontalAlign",
             "MultiLine",
+            "MenuMode",
+            "Buttons",
             "PictureSize",
             "Shortcut",
             "VerticalAlign",

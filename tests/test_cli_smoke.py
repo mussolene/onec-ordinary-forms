@@ -2291,11 +2291,8 @@ class CliSmokeTest(unittest.TestCase):
               <Attributes>
                 <Attribute name="Mode1" slot="5">
                   <Type source="TypeDomainPattern">
-                    <Pattern encoding="TypeDomainPattern" itemCount="4">
-                      <PatternItem code="N" typeName="xs:decimal"/>
-                      <PatternItem code="1" typeName="unknown:1"/>
-                      <PatternItem code="0" typeName="unknown:0"/>
-                      <PatternItem code="1" typeName="unknown:1"/>
+                    <Pattern encoding="TypeDomainPattern" itemCount="1">
+                      <PatternItem code="N" typeName="xs:decimal" kind="primitive" digits="1" fractionDigits="0" allowedSign="NonNegative"/>
                     </Pattern>
                   </Type>
                 </Attribute>
@@ -2394,11 +2391,8 @@ class CliSmokeTest(unittest.TestCase):
                   <RadioButton name="ByFile" id="46">
                     <DataPath>ImportMode</DataPath>
                     <Type source="TypeDomainPattern">
-                      <Pattern encoding="TypeDomainPattern" itemCount="4">
-                        <PatternItem code="N" typeName="xs:decimal"/>
-                        <PatternItem code="1" typeName="unknown:1"/>
-                        <PatternItem code="0" typeName="unknown:0"/>
-                        <PatternItem code="1" typeName="unknown:1"/>
+                      <Pattern encoding="TypeDomainPattern" itemCount="1">
+                        <PatternItem code="N" typeName="xs:decimal" kind="primitive" digits="1" fractionDigits="0" allowedSign="NonNegative"/>
                       </Pattern>
                     </Type>
                     <DataValue typeCode="N">1</DataValue>
@@ -3946,6 +3940,44 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(action.get("recordKind"), "7")
         rebuilt = command_bar_items_record_from_xml(root.find("Buttons"))
         self.assertEqual(rebuilt[5][0], "7")
+
+    def test_button_menu_mode_roundtrips_as_typed_buttons_graph(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <Button name="Run" id="7">
+                    <Title><Item lang="ru">Run</Item></Title>
+                    <MenuMode>UseAdditional</MenuMode>
+                    <Buttons rootUuid="root" rootKind="1" rootFlag="1">
+                      <Actions>
+                        <Action order="1" recordKind="8" uuid="action" enabled="1" eventUuid="e1692cc2-605b-4535-84dd-28440238746c" handler="RunAction" title="Run action" handlerKind="3" changesData="0" display="0" mode="0"/>
+                      </Actions>
+                      <Groups>
+                        <Group order="1" uuid="group" kind="0" mode="0" buttonCount="1">
+                          <Button order="1" actionUuid="action" name="Действие" state="0" visible="1" hasAction="1" ownerUuid="root" position="1" style="1e2" kind="0" groupMode="0" enabled="1" checked="0" showText="1" shortcut="0" default="0">
+                            <Title><Item lang="ru">Действие</Item></Title>
+                          </Button>
+                        </Group>
+                      </Groups>
+                    </Buttons>
+                  </Button>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        form_text = form_stream_from_object_xml(root).decode("utf-8-sig")
+        stream = parse_list_stream_document(form_text).value
+        button = self._find_control(stream, "6ff79819-710e-4145-97cd-1618da79e3e2")
+
+        self.assertIsNotNone(button)
+        assert button is not None
+        info = button[2][1]
+        self.assertEqual(info[11], "2")
+        self.assertEqual(info[12][0:5], ["5", "root", "1", "1", "1"])
+        self.assertEqual(info[12][5][4][1], '"RunAction"')
 
     def test_form_bin_pipeline_keeps_cli_out_of_section_details(self) -> None:
         with TemporaryDirectory() as temp_dir:

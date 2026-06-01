@@ -348,6 +348,9 @@
     <xs:attribute name="uuid" type="UUID"/>
     <xs:attribute name="typeName" type="xs:string" use="required"/>
     <xs:attribute name="kind" type="xs:string" use="required"/>
+    <xs:attribute name="digits" type="xs:nonNegativeInteger"/>
+    <xs:attribute name="fractionDigits" type="xs:nonNegativeInteger"/>
+    <xs:attribute name="allowedSign" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="TypeDomainPattern">
     <xs:sequence>

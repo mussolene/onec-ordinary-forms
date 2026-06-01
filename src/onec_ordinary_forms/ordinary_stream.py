@@ -25,7 +25,15 @@ from onec_ordinary_forms.ordinary_platform import (
 )
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
 from onec_ordinary_forms.ui_values import ordinary_color_code_from_style_ref
-from onec_ordinary_forms.value_codec import clean_atom, is_integer_atom, localized_text_record, quote_atom
+from onec_ordinary_forms.value_codec import (
+    NUMBER_ALLOWED_SIGN_CODE_BY_NAME,
+    DATE_PARTS_CODE_BY_NAME,
+    STRING_ALLOWED_LENGTH_CODE_BY_NAME,
+    clean_atom,
+    is_integer_atom,
+    localized_text_record,
+    quote_atom,
+)
 
 
 PLATFORM_CONTROL_FORMAT_IDS = {
@@ -319,6 +327,8 @@ CONTROL_INFO_SLOT_DESCRIPTORS = {
             InfoSlotDescriptor("Picture", 8),
             InfoSlotDescriptor("Shortcut", 9),
             InfoSlotDescriptor("MultiLine", 10),
+            InfoSlotDescriptor("MenuMode", 11),
+            InfoSlotDescriptor("MenuButtons", 12),
             InfoSlotDescriptor("DefaultButton", 15),
         ),
     ),
@@ -1422,6 +1432,36 @@ def type_pattern_from_xml(attribute: ET.Element) -> list[object]:
         uuid = item.get("uuid")
         if code == "#" and uuid:
             result.append(uuid)
+        if code == "N":
+            digits = item.get("digits")
+            fraction_digits = item.get("fractionDigits")
+            allowed_sign = item.get("allowedSign")
+            if digits is not None and fraction_digits is not None and allowed_sign is not None:
+                allowed_sign_code = NUMBER_ALLOWED_SIGN_CODE_BY_NAME.get(allowed_sign)
+                if allowed_sign_code is None and allowed_sign.startswith("code:"):
+                    allowed_sign_code = allowed_sign.removeprefix("code:")
+                if allowed_sign_code is None:
+                    raise ValueError(f"Unsupported number allowed sign: {allowed_sign}")
+                result.extend([digits, fraction_digits, allowed_sign_code])
+        if code == "S":
+            length = item.get("length")
+            allowed_length = item.get("allowedLength")
+            if length is not None and allowed_length is not None:
+                allowed_length_code = STRING_ALLOWED_LENGTH_CODE_BY_NAME.get(allowed_length)
+                if allowed_length_code is None and allowed_length.startswith("code:"):
+                    allowed_length_code = allowed_length.removeprefix("code:")
+                if allowed_length_code is None:
+                    raise ValueError(f"Unsupported string allowed length: {allowed_length}")
+                result.extend([length, allowed_length_code])
+        if code == "D":
+            date_parts = item.get("dateParts")
+            if date_parts is not None:
+                date_parts_code = DATE_PARTS_CODE_BY_NAME.get(date_parts)
+                if date_parts_code is None and date_parts.startswith("code:"):
+                    date_parts_code = date_parts.removeprefix("code:")
+                if date_parts_code is None:
+                    raise ValueError(f"Unsupported date parts: {date_parts}")
+                result.append(date_parts_code)
     return result
 
 
@@ -2277,11 +2317,35 @@ def button_control_info(element: ET.Element, title_record: list[object], actions
     info_record[descriptor.slot_index("Shortcut")] = shortcut_record_from_xml(element.find("Shortcut"))
     info_record[descriptor.slot_index("MultiLine")] = bool_record_from_xml(element, "MultiLine", default=False)
     info_record[descriptor.slot_index("PictureSize")] = text_or_default(element, "PictureSize", "0")
+    menu_buttons = element.find("Buttons")
+    if menu_buttons is not None:
+        menu_payload = command_bar_items_record_from_xml(menu_buttons, asset_root)
+        if menu_payload:
+            info_record[descriptor.slot_index("MenuMode")] = menu_mode_record_from_xml(element, default="1")
+            info_record[descriptor.slot_index("MenuButtons")] = menu_payload
+            if len(info_record) == 16:
+                info_record.append("1")
+            info_record[15] = "0"
+    elif element.find("MenuMode") is not None:
+        info_record[descriptor.slot_index("MenuMode")] = menu_mode_record_from_xml(element, default="0")
     return [
         descriptor.info_kind,
         info_record,
         action_records(actions),
     ]
+
+
+MENU_MODE_BY_CODE = {
+    "0": "DoNotUse",
+    "1": "Use",
+    "2": "UseAdditional",
+}
+MENU_MODE_CODE_BY_NAME = {name: code for code, name in MENU_MODE_BY_CODE.items()}
+
+
+def menu_mode_record_from_xml(element: ET.Element, default: str = "0") -> str:
+    value = text_or_default(element, "MenuMode", default)
+    return MENU_MODE_CODE_BY_NAME.get(value, value)
 
 
 SHORTCUT_KEY_CODES = {

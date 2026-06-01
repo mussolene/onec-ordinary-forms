@@ -1431,6 +1431,8 @@
           <xs:element name="ButtonBackColor" type="ColorType"/>
           <xs:element name="HorizontalAlign" type="xs:string"/>
           <xs:element name="MultiLine" type="xs:boolean"/>
+          <xs:element name="MenuMode" type="xs:string"/>
+          <xs:element name="Buttons" type="CommandBarButtonsType"/>
           <xs:element name="PictureSize" type="xs:string"/>
           <xs:element name="Shortcut" type="ShortcutType"/>
           <xs:element name="VerticalAlign" type="xs:string"/>
