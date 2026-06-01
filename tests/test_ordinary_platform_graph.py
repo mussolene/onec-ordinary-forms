@@ -289,6 +289,40 @@ def test_platform_form_object_sets_input_field_property_by_platform_name() -> No
     assert len(platform_object.flatten_controls()) == 2
 
 
+def test_platform_form_object_sets_common_base_info_properties() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    form = PlatformFormObject.from_list_stream_text(form_stream_from_object_xml(root).decode("utf-8-sig"))
+
+    updated = form.set_control_property("Run", "Visible", False)
+    updated = updated.set_control_property("Run", "Enabled", False)
+    updated = updated.set_control_property("Run", "baseStyleVisible", "0")
+    platform_object = updated.to_platform_object()
+    reparsed = platform_object_from_list_stream_text(platform_object.to_list_stream_text())
+    public_xml = ordinary_form_xml_from_platform_object(reparsed)
+    button = public_xml.find("./Pages/Page/Button[@name='Run']")
+
+    assert updated.get_control_property("Run", "Visible") == "false"
+    assert updated.get_control_property("Run", "Enabled") == "false"
+    assert updated.get_control_property("Run", "baseStyleVisible") == "0"
+    assert button is not None
+    assert button.findtext("Visible") == "false"
+    assert button.findtext("Enabled") == "false"
+    assert button.get("baseStyleVisible") == "0"
+
+
 def test_platform_form_object_rejects_unverified_property_writer() -> None:
     root = ET.fromstring(
         """
@@ -391,6 +425,52 @@ def test_platform_object_xml_edit_writes_control_name_and_title_to_bracket_strea
     assert reparsed.control_by_name("RunXml").node_id == "control:7"
     assert "RunXml" in emitted
     assert "Run XML title" in emitted
+
+
+def test_platform_object_xml_edit_writes_common_properties_to_bracket_stream() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    xml_root = platform_object_to_xml(platform_object)
+    button = xml_root.find("./Controls/Control[@nodeId='control:7']")
+    input_field = xml_root.find("./Controls/Control[@nodeId='control:8']")
+    assert button is not None
+    assert input_field is not None
+    ET.SubElement(button, "Visible").text = "false"
+    ET.SubElement(button, "Enabled").text = "false"
+    button.set("baseStyleVisible", "0")
+    ET.SubElement(input_field, "ReadOnly").text = "true"
+
+    updated = platform_object_from_xml(xml_root, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    public_xml = ordinary_form_xml_from_platform_object(reparsed)
+    public_button = public_xml.find("./Pages/Page/Button[@name='Run']")
+    public_input = public_xml.find("./Pages/Page/InputField[@name='Input']")
+
+    assert reparsed.control_property("control:7", "Visible") == "false"
+    assert reparsed.control_property("control:7", "Enabled") == "false"
+    assert reparsed.control_property("control:7", "baseStyleVisible") == "0"
+    assert reparsed.control_property("control:8", "ReadOnly") == "true"
+    assert public_button is not None
+    assert public_button.findtext("Visible") == "false"
+    assert public_button.findtext("Enabled") == "false"
+    assert public_button.get("baseStyleVisible") == "0"
+    assert public_input is not None
+    assert public_input.findtext("ReadOnly") == "true"
 
 
 def test_platform_object_xml_rejects_control_identity_changes() -> None:
@@ -500,6 +580,52 @@ def test_public_xsd_form_xml_dematerializes_name_and_title_to_platform_object() 
     assert changed.title == "Run public XML title"
     assert "RunPublicXml" in emitted
     assert "Run public XML title" in emitted
+
+
+def test_public_xsd_form_xml_dematerializes_common_properties_to_platform_object() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    button = public_xml.find("./Pages/Page/Button[@id='7']")
+    input_field = public_xml.find("./Pages/Page/InputField[@id='8']")
+    assert button is not None
+    assert input_field is not None
+    ET.SubElement(button, "Visible").text = "false"
+    ET.SubElement(button, "Enabled").text = "false"
+    button.set("baseStyleVisible", "0")
+    ET.SubElement(input_field, "ReadOnly").text = "true"
+
+    updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    rematerialized = ordinary_form_xml_from_platform_object(reparsed)
+    public_button = rematerialized.find("./Pages/Page/Button[@name='Run']")
+    public_input = rematerialized.find("./Pages/Page/InputField[@name='Input']")
+
+    assert reparsed.control_property("control:7", "Visible") == "false"
+    assert reparsed.control_property("control:7", "Enabled") == "false"
+    assert reparsed.control_property("control:7", "baseStyleVisible") == "0"
+    assert reparsed.control_property("control:8", "ReadOnly") == "true"
+    assert public_button is not None
+    assert public_button.findtext("Visible") == "false"
+    assert public_button.findtext("Enabled") == "false"
+    assert public_button.get("baseStyleVisible") == "0"
+    assert public_input is not None
+    assert public_input.findtext("ReadOnly") == "true"
 
 
 def test_public_xsd_form_xml_full_rebuild_roundtrip_is_semantically_stable() -> None:

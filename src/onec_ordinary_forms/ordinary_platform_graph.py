@@ -34,6 +34,18 @@ from onec_ordinary_forms.platform_model import (
 from onec_ordinary_forms.value_codec import clean_atom, quote_atom
 
 
+COMMON_BASE_INFO_PROPERTY_SLOTS = {
+    "Visible": 1,
+    "Enabled": 5,
+    "baseStyleMode": 16,
+    "baseStyleState": 17,
+    "baseStyleVisible": 18,
+    "baseStyleDefaultMode": 19,
+}
+
+COMMON_BASE_INFO_BOOL_PROPERTIES = {"Visible", "Enabled"}
+
+
 @dataclass(frozen=True)
 class PlatformObjectNode:
     id: str
@@ -399,10 +411,23 @@ def _control_property_key(control_type: str, property_name: str) -> str:
 
 
 def _control_property_value(node: list[object], control_type: str, property_key: str) -> str:
-    if control_type == "InputField" and property_key == "ReadOnly":
-        record = _input_field_object_info_record(node)
-        if record is not None and len(record) > 12:
-            return "true" if clean_atom(record[12]) == "1" else "false"
+    if property_key in COMMON_BASE_INFO_PROPERTY_SLOTS:
+        base = _control_base_info_record(node)
+        slot = COMMON_BASE_INFO_PROPERTY_SLOTS[property_key]
+        if base is not None and len(base) > slot:
+            value = clean_atom(base[slot])
+            if property_key in COMMON_BASE_INFO_BOOL_PROPERTIES:
+                return "true" if value == "1" else "false"
+            return value
+    if property_key == "ReadOnly":
+        record = _control_info_property_record(node, control_type)
+        if record is not None:
+            try:
+                slot = CONTROL_INFO_SLOT_DESCRIPTORS[control_type].slot_index("ReadOnly")
+            except KeyError:
+                slot = -1
+            if slot >= 0 and len(record) > slot:
+                return "true" if clean_atom(record[slot]) == "1" else "false"
     raise UnsupportedPlatformObjectOperation(
         f"No verified object accessor for {control_type}.{property_key}"
     )
@@ -414,14 +439,62 @@ def _set_control_property(
     property_key: str,
     value: object,
 ) -> None:
-    if control_type == "InputField" and property_key == "ReadOnly":
-        record = _input_field_object_info_record(node)
-        if record is not None and len(record) > 12:
-            record[12] = _platform_bool_atom(value)
+    if property_key in COMMON_BASE_INFO_PROPERTY_SLOTS:
+        base = _control_base_info_record(node)
+        slot = COMMON_BASE_INFO_PROPERTY_SLOTS[property_key]
+        if base is not None and len(base) > slot:
+            base[slot] = (
+                _platform_bool_atom(value)
+                if property_key in COMMON_BASE_INFO_BOOL_PROPERTIES
+                else str(value)
+            )
             return
+    if property_key == "ReadOnly":
+        record = _control_info_property_record(node, control_type)
+        if record is not None:
+            try:
+                slot = CONTROL_INFO_SLOT_DESCRIPTORS[control_type].slot_index("ReadOnly")
+            except KeyError:
+                slot = -1
+            if slot >= 0 and len(record) > slot:
+                record[slot] = _platform_bool_atom(value)
+                return
     raise UnsupportedPlatformObjectOperation(
         f"No verified object writer for {control_type}.{property_key}"
     )
+
+
+def _control_base_info_record(node: list[object]) -> list[object] | None:
+    info = _control_info_record(node)
+    return _find_base_info_record(info)
+
+
+def _find_base_info_record(value: object) -> list[object] | None:
+    if not isinstance(value, list):
+        return None
+    if len(value) >= 13 and clean_atom(value[0]) in {"10", "16", "19"}:
+        return value
+    for child in value:
+        found = _find_base_info_record(child)
+        if found is not None:
+            return found
+    return None
+
+
+def _control_info_property_record(node: list[object], control_type: str) -> list[object] | None:
+    if control_type == "InputField":
+        return _input_field_object_info_record(node)
+    info = _control_info_record(node)
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(control_type)
+    if (
+        info is not None
+        and descriptor is not None
+        and len(info) > 1
+        and clean_atom(info[0]) == descriptor.info_kind
+        and isinstance(info[1], list)
+    ):
+        return info[1]
+    return None
 
 
 def _input_field_object_info_record(node: list[object]) -> list[object] | None:

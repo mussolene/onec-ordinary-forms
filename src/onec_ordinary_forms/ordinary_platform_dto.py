@@ -150,6 +150,8 @@ def platform_object_from_ordinary_form_xml(
             editor = editor.rename_control(node_id, name_update)
         elif title_update is not None:
             editor = editor.set_control_title(node_id, title_update)
+        for property_name, value in _public_control_property_updates(element):
+            editor = editor.set_control_property(node_id, property_name, value)
     return editor.to_platform_object()
 
 
@@ -160,6 +162,19 @@ def platform_object_from_ordinary_form_xml_text(
     """Parse public Form.xml text and apply supported edits to a platform object."""
 
     return platform_object_from_ordinary_form_xml(ET.fromstring(text), base_object)
+
+
+def _public_control_property_updates(element: ET.Element) -> tuple[tuple[str, object], ...]:
+    updates: list[tuple[str, object]] = []
+    for attr_name in ("baseStyleMode", "baseStyleState", "baseStyleVisible", "baseStyleDefaultMode"):
+        value = element.get(attr_name)
+        if value is not None:
+            updates.append((attr_name, value))
+    for property_name in ("Visible", "Enabled", "ReadOnly"):
+        node = element.find(property_name)
+        if node is not None:
+            updates.append((property_name, node.text or ""))
+    return tuple(updates)
 
 
 def platform_object_from_ordinary_form_xml_rebuild(

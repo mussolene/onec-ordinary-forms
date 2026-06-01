@@ -14,6 +14,7 @@ import xml.etree.ElementTree as ET
 from onec_ordinary_forms.ordinary_platform_graph import (
     OrdinaryPlatformControlObject,
     OrdinaryPlatformObject,
+    UnsupportedPlatformObjectOperation,
 )
 from onec_ordinary_forms.ordinary_platform_object import PlatformFormObject
 
@@ -34,7 +35,7 @@ def platform_object_to_xml(platform_object: OrdinaryPlatformObject) -> ET.Elemen
     )
     controls = ET.SubElement(root, "Controls")
     for control in platform_object.controls:
-        controls.append(_control_to_xml(control))
+        controls.append(_control_to_xml(control, platform_object))
     if platform_object.diagnostics:
         diagnostics = ET.SubElement(root, "Diagnostics")
         for item in platform_object.diagnostics:
@@ -118,6 +119,8 @@ def platform_object_from_xml(
             editor = editor.rename_control(node_id, name_update)
         elif title_update is not None:
             editor = editor.set_control_title(node_id, title_update)
+        for property_name, value in _control_property_updates(control_element):
+            editor = editor.set_control_property(node_id, property_name, value)
     return editor.to_platform_object()
 
 
@@ -130,7 +133,10 @@ def platform_object_from_xml_text(
     return platform_object_from_xml(ET.fromstring(text), base_object)
 
 
-def _control_to_xml(control: OrdinaryPlatformControlObject) -> ET.Element:
+def _control_to_xml(
+    control: OrdinaryPlatformControlObject,
+    platform_object: OrdinaryPlatformObject,
+) -> ET.Element:
     element = ET.Element(
         "Control",
         {
@@ -149,6 +155,7 @@ def _control_to_xml(control: OrdinaryPlatformControlObject) -> ET.Element:
     title = ET.SubElement(element, "Title")
     title_item = ET.SubElement(title, "Item", {"lang": "ru"})
     title_item.text = control.title
+    _add_control_properties(element, control, platform_object)
     if control.state_names:
         states = ET.SubElement(element, "States")
         for name in control.state_names:
@@ -156,8 +163,35 @@ def _control_to_xml(control: OrdinaryPlatformControlObject) -> ET.Element:
     if control.children:
         children = ET.SubElement(element, "Controls")
         for child in control.children:
-            children.append(_control_to_xml(child))
+            children.append(_control_to_xml(child, platform_object))
     return element
+
+
+def _add_control_properties(
+    element: ET.Element,
+    control: OrdinaryPlatformControlObject,
+    platform_object: OrdinaryPlatformObject,
+) -> None:
+    for attr_name in ("baseStyleMode", "baseStyleState", "baseStyleVisible", "baseStyleDefaultMode"):
+        value = _optional_control_property(platform_object, control.node_id, attr_name)
+        if value is not None:
+            element.set(attr_name, value)
+    for property_name, default in (("Visible", "true"), ("Enabled", "true"), ("ReadOnly", "false")):
+        value = _optional_control_property(platform_object, control.node_id, property_name)
+        if value is not None and value != default:
+            node = ET.SubElement(element, property_name)
+            node.text = value
+
+
+def _optional_control_property(
+    platform_object: OrdinaryPlatformObject,
+    node_id: str,
+    property_name: str,
+) -> str | None:
+    try:
+        return platform_object.control_property(node_id, property_name)
+    except UnsupportedPlatformObjectOperation:
+        return None
 
 
 def _xml_controls(root: ET.Element) -> tuple[ET.Element, ...]:
@@ -261,6 +295,19 @@ def _title_from_xml(element: ET.Element) -> str | None:
     if item is None:
         return title.text or ""
     return item.text or ""
+
+
+def _control_property_updates(element: ET.Element) -> tuple[tuple[str, object], ...]:
+    updates: list[tuple[str, object]] = []
+    for attr_name in ("baseStyleMode", "baseStyleState", "baseStyleVisible", "baseStyleDefaultMode"):
+        value = element.get(attr_name)
+        if value is not None:
+            updates.append((attr_name, value))
+    for property_name in ("Visible", "Enabled", "ReadOnly"):
+        node = element.find(property_name)
+        if node is not None:
+            updates.append((property_name, node.text or ""))
+    return tuple(updates)
 
 
 def _xml_bool(value: bool) -> str:
