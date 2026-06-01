@@ -4813,7 +4813,6 @@ def extended_list_box_view_record_from_xml(element: ET.Element) -> list[object]:
 
 def button_base_info_record(element: ET.Element) -> list[object]:
     base = extended_base_info_record_from_xml(element)
-    base[5] = bool_text_as_record(element, "Enabled", default=False)
     if element.get("baseStyleState") is None:
         base[17] = "2"
     if element.find("BorderColor") is None:

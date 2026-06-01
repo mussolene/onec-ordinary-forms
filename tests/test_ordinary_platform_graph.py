@@ -873,6 +873,31 @@ def test_public_xsd_form_xml_dematerializes_button_enum_properties() -> None:
     assert shortcut.get("ctrl") == "true"
 
 
+def test_public_xsd_form_xml_keeps_button_enabled_default_true() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+
+    assert platform_object.control_property("control:7", "Enabled") == "true"
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    button = public_xml.find("./Pages/Page/Button[@id='7']")
+    assert button is not None
+    assert button.find("Enabled") is None
+
+
 def test_public_xsd_form_xml_dematerializes_color_and_font_to_platform_object() -> None:
     root = ET.fromstring(
         """
@@ -1077,7 +1102,7 @@ def test_top_level_button_without_bindings_uses_platform_page_geometry_defaults(
     base_info = info_record[0]
     geometry = button[3]
 
-    assert base_info[5] == "0"
+    assert base_info[5] == "1"
     assert base_info[17] == "2"
     assert info_record[-1] == "2"
     assert geometry[6:12] == [
