@@ -17,6 +17,10 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS  # noqa: E402
+from onec_ordinary_forms.ordinary_platform_mappings import (  # noqa: E402
+    platform_event_xml_name,
+    platform_property_xml_name,
+)
 from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS, CONTROL_INFO_WRITER_DESCRIPTORS  # noqa: E402
 
 
@@ -54,6 +58,16 @@ def xsd_control_properties(root: ET.Element, control: str) -> set[str]:
     if choice is None:
         return set()
     return {element.get("name", "") for element in choice.findall("xs:element", XS) if element.get("name")}
+
+
+def xsd_control_events(root: ET.Element, control: str) -> set[str]:
+    restriction = root.find(
+        f"xs:simpleType[@name='{control}EventNameType']/xs:restriction",
+        XS,
+    )
+    if restriction is None:
+        return set()
+    return {item.get("value", "") for item in restriction.findall("xs:enumeration", XS) if item.get("value")}
 
 
 def palette_controls(root: ET.Element, *, include_nested: bool = False) -> dict[str, dict[str, object]]:
@@ -151,12 +165,55 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
     public_descriptors = {descriptor.xml_tag: descriptor for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()}
 
     controls: list[dict[str, object]] = []
+    property_matrix: list[dict[str, object]] = []
+    event_matrix: list[dict[str, object]] = []
     for control in sorted(xsd_control_set | set(palette) | set(branches) | set(public_descriptors)):
         stream_control = XML_TO_STREAM_CONTROL_TYPE.get(control, control)
         xsd_props = xsd_control_properties(root, control)
+        xsd_events = xsd_control_events(root, control)
         palette_item = palette.get(control, {})
         public_descriptor = public_descriptors.get(control)
         descriptor_props = set(public_descriptor.properties) if public_descriptor else set()
+        shared_descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(stream_control)
+        shared_slots = {slot.name for slot in shared_descriptor.slots} if shared_descriptor else set()
+        platform_properties = list(palette_item.get("platformProperties", []))
+        platform_events = list(palette_item.get("platformEvents", []))
+        for platform_property in platform_properties:
+            xml_name = platform_property_xml_name(control, platform_property)
+            in_xsd = xml_name in xsd_props
+            in_descriptor = xml_name in descriptor_props
+            property_matrix.append(
+                {
+                    "control": control,
+                    "streamControl": stream_control,
+                    "platformName": platform_property,
+                    "xmlName": xml_name,
+                    "inXsd": in_xsd,
+                    "inPublicDescriptor": in_descriptor,
+                    "sharedInfoSlot": xml_name in shared_slots,
+                    "status": (
+                        "mapped-descriptor"
+                        if xml_name and in_xsd and in_descriptor
+                        else "mapped-xsd-only"
+                        if xml_name and in_xsd
+                        else "mapped-no-public-xml"
+                        if xml_name
+                        else "unmapped"
+                    ),
+                }
+            )
+        for platform_event in platform_events:
+            xml_name = platform_event_xml_name(control, platform_event)
+            event_matrix.append(
+                {
+                    "control": control,
+                    "streamControl": stream_control,
+                    "platformName": platform_event,
+                    "xmlName": xml_name,
+                    "inXsd": xml_name in xsd_events,
+                    "status": "mapped-xsd" if xml_name in xsd_events else "mapped-no-public-xml",
+                }
+            )
         controls.append(
             {
                 "control": control,
@@ -168,12 +225,37 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
                 "sharedInfoDescriptor": stream_control in shared_info_descriptor_controls,
                 "xsdPropertyCount": len(xsd_props),
                 "publicDescriptorPropertyCount": len(descriptor_props),
-                "platformPropertyCount": len(palette_item.get("platformProperties", [])),
-                "platformEventCount": len(palette_item.get("platformEvents", [])),
+                "platformPropertyCount": len(platform_properties),
+                "platformEventCount": len(platform_events),
                 "xsdOnlyProperties": sorted(xsd_props - descriptor_props),
                 "descriptorOnlyProperties": sorted(descriptor_props - xsd_props),
+                "unmappedPlatformProperties": sorted(
+                    item["platformName"]
+                    for item in property_matrix
+                    if item["control"] == control and item["status"] == "unmapped"
+                ),
+                "mappedPlatformPropertiesWithoutPublicXml": sorted(
+                    item["platformName"]
+                    for item in property_matrix
+                    if item["control"] == control and item["status"] == "mapped-no-public-xml"
+                ),
             }
         )
+    unmapped_properties = [
+        f"{item['control']}:{item['platformName']}"
+        for item in property_matrix
+        if item["status"] == "unmapped"
+    ]
+    mapped_without_public_xml = [
+        f"{item['control']}:{item['platformName']}->{item['xmlName']}"
+        for item in property_matrix
+        if item["status"] == "mapped-no-public-xml"
+    ]
+    events_without_public_xml = [
+        f"{item['control']}:{item['platformName']}"
+        for item in event_matrix
+        if item["status"] == "mapped-no-public-xml"
+    ]
 
     return {
         "summary": {
@@ -192,8 +274,16 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
                 control for control in xsd_control_set if XML_TO_STREAM_CONTROL_TYPE.get(control, control) not in shared_info_descriptor_controls
             ),
             "writerFallbackTokens": fallback_tokens,
+            "platformPropertyRows": len(property_matrix),
+            "mappedPlatformPropertyRows": len(property_matrix) - len(unmapped_properties),
+            "unmappedPlatformProperties": sorted(unmapped_properties),
+            "mappedPlatformPropertiesWithoutPublicXml": sorted(mapped_without_public_xml),
+            "platformEventRows": len(event_matrix),
+            "eventsWithoutPublicXml": sorted(events_without_public_xml),
         },
         "controls": controls,
+        "propertyMatrix": property_matrix,
+        "eventMatrix": event_matrix,
     }
 
 

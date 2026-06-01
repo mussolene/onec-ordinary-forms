@@ -21,6 +21,7 @@ from onec_ordinary_forms.ordinary_platform_dto import (
     ordinary_form_xml_bytes_from_platform_object,
     ordinary_form_xml_from_platform_object,
     platform_object_from_ordinary_form_xml,
+    platform_object_from_ordinary_form_xml_rebuild,
     platform_palette_catalog,
 )
 from onec_ordinary_forms.ordinary_platform_xml import (
@@ -30,6 +31,7 @@ from onec_ordinary_forms.ordinary_platform_xml import (
     platform_object_xml_to_string,
 )
 from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
+from onec_ordinary_forms.semantic_digest import semantic_graph_digest
 
 
 def test_runtime_skeleton_graph_keeps_platform_document_view_and_render_layers() -> None:
@@ -389,6 +391,41 @@ def test_public_xsd_form_xml_dematerializes_name_and_title_to_platform_object() 
     assert changed.title == "Run public XML title"
     assert "RunPublicXml" in emitted
     assert "Run public XML title" in emitted
+
+
+def test_public_xsd_form_xml_full_rebuild_roundtrip_is_semantically_stable() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8">
+                <ReadOnly>true</ReadOnly>
+              </InputField>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+
+    rebuilt = platform_object_from_ordinary_form_xml_rebuild(public_xml)
+    rematerialized = ordinary_form_xml_from_platform_object(rebuilt)
+    rebuilt_again = platform_object_from_ordinary_form_xml_rebuild(rematerialized)
+    rematerialized_again = ordinary_form_xml_from_platform_object(rebuilt_again)
+
+    assert rebuilt.control_by_name("Run").title == "Run"
+    assert rebuilt.control_by_name("Input").control_type == "InputField"
+    read_only = rematerialized.find("./Pages/Page/InputField[@name='Input']/ReadOnly")
+    assert read_only is not None
+    assert read_only.text == "true"
+    assert semantic_graph_digest(rematerialized_again) == semantic_graph_digest(rematerialized)
 
 
 def test_platform_palette_catalog_exposes_xsd_platform_property_descriptions() -> None:

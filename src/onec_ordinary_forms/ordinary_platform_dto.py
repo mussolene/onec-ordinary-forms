@@ -33,11 +33,15 @@ from onec_ordinary_forms.cli import (
     pattern_node_from_prop,
     pretty_xml_bytes,
 )
-from onec_ordinary_forms.ordinary_platform_graph import OrdinaryPlatformObject
+from onec_ordinary_forms.ordinary_platform_graph import (
+    OrdinaryPlatformObject,
+    platform_object_from_list_stream_text,
+)
 from onec_ordinary_forms.ordinary_properties import (
     ORDINARY_CONTROL_DESCRIPTORS,
     load_platform_palette,
 )
+from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
 from onec_ordinary_forms.value_codec import clean_atom
 
 
@@ -155,6 +159,27 @@ def platform_object_from_ordinary_form_xml_text(
     """Parse public Form.xml text and apply supported edits to a platform object."""
 
     return platform_object_from_ordinary_form_xml(ET.fromstring(text), base_object)
+
+
+def platform_object_from_ordinary_form_xml_rebuild(
+    root: ET.Element,
+    *,
+    asset_root: Path | None = None,
+) -> OrdinaryPlatformObject:
+    """Rebuild a platform object from public Form.xml through the canonical writer."""
+
+    form_text = form_stream_from_object_xml(root, asset_root).decode("utf-8-sig")
+    return platform_object_from_list_stream_text(form_text)
+
+
+def platform_object_from_ordinary_form_xml_text_rebuild(
+    text: str,
+    *,
+    asset_root: Path | None = None,
+) -> OrdinaryPlatformObject:
+    """Parse public Form.xml text and rebuild a platform object with all writer mappings."""
+
+    return platform_object_from_ordinary_form_xml_rebuild(ET.fromstring(text), asset_root=asset_root)
 
 
 def _ordinary_form_xml_from_platform_object(

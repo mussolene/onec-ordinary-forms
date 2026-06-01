@@ -104,3 +104,41 @@ def test_core_controls_have_no_xsd_only_public_properties() -> None:
 
     for control in ("CommandBar", "InputField", "Panel", "Table"):
         assert controls[control]["xsdOnlyProperties"] == []
+
+
+def test_codec_coverage_audit_tracks_platform_property_name_mapping_matrix() -> None:
+    report = audit_codec_coverage.audit(
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
+    )
+    summary = report["summary"]
+    matrix = {
+        (item["control"], item["platformName"]): item
+        for item in report["propertyMatrix"]
+    }
+
+    assert summary["platformPropertyRows"] == 417
+    assert summary["mappedPlatformPropertyRows"] == summary["platformPropertyRows"]
+    assert summary["unmappedPlatformProperties"] == []
+    assert matrix[("Button", "Заголовок")]["xmlName"] == "Title"
+    assert matrix[("InputField", "ТолькоПросмотр")]["xmlName"] == "ReadOnly"
+    assert matrix[("InputField", "ТолькоПросмотр")]["status"] == "mapped-descriptor"
+    assert matrix[("CommandBar", "АвтоЗаполнение")]["xmlName"] == "Autofill"
+    assert matrix[("Table", "ФиксацияСлева")]["xmlName"] == "LeftFixedColumns"
+
+
+def test_codec_coverage_audit_tracks_platform_event_name_mapping_matrix() -> None:
+    report = audit_codec_coverage.audit(
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
+    )
+    summary = report["summary"]
+    matrix = {
+        (item["control"], item["platformName"]): item
+        for item in report["eventMatrix"]
+    }
+
+    assert summary["platformEventRows"] == 79
+    assert summary["eventsWithoutPublicXml"] == []
+    assert matrix[("Button", "Нажатие")]["xmlName"] == "Нажатие"
+    assert matrix[("InputField", "ПриИзменении")]["status"] == "mapped-xsd"
