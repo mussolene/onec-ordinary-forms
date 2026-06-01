@@ -1394,6 +1394,12 @@
     <xs:attribute name="horizontalMode" type="xs:integer"/>
     <xs:attribute name="verticalMode" type="xs:integer"/>
   </xs:complexType>
+  <xs:complexType name="ShortcutType">
+    <xs:attribute name="key" type="xs:string" use="required"/>
+    <xs:attribute name="ctrl" type="xs:boolean"/>
+    <xs:attribute name="shift" type="xs:boolean"/>
+    <xs:attribute name="alt" type="xs:boolean"/>
+  </xs:complexType>
   <xs:complexType name="ButtonType">
     <xs:complexContent>
       <xs:extension base="ControlIdentityType">
@@ -1423,7 +1429,11 @@
           <xs:element name="PicturePosition" type="xs:string"/>
           <xs:element name="ButtonTextColor" type="ColorType"/>
           <xs:element name="ButtonBackColor" type="ColorType"/>
+          <xs:element name="HorizontalAlign" type="xs:string"/>
           <xs:element name="MultiLine" type="xs:boolean"/>
+          <xs:element name="PictureSize" type="xs:string"/>
+          <xs:element name="Shortcut" type="ShortcutType"/>
+          <xs:element name="VerticalAlign" type="xs:string"/>
           <xs:element name="Events" type="ButtonEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>

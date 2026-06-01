@@ -61,7 +61,7 @@ PLATFORM_TYPE_BY_CONTROL_XML_TAG = {
     for control_type, descriptor in ORDINARY_CONTROL_DESCRIPTORS.items()
 }
 INCREMENTAL_SCALAR_PROPERTIES = {
-    "Button": {"DefaultButton", "MultiLine"},
+    "Button": {"DefaultButton", "HorizontalAlign", "MultiLine", "PictureSize", "VerticalAlign"},
     "ChoiceField": {"ChoiceButton", "ClearButton", "OpenButton", "ChoiceListOrCreateButton", "EditButton"},
     "CommandBar": {"Autofill"},
     "Image": {"DisplayMode", "DisplayState", "RenderingProfileFlag"},
@@ -303,6 +303,7 @@ def _public_control_property_updates(element: ET.Element) -> tuple[tuple[str, ob
         "BorderColor",
         "Font",
         "Position",
+        "Shortcut",
     }
     for attr_name in ("baseStyleMode", "baseStyleState", "baseStyleVisible", "baseStyleDefaultMode"):
         value = element.get(attr_name)
@@ -316,6 +317,9 @@ def _public_control_property_updates(element: ET.Element) -> tuple[tuple[str, ob
         node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node))
+    node = _last_child(element, "Shortcut")
+    if node is not None:
+        updates.append(("Shortcut", node))
     control_type = PLATFORM_TYPE_BY_CONTROL_XML_TAG.get(element.tag, element.tag)
     descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(control_type)
     public_descriptor = ORDINARY_CONTROL_DESCRIPTORS.get(control_type)

@@ -829,6 +829,50 @@ def test_public_xsd_form_xml_dematerializes_descriptor_scalar_properties() -> No
     assert public_button.findtext("MultiLine") == "true"
 
 
+def test_public_xsd_form_xml_dematerializes_button_enum_properties() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    button = public_xml.find("./Pages/Page/Button[@id='7']")
+    assert button is not None
+    ET.SubElement(button, "HorizontalAlign").text = "2"
+    ET.SubElement(button, "VerticalAlign").text = "2"
+    ET.SubElement(button, "PictureSize").text = "1"
+    ET.SubElement(button, "Shortcut", {"key": "F8", "ctrl": "true"})
+
+    updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    rematerialized = ordinary_form_xml_from_platform_object(reparsed)
+    public_button = rematerialized.find("./Pages/Page/Button[@name='Run']")
+
+    assert reparsed.control_property("control:7", "HorizontalAlign") == "2"
+    assert reparsed.control_property("control:7", "VerticalAlign") == "2"
+    assert reparsed.control_property("control:7", "PictureSize") == "1"
+    assert reparsed.control_property("control:7", "Shortcut") == ["0", "119", "8"]
+    assert public_button is not None
+    assert public_button.findtext("HorizontalAlign") == "2"
+    assert public_button.findtext("VerticalAlign") == "2"
+    assert public_button.findtext("PictureSize") == "1"
+    shortcut = public_button.find("Shortcut")
+    assert shortcut is not None
+    assert shortcut.get("key") == "F8"
+    assert shortcut.get("ctrl") == "true"
+
+
 def test_public_xsd_form_xml_dematerializes_color_and_font_to_platform_object() -> None:
     root = ET.fromstring(
         """

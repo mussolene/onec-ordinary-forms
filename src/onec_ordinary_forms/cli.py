@@ -29,6 +29,7 @@ from onec_ordinary_forms.ordinary_stream import (
     TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN,
     form_stream_from_object_xml,
     root_panel_base_info_record,
+    shortcut_record_to_xml_attrs,
 )
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 from onec_ordinary_forms.platform_value_xml import (
@@ -2541,6 +2542,17 @@ def add_button_scalar_properties(parent: ET.Element, item: dict, item_data: obje
         return
     descriptor = CONTROL_INFO_SLOT_DESCRIPTORS["Button"]
     info = control_info_payload(raw[2], descriptor.info_kind)
+    for property_name, default in (
+        ("HorizontalAlign", "1"),
+        ("VerticalAlign", "1"),
+        ("PictureSize", "0"),
+    ):
+        value = nested_list_value(info, (descriptor.slot_index(property_name),))
+        if clean_token(value) != default:
+            set_text(parent, property_name, clean_token(value))
+    shortcut_attrs = shortcut_record_to_xml_attrs(nested_list_value(info, (descriptor.slot_index("Shortcut"),)))
+    if shortcut_attrs is not None:
+        ET.SubElement(parent, "Shortcut", shortcut_attrs)
     multiline = nested_list_value(info, (descriptor.slot_index("MultiLine"),))
     if clean_token(multiline) == "1":
         set_text(parent, "MultiLine", "true")

@@ -28,6 +28,7 @@ from onec_ordinary_forms.ordinary_platform import (
 from onec_ordinary_forms.ordinary_platform_mappings import platform_property_xml_name
 from onec_ordinary_forms.cli import control_geometry_record, geometry_from_raw
 from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS
+from onec_ordinary_forms.ordinary_stream import shortcut_record_from_xml
 from onec_ordinary_forms.ordinary_stream import color_record_from_xml, font_record_from_xml
 from onec_ordinary_forms.platform_position_xml import (
     apply_position_node_to_control_record,
@@ -538,6 +539,8 @@ def _control_property_value(
             slot = -1
         if record is not None and slot >= 0 and len(record) > slot and not isinstance(record[slot], list):
             return clean_atom(record[slot])
+        if property_key == "Shortcut" and record is not None and slot >= 0 and len(record) > slot:
+            return copy.deepcopy(record[slot])
     raise UnsupportedPlatformObjectOperation(
         f"No verified object accessor for {control_type}.{property_key}"
     )
@@ -601,6 +604,9 @@ def _set_control_property(
             slot = -1
         if record is not None and slot >= 0 and len(record) > slot and not isinstance(record[slot], list):
             record[slot] = _platform_scalar_atom(value)
+            return
+        if property_key == "Shortcut" and record is not None and slot >= 0 and len(record) > slot:
+            record[slot] = shortcut_record_from_xml(_property_value_element("Shortcut", value))
             return
     raise UnsupportedPlatformObjectOperation(
         f"No verified object writer for {control_type}.{property_key}"

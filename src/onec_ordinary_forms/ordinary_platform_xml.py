@@ -23,6 +23,7 @@ from onec_ordinary_forms.platform_value_xml import (
     is_default_color_record,
     is_default_font_record,
 )
+from onec_ordinary_forms.ordinary_stream import shortcut_record_to_xml_attrs
 
 
 ROOT_TAG = "OrdinaryPlatformObject"
@@ -187,11 +188,18 @@ def _add_control_properties(
         ("Enabled", "true"),
         ("ReadOnly", "false"),
         ("MultiLine", "false"),
+        ("HorizontalAlign", "1"),
+        ("VerticalAlign", "1"),
+        ("PictureSize", "0"),
     ):
         value = _optional_control_property(platform_object, control.node_id, property_name)
         if value is not None and value != default:
             node = ET.SubElement(element, property_name)
             node.text = str(value)
+    shortcut = _optional_control_property(platform_object, control.node_id, "Shortcut")
+    shortcut_attrs = shortcut_record_to_xml_attrs(shortcut)
+    if shortcut_attrs is not None:
+        ET.SubElement(element, "Shortcut", shortcut_attrs)
     for property_name in ("TextColor", "BackColor", "BorderColor"):
         value = _optional_control_property(platform_object, control.node_id, property_name)
         if value is not None and not is_default_color_record(value):
@@ -324,10 +332,13 @@ def _control_property_updates(element: ET.Element) -> tuple[tuple[str, object], 
         value = element.get(attr_name)
         if value is not None:
             updates.append((attr_name, value))
-    for property_name in ("Visible", "Enabled", "ReadOnly", "MultiLine"):
+    for property_name in ("Visible", "Enabled", "ReadOnly", "MultiLine", "HorizontalAlign", "VerticalAlign", "PictureSize"):
         node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node.text or ""))
+    node = _last_child(element, "Shortcut")
+    if node is not None:
+        updates.append(("Shortcut", node))
     for property_name in ("TextColor", "BackColor", "BorderColor", "Font", "Position"):
         node = _last_child(element, property_name)
         if node is not None:

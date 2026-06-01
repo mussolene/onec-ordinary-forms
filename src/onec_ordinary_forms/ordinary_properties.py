@@ -282,7 +282,11 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
             "PicturePosition",
             "ButtonTextColor",
             "ButtonBackColor",
+            "HorizontalAlign",
             "MultiLine",
+            "PictureSize",
+            "Shortcut",
+            "VerticalAlign",
         ),
     ),
     "InputField": OrdinaryControlDescriptor(

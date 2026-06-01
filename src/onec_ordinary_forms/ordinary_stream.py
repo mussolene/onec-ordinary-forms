@@ -313,7 +313,11 @@ CONTROL_INFO_SLOT_DESCRIPTORS = {
         slots=(
             InfoSlotDescriptor("BaseInfo", 0),
             InfoSlotDescriptor("Title", 2),
+            InfoSlotDescriptor("HorizontalAlign", 3),
+            InfoSlotDescriptor("VerticalAlign", 4),
+            InfoSlotDescriptor("PictureSize", 7),
             InfoSlotDescriptor("Picture", 8),
+            InfoSlotDescriptor("Shortcut", 9),
             InfoSlotDescriptor("MultiLine", 10),
             InfoSlotDescriptor("DefaultButton", 15),
         ),
@@ -2268,12 +2272,61 @@ def button_control_info(element: ET.Element, title_record: list[object], actions
     info_record[descriptor.slot_index("BaseInfo")] = base
     info_record[descriptor.slot_index("Title")] = title_record
     info_record[descriptor.slot_index("Picture")] = picture_record
+    info_record[descriptor.slot_index("HorizontalAlign")] = text_or_default(element, "HorizontalAlign", "1")
+    info_record[descriptor.slot_index("VerticalAlign")] = text_or_default(element, "VerticalAlign", "1")
+    info_record[descriptor.slot_index("Shortcut")] = shortcut_record_from_xml(element.find("Shortcut"))
     info_record[descriptor.slot_index("MultiLine")] = bool_record_from_xml(element, "MultiLine", default=False)
+    info_record[descriptor.slot_index("PictureSize")] = text_or_default(element, "PictureSize", "0")
     return [
         descriptor.info_kind,
         info_record,
         action_records(actions),
     ]
+
+
+SHORTCUT_KEY_CODES = {
+    f"F{index}": str(111 + index)
+    for index in range(1, 13)
+}
+SHORTCUT_KEY_NAMES = {value: key for key, value in SHORTCUT_KEY_CODES.items()}
+
+
+def shortcut_record_from_xml(element: ET.Element | None) -> list[str]:
+    if element is None:
+        return ["0", "0", "0"]
+    key = (element.get("key") or (element.text or "")).strip().upper()
+    key_code = SHORTCUT_KEY_CODES.get(key)
+    if key_code is None:
+        raise ValueError(f"Unsupported ordinary form shortcut key: {key!r}")
+    modifiers = 0
+    if _xml_bool_attr(element, "ctrl"):
+        modifiers |= 8
+    if _xml_bool_attr(element, "shift"):
+        modifiers |= 4
+    if _xml_bool_attr(element, "alt"):
+        modifiers |= 16
+    return ["0", key_code, str(modifiers)]
+
+
+def shortcut_record_to_xml_attrs(value: object) -> dict[str, str] | None:
+    if not isinstance(value, list) or len(value) < 3:
+        return None
+    key = SHORTCUT_KEY_NAMES.get(clean_atom(value[1]))
+    if key is None:
+        return None
+    modifiers = int(clean_atom(value[2]) or "0")
+    attrs = {"key": key}
+    if modifiers & 8:
+        attrs["ctrl"] = "true"
+    if modifiers & 4:
+        attrs["shift"] = "true"
+    if modifiers & 16:
+        attrs["alt"] = "true"
+    return attrs
+
+
+def _xml_bool_attr(element: ET.Element, name: str) -> bool:
+    return (element.get(name) or "").strip().lower() in {"1", "true", "yes", "да"}
 
 
 def button_picture_record(picture_payload: str) -> list[object]:
