@@ -516,10 +516,22 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
 
     controls: list[object] = []
     for page in top_level_pages(root):
+        page_order = 0
         for child in page:
-            control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots)
+            if control_type_from_xml_tag(child.tag) and top_level_control_needs_default_page_geometry(child):
+                control = control_stream_from_xml_with_page(
+                    child,
+                    asset_root,
+                    attribute_type_patterns,
+                    attribute_slots,
+                    0,
+                    page_order,
+                )
+            else:
+                control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots)
             if control:
                 controls.append(control)
+                page_order += 1
 
     root_layout = form_root_layout_from_xml(root)
     stream = ordinary_form_stream(
@@ -547,6 +559,13 @@ def assert_public_object_xml(root: ET.Element) -> None:
                 raise ValueError(f"Public ordinary Form.xml must not contain @{name}")
             if "profile" in name.lower():
                 raise ValueError(f"Public ordinary Form.xml must not contain profile attribute @{name}")
+
+
+def top_level_control_needs_default_page_geometry(element: ET.Element) -> bool:
+    position = element.find("Position")
+    if position is None:
+        return False
+    return position.find("Bindings") is None and position.find("LayoutFlow") is None
 
 
 def local_xml_name(name: str) -> str:
@@ -2240,7 +2259,7 @@ def button_control_info(element: ET.Element, title_record: list[object], actions
         "0",
         "0",
         "0",
-        "1",
+        "2",
     ]
     info_record[descriptor.slot_index("BaseInfo")] = base
     info_record[descriptor.slot_index("Title")] = title_record
@@ -4736,7 +4755,9 @@ def extended_list_box_view_record_from_xml(element: ET.Element) -> list[object]:
 
 def button_base_info_record(element: ET.Element) -> list[object]:
     base = extended_base_info_record_from_xml(element)
-    base[5] = bool_text_as_record(element, "Enabled", default=True)
+    base[5] = bool_text_as_record(element, "Enabled", default=False)
+    if element.get("baseStyleState") is None:
+        base[17] = "2"
     if element.find("BorderColor") is None:
         base[6] = default_color_record()
     if element.find("ButtonTextColor") is not None:

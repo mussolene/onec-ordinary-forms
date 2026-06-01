@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from onec_ordinary_forms.cli import validate_xml_file
+from onec_ordinary_forms.liststream import parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import OrdinaryControl, OrdinaryFormModel
 from onec_ordinary_forms.ordinary_platform import (
     CF_FORM_CONTROLS8_FORMAT_ID,
@@ -996,6 +997,36 @@ def test_public_xsd_form_xml_adds_and_deletes_top_level_controls() -> None:
     assert added is not None
     assert added.findtext("./Title/Item[@lang='ru']") == "Added title"
     assert added.find("Position").get("left") == "160"
+
+
+def test_top_level_button_without_bindings_uses_platform_page_geometry_defaults() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="5">
+                <Title><Item lang="ru">Run</Item></Title>
+                <Position left="20" top="60" right="180" bottom="86"/>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+
+    stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+    button = stream[1][2][2][1]
+    info_record = button[2][1]
+    base_info = info_record[0]
+    geometry = button[3]
+
+    assert base_info[5] == "0"
+    assert base_info[17] == "2"
+    assert info_record[-1] == "2"
+    assert all(isinstance(binding, list) for binding in geometry[6:12])
+    assert geometry[-5:-3] == ["0", "0"]
 
 
 def test_public_xsd_form_xml_adds_and_deletes_nested_controls() -> None:
