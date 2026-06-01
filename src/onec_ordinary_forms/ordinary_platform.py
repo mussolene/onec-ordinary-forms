@@ -9,6 +9,7 @@ the editable XML object model.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from struct import pack, unpack_from
 
@@ -84,6 +85,49 @@ class PlatformCompositeFlagRecord:
 
     composite_id: str
     enabled: bool
+
+
+@dataclass(frozen=True)
+class PlatformControlTransferObject:
+    """Object-level ordinary-control transfer contract used by the platform."""
+
+    controls_payload: bytes = b""
+    position_records: Sequence[PlatformPositionTransferRecord] = ()
+    info_records: Sequence[PlatformTransferRecord] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "controls_payload", bytes(self.controls_payload))
+        object.__setattr__(self, "position_records", tuple(self.position_records))
+        object.__setattr__(self, "info_records", tuple(self.info_records))
+
+    def format_entries(
+        self,
+        *,
+        start_index: int = 0,
+        capacity: int | None = None,
+    ) -> tuple[list[PlatformFormatEntry], bool]:
+        return platform_control_format_entries(start_index=start_index, capacity=capacity)
+
+    def supports(self, format_id: int) -> bool:
+        return platform_control_format_supported(format_id)
+
+    def query_get_data_result(self, format_id: int) -> int:
+        return 0 if self.supports(format_id) else PLATFORM_FORMAT_ERROR_HRESULT
+
+    def try_export(self, format_id: int) -> tuple[int, bytes]:
+        result = self.query_get_data_result(format_id)
+        if result != 0:
+            return result, b""
+        return 0, self.export(format_id)
+
+    def export(self, format_id: int) -> bytes:
+        if format_id == CF_FORM_CONTROLS8_FORMAT_ID:
+            return self.controls_payload
+        if format_id == CF_FORM_CONTROLS_POSITION8_FORMAT_ID:
+            return pack_platform_position_transfer_records(self.position_records)
+        if format_id == CF_FORM_CONTROLS_INFO8_FORMAT_ID:
+            return pack_platform_transfer_records(self.info_records)
+        raise ValueError(f"Unsupported platform control format 0x{format_id:04x}")
 
 
 ORDINARY_CONTROL_CLASS_BY_GUID = {
@@ -206,7 +250,7 @@ def unpack_platform_transfer_records(payload: bytes) -> list[PlatformTransferRec
     return records
 
 
-def pack_platform_transfer_records(records: list[PlatformTransferRecord]) -> bytes:
+def pack_platform_transfer_records(records: Sequence[PlatformTransferRecord]) -> bytes:
     """Encode ``cf_form_controls_info8`` transfer records."""
 
     result = bytearray(pack("<I", len(records)))
@@ -232,7 +276,7 @@ def unpack_platform_position_transfer_records(payload: bytes) -> list[PlatformPo
     return records
 
 
-def pack_platform_position_transfer_records(records: list[PlatformPositionTransferRecord]) -> bytes:
+def pack_platform_position_transfer_records(records: Sequence[PlatformPositionTransferRecord]) -> bytes:
     """Encode ``cf_form_controls_position8`` transfer records."""
 
     result = bytearray(pack("<I", len(records)))
@@ -245,18 +289,16 @@ def pack_platform_control_transfer_payload(
     format_id: int,
     *,
     controls_payload: bytes,
-    position_records: list[PlatformPositionTransferRecord] | None = None,
-    info_records: list[PlatformTransferRecord] | None = None,
+    position_records: Sequence[PlatformPositionTransferRecord] | None = None,
+    info_records: Sequence[PlatformTransferRecord] | None = None,
 ) -> bytes:
     """Encode the payload selected by an ordinary-control platform format id."""
 
-    if format_id == CF_FORM_CONTROLS8_FORMAT_ID:
-        return controls_payload
-    if format_id == CF_FORM_CONTROLS_POSITION8_FORMAT_ID:
-        return pack_platform_position_transfer_records(position_records or [])
-    if format_id == CF_FORM_CONTROLS_INFO8_FORMAT_ID:
-        return pack_platform_transfer_records(info_records or [])
-    raise ValueError(f"Unsupported platform control format 0x{format_id:04x}")
+    return PlatformControlTransferObject(
+        controls_payload=controls_payload,
+        position_records=position_records or (),
+        info_records=info_records or (),
+    ).export(format_id)
 
 
 def platform_composite_flag_registry(records: list[PlatformCompositeFlagRecord], *, version: str = "0") -> list[object]:

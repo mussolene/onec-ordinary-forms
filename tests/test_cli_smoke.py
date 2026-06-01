@@ -42,10 +42,12 @@ from onec_ordinary_forms.ordinary_platform import (
     CF_FORM_CONTROLS8_FORMAT_ID,
     CF_FORM_CONTROLS_INFO8_FORMAT_ID,
     CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
+    PLATFORM_FORMAT_ERROR_HRESULT,
     PLATFORM_FORMAT_ENTRY_RECORD_SIZE,
     PLATFORM_POSITION_TRANSFER_RECORD_SIZE,
     PLATFORM_TRANSFER_RECORD_SIZE,
     PlatformCompositeFlagRecord,
+    PlatformControlTransferObject,
     PlatformFormatEntry,
     PlatformPositionTransferRecord,
     PlatformTransferRecord,
@@ -404,6 +406,37 @@ class CliSmokeTest(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             unpack_platform_position_transfer_records(payload + b"\x00")
+
+    def test_platform_control_transfer_object_exports_decompiled_data_object_contract(self) -> None:
+        position_records = (PlatformPositionTransferRecord(1, 2, 3, 4, 5, 6, 7, 8),)
+        info_records = (PlatformTransferRecord(9, 10, 11, 12),)
+        transfer = PlatformControlTransferObject(
+            controls_payload=b"raw-controls",
+            position_records=position_records,
+            info_records=info_records,
+        )
+
+        entries, exhausted = transfer.format_entries(capacity=2)
+
+        self.assertEqual(
+            [entry.format_id for entry in entries],
+            [CF_FORM_CONTROLS_POSITION8_FORMAT_ID, CF_FORM_CONTROLS8_FORMAT_ID],
+        )
+        self.assertFalse(exhausted)
+        self.assertTrue(transfer.supports(CF_FORM_CONTROLS_INFO8_FORMAT_ID))
+        self.assertEqual(transfer.query_get_data_result(0xFFFF), PLATFORM_FORMAT_ERROR_HRESULT)
+        self.assertEqual(transfer.try_export(0xFFFF), (PLATFORM_FORMAT_ERROR_HRESULT, b""))
+        self.assertEqual(transfer.export(CF_FORM_CONTROLS8_FORMAT_ID), b"raw-controls")
+        self.assertEqual(
+            transfer.export(CF_FORM_CONTROLS_POSITION8_FORMAT_ID),
+            pack_platform_position_transfer_records(position_records),
+        )
+        self.assertEqual(
+            transfer.try_export(CF_FORM_CONTROLS_INFO8_FORMAT_ID),
+            (0, pack_platform_transfer_records(info_records)),
+        )
+        with self.assertRaises(ValueError):
+            transfer.export(0xFFFF)
 
     def test_platform_composite_flag_registry_matches_list_stream_shape(self) -> None:
         records = [
