@@ -6,8 +6,8 @@ if [[ $# -lt 4 || $# -gt 5 ]]; then
   exit 2
 fi
 
-if [[ -z "${NETHASP_INI_PATH:-}" || ! -r "$NETHASP_INI_PATH" ]]; then
-  echo "NETHASP_INI_PATH must point to readable nethasp.ini" >&2
+if [[ -z "${OOF_PLATFORM_CONTAINER:-}" && ( -z "${NETHASP_INI_PATH:-}" || ! -r "$NETHASP_INI_PATH" ) ]]; then
+  echo "Set OOF_PLATFORM_CONTAINER to an already licensed 1C container, or set NETHASP_INI_PATH for throwaway docker run fallback" >&2
   exit 2
 fi
 
@@ -155,6 +155,54 @@ if [[ "${PLATFORM_ORACLE_LD_DEBUG:-}" == "1" ]]; then
 fi
 if [[ -n "${PLATFORM_ORACLE_LD_AUDIT:-}" ]]; then
   docker_env+=("-e" "LD_AUDIT=${PLATFORM_ORACLE_LD_AUDIT}")
+fi
+
+if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
+  if [[ "$(docker inspect -f '{{.State.Running}}' "$OOF_PLATFORM_CONTAINER" 2>/dev/null || true)" != "true" ]]; then
+    echo "OOF_PLATFORM_CONTAINER is not a running container: $OOF_PLATFORM_CONTAINER" >&2
+    exit 2
+  fi
+  container_base="/tmp/oof-platform-oracle"
+  docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "rm -rf '$container_base' && mkdir -p '$container_base/source' '$container_base/logs' '$container_base/dbroot'"
+  docker cp "$out_abs/source/." "$OOF_PLATFORM_CONTAINER:$container_base/source/"
+  docker cp "$script_path" "$OOF_PLATFORM_CONTAINER:$container_base/script.bsl"
+  if [[ -n "$input_abs" ]]; then
+    docker cp "$input_abs" "$OOF_PLATFORM_CONTAINER:$container_base/input.txt"
+  else
+    docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "printf '' > '$container_base/input.txt'"
+  fi
+  set +e
+  docker exec "${docker_env[@]}" "$OOF_PLATFORM_CONTAINER" sh -lc "set -eu
+    base='$container_base/dbroot'
+    db=db
+    /opt/1cv8/x86_64/8.5.1.1343/ibcmd infobase --data=\"\$base\" --database-path=\"\$db\" create --locale=ru_RU \
+      >'$container_base/logs/create.log' 2>&1
+    xvfb-run -a timeout 120 /opt/1cv8/x86_64/8.5.1.1343/1cv8 DESIGNER \
+      /F \"\$base/\$db\" \
+      /LoadExternalDataProcessorOrReportFromFiles '$container_base/source/root.xml' '$container_base/oracle.epf' \
+      /Out '$container_base/logs/load.log' -NoTruncate /DisableStartupDialogs \
+      >'$container_base/logs/load-stdout.log' 2>'$container_base/logs/load-stderr.log'
+    set +e
+    xvfb-run -a timeout 120 /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
+      /F \"\$base/\$db\" /RunModeOrdinaryApplication \
+      /Execute '$container_base/oracle.epf' \
+      /C '$container_base/input.txt|$container_base/output.txt|$container_base/script.bsl' \
+      /Out '$container_base/logs/enterprise.log' -NoTruncate /DisableStartupDialogs \
+      >'$container_base/logs/enterprise-stdout.log' 2>'$container_base/logs/enterprise-stderr.log'
+    code=\$?
+    echo \"\$code\" >'$container_base/logs/code.txt'
+    exit \"\$code\"
+  "
+  exec_code=$?
+  set -e
+  docker cp "$OOF_PLATFORM_CONTAINER:$container_base/logs/." "$out_abs/logs/"
+  if docker exec "$OOF_PLATFORM_CONTAINER" test -f "$container_base/output.txt"; then
+    docker cp "$OOF_PLATFORM_CONTAINER:$container_base/output.txt" "$output_stream"
+  fi
+  if [[ -f "$out_abs/logs/code.txt" ]]; then
+    exit "$(cat "$out_abs/logs/code.txt")"
+  fi
+  exit "$exec_code"
 fi
 
 docker run --rm --platform linux/amd64 --entrypoint sh \

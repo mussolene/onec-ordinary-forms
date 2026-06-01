@@ -6,8 +6,8 @@ if [[ $# -lt 1 || $# -gt 2 ]]; then
   exit 2
 fi
 
-if [[ -z "${NETHASP_INI_PATH:-}" || ! -r "$NETHASP_INI_PATH" ]]; then
-  echo "NETHASP_INI_PATH must point to readable nethasp.ini" >&2
+if [[ -z "${OOF_PLATFORM_CONTAINER:-}" && ( -z "${NETHASP_INI_PATH:-}" || ! -r "$NETHASP_INI_PATH" ) ]]; then
+  echo "Set OOF_PLATFORM_CONTAINER to an already licensed 1C container, or set NETHASP_INI_PATH for throwaway docker run fallback" >&2
   exit 2
 fi
 
@@ -52,6 +52,43 @@ esac
 out_rel=${out_abs#"$repo_root"/}
 mkdir -p "$out_abs"
 
+if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
+  if [[ "$(docker inspect -f '{{.State.Running}}' "$OOF_PLATFORM_CONTAINER" 2>/dev/null || true)" != "true" ]]; then
+    echo "OOF_PLATFORM_CONTAINER is not a running container: $OOF_PLATFORM_CONTAINER" >&2
+    exit 2
+  fi
+  container_base="/tmp/oof-platform-validate"
+  docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "rm -rf '$container_base' && mkdir -p '$container_base/input' '$container_base/out/dump' '$container_base/dbroot'"
+  docker cp "$input_path" "$OOF_PLATFORM_CONTAINER:$container_base/input/$input_name"
+  set +e
+  docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "set -eu
+    base='$container_base/dbroot'
+    db=db
+    /opt/1cv8/x86_64/8.5.1.1343/ibcmd \
+      infobase --data=\"\$base\" --database-path=\"\$db\" create --locale=ru_RU \
+      >'$container_base/out/create.log' 2>&1
+    set +e
+    xvfb-run -a timeout 120 /opt/1cv8/x86_64/8.5.1.1343/1cv8 DESIGNER \
+      /F \"\$base/\$db\" \
+      /DumpExternalDataProcessorOrReportToFiles '$container_base/out/dump/root.xml' '$container_base/input/$input_name' \
+      -Format Hierarchical \
+      /Out '$container_base/out/platform-dump.log' -NoTruncate \
+      /DisableStartupDialogs \
+      >'$container_base/out/stdout.log' 2>'$container_base/out/stderr.log'
+    code=\$?
+    set -e
+    echo \"\$code\" >'$container_base/out/code.txt'
+    exit \"\$code\"
+  "
+  exec_code=$?
+  set -e
+  docker cp "$OOF_PLATFORM_CONTAINER:$container_base/out/." "$out_abs/"
+  if [[ -f "$out_abs/code.txt" ]]; then
+    exit "$(cat "$out_abs/code.txt")"
+  fi
+  exit "$exec_code"
+fi
+
 docker run --rm --platform linux/amd64 --entrypoint sh \
   -v "$repo_root:/workspace" \
   -v "$input_dir:/input:ro" \
@@ -79,4 +116,3 @@ docker run --rm --platform linux/amd64 --entrypoint sh \
     echo \"\$code\" >\"/workspace/$out_rel/code.txt\"
     exit \"\$code\"
   "
-

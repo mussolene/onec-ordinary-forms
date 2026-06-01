@@ -37,11 +37,15 @@ can accept an EPF whose ordinary form later fails with "Ошибка форма�
 The stricter check is Designer batch mode:
 
 ```bash
-export NETHASP_INI_PATH="<local-nethasp.ini>"
+export OOF_PLATFORM_CONTAINER=oof-1c85-licensed
 tools/platform_validate_epf.sh /path/to/processor.epf
 ```
 
-The script runs 1C 8.5 in the amd64 container and executes
+Use the existing licensed container first. `NETHASP_INI_PATH` is only a
+fallback for creating a new throwaway container and should not be treated as
+the normal local workflow.
+
+The script runs 1C 8.5 and executes
 `/DumpExternalDataProcessorOrReportToFiles`. That platform command
 deserializes ordinary `Form.bin` deeply enough to reject malformed bracket/list
 streams. Logs and generated dumps stay under ignored `scan-output/`.
