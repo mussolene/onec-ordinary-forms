@@ -32,7 +32,6 @@ NON_CONTROL_PARENT_TAGS = frozenset(
         "CommandSource",
         "Events",
         "Items",
-        "ValueDescriptor",
     }
 )
 

@@ -255,7 +255,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIn("КнопкаВыбора", {prop.name for prop in input_field.platform_properties})
         self.assertIn("АвтоВводНовойСтроки", {prop.name for prop in table.platform_properties})
 
-    def test_activex_control_roundtrips_typed_state(self) -> None:
+    def test_activex_control_rejects_public_state_blob(self) -> None:
         root = ET.fromstring(
             """
             <Form version="1" containerCreatedTicks="0" containerModifiedTicks="0">
@@ -277,13 +277,8 @@ class CliSmokeTest(unittest.TestCase):
             </Form>
             """
         )
-        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
-        controls = stream[1][2][2]
-        self.assertEqual(controls[1][0], "621e95f1-064f-11d4-9400-008048da11f9")
-        self.assertEqual(controls[1][2][1], "ca8a9780-280d-11cf-a24d-444553540000")
-        self.assertEqual(controls[1][2][4][0], "#base64:AA4AAEBCAADJLQAA")
-        payload = controls[1][2][8][0].replace("#base64:", "").replace("\r", "").replace("\n", "")
-        self.assertEqual(base64.b64decode(payload)[:4], b"\x01\x00\x09\x00")
+        with self.assertRaisesRegex(ValueError, "StateBlob"):
+            form_stream_from_object_xml(root)
 
     def test_panel_info_uses_platform_page_capacity_profile(self) -> None:
         root = ET.fromstring(
@@ -1401,7 +1396,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(column_body[1], ["1", "0"])
         self.assertEqual(column_body[30], '"ИнформацияОбСертификате"')
 
-    def test_table_column_value_descriptor_restores_trailing_line_break(self) -> None:
+    def test_table_column_value_descriptor_is_not_public_xml(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Pages>
@@ -1418,13 +1413,8 @@ class CliSmokeTest(unittest.TestCase):
             </Form>"""
         )
 
-        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
-        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
-
-        self.assertIsNotNone(table)
-        assert table is not None
-        column_body = table[2][2][1][23][1][1][1][1]
-        self.assertEqual(column_body[39][0][0], "#base64:QUJD\r\r\n")
+        with self.assertRaisesRegex(ValueError, "ValueDescriptor"):
+            form_stream_from_object_xml(root)
 
     def test_table_default_border_color_uses_platform_default_color_record(self) -> None:
         root = ET.fromstring(
@@ -1448,7 +1438,7 @@ class CliSmokeTest(unittest.TestCase):
         assert table is not None
         self.assertEqual(table[2][2][0][6], ["4", "4", ["0"], "4"])
 
-    def test_table_data_source_profile_link_mode_is_written(self) -> None:
+    def test_table_data_source_profile_is_not_public_xml(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Pages>
@@ -1464,14 +1454,10 @@ class CliSmokeTest(unittest.TestCase):
             </Form>"""
         )
 
-        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
-        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+        with self.assertRaisesRegex(ValueError, "DataSourceProfile"):
+            form_stream_from_object_xml(root)
 
-        self.assertIsNotNone(table)
-        assert table is not None
-        self.assertEqual(table[2][3], ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "1"]])
-
-    def test_table_data_source_profile_preserves_platform_storage_shape(self) -> None:
+    def test_table_data_source_profile_shape_is_not_public_xml(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Pages>
@@ -1493,21 +1479,15 @@ class CliSmokeTest(unittest.TestCase):
             </Form>"""
         )
 
-        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
-        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+        with self.assertRaisesRegex(ValueError, "DataSourceProfile"):
+            form_stream_from_object_xml(root)
 
-        self.assertIsNotNone(table)
-        assert table is not None
-        self.assertEqual(table[2][3], ["9ab3fa70-d2e0-4e44-baac-730682272ed2", ["4", "1", "0", ["0"]]])
-
-    def test_table_extended_profile_without_columns_is_written(self) -> None:
+    def test_table_extended_view_without_columns_is_canonical(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Pages>
                 <Page name="Main">
                   <Table name="Rows" id="6">
-                    <DataSourceProfile linkMode="1"/>
-                    <ViewProfile>117644301</ViewProfile>
                     <LeftFixedColumns>2</LeftFixedColumns>
                   </Table>
                 </Page>
@@ -1521,10 +1501,10 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(table)
         assert table is not None
         view = table[2][2][1]
-        self.assertEqual(view[0:2], ["23", "117644301"])
+        self.assertEqual(view[0:2], ["23", "117644289"])
         self.assertEqual(view[20], "2")
         self.assertEqual(view[23], ["0"])
-        self.assertEqual(table[2][3], ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "1"]])
+        self.assertEqual(table[2][3], ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]])
 
     def test_button_enabled_false_and_default_border_are_written(self) -> None:
         root = ET.fromstring(
@@ -3392,7 +3372,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(picture_style.get("mode"), "2")
         self.assertIsNone(picture_style.find("BaseStyle"))
 
-    def test_command_bar_command_source_preserves_platform_flags(self) -> None:
+    def test_command_bar_command_source_writes_named_source_fields(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
@@ -3402,10 +3382,7 @@ class CliSmokeTest(unittest.TestCase):
                     <CommandSource
                       actionPlacement="3"
                       actionAlignment="4"
-                      commandSource="5"
-                      actionProfileState="11"
-                      actionProfileFlag1="12"
-                      actionProfileFlag2="13"
+                      sourceMode="5"
                       presentationScope="7"
                       presentationScopeEnabled="0"
                       presentationScopeUuid="00000000-0000-0000-0000-000000000000"
@@ -3432,7 +3409,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(record[3], "3")
         self.assertEqual(record[4], "4")
         self.assertEqual(record[5], "5")
-        self.assertEqual(record[11:14], ["11", "12", "13"])
+        self.assertEqual(record[11:14], ["0", "0", "0"])
         base = record[0]
         self.assertEqual(base[11][3:7], ["7", "0", "0", "00000000-0000-0000-0000-000000000000"])
         self.assertEqual(base[16:20], ["0", "0", "0", "0"])

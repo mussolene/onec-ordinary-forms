@@ -1168,19 +1168,6 @@ def add_activex_properties(parent: ET.Element, item: dict, item_data: object) ->
     info = raw[2]
     if len(info) > 1:
         set_text(parent, "Clsid", clean_token(info[1]))
-    state = ET.SubElement(parent, "State")
-    added = 0
-    for index, value in ((1, info[4] if len(info) > 4 else None), (2, info[8] if len(info) > 8 else None)):
-        payload = find_base64_payload(value)
-        if not payload:
-            continue
-        blob = ET.SubElement(state, "StateBlob")
-        blob.set("slot", str(index))
-        blob.set("encoding", "base64")
-        blob.text = payload
-        added += 1
-    if not added:
-        parent.remove(state)
 
 
 def add_semantic_item(
@@ -1418,15 +1405,10 @@ def add_command_bar_command_source(parent: ET.Element, public_type: str, item_da
     source.set("rootUuid", clean_token(items[1]))
     if len(items) > 2:
         source.set("rootKind", clean_token(items[2]))
-    if len(info) > 10:
-        source.set("profileUuid", clean_token(info[10]))
     for source_index, attr_name in (
         (3, "actionPlacement"),
         (4, "actionAlignment"),
-        (5, "commandSource"),
-        (11, "actionProfileState"),
-        (12, "actionProfileFlag1"),
-        (13, "actionProfileFlag2"),
+        (5, "sourceMode"),
     ):
         if len(info) > source_index:
             source.set(attr_name, clean_token(info[source_index]))
@@ -1998,8 +1980,6 @@ def add_table_view_properties(parent: ET.Element, item: dict, item_data: object)
     view = table_view_from_item_data(item_data)
     if view is None:
         return
-    if len(view) > 1 and clean_token(view[1]) != "117644289":
-        set_text(parent, "ViewProfile", clean_token(view[1]))
     if len(view) > 14 and clean_token(view[14]) == "1":
         set_text(parent, "ReadOnly", "true")
     extended_view = len(view) > 0 and clean_token(view[0]) == "23"
@@ -2013,24 +1993,6 @@ def add_table_view_properties(parent: ET.Element, item: dict, item_data: object)
         set_text(parent, "ViewSetupMode", clean_token(view[35]))
     if len(view) > 6 and not is_default_color_record(view[6]):
         add_color_node_from_record(parent, "FieldBackColor", view[6])
-    data_source = table_data_source_from_item_data(item_data)
-    if data_source is not None and len(data_source) > 1 and isinstance(data_source[1], list) and len(data_source[1]) > 3:
-        record_uuid = clean_token(data_source[0]) if data_source else ""
-        payload = data_source[1]
-        flag = clean_scalar_token(payload[3])
-        default_uuid = "342cf854-134c-42bb-8af9-a2103d5d9723"
-        default_payload = ["5", "0", "0", "0"]
-        is_default_profile = record_uuid == default_uuid and [clean_scalar_token(item) for item in payload[:4]] == default_payload
-        if flag != "0" or not is_default_profile:
-            profile = ET.SubElement(parent, "DataSourceProfile")
-            if record_uuid:
-                profile.set("storageUuid", record_uuid)
-            profile.set("profileKind", clean_token(payload[0]))
-            profile.set("stateKind", clean_token(payload[1]))
-            profile.set("stateMode", clean_token(payload[2]))
-            profile.set("linkMode", flag)
-            if isinstance(payload[3], list):
-                profile.set("linkModeShape", "list")
 
 
 def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_root: Path) -> None:
@@ -2075,12 +2037,6 @@ def add_table_columns(parent: ET.Element, item: dict, item_data: object, asset_r
         if column["picture"]:
             add_picture_node_from_payload(column_node, column["picture"], f"{item.get('name', 'Table')}/{column['name']}", asset_root)
         add_type(column_node, column["pattern"], {})
-        if column["value_descriptor"]:
-            descriptor = ET.SubElement(column_node, "ValueDescriptor")
-            descriptor.set("encoding", "base64")
-            if column.get("value_descriptor_trailing_line_break") == "true":
-                descriptor.set("trailingLineBreak", "true")
-            descriptor.text = column["value_descriptor"]
 
 
 def table_columns_from_item_data(item_data: object) -> list[dict[str, object]]:

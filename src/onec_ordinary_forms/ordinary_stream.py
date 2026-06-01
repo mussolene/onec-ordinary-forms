@@ -459,12 +459,41 @@ SHORT_POSITION_FIXED_HEIGHT_TYPES = {
     "Splitter",
 }
 
+FORBIDDEN_PUBLIC_XML_ELEMENTS = frozenset(
+    {
+        "ObjectModel",
+        "ListStream",
+        "BracketStream",
+        "FormBin",
+        "LogicalStream",
+        "RawBracket",
+        "PlatformRecords",
+        "SerializationProfile",
+        "DataSourceProfile",
+        "ViewProfile",
+        "StateBlob",
+        "ValueDescriptor",
+    }
+)
+
+FORBIDDEN_PUBLIC_XML_ATTRIBUTES = frozenset(
+    {
+        "profileUuid",
+        "actionProfileState",
+        "actionProfileFlag1",
+        "actionProfileFlag2",
+        "linkModeShape",
+        "rawKey",
+    }
+)
+
 
 def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None) -> bytes:
     """Serialize public ordinary ``Form.xml`` into platform list-stream bytes."""
 
     if root.tag != "Form":
         raise ValueError("Expected public ordinary form XML root <Form>")
+    assert_public_object_xml(root)
 
     title = form_title_from_xml(root)
     if not title:
@@ -503,6 +532,27 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         serialization_counter=form_serialization_counter_from_xml(root),
     )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
+
+
+def assert_public_object_xml(root: ET.Element) -> None:
+    """Reject renamed raw/profile structures before writing platform streams."""
+
+    for element in root.iter():
+        tag = local_xml_name(element.tag)
+        if tag in FORBIDDEN_PUBLIC_XML_ELEMENTS:
+            raise ValueError(f"Public ordinary Form.xml must not contain <{tag}>")
+        for attr_name in element.attrib:
+            name = local_xml_name(attr_name)
+            if name in FORBIDDEN_PUBLIC_XML_ATTRIBUTES:
+                raise ValueError(f"Public ordinary Form.xml must not contain @{name}")
+            if "profile" in name.lower():
+                raise ValueError(f"Public ordinary Form.xml must not contain profile attribute @{name}")
+
+
+def local_xml_name(name: str) -> str:
+    if "}" in name:
+        return name.rsplit("}", 1)[1]
+    return name
 
 
 FormRootLayout = dict[str, object]
@@ -1481,14 +1531,6 @@ DATA_BOUND_CONTROL_TYPES = {
 }
 
 
-def active_x_state_payload(element: ET.Element, slot: str) -> str:
-    for blob in element.findall("./State/StateBlob"):
-        if blob.get("slot") == slot:
-            payload = "".join((blob.text or "").split())
-            return wrap_base64_payload(payload) if payload else ""
-    return ""
-
-
 def data_path_from_xml(element: ET.Element) -> str:
     data_path = element.findtext("DataPath")
     if data_path and data_path.strip():
@@ -1723,23 +1765,19 @@ def active_x_control_info(element: ET.Element) -> list[object]:
     clsid = element.findtext("Clsid", "").strip()
     if not clsid:
         raise ValueError("ActiveXControl must contain <Clsid>")
-    state_1 = active_x_state_payload(element, "1")
-    state_2 = active_x_state_payload(element, "2")
     info = [
         descriptor.info_kind,
         clsid.lower(),
         ["0"],
         "2",
-        [state_1] if state_1 else ["0"],
+        ["0"],
         "8",
         "16960",
         "11721",
-        [state_2] if state_2 else ["0"],
+        ["0"],
         ["0"],
     ]
     info[descriptor.slot_index("Clsid")] = clsid.lower()
-    info[descriptor.slot_index("State1")] = [state_1] if state_1 else ["0"]
-    info[descriptor.slot_index("State2")] = [state_2] if state_2 else ["0"]
     return info
 
 
@@ -3855,14 +3893,11 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
         command_bar_items_record(element, title, source),
         "b78f2e80-ec68-11d4-9dcf-0050bae2bc79",
         "4",
-        source.get(
-            "profileUuid",
-            "7aa39d8b-4bb3-4d97-9cd8-89b07dc4c30d"
-            if element.get("name") == "ОсновныеДействияФормы" or title
-            else "bf009aa1-86de-4918-8876-74f65410b0d9"
-            if element.get("name") == "КоманднаяПанель1"
-            else "9d0a2e40-b978-11d4-84b6-008048da06df",
-        ),
+        "7aa39d8b-4bb3-4d97-9cd8-89b07dc4c30d"
+        if element.get("name") == "ОсновныеДействияФормы" or title
+        else "bf009aa1-86de-4918-8876-74f65410b0d9"
+        if element.get("name") == "КоманднаяПанель1"
+        else "9d0a2e40-b978-11d4-84b6-008048da06df",
         "0",
         "0",
         "0",
@@ -3881,10 +3916,7 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
     for index, attr_name in (
         (3, "actionPlacement"),
         (4, "actionAlignment"),
-        (5, "commandSource"),
-        (11, "actionProfileState"),
-        (12, "actionProfileFlag1"),
-        (13, "actionProfileFlag2"),
+        (5, "sourceMode"),
     ):
         if source.get(attr_name) is not None:
             record[index] = source[attr_name]
@@ -4186,20 +4218,6 @@ TABLE_EVENT_ID_BY_NAME = {
 
 
 def table_data_source_record(element: ET.Element) -> list[object]:
-    profile = element.find("DataSourceProfile")
-    if profile is not None:
-        link_mode: object = profile.get("linkMode", "0")
-        if profile.get("linkModeShape") == "list":
-            link_mode = [str(link_mode)]
-        return [
-            profile.get("storageUuid") or "342cf854-134c-42bb-8af9-a2103d5d9723",
-            [
-                profile.get("profileKind") or "5",
-                profile.get("stateKind") or "0",
-                profile.get("stateMode") or "0",
-                link_mode,
-            ],
-        ]
     if table_columns_from_xml(element):
         return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "0"]]
     return ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]]
@@ -4240,7 +4258,6 @@ def table_view_record_from_xml(element: ET.Element, asset_root: Path | None = No
     ]
     record[descriptor.slot_index("RowsCount")] = rows_count.strip() or "0"
     record[descriptor.slot_index("ColumnsCount")] = columns_count.strip() or "0"
-    record[1] = text_or_default(element, "ViewProfile", "100801549")
     if element.find("FieldBackColor") is not None:
         record[6] = color_record_from_xml(element, "FieldBackColor")
     record[descriptor.slot_index("AutoMarkIncomplete")] = bool_record_from_xml(
@@ -4254,11 +4271,8 @@ def table_view_record_from_xml(element: ET.Element, asset_root: Path | None = No
 def table_needs_extended_view_record(element: ET.Element, columns: list[ET.Element]) -> bool:
     if columns:
         return True
-    view_profile = text_or_default(element, "ViewProfile", "100801549")
     return (
-        view_profile != "100801549"
-        or element.find("DataSourceProfile") is not None
-        or element.find("LeftFixedColumns") is not None
+        element.find("LeftFixedColumns") is not None
         or element.find("RightFixedColumns") is not None
     )
 
@@ -4273,7 +4287,7 @@ def table_columns_from_xml(element: ET.Element) -> list[ET.Element]:
 def extended_table_view_record(element: ET.Element, columns: list[ET.Element], asset_root: Path | None = None) -> list[object]:
     record = [
         "23",
-        text_or_default(element, "ViewProfile", "117644289"),
+        "117644289",
         default_color_record(),
         default_color_record(),
         default_color_record(),
@@ -4416,14 +4430,6 @@ def table_column_pattern_record_from_xml(column: ET.Element, pattern: list[objec
 
 
 def table_column_value_payload_from_xml(column: ET.Element, pattern: list[object]) -> str:
-    descriptor = column.find("ValueDescriptor")
-    if descriptor is not None and descriptor.text:
-        payload = "".join(descriptor.text.split())
-        if payload:
-            wrapped = wrap_base64_payload(payload)
-            if descriptor.get("trailingLineBreak") == "true":
-                wrapped += "\r\r\n"
-            return wrapped
     return TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN.get(tuple(pattern), TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN[(quoted_atom("S"),)])
 
 

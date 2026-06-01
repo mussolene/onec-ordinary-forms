@@ -200,7 +200,6 @@ TABLE_SCHEMA_PROPERTIES = (
     "CurrentData",
     "CurrentParent",
     "CurrentRow",
-    "DataSourceProfile",
     "FieldBackColor",
     "Footer",
     "FooterBackColor",
@@ -227,7 +226,6 @@ TABLE_SCHEMA_PROPERTIES = (
     "SelectionTextColor",
     "VerticalLines",
     "VerticalScrollBar",
-    "ViewProfile",
     "ViewSetupMode",
 )
 

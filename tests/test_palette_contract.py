@@ -197,6 +197,10 @@ def test_public_xsd_has_no_raw_or_extension_pockets() -> None:
         "Extensions",
         "ExtensionProperty",
         "SerializationProfile",
+        "DataSourceProfile",
+        "ViewProfile",
+        "StateBlob",
+        "ValueDescriptor",
         "RootRecord",
         "TopLevel",
         "dimensionProfile",
@@ -208,6 +212,7 @@ def test_public_xsd_has_no_raw_or_extension_pockets() -> None:
 
     assert not any(name.startswith("FormSerializationProfile") for name in names)
     assert not any(re.fullmatch(r"slot\d+", name or "") for name in names)
+    assert not any("Profile" in name for name in names)
 
 
 def test_position_schema_does_not_expose_constant_unit_marker() -> None:
@@ -316,6 +321,11 @@ def test_command_bar_schema_has_typed_command_source_not_profile_pocket() -> Non
     assert "SerializationProfile" not in public_elements
     assert root.find("xs:complexType[@name='CommandBarSerializationProfileType']", ns) is None
     assert root.find("xs:complexType[@name='CommandBarActionGraphType']", ns) is None
+    source_type = root.find("xs:complexType[@name='CommandBarCommandSourceType']", ns)
+    assert source_type is not None
+    source_attrs = {node.get("name") for node in source_type.findall("xs:attribute", ns)}
+    assert "sourceMode" in source_attrs
+    assert not any(name and "Profile" in name for name in source_attrs)
 
 
 def test_picture_decoration_schema_has_typed_picture_style_not_profile_pocket() -> None:

@@ -160,6 +160,13 @@ are not acceptable public structures:
 - `LogicalStream`
 - `RawBracket`
 - `PlatformRecords`
+- `SerializationProfile`
+- `DataSourceProfile`
+- `ViewProfile`
+- `StateBlob`
+- `ValueDescriptor`
+- profile/slot-preservation attributes such as `profileUuid`,
+  `actionProfileState`, or `linkModeShape`
 - indexed trees such as `Field kind="list"` or `Field kind="atom"`
 - embedded base64 source streams
 - binary placeholders or other lossless/fallback stream copies
@@ -341,6 +348,13 @@ python3 tools/vendor_platform_schemas.py \
 - `LogicalStream`
 - `RawBracket`
 - `PlatformRecords`
+- `SerializationProfile`
+- `DataSourceProfile`
+- `ViewProfile`
+- `StateBlob`
+- `ValueDescriptor`
+- атрибуты сохранения profile/slot-формы вроде `profileUuid`,
+  `actionProfileState` или `linkModeShape`
 - индексные деревья вроде `Field kind="list"` или `Field kind="atom"`
 - встроенные base64-потоки исходного файла
 - бинарные заглушки и другие побайтно-сохраняющие или резервные копии
