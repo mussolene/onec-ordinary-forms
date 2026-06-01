@@ -237,6 +237,22 @@ class OrdinaryPlatformObject:
         child_table[:] = [str(len(controls)), *copy.deepcopy(controls)]
         return platform_object_from_list_stream_root(root)
 
+    def with_control_child_records(
+        self,
+        node_id: str,
+        controls: list[list[object]],
+    ) -> "OrdinaryPlatformObject":
+        control = self.control(node_id)
+        root = copy.deepcopy(self.root)
+        raw = _find_control_node(root, control)
+        if raw is None:
+            raise KeyError(f"Cannot find raw list-stream node for {node_id}")
+        child_table = _control_child_table(raw)
+        if child_table is None:
+            raise ValueError(f"Cannot find child table for {node_id}")
+        child_table[:] = [str(len(controls)), *copy.deepcopy(controls)]
+        return platform_object_from_list_stream_root(root)
+
 
 @dataclass(frozen=True)
 class OrdinaryFormPlatformGraph:
@@ -420,6 +436,26 @@ def _root_panel_child_table(root: object) -> list[object] | None:
     return None
 
 
+def _control_child_table(node: list[object]) -> list[object] | None:
+    best: list[object] | None = None
+    for child in node:
+        if not isinstance(child, list) or not child or not _is_count_atom(child[0]):
+            continue
+        expected = int(clean_atom(child[0]))
+        controls = [item for item in child[1:] if _looks_like_control_node(item)]
+        if len(controls) == expected:
+            best = child
+    return best
+
+
+def _looks_like_control_node(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) >= 5
+        and clean_atom(value[0]) in ORDINARY_CONTROL_CLASS_BY_GUID
+    )
+
+
 def _is_count_atom(value: object) -> bool:
     try:
         int(clean_atom(value))
@@ -493,6 +529,15 @@ def _control_property_value(
                 slot = -1
             if slot >= 0 and len(record) > slot:
                 return "true" if clean_atom(record[slot]) == "1" else "false"
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(control_type)
+    if descriptor is not None:
+        record = _control_info_property_record(node, control_type)
+        try:
+            slot = descriptor.slot_index(property_key)
+        except KeyError:
+            slot = -1
+        if record is not None and slot >= 0 and len(record) > slot and not isinstance(record[slot], list):
+            return clean_atom(record[slot])
     raise UnsupportedPlatformObjectOperation(
         f"No verified object accessor for {control_type}.{property_key}"
     )
@@ -547,6 +592,16 @@ def _set_control_property(
             if slot >= 0 and len(record) > slot:
                 record[slot] = _platform_bool_atom(value)
                 return
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(control_type)
+    if descriptor is not None:
+        record = _control_info_property_record(node, control_type)
+        try:
+            slot = descriptor.slot_index(property_key)
+        except KeyError:
+            slot = -1
+        if record is not None and slot >= 0 and len(record) > slot and not isinstance(record[slot], list):
+            record[slot] = _platform_scalar_atom(value)
+            return
     raise UnsupportedPlatformObjectOperation(
         f"No verified object writer for {control_type}.{property_key}"
     )
@@ -659,6 +714,14 @@ def _platform_bool_atom(value: object) -> str:
     if text in {"0", "false", "no", "нет", ""}:
         return "0"
     raise ValueError(f"Cannot encode platform boolean value: {value!r}")
+
+
+def _platform_scalar_atom(value: object) -> str:
+    element = _property_value_element("Value", value)
+    text = (element.text or "").strip()
+    if text.lower() in {"true", "false", "yes", "no", "да", "нет"}:
+        return _platform_bool_atom(text)
+    return text
 
 
 def _set_first_localized_text_record(value: object, title: str) -> bool:

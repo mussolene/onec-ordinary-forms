@@ -43,8 +43,12 @@ from onec_ordinary_forms.ordinary_properties import (
     ORDINARY_CONTROL_DESCRIPTORS,
     load_platform_palette,
 )
-from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
-from onec_ordinary_forms.ordinary_stream import control_stream_from_xml
+from onec_ordinary_forms.ordinary_stream import (
+    CONTROL_INFO_SLOT_DESCRIPTORS,
+    control_stream_from_xml,
+    form_stream_from_object_xml,
+    type_domain_pattern_from_xml,
+)
 from onec_ordinary_forms.value_codec import clean_atom
 
 
@@ -55,6 +59,16 @@ CONTROL_XML_TAG_BY_PLATFORM_TYPE = {
 PLATFORM_TYPE_BY_CONTROL_XML_TAG = {
     descriptor.xml_tag: control_type
     for control_type, descriptor in ORDINARY_CONTROL_DESCRIPTORS.items()
+}
+INCREMENTAL_SCALAR_PROPERTIES = {
+    "Button": {"DefaultButton"},
+    "ChoiceField": {"ChoiceButton", "ClearButton", "OpenButton", "ChoiceListOrCreateButton", "EditButton"},
+    "CommandBar": {"Autofill"},
+    "Image": {"DisplayMode", "DisplayState", "RenderingProfileFlag"},
+    "Label": {"Hyperlink", "PictureSize", "TextPosition"},
+    "ProgressBar": {"Orientation", "MinimumValue", "MaximumValue", "Step", "BigStep", "ShowPercent", "DisplayStyle"},
+    "Splitter": {"Orientation"},
+    "TrackBar": {"MinimumValue", "MaximumValue", "Step", "BigStep", "Orientation", "MarkStep", "CurrentValue"},
 }
 
 
@@ -155,9 +169,7 @@ def platform_object_from_ordinary_form_xml(
         for property_name, value in _public_control_property_updates(element):
             editor = editor.set_control_property(node_id, property_name, value)
     updated = editor.to_platform_object()
-    if set(xml_ids) != set(base_controls):
-        updated = _apply_top_level_control_set(root, updated, xml_ids=xml_ids, base_ids=tuple(base_controls))
-    return updated
+    return _apply_public_control_tree(root, updated, base_controls)
 
 
 def platform_object_from_ordinary_form_xml_text(
@@ -169,28 +181,61 @@ def platform_object_from_ordinary_form_xml_text(
     return platform_object_from_ordinary_form_xml(ET.fromstring(text), base_object)
 
 
-def _apply_top_level_control_set(
+def _apply_public_control_tree(
     root: ET.Element,
     base_object: OrdinaryPlatformObject,
-    *,
-    xml_ids: tuple[str, ...],
-    base_ids: tuple[str, ...],
+    original_controls: dict[str, object],
 ) -> OrdinaryPlatformObject:
-    top_level_elements = _public_top_level_control_elements(root)
-    top_level_xml_ids = {_public_control_node_id(element) for element in top_level_elements}
-    top_level_base_ids = {control.node_id for control in base_object.controls}
-    changed_ids = set(xml_ids).symmetric_difference(base_ids)
-    nested_changed = changed_ids - top_level_xml_ids - top_level_base_ids
-    if nested_changed:
-        raise ValueError(f"Nested control add/delete is not implemented yet: {sorted(nested_changed)}")
-    existing_by_id = {control.object_id: control for control in base_object.controls}
-    existing_raw_by_id = {control.object_id: control.raw for control in base_object.model.controls}
+    base_parent_by_id = _platform_parent_map(base_object)
+    xml_parent_by_id = _xml_parent_map(root)
+    for node_id, parent_id in xml_parent_by_id.items():
+        if node_id in original_controls and base_parent_by_id.get(node_id) != parent_id:
+            raise ValueError(f"Moving existing controls between parents is not implemented yet: {node_id}")
+    for node_id, parent_id in base_parent_by_id.items():
+        if node_id in xml_parent_by_id and xml_parent_by_id[node_id] != parent_id:
+            raise ValueError(f"Moving existing controls between parents is not implemented yet: {node_id}")
+
     attribute_type_patterns, attribute_slots = _attribute_type_maps(root)
-    result: list[list[object]] = []
-    for element in top_level_elements:
+    top_level_elements = _public_top_level_control_elements(root)
+    existing_by_id = {control.object_id: control for control in base_object.flatten_controls()}
+    existing_raw_by_id = {control.object_id: control.raw for control in base_object.model.flatten()}
+    updated = base_object.with_top_level_control_records(
+        _control_records_from_elements(
+            top_level_elements,
+            existing_by_id,
+            existing_raw_by_id,
+            attribute_type_patterns,
+            attribute_slots,
+        )
+    )
+    for element in _public_control_elements(root):
         object_id = element.get("id", "")
-        if object_id in existing_by_id:
-            expected_tag = CONTROL_XML_TAG_BY_PLATFORM_TYPE.get(existing_by_id[object_id].control_type, existing_by_id[object_id].control_type)
+        if object_id not in existing_by_id:
+            continue
+        child_records = _control_records_from_elements(
+            _public_direct_child_control_elements(element),
+            {control.object_id: control for control in updated.flatten_controls()},
+            {control.object_id: control.raw for control in updated.model.flatten()},
+            attribute_type_patterns,
+            attribute_slots,
+        )
+        updated = updated.with_control_child_records(f"control:{object_id}", child_records)
+    return updated
+
+
+def _control_records_from_elements(
+    elements: tuple[ET.Element, ...],
+    existing_by_id: dict[str, object],
+    existing_raw_by_id: dict[str, list[object]],
+    attribute_type_patterns: dict[str, list[object]],
+    attribute_slots: dict[str, str],
+) -> list[list[object]]:
+    result: list[list[object]] = []
+    for element in elements:
+        object_id = element.get("id", "")
+        existing = existing_by_id.get(object_id)
+        if existing is not None:
+            expected_tag = CONTROL_XML_TAG_BY_PLATFORM_TYPE.get(existing.control_type, existing.control_type)
             if element.tag != expected_tag:
                 raise ValueError(
                     f"Control type mismatch for control:{object_id}: "
@@ -201,7 +246,36 @@ def _apply_top_level_control_set(
         stream = control_stream_from_xml(element, None, attribute_type_patterns, attribute_slots)
         if stream is not None:
             result.append(stream)
-    return base_object.with_top_level_control_records(result)
+    return result
+
+
+def _platform_parent_map(platform_object: OrdinaryPlatformObject) -> dict[str, str]:
+    result: dict[str, str] = {}
+
+    def walk(control: object, parent_id: str) -> None:
+        result[control.node_id] = parent_id
+        for child in control.children:
+            walk(child, control.node_id)
+
+    for control in platform_object.controls:
+        walk(control, "")
+    return result
+
+
+def _xml_parent_map(root: ET.Element) -> dict[str, str]:
+    result: dict[str, str] = {}
+
+    def walk(parent: ET.Element, parent_id: str) -> None:
+        for child in _public_direct_child_control_elements(parent):
+            node_id = _public_control_node_id(child)
+            result[node_id] = parent_id
+            walk(child, node_id)
+
+    pages = root.find("Pages")
+    if pages is not None:
+        for page in pages.findall("Page"):
+            walk(page, "")
+    return result
 
 
 def _attribute_type_maps(root: ET.Element) -> tuple[dict[str, list[object]], dict[str, str]]:
@@ -219,6 +293,17 @@ def _attribute_type_maps(root: ET.Element) -> tuple[dict[str, list[object]], dic
 
 def _public_control_property_updates(element: ET.Element) -> tuple[tuple[str, object], ...]:
     updates: list[tuple[str, object]] = []
+    handled = {
+        "Title",
+        "Visible",
+        "Enabled",
+        "ReadOnly",
+        "TextColor",
+        "BackColor",
+        "BorderColor",
+        "Font",
+        "Position",
+    }
     for attr_name in ("baseStyleMode", "baseStyleState", "baseStyleVisible", "baseStyleDefaultMode"):
         value = element.get(attr_name)
         if value is not None:
@@ -231,6 +316,18 @@ def _public_control_property_updates(element: ET.Element) -> tuple[tuple[str, ob
         node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node))
+    control_type = PLATFORM_TYPE_BY_CONTROL_XML_TAG.get(element.tag, element.tag)
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(control_type)
+    public_descriptor = ORDINARY_CONTROL_DESCRIPTORS.get(control_type)
+    if descriptor is not None and public_descriptor is not None:
+        slot_names = {slot.name for slot in descriptor.slots}
+        writable = INCREMENTAL_SCALAR_PROPERTIES.get(control_type, set())
+        for property_name in public_descriptor.properties:
+            if property_name in handled or property_name not in writable or property_name not in slot_names:
+                continue
+            node = _last_child(element, property_name)
+            if node is not None and len(node) == 0:
+                updates.append((property_name, node.text or ""))
     return tuple(updates)
 
 
@@ -352,6 +449,15 @@ def _public_top_level_control_elements(root: ET.Element) -> tuple[ET.Element, ..
         return ()
     for page in pages.findall("Page"):
         result.extend(child for child in list(page) if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG)
+    return tuple(result)
+
+
+def _public_direct_child_control_elements(element: ET.Element) -> tuple[ET.Element, ...]:
+    result = [child for child in list(element) if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG]
+    pages = element.find("Pages")
+    if pages is not None:
+        for page in pages.findall("Page"):
+            result.extend(child for child in list(page) if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG)
     return tuple(result)
 
 

@@ -789,6 +789,34 @@ def test_public_xsd_form_xml_dematerializes_common_properties_to_platform_object
     assert public_input.findtext("ReadOnly") == "true"
 
 
+def test_public_xsd_form_xml_dematerializes_descriptor_scalar_properties() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <ChoiceField name="Choice" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    choice = public_xml.find("./Pages/Page/ChoiceField[@id='8']")
+    assert choice is not None
+    ET.SubElement(choice, "ChoiceButton").text = "false"
+    ET.SubElement(choice, "ClearButton").text = "false"
+
+    updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+
+    assert reparsed.control_property("control:8", "ChoiceButton") == "0"
+    assert reparsed.control_property("control:8", "ClearButton") == "0"
+
+
 def test_public_xsd_form_xml_dematerializes_color_and_font_to_platform_object() -> None:
     root = ET.fromstring(
         """
@@ -968,6 +996,57 @@ def test_public_xsd_form_xml_adds_and_deletes_top_level_controls() -> None:
     assert added is not None
     assert added.findtext("./Title/Item[@lang='ru']") == "Added title"
     assert added.find("Position").get("left") == "160"
+
+
+def test_public_xsd_form_xml_adds_and_deletes_nested_controls() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Panel name="PagesPanel" id="4">
+                <Position left="8" top="8" right="400" bottom="300"/>
+                <Pages>
+                  <Page name="Page1">
+                    <Button name="KeepNested" id="7">
+                      <Title><Item lang="ru">Keep nested</Item></Title>
+                      <Position left="13" top="30" right="160" bottom="54"/>
+                    </Button>
+                    <Button name="DropNested" id="8">
+                      <Title><Item lang="ru">Drop nested</Item></Title>
+                      <Position left="13" top="70" right="160" bottom="94"/>
+                    </Button>
+                  </Page>
+                </Pages>
+              </Panel>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    page = public_xml.find("./Pages/Page/Panel[@id='4']/Pages/Page")
+    assert page is not None
+    drop = page.find("Button[@id='8']")
+    assert drop is not None
+    page.remove(drop)
+    added = ET.SubElement(page, "InputField", {"name": "AddedNested", "id": "9"})
+    ET.SubElement(added, "Position", {"left": "20", "top": "110", "right": "220", "bottom": "134"})
+
+    updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    rematerialized = ordinary_form_xml_from_platform_object(reparsed)
+    panel = reparsed.control_by_name("PagesPanel")
+
+    assert [control.name for control in panel.children] == ["KeepNested", "AddedNested"]
+    assert rematerialized.find(".//Button[@name='KeepNested']") is not None
+    assert rematerialized.find(".//Button[@name='DropNested']") is None
+    added_xml = rematerialized.find(".//InputField[@name='AddedNested']")
+    assert added_xml is not None
+    assert added_xml.find("Position").get("top") == "110"
 
 
 def test_public_xsd_form_xml_full_rebuild_roundtrip_is_semantically_stable() -> None:
