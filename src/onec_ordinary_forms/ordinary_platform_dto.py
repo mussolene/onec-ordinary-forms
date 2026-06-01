@@ -8,6 +8,7 @@ part of the XML contract.
 
 from __future__ import annotations
 
+import copy
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -43,6 +44,7 @@ from onec_ordinary_forms.ordinary_properties import (
     load_platform_palette,
 )
 from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
+from onec_ordinary_forms.ordinary_stream import control_stream_from_xml
 from onec_ordinary_forms.value_codec import clean_atom
 
 
@@ -121,14 +123,12 @@ def platform_object_from_ordinary_form_xml(
     xml_controls = _public_control_elements(root)
     base_controls = {control.node_id: control for control in base_object.flatten_controls()}
     xml_ids = _public_control_ids(xml_controls)
-    base_ids = set(base_controls)
-    if set(xml_ids) != base_ids:
-        missing = sorted(base_ids - set(xml_ids))
-        extra = sorted(set(xml_ids) - base_ids)
-        raise ValueError(f"Control set mismatch: missing={missing}, extra={extra}")
 
     for element in xml_controls:
-        control = base_controls[_public_control_node_id(element)]
+        node_id = _public_control_node_id(element)
+        control = base_controls.get(node_id)
+        if control is None:
+            continue
         expected_tag = CONTROL_XML_TAG_BY_PLATFORM_TYPE.get(control.control_type, control.control_type)
         if element.tag != expected_tag:
             raise ValueError(
@@ -139,6 +139,8 @@ def platform_object_from_ordinary_form_xml(
     editor = PlatformFormObject(base_object)
     for element in xml_controls:
         node_id = _public_control_node_id(element)
+        if node_id not in base_controls:
+            continue
         current = editor.to_platform_object().control(node_id)
         name = element.get("name", current.name)
         title = _localized_title_from_xml(element)
@@ -152,7 +154,10 @@ def platform_object_from_ordinary_form_xml(
             editor = editor.set_control_title(node_id, title_update)
         for property_name, value in _public_control_property_updates(element):
             editor = editor.set_control_property(node_id, property_name, value)
-    return editor.to_platform_object()
+    updated = editor.to_platform_object()
+    if set(xml_ids) != set(base_controls):
+        updated = _apply_top_level_control_set(root, updated, xml_ids=xml_ids, base_ids=tuple(base_controls))
+    return updated
 
 
 def platform_object_from_ordinary_form_xml_text(
@@ -162,6 +167,54 @@ def platform_object_from_ordinary_form_xml_text(
     """Parse public Form.xml text and apply supported edits to a platform object."""
 
     return platform_object_from_ordinary_form_xml(ET.fromstring(text), base_object)
+
+
+def _apply_top_level_control_set(
+    root: ET.Element,
+    base_object: OrdinaryPlatformObject,
+    *,
+    xml_ids: tuple[str, ...],
+    base_ids: tuple[str, ...],
+) -> OrdinaryPlatformObject:
+    top_level_elements = _public_top_level_control_elements(root)
+    top_level_xml_ids = {_public_control_node_id(element) for element in top_level_elements}
+    top_level_base_ids = {control.node_id for control in base_object.controls}
+    changed_ids = set(xml_ids).symmetric_difference(base_ids)
+    nested_changed = changed_ids - top_level_xml_ids - top_level_base_ids
+    if nested_changed:
+        raise ValueError(f"Nested control add/delete is not implemented yet: {sorted(nested_changed)}")
+    existing_by_id = {control.object_id: control for control in base_object.controls}
+    existing_raw_by_id = {control.object_id: control.raw for control in base_object.model.controls}
+    attribute_type_patterns, attribute_slots = _attribute_type_maps(root)
+    result: list[list[object]] = []
+    for element in top_level_elements:
+        object_id = element.get("id", "")
+        if object_id in existing_by_id:
+            expected_tag = CONTROL_XML_TAG_BY_PLATFORM_TYPE.get(existing_by_id[object_id].control_type, existing_by_id[object_id].control_type)
+            if element.tag != expected_tag:
+                raise ValueError(
+                    f"Control type mismatch for control:{object_id}: "
+                    f"expected XML tag {expected_tag!r}, got {element.tag!r}"
+                )
+            result.append(copy.deepcopy(existing_raw_by_id[object_id]))
+            continue
+        stream = control_stream_from_xml(element, None, attribute_type_patterns, attribute_slots)
+        if stream is not None:
+            result.append(stream)
+    return base_object.with_top_level_control_records(result)
+
+
+def _attribute_type_maps(root: ET.Element) -> tuple[dict[str, list[object]], dict[str, str]]:
+    attribute_type_patterns: dict[str, list[object]] = {}
+    attribute_slots: dict[str, str] = {}
+    for attribute in root.findall("./Attributes/Attribute"):
+        name = attribute.get("name", "")
+        if not name:
+            continue
+        attribute_type_patterns[name] = type_domain_pattern_from_xml(attribute)
+        if attribute.get("slot"):
+            attribute_slots[name] = attribute.get("slot", "")
+    return attribute_type_patterns, attribute_slots
 
 
 def _public_control_property_updates(element: ET.Element) -> tuple[tuple[str, object], ...]:
@@ -289,6 +342,16 @@ def _public_control_elements(root: ET.Element) -> tuple[ET.Element, ...]:
     if pages is not None:
         for page in pages.findall("Page"):
             _collect_public_controls(page, result)
+    return tuple(result)
+
+
+def _public_top_level_control_elements(root: ET.Element) -> tuple[ET.Element, ...]:
+    result: list[ET.Element] = []
+    pages = root.find("Pages")
+    if pages is None:
+        return ()
+    for page in pages.findall("Page"):
+        result.extend(child for child in list(page) if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG)
     return tuple(result)
 
 

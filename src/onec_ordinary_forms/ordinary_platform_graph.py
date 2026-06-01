@@ -23,6 +23,7 @@ from onec_ordinary_forms.ordinary_platform import (
     CF_FORM_CONTROLS_INFO8_FORMAT_ID,
     CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
     ORDINARY_CONTROL_CLASS_BY_GUID,
+    ORDINARY_CONTROL_GUID_BY_TYPE,
 )
 from onec_ordinary_forms.ordinary_platform_mappings import platform_property_xml_name
 from onec_ordinary_forms.cli import control_geometry_record, geometry_from_raw
@@ -228,6 +229,14 @@ class OrdinaryPlatformObject:
         _set_control_property(root, raw, control.control_type, property_key, value)
         return platform_object_from_list_stream_root(root)
 
+    def with_top_level_control_records(self, controls: list[list[object]]) -> "OrdinaryPlatformObject":
+        root = copy.deepcopy(self.root)
+        child_table = _root_panel_child_table(root)
+        if child_table is None:
+            raise ValueError("Cannot find ordinary form root panel child table")
+        child_table[:] = [str(len(controls)), *copy.deepcopy(controls)]
+        return platform_object_from_list_stream_root(root)
+
 
 @dataclass(frozen=True)
 class OrdinaryFormPlatformGraph:
@@ -399,6 +408,24 @@ def _find_control_node(root: object, control: OrdinaryPlatformControlObject) -> 
         ):
             return node
     return None
+
+
+def _root_panel_child_table(root: object) -> list[object] | None:
+    panel_guid = ORDINARY_CONTROL_GUID_BY_TYPE["Panel"]
+    for node in _walk_lists(root):
+        if len(node) == 3 and clean_atom(node[0]) == panel_guid and isinstance(node[2], list):
+            child_table = node[2]
+            if child_table and _is_count_atom(child_table[0]):
+                return child_table
+    return None
+
+
+def _is_count_atom(value: object) -> bool:
+    try:
+        int(clean_atom(value))
+    except ValueError:
+        return False
+    return True
 
 
 def _set_control_metadata_name(node: list[object], name: str) -> None:

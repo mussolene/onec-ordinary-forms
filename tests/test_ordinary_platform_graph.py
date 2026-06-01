@@ -923,6 +923,53 @@ def test_public_xsd_form_xml_computes_binding_offset_from_geometry() -> None:
     assert public_binding.get("offset") == "25"
 
 
+def test_public_xsd_form_xml_adds_and_deletes_top_level_controls() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Keep" id="7">
+                <Title><Item lang="ru">Keep</Item></Title>
+                <Position left="20" top="20" right="120" bottom="45"/>
+              </Button>
+              <Button name="Drop" id="8">
+                <Title><Item lang="ru">Drop</Item></Title>
+                <Position left="140" top="20" right="240" bottom="45"/>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    page = public_xml.find("./Pages/Page")
+    assert page is not None
+    drop = page.find("Button[@id='8']")
+    assert drop is not None
+    page.remove(drop)
+    new_button = ET.SubElement(page, "Button", {"name": "Added", "id": "9"})
+    title = ET.SubElement(new_button, "Title")
+    item = ET.SubElement(title, "Item", {"lang": "ru"})
+    item.text = "Added title"
+    ET.SubElement(new_button, "Position", {"left": "160", "top": "60", "right": "260", "bottom": "85"})
+
+    updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    rematerialized = ordinary_form_xml_from_platform_object(reparsed)
+
+    assert [control.name for control in reparsed.controls] == ["Keep", "Added"]
+    assert rematerialized.find("./Pages/Page/Button[@name='Keep']") is not None
+    assert rematerialized.find("./Pages/Page/Button[@name='Drop']") is None
+    added = rematerialized.find("./Pages/Page/Button[@name='Added']")
+    assert added is not None
+    assert added.findtext("./Title/Item[@lang='ru']") == "Added title"
+    assert added.find("Position").get("left") == "160"
+
+
 def test_public_xsd_form_xml_full_rebuild_roundtrip_is_semantically_stable() -> None:
     root = ET.fromstring(
         """
