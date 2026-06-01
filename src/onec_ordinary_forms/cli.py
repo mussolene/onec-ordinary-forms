@@ -25,6 +25,7 @@ from onec_ordinary_forms.liststream import parse_list_stream_document
 from onec_ordinary_forms.ordinary_platform import ORDINARY_CONTROL_CLASS_BY_GUID
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS, control_descriptor
 from onec_ordinary_forms.ordinary_stream import (
+    CONTROL_INFO_SLOT_DESCRIPTORS,
     TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN,
     form_stream_from_object_xml,
     root_panel_base_info_record,
@@ -317,33 +318,7 @@ NO_FALLBACK_TITLE_CONTROL_TYPES = {
 
 
 def item_title(item_data: dict | None, control_type: str) -> str:
-    if not isinstance(item_data, dict):
-        return ""
-    raw = item_data.get("raw") or []
-    if not isinstance(raw, list):
-        return ""
-    if len(raw) <= 2 or not isinstance(raw[2], list):
-        if control_type == "Image" and len(raw) > 5 and isinstance(raw[5], list) and len(raw[5]) > 2:
-            title = localized_text_from_record(raw[5][2])
-            if title:
-                return title
-        if control_type in NO_FALLBACK_TITLE_CONTROL_TYPES:
-            return ""
-        return first_localized_text_without_base_tooltip(raw, control_type)
-    info = raw[2]
-    if clean_token(info[0]) == "3" and len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 2:
-        return localized_text_from_record(info[1][2])
-    if clean_token(info[0]) == "1" and len(info) > 1 and isinstance(info[1], list):
-        if len(info[1]) > 2:
-            title = localized_text_from_record(info[1][2])
-            if title:
-                return title
-        if control_type == "Panel":
-            pages = panel_pages_from_raw(raw)
-            return pages[0]["title"] if pages else ""
-    if control_type in NO_FALLBACK_TITLE_CONTROL_TYPES:
-        return ""
-    return first_localized_text_without_base_tooltip(raw, control_type)
+    return item_title_parts(item_data, control_type)[1]
 
 
 def item_title_parts(item_data: dict | None, control_type: str) -> tuple[str, str]:
@@ -359,20 +334,51 @@ def item_title_parts(item_data: dict | None, control_type: str) -> tuple[str, st
                 return lang, title
         return "ru", ""
     if len(raw) > 2 and isinstance(raw[2], list):
-        info = raw[2]
-        if clean_token(info[0]) == "3" and len(info) > 1 and isinstance(info[1], list) and len(info[1]) > 2:
-            return localized_text_parts_from_record(info[1][2])
-        if clean_token(info[0]) == "1" and len(info) > 1 and isinstance(info[1], list):
-            if len(info[1]) > 2:
-                lang, title = localized_text_parts_from_record(info[1][2])
-                if title:
-                    return lang, title
-            if control_type == "Panel":
-                pages = panel_pages_from_raw(raw)
-                return (pages[0].get("titleLang", "ru"), pages[0]["title"]) if pages else ("ru", "")
-    if control_type in NO_FALLBACK_TITLE_CONTROL_TYPES:
-        return "ru", ""
-    return first_localized_text_parts_without_base_tooltip(raw, control_type)
+        lang, title = localized_text_parts_from_record(control_title_record(raw, control_type))
+        if title:
+            return lang, title
+        if control_type == "Panel":
+            pages = panel_pages_from_raw(raw)
+            return (pages[0].get("titleLang", "ru"), pages[0]["title"]) if pages else ("ru", "")
+    return "ru", ""
+
+
+def control_title_record(raw: list[object], control_type: str) -> object:
+    if len(raw) <= 2 or not isinstance(raw[2], list):
+        return None
+    info = raw[2]
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(control_type)
+    if descriptor is None:
+        return None
+    try:
+        title_slot = descriptor.slot_index("Title")
+        return nested_list_value(control_info_payload(info, descriptor.info_kind), (title_slot,))
+    except KeyError:
+        pass
+    try:
+        inner_slot = descriptor.slot_index("InnerInfo")
+    except KeyError:
+        return None
+    if control_type == "CheckBox":
+        return nested_list_value(control_info_payload(info, descriptor.info_kind), (inner_slot, 2))
+    if control_type == "RadioButton":
+        return nested_list_value(info, (inner_slot, 0, 2))
+    return None
+
+
+def control_info_payload(info: list[object], info_kind: str) -> list[object]:
+    if len(info) > 1 and clean_token(info[0]) == info_kind and isinstance(info[1], list):
+        return info[1]
+    return info
+
+
+def nested_list_value(value: object, path: tuple[int, ...]) -> object:
+    current = value
+    for index in path:
+        if not isinstance(current, list) or len(current) <= index:
+            return None
+        current = current[index]
+    return current
 
 
 def first_localized_text_without_base_tooltip(value: object, control_type: str = "") -> str:
@@ -1220,7 +1226,7 @@ def add_semantic_item(
     add_font(node, item_data)
     add_geometry(node, item_data, element_index)
     add_panel_layout(node, public_type, item_data)
-    add_command_bar_command_source(node, public_type, item_data)
+    add_command_bar_command_source(node, public_type, item_data, asset_root)
     add_picture_decoration_picture_style(node, public_type, item_data)
     if public_type == "Image":
         add_picture(node, item_data, str(item.get("name", "Picture")), asset_root)
@@ -1389,7 +1395,7 @@ def add_layout_dependency_group_nodes(parent: ET.Element, descriptors: list[dict
             dependency.set("dimension", PANEL_LAYOUT_DIMENSION_NAMES.get(dimension, f"dimension{dimension}"))
 
 
-def add_command_bar_command_source(parent: ET.Element, public_type: str, item_data: object) -> None:
+def add_command_bar_command_source(parent: ET.Element, public_type: str, item_data: object, asset_root: Path) -> None:
     if public_type != "CommandBar" or not isinstance(item_data, dict):
         return
     raw = item_data.get("raw")
@@ -1433,33 +1439,47 @@ def add_command_bar_command_source(parent: ET.Element, public_type: str, item_da
     metadata = raw[4] if len(raw) > 4 and isinstance(raw[4], list) else None
     if isinstance(metadata, list) and len(metadata) > 2:
         source.set("metadataScope", clean_token(metadata[2]))
-    branch = items[9] if len(items) > 9 and isinstance(items[9], list) else items[6] if len(items) > 6 and isinstance(items[6], list) else None
-    if isinstance(branch, list):
-        if len(branch) > 1:
-            source.set("branchUuid", clean_token(branch[1]))
-        if len(branch) > 3:
-            source.set("branchKind", clean_token(branch[3]))
-        if len(branch) > 4:
-            source.set("branchMode", clean_token(branch[4]))
-    action = items[7] if len(items) > 7 and isinstance(items[7], list) else None
-    if isinstance(action, list):
-        if len(action) > 1:
-            source.set("actionUuid", clean_token(action[1]))
-        if len(action) > 3:
-            source.set("actionTargetUuid", clean_token(action[3]))
-        if len(action) > 6:
-            source.set("actionMode", clean_token(action[6]))
-    if len(items) > 9 and isinstance(items[9], list):
-        children = items[9]
-        if len(children) > 5:
-            source.set("defaultActionUuid", clean_token(children[5]))
-    if len(items) > 6 and isinstance(items[6], list) and len(items[6]) > 1:
-        source.set("closeUuid", clean_token(items[6][1]))
-    if len(items) > 5 and isinstance(items[5], list) and len(items[5]) > 1:
-        source.set("separatorUuid", clean_token(items[5][1]))
+    if not command_bar_items_have_button_model(items):
+        branch = items[9] if len(items) > 9 and isinstance(items[9], list) else items[6] if len(items) > 6 and isinstance(items[6], list) else None
+        if isinstance(branch, list):
+            if len(branch) > 1:
+                source.set("branchUuid", clean_token(branch[1]))
+            if len(branch) > 3:
+                source.set("branchKind", clean_token(branch[3]))
+            if len(branch) > 4:
+                source.set("branchMode", clean_token(branch[4]))
+        action = items[7] if len(items) > 7 and isinstance(items[7], list) else None
+        if isinstance(action, list):
+            if len(action) > 1:
+                source.set("actionUuid", clean_token(action[1]))
+            if len(action) > 3:
+                source.set("actionTargetUuid", clean_token(action[3]))
+            if len(action) > 6:
+                source.set("actionMode", clean_token(action[6]))
+        if len(items) > 9 and isinstance(items[9], list):
+            children = items[9]
+            if len(children) > 5:
+                source.set("defaultActionUuid", clean_token(children[5]))
+        if len(items) > 6 and isinstance(items[6], list) and len(items[6]) > 1:
+            source.set("closeUuid", clean_token(items[6][1]))
+        if len(items) > 5 and isinstance(items[5], list) and len(items[5]) > 1:
+            source.set("separatorUuid", clean_token(items[5][1]))
     if not source.attrib:
         parent.remove(source)
-    add_command_bar_buttons(parent, items)
+    add_command_bar_buttons(parent, items, asset_root, parent.get("name") or "CommandBar")
+
+
+def command_bar_items_have_button_model(items: list[object]) -> bool:
+    if len(items) < 5 or clean_token(items[0]) != "5":
+        return False
+    action_count = safe_int_token(items[4])
+    if action_count < 0:
+        return False
+    groups_index = 5 + action_count
+    if len(items) <= groups_index:
+        return False
+    group_count = safe_int_token(items[groups_index])
+    return group_count >= 0 and len(items) >= groups_index + 1 + group_count
 
 
 def add_picture_decoration_picture_style(parent: ET.Element, public_type: str, item_data: object) -> None:
@@ -1500,7 +1520,12 @@ def add_picture_decoration_picture_style(parent: ET.Element, public_type: str, i
         parent.remove(picture_style_node)
 
 
-def add_command_bar_buttons(parent: ET.Element, items: list[object]) -> None:
+def add_command_bar_buttons(
+    parent: ET.Element,
+    items: list[object],
+    asset_root: Path | None = None,
+    owner_name: str = "CommandBar",
+) -> None:
     if len(items) < 5 or clean_token(items[0]) != "5":
         return
     action_count = safe_int_token(items[4])
@@ -1536,9 +1561,13 @@ def add_command_bar_buttons(parent: ET.Element, items: list[object]) -> None:
             action_node.set("handler", handler)
         if title:
             action_node.set("title", title)
-        action_node.set("kind", command_bar_value_to_attr(action[4]))
-        for index, value in enumerate(action[5:], start=5):
-            action_node.set(f"field{index}", command_bar_value_to_attr(value))
+        add_command_bar_action_payload_fields(action_node, action[4])
+        add_command_bar_action_extra_fields(
+            action_node,
+            action[5:],
+            asset_root,
+            f"{owner_name}/Actions/{clean_token(action[1]) or order}",
+        )
     groups_node = ET.SubElement(buttons, "Groups")
     for order, group in enumerate(groups, start=1):
         if len(group) < 6 or clean_token(group[0]) != "5":
@@ -1563,8 +1592,7 @@ def add_command_bar_buttons(parent: ET.Element, items: list[object]) -> None:
             if isinstance(descriptor, list):
                 add_command_bar_button_descriptor(button_node, descriptor)
         if cursor < len(group):
-            placement = ET.SubElement(group_node, "Placement")
-            placement.set("value", command_bar_value_to_attr(group[cursor]))
+            add_command_bar_group_placement(group_node, group[cursor])
 
 
 def add_command_bar_button_descriptor(button_node: ET.Element, descriptor: list[object]) -> None:
@@ -1588,6 +1616,125 @@ def add_command_bar_button_descriptor(button_node: ET.Element, descriptor: list[
     button_node.set("showText", clean_token(descriptor[13]))
     button_node.set("shortcut", clean_token(descriptor[14]))
     button_node.set("default", clean_token(descriptor[15]))
+
+
+COMMAND_BAR_ACTION_SCALAR_ATTRS = ("changesData", "display", "mode", "state", "flag", "variant")
+
+
+def add_command_bar_group_placement(group_node: ET.Element, value: object) -> None:
+    if not isinstance(value, list) or len(value) < 2:
+        return
+    placement = ET.SubElement(group_node, "Placement")
+    placement.set("zone", clean_token(value[0]))
+    placement.set("order", clean_token(value[1]))
+    if len(value) <= 2 or not isinstance(value[2], list):
+        return
+    targets = value[2]
+    if not targets:
+        return
+    placement.set("targetCount", clean_token(targets[0]))
+    cursor = 1
+    target_order = 1
+    while cursor + 2 < len(targets):
+        target = ET.SubElement(placement, "Target")
+        target.set("order", str(target_order))
+        target.set("uuid", clean_token(targets[cursor]))
+        target.set("commandId", clean_token(targets[cursor + 1]))
+        target.set("flag", clean_token(targets[cursor + 2]))
+        cursor += 3
+        target_order += 1
+
+
+def add_command_bar_action_payload_fields(action_node: ET.Element, payload: object) -> None:
+    if not isinstance(payload, list) or not payload:
+        return
+    action_kind = clean_token(payload[0])
+    if action_kind:
+        action_node.set("handlerKind", action_kind)
+    if action_kind == "1" and len(payload) > 2:
+        action_node.set("commandId", clean_token(payload[2]))
+    if action_kind != "6":
+        return
+    if len(payload) > 1:
+        action_node.set("commandScope", clean_token(payload[1]))
+    if len(payload) > 2:
+        action_node.set("commandTargetUuid", clean_token(payload[2]))
+    if len(payload) > 3:
+        action_node.set("commandCode", clean_token(payload[3]))
+    if len(payload) > 4 and isinstance(payload[4], list):
+        parameter = payload[4]
+        for index, attr_name in (
+            (0, "commandParamKind"),
+            (1, "commandParamMode"),
+            (2, "commandParamUuid"),
+            (3, "commandParamId"),
+            (4, "commandParamFlag"),
+        ):
+            if len(parameter) > index:
+                action_node.set(attr_name, clean_token(parameter[index]))
+    if len(payload) > 5:
+        action_node.set("commandFlag", clean_token(payload[5]))
+    if len(payload) > 6:
+        action_node.set("commandMode", clean_token(payload[6]))
+
+
+def add_command_bar_action_extra_fields(
+    action_node: ET.Element,
+    fields: list[object],
+    asset_root: Path,
+    item_name: str,
+) -> None:
+    scalar_index = 0
+    text_tags = iter(("ToolTip", "Explanation"))
+    picture_index = 0
+    for value in fields:
+        payload = find_base64_payload(value)
+        if payload and asset_root is not None:
+            picture_index += 1
+            picture_name = item_name if picture_index == 1 else f"{item_name}_{picture_index}"
+            add_picture_node_from_payload(action_node, payload, picture_name, asset_root)
+            continue
+        if is_command_bar_action_style_record(value):
+            add_command_bar_action_style(action_node, value)
+            continue
+        if is_empty_localized_text_record(value):
+            ET.SubElement(action_node, next(text_tags, "Explanation"))
+            continue
+        lang, text = localized_title_parts_from_record(value)
+        if text:
+            add_multilang_text(action_node, next(text_tags, "Explanation"), text, lang=lang)
+            continue
+        if scalar_index < len(COMMAND_BAR_ACTION_SCALAR_ATTRS):
+            action_node.set(COMMAND_BAR_ACTION_SCALAR_ATTRS[scalar_index], clean_token(value))
+        scalar_index += 1
+
+
+def is_command_bar_action_style_record(value: object) -> bool:
+    return isinstance(value, list) and len(value) >= 9 and clean_token(value[0]) == "4"
+
+
+def is_empty_localized_text_record(value: object) -> bool:
+    return isinstance(value, list) and len(value) == 2 and clean_token(value[0]) == "1" and clean_token(value[1]) == "0"
+
+
+def add_command_bar_action_style(action_node: ET.Element, value: object) -> None:
+    if not isinstance(value, list):
+        return
+    style = ET.SubElement(action_node, "Style")
+    for index, attr_name in (
+        (0, "kind"),
+        (1, "mode"),
+        (3, "name"),
+        (4, "width"),
+        (5, "height"),
+        (6, "visible"),
+        (7, "variant"),
+        (8, "ref"),
+    ):
+        if len(value) > index:
+            style.set(attr_name, clean_token(value[index]))
+    if len(value) > 2 and isinstance(value[2], list) and value[2]:
+        style.set("state", clean_token(value[2][0]))
 
 
 def command_bar_action_handler_and_title(value: object) -> tuple[str, str]:

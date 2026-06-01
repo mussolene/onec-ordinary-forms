@@ -1575,14 +1575,48 @@
     </xs:sequence>
   </xs:complexType>
   <xs:complexType name="CommandBarActionType">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="ToolTip" type="LocalizedTextType" minOccurs="0"/>
+      <xs:element name="Explanation" type="LocalizedTextType" minOccurs="0"/>
+      <xs:element name="Picture" type="FileRefType" minOccurs="0"/>
+      <xs:element name="Style" type="CommandBarActionStyleType" minOccurs="0"/>
+    </xs:choice>
     <xs:attribute name="order" type="xs:integer"/>
     <xs:attribute name="uuid" type="xs:string" use="required"/>
+    <xs:attribute name="recordKind" type="xs:string"/>
     <xs:attribute name="enabled" type="xs:string"/>
     <xs:attribute name="eventUuid" type="xs:string"/>
+    <xs:attribute name="handlerKind" type="xs:string"/>
     <xs:attribute name="handler" type="xs:string"/>
     <xs:attribute name="title" type="xs:string"/>
+    <xs:attribute name="commandId" type="xs:string"/>
+    <xs:attribute name="commandScope" type="xs:string"/>
+    <xs:attribute name="commandTargetUuid" type="xs:string"/>
+    <xs:attribute name="commandCode" type="xs:string"/>
+    <xs:attribute name="commandParamKind" type="xs:string"/>
+    <xs:attribute name="commandParamMode" type="xs:string"/>
+    <xs:attribute name="commandParamUuid" type="xs:string"/>
+    <xs:attribute name="commandParamId" type="xs:string"/>
+    <xs:attribute name="commandParamFlag" type="xs:string"/>
+    <xs:attribute name="commandFlag" type="xs:string"/>
+    <xs:attribute name="commandMode" type="xs:string"/>
+    <xs:attribute name="changesData" type="xs:string"/>
+    <xs:attribute name="display" type="xs:string"/>
+    <xs:attribute name="mode" type="xs:string"/>
+    <xs:attribute name="state" type="xs:string"/>
+    <xs:attribute name="flag" type="xs:string"/>
+    <xs:attribute name="variant" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="CommandBarActionStyleType">
     <xs:attribute name="kind" type="xs:string"/>
-    <xs:anyAttribute processContents="lax"/>
+    <xs:attribute name="mode" type="xs:string"/>
+    <xs:attribute name="state" type="xs:string"/>
+    <xs:attribute name="name" type="xs:string"/>
+    <xs:attribute name="width" type="xs:string"/>
+    <xs:attribute name="height" type="xs:string"/>
+    <xs:attribute name="visible" type="xs:string"/>
+    <xs:attribute name="variant" type="xs:string"/>
+    <xs:attribute name="ref" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="CommandBarGroupsType">
     <xs:sequence>
@@ -1601,7 +1635,18 @@
     <xs:attribute name="buttonCount" type="xs:integer"/>
   </xs:complexType>
   <xs:complexType name="CommandBarPlacementType">
-    <xs:attribute name="value" type="xs:string" use="required"/>
+    <xs:sequence>
+      <xs:element name="Target" type="CommandBarPlacementTargetType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="zone" type="xs:string" use="required"/>
+    <xs:attribute name="order" type="xs:string" use="required"/>
+    <xs:attribute name="targetCount" type="xs:string"/>
+  </xs:complexType>
+  <xs:complexType name="CommandBarPlacementTargetType">
+    <xs:attribute name="order" type="xs:integer"/>
+    <xs:attribute name="uuid" type="xs:string" use="required"/>
+    <xs:attribute name="commandId" type="xs:string" use="required"/>
+    <xs:attribute name="flag" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="CheckBoxType">
     <xs:complexContent>

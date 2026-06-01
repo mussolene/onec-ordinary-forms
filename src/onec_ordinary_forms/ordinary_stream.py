@@ -1458,7 +1458,13 @@ def control_stream_from_xml_with_page(
         name,
         parent_size,
     )
-    metadata_name = data_path if control_type in DATA_BOUND_CONTROL_TYPES else name
+    metadata_name = (
+        name
+        if control_type == "SpreadsheetDocumentField"
+        else data_path
+        if control_type in DATA_BOUND_CONTROL_TYPES
+        else name
+    )
     command_bar_source = command_bar_command_source_from_xml(element) if control_type == "CommandBar" else {}
     if command_bar_source.get("metadataScope"):
         metadata_scope = command_bar_source["metadataScope"]
@@ -1706,7 +1712,7 @@ def build_graphical_schema_field_control_info(context: ControlInfoBuildContext) 
 
 
 def build_command_bar_control_info(context: ControlInfoBuildContext) -> list[object]:
-    return command_bar_control_info(context.element)
+    return command_bar_control_info(context.element, context.asset_root)
 
 
 def build_table_control_info(context: ControlInfoBuildContext) -> list[object]:
@@ -3878,7 +3884,7 @@ def list_box_base_info_record_from_xml(element: ET.Element) -> list[object]:
     return base
 
 
-def command_bar_control_info(element: ET.Element) -> list[object]:
+def command_bar_control_info(element: ET.Element, asset_root: Path | None = None) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["CommandBar"]
     title = get_multilang_text(element, "Title")
     source = command_bar_command_source_from_xml(element)
@@ -3890,7 +3896,7 @@ def command_bar_control_info(element: ET.Element) -> list[object]:
         "0",
         "0",
         "1",
-        command_bar_items_record(element, title, source),
+        command_bar_items_record(element, title, source, asset_root),
         "b78f2e80-ec68-11d4-9dcf-0050bae2bc79",
         "4",
         "7aa39d8b-4bb3-4d97-9cd8-89b07dc4c30d"
@@ -3932,11 +3938,16 @@ def command_bar_command_source_from_xml(element: ET.Element) -> dict[str, str]:
     return dict(source.attrib) if source is not None else {}
 
 
-def command_bar_items_record(element: ET.Element, title: str, source: dict[str, str] | None = None) -> list[object]:
+def command_bar_items_record(
+    element: ET.Element,
+    title: str,
+    source: dict[str, str] | None = None,
+    asset_root: Path | None = None,
+) -> list[object]:
     source = source or {}
     buttons = element.find("Buttons")
     if buttons is not None:
-        record = command_bar_items_record_from_xml(buttons)
+        record = command_bar_items_record_from_xml(buttons, asset_root)
         if record:
             return record
     if element.get("name") != "ОсновныеДействияФормы" and not title:
@@ -4019,14 +4030,14 @@ def command_bar_items_record(element: ET.Element, title: str, source: dict[str, 
     ]
 
 
-def command_bar_items_record_from_xml(buttons: ET.Element) -> list[object]:
+def command_bar_items_record_from_xml(buttons: ET.Element, asset_root: Path | None = None) -> list[object]:
     root_uuid = buttons.get("rootUuid")
     root_kind = buttons.get("rootKind")
     if not root_uuid or not root_kind:
         return []
     actions = []
     for action in sorted(buttons.findall("./Actions/Action"), key=lambda node: int(node.get("order") or "0")):
-        actions.append(command_bar_action_record_from_xml(action))
+        actions.append(command_bar_action_record_from_xml(action, asset_root))
     groups = []
     for group in sorted(buttons.findall("./Groups/Group"), key=lambda node: int(node.get("order") or "0")):
         groups.append(command_bar_group_record_from_xml(group))
@@ -4042,25 +4053,89 @@ def command_bar_items_record_from_xml(buttons: ET.Element) -> list[object]:
     ]
 
 
-def command_bar_action_record_from_xml(action: ET.Element) -> list[object]:
+def command_bar_action_record_from_xml(action: ET.Element, asset_root: Path | None = None) -> list[object]:
     record = [
         action.get("recordKind") or "8",
         action.get("uuid") or "",
         action.get("enabled") or "1",
         action.get("eventUuid") or DEFAULT_CONTROL_EVENT_UUID,
-        command_bar_value_from_attr(action.get("kind"), default=command_bar_action_payload_from_xml(action)),
+        command_bar_action_payload_from_xml(action),
     ]
-    index = 5
-    while action.get(f"field{index}") is not None:
-        record.append(command_bar_value_from_attr(action.get(f"field{index}"), default="0"))
-        index += 1
+    record.extend(command_bar_action_extra_fields_from_xml(action, asset_root))
     return record
 
 
 def command_bar_action_payload_from_xml(action: ET.Element) -> list[object]:
+    handler_kind = action.get("handlerKind") or "3"
+    if handler_kind == "1":
+        return [
+            "1",
+            action.get("handler") or "",
+            action.get("commandId") or "0",
+        ]
+    if handler_kind == "6":
+        parameter = [
+            action.get("commandParamKind") or "1",
+            action.get("commandParamMode") or "0",
+            action.get("commandParamUuid") or "00000000-0000-0000-0000-000000000000",
+            action.get("commandParamId") or "2147483647",
+            action.get("commandParamFlag") or "0",
+        ]
+        return [
+            "6",
+            action.get("commandScope") or "0",
+            action.get("commandTargetUuid") or "00000000-0000-0000-0000-000000000000",
+            action.get("commandCode") or "0",
+            parameter,
+            action.get("commandFlag") or "0",
+            action.get("commandMode") or "1",
+        ]
     handler = action.get("handler") or action.get("title") or ""
     title = action.get("title") or handler
     return ["3", quoted_atom(handler), command_bar_action_descriptor(handler, title)]
+
+
+COMMAND_BAR_ACTION_SCALAR_ATTRS = ("display", "mode", "state", "flag", "variant")
+
+
+def command_bar_action_extra_fields_from_xml(action: ET.Element, asset_root: Path | None = None) -> list[object]:
+    fields: list[object] = []
+    if action.get("changesData") is not None:
+        fields.append(action.get("changesData") or "0")
+    for tag in ("ToolTip", "Explanation"):
+        if action.find(tag) is not None:
+            fields.append(command_bar_action_text_record_from_xml(action, tag))
+    picture_payload = picture_payload_from_xml(action.find("Picture"), asset_root)
+    if picture_payload:
+        fields.append(button_picture_record(picture_payload))
+    style = action.find("Style")
+    if style is not None:
+        fields.append(command_bar_action_style_record_from_xml(style))
+    for attr_name in COMMAND_BAR_ACTION_SCALAR_ATTRS:
+        if action.get(attr_name) is not None:
+            fields.append(action.get(attr_name) or "0")
+    return fields
+
+
+def command_bar_action_text_record_from_xml(action: ET.Element, tag: str) -> list[object]:
+    node = action.find(tag)
+    if node is not None and node.find("Item") is None:
+        return ["1", "0"]
+    return localized_text_record_from_xml(action, tag)
+
+
+def command_bar_action_style_record_from_xml(style: ET.Element) -> list[object]:
+    return [
+        style.get("kind") or "4",
+        style.get("mode") or "0",
+        [style.get("state") or "0"],
+        quoted_atom(style.get("name") or ""),
+        style.get("width") or "-1",
+        style.get("height") or "-1",
+        style.get("visible") or "1",
+        style.get("variant") or "0",
+        quoted_atom(style.get("ref") or ""),
+    ]
 
 
 def command_bar_group_record_from_xml(group: ET.Element) -> list[object]:
@@ -4077,10 +4152,28 @@ def command_bar_group_record_from_xml(group: ET.Element) -> list[object]:
         record.append(command_bar_button_descriptor_from_xml(button))
     placement = group.find("Placement")
     if placement is not None:
-        record.append(command_bar_value_from_attr(placement.get("value"), default=["-1", "0", ["0"]]))
+        record.append(command_bar_placement_record_from_xml(placement))
     else:
         record.append(["-1", "0", ["0"]])
     return record
+
+
+def command_bar_placement_record_from_xml(placement: ET.Element) -> list[object]:
+    targets = sorted(placement.findall("Target"), key=lambda node: int(node.get("order") or "0"))
+    target_record: list[object] = [placement.get("targetCount") or str(len(targets))]
+    for target in targets:
+        target_record.extend(
+            [
+                target.get("uuid") or "",
+                target.get("commandId") or "0",
+                target.get("flag") or "0",
+            ]
+        )
+    return [
+        placement.get("zone") or "-1",
+        placement.get("order") or "0",
+        target_record,
+    ]
 
 
 def command_bar_button_descriptor_from_xml(button: ET.Element) -> list[object]:

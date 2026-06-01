@@ -142,6 +142,30 @@ def test_platform_object_from_list_stream_text_exposes_typed_controls() -> None:
     assert len(platform_object.persistence_by_family("controls")) == 2
 
 
+def test_platform_object_title_does_not_use_event_titles() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <InputField name="Input" id="8">
+                <Events>
+                  <Event name="ПриИзменении" title="Input changed title">InputOnChange</Event>
+                </Events>
+              </InputField>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+
+    platform_object = platform_object_from_list_stream_text(text)
+
+    assert platform_object.control_by_name("Input").title == ""
+
+
 def test_platform_object_roundtrips_back_to_list_stream_text() -> None:
     root = ET.fromstring(
         """

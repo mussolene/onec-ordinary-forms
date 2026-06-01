@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
+from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS
 
 
 @dataclass
@@ -210,14 +211,54 @@ def _metadata_record(node: list[object]) -> list[object] | None:
 
 
 def _title(node: object) -> str:
-    if isinstance(node, list):
-        if len(node) >= 3 and str(node[0]) == "1" and str(node[1]) == "1" and isinstance(node[2], list):
-            if len(node[2]) >= 2 and _clean(node[2][0]) == "ru":
-                return _clean(node[2][1])
-        for child in node:
-            found = _title(child)
-            if found:
-                return found
+    if isinstance(node, list) and node:
+        record = _control_title_record(ordinary_control_type(node[0]), _control_info_table(node))
+        return _localized_text(record)
+    return ""
+
+
+def _control_title_record(control_type: str, info_table: list[object] | None) -> object:
+    if not isinstance(info_table, list):
+        return None
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(control_type)
+    if descriptor is None:
+        return None
+    try:
+        title_slot = descriptor.slot_index("Title")
+        return _nested_list_value(_control_info_payload(info_table, descriptor.info_kind), (title_slot,))
+    except KeyError:
+        pass
+    try:
+        inner_slot = descriptor.slot_index("InnerInfo")
+    except KeyError:
+        return None
+    if control_type == "CheckBox":
+        return _nested_list_value(_control_info_payload(info_table, descriptor.info_kind), (inner_slot, 2))
+    if control_type == "RadioButton":
+        return _nested_list_value(info_table, (inner_slot, 0, 2))
+    return None
+
+
+def _control_info_payload(info_table: list[object], info_kind: str) -> list[object]:
+    if len(info_table) > 1 and _clean(info_table[0]) == info_kind and isinstance(info_table[1], list):
+        return info_table[1]
+    return info_table
+
+
+def _nested_list_value(value: object, path: tuple[int, ...]) -> object:
+    current = value
+    for index in path:
+        if not isinstance(current, list) or len(current) <= index:
+            return None
+        current = current[index]
+    return current
+
+
+def _localized_text(value: object) -> str:
+    if isinstance(value, list):
+        if len(value) >= 3 and str(value[0]) == "1" and str(value[1]) == "1" and isinstance(value[2], list):
+            if len(value[2]) >= 2 and _clean(value[2][0]) == "ru":
+                return _clean(value[2][1])
     return ""
 
 

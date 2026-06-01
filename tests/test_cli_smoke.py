@@ -2467,6 +2467,27 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(list_box[2][1][1][0], "23")
         self.assertEqual(list_box[2][1][1][22], "0")
 
+    def test_spreadsheet_document_field_keeps_metadata_name_separate_from_data_path(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Title><Item lang="ru">Main</Item></Title>
+              <Pages>
+                <Page name="Main">
+                  <SpreadsheetDocumentField name="0" id="173">
+                    <DataPath>ПечатнаяФормаДокумента</DataPath>
+                  </SpreadsheetDocumentField>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        spreadsheet = self._find_control(stream, "236a17b3-7f44-46d9-a907-75f9cdc61ab5")
+
+        self.assertIsNotNone(spreadsheet)
+        assert spreadsheet is not None
+        self.assertEqual(spreadsheet[4][1], '"0"')
+
     def test_short_paged_positions_use_platform_parent_anchor_profiles(self) -> None:
         root = ET.fromstring(
             """<Form>

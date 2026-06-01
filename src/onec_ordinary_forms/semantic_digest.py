@@ -21,6 +21,12 @@ NOISE_ATTRIBUTES = frozenset(
     }
 )
 
+NOISE_ELEMENTS = frozenset(
+    {
+        "SerializationCounter",
+    }
+)
+
 NON_CONTROL_PARENT_TAGS = frozenset(
     {
         "Actions",
@@ -88,7 +94,11 @@ def stable_node(element: ET.Element) -> dict[str, object]:
         node["attributes"] = attrs
     if element.text and element.text.strip():
         node["text"] = normalize_text(element.text)
-    children = [stable_node(child) for child in element if isinstance(child.tag, str)]
+    children = [
+        stable_node(child)
+        for child in element
+        if isinstance(child.tag, str) and not is_noise_element(child.tag)
+    ]
     if children:
         node["children"] = children
     return node
@@ -293,7 +303,17 @@ def normalize_text(value: str) -> str:
 
 def is_noise_attribute(name: str) -> bool:
     local = local_name(name)
-    return local in NOISE_ATTRIBUTES or local == "schemaLocation" or local == "noNamespaceSchemaLocation"
+    return (
+        local in NOISE_ATTRIBUTES
+        or local == "schemaLocation"
+        or local == "noNamespaceSchemaLocation"
+        or local == "uuid"
+        or local.endswith("Uuid")
+    )
+
+
+def is_noise_element(name: str) -> bool:
+    return local_name(name) in NOISE_ELEMENTS
 
 
 def local_name(name: str) -> str:
