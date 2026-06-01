@@ -22,11 +22,15 @@ CF_FORM_CONTROLS_INFO8_FORMAT_ID = 0x9D00
 
 PLATFORM_TRANSFER_COUNT_SIZE = 4
 PLATFORM_TRANSFER_RECORD_SIZE = 0x10
+PLATFORM_INFO_TRANSFER_RECORD_SIZE = 0x10
+PLATFORM_POSITION_TRANSFER_RECORD_SIZE = 0x20
+PLATFORM_FORMAT_ENTRY_RECORD_SIZE = 0x28
+PLATFORM_FORMAT_ERROR_HRESULT = 0x80040064
 
 
 @dataclass(frozen=True)
 class PlatformTransferRecord:
-    """One 16-byte entry from platform cf_form_controls_info8/position8 data."""
+    """One 16-byte entry from platform ``cf_form_controls_info8`` data."""
 
     word0: int
     word1: int
@@ -35,6 +39,43 @@ class PlatformTransferRecord:
 
     def as_tuple(self) -> tuple[int, int, int, int]:
         return (self.word0, self.word1, self.word2, self.word3)
+
+
+@dataclass(frozen=True)
+class PlatformPositionTransferRecord:
+    """One 32-byte entry from platform ``cf_form_controls_position8`` data."""
+
+    word0: int
+    word1: int
+    word2: int
+    word3: int
+    word4: int
+    word5: int
+    word6: int
+    word7: int
+
+    def as_tuple(self) -> tuple[int, int, int, int, int, int, int, int]:
+        return (
+            self.word0,
+            self.word1,
+            self.word2,
+            self.word3,
+            self.word4,
+            self.word5,
+            self.word6,
+            self.word7,
+        )
+
+
+@dataclass(frozen=True)
+class PlatformFormatEntry:
+    """One platform FORMATETC-like entry advertised by ordinary controls."""
+
+    format_id: int
+    target_device: int = 0
+    aspect: int = 1
+    lindex: int = -1
+    tymed: int = 1
 
 
 @dataclass(frozen=True)
@@ -75,19 +116,80 @@ ORDINARY_CONTROL_CLASS_BY_GUID = {
 }
 
 ORDINARY_CONTROL_GUID_BY_TYPE = {value: key for key, value in ORDINARY_CONTROL_CLASS_BY_GUID.items()}
+PLATFORM_CONTROL_FORMAT_ORDER = (
+    CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
+    CF_FORM_CONTROLS8_FORMAT_ID,
+    CF_FORM_CONTROLS_INFO8_FORMAT_ID,
+)
 
 
 def ordinary_control_type(class_id: object) -> str:
     return ORDINARY_CONTROL_CLASS_BY_GUID.get(str(class_id).lower(), "")
 
 
-def unpack_platform_transfer_records(payload: bytes) -> list[PlatformTransferRecord]:
-    """Decode platform transfer payloads shaped as ``uint32 count + 0x10 * count``.
+def platform_control_format_entries(
+    *,
+    start_index: int = 0,
+    capacity: int | None = None,
+) -> tuple[list[PlatformFormatEntry], bool]:
+    """Return the ordinary-control format entries exposed by the platform.
 
-    1C 8.2 writes both ``cf_form_controls_position8`` and
-    ``cf_form_controls_info8`` this way. In 8.5 decompile the info payload is
-    copied as two 64-bit words, but the external byte layout remains 16 bytes
-    per record, so the four-word representation keeps the contract explicit.
+    1C 8.5 ``dsgnfrm`` function ``FUN_002709e0`` enumerates three
+    FORMATETC-like records in this order: position, controls, info. The boolean
+    mirrors the platform return condition: requested capacity was larger than
+    the remaining records.
+    """
+
+    if start_index < 0:
+        raise ValueError("start_index must be non-negative")
+    remaining = list(PLATFORM_CONTROL_FORMAT_ORDER[start_index:])
+    if capacity is None:
+        requested = len(remaining)
+        selected = remaining
+    else:
+        if capacity < 0:
+            raise ValueError("capacity must be non-negative")
+        requested = capacity
+        selected = remaining[:capacity]
+    return [PlatformFormatEntry(format_id=item) for item in selected], len(remaining) < requested
+
+
+def pack_platform_format_entry(entry: PlatformFormatEntry) -> bytes:
+    """Encode the platform 0x28-byte FORMATETC-like record."""
+
+    return pack(
+        "<H6xQI4xqI4x",
+        entry.format_id,
+        entry.target_device,
+        entry.aspect,
+        entry.lindex,
+        entry.tymed,
+    )
+
+
+def unpack_platform_format_entry(payload: bytes) -> PlatformFormatEntry:
+    """Decode one platform 0x28-byte FORMATETC-like record."""
+
+    if len(payload) != PLATFORM_FORMAT_ENTRY_RECORD_SIZE:
+        raise ValueError(
+            f"Platform format entry has {len(payload)} bytes, expected {PLATFORM_FORMAT_ENTRY_RECORD_SIZE}"
+        )
+    format_id, target_device, aspect, lindex, tymed = unpack_from("<H6xQI4xqI4x", payload, 0)
+    return PlatformFormatEntry(format_id, target_device, aspect, lindex, tymed)
+
+
+def platform_control_format_supported(format_id: int) -> bool:
+    """Return whether the ordinary-control data object accepts ``format_id``."""
+
+    return format_id in PLATFORM_CONTROL_FORMAT_ORDER
+
+
+def unpack_platform_transfer_records(payload: bytes) -> list[PlatformTransferRecord]:
+    """Decode ``cf_form_controls_info8`` as ``uint32 count + 0x10 * count``.
+
+    1C 8.5 ``FUN_00270da0`` writes the info payload as a count followed by
+    linked-list entries copied as two 64-bit words. The four-word representation
+    is the same 16 bytes in little-endian form and is friendlier for tests.
     """
 
     if len(payload) < PLATFORM_TRANSFER_COUNT_SIZE:
@@ -105,12 +207,56 @@ def unpack_platform_transfer_records(payload: bytes) -> list[PlatformTransferRec
 
 
 def pack_platform_transfer_records(records: list[PlatformTransferRecord]) -> bytes:
-    """Encode ``cf_form_controls_info8``/``position8`` transfer records."""
+    """Encode ``cf_form_controls_info8`` transfer records."""
 
     result = bytearray(pack("<I", len(records)))
     for record in records:
         result.extend(pack("<IIII", *record.as_tuple()))
     return bytes(result)
+
+
+def unpack_platform_position_transfer_records(payload: bytes) -> list[PlatformPositionTransferRecord]:
+    """Decode ``cf_form_controls_position8`` as ``uint32 count + 0x20 * count``."""
+
+    if len(payload) < PLATFORM_TRANSFER_COUNT_SIZE:
+        raise ValueError("Platform position payload is too short for count")
+    count = unpack_from("<I", payload, 0)[0]
+    expected = PLATFORM_TRANSFER_COUNT_SIZE + count * PLATFORM_POSITION_TRANSFER_RECORD_SIZE
+    if len(payload) != expected:
+        raise ValueError(f"Platform position payload has {len(payload)} bytes, expected {expected}")
+    records: list[PlatformPositionTransferRecord] = []
+    offset = PLATFORM_TRANSFER_COUNT_SIZE
+    for _ in range(count):
+        records.append(PlatformPositionTransferRecord(*unpack_from("<IIIIIIII", payload, offset)))
+        offset += PLATFORM_POSITION_TRANSFER_RECORD_SIZE
+    return records
+
+
+def pack_platform_position_transfer_records(records: list[PlatformPositionTransferRecord]) -> bytes:
+    """Encode ``cf_form_controls_position8`` transfer records."""
+
+    result = bytearray(pack("<I", len(records)))
+    for record in records:
+        result.extend(pack("<IIIIIIII", *record.as_tuple()))
+    return bytes(result)
+
+
+def pack_platform_control_transfer_payload(
+    format_id: int,
+    *,
+    controls_payload: bytes,
+    position_records: list[PlatformPositionTransferRecord] | None = None,
+    info_records: list[PlatformTransferRecord] | None = None,
+) -> bytes:
+    """Encode the payload selected by an ordinary-control platform format id."""
+
+    if format_id == CF_FORM_CONTROLS8_FORMAT_ID:
+        return controls_payload
+    if format_id == CF_FORM_CONTROLS_POSITION8_FORMAT_ID:
+        return pack_platform_position_transfer_records(position_records or [])
+    if format_id == CF_FORM_CONTROLS_INFO8_FORMAT_ID:
+        return pack_platform_transfer_records(info_records or [])
+    raise ValueError(f"Unsupported platform control format 0x{format_id:04x}")
 
 
 def platform_composite_flag_registry(records: list[PlatformCompositeFlagRecord], *, version: str = "0") -> list[object]:

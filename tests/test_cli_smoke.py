@@ -39,12 +39,26 @@ from onec_ordinary_forms.liststream import dumps, dumps_list_out_stream, parse_l
 from onec_ordinary_forms.ordinary_model import parse_ordinary_form_model
 from onec_ordinary_forms.ordinary_platform import ordinary_control_type
 from onec_ordinary_forms.ordinary_platform import (
+    CF_FORM_CONTROLS8_FORMAT_ID,
+    CF_FORM_CONTROLS_INFO8_FORMAT_ID,
+    CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
+    PLATFORM_FORMAT_ENTRY_RECORD_SIZE,
+    PLATFORM_POSITION_TRANSFER_RECORD_SIZE,
     PLATFORM_TRANSFER_RECORD_SIZE,
     PlatformCompositeFlagRecord,
+    PlatformFormatEntry,
+    PlatformPositionTransferRecord,
     PlatformTransferRecord,
+    pack_platform_control_transfer_payload,
+    pack_platform_format_entry,
+    pack_platform_position_transfer_records,
     pack_platform_transfer_records,
     parse_platform_composite_flag_registry,
+    platform_control_format_entries,
+    platform_control_format_supported,
     platform_composite_flag_registry,
+    unpack_platform_format_entry,
+    unpack_platform_position_transfer_records,
     unpack_platform_transfer_records,
 )
 from onec_ordinary_forms.ordinary_properties import COMMAND_BAR_BUTTON_DESCRIPTOR, ORDINARY_CONTROL_DESCRIPTORS
@@ -338,6 +352,58 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(unpack_platform_transfer_records(payload), records)
         with self.assertRaises(ValueError):
             unpack_platform_transfer_records(payload + b"\x00")
+
+    def test_platform_control_format_entries_match_decompiled_enumerator(self) -> None:
+        entries, exhausted = platform_control_format_entries(capacity=4)
+
+        self.assertEqual(
+            [entry.format_id for entry in entries],
+            [
+                CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
+                CF_FORM_CONTROLS8_FORMAT_ID,
+                CF_FORM_CONTROLS_INFO8_FORMAT_ID,
+            ],
+        )
+        self.assertTrue(exhausted)
+
+        payload = pack_platform_format_entry(entries[0])
+        self.assertEqual(len(payload), PLATFORM_FORMAT_ENTRY_RECORD_SIZE)
+        self.assertEqual(unpack_platform_format_entry(payload), PlatformFormatEntry(CF_FORM_CONTROLS_POSITION8_FORMAT_ID))
+        self.assertTrue(platform_control_format_supported(CF_FORM_CONTROLS8_FORMAT_ID))
+        self.assertFalse(platform_control_format_supported(0xFFFF))
+
+    def test_platform_position_transfer_records_use_decompiled_32_byte_layout(self) -> None:
+        records = [
+            PlatformPositionTransferRecord(1, 2, 3, 4, 5, 6, 7, 8),
+            PlatformPositionTransferRecord(0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80),
+        ]
+
+        payload = pack_platform_position_transfer_records(records)
+
+        self.assertEqual(len(payload), 4 + len(records) * PLATFORM_POSITION_TRANSFER_RECORD_SIZE)
+        self.assertEqual(unpack_platform_position_transfer_records(payload), records)
+        self.assertEqual(
+            pack_platform_control_transfer_payload(
+                CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
+                controls_payload=b"ignored",
+                position_records=records,
+            ),
+            payload,
+        )
+        self.assertEqual(
+            pack_platform_control_transfer_payload(CF_FORM_CONTROLS8_FORMAT_ID, controls_payload=b"controls"),
+            b"controls",
+        )
+        self.assertEqual(
+            pack_platform_control_transfer_payload(
+                CF_FORM_CONTROLS_INFO8_FORMAT_ID,
+                controls_payload=b"ignored",
+                info_records=[PlatformTransferRecord(1, 2, 3, 4)],
+            ),
+            pack_platform_transfer_records([PlatformTransferRecord(1, 2, 3, 4)]),
+        )
+        with self.assertRaises(ValueError):
+            unpack_platform_position_transfer_records(payload + b"\x00")
 
     def test_platform_composite_flag_registry_matches_list_stream_shape(self) -> None:
         records = [
