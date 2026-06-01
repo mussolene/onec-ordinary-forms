@@ -37,6 +37,7 @@ from onec_ordinary_forms.ordinary_platform_graph import (
     OrdinaryPlatformObject,
     platform_object_from_list_stream_text,
 )
+from onec_ordinary_forms.ordinary_platform_object import PlatformFormObject
 from onec_ordinary_forms.ordinary_properties import (
     ORDINARY_CONTROL_DESCRIPTORS,
     load_platform_palette,
@@ -135,21 +136,21 @@ def platform_object_from_ordinary_form_xml(
                 f"expected XML tag {expected_tag!r}, got {element.tag!r}"
             )
 
-    updated = base_object
+    editor = PlatformFormObject(base_object)
     for element in xml_controls:
         node_id = _public_control_node_id(element)
-        current = updated.control(node_id)
+        current = editor.to_platform_object().control(node_id)
         name = element.get("name", current.name)
         title = _localized_title_from_xml(element)
         name_update = name if name != current.name else None
         title_update = title if title is not None and title != current.title else None
-        if name_update is not None or title_update is not None:
-            updated = updated.with_control_updates(
-                node_id,
-                name=name_update,
-                title=title_update,
-            )
-    return updated
+        if name_update is not None and title_update is not None:
+            editor = editor.rename_control(node_id, name_update, title=title_update)
+        elif name_update is not None:
+            editor = editor.rename_control(node_id, name_update)
+        elif title_update is not None:
+            editor = editor.set_control_title(node_id, title_update)
+    return editor.to_platform_object()
 
 
 def platform_object_from_ordinary_form_xml_text(

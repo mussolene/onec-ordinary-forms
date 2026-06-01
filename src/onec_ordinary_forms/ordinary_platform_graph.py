@@ -23,6 +23,7 @@ from onec_ordinary_forms.ordinary_platform import (
     CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
     ORDINARY_CONTROL_CLASS_BY_GUID,
 )
+from onec_ordinary_forms.ordinary_platform_mappings import platform_property_xml_name
 from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS
 from onec_ordinary_forms.platform_model import (
     PLATFORM_RUNTIME_CALL_EDGES,
@@ -66,6 +67,10 @@ class PlatformObjectDiagnostic:
     code: str
     message: str
     node_id: str = ""
+
+
+class UnsupportedPlatformObjectOperation(ValueError):
+    """Raised when an object-level edit has no verified platform accessor yet."""
 
 
 @dataclass(frozen=True)
@@ -163,6 +168,38 @@ class OrdinaryPlatformObject:
 
     def with_control_title(self, node_id: str, title: str) -> "OrdinaryPlatformObject":
         return self.with_control_updates(node_id, title=title)
+
+    def control_property(self, node_id: str, property_name: str) -> str:
+        control = self.control(node_id)
+        property_key = _control_property_key(control.control_type, property_name)
+        if property_key == "Name":
+            return control.name
+        if property_key == "Title":
+            return control.title
+        raw = _find_control_node(self.root, control)
+        if raw is None:
+            raise KeyError(f"Cannot find raw list-stream node for {node_id}")
+        return _control_property_value(raw, control.control_type, property_key)
+
+    def with_control_property(
+        self,
+        node_id: str,
+        property_name: str,
+        value: object,
+    ) -> "OrdinaryPlatformObject":
+        control = self.control(node_id)
+        property_key = _control_property_key(control.control_type, property_name)
+        if property_key == "Name":
+            return self.with_control_name(node_id, str(value))
+        if property_key == "Title":
+            return self.with_control_title(node_id, str(value))
+
+        root = copy.deepcopy(self.root)
+        raw = _find_control_node(root, control)
+        if raw is None:
+            raise KeyError(f"Cannot find raw list-stream node for {node_id}")
+        _set_control_property(raw, control.control_type, property_key, value)
+        return platform_object_from_list_stream_root(root)
 
 
 @dataclass(frozen=True)
@@ -350,6 +387,67 @@ def _set_control_title(node: list[object], control_type: str, title: str) -> boo
     if title_slot is not None and info is not None and len(info) > title_slot:
         return _set_localized_text_record(info[title_slot], title)
     return _set_first_localized_text_record(node, title)
+
+
+def _control_property_key(control_type: str, property_name: str) -> str:
+    if property_name in {"Name", "Имя"}:
+        return "Name"
+    if property_name in {"Title", "Заголовок"}:
+        return "Title"
+    mapped = platform_property_xml_name(control_type, property_name)
+    return mapped or property_name
+
+
+def _control_property_value(node: list[object], control_type: str, property_key: str) -> str:
+    if control_type == "InputField" and property_key == "ReadOnly":
+        record = _input_field_object_info_record(node)
+        if record is not None and len(record) > 12:
+            return "true" if clean_atom(record[12]) == "1" else "false"
+    raise UnsupportedPlatformObjectOperation(
+        f"No verified object accessor for {control_type}.{property_key}"
+    )
+
+
+def _set_control_property(
+    node: list[object],
+    control_type: str,
+    property_key: str,
+    value: object,
+) -> None:
+    if control_type == "InputField" and property_key == "ReadOnly":
+        record = _input_field_object_info_record(node)
+        if record is not None and len(record) > 12:
+            record[12] = _platform_bool_atom(value)
+            return
+    raise UnsupportedPlatformObjectOperation(
+        f"No verified object writer for {control_type}.{property_key}"
+    )
+
+
+def _input_field_object_info_record(node: list[object]) -> list[object] | None:
+    info = _control_info_record(node)
+    if (
+        not info
+        or clean_atom(info[0]) != "9"
+        or len(info) <= 2
+        or not isinstance(info[2], list)
+    ):
+        return None
+    for candidate in info[2]:
+        if isinstance(candidate, list) and candidate and isinstance(candidate[0], list):
+            return candidate
+    return None
+
+
+def _platform_bool_atom(value: object) -> str:
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "да"}:
+        return "1"
+    if text in {"0", "false", "no", "нет", ""}:
+        return "0"
+    raise ValueError(f"Cannot encode platform boolean value: {value!r}")
 
 
 def _set_first_localized_text_record(value: object, title: str) -> bool:

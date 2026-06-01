@@ -17,6 +17,10 @@ from onec_ordinary_forms.ordinary_platform_graph import (
     platform_object_from_model,
     runtime_skeleton_graph,
 )
+from onec_ordinary_forms.ordinary_platform_object import (
+    PlatformFormObject,
+    UnsupportedPlatformObjectOperation,
+)
 from onec_ordinary_forms.ordinary_platform_dto import (
     ordinary_form_xml_bytes_from_platform_object,
     ordinary_form_xml_from_platform_object,
@@ -203,6 +207,87 @@ def test_platform_object_writes_control_name_and_title_to_bracket_stream() -> No
     assert "Run title changed" in emitted
     assert reparsed.control_by_name("RunChanged").node_id == "control:7"
     assert reparsed.control_by_name("Input").node_id == "control:8"
+
+
+def test_platform_form_object_edits_control_identity_and_title_by_object_name() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    form = PlatformFormObject.from_list_stream_text(form_stream_from_object_xml(root).decode("utf-8-sig"))
+
+    updated = form.rename_control("Run", "RunObject", title="Run object title")
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+
+    assert [control.name for control in updated.controls()] == ["RunObject", "Input"]
+    assert reparsed.control_by_name("RunObject").title == "Run object title"
+    assert reparsed.control_by_name("Input").node_id == "control:8"
+
+
+def test_platform_form_object_sets_input_field_property_by_platform_name() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    form = PlatformFormObject.from_list_stream_text(form_stream_from_object_xml(root).decode("utf-8-sig"))
+
+    updated = form.set_control_property("Input", "ТолькоПросмотр", True)
+    platform_object = updated.to_platform_object()
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    read_only = public_xml.find("./Pages/Page/InputField[@name='Input']/ReadOnly")
+
+    assert updated.get_control_property("Input", "ReadOnly") == "true"
+    assert read_only is not None
+    assert read_only.text == "true"
+    assert platform_object.control_by_name("Run").title == "Run"
+    assert len(platform_object.flatten_controls()) == 2
+
+
+def test_platform_form_object_rejects_unverified_property_writer() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    form = PlatformFormObject.from_list_stream_text(form_stream_from_object_xml(root).decode("utf-8-sig"))
+
+    try:
+        form.set_control_property("Run", "Кнопки", "0")
+    except UnsupportedPlatformObjectOperation as error:
+        assert "Button.Buttons" in str(error)
+    else:
+        raise AssertionError("Expected unverified object writer to fail")
 
 
 def test_platform_object_xml_roundtrips_without_stream_payload() -> None:
