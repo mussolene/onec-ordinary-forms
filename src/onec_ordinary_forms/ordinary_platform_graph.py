@@ -25,6 +25,7 @@ from onec_ordinary_forms.ordinary_platform import (
     ORDINARY_CONTROL_CLASS_BY_GUID,
 )
 from onec_ordinary_forms.ordinary_platform_mappings import platform_property_xml_name
+from onec_ordinary_forms.cli import control_geometry_record, geometry_from_raw
 from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS
 from onec_ordinary_forms.ordinary_stream import color_record_from_xml, font_record_from_xml
 from onec_ordinary_forms.platform_position_xml import (
@@ -224,7 +225,7 @@ class OrdinaryPlatformObject:
         raw = _find_control_node(root, control)
         if raw is None:
             raise KeyError(f"Cannot find raw list-stream node for {node_id}")
-        _set_control_property(raw, control.control_type, property_key, value)
+        _set_control_property(root, raw, control.control_type, property_key, value)
         return platform_object_from_list_stream_root(root)
 
 
@@ -471,6 +472,7 @@ def _control_property_value(
 
 
 def _set_control_property(
+    root: object,
     node: list[object],
     control_type: str,
     property_key: str,
@@ -500,7 +502,13 @@ def _set_control_property(
             return
     if property_key == "Position":
         position = _property_value_element("Position", value)
-        if apply_position_node_to_control_record(position, node):
+        current_id = clean_atom(node[1]) if len(node) > 1 else ""
+        if apply_position_node_to_control_record(
+            position,
+            node,
+            current_id=current_id,
+            element_index=_element_index_from_root(root),
+        ):
             return
     if property_key == "ReadOnly":
         record = _control_info_property_record(node, control_type)
@@ -561,6 +569,9 @@ def _element_index_from_root(root: object) -> dict[str, dict[str, str]]:
         object_id = clean_atom(node[1])
         if object_id:
             result[object_id] = {"id": object_id, "name": name, "path": name}
+            geometry = control_geometry_record(node)
+            if geometry is not None:
+                result[object_id].update(geometry_from_raw(geometry))
     return result
 
 
