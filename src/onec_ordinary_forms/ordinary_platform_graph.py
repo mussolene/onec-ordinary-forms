@@ -8,9 +8,10 @@ area for platform ListOutStream persistence work.
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 
-from onec_ordinary_forms.liststream import parse_list_stream_document
+from onec_ordinary_forms.liststream import dumps_list_out_stream, parse_list_stream_document
 from onec_ordinary_forms.ordinary_model import (
     OrdinaryControl,
     OrdinaryFormModel,
@@ -22,12 +23,14 @@ from onec_ordinary_forms.ordinary_platform import (
     CF_FORM_CONTROLS_POSITION8_FORMAT_ID,
     ORDINARY_CONTROL_CLASS_BY_GUID,
 )
+from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS
 from onec_ordinary_forms.platform_model import (
     PLATFORM_RUNTIME_CALL_EDGES,
     PLATFORM_RUNTIME_EDGES,
     PLATFORM_RUNTIME_NODES,
     PlatformRuntimeCallEdge,
 )
+from onec_ordinary_forms.value_codec import clean_atom, quote_atom
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,39 @@ class OrdinaryPlatformObject:
 
     def persistence_by_family(self, family: str) -> tuple[PlatformPersistenceRecord, ...]:
         return self.graph.persistence_by_family(family)
+
+    def to_list_stream_root(self) -> object:
+        return copy.deepcopy(self.root)
+
+    def to_list_stream_text(self, *, include_bom: bool = False) -> str:
+        text = dumps_list_out_stream(self.root)
+        return "\ufeff" + text if include_bom else text
+
+    def with_control_updates(
+        self,
+        node_id: str,
+        *,
+        name: str | None = None,
+        title: str | None = None,
+    ) -> "OrdinaryPlatformObject":
+        if name is None and title is None:
+            return self
+        control = self.control(node_id)
+        root = copy.deepcopy(self.root)
+        raw = _find_control_node(root, control)
+        if raw is None:
+            raise KeyError(f"Cannot find raw list-stream node for {node_id}")
+        if name is not None:
+            _set_control_metadata_name(raw, name)
+        if title is not None and not _set_control_title(raw, control.control_type, title):
+            raise ValueError(f"Cannot find localized title record for {node_id}")
+        return platform_object_from_list_stream_root(root)
+
+    def with_control_name(self, node_id: str, name: str) -> "OrdinaryPlatformObject":
+        return self.with_control_updates(node_id, name=name)
+
+    def with_control_title(self, node_id: str, title: str) -> "OrdinaryPlatformObject":
+        return self.with_control_updates(node_id, title=title)
 
 
 @dataclass(frozen=True)
@@ -287,6 +323,118 @@ def _control_node_id(control: OrdinaryControl, index: int) -> str:
     if control.name:
         return f"control:{control.name}"
     return f"control:{index}"
+
+
+def _find_control_node(root: object, control: OrdinaryPlatformControlObject) -> list[object] | None:
+    for node in _walk_lists(root):
+        if (
+            len(node) >= 2
+            and clean_atom(node[0]) == control.class_id
+            and clean_atom(node[1]) == control.object_id
+            and _control_metadata_name(node) == control.name
+        ):
+            return node
+    return None
+
+
+def _set_control_metadata_name(node: list[object], name: str) -> None:
+    metadata = _control_metadata_record(node)
+    if metadata is None or len(metadata) < 2:
+        raise ValueError("Control list-stream node has no metadata name record")
+    metadata[1] = quote_atom(name)
+
+
+def _set_control_title(node: list[object], control_type: str, title: str) -> bool:
+    info = _control_info_slot_container(node, control_type)
+    title_slot = _control_title_slot(control_type)
+    if title_slot is not None and info is not None and len(info) > title_slot:
+        return _set_localized_text_record(info[title_slot], title)
+    return _set_first_localized_text_record(node, title)
+
+
+def _set_first_localized_text_record(value: object, title: str) -> bool:
+    if _is_localized_text_record(value):
+        _set_localized_text_record(value, title)
+        return True
+    if isinstance(value, list):
+        for item in value:
+            if _set_first_localized_text_record(item, title):
+                return True
+    return False
+
+
+def _set_localized_text_record(value: object, text: str) -> bool:
+    if not _is_localized_text_record(value):
+        return False
+    assert isinstance(value, list)
+    assert isinstance(value[2], list)
+    value[2][1] = quote_atom(text)
+    return True
+
+
+def _is_localized_text_record(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) >= 3
+        and clean_atom(value[0]) == "1"
+        and clean_atom(value[1]) == "1"
+        and isinstance(value[2], list)
+        and len(value[2]) >= 2
+        and clean_atom(value[2][0]) in {"#", "ru"}
+    )
+
+
+def _control_metadata_name(node: list[object]) -> str:
+    metadata = _control_metadata_record(node)
+    if metadata is None or len(metadata) < 2:
+        return ""
+    return clean_atom(metadata[1])
+
+
+def _control_metadata_record(node: list[object]) -> list[object] | None:
+    for child in _walk_lists(node):
+        if len(child) >= 2 and clean_atom(child[0]) == "14":
+            return child
+    return None
+
+
+def _control_info_record(node: list[object]) -> list[object] | None:
+    if len(node) > 2 and isinstance(node[2], list):
+        return node[2]
+    return None
+
+
+def _control_info_slot_container(node: list[object], control_type: str) -> list[object] | None:
+    info = _control_info_record(node)
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(control_type)
+    if (
+        info is not None
+        and descriptor is not None
+        and len(info) > 1
+        and clean_atom(info[0]) == descriptor.info_kind
+        and isinstance(info[1], list)
+    ):
+        return info[1]
+    return info
+
+
+def _control_title_slot(control_type: str) -> int | None:
+    descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(control_type)
+    if descriptor is None:
+        return None
+    try:
+        return descriptor.slot_index("Title")
+    except KeyError:
+        return None
+
+
+def _walk_lists(value: object) -> list[list[object]]:
+    result: list[list[object]] = []
+    if isinstance(value, list):
+        result.append(value)
+        for item in value:
+            result.extend(_walk_lists(item))
+    return result
 
 
 def _platform_control_object(

@@ -122,6 +122,73 @@ def test_platform_object_from_list_stream_text_exposes_typed_controls() -> None:
     assert len(platform_object.persistence_by_family("controls")) == 2
 
 
+def test_platform_object_roundtrips_back_to_list_stream_text() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+
+    platform_object = platform_object_from_list_stream_text(text)
+    emitted = platform_object.to_list_stream_text()
+    reparsed = platform_object_from_list_stream_text(emitted)
+
+    assert emitted == text
+    assert [control.name for control in reparsed.flatten_controls()] == ["Run", "Input"]
+    assert len(reparsed.persistence_by_family("controls")) == 2
+    assert len(reparsed.persistence_by_family("info")) == 2
+    assert reparsed.to_list_stream_text(include_bom=True).startswith("\ufeff{")
+
+
+def test_platform_object_writes_control_name_and_title_to_bracket_stream() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+
+    updated = platform_object.with_control_updates(
+        "control:7",
+        name="RunChanged",
+        title="Run title changed",
+    )
+    emitted = updated.to_list_stream_text()
+    reparsed = platform_object_from_list_stream_text(emitted)
+    changed = reparsed.control("control:7")
+
+    assert changed.name == "RunChanged"
+    assert changed.title == "Run title changed"
+    assert changed.supports_platform_format(CF_FORM_CONTROLS8_FORMAT_ID)
+    assert changed.supports_platform_format(CF_FORM_CONTROLS_INFO8_FORMAT_ID)
+    assert "RunChanged" in emitted
+    assert "Run title changed" in emitted
+    assert reparsed.control_by_name("RunChanged").node_id == "control:7"
+    assert reparsed.control_by_name("Input").node_id == "control:8"
+
+
 def test_platform_object_from_model_reports_child_count_mismatch() -> None:
     model = OrdinaryFormModel(
         [
