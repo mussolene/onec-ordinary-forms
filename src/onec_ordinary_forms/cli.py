@@ -27,6 +27,7 @@ from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
 from onec_ordinary_forms.ordinary_stream import (
     CONTROL_INFO_SLOT_DESCRIPTORS,
     MENU_MODE_BY_CODE,
+    ORDINARY_FORM_SHADOW_NAME,
     TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN,
     form_stream_from_object_xml,
     root_panel_base_info_record,
@@ -2887,9 +2888,45 @@ def dump_xml_from_paths(
             add_type(attr, pattern_node, object_types)
 
     add_semantic_pages(root, control_index, element_index, asset_root)
+    write_form_shadow(control_index, asset_root)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     write_pretty_xml(root, out_path)
+
+
+def write_form_shadow(control_index: dict, asset_root: Path) -> None:
+    table_payloads: dict[str, dict[str, str]] = {}
+    for item in control_index.get("tree", []):
+        if not isinstance(item, dict) or item.get("type") != "Table":
+            continue
+        table_name = str(item.get("name") or "")
+        if not table_name:
+            continue
+        view = table_view_from_item_data(item)
+        if not isinstance(view, list) or len(view) <= 23 or not isinstance(view[23], list):
+            continue
+        for column in view[23][1:]:
+            if not isinstance(column, list) or len(column) < 2 or not isinstance(column[1], list):
+                continue
+            try:
+                body = column[1][1][1]
+            except (IndexError, TypeError):
+                continue
+            if not isinstance(body, list) or len(body) <= 39:
+                continue
+            column_name = clean_token(body[30]) if len(body) > 30 else ""
+            payload = find_base64_payload(body[39])
+            if column_name and payload:
+                table_payloads[f"{table_name}/{column_name}"] = {"payload": "#base64:" + payload}
+    shadow_path = asset_root / ORDINARY_FORM_SHADOW_NAME
+    if table_payloads:
+        asset_root.mkdir(parents=True, exist_ok=True)
+        shadow_path.write_text(
+            json.dumps({"tableColumnValuePayloads": table_payloads}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    elif shadow_path.exists():
+        shadow_path.unlink()
 
 
 def add_form_properties(parent: ET.Element, form_root: object) -> None:

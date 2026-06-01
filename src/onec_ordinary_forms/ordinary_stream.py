@@ -406,6 +406,8 @@ TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN = {
     ('"#"', "4772b3b4-f4a3-49c0-a1a5-8cb5961511a3"): "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVExbsMwDCw6Bsgn1JUERJGypV90yQNkQx07FNkC\r\r\nvaxDn9QvVBIVJ2kN1CRMHHk8UiA9P/Xv+/PrEuF4uJjXdD7nj3fTwYsBmWe38CL4\r\r\nJolR4moxUfIY1sXHiTxR4nI8lMZXpwjUkIC0YAtI2cMBGGylkq0pqwxuAZ0rwLs9\r\r\nf7F2zLeGIUHXDOs2SKFNqdazBFZhnQ5X+zWgvYpJWeN/j9RE+8zJlC0a80DqsnbI\r\r\n1hpS81Y3pvxT3RR2Vr8ZTXM9E3lwnTXO0d8dOLnonUU75YDCEjCGuGJa8hRzyMzZ\r\r\nqf799ZuE+lhM37NNLz8=",
 }
 
+ORDINARY_FORM_SHADOW_NAME = ".ordinary-form-shadow.json"
+
 
 BINDING_COORDINATE_SLOT = {
     "top": 1,
@@ -511,10 +513,8 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
     assert_public_object_xml(root)
 
     title = form_title_from_xml(root)
-    if not title:
-        pages = top_level_pages(root)
-        first_page = pages[0] if pages else None
-        title = get_multilang_text(first_page, "Title") or (first_page.get("name") if first_page is not None else "Main")
+    if not title and not root.findall("./Attributes/Attribute"):
+        title = "Main"
 
     attributes = []
     attribute_type_patterns: dict[str, list[object]] = {}
@@ -551,7 +551,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
 
     root_layout = form_root_layout_from_xml(root)
     stream = ordinary_form_stream(
-        title or "Main",
+        title,
         attributes,
         controls,
         events_from_xml(root),
@@ -644,7 +644,7 @@ def form_root_record(
         root_panel_info_record,
         ["1", *controls] if len(controls) == 1 else [str(len(controls)), *controls],
     ]
-    title_record = localized_text_record(title)
+    title_record = localized_text_record(title) if title else ["1", "0"]
     record = [
         "16",
         [
@@ -664,8 +664,12 @@ def form_root_record(
     ]
     if explicit_size:
         record[0] = "18"
-        record[1][1] = "4" if controls else "41"
-        record[1][2] = "4294967295" if controls else "3"
+        if controls or not title:
+            record[1][1] = "4" if controls else "3"
+            record[1][2] = "4294967295"
+        else:
+            record[1][1] = "41"
+            record[1][2] = "3"
         record[-1] = serialization_counter or "3"
         record.extend([width, height, "96"])
     return record
@@ -805,7 +809,9 @@ def root_panel_info(
         ["2", page_width, "1", "1", "3", "0", "0", right_offset, "0"],
         ["2", page_height, "0", "1", "4", "0", "0", bottom_offset, "0"],
     ]
-    if isinstance(dependency_profile, list):
+    if isinstance(dependency_profile, list) and not dependency_profile and not controls:
+        dependency_sequence = ["0", "0", "0", "0", "0", "0"]
+    elif isinstance(dependency_profile, list):
         dependency_sequence = (
             [str((root_layout or {}).get("rootPanelPageCapacity", "0")), *dependency_profile, *dependency_tail]
             if dependency_profile
@@ -4543,7 +4549,13 @@ def extended_table_view_record(element: ET.Element, columns: list[ET.Element], a
         "0",
         "0",
         "1",
-        [str(len(columns)), *[table_column_record(column, index, asset_root) for index, column in enumerate(columns)]],
+        [
+            str(len(columns)),
+            *[
+                table_column_record(column, index, asset_root, element.get("name", ""))
+                for index, column in enumerate(columns)
+            ],
+        ],
         "0",
         "0",
         "0",
@@ -4570,7 +4582,12 @@ def extended_table_view_record(element: ET.Element, columns: list[ET.Element], a
     return record
 
 
-def table_column_record(column: ET.Element, index: int, asset_root: Path | None = None) -> list[object]:
+def table_column_record(
+    column: ET.Element,
+    index: int,
+    asset_root: Path | None = None,
+    table_name: str = "",
+) -> list[object]:
     explicit_title = get_multilang_text(column, "Title")
     title = explicit_title or column.get("name") or f"Колонка{index + 1}"
     name = column.get("name") or title
@@ -4591,7 +4608,7 @@ def table_column_record(column: ET.Element, index: int, asset_root: Path | None 
     format_record = localized_text_record_from_xml(column, "Format") if column.find("Format") is not None else ["1", "0"]
     pattern = table_column_type_pattern_from_xml(column)
     pattern_record = table_column_pattern_record_from_xml(column, pattern)
-    payload = table_column_value_payload_from_xml(column, pattern)
+    payload = table_column_value_payload_from_xml(column, pattern, asset_root, table_name)
     picture_payload = picture_payload_from_xml(column.find("Picture"), asset_root)
     editor_control = text_or_default(column, "EditorControl", "InputField")
     editor_guid = ORDINARY_CONTROL_GUID_BY_TYPE.get(editor_control, ORDINARY_CONTROL_GUID_BY_TYPE["InputField"])
@@ -4663,8 +4680,36 @@ def table_column_pattern_record_from_xml(column: ET.Element, pattern: list[objec
     return type_domain_record_from_pattern(pattern)
 
 
-def table_column_value_payload_from_xml(column: ET.Element, pattern: list[object]) -> str:
+def table_column_value_payload_from_xml(
+    column: ET.Element,
+    pattern: list[object],
+    asset_root: Path | None = None,
+    table_name: str = "",
+) -> str:
+    shadow_payload = table_column_shadow_payload(asset_root, table_name, column.get("name", ""))
+    if shadow_payload:
+        return shadow_payload
     return TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN.get(tuple(pattern), TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN[(quoted_atom("S"),)])
+
+
+def table_column_shadow_payload(asset_root: Path | None, table_name: str, column_name: str) -> str:
+    if asset_root is None or not table_name or not column_name:
+        return ""
+    path = asset_root / ORDINARY_FORM_SHADOW_NAME
+    if not path.exists():
+        return ""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    columns = data.get("tableColumnValuePayloads") if isinstance(data, dict) else None
+    if not isinstance(columns, dict):
+        return ""
+    item = columns.get(f"{table_name}/{column_name}")
+    if not isinstance(item, dict):
+        return ""
+    payload = item.get("payload")
+    return payload if isinstance(payload, str) and payload.startswith("#base64:") else ""
 
 
 def column_picture_record(picture_payload: str) -> list[object]:
