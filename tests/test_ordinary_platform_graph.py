@@ -473,6 +473,50 @@ def test_platform_object_xml_edit_writes_common_properties_to_bracket_stream() -
     assert public_input.findtext("ReadOnly") == "true"
 
 
+def test_platform_object_xml_edit_writes_color_and_font_to_bracket_stream() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    xml_root = platform_object_to_xml(platform_object)
+    button = xml_root.find("./Controls/Control[@nodeId='control:7']")
+    assert button is not None
+    ET.SubElement(button, "BackColor", {"rgb": "#445566"})
+    ET.SubElement(button, "TextColor", {"value": "-1", "recordKind": "4", "recordSubKind": "3", "tailKind": "3"})
+    ET.SubElement(button, "BorderColor", {"value": "-22", "recordKind": "4", "recordSubKind": "3", "tailKind": "3"})
+    ET.SubElement(button, "Font", {"kind": "8", "family": "3", "style": "0", "size": "120"})
+
+    updated = platform_object_from_xml(xml_root, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    rematerialized = platform_object_to_xml(reparsed)
+    public_xml = ordinary_form_xml_from_platform_object(reparsed)
+    internal_button = rematerialized.find("./Controls/Control[@nodeId='control:7']")
+    public_button = public_xml.find("./Pages/Page/Button[@name='Run']")
+
+    assert internal_button is not None
+    assert internal_button.find("BackColor").get("rgb") == "#445566"
+    assert internal_button.find("TextColor").get("name") == "TextColor"
+    assert internal_button.find("BorderColor").get("name") == "BorderColor"
+    assert internal_button.find("Font").get("size") == "120"
+    assert public_button is not None
+    assert public_button.find("BackColor").get("rgb") == "#445566"
+    assert public_button.find("TextColor").get("name") == "TextColor"
+    assert public_button.find("BorderColor").get("name") == "BorderColor"
+    assert public_button.find("Font").get("size") == "120"
+
+
 def test_platform_object_xml_rejects_control_identity_changes() -> None:
     root = ET.fromstring(
         """
@@ -626,6 +670,39 @@ def test_public_xsd_form_xml_dematerializes_common_properties_to_platform_object
     assert public_button.get("baseStyleVisible") == "0"
     assert public_input is not None
     assert public_input.findtext("ReadOnly") == "true"
+
+
+def test_public_xsd_form_xml_dematerializes_color_and_font_to_platform_object() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    button = public_xml.find("./Pages/Page/Button[@id='7']")
+    assert button is not None
+    ET.SubElement(button, "BackColor", {"rgb": "#112233"})
+    ET.SubElement(button, "Font", {"kind": "8", "family": "3", "style": "0", "size": "140"})
+
+    updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
+    reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
+    rematerialized = ordinary_form_xml_from_platform_object(reparsed)
+    public_button = rematerialized.find("./Pages/Page/Button[@name='Run']")
+
+    assert public_button is not None
+    assert public_button.find("BackColor").get("rgb") == "#112233"
+    assert public_button.find("Font").get("size") == "140"
 
 
 def test_public_xsd_form_xml_full_rebuild_roundtrip_is_semantically_stable() -> None:

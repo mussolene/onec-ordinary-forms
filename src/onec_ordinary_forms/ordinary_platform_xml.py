@@ -17,6 +17,12 @@ from onec_ordinary_forms.ordinary_platform_graph import (
     UnsupportedPlatformObjectOperation,
 )
 from onec_ordinary_forms.ordinary_platform_object import PlatformFormObject
+from onec_ordinary_forms.platform_value_xml import (
+    add_color_node_from_record,
+    add_font_node_from_record,
+    is_default_color_record,
+    is_default_font_record,
+)
 
 
 ROOT_TAG = "OrdinaryPlatformObject"
@@ -180,14 +186,21 @@ def _add_control_properties(
         value = _optional_control_property(platform_object, control.node_id, property_name)
         if value is not None and value != default:
             node = ET.SubElement(element, property_name)
-            node.text = value
+            node.text = str(value)
+    for property_name in ("TextColor", "BackColor", "BorderColor"):
+        value = _optional_control_property(platform_object, control.node_id, property_name)
+        if value is not None and not is_default_color_record(value):
+            add_color_node_from_record(element, property_name, value)
+    font = _optional_control_property(platform_object, control.node_id, "Font")
+    if font is not None and not is_default_font_record(font):
+        add_font_node_from_record(element, font)
 
 
 def _optional_control_property(
     platform_object: OrdinaryPlatformObject,
     node_id: str,
     property_name: str,
-) -> str | None:
+) -> object | None:
     try:
         return platform_object.control_property(node_id, property_name)
     except UnsupportedPlatformObjectOperation:
@@ -304,10 +317,19 @@ def _control_property_updates(element: ET.Element) -> tuple[tuple[str, object], 
         if value is not None:
             updates.append((attr_name, value))
     for property_name in ("Visible", "Enabled", "ReadOnly"):
-        node = element.find(property_name)
+        node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node.text or ""))
+    for property_name in ("TextColor", "BackColor", "BorderColor", "Font"):
+        node = _last_child(element, property_name)
+        if node is not None:
+            updates.append((property_name, node))
     return tuple(updates)
+
+
+def _last_child(element: ET.Element, tag: str) -> ET.Element | None:
+    nodes = element.findall(tag)
+    return nodes[-1] if nodes else None
 
 
 def _xml_bool(value: bool) -> str:

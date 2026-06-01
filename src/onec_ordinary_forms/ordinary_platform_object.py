@@ -68,7 +68,7 @@ class PlatformFormObject:
     def control(self, ref: str) -> PlatformControlObject:
         return PlatformControlObject.from_platform_control(self._resolve_control(ref))
 
-    def get_control_property(self, control_ref: str, property_name: str) -> str:
+    def get_control_property(self, control_ref: str, property_name: str) -> object:
         control = self._resolve_control(control_ref)
         return self.platform_object.control_property(control.node_id, property_name)
 

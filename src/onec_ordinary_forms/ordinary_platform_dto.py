@@ -171,10 +171,19 @@ def _public_control_property_updates(element: ET.Element) -> tuple[tuple[str, ob
         if value is not None:
             updates.append((attr_name, value))
     for property_name in ("Visible", "Enabled", "ReadOnly"):
-        node = element.find(property_name)
+        node = _last_child(element, property_name)
         if node is not None:
             updates.append((property_name, node.text or ""))
+    for property_name in ("TextColor", "BackColor", "BorderColor", "Font"):
+        node = _last_child(element, property_name)
+        if node is not None:
+            updates.append((property_name, node))
     return tuple(updates)
+
+
+def _last_child(element: ET.Element, tag: str) -> ET.Element | None:
+    nodes = element.findall(tag)
+    return nodes[-1] if nodes else None
 
 
 def platform_object_from_ordinary_form_xml_rebuild(

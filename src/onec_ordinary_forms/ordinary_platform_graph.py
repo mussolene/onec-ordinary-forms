@@ -9,6 +9,7 @@ area for platform ListOutStream persistence work.
 from __future__ import annotations
 
 import copy
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
 from onec_ordinary_forms.liststream import dumps_list_out_stream, parse_list_stream_document
@@ -25,6 +26,7 @@ from onec_ordinary_forms.ordinary_platform import (
 )
 from onec_ordinary_forms.ordinary_platform_mappings import platform_property_xml_name
 from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS
+from onec_ordinary_forms.ordinary_stream import color_record_from_xml, font_record_from_xml
 from onec_ordinary_forms.platform_model import (
     PLATFORM_RUNTIME_CALL_EDGES,
     PLATFORM_RUNTIME_EDGES,
@@ -44,6 +46,14 @@ COMMON_BASE_INFO_PROPERTY_SLOTS = {
 }
 
 COMMON_BASE_INFO_BOOL_PROPERTIES = {"Visible", "Enabled"}
+
+COMMON_BASE_INFO_COLOR_PROPERTY_SLOTS = {
+    "TextColor": 2,
+    "BackColor": 3,
+    "BorderColor": 6,
+}
+
+COMMON_BASE_INFO_FONT_PROPERTY_SLOTS = {"Font": 4}
 
 
 @dataclass(frozen=True)
@@ -181,7 +191,7 @@ class OrdinaryPlatformObject:
     def with_control_title(self, node_id: str, title: str) -> "OrdinaryPlatformObject":
         return self.with_control_updates(node_id, title=title)
 
-    def control_property(self, node_id: str, property_name: str) -> str:
+    def control_property(self, node_id: str, property_name: str) -> object:
         control = self.control(node_id)
         property_key = _control_property_key(control.control_type, property_name)
         if property_key == "Name":
@@ -410,7 +420,7 @@ def _control_property_key(control_type: str, property_name: str) -> str:
     return mapped or property_name
 
 
-def _control_property_value(node: list[object], control_type: str, property_key: str) -> str:
+def _control_property_value(node: list[object], control_type: str, property_key: str) -> object:
     if property_key in COMMON_BASE_INFO_PROPERTY_SLOTS:
         base = _control_base_info_record(node)
         slot = COMMON_BASE_INFO_PROPERTY_SLOTS[property_key]
@@ -419,6 +429,16 @@ def _control_property_value(node: list[object], control_type: str, property_key:
             if property_key in COMMON_BASE_INFO_BOOL_PROPERTIES:
                 return "true" if value == "1" else "false"
             return value
+    if property_key in COMMON_BASE_INFO_COLOR_PROPERTY_SLOTS:
+        base = _control_base_info_record(node)
+        slot = COMMON_BASE_INFO_COLOR_PROPERTY_SLOTS[property_key]
+        if base is not None and len(base) > slot:
+            return copy.deepcopy(base[slot])
+    if property_key in COMMON_BASE_INFO_FONT_PROPERTY_SLOTS:
+        base = _control_base_info_record(node)
+        slot = COMMON_BASE_INFO_FONT_PROPERTY_SLOTS[property_key]
+        if base is not None and len(base) > slot:
+            return copy.deepcopy(base[slot])
     if property_key == "ReadOnly":
         record = _control_info_property_record(node, control_type)
         if record is not None:
@@ -449,6 +469,18 @@ def _set_control_property(
                 else str(value)
             )
             return
+    if property_key in COMMON_BASE_INFO_COLOR_PROPERTY_SLOTS:
+        base = _control_base_info_record(node)
+        slot = COMMON_BASE_INFO_COLOR_PROPERTY_SLOTS[property_key]
+        if base is not None and len(base) > slot:
+            base[slot] = _platform_color_record(property_key, value)
+            return
+    if property_key in COMMON_BASE_INFO_FONT_PROPERTY_SLOTS:
+        base = _control_base_info_record(node)
+        slot = COMMON_BASE_INFO_FONT_PROPERTY_SLOTS[property_key]
+        if base is not None and len(base) > slot:
+            base[slot] = _platform_font_record(value)
+            return
     if property_key == "ReadOnly":
         record = _control_info_property_record(node, control_type)
         if record is not None:
@@ -462,6 +494,39 @@ def _set_control_property(
     raise UnsupportedPlatformObjectOperation(
         f"No verified object writer for {control_type}.{property_key}"
     )
+
+
+def _platform_color_record(property_key: str, value: object) -> list[object]:
+    if isinstance(value, list):
+        return copy.deepcopy(value)
+    element = _property_value_element(property_key, value)
+    parent = ET.Element("Control")
+    parent.append(element)
+    return color_record_from_xml(parent, property_key)
+
+
+def _platform_font_record(value: object) -> list[object]:
+    if isinstance(value, list):
+        return copy.deepcopy(value)
+    element = _property_value_element("Font", value)
+    parent = ET.Element("Control")
+    parent.append(element)
+    return font_record_from_xml(parent.find("Font"))
+
+
+def _property_value_element(tag: str, value: object) -> ET.Element:
+    if isinstance(value, ET.Element):
+        return copy.deepcopy(value)
+    element = ET.Element(tag)
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key == "text":
+                element.text = str(item)
+            else:
+                element.set(str(key), str(item))
+        return element
+    element.text = str(value)
+    return element
 
 
 def _control_base_info_record(node: list[object]) -> list[object] | None:

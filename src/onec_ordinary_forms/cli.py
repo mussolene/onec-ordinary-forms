@@ -31,8 +31,13 @@ from onec_ordinary_forms.ordinary_stream import (
     root_panel_base_info_record,
 )
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
+from onec_ordinary_forms.platform_value_xml import (
+    add_color_node_from_record,
+    add_font_node_from_record,
+    color_decimal_to_rgb,
+    is_default_color_record,
+)
 from onec_ordinary_forms.semantic_digest import semantic_graph, semantic_graph_digest
-from onec_ordinary_forms.ui_values import ORDINARY_STYLE_COLOR_NAMES
 from onec_ordinary_forms.value_codec import (
     TYPE_CODE_NAMES,
     clean_atom,
@@ -2701,29 +2706,6 @@ def add_font(parent: ET.Element, item_data: object) -> None:
     add_font_node_from_record(parent, font)
 
 
-def add_font_node_from_record(parent: ET.Element, font: list[object]) -> None:
-    node = ET.SubElement(parent, "Font")
-    node.set("kind", clean_token(font[0]))
-    node.set("family", clean_token(font[1]))
-    node.set("style", clean_token(font[2]))
-    if isinstance(font[3], list):
-        for value in font[3]:
-            delta = ET.SubElement(node, "Delta")
-            delta.text = clean_token(value)
-    else:
-        node.set("delta", clean_token(font[3]))
-    for index, value in enumerate(font[4:], start=1):
-        extra = ET.SubElement(node, "Value")
-        extra.set("index", str(index))
-        clean_value = clean_token(value)
-        if isinstance(value, str) and value.startswith('"'):
-            extra.set("atom", value)
-        if index == 1:
-            node.set("size", clean_value)
-            node.set("height", clean_value)
-        extra.text = clean_value
-
-
 def add_back_color(parent: ET.Element, item_data: object) -> None:
     add_color(parent, "BackColor", item_data, 3)
 
@@ -2751,45 +2733,6 @@ def add_color(parent: ET.Element, tag: str, item_data: object, slot: int) -> Non
     if base is None or len(base) <= slot or is_default_color_record(base[slot]):
         return
     add_color_node_from_record(parent, tag, base[slot])
-
-
-def add_color_node_from_record(parent: ET.Element, tag: str, value: object) -> None:
-    if isinstance(value, list) and len(value) >= 3 and isinstance(value[2], list) and value[2]:
-        color_value = clean_token(value[2][0])
-        node = ET.SubElement(parent, tag)
-        node.set("value", color_value)
-        node.set("recordKind", clean_token(value[0]))
-        if len(value) > 1:
-            node.set("recordSubKind", clean_token(value[1]))
-        if len(value) > 3:
-            node.set("tailKind", clean_token(value[3]))
-        style_name = ORDINARY_STYLE_COLOR_NAMES.get(color_value)
-        if style_name:
-            node.set("kind", "StyleItem")
-            node.set("name", style_name)
-            node.text = f"style:{style_name}"
-            return
-        node.set("kind", "Absolute")
-        rgb = color_decimal_to_rgb(color_value)
-        if rgb:
-            node.set("rgb", rgb)
-            node.text = rgb
-        else:
-            node.text = color_value
-
-
-def color_decimal_to_rgb(value: str) -> str | None:
-    try:
-        number = int(value)
-    except ValueError:
-        return None
-    if number < 0 or number > 0xFFFFFF:
-        return None
-    return f"#{number:06X}"
-
-
-def is_default_color_record(value: object) -> bool:
-    return value in (["3", "4", ["0"]], ["4", "4", ["0"], "4"])
 
 
 def is_default_button_text_color_record(value: object) -> bool:
