@@ -91,14 +91,31 @@ PYTHONPATH=src python3 -m onec_ordinary_forms.cli unpack-bin --bin "$form_bin" -
   >"$out_abs/logs/unpack.log" 2>&1
 
 cat > "$out_abs/parts/Module.bsl" <<'BSL'
+Функция OOF_ПараметрыЗапуска()
+	Результат = Новый Соответствие;
+	Для Каждого Часть Из СтрРазделить(ПараметрЗапуска, ";") Цикл
+		ПозицияРавно = СтрНайти(Часть, "=");
+		Если ПозицияРавно = 0 Тогда
+			Продолжить;
+		КонецЕсли;
+		Имя = СокрЛП(Лев(Часть, ПозицияРавно - 1));
+		Значение = Сред(Часть, ПозицияРавно + 1);
+		Результат.Вставить(Имя, Значение);
+	КонецЦикла;
+	Возврат Результат;
+КонецФункции
+
 Процедура ПриОткрытии()
-	Части = СтрРазделить(ПараметрЗапуска, "|");
-	ПутьВход = "";
-	ПутьВыход = "";
-	ПутьСкрипт = "";
-	Если Части.Количество() > 0 Тогда ПутьВход = Части[0]; КонецЕсли;
-	Если Части.Количество() > 1 Тогда ПутьВыход = Части[1]; КонецЕсли;
-	Если Части.Количество() > 2 Тогда ПутьСкрипт = Части[2]; КонецЕсли;
+	Параметры = OOF_ПараметрыЗапуска();
+	ПутьВход = Параметры.Получить("InputFile");
+	ПутьВыход = Параметры.Получить("OutputFile");
+	ПутьСкрипт = Параметры.Получить("ScriptFile");
+	Если ПутьВход = Неопределено Тогда ПутьВход = Параметры.Получить("Input"); КонецЕсли;
+	Если ПутьВыход = Неопределено Тогда ПутьВыход = Параметры.Получить("Output"); КонецЕсли;
+	Если ПутьСкрипт = Неопределено Тогда ПутьСкрипт = Параметры.Получить("Script"); КонецЕсли;
+	Если ПутьВход = Неопределено Тогда ПутьВход = ""; КонецЕсли;
+	Если ПутьВыход = Неопределено Тогда ПутьВыход = ""; КонецЕсли;
+	Если ПутьСкрипт = Неопределено Тогда ПутьСкрипт = ""; КонецЕсли;
 
 	Вход = "";
 	Если ПутьВход <> "" Тогда
@@ -108,10 +125,6 @@ cat > "$out_abs/parts/Module.bsl" <<'BSL'
 	КонецЕсли;
 
 	Объект = Неопределено;
-	Если Вход <> "" Тогда
-		Объект = ЗначениеИзСтрокиВнутр(Вход);
-	КонецЕсли;
-
 	Результат = ЭтаФорма;
 	Если ПутьСкрипт <> "" Тогда
 		ДокСкрипт = Новый ТекстовыйДокумент;
@@ -186,7 +199,7 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
     xvfb-run -a timeout 120 /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
       /F \"\$base/\$db\" /RunModeOrdinaryApplication \
       /Execute '$container_base/oracle.epf' \
-      /C '$container_base/input.txt|$container_base/output.txt|$container_base/script.bsl' \
+      /C 'InputFile=$container_base/input.txt;OutputFile=$container_base/output.txt;ScriptFile=$container_base/script.bsl' \
       /Out '$container_base/logs/enterprise.log' -NoTruncate /DisableStartupDialogs \
       >'$container_base/logs/enterprise-stdout.log' 2>'$container_base/logs/enterprise-stderr.log'
     code=\$?
@@ -229,7 +242,7 @@ docker run --rm --platform linux/amd64 --entrypoint sh \
     xvfb-run -a timeout 120 /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
       /F \"\$base/\$db\" /RunModeOrdinaryApplication \
       /Execute \"/workspace/$out_rel/oracle.epf\" \
-      /C \"$input_container|$output_container|$script_container\" \
+      /C \"InputFile=$input_container;OutputFile=$output_container;ScriptFile=$script_container\" \
       /Out \"/workspace/$out_rel/logs/enterprise.log\" -NoTruncate /DisableStartupDialogs \
       >\"/workspace/$out_rel/logs/enterprise-stdout.log\" 2>\"/workspace/$out_rel/logs/enterprise-stderr.log\"
     code=\$?
