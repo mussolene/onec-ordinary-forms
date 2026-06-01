@@ -1,5 +1,7 @@
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
+from onec_ordinary_forms.cli import validate_xml_file
 from onec_ordinary_forms.ordinary_model import OrdinaryControl, OrdinaryFormModel
 from onec_ordinary_forms.ordinary_platform import (
     CF_FORM_CONTROLS8_FORMAT_ID,
@@ -14,6 +16,12 @@ from onec_ordinary_forms.ordinary_platform_graph import (
     platform_object_from_list_stream_text,
     platform_object_from_model,
     runtime_skeleton_graph,
+)
+from onec_ordinary_forms.ordinary_platform_dto import (
+    ordinary_form_xml_bytes_from_platform_object,
+    ordinary_form_xml_from_platform_object,
+    platform_object_from_ordinary_form_xml,
+    platform_palette_catalog,
 )
 from onec_ordinary_forms.ordinary_platform_xml import (
     platform_object_from_xml,
@@ -302,6 +310,94 @@ def test_platform_object_xml_rejects_control_identity_changes() -> None:
         assert "Immutable attribute type changed" in str(error)
     else:
         raise AssertionError("Expected platform object XML identity mismatch to fail")
+
+
+def test_platform_object_materializes_public_xsd_form_xml(tmp_path: Path) -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    xml_bytes = ordinary_form_xml_bytes_from_platform_object(platform_object)
+    xml_path = tmp_path / "Form.xml"
+    xml_path.write_bytes(xml_bytes)
+
+    validate_xml_file(xml_path)
+    assert public_xml.tag == "Form"
+    assert public_xml.find("./Pages/Page/Button[@name='Run']") is not None
+    assert public_xml.find("./Pages/Page/InputField[@name='Input']") is not None
+    assert public_xml.find(".//Control") is None
+    xml_text = xml_bytes.decode("utf-8")
+    for forbidden in (
+        "ObjectModel",
+        "ListStream",
+        "BracketStream",
+        "FormBin",
+        "LogicalStream",
+        "RawBracket",
+        "PlatformRecords",
+    ):
+        assert forbidden not in xml_text
+
+
+def test_public_xsd_form_xml_dematerializes_name_and_title_to_platform_object() -> None:
+    root = ET.fromstring(
+        """
+        <Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <Pages>
+            <Page name="Main">
+              <Button name="Run" id="7">
+                <Title><Item lang="ru">Run</Item></Title>
+              </Button>
+              <InputField name="Input" id="8"/>
+            </Page>
+          </Pages>
+        </Form>
+        """
+    )
+    text = form_stream_from_object_xml(root).decode("utf-8-sig")
+    platform_object = platform_object_from_list_stream_text(text)
+    public_xml = ordinary_form_xml_from_platform_object(platform_object)
+    button = public_xml.find("./Pages/Page/Button[@id='7']")
+    assert button is not None
+    title = button.find("./Title/Item[@lang='ru']")
+    assert title is not None
+    button.set("name", "RunPublicXml")
+    title.text = "Run public XML title"
+
+    updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
+    emitted = updated.to_list_stream_text()
+    reparsed = platform_object_from_list_stream_text(emitted)
+    changed = reparsed.control("control:7")
+
+    assert changed.name == "RunPublicXml"
+    assert changed.title == "Run public XML title"
+    assert "RunPublicXml" in emitted
+    assert "Run public XML title" in emitted
+
+
+def test_platform_palette_catalog_exposes_xsd_platform_property_descriptions() -> None:
+    catalog = platform_palette_catalog()
+
+    assert catalog["Button"]["platformName"] == "Кнопка"
+    assert {"name": "Заголовок", "type": "Строка"} in catalog["Button"]["properties"]
+    assert {"name": "Нажатие"} in catalog["Button"]["events"]
+    assert any(item["name"] == "ТолькоПросмотр" for item in catalog["InputField"]["properties"])
 
 
 def test_platform_object_from_model_reports_child_count_mismatch() -> None:

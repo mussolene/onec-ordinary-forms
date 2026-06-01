@@ -47,6 +47,12 @@ def read_bracket_text(path: Path) -> str:
 
 def extract_control_index_from_bracket(text: str) -> dict[str, object]:
     root = parse_bracket_text(text, allow_trailing=True)
+    return control_index_from_list_stream_root(root)
+
+
+def control_index_from_list_stream_root(root: object) -> dict[str, object]:
+    """Build the public XML writer control index from a parsed platform root."""
+
     pages = _extract_pages(root)
     props = _extract_props(root)
     model = parse_ordinary_form_model(root)
