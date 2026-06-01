@@ -526,6 +526,7 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
                     attribute_slots,
                     0,
                     page_order,
+                    use_runtime_auto_geometry=True,
                 )
             else:
                 control = control_stream_from_xml(child, asset_root, attribute_type_patterns, attribute_slots)
@@ -1450,6 +1451,7 @@ def control_stream_from_xml_with_page(
     page_index: int | None,
     page_order: int | None,
     parent_size: tuple[str, str] | None = None,
+    use_runtime_auto_geometry: bool = False,
 ) -> list[object] | None:
     control_type = control_type_from_xml_tag(element.tag)
     if not control_type:
@@ -1476,6 +1478,7 @@ def control_stream_from_xml_with_page(
         object_id,
         name,
         parent_size,
+        use_runtime_auto_geometry,
     )
     metadata_name = (
         name
@@ -4881,6 +4884,7 @@ def geometry_stream_from_xml(
     object_id: str = "0",
     control_name: str = "",
     parent_size: tuple[str, str] | None = None,
+    use_runtime_auto_geometry: bool = False,
 ) -> list[object]:
     left = position.get("left", "0") if position is not None else "0"
     top = position.get("top", "0") if position is not None else "0"
@@ -4925,7 +4929,10 @@ def geometry_stream_from_xml(
                     if 0 <= index < len(dimensions):
                         dimensions[index] = dimension_binding_to_raw(binding)
     if page_index is not None and page_order is not None and not has_explicit_geometry_bindings:
-        bindings, dimensions = default_paged_geometry_bindings(object_id, right, bottom, left, top)
+        if use_runtime_auto_geometry:
+            bindings, dimensions = default_runtime_auto_geometry_bindings()
+        else:
+            bindings, dimensions = default_paged_geometry_bindings(object_id, right, bottom, left, top)
         if control_type in SHORT_POSITION_PARENT_ANCHORED_TYPES:
             bindings, dimensions = default_parent_anchored_geometry_bindings(
                 object_id,
@@ -5192,6 +5199,27 @@ def geometry_stream_from_xml(
             "0",
             "0",
             *group_tail[:3],
+            "0",
+            "0",
+        ]
+    if use_runtime_auto_geometry and page_order is not None:
+        return [
+            "8",
+            left,
+            top,
+            right,
+            bottom,
+            layout_mode,
+            *bindings,
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            str(page_order),
+            str(page_order + 1),
             "0",
             "0",
         ]
@@ -5815,6 +5843,21 @@ def default_paged_geometry_bindings(
             ["0", empty_anchor, empty_anchor],
         ],
         [["0", object_id, "1"], "0", "1", ["0", object_id, "3"]],
+    )
+
+
+def default_runtime_auto_geometry_bindings() -> tuple[list[object], list[object]]:
+    empty_anchor = ["2", "-1", "6", "0"]
+    return (
+        [
+            ["0", empty_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+            ["0", empty_anchor, empty_anchor],
+        ],
+        ["0", "0", "0", "0"],
     )
 
 

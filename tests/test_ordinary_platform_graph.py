@@ -1025,8 +1025,16 @@ def test_top_level_button_without_bindings_uses_platform_page_geometry_defaults(
     assert base_info[5] == "0"
     assert base_info[17] == "2"
     assert info_record[-1] == "2"
-    assert all(isinstance(binding, list) for binding in geometry[6:12])
-    assert geometry[-5:-3] == ["0", "0"]
+    assert geometry[6:12] == [
+        ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+        ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+        ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+        ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+        ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+        ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+    ]
+    assert len(geometry) == 23
+    assert geometry[-11:] == ["0", "0", "0", "0", "0", "0", "0", "0", "1", "0", "0"]
 
 
 def test_public_xsd_form_xml_adds_and_deletes_nested_controls() -> None:
