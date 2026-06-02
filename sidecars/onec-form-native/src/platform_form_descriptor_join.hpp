@@ -217,7 +217,7 @@ constexpr std::array<DescriptorSchemaBinding, 25> descriptor_schema_bindings{{
         "",
         "",
         "СводнаяДиаграмма1",
-        "all-controls Form.bin GUID-headed object name; 8.5 mngui.so and mngbase.so hardcode the PivotChart GUID in repeated UI/type-domain GUID tables next to GanttChart; platform xdto data/ui schema exposes PivotChartType, but dsgnfrm/logform layouter has no PivotChart control complexType",
+        "all-controls Form.bin GUID-headed object name; 8.5 chart_root.res exposes XDTO http://v8.1c.ru/8.2/data/chart complexType PivotChart; 8.5 mngui.so and mngbase.so hardcode the PivotChart GUID in repeated UI/type-domain GUID tables next to GanttChart; dsgnfrm/logform layouter has no PivotChart control complexType",
     },
     {
         "ad37194e-555e-4305-b718-5dca84baf145",

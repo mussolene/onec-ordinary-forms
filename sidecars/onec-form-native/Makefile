@@ -120,6 +120,7 @@ test: $(BIN)
 	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"nearestName":"GroupsCommandBar"'; fi
 	if [ -f ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd ]; then $(BIN) platform-xsd-inventory ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd | grep -F -q '"targetNamespace":"http://v8.1c.ru/8.1/data/ui"'; fi
 	if [ -f ../../work/platform82-xml-resources/mngcore_root-03-http_v8.1c.ru_8.2_managed-application_logform.xsd ]; then $(BIN) platform-xsd-inventory ../../work/platform82-xml-resources/mngcore_root-03-http_v8.1c.ru_8.2_managed-application_logform.xsd | grep -F -q '"formRelatedTypes"'; fi
+	if [ -f ../../work/platform85-xml-resources/chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd ]; then grep -F -q 'complexType name="PivotChart"' ../../work/platform85-xml-resources/chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd; fi
 	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -q '"09ccdc77-ea1a-4a6d-ab1c-3435eada2433"'; fi
 	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -F -q '"repeatedGuidBlocks":["0x42370"'; fi
 
