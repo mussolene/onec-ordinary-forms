@@ -5,6 +5,8 @@
 #include <iostream>
 #include <iterator>
 #include <map>
+#include <regex>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -259,7 +261,9 @@ std::string read_stdin() {
 void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure> Form.bin\n"
-              << "       oof-native platform-guid-scan dsgnfrm.so\n";
+              << "       oof-native platform-guid-scan dsgnfrm.so\n"
+              << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
+              << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
 }
 
 std::vector<std::uint8_t> read_file_bytes(const std::string& path) {
@@ -272,6 +276,11 @@ std::vector<std::uint8_t> read_file_bytes(const std::string& path) {
         std::istreambuf_iterator<char>());
 }
 
+std::string read_file_text_lossy(const std::string& path) {
+    const auto bytes = read_file_bytes(path);
+    return std::string(bytes.begin(), bytes.end());
+}
+
 void print_json_string(std::string_view value) {
     std::cout << '"';
     for (char ch : value) {
@@ -282,6 +291,15 @@ void print_json_string(std::string_view value) {
         }
     }
     std::cout << '"';
+}
+
+std::string ascii_lower(std::string_view value) {
+    std::string lowered;
+    lowered.reserve(value.size());
+    for (const char ch : value) {
+        lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+    }
+    return lowered;
 }
 
 void print_mechanism() {
@@ -1121,6 +1139,313 @@ void print_platform_guid_scan(const std::string& path) {
     std::cout << "]}\n";
 }
 
+struct ResourceDescriptorHit {
+    std::string file;
+    std::string guid;
+    std::string id;
+    std::string nearest_name;
+    const oof::platform::descriptor::DescriptorGuidBinding* binding = nullptr;
+};
+
+std::string parse_decimal_after_guid(std::string_view text, std::size_t pos, std::size_t guid_size) {
+    std::size_t cursor = pos + guid_size;
+    while (cursor < text.size() && std::isspace(static_cast<unsigned char>(text[cursor]))) {
+        ++cursor;
+    }
+    if (cursor >= text.size() || text[cursor] != ',') {
+        return {};
+    }
+    ++cursor;
+    while (cursor < text.size() && std::isspace(static_cast<unsigned char>(text[cursor]))) {
+        ++cursor;
+    }
+    const std::size_t start = cursor;
+    while (cursor < text.size() && std::isdigit(static_cast<unsigned char>(text[cursor]))) {
+        ++cursor;
+    }
+    return std::string(text.substr(start, cursor - start));
+}
+
+std::string find_nearest_resource_name(std::string_view text, std::size_t pos) {
+    constexpr std::size_t scan_window = 20000;
+    const std::size_t end = std::min(text.size(), pos + scan_window);
+    const std::string_view window = text.substr(pos, end - pos);
+    const std::string marker = "{14,\"";
+    const std::size_t marker_pos = window.find(marker);
+    if (marker_pos == std::string_view::npos) {
+        return {};
+    }
+    const std::size_t name_start = marker_pos + marker.size();
+    const std::size_t name_end = window.find('"', name_start);
+    if (name_end == std::string_view::npos) {
+        return {};
+    }
+    return std::string(window.substr(name_start, name_end - name_start));
+}
+
+std::vector<ResourceDescriptorHit> scan_resource_descriptor_hits(const std::string& path) {
+    const std::string text = read_file_text_lossy(path);
+    const std::string lowered = ascii_lower(text);
+    std::vector<ResourceDescriptorHit> hits;
+    for (const auto& binding : oof::platform::descriptor::ordinary_descriptor_guid_bindings) {
+        const std::string guid = ascii_lower(binding.guid);
+        std::size_t pos = 0;
+        while ((pos = lowered.find(guid, pos)) != std::string::npos) {
+            ResourceDescriptorHit hit;
+            hit.file = path;
+            hit.guid = guid;
+            hit.id = parse_decimal_after_guid(text, pos, guid.size());
+            hit.nearest_name = find_nearest_resource_name(text, pos);
+            hit.binding = &binding;
+            hits.push_back(std::move(hit));
+            pos += guid.size();
+        }
+    }
+    return hits;
+}
+
+std::vector<ResourceDescriptorHit> scan_resource_unknown_guid_candidates(const std::string& path) {
+    const std::string text = read_file_text_lossy(path);
+    const std::regex guid_entry(
+        R"(\{([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\s*,\s*([0-9]+))");
+    std::vector<ResourceDescriptorHit> hits;
+    std::set<std::string> seen;
+    for (auto it = std::sregex_iterator(text.begin(), text.end(), guid_entry); it != std::sregex_iterator(); ++it) {
+        const auto& match = *it;
+        const std::string guid = ascii_lower(match[1].str());
+        if (oof::platform::descriptor::is_bound_descriptor_guid(guid)) {
+            continue;
+        }
+        const std::size_t pos = static_cast<std::size_t>(match.position());
+        const std::string nearest_name = find_nearest_resource_name(text, pos);
+        if (nearest_name.empty()) {
+            continue;
+        }
+        const std::string key = guid + ":" + nearest_name;
+        if (!seen.insert(key).second) {
+            continue;
+        }
+        ResourceDescriptorHit hit;
+        hit.file = path;
+        hit.guid = guid;
+        hit.id = match[2].str();
+        hit.nearest_name = nearest_name;
+        hits.push_back(std::move(hit));
+    }
+    return hits;
+}
+
+std::string regex_first_group(const std::string& text, const std::regex& pattern) {
+    std::smatch match;
+    if (std::regex_search(text, match, pattern) && match.size() > 1) {
+        return match[1].str();
+    }
+    return {};
+}
+
+std::vector<std::string> regex_all_group(const std::string& text, const std::regex& pattern) {
+    std::vector<std::string> values;
+    std::set<std::string> seen;
+    for (auto it = std::sregex_iterator(text.begin(), text.end(), pattern); it != std::sregex_iterator(); ++it) {
+        const auto& match = *it;
+        if (match.size() <= 1) {
+            continue;
+        }
+        const std::string value = match[1].str();
+        if (seen.insert(value).second) {
+            values.push_back(value);
+        }
+    }
+    return values;
+}
+
+bool is_form_related_schema_name(std::string_view name) {
+    const std::string lower = ascii_lower(name);
+    return lower.find("form") != std::string::npos ||
+           lower.find("element") != std::string::npos ||
+           lower.find("control") != std::string::npos ||
+           lower.find("uobject") != std::string::npos ||
+           lower.find("ui") != std::string::npos ||
+           lower.find("layout") != std::string::npos ||
+           lower.find("button") != std::string::npos;
+}
+
+void print_json_string_array(const std::vector<std::string>& values, std::size_t max_items = 64) {
+    std::cout << "[";
+    const std::size_t count = std::min(values.size(), max_items);
+    for (std::size_t index = 0; index < count; ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_json_string(values[index]);
+    }
+    std::cout << "]";
+}
+
+void print_platform_xsd_inventory(int argc, char** argv) {
+    const std::regex target_namespace_pattern("targetNamespace\\s*=\\s*\"([^\"]+)\"");
+    const std::regex import_namespace_pattern("<xs:import[^>]*namespace\\s*=\\s*\"([^\"]+)\"");
+    const std::regex include_location_pattern("<xs:include[^>]*schemaLocation\\s*=\\s*\"([^\"]+)\"");
+    const std::regex complex_type_pattern("<xs:complexType[^>]*name\\s*=\\s*\"([^\"]+)\"");
+    const std::regex simple_type_pattern("<xs:simpleType[^>]*name\\s*=\\s*\"([^\"]+)\"");
+    const std::regex element_pattern("<xs:element[^>]*name\\s*=\\s*\"([^\"]+)\"");
+
+    std::cout << "{\"files\":" << (argc - 2) << ",\"schemas\":[";
+    std::map<std::string, std::size_t> namespace_frequency;
+    for (int index = 2; index < argc; ++index) {
+        if (index != 2) {
+            std::cout << ",";
+        }
+        const std::string path = argv[index];
+        const std::string text = read_file_text_lossy(path);
+        const std::string target_namespace = regex_first_group(text, target_namespace_pattern);
+        if (!target_namespace.empty()) {
+            ++namespace_frequency[target_namespace];
+        }
+        const auto imports = regex_all_group(text, import_namespace_pattern);
+        const auto includes = regex_all_group(text, include_location_pattern);
+        const auto complex_types = regex_all_group(text, complex_type_pattern);
+        const auto simple_types = regex_all_group(text, simple_type_pattern);
+        const auto elements = regex_all_group(text, element_pattern);
+
+        std::vector<std::string> form_related_types;
+        for (const auto& name : complex_types) {
+            if (is_form_related_schema_name(name)) {
+                form_related_types.push_back(name);
+            }
+        }
+        for (const auto& name : simple_types) {
+            if (is_form_related_schema_name(name)) {
+                form_related_types.push_back(name);
+            }
+        }
+        std::vector<std::string> form_related_elements;
+        for (const auto& name : elements) {
+            if (is_form_related_schema_name(name)) {
+                form_related_elements.push_back(name);
+            }
+        }
+
+        std::cout << "{\"file\":";
+        print_json_string(path);
+        std::cout << ",\"targetNamespace\":";
+        print_json_string(target_namespace);
+        std::cout << ",\"imports\":";
+        print_json_string_array(imports);
+        std::cout << ",\"includes\":";
+        print_json_string_array(includes);
+        std::cout << ",\"complexTypes\":" << complex_types.size();
+        std::cout << ",\"simpleTypes\":" << simple_types.size();
+        std::cout << ",\"elements\":" << elements.size();
+        std::cout << ",\"formRelatedTypes\":";
+        print_json_string_array(form_related_types);
+        std::cout << ",\"formRelatedTypesTruncated\":"
+                  << (form_related_types.size() > 64 ? "true" : "false");
+        std::cout << ",\"formRelatedElements\":";
+        print_json_string_array(form_related_elements);
+        std::cout << ",\"formRelatedElementsTruncated\":"
+                  << (form_related_elements.size() > 64 ? "true" : "false");
+        std::cout << "}";
+    }
+    std::cout << "],\"namespaceFrequency\":[";
+    std::size_t ns_index = 0;
+    for (const auto& [ns, count] : namespace_frequency) {
+        if (ns_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"namespace\":";
+        print_json_string(ns);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "]}\n";
+}
+
+void print_resource_hit_json(const ResourceDescriptorHit& hit) {
+    std::cout << "{\"file\":";
+    print_json_string(hit.file);
+    std::cout << ",\"guid\":";
+    print_json_string(hit.guid);
+    std::cout << ",\"id\":";
+    print_json_string(hit.id);
+    std::cout << ",\"nearestName\":";
+    print_json_string(hit.nearest_name);
+    if (hit.binding != nullptr) {
+        std::cout << ",\"descriptorBinding\":{\"status\":";
+        print_json_string(hit.binding->status);
+        std::cout << ",\"role\":";
+        print_json_string(hit.binding->role);
+        std::cout << ",\"evidence\":";
+        print_json_string(hit.binding->evidence);
+        std::cout << "}";
+    }
+    std::cout << "}";
+}
+
+void print_platform_resource_descriptor_scan(int argc, char** argv) {
+    std::vector<ResourceDescriptorHit> known_hits;
+    std::vector<ResourceDescriptorHit> unknown_hits;
+    std::map<std::string, std::size_t> known_guid_frequency;
+    std::map<std::string, std::size_t> unknown_guid_frequency;
+
+    for (int index = 2; index < argc; ++index) {
+        auto file_known_hits = scan_resource_descriptor_hits(argv[index]);
+        for (const auto& hit : file_known_hits) {
+            ++known_guid_frequency[hit.guid];
+        }
+        known_hits.insert(known_hits.end(), file_known_hits.begin(), file_known_hits.end());
+
+        auto file_unknown_hits = scan_resource_unknown_guid_candidates(argv[index]);
+        for (const auto& hit : file_unknown_hits) {
+            ++unknown_guid_frequency[hit.guid];
+        }
+        unknown_hits.insert(unknown_hits.end(), file_unknown_hits.begin(), file_unknown_hits.end());
+    }
+
+    constexpr std::size_t max_hits_to_print = 96;
+    std::cout << "{\"files\":" << (argc - 2);
+    std::cout << ",\"knownDescriptorHitsTotal\":" << known_hits.size();
+    std::cout << ",\"unknownGuidCandidateHitsTotal\":" << unknown_hits.size();
+    std::cout << ",\"knownGuidFrequency\":[";
+    std::size_t item_index = 0;
+    for (const auto& [guid, count] : known_guid_frequency) {
+        if (item_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"guid\":";
+        print_json_string(guid);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"unknownGuidFrequency\":[";
+    item_index = 0;
+    for (const auto& [guid, count] : unknown_guid_frequency) {
+        if (item_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"guid\":";
+        print_json_string(guid);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"knownDescriptorHits\":[";
+    for (std::size_t index = 0; index < std::min(known_hits.size(), max_hits_to_print); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_resource_hit_json(known_hits[index]);
+    }
+    std::cout << "],\"knownDescriptorHitsTruncated\":"
+              << (known_hits.size() > max_hits_to_print ? "true" : "false");
+    std::cout << ",\"unknownGuidCandidateHits\":[";
+    for (std::size_t index = 0; index < std::min(unknown_hits.size(), max_hits_to_print); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_resource_hit_json(unknown_hits[index]);
+    }
+    std::cout << "],\"unknownGuidCandidateHitsTruncated\":"
+              << (unknown_hits.size() > max_hits_to_print ? "true" : "false");
+    std::cout << "}\n";
+}
+
 void print_formbin_selftest() {
     oof::platform::formbin::OneCContainer container;
     container.block_size = oof::platform::formbin::container_block_size;
@@ -1145,7 +1470,7 @@ void print_formbin_selftest() {
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2 && argc != 3) {
+    if (argc < 2) {
         usage();
         return 2;
     }
@@ -1203,6 +1528,19 @@ int main(int argc, char** argv) {
         if (command == "platform-guid-scan" && argc == 3) {
             print_platform_guid_scan(argv[2]);
             return 0;
+        }
+        if (command == "platform-resource-descriptor-scan" && argc >= 3) {
+            print_platform_resource_descriptor_scan(argc, argv);
+            return 0;
+        }
+        if (command == "platform-xsd-inventory" && argc >= 3) {
+            print_platform_xsd_inventory(argc, argv);
+            return 0;
+        }
+
+        if (argc != 2) {
+            usage();
+            return 2;
         }
 
         Parser parser(tokenize(read_stdin()));
