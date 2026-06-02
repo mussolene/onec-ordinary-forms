@@ -29,6 +29,10 @@ MECHANISM_SYMBOLS = (
     "PersistenceStorage",
     "LocalWString",
     "FormattedString",
+    "Locale",
+    "ResourceBundle",
+    "create_local_str_val",
+    "load_wstring",
     "Color",
     "Font",
     "V8Border",
@@ -153,9 +157,9 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
                 "repoTarget": "native control-info serializer for shared/base-info records",
             },
             {
-                "platformRole": "core typed values",
-                "platformEvidence": "dsgnfrm/mngbase/mngui imports TypeDomainPattern, CompositeID, GenericValue, Color, Font, V8Border, V8Picture serializers.",
-                "repoTarget": "native platform value layer before public XML model bridge",
+                "platformRole": "core typed and localized values",
+                "platformEvidence": "Container core85.so defines core::LocalWString::serialize/deserialize at 0x57c520/0x57c610 and core::FormattedString::serialize/deserialize at 0x5347b0/0x534800; dsgnfrm/mngbase/mngui references identify ordinary-form use surface. TypeDomainPattern, CompositeID, GenericValue, Color, Font, V8Border, and V8Picture remain serializer surface symbols.",
+                "repoTarget": "native platform value layer must be derived from these platform serializers, not from existing Python value_codec shapes",
             },
         ],
     }
