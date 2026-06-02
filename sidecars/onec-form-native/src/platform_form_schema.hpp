@@ -19,7 +19,7 @@ struct PlatformFormSchemaControl {
 constexpr std::string_view logform_layouter_schema =
     "mngcore_root.res:http://v8.1c.ru/8.2/managed-application/logform/layouter";
 
-constexpr std::array<PlatformFormSchemaControl, 24> logform_layouter_controls{{
+constexpr std::array<PlatformFormSchemaControl, 27> logform_layouter_controls{{
     {
         "Label",
         "lbl",
@@ -119,6 +119,16 @@ constexpr std::array<PlatformFormSchemaControl, 24> logform_layouter_controls{{
         "format,dataLink",
         "ui:Color,ui:Font,ordinary form child controls",
         "GroupBox complexType extends Item; schema exposes ordinary child-control choice and dataLink flag",
+    },
+    {
+        "Separator",
+        "sep",
+        logform_layouter_schema,
+        "Item",
+        "",
+        "dir",
+        "Direction",
+        "Separator complexType extends Item; schema exposes direction and Item defaults for secondary layout divider",
     },
     {
         "Panel",
@@ -251,6 +261,16 @@ constexpr std::array<PlatformFormSchemaControl, 24> logform_layouter_controls{{
         "Flowchart complexType extends Item; schema exposes output/edit flags",
     },
     {
+        "HTML",
+        "html",
+        logform_layouter_schema,
+        "Item",
+        "tooltip,brdClr,stcut,cntm",
+        "output",
+        "ui:Color,ui:ShortCutType,ContextMenu",
+        "HTML complexType extends Item; schema exposes output flag and HTML UI fields",
+    },
+    {
         "GeographicalMap",
         "gm",
         logform_layouter_schema,
@@ -260,6 +280,25 @@ constexpr std::array<PlatformFormSchemaControl, 24> logform_layouter_controls{{
         "ui:Color,ui:ShortCutType,ContextMenu",
         "GeographicalMap complexType extends Item; schema exposes output flag",
     },
+    {
+        "EmptyElement",
+        "empt",
+        logform_layouter_schema,
+        "Item",
+        "",
+        "",
+        "",
+        "EmptyElement complexType extends Item; schema exposes empty ordinary layout placeholder",
+    },
 }};
+
+inline const PlatformFormSchemaControl* control_by_type_name(std::string_view type_name) {
+    for (const auto& control : logform_layouter_controls) {
+        if (control.type_name == type_name) {
+            return &control;
+        }
+    }
+    return nullptr;
+}
 
 }  // namespace oof::platform::form_schema

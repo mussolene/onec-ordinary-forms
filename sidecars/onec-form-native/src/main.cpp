@@ -21,6 +21,7 @@
 #include "ordinary_controls.hpp"
 #include "ordinary_form_graph.hpp"
 #include "platform_descriptor_registry.hpp"
+#include "platform_form_descriptor_join.hpp"
 #include "platform_form_schema.hpp"
 #include "platform_guid_registry.hpp"
 #include "platform_mechanism.hpp"
@@ -268,7 +269,7 @@ void usage() {
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure> Form.bin\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
-              << "       oof-native platform-form-schema\n"
+              << "       oof-native <platform-form-schema|platform-descriptor-join>\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
               << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
@@ -972,7 +973,7 @@ void print_form_payload_info(const std::string& path) {
 }
 
 bool is_known_descriptor_pool_guid(std::string_view guid) {
-    return oof::platform::descriptor::is_bound_descriptor_guid(guid);
+    return oof::platform::form_descriptor::is_bound_descriptor_guid(guid);
 }
 
 std::string child_path(std::string_view path, std::size_t index) {
@@ -990,7 +991,7 @@ struct GuidNodeInfo {
     std::size_t scalar_children = 0;
     std::size_t list_children = 0;
     bool known_descriptor_pool_member = false;
-    const oof::platform::descriptor::DescriptorGuidBinding* descriptor_binding = nullptr;
+    const oof::platform::form_descriptor::DescriptorSchemaBinding* descriptor_binding = nullptr;
 };
 
 struct FormatAtomInfo {
@@ -1021,7 +1022,7 @@ void collect_form_payload_structure(
         info.guid = value.items[0].atom;
         info.path = std::string(path);
         info.arity = value.items.size();
-        info.descriptor_binding = oof::platform::descriptor::binding_for_guid(info.guid);
+        info.descriptor_binding = oof::platform::form_descriptor::binding_for_guid(info.guid);
         info.known_descriptor_pool_member = info.descriptor_binding != nullptr;
         if (value.items.size() > 1 && !value.items[1].is_list) {
             info.slot1 = value.items[1].atom;
@@ -1067,7 +1068,7 @@ void print_form_payload_structure_json(
         ++descriptor_status_frequency[
             node.descriptor_binding == nullptr ? "unbound" : std::string(node.descriptor_binding->status)
         ];
-        if (node.arity == 6 && !node.slot1.empty()) {
+        if ((node.arity == 6 || node.arity == 7) && !node.slot1.empty()) {
             ++candidate_object_nodes;
             if (node.known_descriptor_pool_member) {
                 ++known_descriptor_candidate_nodes;
@@ -1119,11 +1120,15 @@ void print_form_payload_structure_json(
         std::cout << ",\"count\":" << count;
         std::cout << ",\"knownDescriptorPoolMember\":"
                   << (is_known_descriptor_pool_guid(guid) ? "true" : "false");
-        if (const auto* binding = oof::platform::descriptor::binding_for_guid(guid)) {
+        if (const auto* binding = oof::platform::form_descriptor::binding_for_guid(guid)) {
             std::cout << ",\"descriptorBinding\":{\"status\":";
             print_json_string(binding->status);
             std::cout << ",\"role\":";
             print_json_string(binding->role);
+            std::cout << ",\"platformType\":";
+            print_json_string(binding->platform_type);
+            std::cout << ",\"streamElement\":";
+            print_json_string(binding->stream_element);
             std::cout << ",\"evidence\":";
             print_json_string(binding->evidence);
             std::cout << "}";
@@ -1154,6 +1159,10 @@ void print_form_payload_structure_json(
             print_json_string(node.descriptor_binding->status);
             std::cout << ",\"role\":";
             print_json_string(node.descriptor_binding->role);
+            std::cout << ",\"platformType\":";
+            print_json_string(node.descriptor_binding->platform_type);
+            std::cout << ",\"streamElement\":";
+            print_json_string(node.descriptor_binding->stream_element);
             std::cout << ",\"evidence\":";
             print_json_string(node.descriptor_binding->evidence);
             std::cout << "}";
@@ -1450,6 +1459,93 @@ void print_platform_form_schema() {
     std::cout << "]}\n";
 }
 
+void print_descriptor_schema_binding_json(
+    const oof::platform::form_descriptor::DescriptorSchemaBinding& binding
+) {
+    const auto* schema = oof::platform::form_descriptor::schema_for_binding(binding);
+    const auto* direct = oof::platform::descriptor::binding_for_guid(binding.guid);
+
+    std::cout << "{\"guid\":";
+    print_json_string(binding.guid);
+    std::cout << ",\"status\":";
+    print_json_string(binding.status);
+    std::cout << ",\"platformType\":";
+    print_json_string(binding.platform_type);
+    std::cout << ",\"streamElement\":";
+    print_json_string(binding.stream_element);
+    std::cout << ",\"role\":";
+    print_json_string(binding.role);
+    std::cout << ",\"fieldKindSymbol\":";
+    print_json_string(binding.field_kind_symbol);
+    std::cout << ",\"typePresentationSymbol\":";
+    print_json_string(binding.type_presentation_symbol);
+    std::cout << ",\"corpusObjectNames\":";
+    print_json_string(binding.corpus_object_names);
+    std::cout << ",\"evidence\":";
+    print_json_string(binding.evidence);
+    std::cout << ",\"directDescriptorRegistry\":"
+              << (direct != nullptr ? "true" : "false");
+    std::cout << ",\"schemaBacked\":"
+              << (schema != nullptr ? "true" : "false");
+    if (schema != nullptr) {
+        std::cout << ",\"schema\":{\"source\":";
+        print_json_string(schema->schema_source);
+        std::cout << ",\"typeName\":";
+        print_json_string(schema->type_name);
+        std::cout << ",\"streamElement\":";
+        print_json_string(schema->stream_element);
+        std::cout << ",\"baseType\":";
+        print_json_string(schema->base_type);
+        std::cout << ",\"childElements\":";
+        print_json_string(schema->child_elements);
+        std::cout << ",\"attributes\":";
+        print_json_string(schema->attributes);
+        std::cout << ",\"valueTypes\":";
+        print_json_string(schema->value_types);
+        std::cout << "}";
+    }
+    std::cout << "}";
+}
+
+void print_platform_descriptor_join() {
+    std::map<std::string_view, std::size_t> status_frequency;
+    std::size_t schema_backed = 0;
+    std::size_t direct_registry = 0;
+    for (const auto& binding : oof::platform::form_descriptor::descriptor_schema_bindings) {
+        ++status_frequency[binding.status];
+        if (oof::platform::form_descriptor::schema_for_binding(binding) != nullptr) {
+            ++schema_backed;
+        }
+        if (oof::platform::descriptor::binding_for_guid(binding.guid) != nullptr) {
+            ++direct_registry;
+        }
+    }
+
+    std::cout << "{\"source\":\"platform resources + binary/resource descriptor evidence + all-controls Form.bin corpus\"";
+    std::cout << ",\"bindingCount\":"
+              << oof::platform::form_descriptor::descriptor_schema_bindings.size();
+    std::cout << ",\"schemaBackedCount\":" << schema_backed;
+    std::cout << ",\"directRegistryCount\":" << direct_registry;
+    std::cout << ",\"statusFrequency\":[";
+    std::size_t status_index = 0;
+    for (const auto& [status, count] : status_frequency) {
+        if (status_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"status\":";
+        print_json_string(status);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"bindings\":[";
+    for (std::size_t index = 0; index < oof::platform::form_descriptor::descriptor_schema_bindings.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_descriptor_schema_binding_json(oof::platform::form_descriptor::descriptor_schema_bindings[index]);
+    }
+    std::cout << "]}\n";
+}
+
 void print_platform_xsd_inventory(int argc, char** argv) {
     const std::regex target_namespace_pattern("targetNamespace\\s*=\\s*\"([^\"]+)\"");
     const std::regex import_namespace_pattern("<xs:import[^>]*namespace\\s*=\\s*\"([^\"]+)\"");
@@ -1699,6 +1795,10 @@ int main(int argc, char** argv) {
         }
         if (command == "platform-form-schema") {
             print_platform_form_schema();
+            return 0;
+        }
+        if (command == "platform-descriptor-join") {
+            print_platform_descriptor_join();
             return 0;
         }
         if (command == "form-payload-info" && argc == 3) {
