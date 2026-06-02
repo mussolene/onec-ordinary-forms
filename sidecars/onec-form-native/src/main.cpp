@@ -1,13 +1,16 @@
 #include <cctype>
 #include <exception>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "form_bin_container.hpp"
 #include "ordinary_controls.hpp"
 #include "ordinary_form_graph.hpp"
 #include "platform_mechanism.hpp"
@@ -251,7 +254,18 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip> < stream.txt\n";
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|formbin-selftest> < stream.txt\n"
+              << "       oof-native <formbin-info|formbin-roundtrip> Form.bin\n";
+}
+
+std::vector<std::uint8_t> read_file_bytes(const std::string& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        throw std::runtime_error("cannot open input file: " + path);
+    }
+    return std::vector<std::uint8_t>(
+        std::istreambuf_iterator<char>(file),
+        std::istreambuf_iterator<char>());
 }
 
 void print_json_string(std::string_view value) {
@@ -522,10 +536,80 @@ void print_transfer_roundtrip() {
     std::cout << "}\n";
 }
 
+void print_formbin_info(const std::string& path) {
+    const std::vector<std::uint8_t> data = read_file_bytes(path);
+    const auto container = oof::platform::formbin::parse_container(data);
+
+    std::cout << "{";
+    std::cout << "\"containerSize\":" << data.size();
+    std::cout << ",\"blockSize\":" << container.block_size;
+    std::cout << ",\"fileCount\":" << container.files.size();
+    std::cout << ",\"files\":[";
+    for (size_t i = 0; i < container.files.size(); ++i) {
+        const auto& file = container.files[i];
+        if (i != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{";
+        std::cout << "\"name\":";
+        print_json_string(file.name);
+        std::cout << ",\"payloadSize\":" << file.payload.size();
+        std::cout << ",\"payloadHexPrefix\":";
+        const auto prefix_end = file.payload.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(16, file.payload.size()));
+        print_json_string(bytes_hex(std::vector<std::uint8_t>(file.payload.begin(), prefix_end)));
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+}
+
+void print_formbin_roundtrip(const std::string& path) {
+    const std::vector<std::uint8_t> data = read_file_bytes(path);
+    const auto container = oof::platform::formbin::parse_container(data);
+    const std::vector<std::uint8_t> rebuilt = oof::platform::formbin::serialize_container(container);
+    const auto reparsed = oof::platform::formbin::parse_container(rebuilt);
+
+    bool logical_equal = container.files.size() == reparsed.files.size();
+    for (size_t i = 0; logical_equal && i < container.files.size(); ++i) {
+        logical_equal = container.files[i].name == reparsed.files[i].name &&
+                        container.files[i].created == reparsed.files[i].created &&
+                        container.files[i].modified == reparsed.files[i].modified &&
+                        container.files[i].payload == reparsed.files[i].payload;
+    }
+
+    std::cout << "{";
+    std::cout << "\"inputSize\":" << data.size();
+    std::cout << ",\"rebuiltSize\":" << rebuilt.size();
+    std::cout << ",\"byteEqual\":" << (data == rebuilt ? "true" : "false");
+    std::cout << ",\"logicalEqual\":" << (logical_equal ? "true" : "false");
+    std::cout << ",\"fileCount\":" << reparsed.files.size();
+    std::cout << "}\n";
+}
+
+void print_formbin_selftest() {
+    oof::platform::formbin::OneCContainer container;
+    container.block_size = oof::platform::formbin::container_block_size;
+    container.files.push_back({"form", 1, 2, {'{', '1', '}'}});
+    container.files.push_back({"module", 3, 4, {'/', '/', 'm'}});
+
+    const std::vector<std::uint8_t> bytes = oof::platform::formbin::serialize_container(container);
+    const auto reparsed = oof::platform::formbin::parse_container(bytes);
+    const std::vector<std::uint8_t> rebuilt = oof::platform::formbin::serialize_container(reparsed);
+
+    std::cout << "{";
+    std::cout << "\"bytes\":" << bytes.size();
+    std::cout << ",\"byteEqual\":" << (bytes == rebuilt ? "true" : "false");
+    std::cout << ",\"fileCount\":" << reparsed.files.size();
+    std::cout << ",\"firstName\":";
+    print_json_string(reparsed.files.at(0).name);
+    std::cout << ",\"secondName\":";
+    print_json_string(reparsed.files.at(1).name);
+    std::cout << "}\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
+    if (argc != 2 && argc != 3) {
         usage();
         return 2;
     }
@@ -550,6 +634,18 @@ int main(int argc, char** argv) {
         }
         if (command == "transfer-roundtrip") {
             print_transfer_roundtrip();
+            return 0;
+        }
+        if (command == "formbin-selftest") {
+            print_formbin_selftest();
+            return 0;
+        }
+        if (command == "formbin-info" && argc == 3) {
+            print_formbin_info(argv[2]);
+            return 0;
+        }
+        if (command == "formbin-roundtrip" && argc == 3) {
+            print_formbin_roundtrip(argv[2]);
             return 0;
         }
 

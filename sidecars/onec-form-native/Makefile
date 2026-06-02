@@ -3,7 +3,7 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp
 
 .PHONY: all clean test
 
@@ -39,6 +39,8 @@ test: $(BIN)
 	$(BIN) transfer-roundtrip | grep -q '"controls":1'
 	$(BIN) transfer-roundtrip | grep -q '"controlObjectId":7'
 	$(BIN) transfer-roundtrip | grep -q '"infoObjectId":7'
+	$(BIN) formbin-selftest | grep -q '"byteEqual":true'
+	$(BIN) formbin-selftest | grep -q '"firstName":"form"'
 
 clean:
 	rm -rf $(BUILD_DIR)
