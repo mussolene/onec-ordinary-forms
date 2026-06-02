@@ -95,6 +95,14 @@ sidecars/onec-form-native/build/oof-native formbin-dump-xml Form.bin Form.xml
 sidecars/onec-form-native/build/oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml
 ```
 
+Apply supported public XML edits back to a runtime stream or a real `Form.bin`
+container:
+
+```bash
+sidecars/onec-form-native/build/oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt
+sidecars/onec-form-native/build/oof-native formbin-build-xml base-Form.bin Form.xml rebuilt-Form.bin
+```
+
 The XML projection is native C++ and emits `Form`, `ChildItems`, `Attributes`,
 `Commands`, `Events`, and named control elements. It does not expose raw
 list-stream, payload, or fallback nodes. Use the coverage command before
@@ -105,5 +113,7 @@ sidecars/onec-form-native/build/oof-native formbin-xml-coverage Form.bin
 ```
 
 Current coverage is intentionally explicit: native XML projection is present,
-while full XML-to-Form.bin writing still requires typed `cf_form_controls8`
-payload properties, positions, attributes, commands, and events.
+and name plus simple localized `Title` edits round-trip through native runtime
+and Form.bin build commands. Full XML-to-Form.bin writing still requires typed
+`cf_form_controls8` payload properties for positions, attributes, commands,
+events, and the remaining control-specific property slots.

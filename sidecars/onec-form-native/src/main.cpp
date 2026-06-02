@@ -268,11 +268,13 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-xml-build-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-xml Form.bin Form.xml\n"
+              << "       oof-native formbin-build-xml base-Form.bin Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-xml-coverage Form.bin\n"
               << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
+              << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-platform-object> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
@@ -1025,6 +1027,7 @@ struct MaterializedFormItem {
     std::string object_id;
     std::string parent_object_id;
     std::string name;
+    std::string title;
     std::size_t arity = 0;
     const oof::platform::form_descriptor::DescriptorSchemaBinding* descriptor_binding = nullptr;
 };
@@ -1099,6 +1102,29 @@ bool find_platform_name_record(
     return false;
 }
 
+bool find_first_localized_text(
+    const oof::platform::stream::ListValue& value,
+    std::string& text
+) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (value.items.size() >= 2 &&
+        !value.items[0].is_list &&
+        !value.items[1].is_list &&
+        value.items[0].atom_kind == oof::platform::stream::ListValue::AtomKind::string &&
+        value.items[1].atom_kind == oof::platform::stream::ListValue::AtomKind::string) {
+        text = value.items[1].atom;
+        return true;
+    }
+    for (const auto& item : value.items) {
+        if (find_first_localized_text(item, text)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool is_materializable_object_candidate(const oof::platform::stream::ListValue& value) {
     if (!value.is_list || value.items.size() < 2 || value.items[0].is_list || value.items[1].is_list) {
         return false;
@@ -1139,6 +1165,12 @@ void collect_materialized_form_items(
             std::string name;
             if (find_platform_name_record(value, name)) {
                 item.name = std::move(name);
+            }
+            if (value.items.size() > 2 && value.items[2].is_list) {
+                std::string title;
+                if (find_first_localized_text(value.items[2], title)) {
+                    item.title = std::move(title);
+                }
             }
             next_parent = item.object_id;
             items.push_back(std::move(item));
@@ -1702,9 +1734,8 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
         object.properties.push_back(make_described_property("Type", object.platform_type));
         object.properties.push_back(make_described_property("Parent", item.parent_object_id));
         object.properties.push_back(make_described_property("Path", item.path));
-        if (object.platform_type == "Button" || object.platform_type == "PanelPage" ||
-            object.platform_type == "Panel" || object.platform_type == "PivotChart") {
-            object.properties.push_back(make_described_property("Title", item.name));
+        if (!item.title.empty()) {
+            object.properties.push_back(make_described_property("Title", item.title));
         }
         add_api_surface(object, api_object_for_type(object.platform_type));
         form_object.items.add(std::move(object));
@@ -1861,6 +1892,24 @@ std::string xml_escape(std::string_view value) {
     return out;
 }
 
+std::string xml_unescape(std::string value) {
+    const std::vector<std::pair<std::string, std::string>> entities{
+        {"&quot;", "\""},
+        {"&apos;", "'"},
+        {"&lt;", "<"},
+        {"&gt;", ">"},
+        {"&amp;", "&"},
+    };
+    for (const auto& [entity, replacement] : entities) {
+        std::size_t pos = 0;
+        while ((pos = value.find(entity, pos)) != std::string::npos) {
+            value.replace(pos, entity.size(), replacement);
+            pos += replacement.size();
+        }
+    }
+    return value;
+}
+
 std::string public_xml_tag_for_platform_type(std::string_view platform_type) {
     if (platform_type == "TextBox") {
         return "InputField";
@@ -1896,6 +1945,87 @@ std::string public_xml_tag_for_platform_type(std::string_view platform_type) {
         return "Page";
     }
     return std::string(platform_type);
+}
+
+struct PublicXmlControlEdit {
+    std::string tag;
+    std::string object_id;
+    std::string name;
+    bool has_name = false;
+    std::string title;
+    bool has_title = false;
+};
+
+struct PublicXmlApplyResult {
+    std::size_t controls = 0;
+    std::size_t name_edits = 0;
+    std::size_t title_edits = 0;
+};
+
+PublicXmlApplyResult apply_public_xml_edits(
+    RuntimeFormEnvelope& envelope,
+    const std::vector<PublicXmlControlEdit>& edits
+);
+
+std::string xml_attr_value(std::string_view attrs, std::string_view name) {
+    const std::regex attr_pattern(std::string(name) + "\\s*=\\s*\"([^\"]*)\"");
+    std::cmatch match;
+    const std::string attr_text(attrs);
+    if (!std::regex_search(attr_text.c_str(), match, attr_pattern)) {
+        return {};
+    }
+    return xml_unescape(match[1].str());
+}
+
+std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::string& xml) {
+    if (xml.find("<ListStream") != std::string::npos || xml.find("<RawBracket") != std::string::npos ||
+        xml.find("<PlatformRecords") != std::string::npos || xml.find("<FormBin") != std::string::npos) {
+        throw std::runtime_error("OrdinaryFormV2 XML must not contain raw/list-stream fallback nodes");
+    }
+    if (xml.find("ordinaryFormVersion=\"2.") == std::string::npos) {
+        throw std::runtime_error("expected OrdinaryFormV2 XML with ordinaryFormVersion=\"2.*\"");
+    }
+
+    const std::set<std::string> section_tags{
+        "Form", "Events", "Event", "ChildItems", "Attributes", "Attribute", "Commands", "Command",
+        "Title", "Position", "Pages"
+    };
+    const std::regex start_tag_pattern(R"(<([A-Za-z][A-Za-z0-9]*)\b([^>]*)>)");
+    std::vector<PublicXmlControlEdit> edits;
+    for (std::sregex_iterator it(xml.begin(), xml.end(), start_tag_pattern), end; it != end; ++it) {
+        const std::string tag = (*it)[1].str();
+        if (section_tags.count(tag) != 0) {
+            continue;
+        }
+        const std::string attrs = (*it)[2].str();
+        const std::string object_id = xml_attr_value(attrs, "id");
+        if (object_id.empty()) {
+            continue;
+        }
+        PublicXmlControlEdit edit;
+        edit.tag = tag;
+        edit.object_id = object_id;
+        edit.name = xml_attr_value(attrs, "name");
+        edit.has_name = attrs.find("name") != std::string::npos;
+
+        const std::size_t body_start = static_cast<std::size_t>(it->position() + it->length());
+        const std::string close_tag = "</" + tag + ">";
+        const std::size_t body_end = xml.find(close_tag, body_start);
+        if (body_end != std::string::npos) {
+            const std::string body = xml.substr(body_start, body_end - body_start);
+            const std::size_t title_start = body.find("<Title>");
+            if (title_start != std::string::npos) {
+                const std::size_t title_value_start = title_start + std::string("<Title>").size();
+                const std::size_t title_end = body.find("</Title>", title_value_start);
+                if (title_end != std::string::npos) {
+                    edit.title = xml_unescape(body.substr(title_value_start, title_end - title_value_start));
+                    edit.has_title = true;
+                }
+            }
+        }
+        edits.push_back(std::move(edit));
+    }
+    return edits;
 }
 
 void append_indent(std::string& out, int indent) {
@@ -2023,6 +2153,82 @@ void write_formbin_xml(const std::string& input_path, const std::string& output_
     std::cout << "}\n";
 }
 
+std::vector<std::uint8_t> encode_form_payload_text(
+    const std::vector<std::uint8_t>& original_payload,
+    const oof::platform::stream::ListValue& payload
+) {
+    const std::string text = oof::platform::stream::dump_compact(payload);
+    std::vector<std::uint8_t> out;
+    if (original_payload.size() >= 3 &&
+        original_payload[0] == 0xef &&
+        original_payload[1] == 0xbb &&
+        original_payload[2] == 0xbf) {
+        out.push_back(0xef);
+        out.push_back(0xbb);
+        out.push_back(0xbf);
+    }
+    out.insert(out.end(), text.begin(), text.end());
+    return out;
+}
+
+void write_runtime_form_from_xml(
+    const std::string& input_path,
+    const std::string& xml_path,
+    const std::string& output_path
+) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    const auto edits = parse_public_xml_control_edits(read_file_text_lossy(xml_path));
+    const auto result = apply_public_xml_edits(envelope, edits);
+    const std::string rebuilt_text = dump_runtime_form_envelope(envelope);
+    write_file_bytes(output_path, std::vector<std::uint8_t>(rebuilt_text.begin(), rebuilt_text.end()));
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"operation\":\"runtime-form-build-xml\"";
+    std::cout << ",\"bytes\":" << rebuilt_text.size();
+    std::cout << ",\"controls\":" << result.controls;
+    std::cout << ",\"nameEdits\":" << result.name_edits;
+    std::cout << ",\"titleEdits\":" << result.title_edits;
+    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << "}\n";
+}
+
+void write_formbin_from_xml(
+    const std::string& input_path,
+    const std::string& xml_path,
+    const std::string& output_path
+) {
+    const std::vector<std::uint8_t> data = read_file_bytes(input_path);
+    auto container = oof::platform::formbin::parse_container(data);
+    auto file_it = container.files.end();
+    for (auto it = container.files.begin(); it != container.files.end(); ++it) {
+        if (it->name == "form") {
+            file_it = it;
+            break;
+        }
+    }
+    if (file_it == container.files.end()) {
+        throw std::runtime_error("Form.bin does not contain required logical file");
+    }
+
+    RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(file_it->payload);
+    const auto edits = parse_public_xml_control_edits(read_file_text_lossy(xml_path));
+    const auto result = apply_public_xml_edits(envelope, edits);
+    file_it->payload = encode_form_payload_text(file_it->payload, envelope.payload);
+    const auto rebuilt = oof::platform::formbin::serialize_container(container);
+    write_file_bytes(output_path, rebuilt);
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"operation\":\"formbin-build-xml\"";
+    std::cout << ",\"bytes\":" << rebuilt.size();
+    std::cout << ",\"controls\":" << result.controls;
+    std::cout << ",\"nameEdits\":" << result.name_edits;
+    std::cout << ",\"titleEdits\":" << result.title_edits;
+    std::cout << ",\"preservedContainerFiles\":" << container.files.size();
+    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << "}\n";
+}
+
 void print_formbin_xml_coverage(const std::string& input_path) {
     RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
     const auto summary = summarize_materialized_graph(envelope.payload);
@@ -2034,6 +2240,53 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
     std::cout << ",\"missingCodecs\":[\"Position\",\"Attributes\",\"Commands\",\"Events\",\"cf_form_controls8 typed payload fields\",\"XML-to-Form.bin writer\"]";
+    std::cout << "}\n";
+}
+
+void replace_all(std::string& value, std::string_view needle, std::string_view replacement) {
+    std::size_t pos = 0;
+    while ((pos = value.find(needle, pos)) != std::string::npos) {
+        value.replace(pos, needle.size(), replacement);
+        pos += replacement.size();
+    }
+}
+
+void print_formbin_xml_build_selftest() {
+    const std::string form_text =
+        "{{\"MainCaption\",1,1,{\"ru\",\"Main\"}},"
+        "{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{\"ru\",\"Run\"}}},"
+        "{8,1,2,101,22,0,0,0,0,0,0,0,0,0,0,0,0},{14,\"Button1\",4294967295,0,0,0},{0}}}";
+    oof::platform::formbin::OneCContainer container;
+    container.block_size = oof::platform::formbin::container_block_size;
+    container.files.push_back({"form", 11, 22, std::vector<std::uint8_t>(form_text.begin(), form_text.end())});
+    container.files.push_back({"module", 33, 44, {'m', 'o', 'd'}});
+
+    RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(container.files[0].payload);
+    std::string xml = form_object_to_public_xml(materialize_platform_form_object(envelope));
+    replace_all(xml, "name=\"Button1\"", "name=\"ButtonXmlEdited\"");
+    replace_all(xml, "<Title>Run</Title>", "<Title>RunXmlEdited</Title>");
+
+    const auto edits = parse_public_xml_control_edits(xml);
+    const auto result = apply_public_xml_edits(envelope, edits);
+    container.files[0].payload = encode_form_payload_text(container.files[0].payload, envelope.payload);
+    const auto rebuilt = oof::platform::formbin::serialize_container(container);
+    const auto reparsed = oof::platform::formbin::parse_container(rebuilt);
+    const auto redump_envelope = runtime_envelope_from_form_payload(find_container_file(reparsed, "form").payload);
+    const std::string redump_xml = form_object_to_public_xml(materialize_platform_form_object(redump_envelope));
+    const auto& module = find_container_file(reparsed, "module");
+
+    std::cout << "{\"operation\":\"formbin-xml-build-selftest\"";
+    std::cout << ",\"nameEdits\":" << result.name_edits;
+    std::cout << ",\"titleEdits\":" << result.title_edits;
+    std::cout << ",\"nameRoundtrip\":"
+              << (redump_xml.find("ButtonXmlEdited") != std::string::npos ? "true" : "false");
+    std::cout << ",\"titleRoundtrip\":"
+              << (redump_xml.find("RunXmlEdited") != std::string::npos ? "true" : "false");
+    std::cout << ",\"modulePreserved\":"
+              << (module.payload == std::vector<std::uint8_t>({'m', 'o', 'd'}) ? "true" : "false");
+    std::cout << ",\"noRawXml\":"
+              << (redump_xml.find("ListStream") == std::string::npos ? "true" : "false");
+    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << "}\n";
 }
 
@@ -2154,6 +2407,73 @@ bool rename_materialized_object(
         }
     }
     return false;
+}
+
+bool set_first_localized_text(oof::platform::stream::ListValue& value, std::string_view text) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (value.items.size() >= 2 &&
+        !value.items[0].is_list &&
+        !value.items[1].is_list &&
+        value.items[0].atom_kind == oof::platform::stream::ListValue::AtomKind::string &&
+        value.items[1].atom_kind == oof::platform::stream::ListValue::AtomKind::string) {
+        value.items[1].atom = std::string(text);
+        return true;
+    }
+    for (auto& item : value.items) {
+        if (set_first_localized_text(item, text)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool set_materialized_object_title(
+    oof::platform::stream::ListValue& value,
+    std::string_view object_id,
+    std::string_view title
+) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (is_materializable_object_candidate(value) &&
+        !value.items[1].is_list &&
+        value.items[1].atom == object_id) {
+        if (value.items.size() > 2 && value.items[2].is_list) {
+            return set_first_localized_text(value.items[2], title);
+        }
+        return false;
+    }
+    for (auto& item : value.items) {
+        if (set_materialized_object_title(item, object_id, title)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+PublicXmlApplyResult apply_public_xml_edits(
+    RuntimeFormEnvelope& envelope,
+    const std::vector<PublicXmlControlEdit>& edits
+) {
+    PublicXmlApplyResult result;
+    for (const auto& edit : edits) {
+        ++result.controls;
+        if (edit.has_name) {
+            if (!rename_materialized_object(envelope.payload, edit.object_id, edit.name)) {
+                throw std::runtime_error("XML control id has no writable platform name record: " + edit.object_id);
+            }
+            ++result.name_edits;
+        }
+        if (edit.has_title) {
+            if (!set_materialized_object_title(envelope.payload, edit.object_id, edit.title)) {
+                throw std::runtime_error("XML control id has no writable platform title slot: " + edit.object_id);
+            }
+            ++result.title_edits;
+        }
+    }
+    return result;
 }
 
 const oof::platform::property_registry::PlatformPropertyDescriptor& require_property_descriptor(
@@ -3254,6 +3574,10 @@ int main(int argc, char** argv) {
             print_formbin_selftest();
             return 0;
         }
+        if (command == "formbin-xml-build-selftest") {
+            print_formbin_xml_build_selftest();
+            return 0;
+        }
         if (command == "form-payload-structure-selftest") {
             print_form_payload_structure_selftest();
             return 0;
@@ -3318,12 +3642,20 @@ int main(int argc, char** argv) {
             write_formbin_xml(argv[2], argv[3]);
             return 0;
         }
+        if (command == "formbin-build-xml" && argc == 5) {
+            write_formbin_from_xml(argv[2], argv[3], argv[4]);
+            return 0;
+        }
         if (command == "formbin-xml-coverage" && argc == 3) {
             print_formbin_xml_coverage(argv[2]);
             return 0;
         }
         if (command == "runtime-form-dump-xml" && argc == 4) {
             write_runtime_form_xml(argv[2], argv[3]);
+            return 0;
+        }
+        if (command == "runtime-form-build-xml" && argc == 5) {
+            write_runtime_form_from_xml(argv[2], argv[3], argv[4]);
             return 0;
         }
         if (command == "runtime-form-object-graph" && argc == 3) {

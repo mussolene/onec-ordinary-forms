@@ -88,6 +88,10 @@ test: $(BIN)
 	$(BIN) transfer-sections | grep -F -q '"countOrBytes":40'
 	$(BIN) formbin-selftest | grep -q '"byteEqual":true'
 	$(BIN) formbin-selftest | grep -q '"firstName":"form"'
+	$(BIN) formbin-xml-build-selftest | grep -F -q '"nameRoundtrip":true'
+	$(BIN) formbin-xml-build-selftest | grep -F -q '"titleRoundtrip":true'
+	$(BIN) formbin-xml-build-selftest | grep -F -q '"modulePreserved":true'
+	$(BIN) formbin-xml-build-selftest | grep -F -q '"noRawXml":true'
 	$(BIN) raw-deflate-selftest | grep -q '"byteEqual":true'
 	$(BIN) form-payload-structure-selftest | grep -q '"guidHeadNodes":2'
 	$(BIN) form-payload-structure-selftest | grep -q '"candidateObjectNodes":1'
@@ -110,8 +114,12 @@ test: $(BIN)
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"materializedItems":2'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
 	grep -F -q '<ChildItems>' $(BUILD_DIR)/runtime-form.xml
-	grep -F -q '<Button name="Button1" id="5">' $(BUILD_DIR)/runtime-form.xml
+	grep -F -q '<Button name="Button1" id="5"' $(BUILD_DIR)/runtime-form.xml
 	! grep -F -q '<ListStream' $(BUILD_DIR)/runtime-form.xml
+	perl -0pi -e 's/name="Button1"/name="ButtonXmlEdited"/' $(BUILD_DIR)/runtime-form.xml
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml $(BUILD_DIR)/runtime-form-xml-edited.txt | grep -F -q '"nameEdits":2'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-xml-edited.txt $(BUILD_DIR)/runtime-form-xml-redump.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	grep -F -q 'ButtonXmlEdited' $(BUILD_DIR)/runtime-form-xml-redump.xml
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:PlatformObject"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"contextContract":{"platformEvidence":"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"platformType":"Form"'
