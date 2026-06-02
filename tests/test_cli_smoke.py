@@ -2088,6 +2088,33 @@ class CliSmokeTest(unittest.TestCase):
 
             validate_xml_file(xml)
 
+    def test_schema_accepts_command_bar_menu_buttons_without_name(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            xml = Path(temp_dir) / "Form.xml"
+            xml.write_text(
+                """<Form version="1" containerCreatedTicks="0" containerModifiedTicks="0">
+                  <Title><Item lang="ru">Main</Item></Title>
+                  <Pages>
+                    <Page name="Main">
+                      <CommandBar name="ДействияФормы" id="2">
+                        <Buttons rootUuid="ad00c95e-dfa1-41f4-8bab-63a94f60a60e" rootKind="315" rootFlag="1">
+                          <Actions/>
+                          <Groups>
+                            <Group order="1" uuid="875faa24-ba4b-4731-9f11-7a7cea99ef16" kind="6" mode="0" buttonCount="1">
+                              <Button order="1" actionUuid="927929e5-0547-4575-b493-2ba694620c72" descriptor="[&quot;7&quot;]"/>
+                              <Placement zone="1" order="0" targetCount="0"/>
+                            </Group>
+                          </Groups>
+                        </Buttons>
+                      </CommandBar>
+                    </Page>
+                  </Pages>
+                </Form>""",
+                encoding="utf-8",
+            )
+
+            validate_xml_file(xml)
+
     def test_base_style_attributes_roundtrip_control_style_slots(self) -> None:
         base = [
             "19",

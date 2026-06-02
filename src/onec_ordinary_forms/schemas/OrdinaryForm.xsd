@@ -2322,34 +2322,36 @@
     </xs:complexContent>
   </xs:complexType>
   <xs:complexType name="CommandBarButtonType">
-    <xs:complexContent>
-      <xs:extension base="ControlIdentityType">
-        <xs:choice minOccurs="0" maxOccurs="unbounded">
-          <xs:element name="Title" type="LocalizedTextType"/>
-          <xs:element name="ToolTip" type="LocalizedTextType"/>
-          <xs:element name="Picture" type="FileRefType"/>
-          <xs:element name="Action" type="OpenElementType"/>
-          <xs:element name="CommandName" type="xs:string"/>
-          <xs:group ref="ControlElementGroup"/>
-        </xs:choice>
-        <xs:attribute name="order" type="xs:integer"/>
-        <xs:attribute name="actionUuid" type="xs:string"/>
-        <xs:attribute name="state" type="xs:string"/>
-        <xs:attribute name="visible" type="xs:string"/>
-        <xs:attribute name="hasAction" type="xs:string"/>
-        <xs:attribute name="ownerUuid" type="xs:string"/>
-        <xs:attribute name="position" type="xs:string"/>
-        <xs:attribute name="style" type="xs:string"/>
-        <xs:attribute name="kind" type="xs:string"/>
-        <xs:attribute name="groupMode" type="xs:string"/>
-        <xs:attribute name="enabled" type="xs:string"/>
-        <xs:attribute name="checked" type="xs:string"/>
-        <xs:attribute name="showText" type="xs:string"/>
-        <xs:attribute name="shortcut" type="xs:string"/>
-        <xs:attribute name="default" type="xs:string"/>
-        <xs:attribute name="descriptor" type="xs:string"/>
-      </xs:extension>
-    </xs:complexContent>
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="Title" type="LocalizedTextType"/>
+      <xs:element name="ToolTip" type="LocalizedTextType"/>
+      <xs:element name="Picture" type="FileRefType"/>
+      <xs:element name="Action" type="OpenElementType"/>
+      <xs:element name="CommandName" type="xs:string"/>
+      <xs:group ref="ControlElementGroup"/>
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string"/>
+    <xs:attribute name="id" type="xs:integer"/>
+    <xs:attribute name="baseStyleMode" type="xs:string"/>
+    <xs:attribute name="baseStyleState" type="xs:string"/>
+    <xs:attribute name="baseStyleVisible" type="xs:string"/>
+    <xs:attribute name="baseStyleDefaultMode" type="xs:string"/>
+    <xs:attribute name="order" type="xs:integer"/>
+    <xs:attribute name="actionUuid" type="xs:string"/>
+    <xs:attribute name="state" type="xs:string"/>
+    <xs:attribute name="visible" type="xs:string"/>
+    <xs:attribute name="hasAction" type="xs:string"/>
+    <xs:attribute name="ownerUuid" type="xs:string"/>
+    <xs:attribute name="position" type="xs:string"/>
+    <xs:attribute name="style" type="xs:string"/>
+    <xs:attribute name="kind" type="xs:string"/>
+    <xs:attribute name="groupMode" type="xs:string"/>
+    <xs:attribute name="enabled" type="xs:string"/>
+    <xs:attribute name="checked" type="xs:string"/>
+    <xs:attribute name="showText" type="xs:string"/>
+    <xs:attribute name="shortcut" type="xs:string"/>
+    <xs:attribute name="default" type="xs:string"/>
+    <xs:attribute name="descriptor" type="xs:string"/>
   </xs:complexType>
   <xs:simpleType name="ControlElementNameType">
     <xs:annotation>
