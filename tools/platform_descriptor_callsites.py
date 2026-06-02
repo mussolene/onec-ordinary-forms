@@ -22,6 +22,7 @@ from typing import Iterable
 ADDR_RE = re.compile(r"^\s*([0-9a-fA-F]+):")
 COMMENT_ADDR_RE = re.compile(r"#\s*0x([0-9a-fA-F]+)")
 INDIRECT_CALL_RE = re.compile(r"\bcallq?\s+\*([^#]+)")
+RELOCATION_TYPE_RELATIVE = 8
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,13 @@ def load_sections(path: Path) -> list[Section]:
     return sections
 
 
+def section_by_name(sections: Iterable[Section], name: str) -> Section | None:
+    for section in sections:
+        if section.name == name:
+            return section
+    return None
+
+
 def section_header(blob: bytes, shoff: int, shentsize: int, index: int) -> dict:
     at = shoff + index * shentsize
     name, _type = struct.unpack_from("<II", blob, at)
@@ -81,6 +89,34 @@ def c_string(blob: bytes, offset: int) -> str:
     if end < 0:
         end = len(blob)
     return blob[offset:end].decode("utf-8", errors="replace")
+
+
+def vma_string(blob: bytes, sections: list[Section], address: int) -> str:
+    try:
+        section = section_for(sections, address)
+        if section is None or section.name not in {".rodata", ".dynstr"}:
+            return ""
+        offset = file_offset(sections, address)
+        if offset is None:
+            return ""
+        return c_string(blob, offset)
+    except Exception:
+        return ""
+
+
+def load_relative_relocations(blob: bytes, sections: list[Section]) -> dict[int, int]:
+    rela = section_by_name(sections, ".rela.dyn")
+    if rela is None or rela.size == 0:
+        return {}
+    result: dict[int, int] = {}
+    count = rela.size // 24
+    for index in range(count):
+        at = rela.file_offset + index * 24
+        offset, info, addend = struct.unpack_from("<QQq", blob, at)
+        relocation_type = info & 0xFFFFFFFF
+        if relocation_type == RELOCATION_TYPE_RELATIVE:
+            result[offset] = addend
+    return result
 
 
 def section_for(sections: Iterable[Section], address: int) -> Section | None:
@@ -163,6 +199,10 @@ def disassemble(path: Path, start: int, end: int) -> list[str]:
     return [line.rstrip() for line in text.splitlines()]
 
 
+def disassemble_all(path: Path) -> list[str]:
+    return [line.rstrip() for line in run(["objdump", "-d", str(path)]).splitlines()]
+
+
 def instruction_address(line: str) -> int | None:
     match = ADDR_RE.match(line)
     return int(match.group(1), 16) if match else None
@@ -195,15 +235,52 @@ def extract_function(path: Path, blob: bytes, sections: list[Section], callsite:
     }
 
 
+def extract_xrefs(path: Path, addresses: Iterable[int]) -> dict[str, list[dict]]:
+    wanted = {address: f"0x{address:x}" for address in addresses}
+    result = {label: [] for label in wanted.values()}
+    for line in disassemble_all(path):
+        at = instruction_address(line)
+        if at is None:
+            continue
+        for match in COMMENT_ADDR_RE.finditer(line):
+            ref = int(match.group(1), 16)
+            label = wanted.get(ref)
+            if label is not None:
+                result[label].append({"at": f"0x{at:x}", "instruction": line.strip()})
+    return result
+
+
+def extract_relocation_targets(
+    blob: bytes,
+    sections: list[Section],
+    relocations: dict[int, int],
+    targets: Iterable[int],
+) -> list[dict]:
+    result = []
+    for target in targets:
+        value = relocations.get(target)
+        entry = {"address": f"0x{target:x}", "relativeValue": "", "section": "", "string": ""}
+        if value is not None:
+            entry["relativeValue"] = f"0x{value:x}"
+            section = section_for(sections, value)
+            entry["section"] = "" if section is None else section.name
+            entry["string"] = vma_string(blob, sections, value)
+        result.append(entry)
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("platform_elf", type=Path)
     parser.add_argument("callsites", nargs="+")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--xref-addresses", nargs="*", default=[])
+    parser.add_argument("--relocation-targets", nargs="*", default=[])
     args = parser.parse_args()
 
     blob = args.platform_elf.read_bytes()
     sections = load_sections(args.platform_elf)
+    relocations = load_relative_relocations(blob, sections)
     result = {
         "platform_elf": args.platform_elf.name,
         "callsites": [
@@ -211,6 +288,15 @@ def main() -> int:
             for callsite in args.callsites
         ],
     }
+    if args.xref_addresses:
+        result["xrefs"] = extract_xrefs(args.platform_elf, [parse_int(value) for value in args.xref_addresses])
+    if args.relocation_targets:
+        result["relocations"] = extract_relocation_targets(
+            blob,
+            sections,
+            relocations,
+            [parse_int(value) for value in args.relocation_targets],
+        )
 
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
