@@ -270,6 +270,9 @@ std::string read_stdin() {
 void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
+              << "       oof-native formbin-dump-xml Form.bin Form.xml\n"
+              << "       oof-native formbin-xml-coverage Form.bin\n"
+              << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-platform-object> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
@@ -1447,6 +1450,17 @@ RuntimeFormEnvelope parse_runtime_form_envelope(const std::string& text) {
     return envelope;
 }
 
+RuntimeFormEnvelope runtime_envelope_from_form_payload(const std::vector<std::uint8_t>& form_payload) {
+    RuntimeFormEnvelope envelope;
+    envelope.marker = "#";
+    envelope.runtime_uuid = "00000000-0000-0000-0000-000000000000";
+    envelope.payload = oof::platform::stream::parse(decode_form_payload_text(form_payload));
+    if (!envelope.payload.is_list) {
+        throw std::runtime_error("Form.bin form payload does not look like an ordinary form list stream");
+    }
+    return envelope;
+}
+
 oof::platform::stream::ListValue build_runtime_form_envelope_value(const RuntimeFormEnvelope& envelope) {
     return oof::platform::stream::ListValue::list({
         oof::platform::stream::ListValue::string_atom(envelope.marker),
@@ -1818,6 +1832,209 @@ void print_runtime_platform_object(const std::string& path) {
         print_platform_object_json(form_object.items.get(index));
     }
     std::cout << "]}}\n";
+}
+
+std::string xml_escape(std::string_view value) {
+    std::string out;
+    for (const char ch : value) {
+        switch (ch) {
+            case '&':
+                out += "&amp;";
+                break;
+            case '<':
+                out += "&lt;";
+                break;
+            case '>':
+                out += "&gt;";
+                break;
+            case '"':
+                out += "&quot;";
+                break;
+            case '\'':
+                out += "&apos;";
+                break;
+            default:
+                out.push_back(ch);
+                break;
+        }
+    }
+    return out;
+}
+
+std::string public_xml_tag_for_platform_type(std::string_view platform_type) {
+    if (platform_type == "TextBox") {
+        return "InputField";
+    }
+    if (platform_type == "TableBox") {
+        return "Table";
+    }
+    if (platform_type == "Image") {
+        return "PictureDecoration";
+    }
+    if (platform_type == "Label") {
+        return "LabelDecoration";
+    }
+    if (platform_type == "GroupBox") {
+        return "UsualGroup";
+    }
+    if (platform_type == "Spreadsheet") {
+        return "SpreadsheetDocumentField";
+    }
+    if (platform_type == "TextDocument") {
+        return "TextDocumentField";
+    }
+    if (platform_type == "FormattedDocument") {
+        return "FormattedDocumentField";
+    }
+    if (platform_type == "Calendar") {
+        return "CalendarField";
+    }
+    if (platform_type == "TrackBar") {
+        return "TrackBar";
+    }
+    if (platform_type == "PanelPage") {
+        return "Page";
+    }
+    return std::string(platform_type);
+}
+
+void append_indent(std::string& out, int indent) {
+    out.append(static_cast<std::size_t>(indent), ' ');
+}
+
+const oof::platform::object_model::PlatformObjectProperty* find_object_property(
+    const oof::platform::object_model::PlatformObject& object,
+    std::string_view name
+) {
+    return object.property(name);
+}
+
+void append_named_text_property_xml(
+    std::string& out,
+    const oof::platform::object_model::PlatformObject& object,
+    std::string_view property_name,
+    int indent
+) {
+    const auto* property = find_object_property(object, property_name);
+    if (property == nullptr || property->value.empty()) {
+        return;
+    }
+    append_indent(out, indent);
+    out += "<";
+    out += property_name;
+    out += ">";
+    out += xml_escape(property->value);
+    out += "</";
+    out += property_name;
+    out += ">\n";
+}
+
+void append_control_xml(
+    std::string& out,
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::size_t object_index,
+    int indent
+) {
+    const auto& object = form_object.items.get(object_index);
+    const std::string tag = public_xml_tag_for_platform_type(object.platform_type);
+    append_indent(out, indent);
+    out += "<";
+    out += tag;
+    if (!object.name.empty()) {
+        out += " name=\"";
+        out += xml_escape(object.name);
+        out += "\"";
+    }
+    if (!object.object_id.empty()) {
+        out += " id=\"";
+        out += xml_escape(object.object_id);
+        out += "\"";
+    }
+    if (object.children.empty() && find_object_property(object, "Title") == nullptr) {
+        out += "/>\n";
+        return;
+    }
+    out += ">\n";
+    append_named_text_property_xml(out, object, "Title", indent + 2);
+    if (!object.children.empty()) {
+        append_indent(out, indent + 2);
+        out += "<ChildItems>\n";
+        for (const std::size_t child_index : object.children) {
+            append_control_xml(out, form_object, child_index, indent + 4);
+        }
+        append_indent(out, indent + 2);
+        out += "</ChildItems>\n";
+    }
+    append_indent(out, indent);
+    out += "</";
+    out += tag;
+    out += ">\n";
+}
+
+std::string form_object_to_public_xml(const oof::platform::object_model::PlatformFormObject& form_object) {
+    std::string out;
+    out += "<?xml version='1.0' encoding='utf-8'?>\n";
+    out += "<Form xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" ordinaryFormVersion=\"2.0-draft\" xsi:noNamespaceSchemaLocation=\"OrdinaryFormV2.xsd\">\n";
+    out += "  <Events/>\n";
+    out += "  <ChildItems>\n";
+    for (const std::size_t child_index : form_object.form.children) {
+        append_control_xml(out, form_object, child_index, 4);
+    }
+    out += "  </ChildItems>\n";
+    out += "  <Attributes/>\n";
+    out += "  <Commands/>\n";
+    out += "</Form>\n";
+    return out;
+}
+
+void write_runtime_form_xml(const std::string& input_path, const std::string& output_path) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    const auto form_object = materialize_platform_form_object(envelope);
+    const std::string xml = form_object_to_public_xml(form_object);
+    write_file_bytes(output_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"bytes\":" << xml.size();
+    std::cout << ",\"source\":\"RuntimeForm:PlatformObject\"";
+    std::cout << ",\"controlCount\":" << form_object.items.count();
+    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << "}\n";
+}
+
+RuntimeFormEnvelope read_formbin_runtime_envelope(const std::string& input_path) {
+    const std::vector<std::uint8_t> data = read_file_bytes(input_path);
+    const auto container = oof::platform::formbin::parse_container(data);
+    const auto& form_file = find_container_file(container, "form");
+    return runtime_envelope_from_form_payload(form_file.payload);
+}
+
+void write_formbin_xml(const std::string& input_path, const std::string& output_path) {
+    RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
+    const auto form_object = materialize_platform_form_object(envelope);
+    const std::string xml = form_object_to_public_xml(form_object);
+    write_file_bytes(output_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"bytes\":" << xml.size();
+    std::cout << ",\"source\":\"Form.bin:form\"";
+    std::cout << ",\"controlCount\":" << form_object.items.count();
+    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << "}\n";
+}
+
+void print_formbin_xml_coverage(const std::string& input_path) {
+    RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
+    const auto summary = summarize_materialized_graph(envelope.payload);
+    std::cout << "{\"source\":\"Form.bin:form\"";
+    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << ",\"nativeXmlProjection\":true";
+    std::cout << ",\"nativeXmlWriter\":false";
+    std::cout << ",\"materializedItems\":" << summary.items.size();
+    std::cout << ",\"namedItems\":" << summary.named_items;
+    std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
+    std::cout << ",\"missingCodecs\":[\"Position\",\"Attributes\",\"Commands\",\"Events\",\"cf_form_controls8 typed payload fields\",\"XML-to-Form.bin writer\"]";
+    std::cout << "}\n";
 }
 
 RuntimeFormEnvelope read_runtime_form_envelope_file(const std::string& path, std::string& canonical_text) {
@@ -3095,6 +3312,18 @@ int main(int argc, char** argv) {
         }
         if (command == "form-object-graph" && argc == 3) {
             print_form_object_graph(argv[2]);
+            return 0;
+        }
+        if (command == "formbin-dump-xml" && argc == 4) {
+            write_formbin_xml(argv[2], argv[3]);
+            return 0;
+        }
+        if (command == "formbin-xml-coverage" && argc == 3) {
+            print_formbin_xml_coverage(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-form-dump-xml" && argc == 4) {
+            write_runtime_form_xml(argv[2], argv[3]);
             return 0;
         }
         if (command == "runtime-form-object-graph" && argc == 3) {

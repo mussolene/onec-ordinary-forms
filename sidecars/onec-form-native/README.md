@@ -86,3 +86,24 @@ Print the native transfer sections with proven count/byte semantics:
 ```bash
 sidecars/onec-form-native/build/oof-native transfer-sections
 ```
+
+Dump the current native materialized form graph as public `OrdinaryFormV2`
+managed-style XML:
+
+```bash
+sidecars/onec-form-native/build/oof-native formbin-dump-xml Form.bin Form.xml
+sidecars/onec-form-native/build/oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml
+```
+
+The XML projection is native C++ and emits `Form`, `ChildItems`, `Attributes`,
+`Commands`, `Events`, and named control elements. It does not expose raw
+list-stream, payload, or fallback nodes. Use the coverage command before
+treating a dump as rebuild-complete:
+
+```bash
+sidecars/onec-form-native/build/oof-native formbin-xml-coverage Form.bin
+```
+
+Current coverage is intentionally explicit: native XML projection is present,
+while full XML-to-Form.bin writing still requires typed `cf_form_controls8`
+payload properties, positions, attributes, commands, and events.

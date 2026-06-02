@@ -108,6 +108,10 @@ test: $(BIN)
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,"Button1",4294967295,0,0,0},{},{},{}},{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,"Check1",4294967295,0,0,0},{},{},{}}}}}' > $(BUILD_DIR)/runtime-form-selftest.txt
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:payload"'
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"materializedItems":2'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	grep -F -q '<ChildItems>' $(BUILD_DIR)/runtime-form.xml
+	grep -F -q '<Button name="Button1" id="5">' $(BUILD_DIR)/runtime-form.xml
+	! grep -F -q '<ListStream' $(BUILD_DIR)/runtime-form.xml
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:PlatformObject"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"contextContract":{"platformEvidence":"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"platformType":"Form"'
