@@ -26,6 +26,7 @@
 #include "platform_guid_registry.hpp"
 #include "platform_mechanism.hpp"
 #include "platform_object_model.hpp"
+#include "platform_property_registry.hpp"
 #include "platform_runtime_binding.hpp"
 #include "platform_value.hpp"
 
@@ -276,7 +277,7 @@ void usage() {
               << "       oof-native runtime-platform-object-set runtime-form-stream.txt rebuilt-stream.txt objectId property value\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
-              << "       oof-native <platform-form-schema|platform-descriptor-join|platform-runtime-bindings>\n"
+              << "       oof-native <platform-form-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry>\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
               << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
@@ -1579,6 +1580,9 @@ std::vector<std::string> split_csv_list(std::string_view value) {
 }
 
 std::string localized_property_name(std::string_view name) {
+    if (const auto* descriptor = oof::platform::property_registry::find_descriptor(name)) {
+        return std::string(descriptor->localized_name);
+    }
     if (name == "Title" || name == "Caption") {
         return "Заголовок";
     }
@@ -1600,6 +1604,30 @@ std::string localized_property_name(std::string_view name) {
     return {};
 }
 
+oof::platform::object_model::PlatformObjectProperty make_described_property(
+    std::string_view name,
+    std::string value
+) {
+    const auto* descriptor = oof::platform::property_registry::find_descriptor(name);
+    if (descriptor == nullptr) {
+        return oof::platform::object_model::make_property(
+            std::string(name),
+            localized_property_name(name),
+            std::move(value),
+            "platform-api-catalog",
+            "GenericValue");
+    }
+    return oof::platform::object_model::make_property(
+        std::string(descriptor->name),
+        std::string(descriptor->localized_name),
+        std::move(value),
+        std::string(descriptor->source),
+        std::string(descriptor->value_type),
+        std::string(descriptor->slot_binding),
+        descriptor->writable,
+        std::string(oof::platform::property_registry::slot_codec_name(descriptor->slot_codec)));
+}
+
 void add_api_surface(
     oof::platform::object_model::PlatformObject& object,
     const oof::platform::runtime_binding::PlatformApiObject* api
@@ -1609,12 +1637,7 @@ void add_api_surface(
     }
     for (const auto& name : split_csv_list(api->sample_properties)) {
         if (object.property(name) == nullptr) {
-            object.properties.push_back(oof::platform::object_model::make_property(
-                name,
-                localized_property_name(name),
-                "",
-                "platform-api-catalog",
-                "GenericValue"));
+            object.properties.push_back(make_described_property(name, ""));
         }
     }
     for (const auto& name : split_csv_list(api->sample_methods)) {
@@ -1646,12 +1669,9 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
     form_object.form.type_category = "core::kLogFormTypeInfoCategory";
     form_object.form.type_source = "core85 ContextCore + mngbase RTLogForm";
     form_object.form.path = "$";
-    form_object.form.properties.push_back(oof::platform::object_model::make_property(
-        "Type", "Тип", "Form", "platform-api-catalog", "TypeDescription"));
-    form_object.form.properties.push_back(oof::platform::object_model::make_property(
-        "RuntimeUUID", "", envelope.runtime_uuid, "runtime-form-envelope", "UUID"));
-    form_object.form.properties.push_back(oof::platform::object_model::make_property(
-        "Items", "Элементы", std::to_string(summary.items.size()), "materialized-object-collection", "FormItems"));
+    form_object.form.properties.push_back(make_described_property("Type", "Form"));
+    form_object.form.properties.push_back(make_described_property("RuntimeUUID", envelope.runtime_uuid));
+    form_object.form.properties.push_back(make_described_property("Items", std::to_string(summary.items.size())));
     add_api_surface(form_object.form, api_object_for_type("Form"));
 
     for (const auto& item : summary.items) {
@@ -1663,20 +1683,14 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
         object.type_source = std::string(item.descriptor_binding->evidence);
         object.path = item.path;
         object.parent_object_id = item.parent_object_id;
-        object.properties.push_back(oof::platform::object_model::make_property(
-            "ObjectID", "", item.object_id, "materialized-list-stream", "CompositeID"));
-        object.properties.push_back(oof::platform::object_model::make_property(
-            "Name", "Имя", item.name, "platform-name-record", "String", "platform-name-record:{14,name,...}", true));
-        object.properties.push_back(oof::platform::object_model::make_property(
-            "Type", "Тип", object.platform_type, "descriptor-binding", "TypeDescription"));
-        object.properties.push_back(oof::platform::object_model::make_property(
-            "Parent", "Родитель", item.parent_object_id, "materialized-parent-chain", "FormItem"));
-        object.properties.push_back(oof::platform::object_model::make_property(
-            "Path", "", item.path, "list-stream-node-path", "String"));
+        object.properties.push_back(make_described_property("ObjectID", item.object_id));
+        object.properties.push_back(make_described_property("Name", item.name));
+        object.properties.push_back(make_described_property("Type", object.platform_type));
+        object.properties.push_back(make_described_property("Parent", item.parent_object_id));
+        object.properties.push_back(make_described_property("Path", item.path));
         if (object.platform_type == "Button" || object.platform_type == "PanelPage" ||
             object.platform_type == "Panel" || object.platform_type == "PivotChart") {
-            object.properties.push_back(oof::platform::object_model::make_property(
-                "Title", "Заголовок", item.name, "platform-name-record-as-initial-title", "String", "platform-name-record:{14,name,...}", true));
+            object.properties.push_back(make_described_property("Title", item.name));
         }
         add_api_surface(object, api_object_for_type(object.platform_type));
         form_object.items.add(std::move(object));
@@ -1732,6 +1746,8 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
         print_json_string(prop.source);
         std::cout << ",\"slotBinding\":";
         print_json_string(prop.slot_binding);
+        std::cout << ",\"slotCodec\":";
+        print_json_string(prop.slot_codec);
         std::cout << ",\"readable\":"
                   << (prop.readable ? "true" : "false");
         std::cout << ",\"writable\":"
@@ -1780,7 +1796,7 @@ void print_runtime_platform_object(const std::string& path) {
     std::cout << "{\"source\":\"RuntimeForm:PlatformObject\"";
     std::cout << ",\"runtimeUuid\":";
     print_json_string(envelope.runtime_uuid);
-    std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call\",\"model\":\"typeDescriptor + property/method/event descriptors + slot-backed values\",\"writableSlotCount\":1}";
+    std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call\",\"model\":\"typeDescriptor + property/method/event descriptors + slot-backed values\",\"descriptorRegistry\":\"PlatformPropertyDescriptor + PropertySlotBinding\",\"implementedWritableSlotCodecs\":[\"name-record\"]}";
     std::cout << ",\"form\":";
     print_platform_object_json(form_object.form);
     std::cout << ",\"items\":{\"count\":" << form_object.items.count();
@@ -1923,12 +1939,27 @@ bool rename_materialized_object(
     return false;
 }
 
-bool is_name_slot_property(std::string_view property_name) {
-    return property_name == "Name" ||
-           property_name == "Имя" ||
-           property_name == "Title" ||
-           property_name == "Caption" ||
-           property_name == "Заголовок";
+const oof::platform::property_registry::PlatformPropertyDescriptor& require_property_descriptor(
+    std::string_view property_name
+) {
+    const auto* descriptor = oof::platform::property_registry::find_descriptor(property_name);
+    if (descriptor == nullptr) {
+        throw std::runtime_error("platform property descriptor is not registered yet: " + std::string(property_name));
+    }
+    return *descriptor;
+}
+
+bool set_property_slot_value(
+    oof::platform::stream::ListValue& payload,
+    std::string_view object_id,
+    const oof::platform::property_registry::PlatformPropertyDescriptor& descriptor,
+    std::string_view new_value
+) {
+    if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::name_record) {
+        return rename_materialized_object(payload, object_id, new_value);
+    }
+    throw std::runtime_error("slot codec is registered but not implemented for setPropVal yet: " +
+                             std::string(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec)));
 }
 
 void write_runtime_platform_object_set(
@@ -1938,14 +1969,17 @@ void write_runtime_platform_object_set(
     std::string_view property_name,
     std::string_view new_value
 ) {
-    if (!is_name_slot_property(property_name)) {
-        throw std::runtime_error("property is not writable yet through platform object slots: " + std::string(property_name));
+    const auto& descriptor = require_property_descriptor(property_name);
+    if (!oof::platform::property_registry::can_set_with_current_codec(descriptor)) {
+        throw std::runtime_error("property is registered but its slot codec is not writable yet through native setPropVal: " +
+                                 std::string(property_name) + " codec=" +
+                                 std::string(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec)));
     }
 
     std::string canonical_text;
     RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
-    if (!rename_materialized_object(envelope.payload, object_id, new_value)) {
-        throw std::runtime_error("runtime form object id was not found or has no platform name record: " + std::string(object_id));
+    if (!set_property_slot_value(envelope.payload, object_id, descriptor, new_value)) {
+        throw std::runtime_error("runtime form object id was not found or has no writable property slot: " + std::string(object_id));
     }
 
     const std::string rebuilt_text = dump_runtime_form_envelope(envelope);
@@ -1968,9 +2002,14 @@ void write_runtime_platform_object_set(
     print_json_string(object_id);
     std::cout << ",\"property\":";
     print_json_string(property_name);
+    std::cout << ",\"descriptorName\":";
+    print_json_string(descriptor.name);
     std::cout << ",\"value\":";
     print_json_string(new_value);
-    std::cout << ",\"slotBinding\":\"platform-name-record:{14,name,...}\"";
+    std::cout << ",\"slotBinding\":";
+    print_json_string(descriptor.slot_binding);
+    std::cout << ",\"slotCodec\":";
+    print_json_string(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec));
     std::cout << ",\"runtimeUuid\":";
     print_json_string(envelope.runtime_uuid);
     std::cout << ",\"changedObject\":";
@@ -1980,6 +2019,53 @@ void write_runtime_platform_object_set(
         std::cout << "null";
     }
     std::cout << "}\n";
+}
+
+void print_platform_property_registry() {
+    std::map<std::string, std::size_t> codec_counts;
+    std::size_t writable = 0;
+    std::cout << "{\"source\":\"PlatformPropertyDescriptorRegistry\"";
+    std::cout << ",\"descriptorCount\":" << oof::platform::property_registry::descriptors.size();
+    std::cout << ",\"descriptors\":[";
+    for (std::size_t index = 0; index < oof::platform::property_registry::descriptors.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& descriptor = oof::platform::property_registry::descriptors[index];
+        const std::string codec(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec));
+        codec_counts[codec] += 1;
+        if (descriptor.writable) {
+            ++writable;
+        }
+        std::cout << "{\"name\":";
+        print_json_string(descriptor.name);
+        std::cout << ",\"localizedName\":";
+        print_json_string(descriptor.localized_name);
+        std::cout << ",\"valueType\":";
+        print_json_string(descriptor.value_type);
+        std::cout << ",\"slotCodec\":";
+        print_json_string(codec);
+        std::cout << ",\"slotBinding\":";
+        print_json_string(descriptor.slot_binding);
+        std::cout << ",\"readable\":" << (descriptor.readable ? "true" : "false");
+        std::cout << ",\"writable\":" << (descriptor.writable ? "true" : "false");
+        std::cout << ",\"source\":";
+        print_json_string(descriptor.source);
+        std::cout << "}";
+    }
+    std::cout << "],\"writableCount\":" << writable;
+    std::cout << ",\"slotCodecCounts\":[";
+    bool first = true;
+    for (const auto& [codec, count] : codec_counts) {
+        if (!first) {
+            std::cout << ",";
+        }
+        first = false;
+        std::cout << "{\"slotCodec\":";
+        print_json_string(codec);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "]}\n";
 }
 
 void write_runtime_form_rename(
@@ -2993,6 +3079,10 @@ int main(int argc, char** argv) {
         }
         if (command == "platform-runtime-bindings") {
             print_platform_runtime_bindings();
+            return 0;
+        }
+        if (command == "platform-property-registry") {
+            print_platform_property_registry();
             return 0;
         }
         if (command == "form-payload-info" && argc == 3) {

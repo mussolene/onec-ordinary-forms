@@ -16,6 +16,7 @@ struct PlatformObjectProperty {
     std::string value;
     std::string source;
     std::string slot_binding;
+    std::string slot_codec;
     bool readable = true;
     bool writable = false;
 };
@@ -107,7 +108,8 @@ inline PlatformObjectProperty make_property(
     std::string source,
     std::string value_type = {},
     std::string slot_binding = {},
-    bool writable = false
+    bool writable = false,
+    std::string slot_codec = {}
 ) {
     PlatformObjectProperty property;
     property.name = std::move(name);
@@ -116,6 +118,7 @@ inline PlatformObjectProperty make_property(
     property.value = std::move(value);
     property.source = std::move(source);
     property.slot_binding = std::move(slot_binding);
+    property.slot_codec = std::move(slot_codec);
     property.writable = writable;
     return property;
 }

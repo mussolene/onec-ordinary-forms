@@ -4,7 +4,7 @@ LDLIBS ?= -lz
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
@@ -54,6 +54,13 @@ test: $(BIN)
 	$(BIN) platform-runtime-bindings | grep -F -q '"name":"PivotChart"'
 	$(BIN) platform-runtime-bindings | grep -F -q '"sampleMethods":"GetPicture,Refresh"'
 	$(BIN) platform-runtime-bindings | grep -F -q 'chartui_ru.res/frntend_ru.res'
+	$(BIN) platform-property-registry | grep -F -q '"source":"PlatformPropertyDescriptorRegistry"'
+	$(BIN) platform-property-registry | grep -F -q '"descriptorCount":18'
+	$(BIN) platform-property-registry | grep -F -q '"slotCodec":"name-record"'
+	$(BIN) platform-property-registry | grep -F -q '"slotCodec":"position-record"'
+	$(BIN) platform-property-registry | grep -F -q '"slotCodec":"color-record"'
+	$(BIN) platform-property-registry | grep -F -q '"slotCodec":"font-record"'
+	$(BIN) platform-property-registry | grep -F -q '"writableCount":12'
 	$(BIN) value-roundtrip | grep -F -q '"serialized":"{1,{1,2,{\"ru\",\"Title\"},{\"en\",\"Caption\"}},1}"'
 	$(BIN) value-roundtrip | grep -q '"itemCount":2'
 	$(BIN) value-roundtrip | grep -F -q '"compositeID":"{42,09ccdc77-ea1a-4a6d-ab1c-3435eada2433}"'
@@ -111,6 +118,7 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"findFirstName":true'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"localizedName":"Заголовок"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"slotBinding":"platform-name-record:{14,name,...}"'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"slotCodec":"name-record"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"writable":true'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"canonicalRoundtripEqual":true'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"payloadRoundtripEqual":true'
@@ -119,6 +127,8 @@ test: $(BIN)
 	$(BIN) runtime-form-semantic-diff $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form-rebuilt.txt | grep -F -q '"normalizedEqual":true'
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-platform-set.txt 5 Заголовок ButtonViaSet | grep -F -q '"operation":"setPropVal"'
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-platform-set.txt 5 Заголовок ButtonViaSet | grep -F -q '"slotBinding":"platform-name-record:{14,name,...}"'
+	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-platform-set.txt 5 Заголовок ButtonViaSet | grep -F -q '"descriptorName":"Title"'
+	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-platform-set.txt 5 Заголовок ButtonViaSet | grep -F -q '"slotCodec":"name-record"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-platform-set.txt | grep -F -q '"name":"ButtonViaSet"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-platform-set.txt | grep -F -q '"value":"ButtonViaSet"'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-platform-set.txt | grep -F -q '"payloadRoundtripEqual":true'
