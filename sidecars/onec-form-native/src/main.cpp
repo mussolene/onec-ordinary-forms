@@ -267,6 +267,8 @@ std::string read_stdin() {
 void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
+              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip> runtime-form-stream.txt\n"
+              << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "       oof-native <platform-form-schema|platform-descriptor-join>\n"
@@ -288,6 +290,14 @@ std::vector<std::uint8_t> read_file_bytes(const std::string& path) {
 std::string read_file_text_lossy(const std::string& path) {
     const auto bytes = read_file_bytes(path);
     return std::string(bytes.begin(), bytes.end());
+}
+
+std::string decode_text_file_bytes(const std::vector<std::uint8_t>& bytes) {
+    std::size_t offset = 0;
+    if (bytes.size() >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) {
+        offset = 3;
+    }
+    return std::string(bytes.begin() + static_cast<std::ptrdiff_t>(offset), bytes.end());
 }
 
 void print_json_string(std::string_view value) {
@@ -1400,6 +1410,226 @@ void print_form_object_graph(const std::string& path) {
     print_form_object_graph_json(form_file.payload, "Form.bin:form");
 }
 
+struct RuntimeFormEnvelope {
+    std::string marker;
+    std::string runtime_uuid;
+    oof::platform::stream::ListValue payload;
+};
+
+RuntimeFormEnvelope parse_runtime_form_envelope(const std::string& text) {
+    auto root = oof::platform::stream::parse(text);
+    if (!root.is_list || root.items.size() != 3) {
+        throw std::runtime_error("runtime form stream must be {\"#\",runtime-guid,form-payload}");
+    }
+    if (root.items[0].is_list || root.items[1].is_list || !root.items[2].is_list) {
+        throw std::runtime_error("runtime form stream envelope has unexpected slot types");
+    }
+    if (root.items[0].atom != "#") {
+        throw std::runtime_error("runtime form stream envelope marker is not #");
+    }
+    if (!is_guid_text(root.items[1].atom)) {
+        throw std::runtime_error("runtime form stream envelope uuid is not a GUID atom");
+    }
+    if (root.items[2].items.empty() || root.items[2].items[0].is_list) {
+        throw std::runtime_error("runtime form payload root is missing version atom");
+    }
+
+    RuntimeFormEnvelope envelope;
+    envelope.marker = root.items[0].atom;
+    envelope.runtime_uuid = root.items[1].atom;
+    envelope.payload = std::move(root.items[2]);
+    return envelope;
+}
+
+oof::platform::stream::ListValue build_runtime_form_envelope_value(const RuntimeFormEnvelope& envelope) {
+    return oof::platform::stream::ListValue::list({
+        oof::platform::stream::ListValue::string_atom(envelope.marker),
+        oof::platform::stream::ListValue::raw_atom(envelope.runtime_uuid),
+        envelope.payload
+    });
+}
+
+std::string dump_runtime_form_envelope(const RuntimeFormEnvelope& envelope) {
+    return oof::platform::stream::dump_compact(build_runtime_form_envelope_value(envelope));
+}
+
+struct MaterializedGraphSummary {
+    std::vector<MaterializedFormItem> items;
+    std::size_t guid_head_nodes = 0;
+    std::size_t nested_unbound_guid_nodes = 0;
+    std::size_t named_items = 0;
+    std::size_t schema_backed_items = 0;
+    std::map<std::string_view, std::size_t> type_frequency;
+    std::map<std::string_view, std::size_t> status_frequency;
+};
+
+MaterializedGraphSummary summarize_materialized_graph(const oof::platform::stream::ListValue& payload) {
+    MaterializedGraphSummary summary;
+    collect_materialized_form_items(
+        payload,
+        "$",
+        "",
+        summary.items,
+        summary.guid_head_nodes,
+        summary.nested_unbound_guid_nodes);
+
+    for (const auto& item : summary.items) {
+        ++summary.status_frequency[item.descriptor_binding->status];
+        ++summary.type_frequency[item.descriptor_binding->platform_type];
+        if (!item.name.empty()) {
+            ++summary.named_items;
+        }
+        if (oof::platform::form_descriptor::schema_for_binding(*item.descriptor_binding) != nullptr) {
+            ++summary.schema_backed_items;
+        }
+    }
+    return summary;
+}
+
+void print_materialized_graph_json(const MaterializedGraphSummary& summary) {
+    std::cout << "\"guidHeadNodes\":" << summary.guid_head_nodes;
+    std::cout << ",\"materializedItems\":" << summary.items.size();
+    std::cout << ",\"namedItems\":" << summary.named_items;
+    std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
+    std::cout << ",\"nestedUnboundGuidNodes\":" << summary.nested_unbound_guid_nodes;
+    std::cout << ",\"statusFrequency\":[";
+    std::size_t index = 0;
+    for (const auto& [status, count] : summary.status_frequency) {
+        if (index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"status\":";
+        print_json_string(status);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"typeFrequency\":[";
+    index = 0;
+    for (const auto& [type, count] : summary.type_frequency) {
+        if (index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"type\":";
+        print_json_string(type);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"items\":[";
+    for (std::size_t item_index = 0; item_index < summary.items.size(); ++item_index) {
+        if (item_index != 0) {
+            std::cout << ",";
+        }
+        const auto& item = summary.items[item_index];
+        const auto* schema = oof::platform::form_descriptor::schema_for_binding(*item.descriptor_binding);
+        std::cout << "{\"objectId\":";
+        print_json_string(item.object_id);
+        std::cout << ",\"name\":";
+        print_json_string(item.name);
+        std::cout << ",\"parentObjectId\":";
+        print_json_string(item.parent_object_id);
+        std::cout << ",\"path\":";
+        print_json_string(item.path);
+        std::cout << ",\"guid\":";
+        print_json_string(item.guid);
+        std::cout << ",\"arity\":" << item.arity;
+        std::cout << ",\"platformType\":";
+        print_json_string(item.descriptor_binding->platform_type);
+        std::cout << ",\"streamElement\":";
+        print_json_string(item.descriptor_binding->stream_element);
+        std::cout << ",\"status\":";
+        print_json_string(item.descriptor_binding->status);
+        std::cout << ",\"schemaBacked\":"
+                  << (schema != nullptr ? "true" : "false");
+        if (schema != nullptr) {
+            std::cout << ",\"schemaAttributes\":";
+            print_json_string(schema->attributes);
+            std::cout << ",\"schemaChildElements\":";
+            print_json_string(schema->child_elements);
+        }
+        std::cout << "}";
+    }
+    std::cout << "]";
+}
+
+RuntimeFormEnvelope read_runtime_form_envelope_file(const std::string& path, std::string& canonical_text) {
+    const auto bytes = read_file_bytes(path);
+    const std::string text = decode_text_file_bytes(bytes);
+    RuntimeFormEnvelope envelope = parse_runtime_form_envelope(text);
+    canonical_text = dump_runtime_form_envelope(envelope);
+    return envelope;
+}
+
+void print_runtime_form_object_graph(const std::string& path) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
+    const std::string payload_text = oof::platform::stream::dump_compact(envelope.payload);
+    const auto summary = summarize_materialized_graph(envelope.payload);
+
+    std::cout << "{\"source\":\"RuntimeForm:payload\"";
+    std::cout << ",\"runtimeEnvelope\":{\"marker\":";
+    print_json_string(envelope.marker);
+    std::cout << ",\"runtimeUuid\":";
+    print_json_string(envelope.runtime_uuid);
+    std::cout << ",\"canonicalBytes\":" << canonical_text.size() << "}";
+    std::cout << ",\"payloadSize\":" << payload_text.size();
+    std::cout << ",\"rootArity\":" << envelope.payload.items.size();
+    std::cout << ",\"rootVersion\":";
+    print_json_string(envelope.payload.items[0].atom);
+    if (envelope.payload.items.size() > 1 && envelope.payload.items[1].is_list && !envelope.payload.items[1].items.empty() && !envelope.payload.items[1].items[0].is_list) {
+        std::cout << ",\"formSectionVersion\":";
+        print_json_string(envelope.payload.items[1].items[0].atom);
+    }
+    std::cout << ",";
+    print_materialized_graph_json(summary);
+    std::cout << "}\n";
+}
+
+void print_runtime_form_roundtrip(const std::string& path) {
+    const auto input_bytes = read_file_bytes(path);
+    const std::string input_text = decode_text_file_bytes(input_bytes);
+    RuntimeFormEnvelope envelope = parse_runtime_form_envelope(input_text);
+    const std::string canonical_text = dump_runtime_form_envelope(envelope);
+    RuntimeFormEnvelope reparsed = parse_runtime_form_envelope(canonical_text);
+    const std::string rebuilt_text = dump_runtime_form_envelope(reparsed);
+    const std::string payload_text = oof::platform::stream::dump_compact(envelope.payload);
+    const std::string rebuilt_payload_text = oof::platform::stream::dump_compact(reparsed.payload);
+    const auto summary = summarize_materialized_graph(reparsed.payload);
+
+    std::cout << "{\"inputBytes\":" << input_bytes.size();
+    std::cout << ",\"canonicalBytes\":" << canonical_text.size();
+    std::cout << ",\"runtimeUuid\":";
+    print_json_string(envelope.runtime_uuid);
+    std::cout << ",\"payloadRootVersion\":";
+    print_json_string(envelope.payload.items[0].atom);
+    std::cout << ",\"canonicalRoundtripEqual\":"
+              << (canonical_text == rebuilt_text ? "true" : "false");
+    std::cout << ",\"payloadRoundtripEqual\":"
+              << (payload_text == rebuilt_payload_text ? "true" : "false");
+    std::cout << ",\"materializedItems\":" << summary.items.size();
+    std::cout << ",\"namedItems\":" << summary.named_items;
+    std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
+    std::cout << ",\"nestedUnboundGuidNodes\":" << summary.nested_unbound_guid_nodes;
+    std::cout << "}\n";
+}
+
+void write_runtime_form_rebuild(const std::string& input_path, const std::string& output_path) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    const std::vector<std::uint8_t> output(canonical_text.begin(), canonical_text.end());
+    write_file_bytes(output_path, output);
+    const auto summary = summarize_materialized_graph(envelope.payload);
+
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"bytes\":" << output.size();
+    std::cout << ",\"runtimeUuid\":";
+    print_json_string(envelope.runtime_uuid);
+    std::cout << ",\"payloadRootVersion\":";
+    print_json_string(envelope.payload.items[0].atom);
+    std::cout << ",\"materializedItems\":" << summary.items.size();
+    std::cout << ",\"namedItems\":" << summary.named_items;
+    std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
+    std::cout << "}\n";
+}
+
 void print_transfer_descriptor_json(const oof::platform::ordinary::TransferDescriptor& descriptor) {
     std::cout << "{\"symbol\":";
     print_json_string(descriptor.symbol);
@@ -2203,6 +2433,18 @@ int main(int argc, char** argv) {
         }
         if (command == "form-object-graph" && argc == 3) {
             print_form_object_graph(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-form-object-graph" && argc == 3) {
+            print_runtime_form_object_graph(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-form-roundtrip" && argc == 3) {
+            print_runtime_form_roundtrip(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-form-rebuild" && argc == 4) {
+            write_runtime_form_rebuild(argv[2], argv[3]);
             return 0;
         }
         if (command == "form-transfer-linkage" && argc == 3) {

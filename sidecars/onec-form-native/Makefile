@@ -92,6 +92,13 @@ test: $(BIN)
 	$(BIN) form-object-graph-selftest | grep -F -q '"platformType":"Button"'
 	$(BIN) form-object-graph-selftest | grep -F -q '"name":"Check1"'
 	$(BIN) form-object-graph-selftest | grep -F -q '"platformType":"CheckBox"'
+	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,"Button1",4294967295,0,0,0},{},{},{}},{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,"Check1",4294967295,0,0,0},{},{},{}}}}}' > $(BUILD_DIR)/runtime-form-selftest.txt
+	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:payload"'
+	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"materializedItems":2'
+	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"canonicalRoundtripEqual":true'
+	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"payloadRoundtripEqual":true'
+	$(BIN) runtime-form-rebuild $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form-rebuilt.txt | grep -F -q '"schemaBackedItems":2'
+	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-rebuilt.txt | grep -F -q '"canonicalRoundtripEqual":true'
 	$(BIN) form-transfer-linkage-selftest | grep -F -q '"objectGraphReady":true'
 	$(BIN) form-transfer-linkage-selftest | grep -F -q '"transferFormatAtomsEmbedded":true'
 	$(BIN) form-transfer-linkage-selftest | grep -F -q '"directFacetLinkageRequiredForFormBinRebuild":true'
