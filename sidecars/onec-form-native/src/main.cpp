@@ -14,6 +14,7 @@
 #include "form_bin_container.hpp"
 #include "ordinary_controls.hpp"
 #include "ordinary_form_graph.hpp"
+#include "platform_descriptor_registry.hpp"
 #include "platform_guid_registry.hpp"
 #include "platform_mechanism.hpp"
 #include "platform_value.hpp"
@@ -846,8 +847,7 @@ void print_form_payload_info(const std::string& path) {
 }
 
 bool is_known_descriptor_pool_guid(std::string_view guid) {
-    return guid == "09ccdc77-ea1a-4a6d-ab1c-3435eada2433" ||
-           guid == "e69bf21d-97b2-4f37-86db-675aea9ec2cb";
+    return oof::platform::descriptor::is_bound_descriptor_guid(guid);
 }
 
 std::string child_path(std::string_view path, std::size_t index) {
@@ -865,6 +865,7 @@ struct GuidNodeInfo {
     std::size_t scalar_children = 0;
     std::size_t list_children = 0;
     bool known_descriptor_pool_member = false;
+    const oof::platform::descriptor::DescriptorGuidBinding* descriptor_binding = nullptr;
 };
 
 struct FormatAtomInfo {
@@ -895,7 +896,8 @@ void collect_form_payload_structure(
         info.guid = value.items[0].atom;
         info.path = std::string(path);
         info.arity = value.items.size();
-        info.known_descriptor_pool_member = is_known_descriptor_pool_guid(info.guid);
+        info.descriptor_binding = oof::platform::descriptor::binding_for_guid(info.guid);
+        info.known_descriptor_pool_member = info.descriptor_binding != nullptr;
         if (value.items.size() > 1 && !value.items[1].is_list) {
             info.slot1 = value.items[1].atom;
         }
@@ -932,10 +934,14 @@ void print_form_payload_structure_json(
     collect_form_payload_structure(root, "$", guid_nodes, format_atoms);
 
     std::map<std::string, std::size_t> guid_frequency;
+    std::map<std::string, std::size_t> descriptor_status_frequency;
     std::size_t candidate_object_nodes = 0;
     std::size_t known_descriptor_candidate_nodes = 0;
     for (const auto& node : guid_nodes) {
         ++guid_frequency[node.guid];
+        ++descriptor_status_frequency[
+            node.descriptor_binding == nullptr ? "unbound" : std::string(node.descriptor_binding->status)
+        ];
         if (node.arity == 6 && !node.slot1.empty()) {
             ++candidate_object_nodes;
             if (node.known_descriptor_pool_member) {
@@ -966,6 +972,17 @@ void print_form_payload_structure_json(
     constexpr std::size_t max_guid_nodes_to_print = 64;
     const std::size_t guid_nodes_to_print = std::min(guid_nodes.size(), max_guid_nodes_to_print);
     std::cout << ",\"guidNodesTruncated\":" << (guid_nodes_to_print < guid_nodes.size() ? "true" : "false");
+    std::cout << ",\"descriptorStatusFrequency\":[";
+    std::size_t status_index = 0;
+    for (const auto& [status, count] : descriptor_status_frequency) {
+        if (status_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"status\":";
+        print_json_string(status);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "]";
     std::cout << ",\"guidFrequency\":[";
     std::size_t frequency_index = 0;
     for (const auto& [guid, count] : guid_frequency) {
@@ -976,7 +993,17 @@ void print_form_payload_structure_json(
         print_json_string(guid);
         std::cout << ",\"count\":" << count;
         std::cout << ",\"knownDescriptorPoolMember\":"
-                  << (is_known_descriptor_pool_guid(guid) ? "true" : "false") << "}";
+                  << (is_known_descriptor_pool_guid(guid) ? "true" : "false");
+        if (const auto* binding = oof::platform::descriptor::binding_for_guid(guid)) {
+            std::cout << ",\"descriptorBinding\":{\"status\":";
+            print_json_string(binding->status);
+            std::cout << ",\"role\":";
+            print_json_string(binding->role);
+            std::cout << ",\"evidence\":";
+            print_json_string(binding->evidence);
+            std::cout << "}";
+        }
+        std::cout << "}";
     }
     std::cout << "],\"guidNodes\":[";
     for (std::size_t index = 0; index < guid_nodes_to_print; ++index) {
@@ -996,7 +1023,17 @@ void print_form_payload_structure_json(
         std::cout << ",\"scalarChildren\":" << node.scalar_children;
         std::cout << ",\"listChildren\":" << node.list_children;
         std::cout << ",\"knownDescriptorPoolMember\":"
-                  << (node.known_descriptor_pool_member ? "true" : "false") << "}";
+                  << (node.known_descriptor_pool_member ? "true" : "false");
+        if (node.descriptor_binding != nullptr) {
+            std::cout << ",\"descriptorBinding\":{\"status\":";
+            print_json_string(node.descriptor_binding->status);
+            std::cout << ",\"role\":";
+            print_json_string(node.descriptor_binding->role);
+            std::cout << ",\"evidence\":";
+            print_json_string(node.descriptor_binding->evidence);
+            std::cout << "}";
+        }
+        std::cout << "}";
     }
     std::cout << "],\"formatIdAtoms\":[";
     for (std::size_t index = 0; index < format_atoms.size(); ++index) {

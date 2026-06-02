@@ -3,7 +3,7 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
@@ -60,6 +60,8 @@ test: $(BIN)
 	$(BIN) form-payload-structure-selftest | grep -q '"guidHeadNodes":2'
 	$(BIN) form-payload-structure-selftest | grep -q '"candidateObjectNodes":1'
 	$(BIN) form-payload-structure-selftest | grep -q '"knownDescriptorCandidateNodes":1'
+	$(BIN) form-payload-structure-selftest | grep -F -q '"descriptorStatusFrequency":[{"status":"platform-guid-pool-member","count":2}]'
+	$(BIN) form-payload-structure-selftest | grep -F -q '"descriptorBinding":{"status":"platform-guid-pool-member"'
 	$(BIN) form-payload-structure-selftest | grep -F -q '"knownDescriptorPoolMember":true'
 	$(BIN) form-payload-structure-selftest | grep -F -q '"symbol":"cf_form_controls8"'
 	$(BIN) form-payload-structure-selftest | grep -F -q '"symbol":"cf_form_controls_position8"'
