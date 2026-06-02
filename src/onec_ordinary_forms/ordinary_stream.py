@@ -4506,7 +4506,8 @@ def table_control_info(element: ET.Element, actions: list[object], type_pattern:
     pattern = type_pattern or [quoted_atom("#"), "00000000-0000-0000-0000-000000000000"]
     base = extended_base_info_record_from_xml(element)
     base[11] = ["3", "1", ["-18"], "0", "0", "0"]
-    base[17] = "1"
+    if element.get("baseStyleState") is None:
+        base[17] = "0"
     if element.find("BorderColor") is None:
         base[6] = default_color_record()
     return [
@@ -5009,6 +5010,8 @@ def button_base_info_record(element: ET.Element) -> list[object]:
 
 def extended_base_info_record_from_xml(element: ET.Element) -> list[object]:
     base = root_panel_base_info_record()
+    if element.find("Font") is None:
+        base[4] = font_record_from_xml(None)
     base[17] = "1"
     base[1] = visible_record_from_xml(element)
     base[5] = bool_text_as_record(element, "Enabled", default=True)

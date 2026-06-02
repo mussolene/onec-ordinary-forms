@@ -68,8 +68,11 @@ from onec_ordinary_forms.ordinary_stream import (
     CORE_CONTROL_INFO_DESCRIPTORS,
     PLATFORM_CONTROL_FORMAT_IDS,
     apply_geometry_bindings_to_raw,
+    extended_base_info_record_from_xml,
     form_stream_from_object_xml,
     geometry_stream_from_xml,
+    quoted_atom,
+    table_control_info,
 )
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
 
@@ -2067,6 +2070,18 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(node.findtext("BorderColor"), "style:BorderColor")
         self.assertIsNotNone(node.find("Font"))
 
+    def test_extended_control_base_without_font_uses_dump_default_font(self) -> None:
+        element = ET.fromstring('<Button name="Run" id="26"/>')
+
+        base = extended_base_info_record_from_xml(element)
+        node = ET.Element("Button")
+        item_data = {"raw": ["6ff79819-710e-4145-97cd-1618da79e3e2", "26", ["1", [base]]]}
+
+        add_font(node, item_data)
+
+        self.assertEqual(base[4], ["6", "3", "0", "1"])
+        self.assertIsNone(node.find("Font"))
+
     def test_schema_accepts_platform_style_font_and_color_values(self) -> None:
         with TemporaryDirectory() as temp_dir:
             xml = Path(temp_dir) / "Form.xml"
@@ -2165,6 +2180,22 @@ class CliSmokeTest(unittest.TestCase):
         self.assertIsNotNone(label)
         assert label is not None
         self.assertEqual(label[2][1][0][16:20], ["2", "1", "1", "2"])
+
+    def test_table_base_style_state_defaults_to_platform_zero(self) -> None:
+        table = ET.fromstring('<Table name="Goods" id="42"/>')
+
+        info = table_control_info(table, [], [quoted_atom("#"), "00000000-0000-0000-0000-000000000000"])
+        base = info[2][0]
+
+        self.assertEqual(base[17], "0")
+
+    def test_table_base_style_state_preserves_explicit_xml_value(self) -> None:
+        table = ET.fromstring('<Table name="Goods" id="42" baseStyleState="1"/>')
+
+        info = table_control_info(table, [], [quoted_atom("#"), "00000000-0000-0000-0000-000000000000"])
+        base = info[2][0]
+
+        self.assertEqual(base[17], "1")
 
     def test_build_bin_uses_default_title_marker_when_title_is_absent(self) -> None:
         root = ET.fromstring(
