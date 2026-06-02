@@ -43,6 +43,36 @@ container_path() {
   esac
 }
 
+copy_host_dir_to_container() {
+  local src_dir="$1"
+  local dst_dir="$2"
+  COPYFILE_DISABLE=1 tar --disable-copyfile -C "$src_dir" --exclude='._*' -cf - . \
+    | docker exec -i "$OOF_PLATFORM_CONTAINER" sh -lc "mkdir -p '$dst_dir' && tar -C '$dst_dir' -xf -"
+}
+
+copy_host_file_to_container() {
+  local src_file="$1"
+  local dst_file="$2"
+  local dst_dir
+  dst_dir=$(dirname "$dst_file")
+  COPYFILE_DISABLE=1 tar --disable-copyfile -C "$(dirname "$src_file")" -cf - "$(basename "$src_file")" \
+    | docker exec -i "$OOF_PLATFORM_CONTAINER" sh -lc "mkdir -p '$dst_dir' && tar -C '$dst_dir' -xf - && mv '$dst_dir/$(basename "$src_file")' '$dst_file'"
+}
+
+copy_container_dir_to_host() {
+  local src_dir="$1"
+  local dst_dir="$2"
+  mkdir -p "$dst_dir"
+  docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "cd '$src_dir' && tar -cf - ." | tar -C "$dst_dir" -xf -
+}
+
+copy_container_file_to_host() {
+  local src_file="$1"
+  local dst_file="$2"
+  mkdir -p "$(dirname "$dst_file")"
+  docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "cat '$src_file'" > "$dst_file"
+}
+
 if [[ ! -f "$source_root" ]]; then
   echo "Source root.xml does not exist: $source_root" >&2
   exit 2
@@ -177,10 +207,10 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
   fi
   container_base="/tmp/oof-platform-oracle"
   docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "rm -rf '$container_base' && mkdir -p '$container_base/source' '$container_base/logs' '$container_base/dbroot'"
-  docker cp "$out_abs/source/." "$OOF_PLATFORM_CONTAINER:$container_base/source/"
-  docker cp "$script_path" "$OOF_PLATFORM_CONTAINER:$container_base/script.bsl"
+  copy_host_dir_to_container "$out_abs/source" "$container_base/source"
+  copy_host_file_to_container "$script_path" "$container_base/script.bsl"
   if [[ -n "$input_abs" ]]; then
-    docker cp "$input_abs" "$OOF_PLATFORM_CONTAINER:$container_base/input.txt"
+    copy_host_file_to_container "$input_abs" "$container_base/input.txt"
   else
     docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "printf '' > '$container_base/input.txt'"
   fi
@@ -208,9 +238,9 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
   "
   exec_code=$?
   set -e
-  docker cp "$OOF_PLATFORM_CONTAINER:$container_base/logs/." "$out_abs/logs/"
+  copy_container_dir_to_host "$container_base/logs" "$out_abs/logs"
   if docker exec "$OOF_PLATFORM_CONTAINER" test -f "$container_base/output.txt"; then
-    docker cp "$OOF_PLATFORM_CONTAINER:$container_base/output.txt" "$output_stream"
+    copy_container_file_to_host "$container_base/output.txt" "$output_stream"
   fi
   if [[ -f "$out_abs/logs/code.txt" ]]; then
     exit "$(cat "$out_abs/logs/code.txt")"
