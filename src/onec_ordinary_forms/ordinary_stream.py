@@ -550,6 +550,12 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
                 page_order += 1
 
     root_layout = form_root_layout_from_xml(root)
+    root_title_layout = form_root_title_layout_from_xml(root)
+    if root_title_layout:
+        root_layout = {**(root_layout or {}), **root_title_layout}
+    if root.findtext("ShowCommandBar"):
+        root_layout = {**(root_layout or {}), "showCommandBar": root.findtext("ShowCommandBar", "")}
+    attributes_layout = form_attributes_layout_from_xml(root)
     stream = ordinary_form_stream(
         title,
         attributes,
@@ -557,6 +563,8 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         events_from_xml(root),
         form_size_from_xml(root, root_layout),
         root_layout=root_layout,
+        attributes_layout=attributes_layout,
+        object_info=form_object_info_from_xml(root),
         serialization_counter=form_serialization_counter_from_xml(root),
     )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
@@ -611,7 +619,7 @@ def ordinary_form_stream(
         attributes_table(attributes, controls, attributes_layout),
         copy.deepcopy(object_info) if object_info is not None else form_object_info_record(),
         action_records(events),
-        "1",
+        form_show_command_bar_record(root_layout),
         "4",
         "1",
         "0",
@@ -672,7 +680,24 @@ def form_root_record(
             record[1][2] = "3"
         record[-1] = serialization_counter or "3"
         record.extend([width, height, "96"])
+    if root_layout is not None:
+        if root_layout.get("titleMarker"):
+            record[1][1] = str(root_layout.get("titleMarker", ""))
+        if root_layout.get("titleScope"):
+            record[1][2] = str(root_layout.get("titleScope", ""))
     return record
+
+
+def form_root_title_layout_from_xml(root: ET.Element) -> FormRootLayout | None:
+    title = root.find("Title")
+    if title is None:
+        return None
+    result: FormRootLayout = {}
+    if title.get("marker") is not None:
+        result["titleMarker"] = title.get("marker", "")
+    if title.get("scope") is not None:
+        result["titleScope"] = title.get("scope", "")
+    return result or None
 
 
 def form_root_layout_from_xml(root: ET.Element) -> FormRootLayout | None:
@@ -1026,6 +1051,9 @@ def root_panel_post_layout_tail_before_color(root_layout: FormRootLayout | None)
     value = (root_layout or {}).get("rootPanelPostLayoutTailBeforeColor")
     if isinstance(value, list) and value:
         return [str(item) for item in value]
+    page_states = (root_layout or {}).get("rootPageStates")
+    if isinstance(page_states, list) and len(page_states) > 1:
+        return ["0", "4294967295", "4294967295", "4294967295", "5", "64", "0"]
     return ["0", "4294967295", "5", "64", "0"]
 
 
@@ -1255,6 +1283,18 @@ def attributes_table(
     ]
 
 
+def form_attributes_layout_from_xml(root: ET.Element) -> dict[str, object] | None:
+    attributes = root.find("Attributes")
+    if attributes is None:
+        return None
+    result: dict[str, object] = {}
+    if attributes.get("layoutMarker") is not None:
+        result["marker"] = attributes.get("layoutMarker", "")
+    if attributes.get("slotCount") is not None:
+        result["slotCount"] = attributes.get("slotCount", "")
+    return result or None
+
+
 def attribute_link_table(attributes: list[object], controls: list[object]) -> list[object]:
     slots_by_name: dict[str, str] = {}
     for attribute in attributes:
@@ -1328,6 +1368,29 @@ def form_object_info_record() -> list[object]:
     return ["00000000-0000-0000-0000-000000000000", "0"]
 
 
+def form_object_info_from_xml(root: ET.Element) -> list[object] | None:
+    uuid = root.get("formObjectUuid")
+    kind = root.get("formObjectKind")
+    if not uuid or kind is None:
+        return None
+    state_kind = root.get("formObjectStateKind")
+    state_mode = root.get("formObjectStateMode")
+    state_flag = root.get("formObjectStateFlag")
+    if state_kind is None and state_mode is None and state_flag is None:
+        return [uuid, kind]
+    return [
+        uuid,
+        kind,
+        [
+            state_kind or "0",
+            state_mode or "0",
+            ["0", "0"],
+            ["0"],
+            state_flag or "0",
+        ],
+    ]
+
+
 def events_from_xml(root: ET.Element, style_profile: str = "extended") -> list[object]:
     result: list[object] = []
     for event in root.findall("./Events/Event"):
@@ -1371,6 +1434,12 @@ def form_size_from_xml(root: ET.Element, root_layout: FormRootLayout | None = No
 def form_serialization_counter_from_xml(root: ET.Element) -> str:
     value = (root.findtext("SerializationCounter") or "").strip()
     return value if value.isdigit() else ""
+
+
+def form_show_command_bar_record(root_layout: FormRootLayout | None) -> str:
+    if str((root_layout or {}).get("showCommandBar", "")).strip().lower() == "false":
+        return "0"
+    return "1"
 
 
 def is_localized_text_record(value: list[object]) -> bool:
@@ -2323,6 +2392,9 @@ def button_control_info(element: ET.Element, title_record: list[object], actions
     info_record[descriptor.slot_index("Shortcut")] = shortcut_record_from_xml(element.find("Shortcut"))
     info_record[descriptor.slot_index("MultiLine")] = bool_record_from_xml(element, "MultiLine", default=False)
     info_record[descriptor.slot_index("PictureSize")] = text_or_default(element, "PictureSize", "0")
+    default_button = element.findtext("DefaultButton")
+    if default_button is not None:
+        info_record[descriptor.slot_index("DefaultButton")] = bool_record_from_xml(element, "DefaultButton", default=False)
     menu_buttons = element.find("Buttons")
     if menu_buttons is not None:
         menu_payload = command_bar_items_record_from_xml(menu_buttons, asset_root)
@@ -4459,7 +4531,8 @@ TABLE_EVENT_ID_BY_NAME = {
 
 def table_data_source_record(element: ET.Element) -> list[object]:
     if table_columns_from_xml(element):
-        return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "0"]]
+        link_mode = "1" if element.findtext("DataPath") else "0"
+        return ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", link_mode]]
     return ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]]
 
 
@@ -4525,9 +4598,10 @@ def table_columns_from_xml(element: ET.Element) -> list[ET.Element]:
 
 
 def extended_table_view_record(element: ET.Element, columns: list[ET.Element], asset_root: Path | None = None) -> list[object]:
+    view_flags = "117643264" if element.findtext("DataPath") else "117644289"
     record = [
         "23",
-        "117644289",
+        view_flags,
         default_color_record(),
         default_color_record(),
         default_color_record(),
@@ -5112,10 +5186,58 @@ def geometry_stream_from_xml(
     if compact_scalar_geometry(position, bindings, dimensions):
         compact_order = str(page_order) if page_order is not None else "3"
         return ["3", left, top, right, bottom, compact_order, *bindings, "0", *dimensions[:2]]
+    if control_type == "Table" and layout_flow is not None:
+        group_tail = layout_group_tail(
+            layout_group,
+            layout_order,
+            str(page_order) if page_order is not None else "0",
+            str(page_index) if page_index is not None else "0",
+            layout_next_order,
+        )
+        if any(dimension != "0" for dimension in dimensions):
+            return [
+                "8",
+                left,
+                top,
+                right,
+                bottom,
+                layout_mode,
+                *bindings,
+                "0",
+                position.get("primaryDimensionMarker", "1") if position is not None else "1",
+                *dimensions,
+                "0",
+                *group_tail,
+            ]
+        return [
+            "8",
+            left,
+            top,
+            right,
+            bottom,
+            layout_mode,
+            *bindings,
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            group_tail[0],
+            group_tail[1],
+            group_tail[2],
+            "0",
+            "0",
+        ]
     counted_geometry = counted_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
     if counted_geometry is not None:
         counted_geometry[5] = layout_mode
         return counted_geometry
+    if control_type == "InputField":
+        prefixed_flagged_height_width_geometry = prefixed_flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
+        if prefixed_flagged_height_width_geometry is not None:
+            prefixed_flagged_height_width_geometry[5] = layout_mode
+            return prefixed_flagged_height_width_geometry
     layout_flagged_height_width_geometry = layout_flagged_height_width_dimension_geometry_from_xml(
         position,
         left,
@@ -5140,7 +5262,7 @@ def geometry_stream_from_xml(
         layout_prefixed_height_geometry[5] = layout_mode
         return layout_prefixed_height_geometry
     prefixed_flagged_height_width_geometry = prefixed_flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
-    if prefixed_flagged_height_width_geometry is not None:
+    if control_type != "InputField" and prefixed_flagged_height_width_geometry is not None:
         prefixed_flagged_height_width_geometry[5] = layout_mode
         return prefixed_flagged_height_width_geometry
     flagged_height_width_geometry = flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
@@ -5271,6 +5393,21 @@ def geometry_stream_from_xml(
             str(page_index) if page_index is not None else "0",
             layout_next_order,
         )
+        if any(dimension != "0" for dimension in dimensions):
+            return [
+                "8",
+                left,
+                top,
+                right,
+                bottom,
+                layout_mode,
+                *bindings,
+                "0",
+                position.get("primaryDimensionMarker", "1") if position is not None else "1",
+                *dimensions,
+                "0",
+                *group_tail,
+            ]
         return [
             "8",
             left,

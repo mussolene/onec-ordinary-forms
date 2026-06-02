@@ -1506,6 +1506,30 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(view[23], ["0"])
         self.assertEqual(table[2][3], ["00000000-0000-0000-0000-000000000000", ["2", "1", ["0", "1"]]])
 
+    def test_bound_table_with_columns_uses_platform_bound_view_and_source_shape(self) -> None:
+        root = ET.fromstring(
+            """<Form>
+              <Pages>
+                <Page name="Main">
+                  <Table name="Rows" id="6">
+                    <DataPath>Rows</DataPath>
+                    <Columns>
+                      <Column name="Name" order="0"/>
+                    </Columns>
+                  </Table>
+                </Page>
+              </Pages>
+            </Form>"""
+        )
+
+        stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig")).value
+        table = self._find_control(stream, "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1")
+
+        self.assertIsNotNone(table)
+        assert table is not None
+        self.assertEqual(table[2][2][1][1], "117643264")
+        self.assertEqual(table[2][3], ["342cf854-134c-42bb-8af9-a2103d5d9723", ["5", "0", "0", "1"]])
+
     def test_button_enabled_false_and_default_border_are_written(self) -> None:
         root = ET.fromstring(
             """<Form>
@@ -1620,6 +1644,22 @@ class CliSmokeTest(unittest.TestCase):
         geometry = geometry_stream_from_xml("Table", position, page_index=0, page_order=1, object_id="8")
 
         self.assertEqual(geometry[-5:], ["2", "1", "2", "0", "0"])
+
+    def test_table_geometry_with_dimension_binding_preserves_platform_dimension_marker(self) -> None:
+        position = ET.fromstring(
+            """
+            <Position left="8" top="37" right="493" bottom="428">
+              <LayoutFlow group="1" order="0" nextOrder="2"/>
+              <Bindings>
+                <DimensionBinding dimension="height" mode="0" target="element" targetId="7" side="top"/>
+              </Bindings>
+            </Position>
+            """
+        )
+
+        geometry = geometry_stream_from_xml("Table", position, page_index=0, page_order=1, object_id="6")
+
+        self.assertEqual(geometry[12:], ["0", "1", ["0", "7", "0"], "0", "0", "0", "0", "1", "0", "2", "0", "0"])
 
     def test_geographical_schema_preserves_base_style_slots(self) -> None:
         root = ET.fromstring(
@@ -3178,9 +3218,7 @@ class CliSmokeTest(unittest.TestCase):
         self.assertEqual(flow.get("group"), "2")
         self.assertEqual(flow.get("order"), "6")
         self.assertEqual(flow.get("nextOrder"), "6")
-        canonical = geometry.copy()
-        canonical[12:17] = ["1", ["0", "14", "0"], "0", "1", ["0", "15", "3"]]
-        self.assertEqual(geometry_stream_from_xml("InputField", position), canonical)
+        self.assertEqual(geometry_stream_from_xml("InputField", position), geometry)
 
     def test_picture_decoration_picture_style_roundtrips_named_slots(self) -> None:
         with TemporaryDirectory() as temp_dir:

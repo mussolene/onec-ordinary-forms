@@ -695,6 +695,11 @@
     <xs:attribute name="version" type="xs:string" use="required"/>
     <xs:attribute name="containerCreatedTicks" type="xs:unsignedLong" use="required"/>
     <xs:attribute name="containerModifiedTicks" type="xs:unsignedLong" use="required"/>
+    <xs:attribute name="formObjectUuid" type="GuidType"/>
+    <xs:attribute name="formObjectKind" type="xs:string"/>
+    <xs:attribute name="formObjectStateKind" type="xs:string"/>
+    <xs:attribute name="formObjectStateMode" type="xs:string"/>
+    <xs:attribute name="formObjectStateFlag" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="RootPanelLayoutType">
     <xs:sequence>
@@ -760,6 +765,8 @@
     <xs:sequence>
       <xs:element name="Attribute" type="AttributeType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
+    <xs:attribute name="layoutMarker" type="xs:string"/>
+    <xs:attribute name="slotCount" type="xs:nonNegativeInteger"/>
   </xs:complexType>
   <xs:complexType name="AttributeType">
     <xs:sequence>

@@ -2566,6 +2566,9 @@ def add_button_scalar_properties(parent: ET.Element, item: dict, item_data: obje
     menu_buttons = nested_list_value(info, (descriptor.slot_index("MenuButtons"),))
     if isinstance(menu_buttons, list):
         add_command_bar_buttons(parent, menu_buttons, asset_root, parent.get("name") or "Button")
+    default_button = clean_token(nested_list_value(info, (descriptor.slot_index("DefaultButton"),)))
+    if default_button == "1":
+        set_text(parent, "DefaultButton", "true")
 
 
 def add_control_events(parent: ET.Element, control_type: str, item_data: object) -> None:
@@ -2854,6 +2857,7 @@ def dump_xml_from_paths(
     add_form_events(root, form_root)
 
     attrs = ET.SubElement(root, "Attributes")
+    add_form_attribute_layout_attributes(attrs, form_root)
     attribute_slots = attribute_slots_from_form_root(form_root)
     props_by_name = {str(prop.get("name", "")): prop for prop in control_index.get("props", [])}
     form_attribute_records = attribute_records_from_form_root(form_root)
@@ -2950,6 +2954,62 @@ def add_form_properties(parent: ET.Element, form_root: object) -> None:
     root_panel_info = form_root_panel_info(form_record)
     if root_panel_info is not None:
         add_form_root_panel_layout(parent, root_panel_info)
+    add_form_root_title_attributes(parent, form_record)
+    add_form_object_attributes(parent, form_root)
+    add_form_command_bar_visibility(parent, form_root)
+
+
+def add_form_command_bar_visibility(parent: ET.Element, form_root: object) -> None:
+    if not isinstance(form_root, list) or len(form_root) <= 5:
+        return
+    value = clean_token(form_root[5])
+    if value == "0":
+        set_text(parent, "ShowCommandBar", "false")
+
+
+def add_form_root_title_attributes(parent: ET.Element, form_record: list[object]) -> None:
+    title = parent.find("Title")
+    if title is None or len(form_record) <= 1 or not isinstance(form_record[1], list) or len(form_record[1]) <= 2:
+        return
+    marker = clean_token(form_record[1][1])
+    scope = clean_token(form_record[1][2])
+    if marker:
+        title.set("marker", marker)
+    if scope:
+        title.set("scope", scope)
+
+
+def add_form_attribute_layout_attributes(parent: ET.Element, form_root: object) -> None:
+    if not isinstance(form_root, list) or len(form_root) <= 2 or not isinstance(form_root[2], list):
+        return
+    attributes = form_root[2]
+    if len(attributes) < 2:
+        return
+    marker = clean_token(attributes[0][0]) if isinstance(attributes[0], list) and attributes[0] else ""
+    slot_count = clean_token(attributes[1])
+    if marker:
+        parent.set("layoutMarker", marker)
+    if slot_count.isdigit():
+        parent.set("slotCount", slot_count)
+
+
+def add_form_object_attributes(parent: ET.Element, form_root: object) -> None:
+    if not isinstance(form_root, list) or len(form_root) <= 3 or not isinstance(form_root[3], list):
+        return
+    object_info = form_root[3]
+    if object_info == ["00000000-0000-0000-0000-000000000000", "0"] or len(object_info) < 2:
+        return
+    parent.set("formObjectUuid", clean_token(object_info[0]))
+    parent.set("formObjectKind", clean_token(object_info[1]))
+    if len(object_info) <= 2 or not isinstance(object_info[2], list):
+        return
+    state = object_info[2]
+    if len(state) > 0:
+        parent.set("formObjectStateKind", clean_token(state[0]))
+    if len(state) > 1:
+        parent.set("formObjectStateMode", clean_token(state[1]))
+    if len(state) > 4:
+        parent.set("formObjectStateFlag", clean_token(state[4]))
 
 
 def form_root_title(form_root: object) -> str:
