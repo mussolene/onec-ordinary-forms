@@ -1954,6 +1954,30 @@ oof::platform::object_model::PlatformObjectProperty make_described_property(
         std::string(oof::platform::property_registry::slot_codec_name(descriptor->slot_codec)));
 }
 
+oof::platform::object_model::PlatformObjectCollectionDescriptor make_described_collection(
+    std::string_view name,
+    std::size_t count
+) {
+    const auto* descriptor = oof::platform::property_registry::find_descriptor(name);
+    if (descriptor == nullptr) {
+        return oof::platform::object_model::make_collection_descriptor(
+            std::string(name),
+            {},
+            "ObjectCollection",
+            count,
+            "platform-api-catalog");
+    }
+    return oof::platform::object_model::make_collection_descriptor(
+        std::string(descriptor->name),
+        std::string(descriptor->localized_name),
+        std::string(descriptor->value_type),
+        count,
+        std::string(descriptor->source),
+        std::string(descriptor->slot_binding),
+        descriptor->writable,
+        std::string(oof::platform::property_registry::slot_codec_name(descriptor->slot_codec)));
+}
+
 void add_api_surface(
     oof::platform::object_model::PlatformObject& object,
     const oof::platform::runtime_binding::PlatformApiObject* api
@@ -1998,6 +2022,13 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
     form_object.form.properties.push_back(make_described_property("Type", "Form"));
     form_object.form.properties.push_back(make_described_property("RuntimeUUID", envelope.runtime_uuid));
     form_object.form.properties.push_back(make_described_property("Items", std::to_string(summary.items.size())));
+    form_object.form.properties.push_back(make_described_property("Attributes", "0"));
+    form_object.form.properties.push_back(make_described_property("Commands", "0"));
+    form_object.form.properties.push_back(make_described_property("Events", "0"));
+    form_object.form.collections.push_back(make_described_collection("Items", summary.items.size()));
+    form_object.form.collections.push_back(make_described_collection("Attributes", 0));
+    form_object.form.collections.push_back(make_described_collection("Commands", 0));
+    form_object.form.collections.push_back(make_described_collection("Events", 0));
     add_api_surface(form_object.form, api_object_for_type("Form"));
 
     for (const auto& item : summary.items) {
@@ -2017,6 +2048,8 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
         if (!item.title.empty()) {
             object.properties.push_back(make_described_property("Title", item.title));
         }
+        object.properties.push_back(make_described_property("Events", "0"));
+        object.collections.push_back(make_described_collection("Events", 0));
         if (!item.left.empty()) {
             object.properties.push_back(make_described_property("Left", item.left));
             object.properties.push_back(make_described_property("Top", item.top));
@@ -2093,6 +2126,31 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
                   << (prop.writable ? "true" : "false");
         std::cout << "}";
     }
+    std::cout << "],\"collections\":[";
+    for (std::size_t index = 0; index < object.collections.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& collection = object.collections[index];
+        std::cout << "{\"name\":";
+        print_json_string(collection.name);
+        std::cout << ",\"localizedName\":";
+        print_json_string(collection.localized_name);
+        std::cout << ",\"valueType\":";
+        print_json_string(collection.value_type);
+        std::cout << ",\"count\":" << collection.count;
+        std::cout << ",\"source\":";
+        print_json_string(collection.source);
+        std::cout << ",\"slotBinding\":";
+        print_json_string(collection.slot_binding);
+        std::cout << ",\"slotCodec\":";
+        print_json_string(collection.slot_codec);
+        std::cout << ",\"readable\":"
+                  << (collection.readable ? "true" : "false");
+        std::cout << ",\"writable\":"
+                  << (collection.writable ? "true" : "false");
+        std::cout << "}";
+    }
     std::cout << "],\"methods\":[";
     for (std::size_t index = 0; index < object.methods.size(); ++index) {
         if (index != 0) {
@@ -2135,7 +2193,7 @@ void print_runtime_platform_object(const std::string& path) {
     std::cout << "{\"source\":\"RuntimeForm:PlatformObject\"";
     std::cout << ",\"runtimeUuid\":";
     print_json_string(envelope.runtime_uuid);
-    std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call\",\"model\":\"typeDescriptor + property/method/event descriptors + slot-backed values\",\"descriptorRegistry\":\"PlatformPropertyDescriptor + PropertySlotBinding\",\"implementedWritableSlotCodecs\":[\"name-record\",\"position-record\"]}";
+    std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call; mngcore logform.xsd declares Form/elements/command/property and element event/commands/autoCommandBar; cmi.xsd declares CommandInfo/Command/HandlerInfo\",\"model\":\"typeDescriptor + property/method/event/collection descriptors + slot-backed values\",\"descriptorRegistry\":\"PlatformPropertyDescriptor + PropertySlotBinding\",\"implementedWritableSlotCodecs\":[\"name-record\",\"position-record\",\"binding-record\"]}";
     std::cout << ",\"form\":";
     print_platform_object_json(form_object.form);
     std::cout << ",\"items\":{\"count\":" << form_object.items.count();
@@ -2934,7 +2992,7 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     std::cout << ",\"materializedItems\":" << summary.items.size();
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
-    std::cout << ",\"missingCodecs\":[\"Attributes\",\"Commands\",\"Events\",\"cf_form_controls8 typed payload fields\"]";
+    std::cout << ",\"missingCodecs\":[\"Attributes record codec\",\"Commands record codec\",\"Events action-table codec\",\"cf_form_controls8 remaining typed payload fields\"]";
     std::cout << "}\n";
 }
 
@@ -3430,6 +3488,17 @@ const oof::platform::property_registry::PlatformPropertyDescriptor& require_prop
     return *descriptor;
 }
 
+bool string_view_starts_with(std::string_view value, std::string_view prefix) {
+    return value.size() >= prefix.size() && value.substr(0, prefix.size()) == prefix;
+}
+
+oof::platform::stream::ListValue parse_slot_value(std::string_view new_value) {
+    if (!new_value.empty() && new_value.front() == '{') {
+        return oof::platform::stream::parse(std::string(new_value));
+    }
+    return oof::platform::stream::ListValue::raw_atom(std::string(new_value));
+}
+
 bool set_property_slot_value(
     oof::platform::stream::ListValue& payload,
     std::string_view object_id,
@@ -3441,6 +3510,18 @@ bool set_property_slot_value(
     }
     if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::position_record) {
         return set_materialized_object_position_property(payload, object_id, descriptor.name, new_value);
+    }
+    if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::binding_record) {
+        constexpr std::string_view binding_prefix = "Binding.";
+        constexpr std::string_view dimension_prefix = "DimensionBinding.";
+        if (string_view_starts_with(descriptor.name, binding_prefix)) {
+            const std::string coordinate(descriptor.name.substr(binding_prefix.size()));
+            return set_materialized_object_bindings(payload, object_id, {{coordinate, parse_slot_value(new_value)}});
+        }
+        if (string_view_starts_with(descriptor.name, dimension_prefix)) {
+            const std::string dimension(descriptor.name.substr(dimension_prefix.size()));
+            return set_materialized_object_dimension_bindings(payload, object_id, {{dimension, parse_slot_value(new_value)}});
+        }
     }
     throw std::runtime_error("slot codec is registered but not implemented for setPropVal yet: " +
                              std::string(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec)));

@@ -30,7 +30,7 @@ struct PlatformPropertyDescriptor {
     std::string_view source;
 };
 
-inline constexpr std::array<PlatformPropertyDescriptor, 18> descriptors{{
+inline constexpr std::array<PlatformPropertyDescriptor, 42> descriptors{{
     {"ObjectID", "", "CompositeID", SlotCodec::none, "", true, false, "materialized-list-stream"},
     {"Name", "Имя", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record"},
     {"Title", "Заголовок", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record-as-initial-title"},
@@ -46,9 +46,33 @@ inline constexpr std::array<PlatformPropertyDescriptor, 18> descriptors{{
     {"Top", "Верх", "Number", SlotCodec::position_record, "cf_form_controls_position8:top", true, true, "cf_form_controls_position8"},
     {"Width", "Ширина", "Number", SlotCodec::position_record, "cf_form_controls_position8:width", true, true, "cf_form_controls_position8"},
     {"Height", "Высота", "Number", SlotCodec::position_record, "cf_form_controls_position8:height", true, true, "cf_form_controls_position8"},
+    {"Right", "Правая граница", "Number", SlotCodec::position_record, "cf_form_controls_position8:right", true, true, "cf_form_controls_position8"},
+    {"Bottom", "Нижняя граница", "Number", SlotCodec::position_record, "cf_form_controls_position8:bottom", true, true, "cf_form_controls_position8"},
     {"Color", "Цвет", "Color", SlotCodec::color_record, "ui:Color", true, true, "xdto_root.res:data_ui.xsd Color"},
     {"Font", "Шрифт", "Font", SlotCodec::font_record, "ui:Font", true, true, "xdto_root.res:data_ui.xsd Font"},
     {"Picture", "Картинка", "Picture", SlotCodec::picture_record, "ui:Picture", true, true, "xdto_root.res:data_ui.xsd Picture"},
+    {"Binding.top", "Привязка.Верх", "FormControlBinding", SlotCodec::binding_record, "cf_form_controls_position8:binding:top", true, true, "cf_form_controls_position8"},
+    {"Binding.bottom", "Привязка.Низ", "FormControlBinding", SlotCodec::binding_record, "cf_form_controls_position8:binding:bottom", true, true, "cf_form_controls_position8"},
+    {"Binding.left", "Привязка.Лево", "FormControlBinding", SlotCodec::binding_record, "cf_form_controls_position8:binding:left", true, true, "cf_form_controls_position8"},
+    {"Binding.right", "Привязка.Право", "FormControlBinding", SlotCodec::binding_record, "cf_form_controls_position8:binding:right", true, true, "cf_form_controls_position8"},
+    {"Binding.verticalCenter", "Привязка.ВертикальныйЦентр", "FormControlBinding", SlotCodec::binding_record, "cf_form_controls_position8:binding:verticalCenter", true, true, "cf_form_controls_position8"},
+    {"Binding.horizontalCenter", "Привязка.ГоризонтальныйЦентр", "FormControlBinding", SlotCodec::binding_record, "cf_form_controls_position8:binding:horizontalCenter", true, true, "cf_form_controls_position8"},
+    {"DimensionBinding.height", "ПривязкаВысоты.Высота", "FormControlDimensionBinding", SlotCodec::binding_record, "cf_form_controls_position8:dimensionBinding:height", true, true, "cf_form_controls_position8"},
+    {"DimensionBinding.minHeight", "ПривязкаВысоты.МинимальнаяВысота", "FormControlDimensionBinding", SlotCodec::binding_record, "cf_form_controls_position8:dimensionBinding:minHeight", true, true, "cf_form_controls_position8"},
+    {"DimensionBinding.stretch", "Привязка.Растянуть", "FormControlDimensionBinding", SlotCodec::binding_record, "cf_form_controls_position8:dimensionBinding:stretch", true, true, "cf_form_controls_position8"},
+    {"DimensionBinding.width", "ПривязкаШирины.Ширина", "FormControlDimensionBinding", SlotCodec::binding_record, "cf_form_controls_position8:dimensionBinding:width", true, true, "cf_form_controls_position8"},
+    {"Events", "События", "FormEvents", SlotCodec::collection_record, "logform.xsd:m_elementEvents/event", true, false, "mngcore logform.xsd Event"},
+    {"Attributes", "Реквизиты", "FormAttributes", SlotCodec::collection_record, "logform.xsd:m_pProperties/property", true, false, "mngcore logform.xsd Property"},
+    {"Commands", "Команды", "FormCommands", SlotCodec::collection_record, "logform.xsd:m_pCommands/command", true, false, "mngcore logform.xsd Command + cmi.xsd CommandInfo"},
+    {"Event.ID", "Событие.Идентификатор", "UUID", SlotCodec::event_action_record, "logform.xsd:Event/id", true, true, "mngcore logform.xsd Event"},
+    {"Event.Handler", "Событие.Обработчик", "String", SlotCodec::event_action_record, "logform.xsd:Event@handler", true, true, "mngcore logform.xsd Event"},
+    {"Command.ID", "Команда.Идентификатор", "CompositeID", SlotCodec::event_action_record, "logform.xsd:Command/id", true, true, "mngcore logform.xsd Command"},
+    {"Command.Name", "Команда.Имя", "String", SlotCodec::event_action_record, "logform.xsd:Command@name", true, true, "mngcore logform.xsd Command"},
+    {"Command.Handler", "Команда.Обработчик", "String", SlotCodec::event_action_record, "logform.xsd:Command@handler", true, true, "mngcore logform.xsd Command"},
+    {"Command.ModifiesData", "Команда.ИзменяетДанные", "Boolean", SlotCodec::event_action_record, "logform.xsd:Command@modifiesData", true, true, "mngcore logform.xsd Command"},
+    {"Attribute.ID", "Реквизит.Идентификатор", "CompositeID", SlotCodec::collection_record, "logform.xsd:Property@id", true, true, "mngcore logform.xsd Property"},
+    {"Attribute.Main", "Реквизит.Основной", "Boolean", SlotCodec::collection_record, "logform.xsd:Property@main", true, true, "mngcore logform.xsd Property"},
+    {"Attribute.StoredData", "Реквизит.СохраняемыеДанные", "Boolean", SlotCodec::collection_record, "logform.xsd:Property@storedData", true, true, "mngcore logform.xsd Property"},
 }};
 
 inline constexpr std::string_view slot_codec_name(SlotCodec codec) {
@@ -99,7 +123,8 @@ inline const PlatformPropertyDescriptor& generic_value_descriptor(std::string_vi
 inline bool can_set_with_current_codec(const PlatformPropertyDescriptor& descriptor) {
     return descriptor.writable &&
            (descriptor.slot_codec == SlotCodec::name_record ||
-            descriptor.slot_codec == SlotCodec::position_record);
+            descriptor.slot_codec == SlotCodec::position_record ||
+            descriptor.slot_codec == SlotCodec::binding_record);
 }
 
 }  // namespace oof::platform::property_registry

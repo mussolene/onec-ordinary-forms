@@ -5,6 +5,10 @@
     <xs:appinfo>
       <PublicContract version="2.0-draft" styleReference="http://v8.1c.ru/8.3/xcf/logform">
         <NoRawElements>ObjectModel ListStream BracketStream FormBin LogicalStream RawBracket PlatformRecords</NoRawElements>
+        <PlatformEvidence>
+          <LogForm source="mngcore_root-03-http_v8.1c.ru_8.2_managed-application_logform.xsd" root="Form/elements/command/property" elementCollections="event commands autoCommandBar"/>
+          <CommandInterface source="mngcore_root-149-http_v8.1c.ru_8.2_managed-application_cmi.xsd" objects="CommandInfo CommandsInfo Command HandlerInfo"/>
+        </PlatformEvidence>
       </PublicContract>
     </xs:appinfo>
   </xs:annotation>

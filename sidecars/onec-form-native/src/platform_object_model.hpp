@@ -31,6 +31,18 @@ struct PlatformObjectEvent {
     std::string localized_name;
 };
 
+struct PlatformObjectCollectionDescriptor {
+    std::string name;
+    std::string localized_name;
+    std::string value_type;
+    std::string source;
+    std::string slot_binding;
+    std::string slot_codec;
+    std::size_t count = 0;
+    bool readable = true;
+    bool writable = false;
+};
+
 struct PlatformObject {
     std::string object_id;
     std::string name;
@@ -40,6 +52,7 @@ struct PlatformObject {
     std::string path;
     std::string parent_object_id;
     std::vector<PlatformObjectProperty> properties;
+    std::vector<PlatformObjectCollectionDescriptor> collections;
     std::vector<PlatformObjectMethod> methods;
     std::vector<PlatformObjectEvent> events;
     std::vector<std::size_t> children;
@@ -135,6 +148,28 @@ inline PlatformObjectEvent make_event(std::string name, std::string localized_na
     event.name = std::move(name);
     event.localized_name = std::move(localized_name);
     return event;
+}
+
+inline PlatformObjectCollectionDescriptor make_collection_descriptor(
+    std::string name,
+    std::string localized_name,
+    std::string value_type,
+    std::size_t count,
+    std::string source,
+    std::string slot_binding = {},
+    bool writable = false,
+    std::string slot_codec = "collection-record"
+) {
+    PlatformObjectCollectionDescriptor collection;
+    collection.name = std::move(name);
+    collection.localized_name = std::move(localized_name);
+    collection.value_type = std::move(value_type);
+    collection.count = count;
+    collection.source = std::move(source);
+    collection.slot_binding = std::move(slot_binding);
+    collection.slot_codec = std::move(slot_codec);
+    collection.writable = writable;
+    return collection;
 }
 
 }  // namespace oof::platform::object_model
