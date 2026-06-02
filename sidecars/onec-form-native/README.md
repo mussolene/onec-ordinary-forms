@@ -43,24 +43,3 @@ Print the platform-derived mechanism map embedded in the native sidecar:
 ```bash
 sidecars/onec-form-native/build/oof-native mechanism
 ```
-
-Parse a flat platform `TypeDomainPattern` list and show the typed items plus
-the exact list-stream roundtrip atoms:
-
-```bash
-printf '{"S","B"}' | sidecars/onec-form-native/build/oof-native type-domain
-```
-
-Parse the confirmed scalar subset of `ValueFromStringInternal`/
-`ValueToStringInternal`:
-
-```bash
-printf '"Caption"' | sidecars/onec-form-native/build/oof-native value
-```
-
-Parse a localized string record in the observed ordinary-form shape
-`{version,count,{lang,text}}`:
-
-```bash
-printf '{1,1,{"ru","Caption"}}' | sidecars/onec-form-native/build/oof-native localized
-```

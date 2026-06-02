@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "platform_mechanism.hpp"
-#include "platform_value.hpp"
 
 namespace {
 
@@ -248,7 +247,7 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|type-domain|value|localized> < stream.txt\n";
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism> < stream.txt\n";
 }
 
 void print_json_string(std::string_view value) {
@@ -321,164 +320,7 @@ void print_mechanism() {
         }
         print_json_string(oof::platform::type_tree_surface[i]);
     }
-    std::cout << "],\"controlObjectDescriptions\":[";
-    for (size_t i = 0; i < oof::platform::control_object_descriptions.size(); ++i) {
-        const auto& item = oof::platform::control_object_descriptions[i];
-        if (i != 0) {
-            std::cout << ",";
-        }
-        std::cout << "{";
-        std::cout << "\"publicName\":";
-        print_json_string(item.public_name);
-        std::cout << ",\"platformName\":";
-        print_json_string(item.platform_name);
-        std::cout << ",\"managedEquivalent\":";
-        print_json_string(item.managed_equivalent);
-        std::cout << "}";
-    }
     std::cout << "]}\n";
-}
-
-std::string trim_copy(std::string value) {
-    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
-        value.pop_back();
-    }
-    size_t start = 0;
-    while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
-        ++start;
-    }
-    return value.substr(start);
-}
-
-std::vector<std::string> atom_list(const Node& node) {
-    if (!node.is_list) {
-        throw std::runtime_error("expected list-stream list");
-    }
-    std::vector<std::string> result;
-    for (const Node& item : node.items) {
-        if (item.is_list) {
-            throw std::runtime_error("expected flat atom list");
-        }
-        result.push_back(item.atom);
-    }
-    return result;
-}
-
-void print_json_string_array(const std::vector<std::string>& values) {
-    std::cout << "[";
-    for (size_t i = 0; i < values.size(); ++i) {
-        if (i != 0) {
-            std::cout << ",";
-        }
-        print_json_string(values[i]);
-    }
-    std::cout << "]";
-}
-
-void print_type_domain(const Node& root) {
-    const oof::platform::TypeDomainPattern pattern = oof::platform::parse_type_domain_pattern(atom_list(root));
-    std::cout << "{\"encoding\":\"TypeDomainPattern\",\"itemCount\":" << pattern.items.size() << ",\"items\":[";
-    for (size_t i = 0; i < pattern.items.size(); ++i) {
-        const auto& item = pattern.items[i];
-        if (i != 0) {
-            std::cout << ",";
-        }
-        std::cout << "{";
-        std::cout << "\"code\":";
-        print_json_string(item.code);
-        std::cout << ",\"typeName\":";
-        print_json_string(item.type_name);
-        std::cout << ",\"kind\":";
-        print_json_string(item.kind);
-        if (!item.uuid.empty()) {
-            std::cout << ",\"uuid\":";
-            print_json_string(item.uuid);
-        }
-        if (!item.digits.empty()) {
-            std::cout << ",\"digits\":";
-            print_json_string(item.digits);
-        }
-        if (!item.fraction_digits.empty()) {
-            std::cout << ",\"fractionDigits\":";
-            print_json_string(item.fraction_digits);
-        }
-        if (!item.allowed_sign.empty()) {
-            std::cout << ",\"allowedSign\":";
-            print_json_string(item.allowed_sign);
-        }
-        if (!item.length.empty()) {
-            std::cout << ",\"length\":";
-            print_json_string(item.length);
-        }
-        if (!item.allowed_length.empty()) {
-            std::cout << ",\"allowedLength\":";
-            print_json_string(item.allowed_length);
-        }
-        if (!item.date_parts.empty()) {
-            std::cout << ",\"dateParts\":";
-            print_json_string(item.date_parts);
-        }
-        std::cout << "}";
-    }
-    std::cout << "],\"roundtrip\":";
-    print_json_string_array(oof::platform::dump_type_domain_pattern(pattern));
-    std::cout << "}\n";
-}
-
-void print_value(const std::string& raw) {
-    const oof::platform::GenericValue value = oof::platform::value_from_string_internal(raw);
-    std::cout << "{";
-    if (std::holds_alternative<std::monostate>(value.value)) {
-        std::cout << "\"kind\":\"null\",\"value\":null";
-    } else if (const auto* item = std::get_if<bool>(&value.value)) {
-        std::cout << "\"kind\":\"boolean\",\"value\":" << (*item ? "true" : "false");
-    } else if (const auto* item = std::get_if<std::int64_t>(&value.value)) {
-        std::cout << "\"kind\":\"integer\",\"value\":" << *item;
-    } else if (const auto* item = std::get_if<double>(&value.value)) {
-        std::cout << "\"kind\":\"number\",\"value\":" << *item;
-    } else if (const auto* item = std::get_if<std::string>(&value.value)) {
-        std::cout << "\"kind\":\"string\",\"value\":";
-        print_json_string(*item);
-    } else {
-        std::cout << "\"kind\":\"object\",\"value\":null";
-    }
-    std::cout << ",\"roundtrip\":";
-    print_json_string(oof::platform::value_to_string_internal(value));
-    std::cout << "}\n";
-}
-
-void print_localized(const Node& root) {
-    if (!root.is_list || root.items.size() < 3 || root.items[0].is_list || root.items[1].is_list || !root.items[2].is_list) {
-        throw std::runtime_error("localized record must have shape {version,count,{lang,text}}");
-    }
-    const std::string version = oof::platform::clean_atom(root.items[0].atom);
-    const std::string count = oof::platform::clean_atom(root.items[1].atom);
-    if (root.items[2].items.size() < 2 || root.items[2].items[0].is_list || root.items[2].items[1].is_list) {
-        throw std::runtime_error("localized item must have shape {lang,text}");
-    }
-    const std::string lang = oof::platform::clean_atom(root.items[2].items[0].atom);
-    const std::string text = oof::platform::clean_atom(root.items[2].items[1].atom);
-    if (!oof::platform::is_localized_lang(lang)) {
-        throw std::runtime_error("invalid localized string language: " + lang);
-    }
-    const oof::platform::LocalizedStringRecord record = oof::platform::localized_text_record(text, lang);
-    std::cout << "{\"encoding\":\"LocalizedStringRecord\",\"version\":";
-    print_json_string(version);
-    std::cout << ",\"count\":";
-    print_json_string(count);
-    std::cout << ",\"lang\":";
-    print_json_string(record.items.front().lang);
-    std::cout << ",\"text\":";
-    print_json_string(record.items.front().text.value);
-    std::cout << ",\"roundtrip\":[";
-    print_json_string(record.version);
-    std::cout << ",";
-    print_json_string(std::to_string(record.items.size()));
-    std::cout << ",[";
-    print_json_string(oof::platform::quote_atom(record.items.front().lang));
-    std::cout << ",";
-    print_json_string(oof::platform::quote_atom(record.items.front().text.value));
-    std::cout << "]]}\n";
 }
 
 }  // namespace
@@ -493,10 +335,6 @@ int main(int argc, char** argv) {
         const std::string command = argv[1];
         if (command == "mechanism") {
             print_mechanism();
-            return 0;
-        }
-        if (command == "value") {
-            print_value(trim_copy(read_stdin()));
             return 0;
         }
 
@@ -516,14 +354,6 @@ int main(int argc, char** argv) {
             collect_stats(root, 1, stats);
             std::cout << "{\"lists\":" << stats.lists << ",\"atoms\":" << stats.atoms
                       << ",\"maxDepth\":" << stats.max_depth << "}\n";
-            return 0;
-        }
-        if (command == "type-domain") {
-            print_type_domain(root);
-            return 0;
-        }
-        if (command == "localized") {
-            print_localized(root);
             return 0;
         }
 

@@ -22,12 +22,6 @@ struct MechanismEntry {
     std::string_view native_target;
 };
 
-struct ControlObjectDescription {
-    std::string_view public_name;
-    std::string_view platform_name;
-    std::string_view managed_equivalent;
-};
-
 constexpr std::array<MechanismEntry, 6> mechanism_entries{{
     {
         "00255f70",
@@ -150,37 +144,6 @@ constexpr std::array<std::string_view, 25> type_tree_surface{{
     "Filter",
     "Order",
     "ConditionalAppearance",
-}};
-
-constexpr std::array<ControlObjectDescription, 28> control_object_descriptions{{
-    {"ActiveXControl", "ЭлементУправленияActiveX", "ActiveXControl"},
-    {"Panel", "Панель", "Pages"},
-    {"LabelDecoration", "Надпись", "LabelDecoration"},
-    {"PictureDecoration", "ПолеКартинки", "PictureDecoration"},
-    {"Button", "Кнопка", "Button"},
-    {"InputField", "ПолеВвода", "InputField"},
-    {"CommandBar", "КоманднаяПанель", "CommandBar"},
-    {"CheckBox", "Флажок", "CheckBoxField"},
-    {"Table", "ТабличноеПоле", "Table"},
-    {"ChoiceField", "ПолеВыбора", "ChoiceField"},
-    {"SpreadsheetDocumentField", "ПолеТабличногоДокумента", "SpreadsheetDocumentField"},
-    {"GroupBox", "РамкаГруппы", "UsualGroup"},
-    {"RadioButton", "Переключатель", "RadioButton"},
-    {"Splitter", "Разделитель", "Splitter"},
-    {"Chart", "Диаграмма", "ChartField"},
-    {"PivotChart", "СводнаяДиаграмма", "PivotChartField"},
-    {"GeographicalSchemaField", "ПолеГеографическойСхемы", "GeographicalSchemaField"},
-    {"GraphicalSchemaField", "ПолеГрафическойСхемы", "GraphicalSchemaField"},
-    {"ListBox", "Список", "ListBox"},
-    {"HTMLDocumentField", "ПолеHTMLДокумента", "HTMLDocumentField"},
-    {"ProgressBar", "Индикатор", "ProgressBar"},
-    {"TrackBar", "ПолосаРегулирования", "TrackBar"},
-    {"CalendarField", "ПолеКалендаря", "CalendarField"},
-    {"TextDocumentField", "ПолеТекстовогоДокумента", "TextDocumentField"},
-    {"GanttChart", "ДиаграммаГанта", "GanttChartField"},
-    {"Dendrogram", "Дендрограмма", "DendrogramField"},
-    {"CommandBarButton", "КнопкаКоманднойПанели", "CommandBarButton"},
-    {"Form", "Форма", "Form"},
 }};
 
 }  // namespace oof::platform
