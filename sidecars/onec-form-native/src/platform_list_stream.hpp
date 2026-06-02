@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -88,8 +89,16 @@ public:
         append(ListValue::raw_atom(std::to_string(value)));
     }
 
+    void write_int64(std::int64_t value) {
+        append(ListValue::raw_atom(std::to_string(value)));
+    }
+
     void write_bool(bool value) {
         append(ListValue::raw_atom(value ? "1" : "0"));
+    }
+
+    void write_guid(std::string value) {
+        append(ListValue::raw_atom(std::move(value)));
     }
 
     void write_string(std::string value) {
@@ -280,6 +289,14 @@ public:
         stack_.pop_back();
     }
 
+    bool has_next() const {
+        if (stack_.empty()) {
+            return !root_consumed_;
+        }
+        const Frame& frame = stack_.back();
+        return frame.index < frame.value->items.size();
+    }
+
     std::uint32_t read_uint32() {
         const ListValue& value = take_value();
         if (value.is_list || value.atom_kind != ListValue::AtomKind::raw || value.atom.empty()) {
@@ -288,12 +305,33 @@ public:
         return static_cast<std::uint32_t>(std::stoul(value.atom));
     }
 
+    std::int64_t read_int64() {
+        const ListValue& value = take_value();
+        if (value.is_list || value.atom_kind != ListValue::AtomKind::raw || value.atom.empty()) {
+            throw std::runtime_error("ListInStream expected int64 atom");
+        }
+        char* end = nullptr;
+        const long long parsed = std::strtoll(value.atom.c_str(), &end, 10);
+        if (end == nullptr || *end != '\0') {
+            throw std::runtime_error("ListInStream invalid int64 atom");
+        }
+        return static_cast<std::int64_t>(parsed);
+    }
+
     bool read_bool() {
         const std::uint32_t value = read_uint32();
         if (value > 1) {
             throw std::runtime_error("ListInStream expected bool atom");
         }
         return value != 0;
+    }
+
+    std::string read_guid() {
+        const ListValue& value = take_value();
+        if (value.is_list || value.atom_kind != ListValue::AtomKind::raw || value.atom.empty()) {
+            throw std::runtime_error("ListInStream expected guid atom");
+        }
+        return value.atom;
     }
 
     std::string read_string() {

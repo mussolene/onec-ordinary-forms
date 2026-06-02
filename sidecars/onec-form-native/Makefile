@@ -28,6 +28,8 @@ test: $(BIN)
 	$(BIN) mechanism | grep -F -q '"boundary":"existing IFile/HGLOBAL payload returned by FUN_00270da0"'
 	$(BIN) value-roundtrip | grep -F -q '"serialized":"{1,{1,2,{\"ru\",\"Title\"},{\"en\",\"Caption\"}},1}"'
 	$(BIN) value-roundtrip | grep -q '"itemCount":2'
+	$(BIN) value-roundtrip | grep -F -q '"compositeID":"{42,09ccdc77-ea1a-4a6d-ab1c-3435eada2433}"'
+	$(BIN) value-roundtrip | grep -F -q '"typeDomainPattern":"{\"Pattern\",{\"T\",d47d59f8-73f0-481c-8b5e-f6384c0a4804}}"'
 	$(BIN) controls-codec | grep -q '"diagnosticControlsFixtureSize":40'
 	$(BIN) controls-codec | grep -q '"positionSize":32'
 	$(BIN) controls-codec | grep -q '"infoSize":16'

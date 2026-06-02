@@ -450,6 +450,22 @@ void print_value_roundtrip() {
     const oof::platform::value::FormattedString restored =
         oof::platform::value::FormattedString::deserialize(in);
 
+    oof::platform::value::CompositeID composite;
+    composite.object_id = 42;
+    composite.guid = "09ccdc77-ea1a-4a6d-ab1c-3435eada2433";
+    composite.null = false;
+    const std::string composite_serialized = composite.serialize_list_stream();
+    oof::platform::stream::ListInStream composite_stream(composite_serialized);
+    const oof::platform::value::CompositeID restored_composite =
+        oof::platform::value::CompositeID::deserialize(composite_stream);
+
+    oof::platform::value::TypeDomainPattern type_domain;
+    type_domain.add_type(std::string(oof::platform::value::TypeDomainPattern::type_term_guid));
+    const std::string type_domain_serialized = type_domain.serialize_list_stream();
+    oof::platform::stream::ListInStream type_domain_stream(type_domain_serialized);
+    const oof::platform::value::TypeDomainPattern restored_type_domain =
+        oof::platform::value::TypeDomainPattern::deserialize(type_domain_stream);
+
     std::cout << "{";
     std::cout << "\"serialized\":";
     print_json_string(serialized);
@@ -459,6 +475,14 @@ void print_value_roundtrip() {
     print_json_string(restored.value().items().at(0).language);
     std::cout << ",\"secondText\":";
     print_json_string(restored.value().items().at(1).text);
+    std::cout << ",\"compositeID\":";
+    print_json_string(composite_serialized);
+    std::cout << ",\"compositeObjectId\":" << restored_composite.object_id;
+    std::cout << ",\"compositeGuid\":";
+    print_json_string(restored_composite.guid);
+    std::cout << ",\"typeDomainPattern\":";
+    print_json_string(type_domain_serialized);
+    std::cout << ",\"typeDomainEntries\":" << restored_type_domain.entries.size();
     std::cout << "}\n";
 }
 
