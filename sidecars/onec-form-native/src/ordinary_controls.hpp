@@ -28,20 +28,20 @@ struct TransferDescriptor {
 
 constexpr std::array<TransferDescriptor, 3> transfer_registry{{
     {
-        "cf_form_controls8",
-        TransferFacet::controls,
-        cf_form_controls8,
-        format_entry_record_size,
-        "ordinary control payload records",
-        "control descriptor payload codec",
-    },
-    {
         "cf_form_controls_position8",
         TransferFacet::position,
         cf_form_controls_position8,
         position_transfer_record_size,
         "ordinary control geometry/binding position records",
         "position and binding descriptor codec",
+    },
+    {
+        "cf_form_controls8",
+        TransferFacet::controls,
+        cf_form_controls8,
+        0,
+        "ordinary control payload file",
+        "raw controls8 payload until platform field decoder is proven",
     },
     {
         "cf_form_controls_info8",
@@ -124,6 +124,10 @@ struct ControlPayloadRecord {
         }
         return record;
     }
+};
+
+struct ControlPayloadFile {
+    std::vector<std::uint8_t> bytes;
 };
 
 struct ControlPositionRecord {
@@ -258,22 +262,22 @@ private:
 };
 
 struct OrdinaryTransferSet {
-    std::vector<ControlPayloadRecord> controls;
+    ControlPayloadFile controls;
     std::vector<ControlPositionRecord> positions;
     std::vector<ControlInfoRecord> infos;
 
     FormFormatEnumerator enumerator() const {
         FormFormatEnumerator result;
-        result.add(TransferFacet::controls, static_cast<std::uint32_t>(controls.size()));
         result.add(TransferFacet::position, static_cast<std::uint32_t>(positions.size()));
+        result.add(TransferFacet::controls, static_cast<std::uint32_t>(controls.bytes.size()));
         result.add(TransferFacet::info, static_cast<std::uint32_t>(infos.size()));
         return result;
     }
 
     std::vector<std::uint8_t> serialize_records() const {
         std::vector<std::uint8_t> out = enumerator().serialize_headers();
-        append_records(out, controls);
         append_records(out, positions);
+        out.insert(out.end(), controls.bytes.begin(), controls.bytes.end());
         append_records(out, infos);
         return out;
     }
@@ -284,7 +288,13 @@ struct OrdinaryTransferSet {
         OrdinaryTransferSet set;
         for (const auto& entry : enumerator.entries()) {
             if (entry.format_id == cf_form_controls8) {
-                read_records<ControlPayloadRecord>(bytes, offset, entry, set.controls);
+                if (offset + entry.record_count > bytes.size()) {
+                    throw std::runtime_error("cf_form_controls8 payload is truncated");
+                }
+                set.controls.bytes.assign(
+                    bytes.begin() + static_cast<std::ptrdiff_t>(offset),
+                    bytes.begin() + static_cast<std::ptrdiff_t>(offset + entry.record_count));
+                offset += entry.record_count;
             } else if (entry.format_id == cf_form_controls_position8) {
                 read_records<ControlPositionRecord>(bytes, offset, entry, set.positions);
             } else if (entry.format_id == cf_form_controls_info8) {

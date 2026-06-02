@@ -43,11 +43,11 @@ public:
 
     OrdinaryTransferSet transfer_set() const {
         OrdinaryTransferSet set;
-        set.controls.reserve(controls_.size());
         set.positions.reserve(controls_.size());
         set.infos.reserve(controls_.size());
         for (const auto& control : controls_) {
-            set.controls.push_back(control.payload);
+            const auto payload = control.payload.serialize();
+            set.controls.bytes.insert(set.controls.bytes.end(), payload.begin(), payload.end());
             set.positions.push_back(control.position);
             set.infos.push_back(control.info);
         }

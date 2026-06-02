@@ -255,7 +255,7 @@ std::string read_stdin() {
 
 void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|formbin-selftest> < stream.txt\n"
-              << "       oof-native <formbin-info|formbin-roundtrip> Form.bin\n";
+              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info> Form.bin\n";
 }
 
 std::vector<std::uint8_t> read_file_bytes(const std::string& path) {
@@ -477,12 +477,12 @@ void print_controls_codec() {
     const auto restored_info = oof::platform::ordinary::ControlInfoRecord::deserialize(info_bytes);
 
     oof::platform::ordinary::FormFormatEnumerator enumerator;
-    enumerator.add(oof::platform::ordinary::TransferFacet::controls, 1);
     enumerator.add(oof::platform::ordinary::TransferFacet::position, 1);
+    enumerator.add(oof::platform::ordinary::TransferFacet::controls, static_cast<std::uint32_t>(controls_bytes.size()));
     enumerator.add(oof::platform::ordinary::TransferFacet::info, 1);
 
     oof::platform::ordinary::OrdinaryTransferSet transfer_set;
-    transfer_set.controls.push_back(controls);
+    transfer_set.controls.bytes = controls_bytes;
     transfer_set.positions.push_back(position);
     transfer_set.infos.push_back(info);
 
@@ -527,10 +527,11 @@ void print_transfer_roundtrip() {
 
     std::cout << "{";
     std::cout << "\"bytes\":" << transfer_bytes.size();
-    std::cout << ",\"controls\":" << transfer_set.controls.size();
+    std::cout << ",\"controlsBytes\":" << transfer_set.controls.bytes.size();
     std::cout << ",\"positions\":" << transfer_set.positions.size();
     std::cout << ",\"infos\":" << transfer_set.infos.size();
-    std::cout << ",\"controlObjectId\":" << transfer_set.controls.at(0).words[1];
+    const auto control_record = oof::platform::ordinary::ControlPayloadRecord::deserialize(transfer_set.controls.bytes);
+    std::cout << ",\"controlObjectId\":" << control_record.words[1];
     std::cout << ",\"positionObjectId\":" << transfer_set.positions.at(0).words[1];
     std::cout << ",\"infoObjectId\":" << transfer_set.infos.at(0).words[1];
     std::cout << "}\n";
@@ -583,6 +584,128 @@ void print_formbin_roundtrip(const std::string& path) {
     std::cout << ",\"logicalEqual\":" << (logical_equal ? "true" : "false");
     std::cout << ",\"fileCount\":" << reparsed.files.size();
     std::cout << "}\n";
+}
+
+bool is_hex_digit(char ch) {
+    return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+}
+
+bool is_guid_text(std::string_view value) {
+    constexpr std::array<std::size_t, 4> dashes{{8, 13, 18, 23}};
+    if (value.size() != 36) {
+        return false;
+    }
+    for (std::size_t index = 0; index < value.size(); ++index) {
+        bool dash = false;
+        for (const std::size_t dash_index : dashes) {
+            dash = dash || index == dash_index;
+        }
+        if (dash) {
+            if (value[index] != '-') {
+                return false;
+            }
+        } else if (!is_hex_digit(value[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+const oof::platform::formbin::OneCContainerFile& find_container_file(
+    const oof::platform::formbin::OneCContainer& container,
+    std::string_view name
+) {
+    for (const auto& file : container.files) {
+        if (file.name == name) {
+            return file;
+        }
+    }
+    throw std::runtime_error("Form.bin does not contain required logical file");
+}
+
+std::string decode_form_payload_text(const std::vector<std::uint8_t>& bytes) {
+    std::size_t offset = 0;
+    if (bytes.size() >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf) {
+        offset = 3;
+    }
+    return std::string(bytes.begin() + static_cast<std::ptrdiff_t>(offset), bytes.end());
+}
+
+struct PayloadScanStats {
+    std::size_t lists = 0;
+    std::size_t atoms = 0;
+    std::size_t guid_head_nodes = 0;
+};
+
+void collect_payload_scan(const oof::platform::stream::ListValue& value, PayloadScanStats& stats) {
+    if (!value.is_list) {
+        ++stats.atoms;
+        return;
+    }
+    ++stats.lists;
+    if (!value.items.empty() && !value.items[0].is_list && is_guid_text(value.items[0].atom)) {
+        ++stats.guid_head_nodes;
+    }
+    for (const auto& item : value.items) {
+        collect_payload_scan(item, stats);
+    }
+}
+
+void print_guid_head_nodes(const oof::platform::stream::ListValue& value, std::size_t& printed) {
+    if (!value.is_list) {
+        return;
+    }
+    if (!value.items.empty() && !value.items[0].is_list && is_guid_text(value.items[0].atom)) {
+        if (printed != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{";
+        std::cout << "\"guid\":";
+        print_json_string(value.items[0].atom);
+        std::cout << ",\"arity\":" << value.items.size();
+        if (value.items.size() > 1 && !value.items[1].is_list) {
+            std::cout << ",\"slot1\":";
+            print_json_string(value.items[1].atom);
+        }
+        std::cout << "}";
+        ++printed;
+    }
+    for (const auto& item : value.items) {
+        print_guid_head_nodes(item, printed);
+    }
+}
+
+void print_form_payload_info(const std::string& path) {
+    const std::vector<std::uint8_t> data = read_file_bytes(path);
+    const auto container = oof::platform::formbin::parse_container(data);
+    const auto& form_file = find_container_file(container, "form");
+    const std::string text = decode_form_payload_text(form_file.payload);
+    const auto root = oof::platform::stream::parse(text);
+    if (!root.is_list) {
+        throw std::runtime_error("form payload root is not a list");
+    }
+
+    PayloadScanStats stats;
+    collect_payload_scan(root, stats);
+
+    std::cout << "{";
+    std::cout << "\"payloadSize\":" << form_file.payload.size();
+    std::cout << ",\"rootArity\":" << root.items.size();
+    if (!root.items.empty() && !root.items[0].is_list) {
+        std::cout << ",\"rootVersion\":";
+        print_json_string(root.items[0].atom);
+    }
+    if (root.items.size() > 1 && root.items[1].is_list && !root.items[1].items.empty() && !root.items[1].items[0].is_list) {
+        std::cout << ",\"formSectionVersion\":";
+        print_json_string(root.items[1].items[0].atom);
+    }
+    std::cout << ",\"lists\":" << stats.lists;
+    std::cout << ",\"atoms\":" << stats.atoms;
+    std::cout << ",\"guidHeadNodes\":" << stats.guid_head_nodes;
+    std::cout << ",\"guidNodes\":[";
+    std::size_t printed = 0;
+    print_guid_head_nodes(root, printed);
+    std::cout << "]}\n";
 }
 
 void print_formbin_selftest() {
@@ -646,6 +769,10 @@ int main(int argc, char** argv) {
         }
         if (command == "formbin-roundtrip" && argc == 3) {
             print_formbin_roundtrip(argv[2]);
+            return 0;
+        }
+        if (command == "form-payload-info" && argc == 3) {
+            print_form_payload_info(argv[2]);
             return 0;
         }
 
