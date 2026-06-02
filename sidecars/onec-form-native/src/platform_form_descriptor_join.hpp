@@ -210,14 +210,14 @@ constexpr std::array<DescriptorSchemaBinding, 25> descriptor_schema_bindings{{
     },
     {
         "a26da99e-184a-4823-b0d6-62816d38dc4e",
-        "corpus-ui-value-correlated",
+        "platform-ui-guid-table-backed",
         "PivotChart",
         "",
-        "ordinary-form pivot chart descriptor candidate",
+        "ordinary-form pivot chart descriptor",
         "",
         "",
         "СводнаяДиаграмма1",
-        "all-controls Form.bin GUID-headed object name; platform xdto data/ui schema exposes PivotChartType, but logform layouter has no PivotChart control complexType",
+        "all-controls Form.bin GUID-headed object name; 8.5 mngui.so and mngbase.so hardcode the PivotChart GUID in repeated UI/type-domain GUID tables next to GanttChart; platform xdto data/ui schema exposes PivotChartType, but dsgnfrm/logform layouter has no PivotChart control complexType",
     },
     {
         "ad37194e-555e-4305-b718-5dca84baf145",
