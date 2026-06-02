@@ -113,7 +113,7 @@ sidecars/onec-form-native/build/oof-native formbin-xml-coverage Form.bin
 ```
 
 Current coverage is intentionally explicit: native XML projection is present,
-and name plus simple localized `Title` edits round-trip through native runtime
-and Form.bin build commands. Full XML-to-Form.bin writing still requires typed
-`cf_form_controls8` payload properties for positions, attributes, commands,
-events, and the remaining control-specific property slots.
+and name, simple localized `Title`, and basic `Position left/top/right/bottom`
+edits round-trip through native runtime and Form.bin build commands. Full
+XML-to-Form.bin writing still requires typed `Bindings`, attributes, commands,
+events, and the remaining `cf_form_controls8` control-specific property slots.

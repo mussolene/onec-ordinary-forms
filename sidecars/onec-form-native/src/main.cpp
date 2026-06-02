@@ -1028,6 +1028,10 @@ struct MaterializedFormItem {
     std::string parent_object_id;
     std::string name;
     std::string title;
+    std::string left;
+    std::string top;
+    std::string right;
+    std::string bottom;
     std::size_t arity = 0;
     const oof::platform::form_descriptor::DescriptorSchemaBinding* descriptor_binding = nullptr;
 };
@@ -1125,6 +1129,48 @@ bool find_first_localized_text(
     return false;
 }
 
+bool is_int_atom(const oof::platform::stream::ListValue& value) {
+    if (value.is_list || value.atom.empty()) {
+        return false;
+    }
+    std::size_t index = 0;
+    if (value.atom[0] == '-') {
+        index = 1;
+    }
+    if (index == value.atom.size()) {
+        return false;
+    }
+    for (; index < value.atom.size(); ++index) {
+        if (!std::isdigit(static_cast<unsigned char>(value.atom[index]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool is_geometry_record(const oof::platform::stream::ListValue& value) {
+    return value.is_list &&
+           value.items.size() >= 5 &&
+           is_int_atom(value.items[1]) &&
+           is_int_atom(value.items[2]) &&
+           is_int_atom(value.items[3]) &&
+           is_int_atom(value.items[4]);
+}
+
+const oof::platform::stream::ListValue* find_immediate_geometry_record(
+    const oof::platform::stream::ListValue& value
+) {
+    if (!value.is_list) {
+        return nullptr;
+    }
+    for (const auto& item : value.items) {
+        if (is_geometry_record(item)) {
+            return &item;
+        }
+    }
+    return nullptr;
+}
+
 bool is_materializable_object_candidate(const oof::platform::stream::ListValue& value) {
     if (!value.is_list || value.items.size() < 2 || value.items[0].is_list || value.items[1].is_list) {
         return false;
@@ -1171,6 +1217,12 @@ void collect_materialized_form_items(
                 if (find_first_localized_text(value.items[2], title)) {
                     item.title = std::move(title);
                 }
+            }
+            if (const auto* geometry = find_immediate_geometry_record(value)) {
+                item.left = geometry->items[1].atom;
+                item.top = geometry->items[2].atom;
+                item.right = geometry->items[3].atom;
+                item.bottom = geometry->items[4].atom;
             }
             next_parent = item.object_id;
             items.push_back(std::move(item));
@@ -1737,6 +1789,14 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
         if (!item.title.empty()) {
             object.properties.push_back(make_described_property("Title", item.title));
         }
+        if (!item.left.empty()) {
+            object.properties.push_back(make_described_property("Left", item.left));
+            object.properties.push_back(make_described_property("Top", item.top));
+            object.properties.push_back(make_described_property("Width", std::to_string(std::stoll(item.right) - std::stoll(item.left))));
+            object.properties.push_back(make_described_property("Height", std::to_string(std::stoll(item.bottom) - std::stoll(item.top))));
+            object.properties.push_back(make_described_property("Right", item.right));
+            object.properties.push_back(make_described_property("Bottom", item.bottom));
+        }
         add_api_surface(object, api_object_for_type(object.platform_type));
         form_object.items.add(std::move(object));
     }
@@ -1841,7 +1901,7 @@ void print_runtime_platform_object(const std::string& path) {
     std::cout << "{\"source\":\"RuntimeForm:PlatformObject\"";
     std::cout << ",\"runtimeUuid\":";
     print_json_string(envelope.runtime_uuid);
-    std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call\",\"model\":\"typeDescriptor + property/method/event descriptors + slot-backed values\",\"descriptorRegistry\":\"PlatformPropertyDescriptor + PropertySlotBinding\",\"implementedWritableSlotCodecs\":[\"name-record\"]}";
+    std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call\",\"model\":\"typeDescriptor + property/method/event descriptors + slot-backed values\",\"descriptorRegistry\":\"PlatformPropertyDescriptor + PropertySlotBinding\",\"implementedWritableSlotCodecs\":[\"name-record\",\"position-record\"]}";
     std::cout << ",\"form\":";
     print_platform_object_json(form_object.form);
     std::cout << ",\"items\":{\"count\":" << form_object.items.count();
@@ -1954,12 +2014,18 @@ struct PublicXmlControlEdit {
     bool has_name = false;
     std::string title;
     bool has_title = false;
+    std::string left;
+    std::string top;
+    std::string right;
+    std::string bottom;
+    bool has_position = false;
 };
 
 struct PublicXmlApplyResult {
     std::size_t controls = 0;
     std::size_t name_edits = 0;
     std::size_t title_edits = 0;
+    std::size_t position_edits = 0;
 };
 
 PublicXmlApplyResult apply_public_xml_edits(
@@ -2022,6 +2088,21 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                     edit.has_title = true;
                 }
             }
+            const std::size_t position_start = body.find("<Position");
+            if (position_start != std::string::npos) {
+                const std::size_t position_end = body.find(">", position_start);
+                if (position_end != std::string::npos) {
+                    const std::string position_tag = body.substr(position_start, position_end - position_start + 1);
+                    edit.left = xml_attr_value(position_tag, "left");
+                    edit.top = xml_attr_value(position_tag, "top");
+                    edit.right = xml_attr_value(position_tag, "right");
+                    edit.bottom = xml_attr_value(position_tag, "bottom");
+                    edit.has_position = !edit.left.empty() &&
+                                        !edit.top.empty() &&
+                                        !edit.right.empty() &&
+                                        !edit.bottom.empty();
+                }
+            }
         }
         edits.push_back(std::move(edit));
     }
@@ -2059,6 +2140,37 @@ void append_named_text_property_xml(
     out += ">\n";
 }
 
+bool has_position_properties(const oof::platform::object_model::PlatformObject& object) {
+    return object.property("Left") != nullptr &&
+           object.property("Top") != nullptr &&
+           object.property("Right") != nullptr &&
+           object.property("Bottom") != nullptr;
+}
+
+void append_position_xml(
+    std::string& out,
+    const oof::platform::object_model::PlatformObject& object,
+    int indent
+) {
+    const auto* left = object.property("Left");
+    const auto* top = object.property("Top");
+    const auto* right = object.property("Right");
+    const auto* bottom = object.property("Bottom");
+    if (left == nullptr || top == nullptr || right == nullptr || bottom == nullptr) {
+        return;
+    }
+    append_indent(out, indent);
+    out += "<Position left=\"";
+    out += xml_escape(left->value);
+    out += "\" top=\"";
+    out += xml_escape(top->value);
+    out += "\" right=\"";
+    out += xml_escape(right->value);
+    out += "\" bottom=\"";
+    out += xml_escape(bottom->value);
+    out += "\"/>\n";
+}
+
 void append_control_xml(
     std::string& out,
     const oof::platform::object_model::PlatformFormObject& form_object,
@@ -2080,12 +2192,15 @@ void append_control_xml(
         out += xml_escape(object.object_id);
         out += "\"";
     }
-    if (object.children.empty() && find_object_property(object, "Title") == nullptr) {
+    if (object.children.empty() &&
+        find_object_property(object, "Title") == nullptr &&
+        !has_position_properties(object)) {
         out += "/>\n";
         return;
     }
     out += ">\n";
     append_named_text_property_xml(out, object, "Title", indent + 2);
+    append_position_xml(out, object, indent + 2);
     if (!object.children.empty()) {
         append_indent(out, indent + 2);
         out += "<ChildItems>\n";
@@ -2189,6 +2304,7 @@ void write_runtime_form_from_xml(
     std::cout << ",\"controls\":" << result.controls;
     std::cout << ",\"nameEdits\":" << result.name_edits;
     std::cout << ",\"titleEdits\":" << result.title_edits;
+    std::cout << ",\"positionEdits\":" << result.position_edits;
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << "}\n";
 }
@@ -2224,6 +2340,7 @@ void write_formbin_from_xml(
     std::cout << ",\"controls\":" << result.controls;
     std::cout << ",\"nameEdits\":" << result.name_edits;
     std::cout << ",\"titleEdits\":" << result.title_edits;
+    std::cout << ",\"positionEdits\":" << result.position_edits;
     std::cout << ",\"preservedContainerFiles\":" << container.files.size();
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << "}\n";
@@ -2235,11 +2352,12 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     std::cout << "{\"source\":\"Form.bin:form\"";
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << ",\"nativeXmlProjection\":true";
-    std::cout << ",\"nativeXmlWriter\":false";
+    std::cout << ",\"nativeXmlWriter\":true";
+    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Position\"]";
     std::cout << ",\"materializedItems\":" << summary.items.size();
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
-    std::cout << ",\"missingCodecs\":[\"Position\",\"Attributes\",\"Commands\",\"Events\",\"cf_form_controls8 typed payload fields\",\"XML-to-Form.bin writer\"]";
+    std::cout << ",\"missingCodecs\":[\"Bindings\",\"Attributes\",\"Commands\",\"Events\",\"cf_form_controls8 typed payload fields\"]";
     std::cout << "}\n";
 }
 
@@ -2265,6 +2383,7 @@ void print_formbin_xml_build_selftest() {
     std::string xml = form_object_to_public_xml(materialize_platform_form_object(envelope));
     replace_all(xml, "name=\"Button1\"", "name=\"ButtonXmlEdited\"");
     replace_all(xml, "<Title>Run</Title>", "<Title>RunXmlEdited</Title>");
+    replace_all(xml, "left=\"1\"", "left=\"9\"");
 
     const auto edits = parse_public_xml_control_edits(xml);
     const auto result = apply_public_xml_edits(envelope, edits);
@@ -2278,10 +2397,13 @@ void print_formbin_xml_build_selftest() {
     std::cout << "{\"operation\":\"formbin-xml-build-selftest\"";
     std::cout << ",\"nameEdits\":" << result.name_edits;
     std::cout << ",\"titleEdits\":" << result.title_edits;
+    std::cout << ",\"positionEdits\":" << result.position_edits;
     std::cout << ",\"nameRoundtrip\":"
               << (redump_xml.find("ButtonXmlEdited") != std::string::npos ? "true" : "false");
     std::cout << ",\"titleRoundtrip\":"
               << (redump_xml.find("RunXmlEdited") != std::string::npos ? "true" : "false");
+    std::cout << ",\"positionRoundtrip\":"
+              << (redump_xml.find("<Position left=\"9\" top=\"2\" right=\"101\" bottom=\"22\"/>") != std::string::npos ? "true" : "false");
     std::cout << ",\"modulePreserved\":"
               << (module.payload == std::vector<std::uint8_t>({'m', 'o', 'd'}) ? "true" : "false");
     std::cout << ",\"noRawXml\":"
@@ -2453,6 +2575,128 @@ bool set_materialized_object_title(
     return false;
 }
 
+bool set_geometry_atom(
+    oof::platform::stream::ListValue& geometry,
+    std::size_t index,
+    std::string_view value
+) {
+    if (!geometry.is_list || geometry.items.size() <= index || !is_int_atom(geometry.items[index])) {
+        return false;
+    }
+    geometry.items[index].atom = std::string(value);
+    geometry.items[index].atom_kind = oof::platform::stream::ListValue::AtomKind::raw;
+    return true;
+}
+
+oof::platform::stream::ListValue* find_immediate_geometry_record_mut(
+    oof::platform::stream::ListValue& value
+) {
+    if (!value.is_list) {
+        return nullptr;
+    }
+    for (auto& item : value.items) {
+        if (is_geometry_record(item)) {
+            return &item;
+        }
+    }
+    return nullptr;
+}
+
+bool set_materialized_object_position(
+    oof::platform::stream::ListValue& value,
+    std::string_view object_id,
+    std::string_view left,
+    std::string_view top,
+    std::string_view right,
+    std::string_view bottom
+) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (is_materializable_object_candidate(value) &&
+        !value.items[1].is_list &&
+        value.items[1].atom == object_id) {
+        auto* geometry = find_immediate_geometry_record_mut(value);
+        if (geometry == nullptr) {
+            return false;
+        }
+        return set_geometry_atom(*geometry, 1, left) &&
+               set_geometry_atom(*geometry, 2, top) &&
+               set_geometry_atom(*geometry, 3, right) &&
+               set_geometry_atom(*geometry, 4, bottom);
+    }
+    for (auto& item : value.items) {
+        if (set_materialized_object_position(item, object_id, left, top, right, bottom)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::int64_t parse_required_int(std::string_view value, std::string_view field_name) {
+    try {
+        std::size_t consumed = 0;
+        const auto parsed = std::stoll(std::string(value), &consumed, 10);
+        if (consumed != value.size()) {
+            throw std::invalid_argument("trailing characters");
+        }
+        return parsed;
+    } catch (const std::exception&) {
+        throw std::runtime_error("expected integer value for " + std::string(field_name) + ": " + std::string(value));
+    }
+}
+
+bool set_materialized_object_position_property(
+    oof::platform::stream::ListValue& value,
+    std::string_view object_id,
+    std::string_view property_name,
+    std::string_view new_value
+) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (is_materializable_object_candidate(value) &&
+        !value.items[1].is_list &&
+        value.items[1].atom == object_id) {
+        auto* geometry = find_immediate_geometry_record_mut(value);
+        if (geometry == nullptr) {
+            return false;
+        }
+        const auto left = parse_required_int(geometry->items[1].atom, "Left");
+        const auto top = parse_required_int(geometry->items[2].atom, "Top");
+        const auto right = parse_required_int(geometry->items[3].atom, "Right");
+        const auto bottom = parse_required_int(geometry->items[4].atom, "Bottom");
+        const auto numeric_value = parse_required_int(new_value, property_name);
+        if (property_name == "Left" || property_name == "Лево") {
+            return set_geometry_atom(*geometry, 1, std::to_string(numeric_value));
+        }
+        if (property_name == "Top" || property_name == "Верх") {
+            return set_geometry_atom(*geometry, 2, std::to_string(numeric_value));
+        }
+        if (property_name == "Width" || property_name == "Ширина") {
+            return set_geometry_atom(*geometry, 3, std::to_string(left + numeric_value));
+        }
+        if (property_name == "Height" || property_name == "Высота") {
+            return set_geometry_atom(*geometry, 4, std::to_string(top + numeric_value));
+        }
+        if (property_name == "Right") {
+            return set_geometry_atom(*geometry, 3, std::to_string(numeric_value));
+        }
+        if (property_name == "Bottom") {
+            return set_geometry_atom(*geometry, 4, std::to_string(numeric_value));
+        }
+        (void)right;
+        (void)bottom;
+        return false;
+    }
+    for (auto& item : value.items) {
+        if (set_materialized_object_position_property(item, object_id, property_name, new_value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 PublicXmlApplyResult apply_public_xml_edits(
     RuntimeFormEnvelope& envelope,
     const std::vector<PublicXmlControlEdit>& edits
@@ -2471,6 +2715,18 @@ PublicXmlApplyResult apply_public_xml_edits(
                 throw std::runtime_error("XML control id has no writable platform title slot: " + edit.object_id);
             }
             ++result.title_edits;
+        }
+        if (edit.has_position) {
+            if (!set_materialized_object_position(
+                    envelope.payload,
+                    edit.object_id,
+                    edit.left,
+                    edit.top,
+                    edit.right,
+                    edit.bottom)) {
+                throw std::runtime_error("XML control id has no writable platform position record: " + edit.object_id);
+            }
+            ++result.position_edits;
         }
     }
     return result;
@@ -2494,6 +2750,9 @@ bool set_property_slot_value(
 ) {
     if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::name_record) {
         return rename_materialized_object(payload, object_id, new_value);
+    }
+    if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::position_record) {
+        return set_materialized_object_position_property(payload, object_id, descriptor.name, new_value);
     }
     throw std::runtime_error("slot codec is registered but not implemented for setPropVal yet: " +
                              std::string(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec)));

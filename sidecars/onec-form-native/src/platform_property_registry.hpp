@@ -97,7 +97,9 @@ inline const PlatformPropertyDescriptor& generic_value_descriptor(std::string_vi
 }
 
 inline bool can_set_with_current_codec(const PlatformPropertyDescriptor& descriptor) {
-    return descriptor.writable && descriptor.slot_codec == SlotCodec::name_record;
+    return descriptor.writable &&
+           (descriptor.slot_codec == SlotCodec::name_record ||
+            descriptor.slot_codec == SlotCodec::position_record);
 }
 
 }  // namespace oof::platform::property_registry
