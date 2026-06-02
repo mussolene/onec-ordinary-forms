@@ -114,6 +114,21 @@ struct PlatformFormObject {
     }
 };
 
+struct PlatformObjectPropertyEdit {
+    std::string name;
+    std::string value;
+};
+
+struct PlatformObjectEdit {
+    std::string object_id;
+    std::string platform_type;
+    std::vector<PlatformObjectPropertyEdit> properties;
+};
+
+struct PlatformFormObjectEdit {
+    std::vector<PlatformObjectEdit> objects;
+};
+
 inline PlatformObjectProperty make_property(
     std::string name,
     std::string localized_name,

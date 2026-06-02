@@ -2329,6 +2329,17 @@ PublicXmlApplyResult apply_public_xml_edits(
     const std::vector<PublicXmlControlEdit>& edits
 );
 
+bool set_property_slot_value(
+    oof::platform::stream::ListValue& payload,
+    std::string_view object_id,
+    const oof::platform::property_registry::PlatformPropertyDescriptor& descriptor,
+    std::string_view new_value
+);
+
+const oof::platform::property_registry::PlatformPropertyDescriptor& require_property_descriptor(
+    std::string_view property_name
+);
+
 std::string xml_attr_value(std::string_view attrs, std::string_view name) {
     const std::regex attr_pattern(std::string(name) + "\\s*=\\s*\"([^\"]*)\"");
     std::cmatch match;
@@ -3268,37 +3279,6 @@ oof::platform::stream::ListValue* find_immediate_geometry_record_mut(
     return nullptr;
 }
 
-bool set_materialized_object_position(
-    oof::platform::stream::ListValue& value,
-    std::string_view object_id,
-    std::string_view left,
-    std::string_view top,
-    std::string_view right,
-    std::string_view bottom
-) {
-    if (!value.is_list) {
-        return false;
-    }
-    if (is_materializable_object_candidate(value) &&
-        !value.items[1].is_list &&
-        value.items[1].atom == object_id) {
-        auto* geometry = find_immediate_geometry_record_mut(value);
-        if (geometry == nullptr) {
-            return false;
-        }
-        return set_geometry_atom(*geometry, 1, left) &&
-               set_geometry_atom(*geometry, 2, top) &&
-               set_geometry_atom(*geometry, 3, right) &&
-               set_geometry_atom(*geometry, 4, bottom);
-    }
-    for (auto& item : value.items) {
-        if (set_materialized_object_position(item, object_id, left, top, right, bottom)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 std::int64_t parse_required_int(std::string_view value, std::string_view field_name) {
     try {
         std::size_t consumed = 0;
@@ -3435,44 +3415,54 @@ PublicXmlApplyResult apply_public_xml_edits(
     RuntimeFormEnvelope& envelope,
     const std::vector<PublicXmlControlEdit>& edits
 ) {
-    PublicXmlApplyResult result;
+    oof::platform::object_model::PlatformFormObjectEdit object_edit;
     for (const auto& edit : edits) {
-        ++result.controls;
+        oof::platform::object_model::PlatformObjectEdit object;
+        object.object_id = edit.object_id;
+        object.platform_type = edit.tag;
         if (edit.has_name) {
-            if (!rename_materialized_object(envelope.payload, edit.object_id, edit.name)) {
-                throw std::runtime_error("XML control id has no writable platform name record: " + edit.object_id);
-            }
-            ++result.name_edits;
+            object.properties.push_back({"Name", edit.name});
         }
         if (edit.has_title) {
-            if (!set_materialized_object_title(envelope.payload, edit.object_id, edit.title)) {
-                throw std::runtime_error("XML control id has no writable platform title slot: " + edit.object_id);
-            }
-            ++result.title_edits;
+            object.properties.push_back({"Title", edit.title});
         }
         if (edit.has_position) {
-            if (!set_materialized_object_position(
-                    envelope.payload,
-                    edit.object_id,
-                    edit.left,
-                    edit.top,
-                    edit.right,
-                    edit.bottom)) {
-                throw std::runtime_error("XML control id has no writable platform position record: " + edit.object_id);
-            }
-            ++result.position_edits;
+            object.properties.push_back({"Left", edit.left});
+            object.properties.push_back({"Top", edit.top});
+            object.properties.push_back({"Right", edit.right});
+            object.properties.push_back({"Bottom", edit.bottom});
         }
-        if (!edit.bindings.empty()) {
-            if (!set_materialized_object_bindings(envelope.payload, edit.object_id, edit.bindings)) {
-                throw std::runtime_error("XML control id has no writable scalar platform binding records: " + edit.object_id);
-            }
-            result.binding_edits += edit.bindings.size();
+        for (const auto& binding : edit.bindings) {
+            object.properties.push_back({"Binding." + binding.name, oof::platform::stream::dump_compact(binding.value)});
         }
-        if (!edit.dimension_bindings.empty()) {
-            if (!set_materialized_object_dimension_bindings(envelope.payload, edit.object_id, edit.dimension_bindings)) {
-                throw std::runtime_error("XML control id has no writable scalar platform dimension binding records: " + edit.object_id);
+        for (const auto& binding : edit.dimension_bindings) {
+            object.properties.push_back({"DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value)});
+        }
+        if (!object.properties.empty()) {
+            object_edit.objects.push_back(std::move(object));
+        }
+    }
+
+    PublicXmlApplyResult result;
+    for (const auto& object : object_edit.objects) {
+        ++result.controls;
+        for (const auto& property : object.properties) {
+            const auto& descriptor = require_property_descriptor(property.name);
+            if (!set_property_slot_value(envelope.payload, object.object_id, descriptor, property.value)) {
+                throw std::runtime_error("PlatformObject property has no writable platform slot: object=" +
+                                         object.object_id + " property=" + property.name);
             }
-            result.dimension_binding_edits += edit.dimension_bindings.size();
+            if (property.name == "Name") {
+                ++result.name_edits;
+            } else if (property.name == "Title") {
+                ++result.title_edits;
+            } else if (property.name == "Left") {
+                ++result.position_edits;
+            } else if (property.name.rfind("Binding.", 0) == 0) {
+                ++result.binding_edits;
+            } else if (property.name.rfind("DimensionBinding.", 0) == 0) {
+                ++result.dimension_binding_edits;
+            }
         }
     }
     return result;
@@ -3506,6 +3496,12 @@ bool set_property_slot_value(
     std::string_view new_value
 ) {
     if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::name_record) {
+        if (descriptor.name == "Title" || descriptor.name == "Caption") {
+            if (set_materialized_object_title(payload, object_id, new_value)) {
+                return true;
+            }
+            return rename_materialized_object(payload, object_id, new_value);
+        }
         return rename_materialized_object(payload, object_id, new_value);
     }
     if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::position_record) {
