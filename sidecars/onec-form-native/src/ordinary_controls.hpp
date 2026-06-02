@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <string_view>
@@ -232,6 +233,26 @@ public:
         return out;
     }
 
+    static FormFormatEnumerator deserialize_headers(const std::vector<std::uint8_t>& bytes, std::size_t& offset) {
+        if (offset + 4 > bytes.size()) {
+            throw std::runtime_error("format enumerator is truncated");
+        }
+        const std::uint32_t count = read_u32_le(bytes, offset);
+        offset += 4;
+        FormFormatEnumerator enumerator;
+        for (std::uint32_t index = 0; index < count; ++index) {
+            if (offset + FormatEntryRecord::serialized_size > bytes.size()) {
+                throw std::runtime_error("format entry record is truncated");
+            }
+            const std::vector<std::uint8_t> entry_bytes(
+                bytes.begin() + static_cast<std::ptrdiff_t>(offset),
+                bytes.begin() + static_cast<std::ptrdiff_t>(offset + FormatEntryRecord::serialized_size));
+            enumerator.entries_.push_back(FormatEntryRecord::deserialize(entry_bytes));
+            offset += FormatEntryRecord::serialized_size;
+        }
+        return enumerator;
+    }
+
 private:
     std::vector<FormatEntryRecord> entries_;
 };
@@ -257,12 +278,56 @@ struct OrdinaryTransferSet {
         return out;
     }
 
+    static OrdinaryTransferSet deserialize_records(const std::vector<std::uint8_t>& bytes) {
+        std::size_t offset = 0;
+        const FormFormatEnumerator enumerator = FormFormatEnumerator::deserialize_headers(bytes, offset);
+        OrdinaryTransferSet set;
+        for (const auto& entry : enumerator.entries()) {
+            if (entry.format_id == cf_form_controls8) {
+                read_records<ControlPayloadRecord>(bytes, offset, entry, set.controls);
+            } else if (entry.format_id == cf_form_controls_position8) {
+                read_records<ControlPositionRecord>(bytes, offset, entry, set.positions);
+            } else if (entry.format_id == cf_form_controls_info8) {
+                read_records<ControlInfoRecord>(bytes, offset, entry, set.infos);
+            } else {
+                throw std::runtime_error("unknown ordinary transfer format id");
+            }
+        }
+        if (offset != bytes.size()) {
+            throw std::runtime_error("ordinary transfer set has trailing bytes");
+        }
+        return set;
+    }
+
 private:
     template <typename Record>
     static void append_records(std::vector<std::uint8_t>& out, const std::vector<Record>& records) {
         for (const auto& record : records) {
             std::vector<std::uint8_t> bytes = record.serialize();
             out.insert(out.end(), bytes.begin(), bytes.end());
+        }
+    }
+
+    template <typename Record>
+    static void read_records(
+        const std::vector<std::uint8_t>& bytes,
+        std::size_t& offset,
+        const FormatEntryRecord& entry,
+        std::vector<Record>& records
+    ) {
+        if (entry.record_size != Record::serialized_size) {
+            throw std::runtime_error("ordinary transfer record size mismatch");
+        }
+        records.reserve(records.size() + entry.record_count);
+        for (std::uint32_t index = 0; index < entry.record_count; ++index) {
+            if (offset + Record::serialized_size > bytes.size()) {
+                throw std::runtime_error("ordinary transfer record payload is truncated");
+            }
+            const std::vector<std::uint8_t> record_bytes(
+                bytes.begin() + static_cast<std::ptrdiff_t>(offset),
+                bytes.begin() + static_cast<std::ptrdiff_t>(offset + Record::serialized_size));
+            records.push_back(Record::deserialize(record_bytes));
+            offset += Record::serialized_size;
         }
     }
 };

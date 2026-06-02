@@ -35,6 +35,10 @@ test: $(BIN)
 	$(BIN) graph-codec | grep -q '"objectId":5'
 	$(BIN) graph-codec | grep -F -q '"title":"{1,{1,1,{\"ru\",\"Button title\"}},0}"'
 	$(BIN) graph-codec | grep -q '"transferSetSize":212'
+	$(BIN) transfer-roundtrip | grep -q '"bytes":212'
+	$(BIN) transfer-roundtrip | grep -q '"controls":1'
+	$(BIN) transfer-roundtrip | grep -q '"controlObjectId":7'
+	$(BIN) transfer-roundtrip | grep -q '"infoObjectId":7'
 
 clean:
 	rm -rf $(BUILD_DIR)

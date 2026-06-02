@@ -68,3 +68,9 @@ Run the internal ordinary form graph to transfer-set codec check:
 ```bash
 sidecars/onec-form-native/build/oof-native graph-codec
 ```
+
+Run the transfer-set write/read round-trip:
+
+```bash
+sidecars/onec-form-native/build/oof-native transfer-roundtrip
+```

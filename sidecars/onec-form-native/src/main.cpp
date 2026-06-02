@@ -251,7 +251,7 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec> < stream.txt\n";
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip> < stream.txt\n";
 }
 
 void print_json_string(std::string_view value) {
@@ -506,6 +506,22 @@ void print_graph_codec() {
     std::cout << "}\n";
 }
 
+void print_transfer_roundtrip() {
+    const auto graph = oof::platform::ordinary::make_single_control_graph(7, "Input1", "Input title");
+    const auto transfer_bytes = graph.serialize_transfer_records();
+    const auto transfer_set = oof::platform::ordinary::OrdinaryTransferSet::deserialize_records(transfer_bytes);
+
+    std::cout << "{";
+    std::cout << "\"bytes\":" << transfer_bytes.size();
+    std::cout << ",\"controls\":" << transfer_set.controls.size();
+    std::cout << ",\"positions\":" << transfer_set.positions.size();
+    std::cout << ",\"infos\":" << transfer_set.infos.size();
+    std::cout << ",\"controlObjectId\":" << transfer_set.controls.at(0).words[1];
+    std::cout << ",\"positionObjectId\":" << transfer_set.positions.at(0).words[1];
+    std::cout << ",\"infoObjectId\":" << transfer_set.infos.at(0).words[1];
+    std::cout << "}\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -530,6 +546,10 @@ int main(int argc, char** argv) {
         }
         if (command == "graph-codec") {
             print_graph_codec();
+            return 0;
+        }
+        if (command == "transfer-roundtrip") {
+            print_transfer_roundtrip();
             return 0;
         }
 
