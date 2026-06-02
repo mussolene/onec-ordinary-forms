@@ -8,34 +8,9 @@
 #include <utility>
 #include <vector>
 
+#include "platform_list_stream.hpp"
+
 namespace oof::platform::value {
-
-inline std::string quote_list_string(std::string_view value) {
-    std::string out = "\"";
-    for (const char ch : value) {
-        if (ch == '"') {
-            out += "\"\"";
-        } else {
-            out += ch;
-        }
-    }
-    out += "\"";
-    return out;
-}
-
-inline std::string list(std::initializer_list<std::string> items) {
-    std::string out = "{";
-    bool first = true;
-    for (const auto& item : items) {
-        if (!first) {
-            out += ",";
-        }
-        first = false;
-        out += item;
-    }
-    out += "}";
-    return out;
-}
 
 struct PlatformSymbol {
     std::string_view name;
@@ -105,22 +80,44 @@ public:
         items_.push_back({std::move(language), std::move(text)});
     }
 
-    std::string serialize_list_stream() const {
-        std::vector<std::string> fields;
-        fields.push_back(std::to_string(platform_version));
-        fields.push_back(std::to_string(items_.size()));
+    void serialize(stream::ListOutStream& out) const {
+        out.begin_list();
+        out.write_uint32(platform_version);
+        out.write_uint32(static_cast<std::uint32_t>(items_.size()));
         for (const auto& item : items_) {
-            fields.push_back(list({quote_list_string(item.language), quote_list_string(item.text)}));
+            out.begin_list();
+            out.write_string(item.language);
+            out.write_string(item.text);
+            out.end_list();
         }
-        std::string out = "{";
-        for (std::size_t index = 0; index < fields.size(); ++index) {
-            if (index != 0) {
-                out += ",";
-            }
-            out += fields[index];
+        out.end_list();
+    }
+
+    static LocalWString deserialize(stream::ListInStream& in) {
+        in.begin_list();
+        const std::uint32_t version = in.read_uint32();
+        if (version != platform_version) {
+            throw std::runtime_error("LocalWString unsupported platform version " + std::to_string(version));
         }
-        out += "}";
-        return out;
+        const std::uint32_t count = in.read_uint32();
+        std::vector<LocalWStringItem> items;
+        items.reserve(count);
+        for (std::uint32_t index = 0; index < count; ++index) {
+            in.begin_list();
+            LocalWStringItem item;
+            item.language = in.read_string();
+            item.text = in.read_string();
+            in.end_list();
+            items.push_back(std::move(item));
+        }
+        in.end_list();
+        return LocalWString(std::move(items));
+    }
+
+    std::string serialize_list_stream() const {
+        stream::ListOutStream out;
+        serialize(out);
+        return out.text();
     }
 
 private:
@@ -143,12 +140,30 @@ public:
         return formatted_;
     }
 
+    void serialize(stream::ListOutStream& out) const {
+        out.begin_list();
+        out.write_uint32(platform_version);
+        value_.serialize(out);
+        out.write_bool(formatted_);
+        out.end_list();
+    }
+
+    static FormattedString deserialize(stream::ListInStream& in) {
+        in.begin_list();
+        const std::uint32_t version = in.read_uint32();
+        if (version != platform_version) {
+            throw std::runtime_error("FormattedString unsupported platform version " + std::to_string(version));
+        }
+        LocalWString value = LocalWString::deserialize(in);
+        const bool formatted = in.read_bool();
+        in.end_list();
+        return FormattedString(std::move(value), formatted);
+    }
+
     std::string serialize_list_stream() const {
-        return list({
-            std::to_string(platform_version),
-            value_.serialize_list_stream(),
-            formatted_ ? "1" : "0",
-        });
+        stream::ListOutStream out;
+        serialize(out);
+        return out.text();
     }
 
 private:

@@ -3,7 +3,7 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_value.hpp src/ordinary_controls.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/ordinary_controls.hpp
 
 .PHONY: all clean test
 
@@ -24,6 +24,13 @@ test: $(BIN)
 	$(BIN) mechanism | grep -F -q '"sampleFormattedString":"{1,{1,1,{\"ru\",\"Title\"}},0}"'
 	$(BIN) mechanism | grep -q '"ordinaryTransferRegistry"'
 	$(BIN) mechanism | grep -q '"recordSize":40'
+	$(BIN) value-roundtrip | grep -F -q '"serialized":"{1,{1,2,{\"ru\",\"Title\"},{\"en\",\"Caption\"}},1}"'
+	$(BIN) value-roundtrip | grep -q '"itemCount":2'
+	$(BIN) controls-codec | grep -q '"controlsSize":40'
+	$(BIN) controls-codec | grep -q '"positionSize":32'
+	$(BIN) controls-codec | grep -q '"infoSize":16'
+	$(BIN) controls-codec | grep -q '"transferSetSize":212'
+	$(BIN) controls-codec | grep -q '"enumeratorHex":"030000000025000028000000010000000000000000000000000000000000000000000000000000000000000000550000200000000100000000000000000000000000000000000000000000000000000000000000009d0000100000000100000000000000000000000000000000000000000000000000000000000000"'
 
 clean:
 	rm -rf $(BUILD_DIR)

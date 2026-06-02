@@ -49,3 +49,16 @@ The mechanism output includes the platform-derived value surface, the
 registry for `cf_form_controls8`, `cf_form_controls_position8`, and
 `cf_form_controls_info8`. This sidecar records platform mechanism evidence and
 internal codec structures only; it is not a public XML format.
+
+Run the native value stream round-trip for `FormattedString` and
+`LocalWString`:
+
+```bash
+sidecars/onec-form-native/build/oof-native value-roundtrip
+```
+
+Run the native ordinary-control transfer record codec check:
+
+```bash
+sidecars/onec-form-native/build/oof-native controls-codec
+```

@@ -2,7 +2,9 @@
 
 #include <array>
 #include <cstdint>
+#include <stdexcept>
 #include <string_view>
+#include <vector>
 
 #include "platform_mechanism.hpp"
 
@@ -79,5 +81,190 @@ constexpr std::uint32_t record_size_for(TransferFacet facet) {
     }
     return 0;
 }
+
+inline void write_u32_le(std::vector<std::uint8_t>& out, std::uint32_t value) {
+    out.push_back(static_cast<std::uint8_t>(value & 0xff));
+    out.push_back(static_cast<std::uint8_t>((value >> 8) & 0xff));
+    out.push_back(static_cast<std::uint8_t>((value >> 16) & 0xff));
+    out.push_back(static_cast<std::uint8_t>((value >> 24) & 0xff));
+}
+
+inline std::uint32_t read_u32_le(const std::vector<std::uint8_t>& bytes, std::size_t offset) {
+    if (offset + 4 > bytes.size()) {
+        throw std::runtime_error("ordinary transfer record is truncated");
+    }
+    return static_cast<std::uint32_t>(bytes[offset]) |
+           (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+           (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
+           (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+}
+
+struct ControlPayloadRecord {
+    static constexpr std::uint32_t serialized_size = format_entry_record_size;
+
+    std::array<std::uint32_t, serialized_size / 4> words{};
+
+    std::vector<std::uint8_t> serialize() const {
+        std::vector<std::uint8_t> out;
+        out.reserve(serialized_size);
+        for (const std::uint32_t word : words) {
+            write_u32_le(out, word);
+        }
+        return out;
+    }
+
+    static ControlPayloadRecord deserialize(const std::vector<std::uint8_t>& bytes) {
+        if (bytes.size() != serialized_size) {
+            throw std::runtime_error("cf_form_controls8 record must be 40 bytes");
+        }
+        ControlPayloadRecord record;
+        for (std::size_t index = 0; index < record.words.size(); ++index) {
+            record.words[index] = read_u32_le(bytes, index * 4);
+        }
+        return record;
+    }
+};
+
+struct ControlPositionRecord {
+    static constexpr std::uint32_t serialized_size = position_transfer_record_size;
+
+    std::array<std::uint32_t, serialized_size / 4> words{};
+
+    std::vector<std::uint8_t> serialize() const {
+        std::vector<std::uint8_t> out;
+        out.reserve(serialized_size);
+        for (const std::uint32_t word : words) {
+            write_u32_le(out, word);
+        }
+        return out;
+    }
+
+    static ControlPositionRecord deserialize(const std::vector<std::uint8_t>& bytes) {
+        if (bytes.size() != serialized_size) {
+            throw std::runtime_error("cf_form_controls_position8 record must be 32 bytes");
+        }
+        ControlPositionRecord record;
+        for (std::size_t index = 0; index < record.words.size(); ++index) {
+            record.words[index] = read_u32_le(bytes, index * 4);
+        }
+        return record;
+    }
+};
+
+struct ControlInfoRecord {
+    static constexpr std::uint32_t serialized_size = info_transfer_record_size;
+
+    std::array<std::uint32_t, serialized_size / 4> words{};
+
+    std::vector<std::uint8_t> serialize() const {
+        std::vector<std::uint8_t> out;
+        out.reserve(serialized_size);
+        for (const std::uint32_t word : words) {
+            write_u32_le(out, word);
+        }
+        return out;
+    }
+
+    static ControlInfoRecord deserialize(const std::vector<std::uint8_t>& bytes) {
+        if (bytes.size() != serialized_size) {
+            throw std::runtime_error("cf_form_controls_info8 record must be 16 bytes");
+        }
+        ControlInfoRecord record;
+        for (std::size_t index = 0; index < record.words.size(); ++index) {
+            record.words[index] = read_u32_le(bytes, index * 4);
+        }
+        return record;
+    }
+};
+
+struct FormatEntryRecord {
+    static constexpr std::uint32_t serialized_size = format_entry_record_size;
+
+    std::uint32_t format_id = 0;
+    std::uint32_t record_size = 0;
+    std::uint32_t record_count = 0;
+    std::array<std::uint32_t, (serialized_size / 4) - 3> reserved{};
+
+    std::vector<std::uint8_t> serialize() const {
+        std::vector<std::uint8_t> out;
+        out.reserve(serialized_size);
+        write_u32_le(out, format_id);
+        write_u32_le(out, record_size);
+        write_u32_le(out, record_count);
+        for (const std::uint32_t word : reserved) {
+            write_u32_le(out, word);
+        }
+        return out;
+    }
+
+    static FormatEntryRecord deserialize(const std::vector<std::uint8_t>& bytes) {
+        if (bytes.size() != serialized_size) {
+            throw std::runtime_error("format entry record must be 40 bytes");
+        }
+        FormatEntryRecord record;
+        record.format_id = read_u32_le(bytes, 0);
+        record.record_size = read_u32_le(bytes, 4);
+        record.record_count = read_u32_le(bytes, 8);
+        for (std::size_t index = 0; index < record.reserved.size(); ++index) {
+            record.reserved[index] = read_u32_le(bytes, 12 + index * 4);
+        }
+        return record;
+    }
+};
+
+class FormFormatEnumerator {
+public:
+    void add(TransferFacet facet, std::uint32_t count) {
+        entries_.push_back({format_id_for(facet), record_size_for(facet), count});
+    }
+
+    const std::vector<FormatEntryRecord>& entries() const {
+        return entries_;
+    }
+
+    std::vector<std::uint8_t> serialize_headers() const {
+        std::vector<std::uint8_t> out;
+        write_u32_le(out, static_cast<std::uint32_t>(entries_.size()));
+        for (const auto& entry : entries_) {
+            std::vector<std::uint8_t> header = entry.serialize();
+            out.insert(out.end(), header.begin(), header.end());
+        }
+        return out;
+    }
+
+private:
+    std::vector<FormatEntryRecord> entries_;
+};
+
+struct OrdinaryTransferSet {
+    std::vector<ControlPayloadRecord> controls;
+    std::vector<ControlPositionRecord> positions;
+    std::vector<ControlInfoRecord> infos;
+
+    FormFormatEnumerator enumerator() const {
+        FormFormatEnumerator result;
+        result.add(TransferFacet::controls, static_cast<std::uint32_t>(controls.size()));
+        result.add(TransferFacet::position, static_cast<std::uint32_t>(positions.size()));
+        result.add(TransferFacet::info, static_cast<std::uint32_t>(infos.size()));
+        return result;
+    }
+
+    std::vector<std::uint8_t> serialize_records() const {
+        std::vector<std::uint8_t> out = enumerator().serialize_headers();
+        append_records(out, controls);
+        append_records(out, positions);
+        append_records(out, infos);
+        return out;
+    }
+
+private:
+    template <typename Record>
+    static void append_records(std::vector<std::uint8_t>& out, const std::vector<Record>& records) {
+        for (const auto& record : records) {
+            std::vector<std::uint8_t> bytes = record.serialize();
+            out.insert(out.end(), bytes.begin(), bytes.end());
+        }
+    }
+};
 
 }  // namespace oof::platform::ordinary

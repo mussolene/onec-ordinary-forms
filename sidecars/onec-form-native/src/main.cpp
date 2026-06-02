@@ -1,5 +1,6 @@
 #include <cctype>
 #include <exception>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -249,7 +250,7 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism> < stream.txt\n";
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec> < stream.txt\n";
 }
 
 void print_json_string(std::string_view value) {
@@ -405,6 +406,84 @@ void print_mechanism() {
     std::cout << "]}\n";
 }
 
+std::string bytes_hex(const std::vector<std::uint8_t>& bytes) {
+    std::ostringstream out;
+    out << std::hex << std::setfill('0');
+    for (const std::uint8_t byte : bytes) {
+        out << std::setw(2) << static_cast<unsigned int>(byte);
+    }
+    return out.str();
+}
+
+void print_value_roundtrip() {
+    oof::platform::value::LocalWString title;
+    title.add_item("ru", "Title");
+    title.add_item("en", "Caption");
+    const oof::platform::value::FormattedString formatted(title, true);
+
+    oof::platform::stream::ListOutStream out;
+    formatted.serialize(out);
+    const std::string serialized = out.text();
+
+    oof::platform::stream::ListInStream in(serialized);
+    const oof::platform::value::FormattedString restored =
+        oof::platform::value::FormattedString::deserialize(in);
+
+    std::cout << "{";
+    std::cout << "\"serialized\":";
+    print_json_string(serialized);
+    std::cout << ",\"formatted\":" << (restored.formatted() ? "true" : "false");
+    std::cout << ",\"itemCount\":" << restored.value().items().size();
+    std::cout << ",\"firstLanguage\":";
+    print_json_string(restored.value().items().at(0).language);
+    std::cout << ",\"secondText\":";
+    print_json_string(restored.value().items().at(1).text);
+    std::cout << "}\n";
+}
+
+void print_controls_codec() {
+    oof::platform::ordinary::ControlPayloadRecord controls;
+    controls.words[0] = oof::platform::cf_form_controls8;
+    controls.words[1] = 1;
+    controls.words[9] = 9;
+    const auto controls_bytes = controls.serialize();
+    const auto restored_controls = oof::platform::ordinary::ControlPayloadRecord::deserialize(controls_bytes);
+
+    oof::platform::ordinary::ControlPositionRecord position;
+    position.words[0] = oof::platform::cf_form_controls_position8;
+    position.words[7] = 7;
+    const auto position_bytes = position.serialize();
+    const auto restored_position = oof::platform::ordinary::ControlPositionRecord::deserialize(position_bytes);
+
+    oof::platform::ordinary::ControlInfoRecord info;
+    info.words[0] = oof::platform::cf_form_controls_info8;
+    info.words[3] = 3;
+    const auto info_bytes = info.serialize();
+    const auto restored_info = oof::platform::ordinary::ControlInfoRecord::deserialize(info_bytes);
+
+    oof::platform::ordinary::FormFormatEnumerator enumerator;
+    enumerator.add(oof::platform::ordinary::TransferFacet::controls, 1);
+    enumerator.add(oof::platform::ordinary::TransferFacet::position, 1);
+    enumerator.add(oof::platform::ordinary::TransferFacet::info, 1);
+
+    oof::platform::ordinary::OrdinaryTransferSet transfer_set;
+    transfer_set.controls.push_back(controls);
+    transfer_set.positions.push_back(position);
+    transfer_set.infos.push_back(info);
+
+    std::cout << "{";
+    std::cout << "\"controlsSize\":" << controls_bytes.size();
+    std::cout << ",\"positionSize\":" << position_bytes.size();
+    std::cout << ",\"infoSize\":" << info_bytes.size();
+    std::cout << ",\"controlsFirstWord\":" << restored_controls.words[0];
+    std::cout << ",\"positionLastWord\":" << restored_position.words[7];
+    std::cout << ",\"infoLastWord\":" << restored_info.words[3];
+    std::cout << ",\"enumeratorHex\":";
+    print_json_string(bytes_hex(enumerator.serialize_headers()));
+    std::cout << ",\"transferSetSize\":" << transfer_set.serialize_records().size();
+    std::cout << "}\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -417,6 +496,14 @@ int main(int argc, char** argv) {
         const std::string command = argv[1];
         if (command == "mechanism") {
             print_mechanism();
+            return 0;
+        }
+        if (command == "value-roundtrip") {
+            print_value_roundtrip();
+            return 0;
+        }
+        if (command == "controls-codec") {
+            print_controls_codec();
             return 0;
         }
 
