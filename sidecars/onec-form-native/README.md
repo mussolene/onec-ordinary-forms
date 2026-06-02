@@ -37,3 +37,9 @@ Print structural statistics as JSON:
 ```bash
 sidecars/onec-form-native/build/oof-native stats < stream.txt
 ```
+
+Print the platform-derived mechanism map embedded in the native sidecar:
+
+```bash
+sidecars/onec-form-native/build/oof-native mechanism
+```

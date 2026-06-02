@@ -3,7 +3,7 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp
+SRC := src/main.cpp src/platform_mechanism.hpp
 
 .PHONY: all clean test
 
@@ -17,6 +17,7 @@ test: $(BIN)
 	printf '{1,,{2,"x"}}' | $(BIN) compact | grep -q '{1,,{2,"x"}}'
 	printf '{1,,{2,"x"}}' | $(BIN) listout | grep -q '{2,"x"}'
 	printf '{1,,{2,"x"}}' | $(BIN) stats | grep -q '"lists":2'
+	$(BIN) mechanism | grep -q '"cf_form_controls_info8":40192'
 
 clean:
 	rm -rf $(BUILD_DIR)

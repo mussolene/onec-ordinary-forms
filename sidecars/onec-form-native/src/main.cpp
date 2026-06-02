@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "platform_mechanism.hpp"
+
 namespace {
 
 struct Node {
@@ -245,7 +247,59 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats> < stream.txt\n";
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism> < stream.txt\n";
+}
+
+void print_json_string(std::string_view value) {
+    std::cout << '"';
+    for (char ch : value) {
+        if (ch == '"' || ch == '\\') {
+            std::cout << '\\' << ch;
+        } else {
+            std::cout << ch;
+        }
+    }
+    std::cout << '"';
+}
+
+void print_mechanism() {
+    std::cout << "{";
+    std::cout << "\"formats\":{";
+    std::cout << "\"cf_form_controls8\":" << oof::platform::cf_form_controls8 << ",";
+    std::cout << "\"cf_form_controls_position8\":" << oof::platform::cf_form_controls_position8 << ",";
+    std::cout << "\"cf_form_controls_info8\":" << oof::platform::cf_form_controls_info8;
+    std::cout << "},";
+    std::cout << "\"recordSizes\":{";
+    std::cout << "\"count\":" << oof::platform::transfer_count_size << ",";
+    std::cout << "\"info\":" << oof::platform::info_transfer_record_size << ",";
+    std::cout << "\"position\":" << oof::platform::position_transfer_record_size << ",";
+    std::cout << "\"formatEntry\":" << oof::platform::format_entry_record_size;
+    std::cout << "},";
+    std::cout << "\"entries\":[";
+    for (size_t i = 0; i < oof::platform::mechanism_entries.size(); ++i) {
+        const auto& entry = oof::platform::mechanism_entries[i];
+        if (i != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{";
+        std::cout << "\"address\":";
+        print_json_string(entry.address);
+        std::cout << ",\"role\":";
+        print_json_string(entry.role);
+        std::cout << ",\"platformSymbols\":";
+        print_json_string(entry.platform_symbols);
+        std::cout << ",\"nativeTarget\":";
+        print_json_string(entry.native_target);
+        std::cout << "}";
+    }
+    std::cout << "],\"coreValueSurface\":[";
+    for (size_t i = 0; i < oof::platform::core_value_surface.size(); ++i) {
+        if (i != 0) {
+            std::cout << ",";
+        }
+        print_json_string(oof::platform::core_value_surface[i]);
+    }
+    std::cout << "]}\n";
 }
 
 }  // namespace
@@ -258,6 +312,11 @@ int main(int argc, char** argv) {
 
     try {
         const std::string command = argv[1];
+        if (command == "mechanism") {
+            print_mechanism();
+            return 0;
+        }
+
         Parser parser(tokenize(read_stdin()));
         const Node root = parser.parse_document();
 
