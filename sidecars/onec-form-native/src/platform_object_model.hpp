@@ -123,10 +123,45 @@ struct PlatformObjectEdit {
     std::string object_id;
     std::string platform_type;
     std::vector<PlatformObjectPropertyEdit> properties;
+
+    void set_property(std::string name, std::string value) {
+        for (auto& property : properties) {
+            if (property.name == name) {
+                property.value = std::move(value);
+                return;
+            }
+        }
+        properties.push_back({std::move(name), std::move(value)});
+    }
 };
 
 struct PlatformFormObjectEdit {
     std::vector<PlatformObjectEdit> objects;
+
+    PlatformObjectEdit& object(std::string object_id, std::string platform_type = {}) {
+        for (auto& item : objects) {
+            if (item.object_id == object_id) {
+                if (item.platform_type.empty()) {
+                    item.platform_type = std::move(platform_type);
+                }
+                return item;
+            }
+        }
+        PlatformObjectEdit item;
+        item.object_id = std::move(object_id);
+        item.platform_type = std::move(platform_type);
+        objects.push_back(std::move(item));
+        return objects.back();
+    }
+
+    bool empty() const {
+        for (const auto& object_edit : objects) {
+            if (!object_edit.properties.empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 inline PlatformObjectProperty make_property(

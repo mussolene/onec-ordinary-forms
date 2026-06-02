@@ -2329,6 +2329,15 @@ PublicXmlApplyResult apply_public_xml_edits(
     const std::vector<PublicXmlControlEdit>& edits
 );
 
+oof::platform::object_model::PlatformFormObjectEdit public_xml_edits_to_platform_object_edits(
+    const std::vector<PublicXmlControlEdit>& edits
+);
+
+PublicXmlApplyResult apply_platform_object_edits(
+    RuntimeFormEnvelope& envelope,
+    const oof::platform::object_model::PlatformFormObjectEdit& object_edit
+);
+
 bool set_property_slot_value(
     oof::platform::stream::ListValue& payload,
     std::string_view object_id,
@@ -3415,36 +3424,46 @@ PublicXmlApplyResult apply_public_xml_edits(
     RuntimeFormEnvelope& envelope,
     const std::vector<PublicXmlControlEdit>& edits
 ) {
+    return apply_platform_object_edits(envelope, public_xml_edits_to_platform_object_edits(edits));
+}
+
+oof::platform::object_model::PlatformFormObjectEdit public_xml_edits_to_platform_object_edits(
+    const std::vector<PublicXmlControlEdit>& edits
+) {
     oof::platform::object_model::PlatformFormObjectEdit object_edit;
     for (const auto& edit : edits) {
-        oof::platform::object_model::PlatformObjectEdit object;
-        object.object_id = edit.object_id;
-        object.platform_type = edit.tag;
+        auto& object = object_edit.object(edit.object_id, edit.tag);
         if (edit.has_name) {
-            object.properties.push_back({"Name", edit.name});
+            object.set_property("Name", edit.name);
         }
         if (edit.has_title) {
-            object.properties.push_back({"Title", edit.title});
+            object.set_property("Title", edit.title);
         }
         if (edit.has_position) {
-            object.properties.push_back({"Left", edit.left});
-            object.properties.push_back({"Top", edit.top});
-            object.properties.push_back({"Right", edit.right});
-            object.properties.push_back({"Bottom", edit.bottom});
+            object.set_property("Left", edit.left);
+            object.set_property("Top", edit.top);
+            object.set_property("Right", edit.right);
+            object.set_property("Bottom", edit.bottom);
         }
         for (const auto& binding : edit.bindings) {
-            object.properties.push_back({"Binding." + binding.name, oof::platform::stream::dump_compact(binding.value)});
+            object.set_property("Binding." + binding.name, oof::platform::stream::dump_compact(binding.value));
         }
         for (const auto& binding : edit.dimension_bindings) {
-            object.properties.push_back({"DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value)});
-        }
-        if (!object.properties.empty()) {
-            object_edit.objects.push_back(std::move(object));
+            object.set_property("DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value));
         }
     }
+    return object_edit;
+}
 
+PublicXmlApplyResult apply_platform_object_edits(
+    RuntimeFormEnvelope& envelope,
+    const oof::platform::object_model::PlatformFormObjectEdit& object_edit
+) {
     PublicXmlApplyResult result;
     for (const auto& object : object_edit.objects) {
+        if (object.properties.empty()) {
+            continue;
+        }
         ++result.controls;
         for (const auto& property : object.properties) {
             const auto& descriptor = require_property_descriptor(property.name);
@@ -3539,9 +3558,9 @@ void write_runtime_platform_object_set(
 
     std::string canonical_text;
     RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
-    if (!set_property_slot_value(envelope.payload, object_id, descriptor, new_value)) {
-        throw std::runtime_error("runtime form object id was not found or has no writable property slot: " + std::string(object_id));
-    }
+    oof::platform::object_model::PlatformFormObjectEdit object_edit;
+    object_edit.object(std::string(object_id)).set_property(std::string(descriptor.name), std::string(new_value));
+    apply_platform_object_edits(envelope, object_edit);
 
     const std::string rebuilt_text = dump_runtime_form_envelope(envelope);
     const std::vector<std::uint8_t> output(rebuilt_text.begin(), rebuilt_text.end());
