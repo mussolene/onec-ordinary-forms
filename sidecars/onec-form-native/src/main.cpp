@@ -391,6 +391,8 @@ void print_mechanism() {
         print_json_string(value.platform_evidence);
         std::cout << ",\"nativeRole\":";
         print_json_string(value.native_role);
+        std::cout << ",\"layoutStatus\":";
+        print_json_string(value.layout_status);
         std::cout << "}";
     }
     std::cout << "],\"localizedValueLayout\":{";

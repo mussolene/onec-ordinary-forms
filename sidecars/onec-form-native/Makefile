@@ -3,7 +3,7 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
@@ -25,6 +25,7 @@ test: $(BIN)
 	$(BIN) mechanism | grep -q '"schemaValueSurface"'
 	$(BIN) mechanism | grep -F -q '"schemaSource":"xdto_root.res:data_ui.xsd Color"'
 	$(BIN) mechanism | grep -F -q '"platformEvidence":"core82 Font::serialize/deserialize list arity 6"'
+	$(BIN) mechanism | grep -F -q '"layoutStatus":"trace-backed list skeleton; real payload correlation pending"'
 	$(BIN) mechanism | grep -q '"ordinaryTransferRegistry"'
 	$(BIN) mechanism | grep -q '"formatEntry":40'
 	$(BIN) mechanism | grep -F -q '"countSemantics":"payload byte size"'
