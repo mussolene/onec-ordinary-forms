@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ordinary_controls.hpp"
+#include "ordinary_form_graph.hpp"
 #include "platform_mechanism.hpp"
 #include "platform_value.hpp"
 
@@ -250,7 +251,7 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec> < stream.txt\n";
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec> < stream.txt\n";
 }
 
 void print_json_string(std::string_view value) {
@@ -484,6 +485,27 @@ void print_controls_codec() {
     std::cout << "}\n";
 }
 
+void print_graph_codec() {
+    const auto graph = oof::platform::ordinary::make_single_control_graph(5, "Button1", "Button title");
+    const auto& control = graph.controls().at(0);
+    const auto transfer_bytes = graph.serialize_transfer_records();
+
+    std::cout << "{";
+    std::cout << "\"controlCount\":" << graph.controls().size();
+    std::cout << ",\"objectId\":" << control.identity.object_id;
+    std::cout << ",\"name\":";
+    print_json_string(control.identity.name);
+    std::cout << ",\"title\":";
+    print_json_string(control.presentation.title.serialize_list_stream());
+    std::cout << ",\"payloadFormat\":" << control.payload.words[0];
+    std::cout << ",\"positionFormat\":" << control.position.words[0];
+    std::cout << ",\"infoFormat\":" << control.info.words[0];
+    std::cout << ",\"transferSetSize\":" << transfer_bytes.size();
+    std::cout << ",\"transferSetHexPrefix\":";
+    print_json_string(bytes_hex(std::vector<std::uint8_t>(transfer_bytes.begin(), transfer_bytes.begin() + 16)));
+    std::cout << "}\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -504,6 +526,10 @@ int main(int argc, char** argv) {
         }
         if (command == "controls-codec") {
             print_controls_codec();
+            return 0;
+        }
+        if (command == "graph-codec") {
+            print_graph_codec();
             return 0;
         }
 

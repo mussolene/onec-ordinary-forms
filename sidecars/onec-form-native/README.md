@@ -62,3 +62,9 @@ Run the native ordinary-control transfer record codec check:
 ```bash
 sidecars/onec-form-native/build/oof-native controls-codec
 ```
+
+Run the internal ordinary form graph to transfer-set codec check:
+
+```bash
+sidecars/onec-form-native/build/oof-native graph-codec
+```

@@ -3,7 +3,7 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/ordinary_controls.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp
 
 .PHONY: all clean test
 
@@ -31,6 +31,10 @@ test: $(BIN)
 	$(BIN) controls-codec | grep -q '"infoSize":16'
 	$(BIN) controls-codec | grep -q '"transferSetSize":212'
 	$(BIN) controls-codec | grep -q '"enumeratorHex":"030000000025000028000000010000000000000000000000000000000000000000000000000000000000000000550000200000000100000000000000000000000000000000000000000000000000000000000000009d0000100000000100000000000000000000000000000000000000000000000000000000000000"'
+	$(BIN) graph-codec | grep -q '"controlCount":1'
+	$(BIN) graph-codec | grep -q '"objectId":5'
+	$(BIN) graph-codec | grep -F -q '"title":"{1,{1,1,{\"ru\",\"Button title\"}},0}"'
+	$(BIN) graph-codec | grep -q '"transferSetSize":212'
 
 clean:
 	rm -rf $(BUILD_DIR)
