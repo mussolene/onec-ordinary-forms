@@ -22,6 +22,8 @@ struct TransferDescriptor {
     TransferFacet facet;
     std::uint32_t format_id;
     std::uint32_t record_size;
+    std::string_view count_semantics;
+    std::string_view boundary;
     std::string_view platform_role;
     std::string_view native_role;
 };
@@ -32,6 +34,8 @@ constexpr std::array<TransferDescriptor, 3> transfer_registry{{
         TransferFacet::position,
         cf_form_controls_position8,
         position_transfer_record_size,
+        "record count",
+        "count + 0x20-byte records copied by the position transfer path",
         "ordinary control geometry/binding position records",
         "position and binding descriptor codec",
     },
@@ -40,14 +44,18 @@ constexpr std::array<TransferDescriptor, 3> transfer_registry{{
         TransferFacet::controls,
         cf_form_controls8,
         0,
+        "payload byte size",
+        "existing IFile/HGLOBAL payload returned by FUN_00270da0",
         "ordinary control payload file",
-        "raw controls8 payload until platform field decoder is proven",
+        "raw controls8 payload; not a fixed 40-byte record list at GetData boundary",
     },
     {
         "cf_form_controls_info8",
         TransferFacet::info,
         cf_form_controls_info8,
         info_transfer_record_size,
+        "record count",
+        "count + 0x10-byte records copied from the info linked list",
         "ordinary control shared/base info records",
         "control-info descriptor codec",
     },
@@ -100,7 +108,10 @@ inline std::uint32_t read_u32_le(const std::vector<std::uint8_t>& bytes, std::si
            (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
 }
 
-struct ControlPayloadRecord {
+struct DiagnosticControlPayloadChunk {
+    // This is a native fixture chunk for sidecar round-trip tests. Platform
+    // evidence says cf_form_controls8 is exposed as raw payload bytes at the
+    // transfer boundary, not as a fixed-size record list.
     static constexpr std::uint32_t serialized_size = format_entry_record_size;
 
     std::array<std::uint32_t, serialized_size / 4> words{};
@@ -114,11 +125,11 @@ struct ControlPayloadRecord {
         return out;
     }
 
-    static ControlPayloadRecord deserialize(const std::vector<std::uint8_t>& bytes) {
+    static DiagnosticControlPayloadChunk deserialize(const std::vector<std::uint8_t>& bytes) {
         if (bytes.size() != serialized_size) {
-            throw std::runtime_error("cf_form_controls8 record must be 40 bytes");
+            throw std::runtime_error("diagnostic cf_form_controls8 fixture chunk must be 40 bytes");
         }
-        ControlPayloadRecord record;
+        DiagnosticControlPayloadChunk record;
         for (std::size_t index = 0; index < record.words.size(); ++index) {
             record.words[index] = read_u32_le(bytes, index * 4);
         }
@@ -128,6 +139,15 @@ struct ControlPayloadRecord {
 
 struct ControlPayloadFile {
     std::vector<std::uint8_t> bytes;
+};
+
+struct TransferSectionInfo {
+    TransferFacet facet;
+    std::uint32_t format_id = 0;
+    std::uint32_t record_size = 0;
+    std::uint32_t count_or_bytes = 0;
+    std::size_t payload_offset = 0;
+    std::size_t payload_size = 0;
 };
 
 struct ControlPositionRecord {
@@ -261,6 +281,69 @@ private:
     std::vector<FormatEntryRecord> entries_;
 };
 
+inline std::string_view facet_name(TransferFacet facet) {
+    switch (facet) {
+        case TransferFacet::controls:
+            return "controls";
+        case TransferFacet::position:
+            return "position";
+        case TransferFacet::info:
+            return "info";
+    }
+    return "unknown";
+}
+
+inline TransferFacet facet_for_format_id(std::uint32_t format_id) {
+    for (const auto& descriptor : transfer_registry) {
+        if (descriptor.format_id == format_id) {
+            return descriptor.facet;
+        }
+    }
+    throw std::runtime_error("unknown ordinary transfer format id");
+}
+
+inline std::size_t payload_size_for_entry(const FormatEntryRecord& entry) {
+    const TransferFacet facet = facet_for_format_id(entry.format_id);
+    if (facet == TransferFacet::controls) {
+        if (entry.record_size != 0) {
+            throw std::runtime_error("cf_form_controls8 transfer entry must use raw byte payload semantics");
+        }
+        return entry.record_count;
+    }
+    const std::uint32_t expected_size = record_size_for(facet);
+    if (entry.record_size != expected_size) {
+        throw std::runtime_error("ordinary transfer record size mismatch");
+    }
+    return static_cast<std::size_t>(entry.record_count) * expected_size;
+}
+
+inline std::vector<TransferSectionInfo> inspect_transfer_sections(const std::vector<std::uint8_t>& bytes) {
+    std::size_t offset = 0;
+    const FormFormatEnumerator enumerator = FormFormatEnumerator::deserialize_headers(bytes, offset);
+    std::vector<TransferSectionInfo> sections;
+    sections.reserve(enumerator.entries().size());
+    for (const auto& entry : enumerator.entries()) {
+        const TransferFacet facet = facet_for_format_id(entry.format_id);
+        const std::size_t payload_size = payload_size_for_entry(entry);
+        if (offset + payload_size > bytes.size()) {
+            throw std::runtime_error("ordinary transfer section payload is truncated");
+        }
+        sections.push_back({
+            facet,
+            entry.format_id,
+            entry.record_size,
+            entry.record_count,
+            offset,
+            payload_size,
+        });
+        offset += payload_size;
+    }
+    if (offset != bytes.size()) {
+        throw std::runtime_error("ordinary transfer set has trailing bytes");
+    }
+    return sections;
+}
+
 struct OrdinaryTransferSet {
     ControlPayloadFile controls;
     std::vector<ControlPositionRecord> positions;
@@ -288,13 +371,14 @@ struct OrdinaryTransferSet {
         OrdinaryTransferSet set;
         for (const auto& entry : enumerator.entries()) {
             if (entry.format_id == cf_form_controls8) {
-                if (offset + entry.record_count > bytes.size()) {
+                const std::size_t payload_size = payload_size_for_entry(entry);
+                if (offset + payload_size > bytes.size()) {
                     throw std::runtime_error("cf_form_controls8 payload is truncated");
                 }
                 set.controls.bytes.assign(
                     bytes.begin() + static_cast<std::ptrdiff_t>(offset),
-                    bytes.begin() + static_cast<std::ptrdiff_t>(offset + entry.record_count));
-                offset += entry.record_count;
+                    bytes.begin() + static_cast<std::ptrdiff_t>(offset + payload_size));
+                offset += payload_size;
             } else if (entry.format_id == cf_form_controls_position8) {
                 read_records<ControlPositionRecord>(bytes, offset, entry, set.positions);
             } else if (entry.format_id == cf_form_controls_info8) {

@@ -23,7 +23,7 @@ struct PlatformControlPresentation {
 struct PlatformControlObject {
     PlatformControlIdentity identity;
     PlatformControlPresentation presentation;
-    ControlPayloadRecord payload;
+    DiagnosticControlPayloadChunk payload_fixture;
     ControlPositionRecord position;
     ControlInfoRecord info;
 };
@@ -46,7 +46,7 @@ public:
         set.positions.reserve(controls_.size());
         set.infos.reserve(controls_.size());
         for (const auto& control : controls_) {
-            const auto payload = control.payload.serialize();
+            const auto payload = control.payload_fixture.serialize();
             set.controls.bytes.insert(set.controls.bytes.end(), payload.begin(), payload.end());
             set.positions.push_back(control.position);
             set.infos.push_back(control.info);
@@ -70,8 +70,8 @@ inline OrdinaryFormGraph make_single_control_graph(std::uint32_t object_id, std:
     control.identity.object_id = object_id;
     control.identity.name = std::move(name);
     control.presentation.title = value::FormattedString(std::move(localized_title), false);
-    control.payload.words[0] = cf_form_controls8;
-    control.payload.words[1] = object_id;
+    control.payload_fixture.words[0] = cf_form_controls8;
+    control.payload_fixture.words[1] = object_id;
     control.position.words[0] = cf_form_controls_position8;
     control.position.words[1] = object_id;
     control.info.words[0] = cf_form_controls_info8;

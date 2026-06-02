@@ -68,6 +68,16 @@ descriptor enumerator, designer graph, runtime graph, and control-site bridge.
 - `cf_form_controls_position8` transfer record: 32 bytes.
 - Format entry record: 40 bytes.
 
+The proven GetData boundary is not symmetric for all three formats:
+
+- `cf_form_controls_position8` is count plus 32-byte records.
+- `cf_form_controls_info8` is count plus 16-byte records copied from the info
+  linked list.
+- `cf_form_controls8` is returned as an existing raw payload file/HGLOBAL in
+  `FUN_00270da0`; do not model it as a fixed 40-byte record list at that
+  boundary. Native tests may use a diagnostic fixture chunk to exercise the
+  transfer envelope, but that fixture is not a platform control record shape.
+
 ## Core Value Surface
 
 The relevant platform libraries import these serializers/value types around

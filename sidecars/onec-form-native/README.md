@@ -50,6 +50,12 @@ registry for `cf_form_controls8`, `cf_form_controls_position8`, and
 `cf_form_controls_info8`. This sidecar records platform mechanism evidence and
 internal codec structures only; it is not a public XML format.
 
+At the proven transfer boundary, `cf_form_controls_position8` and
+`cf_form_controls_info8` are fixed-record lists, while `cf_form_controls8` is a
+raw payload file/HGLOBAL. The native diagnostic fixture named
+`DiagnosticControlPayloadChunk` only exercises the transfer envelope; it is not
+a platform-derived control record schema.
+
 Run the native value stream round-trip for `FormattedString` and
 `LocalWString`:
 
@@ -73,4 +79,10 @@ Run the transfer-set write/read round-trip:
 
 ```bash
 sidecars/onec-form-native/build/oof-native transfer-roundtrip
+```
+
+Print the native transfer sections with proven count/byte semantics:
+
+```bash
+sidecars/onec-form-native/build/oof-native transfer-sections
 ```

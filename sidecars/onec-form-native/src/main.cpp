@@ -255,7 +255,7 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|formbin-selftest> < stream.txt\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info> Form.bin\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n";
 }
@@ -401,6 +401,10 @@ void print_mechanism() {
         print_json_string(descriptor.symbol);
         std::cout << ",\"formatId\":" << descriptor.format_id;
         std::cout << ",\"recordSize\":" << descriptor.record_size;
+        std::cout << ",\"countSemantics\":";
+        print_json_string(descriptor.count_semantics);
+        std::cout << ",\"boundary\":";
+        print_json_string(descriptor.boundary);
         std::cout << ",\"platformRole\":";
         print_json_string(descriptor.platform_role);
         std::cout << ",\"nativeRole\":";
@@ -459,12 +463,12 @@ void print_value_roundtrip() {
 }
 
 void print_controls_codec() {
-    oof::platform::ordinary::ControlPayloadRecord controls;
+    oof::platform::ordinary::DiagnosticControlPayloadChunk controls;
     controls.words[0] = oof::platform::cf_form_controls8;
     controls.words[1] = 1;
     controls.words[9] = 9;
     const auto controls_bytes = controls.serialize();
-    const auto restored_controls = oof::platform::ordinary::ControlPayloadRecord::deserialize(controls_bytes);
+    const auto restored_controls = oof::platform::ordinary::DiagnosticControlPayloadChunk::deserialize(controls_bytes);
 
     oof::platform::ordinary::ControlPositionRecord position;
     position.words[0] = oof::platform::cf_form_controls_position8;
@@ -489,10 +493,10 @@ void print_controls_codec() {
     transfer_set.infos.push_back(info);
 
     std::cout << "{";
-    std::cout << "\"controlsSize\":" << controls_bytes.size();
+    std::cout << "\"diagnosticControlsFixtureSize\":" << controls_bytes.size();
     std::cout << ",\"positionSize\":" << position_bytes.size();
     std::cout << ",\"infoSize\":" << info_bytes.size();
-    std::cout << ",\"controlsFirstWord\":" << restored_controls.words[0];
+    std::cout << ",\"diagnosticControlsFirstWord\":" << restored_controls.words[0];
     std::cout << ",\"positionLastWord\":" << restored_position.words[7];
     std::cout << ",\"infoLastWord\":" << restored_info.words[3];
     std::cout << ",\"enumeratorHex\":";
@@ -513,7 +517,7 @@ void print_graph_codec() {
     print_json_string(control.identity.name);
     std::cout << ",\"title\":";
     print_json_string(control.presentation.title.serialize_list_stream());
-    std::cout << ",\"payloadFormat\":" << control.payload.words[0];
+    std::cout << ",\"diagnosticPayloadFormat\":" << control.payload_fixture.words[0];
     std::cout << ",\"positionFormat\":" << control.position.words[0];
     std::cout << ",\"infoFormat\":" << control.info.words[0];
     std::cout << ",\"transferSetSize\":" << transfer_bytes.size();
@@ -532,11 +536,37 @@ void print_transfer_roundtrip() {
     std::cout << ",\"controlsBytes\":" << transfer_set.controls.bytes.size();
     std::cout << ",\"positions\":" << transfer_set.positions.size();
     std::cout << ",\"infos\":" << transfer_set.infos.size();
-    const auto control_record = oof::platform::ordinary::ControlPayloadRecord::deserialize(transfer_set.controls.bytes);
-    std::cout << ",\"controlObjectId\":" << control_record.words[1];
+    const auto control_fixture = oof::platform::ordinary::DiagnosticControlPayloadChunk::deserialize(transfer_set.controls.bytes);
+    std::cout << ",\"diagnosticControlObjectId\":" << control_fixture.words[1];
     std::cout << ",\"positionObjectId\":" << transfer_set.positions.at(0).words[1];
     std::cout << ",\"infoObjectId\":" << transfer_set.infos.at(0).words[1];
     std::cout << "}\n";
+}
+
+void print_transfer_sections() {
+    const auto graph = oof::platform::ordinary::make_single_control_graph(7, "Input1", "Input title");
+    const auto transfer_bytes = graph.serialize_transfer_records();
+    const auto sections = oof::platform::ordinary::inspect_transfer_sections(transfer_bytes);
+
+    std::cout << "{";
+    std::cout << "\"bytes\":" << transfer_bytes.size();
+    std::cout << ",\"sections\":[";
+    for (std::size_t index = 0; index < sections.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& section = sections[index];
+        std::cout << "{";
+        std::cout << "\"facet\":";
+        print_json_string(oof::platform::ordinary::facet_name(section.facet));
+        std::cout << ",\"formatId\":" << section.format_id;
+        std::cout << ",\"recordSize\":" << section.record_size;
+        std::cout << ",\"countOrBytes\":" << section.count_or_bytes;
+        std::cout << ",\"payloadOffset\":" << section.payload_offset;
+        std::cout << ",\"payloadSize\":" << section.payload_size;
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
 }
 
 void print_formbin_info(const std::string& path) {
@@ -807,6 +837,10 @@ int main(int argc, char** argv) {
         }
         if (command == "transfer-roundtrip") {
             print_transfer_roundtrip();
+            return 0;
+        }
+        if (command == "transfer-sections") {
+            print_transfer_sections();
             return 0;
         }
         if (command == "formbin-selftest") {
