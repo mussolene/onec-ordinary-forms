@@ -265,8 +265,8 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|form-object-graph-selftest|raw-deflate-selftest> < stream.txt\n"
-              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph> Form.bin\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
+              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "       oof-native <platform-form-schema|platform-descriptor-join>\n"
@@ -1400,6 +1400,152 @@ void print_form_object_graph(const std::string& path) {
     print_form_object_graph_json(form_file.payload, "Form.bin:form");
 }
 
+void print_transfer_descriptor_json(const oof::platform::ordinary::TransferDescriptor& descriptor) {
+    std::cout << "{\"symbol\":";
+    print_json_string(descriptor.symbol);
+    std::cout << ",\"facet\":";
+    print_json_string(oof::platform::ordinary::facet_name(descriptor.facet));
+    std::cout << ",\"formatId\":" << descriptor.format_id;
+    std::cout << ",\"recordSize\":" << descriptor.record_size;
+    std::cout << ",\"countSemantics\":";
+    print_json_string(descriptor.count_semantics);
+    std::cout << ",\"boundary\":";
+    print_json_string(descriptor.boundary);
+    std::cout << ",\"platformRole\":";
+    print_json_string(descriptor.platform_role);
+    std::cout << ",\"nativeRole\":";
+    print_json_string(descriptor.native_role);
+    std::cout << "}";
+}
+
+void print_form_transfer_linkage_json(
+    const std::vector<std::uint8_t>& form_payload,
+    std::string_view source_label
+) {
+    const std::string text = decode_form_payload_text(form_payload);
+    const auto root = oof::platform::stream::parse(text);
+    if (!root.is_list) {
+        throw std::runtime_error("form payload root is not a list");
+    }
+
+    std::vector<MaterializedFormItem> items;
+    std::size_t guid_head_nodes = 0;
+    std::size_t nested_unbound_guid_nodes = 0;
+    collect_materialized_form_items(root, "$", "", items, guid_head_nodes, nested_unbound_guid_nodes);
+
+    std::vector<GuidNodeInfo> guid_nodes;
+    std::vector<FormatAtomInfo> format_atoms;
+    collect_form_payload_structure(root, "$", guid_nodes, format_atoms);
+
+    std::set<std::string> object_ids;
+    std::size_t schema_backed = 0;
+    for (const auto& item : items) {
+        object_ids.insert(item.object_id);
+        if (oof::platform::form_descriptor::schema_for_binding(*item.descriptor_binding) != nullptr) {
+            ++schema_backed;
+        }
+    }
+
+    std::map<std::string, std::size_t> format_symbol_frequency;
+    for (const auto& atom : format_atoms) {
+        ++format_symbol_frequency[atom.symbol];
+    }
+
+    std::cout << "{\"source\":";
+    print_json_string(source_label);
+    std::cout << ",\"payloadSize\":" << form_payload.size();
+    std::cout << ",\"objectGraph\":{\"materializedItems\":" << items.size();
+    std::cout << ",\"schemaBackedItems\":" << schema_backed;
+    std::cout << ",\"uniqueObjectIds\":" << object_ids.size();
+    std::cout << ",\"nestedUnboundGuidNodes\":" << nested_unbound_guid_nodes;
+    std::cout << "},\"platformTransferContract\":{\"evidence\":\"dsgnfrm exports wbase::cf_form_controls8/cf_form_controls_position8/cf_form_controls_info8; decompile maps GetData order position8, controls8, info8\"";
+    std::cout << ",\"formatEntrySize\":" << oof::platform::format_entry_record_size;
+    std::cout << ",\"descriptors\":[";
+    for (std::size_t index = 0; index < oof::platform::ordinary::transfer_registry.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_transfer_descriptor_json(oof::platform::ordinary::transfer_registry[index]);
+    }
+    std::cout << "]},\"payloadFormatAtoms\":{\"count\":" << format_atoms.size();
+    std::cout << ",\"frequency\":[";
+    std::size_t index = 0;
+    for (const auto& [symbol, count] : format_symbol_frequency) {
+        if (index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"symbol\":";
+        print_json_string(symbol);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"atoms\":[";
+    for (std::size_t atom_index = 0; atom_index < format_atoms.size(); ++atom_index) {
+        if (atom_index != 0) {
+            std::cout << ",";
+        }
+        const auto& atom = format_atoms[atom_index];
+        std::cout << "{\"path\":";
+        print_json_string(atom.path);
+        std::cout << ",\"formatId\":" << atom.format_id;
+        std::cout << ",\"symbol\":";
+        print_json_string(atom.symbol);
+        std::cout << "}";
+    }
+    const bool transfer_format_atoms_embedded = !format_atoms.empty();
+    std::cout << "]},\"linkageStatus\":{\"objectGraphReady\":true";
+    std::cout << ",\"transferFormatAtomsEmbedded\":"
+              << (transfer_format_atoms_embedded ? "true" : "false");
+    std::cout << ",\"directFacetLinkageRequiredForFormBinRebuild\":"
+              << (transfer_format_atoms_embedded ? "true" : "false");
+    std::cout << ",\"controls8SectionDecoded\":false";
+    std::cout << ",\"position8RecordsDecoded\":false";
+    std::cout << ",\"info8RecordsDecoded\":false";
+    std::cout << ",\"reason\":";
+    if (transfer_format_atoms_embedded) {
+        print_json_string(
+            "payload contains transfer format ids; inspect as a platform data-exchange transfer set before rebuild");
+    } else {
+        print_json_string(
+            "persisted ordinary Form.bin payload is a list-stream object graph and does not embed cf_form_controls* transfer format ids; transfer registry describes platform GetData/data-exchange facets, not direct Form.bin sections");
+    }
+    std::cout << ",\"next\":";
+    if (transfer_format_atoms_embedded) {
+        print_json_string("decode transfer sections and correlate records by objectId");
+    } else {
+        print_json_string("decode named properties directly from the materialized list-stream object graph and use cf_form_controls* registry only for data-exchange/export compatibility");
+    }
+    std::cout << "},\"items\":[";
+    for (std::size_t item_index = 0; item_index < items.size(); ++item_index) {
+        if (item_index != 0) {
+            std::cout << ",";
+        }
+        const auto& item = items[item_index];
+        std::cout << "{\"objectId\":";
+        print_json_string(item.object_id);
+        std::cout << ",\"name\":";
+        print_json_string(item.name);
+        std::cout << ",\"platformType\":";
+        print_json_string(item.descriptor_binding->platform_type);
+        std::cout << ",\"status\":";
+        print_json_string(item.descriptor_binding->status);
+        std::cout << ",\"expectedFacets\":[\"cf_form_controls8\",\"cf_form_controls_position8\",\"cf_form_controls_info8\"]";
+        std::cout << ",\"facetLinkage\":";
+        print_json_string(
+            transfer_format_atoms_embedded
+                ? "pending-transfer-section-decode"
+                : "not-embedded-in-persisted-formbin");
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+}
+
+void print_form_transfer_linkage(const std::string& path) {
+    const std::vector<std::uint8_t> data = read_file_bytes(path);
+    const auto container = oof::platform::formbin::parse_container(data);
+    const auto& form_file = find_container_file(container, "form");
+    print_form_transfer_linkage_json(form_file.payload, "Form.bin:form");
+}
+
 void print_form_payload_structure_selftest() {
     oof::platform::formbin::OneCContainer container;
     container.block_size = oof::platform::formbin::container_block_size;
@@ -1428,6 +1574,21 @@ void print_form_object_graph_selftest() {
     const auto reparsed = oof::platform::formbin::parse_container(bytes);
     const auto& form_file = find_container_file(reparsed, "form");
     print_form_object_graph_json(form_file.payload, "selftest");
+}
+
+void print_form_transfer_linkage_selftest() {
+    oof::platform::formbin::OneCContainer container;
+    container.block_size = oof::platform::formbin::container_block_size;
+    const std::string form_text =
+        "{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,\"Button1\",4294967295,0,0,0},"
+        "{9472,21760,40192},{},{}}}}";
+    container.files.push_back({"form", 1, 2, std::vector<std::uint8_t>(form_text.begin(), form_text.end())});
+    container.files.push_back({"module", 3, 4, {'/', '/', 'm'}});
+
+    const auto bytes = oof::platform::formbin::serialize_container(container);
+    const auto reparsed = oof::platform::formbin::parse_container(bytes);
+    const auto& form_file = find_container_file(reparsed, "form");
+    print_form_transfer_linkage_json(form_file.payload, "selftest");
 }
 
 void print_platform_guid_scan(const std::string& path) {
@@ -2000,6 +2161,10 @@ int main(int argc, char** argv) {
             print_form_object_graph_selftest();
             return 0;
         }
+        if (command == "form-transfer-linkage-selftest") {
+            print_form_transfer_linkage_selftest();
+            return 0;
+        }
         if (command == "raw-deflate-selftest") {
             print_raw_deflate_selftest();
             return 0;
@@ -2038,6 +2203,10 @@ int main(int argc, char** argv) {
         }
         if (command == "form-object-graph" && argc == 3) {
             print_form_object_graph(argv[2]);
+            return 0;
+        }
+        if (command == "form-transfer-linkage" && argc == 3) {
+            print_form_transfer_linkage(argv[2]);
             return 0;
         }
         if (command == "platform-guid-scan" && argc == 3) {

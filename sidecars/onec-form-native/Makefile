@@ -92,6 +92,18 @@ test: $(BIN)
 	$(BIN) form-object-graph-selftest | grep -F -q '"platformType":"Button"'
 	$(BIN) form-object-graph-selftest | grep -F -q '"name":"Check1"'
 	$(BIN) form-object-graph-selftest | grep -F -q '"platformType":"CheckBox"'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"objectGraphReady":true'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"transferFormatAtomsEmbedded":true'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"directFacetLinkageRequiredForFormBinRebuild":true'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"controls8SectionDecoded":false'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"symbol":"cf_form_controls8"'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"recordSize":0'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"countSemantics":"payload byte size"'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"symbol":"cf_form_controls_position8"'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"recordSize":32'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"symbol":"cf_form_controls_info8"'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"recordSize":16'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"facetLinkage":"pending-transfer-section-decode"'
 	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"knownDescriptorHitsTotal":12'; fi
 	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"nearestName":"GroupsCommandBar"'; fi
 	if [ -f ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd ]; then $(BIN) platform-xsd-inventory ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd | grep -F -q '"targetNamespace":"http://v8.1c.ru/8.1/data/ui"'; fi
