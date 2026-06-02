@@ -1,5 +1,6 @@
 CXX ?= c++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
+LDLIBS ?= -lz
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
@@ -11,7 +12,7 @@ all: $(BIN)
 
 $(BIN): $(SRC)
 	mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $<
+	$(CXX) $(CXXFLAGS) -o $@ $< $(LDLIBS)
 
 test: $(BIN)
 	printf '{1,,{2,"x"}}' | $(BIN) compact | grep -q '{1,,{2,"x"}}'
@@ -57,6 +58,7 @@ test: $(BIN)
 	$(BIN) transfer-sections | grep -F -q '"countOrBytes":40'
 	$(BIN) formbin-selftest | grep -q '"byteEqual":true'
 	$(BIN) formbin-selftest | grep -q '"firstName":"form"'
+	$(BIN) raw-deflate-selftest | grep -q '"byteEqual":true'
 	$(BIN) form-payload-structure-selftest | grep -q '"guidHeadNodes":2'
 	$(BIN) form-payload-structure-selftest | grep -q '"candidateObjectNodes":1'
 	$(BIN) form-payload-structure-selftest | grep -q '"knownDescriptorCandidateNodes":1'

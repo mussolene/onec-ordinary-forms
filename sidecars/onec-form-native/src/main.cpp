@@ -1,5 +1,7 @@
+#include <array>
 #include <cctype>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -12,6 +14,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+#include <zlib.h>
 
 #include "form_bin_container.hpp"
 #include "ordinary_controls.hpp"
@@ -259,8 +263,10 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest> < stream.txt\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure> Form.bin\n"
+              << "       oof-native container-extract <1c-container> <out-dir>\n"
+              << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
               << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
@@ -739,6 +745,105 @@ void print_formbin_roundtrip(const std::string& path) {
     std::cout << ",\"byteEqual\":" << (data == rebuilt ? "true" : "false");
     std::cout << ",\"logicalEqual\":" << (logical_equal ? "true" : "false");
     std::cout << ",\"fileCount\":" << reparsed.files.size();
+    std::cout << "}\n";
+}
+
+std::string safe_container_file_name(const std::string& name) {
+    std::string safe;
+    safe.reserve(name.size());
+    for (const char ch : name) {
+        const bool allowed = std::isalnum(static_cast<unsigned char>(ch)) ||
+                             ch == '-' || ch == '_' || ch == '.';
+        safe.push_back(allowed ? ch : '_');
+    }
+    if (safe.empty() || safe == "." || safe == "..") {
+        return "unnamed";
+    }
+    return safe;
+}
+
+void write_file_bytes(const std::filesystem::path& path, const std::vector<std::uint8_t>& data) {
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
+        throw std::runtime_error("cannot open output file: " + path.string());
+    }
+    file.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    if (!file) {
+        throw std::runtime_error("cannot write output file: " + path.string());
+    }
+}
+
+std::vector<std::uint8_t> inflate_raw_deflate(const std::vector<std::uint8_t>& data) {
+    z_stream stream{};
+    stream.next_in = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(data.data()));
+    stream.avail_in = static_cast<uInt>(data.size());
+    const int init_code = inflateInit2(&stream, -MAX_WBITS);
+    if (init_code != Z_OK) {
+        throw std::runtime_error("cannot initialize raw deflate inflater");
+    }
+
+    std::vector<std::uint8_t> output;
+    std::array<std::uint8_t, 16384> buffer{};
+    int code = Z_OK;
+    while (code == Z_OK) {
+        stream.next_out = reinterpret_cast<Bytef*>(buffer.data());
+        stream.avail_out = static_cast<uInt>(buffer.size());
+        code = inflate(&stream, Z_NO_FLUSH);
+        const std::size_t produced = buffer.size() - stream.avail_out;
+        output.insert(output.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(produced));
+    }
+    inflateEnd(&stream);
+    if (code != Z_STREAM_END) {
+        throw std::runtime_error("raw deflate payload did not inflate cleanly");
+    }
+    return output;
+}
+
+void extract_container_files(const std::string& input_path, const std::string& output_dir, bool inflate_payloads) {
+    const std::vector<std::uint8_t> data = read_file_bytes(input_path);
+    const auto container = oof::platform::formbin::parse_container(data);
+    const std::filesystem::path out(output_dir);
+    std::filesystem::create_directories(out);
+
+    std::cout << "{";
+    std::cout << "\"containerSize\":" << data.size();
+    std::cout << ",\"blockSize\":" << container.block_size;
+    std::cout << ",\"fileCount\":" << container.files.size();
+    std::cout << ",\"files\":[";
+    for (size_t i = 0; i < container.files.size(); ++i) {
+        const auto& file = container.files[i];
+        const std::string safe_name = safe_container_file_name(file.name);
+        const std::filesystem::path file_path = out / safe_name;
+        const std::vector<std::uint8_t> payload =
+            inflate_payloads ? inflate_raw_deflate(file.payload) : file.payload;
+        write_file_bytes(file_path, payload);
+
+        if (i != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{";
+        std::cout << "\"name\":";
+        print_json_string(file.name);
+        std::cout << ",\"path\":";
+        print_json_string(file_path.string());
+        std::cout << ",\"payloadSize\":" << payload.size();
+        if (inflate_payloads) {
+            std::cout << ",\"compressedPayloadSize\":" << file.payload.size();
+            std::cout << ",\"inflated\":true";
+        }
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+}
+
+void print_raw_deflate_selftest() {
+    const std::vector<std::uint8_t> compressed{0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00};
+    const auto inflated = inflate_raw_deflate(compressed);
+    const std::string text(inflated.begin(), inflated.end());
+    std::cout << "{";
+    std::cout << "\"inflated\":";
+    print_json_string(text);
+    std::cout << ",\"byteEqual\":" << (text == "hello" ? "true" : "false");
     std::cout << "}\n";
 }
 
@@ -1509,12 +1614,24 @@ int main(int argc, char** argv) {
             print_form_payload_structure_selftest();
             return 0;
         }
+        if (command == "raw-deflate-selftest") {
+            print_raw_deflate_selftest();
+            return 0;
+        }
         if (command == "formbin-info" && argc == 3) {
             print_formbin_info(argv[2]);
             return 0;
         }
         if (command == "formbin-roundtrip" && argc == 3) {
             print_formbin_roundtrip(argv[2]);
+            return 0;
+        }
+        if (command == "container-extract" && argc == 4) {
+            extract_container_files(argv[2], argv[3], false);
+            return 0;
+        }
+        if (command == "container-extract-inflate" && argc == 4) {
+            extract_container_files(argv[2], argv[3], true);
             return 0;
         }
         if (command == "form-payload-info" && argc == 3) {
