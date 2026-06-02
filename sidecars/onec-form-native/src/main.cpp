@@ -7,7 +7,9 @@
 #include <utility>
 #include <vector>
 
+#include "ordinary_controls.hpp"
 #include "platform_mechanism.hpp"
+#include "platform_value.hpp"
 
 namespace {
 
@@ -263,6 +265,10 @@ void print_json_string(std::string_view value) {
 }
 
 void print_mechanism() {
+    oof::platform::value::LocalWString sample_title;
+    sample_title.add_item("ru", "Title");
+    const oof::platform::value::FormattedString sample_formatted(sample_title, false);
+
     std::cout << "{";
     std::cout << "\"formats\":{";
     std::cout << "\"cf_form_controls8\":" << oof::platform::cf_form_controls8 << ",";
@@ -319,6 +325,82 @@ void print_mechanism() {
             std::cout << ",";
         }
         print_json_string(oof::platform::type_tree_surface[i]);
+    }
+    std::cout << "],\"platformValueSymbols\":[";
+    for (size_t i = 0; i < oof::platform::value::localized_value_symbols.size(); ++i) {
+        const auto& symbol = oof::platform::value::localized_value_symbols[i];
+        if (i != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{";
+        std::cout << "\"name\":";
+        print_json_string(symbol.name);
+        std::cout << ",\"provider\":";
+        print_json_string(symbol.provider);
+        std::cout << ",\"address\":";
+        print_json_string(symbol.address);
+        std::cout << ",\"evidence\":";
+        print_json_string(symbol.evidence);
+        std::cout << "}";
+    }
+    std::cout << "],\"platformValueSurface\":[";
+    for (size_t i = 0; i < oof::platform::value::value_surface.size(); ++i) {
+        const auto& value = oof::platform::value::value_surface[i];
+        if (i != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{";
+        std::cout << "\"type\":";
+        print_json_string(value.type_name);
+        std::cout << ",\"symbol\":";
+        print_json_string(value.platform_symbol);
+        std::cout << ",\"nativeRole\":";
+        print_json_string(value.native_role);
+        std::cout << "}";
+    }
+    std::cout << "],\"localizedValueLayout\":{";
+    std::cout << "\"localWStringVersion\":" << oof::platform::value::LocalWString::platform_version << ",";
+    std::cout << "\"firstItemLanguageOffset\":" << oof::platform::value::LocalWString::first_item_language_offset << ",";
+    std::cout << "\"firstItemTextOffset\":" << oof::platform::value::LocalWString::first_item_text_offset << ",";
+    std::cout << "\"vectorOffset\":" << oof::platform::value::LocalWString::vector_offset << ",";
+    std::cout << "\"vectorStride\":" << oof::platform::value::LocalWString::vector_stride << ",";
+    std::cout << "\"vectorLanguageOffset\":" << oof::platform::value::LocalWString::vector_language_offset << ",";
+    std::cout << "\"vectorTextOffset\":" << oof::platform::value::LocalWString::vector_text_offset << ",";
+    std::cout << "\"formattedStringVersion\":" << oof::platform::value::FormattedString::platform_version << ",";
+    std::cout << "\"formattedFlagOffset\":" << oof::platform::value::FormattedString::formatted_flag_offset << ",";
+    std::cout << "\"sampleLocalWString\":";
+    print_json_string(sample_title.serialize_list_stream());
+    std::cout << ",\"sampleFormattedString\":";
+    print_json_string(sample_formatted.serialize_list_stream());
+    std::cout << "},\"ordinaryTransferRegistry\":[";
+    for (size_t i = 0; i < oof::platform::ordinary::transfer_registry.size(); ++i) {
+        const auto& descriptor = oof::platform::ordinary::transfer_registry[i];
+        if (i != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{";
+        std::cout << "\"symbol\":";
+        print_json_string(descriptor.symbol);
+        std::cout << ",\"formatId\":" << descriptor.format_id;
+        std::cout << ",\"recordSize\":" << descriptor.record_size;
+        std::cout << ",\"platformRole\":";
+        print_json_string(descriptor.platform_role);
+        std::cout << ",\"nativeRole\":";
+        print_json_string(descriptor.native_role);
+        std::cout << "}";
+    }
+    std::cout << "],\"ordinaryTripletEntryPoints\":[";
+    for (size_t i = 0; i < oof::platform::ordinary::triplet_entry_points.size(); ++i) {
+        const auto& entry = oof::platform::ordinary::triplet_entry_points[i];
+        if (i != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{";
+        std::cout << "\"address\":";
+        print_json_string(entry.address);
+        std::cout << ",\"role\":";
+        print_json_string(entry.role);
+        std::cout << "}";
     }
     std::cout << "]}\n";
 }

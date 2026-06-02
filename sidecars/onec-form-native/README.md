@@ -43,3 +43,9 @@ Print the platform-derived mechanism map embedded in the native sidecar:
 ```bash
 sidecars/onec-form-native/build/oof-native mechanism
 ```
+
+The mechanism output includes the platform-derived value surface, the
+`core85.so` addresses for `LocalWString`/`FormattedString`, and the native
+registry for `cf_form_controls8`, `cf_form_controls_position8`, and
+`cf_form_controls_info8`. This sidecar records platform mechanism evidence and
+internal codec structures only; it is not a public XML format.
