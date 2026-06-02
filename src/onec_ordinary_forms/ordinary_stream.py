@@ -5154,6 +5154,8 @@ def geometry_stream_from_xml(
                     if 0 <= index < len(bindings):
                         bindings[index] = binding_to_raw(binding)
             for binding in binding_container.findall("DimensionBinding"):
+                if binding.get("section"):
+                    continue
                 slot = binding.get("slot")
                 if not slot and binding.get("dimension"):
                     mapped = DIMENSION_NAME_SLOT.get(binding.get("dimension", ""))
@@ -5183,9 +5185,6 @@ def geometry_stream_from_xml(
             )
             if control_type == "Splitter":
                 dimensions = ["1", ["0", object_id, "0"], "0", "0"]
-    if compact_scalar_geometry(position, bindings, dimensions):
-        compact_order = str(page_order) if page_order is not None else "3"
-        return ["3", left, top, right, bottom, compact_order, *bindings, "0", *dimensions[:2]]
     if control_type == "Table" and layout_flow is not None:
         group_tail = layout_group_tail(
             layout_group,
@@ -5229,10 +5228,6 @@ def geometry_stream_from_xml(
             "0",
             "0",
         ]
-    counted_geometry = counted_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
-    if counted_geometry is not None:
-        counted_geometry[5] = layout_mode
-        return counted_geometry
     if control_type == "InputField":
         prefixed_flagged_height_width_geometry = prefixed_flagged_height_width_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
         if prefixed_flagged_height_width_geometry is not None:
@@ -5289,6 +5284,13 @@ def geometry_stream_from_xml(
     if inline_counted_geometry is not None:
         inline_counted_geometry[5] = layout_mode
         return inline_counted_geometry
+    counted_geometry = counted_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
+    if counted_geometry is not None:
+        counted_geometry[5] = layout_mode
+        return counted_geometry
+    if compact_scalar_geometry(position, bindings, dimensions):
+        compact_order = str(page_order) if page_order is not None else "3"
+        return ["3", left, top, right, bottom, compact_order, *bindings, "0", *dimensions[:2]]
     if layout_group is not None and (layout_flag1 != "0" or layout_flag2 != "0") and not any(dimension != "0" for dimension in dimensions):
         return [
             "8",
@@ -5949,14 +5951,19 @@ def flagged_extra_dimension_geometry_from_xml(
     dimensions: list[object] = ["0"] * 4
     extra: list[tuple[int, object]] = []
     for binding in binding_container.findall("DimensionBinding"):
+        section = binding.get("section")
+        if section and section not in {"primary", "extra"}:
+            return None
         slot = dimension_binding_slot(binding)
         if slot is None:
             continue
         raw = dimension_binding_to_raw(binding)
-        if 1 <= slot <= 4:
+        if 1 <= slot <= 4 and section in {None, "primary"}:
             dimensions[slot - 1] = raw
-        elif slot >= 5:
+        elif slot >= 5 and section in {None, "extra"}:
             extra.append((slot, raw))
+        else:
+            return None
     if not extra:
         return None
     return [
@@ -6040,7 +6047,7 @@ def inline_dual_counted_dimension_geometry_from_xml(
     bottom: str,
     bindings: list[object],
 ) -> list[object] | None:
-    if position is None:
+    if position is None or has_named_layout_group(position):
         return None
     binding_container = position.find("Bindings")
     if binding_container is None:
@@ -6114,6 +6121,8 @@ def compact_scalar_geometry(
         return False
     binding_container = position.find("Bindings")
     if binding_container is None:
+        return False
+    if any(binding.get("section") for binding in binding_container.findall("DimensionBinding")):
         return False
     dimension_names = {binding.get("dimension", "") for binding in binding_container.findall("DimensionBinding")}
     if not dimension_names or not dimension_names <= {"height", "minHeight"}:

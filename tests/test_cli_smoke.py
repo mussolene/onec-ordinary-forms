@@ -3819,6 +3819,60 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertEqual(rebuilt, geometry)
 
+    def test_dump_preserves_inline_counted_dimension_geometry_profile(self) -> None:
+        from onec_ordinary_forms.cli import add_semantic_item
+
+        geometry = [
+            "8", "6", "78", "975", "441", "1",
+            "0", "0", "0", "0", "0", "0",
+            "2", ["0", "2", "0"], ["0", "3", "0"],
+        ]
+        item = {
+            "id": "120",
+            "name": "Pages",
+            "type": "Panel",
+            "rawKey": "Pages",
+            "raw": [
+                "e5cabe59-d992-4d31-8086-3116931aff81",
+                "120",
+                ["1"],
+                geometry,
+                ["14", '"Pages"', "4294967295", "0", "0", "0"],
+                ["0"],
+            ],
+        }
+        root = ET.Element("Root")
+
+        add_semantic_item(root, item, {"Pages": item}, "Pages", {}, Path("/tmp"))
+        position = root.find("./Panel/Position")
+        self.assertIsNotNone(position)
+        rebuilt = geometry_stream_from_xml("Panel", position, object_id="120")
+
+        self.assertEqual(rebuilt, geometry)
+
+    def test_sectioned_scalar_dimensions_use_inline_counted_geometry(self) -> None:
+        position = ET.fromstring(
+            """
+            <Position left="6" top="78" right="975" bottom="441">
+              <Bindings>
+                <DimensionBinding dimension="height" section="primary" value="0"/>
+                <DimensionBinding dimension="minHeight" section="primary" value="0"/>
+              </Bindings>
+            </Position>
+            """
+        )
+
+        geometry = geometry_stream_from_xml("Panel", position, object_id="120")
+
+        self.assertEqual(
+            geometry,
+            [
+                "8", "6", "78", "975", "441", "1",
+                "0", "0", "0", "0", "0", "0",
+                "2", "0", "0",
+            ],
+        )
+
     def test_panel_position_preserves_paged_dimension_marker(self) -> None:
         from onec_ordinary_forms.cli import add_semantic_item
 
