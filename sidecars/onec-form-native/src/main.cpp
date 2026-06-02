@@ -13,6 +13,7 @@
 #include "form_bin_container.hpp"
 #include "ordinary_controls.hpp"
 #include "ordinary_form_graph.hpp"
+#include "platform_guid_registry.hpp"
 #include "platform_mechanism.hpp"
 #include "platform_value.hpp"
 
@@ -255,7 +256,8 @@ std::string read_stdin() {
 
 void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|formbin-selftest> < stream.txt\n"
-              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info> Form.bin\n";
+              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info> Form.bin\n"
+              << "       oof-native platform-guid-scan dsgnfrm.so\n";
 }
 
 std::vector<std::uint8_t> read_file_bytes(const std::string& path) {
@@ -708,6 +710,54 @@ void print_form_payload_info(const std::string& path) {
     std::cout << "]}\n";
 }
 
+void print_platform_guid_scan(const std::string& path) {
+    const std::vector<std::uint8_t> data = read_file_bytes(path);
+    const auto scan = oof::platform::guid_registry::scan_dsgnfrm_guid_registry(data);
+
+    std::cout << "{";
+    std::cout << "\"seedHits\":[";
+    for (std::size_t index = 0; index < scan.seed_hits.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& hit = scan.seed_hits[index];
+        std::cout << "{\"offset\":\"0x" << std::hex << hit.offset << std::dec << "\",\"guid\":";
+        print_json_string(hit.guid);
+        std::cout << "}";
+    }
+    std::cout << "],\"repeatedGuidBlocks\":[";
+    for (std::size_t index = 0; index < scan.repeated_blocks.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        std::cout << "\"0x" << std::hex << scan.repeated_blocks[index].offset << std::dec << "\"";
+    }
+    std::cout << "],\"codeRefs\":[";
+    for (std::size_t index = 0; index < scan.code_refs.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& ref = scan.code_refs[index];
+        std::cout << "{\"offset\":\"0x" << std::hex << ref.offset << "\",\"target\":\"0x" << ref.target
+                  << std::dec << "\"}";
+    }
+    std::cout << "],\"firstBlockGuids\":[";
+    if (!scan.repeated_blocks.empty()) {
+        const std::size_t block = scan.repeated_blocks.front().offset;
+        for (std::size_t index = 0; index < 24 && block + (index + 1) * 16 <= data.size(); ++index) {
+            if (index != 0) {
+                std::cout << ",";
+            }
+            std::array<std::uint8_t, 16> bytes{};
+            for (std::size_t byte_index = 0; byte_index < bytes.size(); ++byte_index) {
+                bytes[byte_index] = data[block + index * 16 + byte_index];
+            }
+            print_json_string(oof::platform::guid_registry::guid_to_text_le(bytes));
+        }
+    }
+    std::cout << "]}\n";
+}
+
 void print_formbin_selftest() {
     oof::platform::formbin::OneCContainer container;
     container.block_size = oof::platform::formbin::container_block_size;
@@ -773,6 +823,10 @@ int main(int argc, char** argv) {
         }
         if (command == "form-payload-info" && argc == 3) {
             print_form_payload_info(argv[2]);
+            return 0;
+        }
+        if (command == "platform-guid-scan" && argc == 3) {
+            print_platform_guid_scan(argv[2]);
             return 0;
         }
 

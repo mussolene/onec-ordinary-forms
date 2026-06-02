@@ -3,7 +3,7 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
@@ -41,6 +41,8 @@ test: $(BIN)
 	$(BIN) transfer-roundtrip | grep -q '"infoObjectId":7'
 	$(BIN) formbin-selftest | grep -q '"byteEqual":true'
 	$(BIN) formbin-selftest | grep -q '"firstName":"form"'
+	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -q '"09ccdc77-ea1a-4a6d-ab1c-3435eada2433"'; fi
+	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -F -q '"repeatedGuidBlocks":["0x42370"'; fi
 
 clean:
 	rm -rf $(BUILD_DIR)
