@@ -269,6 +269,7 @@ void usage() {
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
+              << "       oof-native runtime-form-rename runtime-form-stream.txt rebuilt-stream.txt objectId newName\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "       oof-native <platform-form-schema|platform-descriptor-join>\n"
@@ -1630,6 +1631,75 @@ void write_runtime_form_rebuild(const std::string& input_path, const std::string
     std::cout << "}\n";
 }
 
+bool rename_platform_name_record(oof::platform::stream::ListValue& value, std::string_view new_name) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (is_platform_name_record(value)) {
+        value.items[1].atom = std::string(new_name);
+        value.items[1].atom_kind = oof::platform::stream::ListValue::AtomKind::string;
+        return true;
+    }
+    for (auto& item : value.items) {
+        if (rename_platform_name_record(item, new_name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool rename_materialized_object(
+    oof::platform::stream::ListValue& value,
+    std::string_view object_id,
+    std::string_view new_name
+) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (is_materializable_object_candidate(value) &&
+        !value.items[1].is_list &&
+        value.items[1].atom == object_id) {
+        return rename_platform_name_record(value, new_name);
+    }
+    for (auto& item : value.items) {
+        if (rename_materialized_object(item, object_id, new_name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void write_runtime_form_rename(
+    const std::string& input_path,
+    const std::string& output_path,
+    std::string_view object_id,
+    std::string_view new_name
+) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    if (!rename_materialized_object(envelope.payload, object_id, new_name)) {
+        throw std::runtime_error("runtime form object id was not found or has no platform name record: " + std::string(object_id));
+    }
+    const std::string rebuilt_text = dump_runtime_form_envelope(envelope);
+    const std::vector<std::uint8_t> output(rebuilt_text.begin(), rebuilt_text.end());
+    write_file_bytes(output_path, output);
+    const auto summary = summarize_materialized_graph(envelope.payload);
+
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"bytes\":" << output.size();
+    std::cout << ",\"objectId\":";
+    print_json_string(object_id);
+    std::cout << ",\"newName\":";
+    print_json_string(new_name);
+    std::cout << ",\"payloadRootVersion\":";
+    print_json_string(envelope.payload.items[0].atom);
+    std::cout << ",\"materializedItems\":" << summary.items.size();
+    std::cout << ",\"namedItems\":" << summary.named_items;
+    std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
+    std::cout << "}\n";
+}
+
 void print_transfer_descriptor_json(const oof::platform::ordinary::TransferDescriptor& descriptor) {
     std::cout << "{\"symbol\":";
     print_json_string(descriptor.symbol);
@@ -2445,6 +2515,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-rebuild" && argc == 4) {
             write_runtime_form_rebuild(argv[2], argv[3]);
+            return 0;
+        }
+        if (command == "runtime-form-rename" && argc == 6) {
+            write_runtime_form_rename(argv[2], argv[3], argv[4], argv[5]);
             return 0;
         }
         if (command == "form-transfer-linkage" && argc == 3) {
