@@ -25,6 +25,7 @@
 #include "platform_form_schema.hpp"
 #include "platform_guid_registry.hpp"
 #include "platform_mechanism.hpp"
+#include "platform_runtime_binding.hpp"
 #include "platform_value.hpp"
 
 namespace {
@@ -273,7 +274,7 @@ void usage() {
               << "       oof-native runtime-form-rename runtime-form-stream.txt rebuilt-stream.txt objectId newName\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
-              << "       oof-native <platform-form-schema|platform-descriptor-join>\n"
+              << "       oof-native <platform-form-schema|platform-descriptor-join|platform-runtime-bindings>\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
               << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
@@ -2360,6 +2361,62 @@ void print_platform_descriptor_join() {
     std::cout << "]}\n";
 }
 
+void print_platform_runtime_bindings() {
+    std::cout << "{\"source\":\"platform help/resource/binary runtime binding evidence\"";
+    std::cout << ",\"layerCount\":"
+              << oof::platform::runtime_binding::runtime_layers.size();
+    std::cout << ",\"layers\":[";
+    for (std::size_t index = 0; index < oof::platform::runtime_binding::runtime_layers.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& layer = oof::platform::runtime_binding::runtime_layers[index];
+        std::cout << "{\"name\":";
+        print_json_string(layer.name);
+        std::cout << ",\"source\":";
+        print_json_string(layer.source);
+        std::cout << ",\"role\":";
+        print_json_string(layer.role);
+        std::cout << ",\"evidence\":";
+        print_json_string(layer.evidence);
+        std::cout << "}";
+    }
+    std::cout << "],\"objectCount\":"
+              << oof::platform::runtime_binding::api_objects.size();
+    std::cout << ",\"objects\":[";
+    for (std::size_t index = 0; index < oof::platform::runtime_binding::api_objects.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& object = oof::platform::runtime_binding::api_objects[index];
+        std::cout << "{\"name\":";
+        print_json_string(object.name);
+        std::cout << ",\"apiSource\":";
+        print_json_string(object.api_source);
+        std::cout << ",\"runtimeSource\":";
+        print_json_string(object.runtime_source);
+        std::cout << ",\"persistenceSource\":";
+        print_json_string(object.persistence_source);
+        std::cout << ",\"xdtoSource\":";
+        print_json_string(object.xdto_source);
+        std::cout << ",\"localizationSource\":";
+        print_json_string(object.localization_source);
+        std::cout << ",\"propertyCount\":" << object.property_count;
+        std::cout << ",\"methodCount\":" << object.method_count;
+        std::cout << ",\"eventCount\":" << object.event_count;
+        std::cout << ",\"sampleProperties\":";
+        print_json_string(object.sample_properties);
+        std::cout << ",\"sampleMethods\":";
+        print_json_string(object.sample_methods);
+        std::cout << ",\"sampleEvents\":";
+        print_json_string(object.sample_events);
+        std::cout << ",\"evidence\":";
+        print_json_string(object.evidence);
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+}
+
 void print_platform_xsd_inventory(int argc, char** argv) {
     const std::regex target_namespace_pattern("targetNamespace\\s*=\\s*\"([^\"]+)\"");
     const std::regex import_namespace_pattern("<xs:import[^>]*namespace\\s*=\\s*\"([^\"]+)\"");
@@ -2621,6 +2678,10 @@ int main(int argc, char** argv) {
         }
         if (command == "platform-descriptor-join") {
             print_platform_descriptor_join();
+            return 0;
+        }
+        if (command == "platform-runtime-bindings") {
+            print_platform_runtime_bindings();
             return 0;
         }
         if (command == "form-payload-info" && argc == 3) {

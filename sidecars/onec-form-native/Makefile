@@ -4,7 +4,7 @@ LDLIBS ?= -lz
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
@@ -48,6 +48,12 @@ test: $(BIN)
 	$(BIN) platform-descriptor-join | grep -F -q '"platformType":"RadioButton"'
 	$(BIN) platform-descriptor-join | grep -F -q '"platformType":"PivotChart"'
 	$(BIN) platform-descriptor-join | grep -F -q '"status":"corpus-unbound-platform-extension"'
+	$(BIN) platform-runtime-bindings | grep -F -q '"name":"script-context-dispatch"'
+	$(BIN) platform-runtime-bindings | grep -F -q 'core::ContextCore::getPropVal/setPropVal/call'
+	$(BIN) platform-runtime-bindings | grep -F -q 'LogFormButtonCustomizer'
+	$(BIN) platform-runtime-bindings | grep -F -q '"name":"PivotChart"'
+	$(BIN) platform-runtime-bindings | grep -F -q '"sampleMethods":"GetPicture,Refresh"'
+	$(BIN) platform-runtime-bindings | grep -F -q 'chartui_ru.res/frntend_ru.res'
 	$(BIN) value-roundtrip | grep -F -q '"serialized":"{1,{1,2,{\"ru\",\"Title\"},{\"en\",\"Caption\"}},1}"'
 	$(BIN) value-roundtrip | grep -q '"itemCount":2'
 	$(BIN) value-roundtrip | grep -F -q '"compositeID":"{42,09ccdc77-ea1a-4a6d-ab1c-3435eada2433}"'
