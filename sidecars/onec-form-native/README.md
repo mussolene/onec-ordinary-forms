@@ -114,8 +114,11 @@ sidecars/onec-form-native/build/oof-native formbin-xml-coverage Form.bin
 
 Current coverage is intentionally explicit: native XML projection is present,
 and name, simple localized `Title`, basic `Position left/top/right/bottom`,
-scalar `Binding coordinate/value`, and scalar `DimensionBinding dimension/value`
-edits round-trip through native runtime and Form.bin build commands. Full
-XML-to-Form.bin writing still requires typed anchor-list bindings, attributes,
+scalar `Binding coordinate/value`, typed anchor-list `Binding` records,
+scalar `DimensionBinding dimension/value`, and typed dimension binding records
+round-trip through native runtime and Form.bin build commands. Anchor records
+stay platform-shaped internally but are projected as named XML anchors
+(`From`, `To`, `Extra`) with readable `targetName` hints when the target object
+is materialized. Full XML-to-Form.bin writing still requires attributes,
 commands, events, and the remaining `cf_form_controls8` control-specific
 property slots.

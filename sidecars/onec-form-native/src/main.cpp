@@ -1,4 +1,5 @@
 #include <array>
+#include <algorithm>
 #include <cctype>
 #include <exception>
 #include <filesystem>
@@ -1021,6 +1022,11 @@ struct FormatAtomInfo {
     std::string path;
 };
 
+struct GeometryBindingRecord {
+    std::string name;
+    oof::platform::stream::ListValue value;
+};
+
 struct MaterializedFormItem {
     std::string guid;
     std::string path;
@@ -1032,8 +1038,8 @@ struct MaterializedFormItem {
     std::string top;
     std::string right;
     std::string bottom;
-    std::vector<std::pair<std::string, std::string>> bindings;
-    std::vector<std::pair<std::string, std::string>> dimension_bindings;
+    std::vector<GeometryBindingRecord> bindings;
+    std::vector<GeometryBindingRecord> dimension_bindings;
     std::size_t arity = 0;
     const oof::platform::form_descriptor::DescriptorSchemaBinding* descriptor_binding = nullptr;
 };
@@ -1245,6 +1251,148 @@ std::size_t dimension_binding_slot(std::string_view dimension) {
     return 0;
 }
 
+std::string anchor_relation_name(std::string_view code) {
+    if (code == "0") {
+        return "none";
+    }
+    if (code == "1") {
+        return "absolute";
+    }
+    if (code == "2") {
+        return "targetEdgeOffset";
+    }
+    if (code == "3") {
+        return "targetCenterOffset";
+    }
+    if (code == "4") {
+        return "expression";
+    }
+    if (code == "5") {
+        return "relative";
+    }
+    if (code == "6") {
+        return "group";
+    }
+    return {};
+}
+
+std::string anchor_relation_code(std::string_view name) {
+    if (name == "none") {
+        return "0";
+    }
+    if (name == "absolute") {
+        return "1";
+    }
+    if (name == "targetEdgeOffset" || name.empty()) {
+        return "2";
+    }
+    if (name == "targetCenterOffset") {
+        return "3";
+    }
+    if (name == "expression") {
+        return "4";
+    }
+    if (name == "relative") {
+        return "5";
+    }
+    if (name == "group") {
+        return "6";
+    }
+    throw std::runtime_error("unsupported Binding anchor relation: " + std::string(name));
+}
+
+std::string anchor_side_name(std::string_view code) {
+    if (code == "-1") {
+        return "unknown";
+    }
+    if (code == "0") {
+        return "top";
+    }
+    if (code == "1") {
+        return "bottom";
+    }
+    if (code == "2") {
+        return "left";
+    }
+    if (code == "3") {
+        return "right";
+    }
+    if (code == "4") {
+        return "width";
+    }
+    if (code == "5") {
+        return "height";
+    }
+    if (code == "6") {
+        return "none";
+    }
+    return {};
+}
+
+std::string anchor_side_code(std::string_view name) {
+    if (name == "unknown") {
+        return "-1";
+    }
+    if (name == "top") {
+        return "0";
+    }
+    if (name == "bottom") {
+        return "1";
+    }
+    if (name == "left") {
+        return "2";
+    }
+    if (name == "right") {
+        return "3";
+    }
+    if (name == "width") {
+        return "4";
+    }
+    if (name == "height") {
+        return "5";
+    }
+    if (name == "none" || name.empty()) {
+        return "6";
+    }
+    throw std::runtime_error("unsupported Binding anchor side: " + std::string(name));
+}
+
+std::string anchor_target_name(std::string_view target_id) {
+    if (target_id == "-1") {
+        return "none";
+    }
+    if (target_id == "0") {
+        return "parent";
+    }
+    return "element";
+}
+
+bool is_simple_platform_anchor(const oof::platform::stream::ListValue& value) {
+    return value.is_list &&
+           value.items.size() >= 4 &&
+           !value.items[0].is_list &&
+           !value.items[1].is_list &&
+           !value.items[2].is_list &&
+           !value.items[3].is_list &&
+           !anchor_relation_name(value.items[0].atom).empty() &&
+           !anchor_side_name(value.items[2].atom).empty();
+}
+
+const oof::platform::object_model::PlatformObject* find_object_by_id(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view object_id
+) {
+    if (object_id == "0") {
+        return &form_object.form;
+    }
+    for (const auto& object : form_object.items.objects()) {
+        if (object.object_id == object_id) {
+            return &object;
+        }
+    }
+    return nullptr;
+}
+
 bool is_materializable_object_candidate(const oof::platform::stream::ListValue& value) {
     if (!value.is_list || value.items.size() < 2 || value.items[0].is_list || value.items[1].is_list) {
         return false;
@@ -1298,14 +1446,10 @@ void collect_materialized_form_items(
                 item.right = geometry->items[3].atom;
                 item.bottom = geometry->items[4].atom;
                 for (std::size_t index = 6; index <= 11 && index < geometry->items.size(); ++index) {
-                    if (!geometry->items[index].is_list) {
-                        item.bindings.push_back({binding_coordinate_name(index), geometry->items[index].atom});
-                    }
+                    item.bindings.push_back({binding_coordinate_name(index), geometry->items[index]});
                 }
                 for (std::size_t index = 13; index <= 16 && index < geometry->items.size(); ++index) {
-                    if (!geometry->items[index].is_list) {
-                        item.dimension_bindings.push_back({dimension_binding_name(index), geometry->items[index].atom});
-                    }
+                    item.dimension_bindings.push_back({dimension_binding_name(index), geometry->items[index]});
                 }
             }
             next_parent = item.object_id;
@@ -1880,11 +2024,11 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
             object.properties.push_back(make_described_property("Height", std::to_string(std::stoll(item.bottom) - std::stoll(item.top))));
             object.properties.push_back(make_described_property("Right", item.right));
             object.properties.push_back(make_described_property("Bottom", item.bottom));
-            for (const auto& [coordinate, value] : item.bindings) {
-                object.properties.push_back(make_described_property("Binding." + coordinate, value));
+            for (const auto& binding : item.bindings) {
+                object.properties.push_back(make_described_property("Binding." + binding.name, oof::platform::stream::dump_compact(binding.value)));
             }
-            for (const auto& [dimension, value] : item.dimension_bindings) {
-                object.properties.push_back(make_described_property("DimensionBinding." + dimension, value));
+            for (const auto& binding : item.dimension_bindings) {
+                object.properties.push_back(make_described_property("DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value)));
             }
         }
         add_api_surface(object, api_object_for_type(object.platform_type));
@@ -2109,8 +2253,8 @@ struct PublicXmlControlEdit {
     std::string right;
     std::string bottom;
     bool has_position = false;
-    std::vector<std::pair<std::string, std::string>> bindings;
-    std::vector<std::pair<std::string, std::string>> dimension_bindings;
+    std::vector<GeometryBindingRecord> bindings;
+    std::vector<GeometryBindingRecord> dimension_bindings;
 };
 
 struct PublicXmlApplyResult {
@@ -2135,6 +2279,115 @@ std::string xml_attr_value(std::string_view attrs, std::string_view name) {
         return {};
     }
     return xml_unescape(match[1].str());
+}
+
+struct XmlElementSlice {
+    std::string attrs;
+    std::string body;
+    bool self_closing = false;
+};
+
+std::vector<XmlElementSlice> find_xml_elements(std::string_view text, std::string_view tag) {
+    std::vector<XmlElementSlice> elements;
+    std::size_t cursor = 0;
+    const std::string open = "<" + std::string(tag);
+    const std::string close = "</" + std::string(tag) + ">";
+    while (cursor < text.size()) {
+        const std::size_t start = text.find(open, cursor);
+        if (start == std::string::npos) {
+            break;
+        }
+        const std::size_t name_end = start + open.size();
+        if (name_end < text.size()) {
+            const char after_name = text[name_end];
+            if (std::isalnum(static_cast<unsigned char>(after_name)) || after_name == '_' || after_name == '-') {
+                cursor = name_end;
+                continue;
+            }
+        }
+        const std::size_t tag_end = text.find(">", start);
+        if (tag_end == std::string::npos) {
+            break;
+        }
+        XmlElementSlice element;
+        element.attrs = std::string(text.substr(start + open.size(), tag_end - start - open.size()));
+        std::size_t attr_end = element.attrs.find_last_not_of(" \t\r\n/");
+        element.self_closing = attr_end == std::string::npos || element.attrs.find('/', attr_end + 1) != std::string::npos;
+        if (element.self_closing) {
+            element.attrs = element.attrs.substr(0, attr_end == std::string::npos ? 0 : attr_end + 1);
+            cursor = tag_end + 1;
+        } else {
+            const std::size_t close_start = text.find(close, tag_end + 1);
+            if (close_start == std::string::npos) {
+                break;
+            }
+            element.body = std::string(text.substr(tag_end + 1, close_start - tag_end - 1));
+            cursor = close_start + close.size();
+        }
+        elements.push_back(std::move(element));
+    }
+    return elements;
+}
+
+std::string anchor_target_id_from_attrs(std::string_view attrs) {
+    const std::string target = xml_attr_value(attrs, "target");
+    const std::string target_id = xml_attr_value(attrs, "targetId");
+    if (target == "none") {
+        return "-1";
+    }
+    if (target == "parent") {
+        return "0";
+    }
+    if (target == "self") {
+        return target_id.empty() ? "0" : target_id;
+    }
+    return target_id.empty() ? "-1" : target_id;
+}
+
+oof::platform::stream::ListValue anchor_record_from_xml_attrs(std::string_view attrs) {
+    const std::string value = xml_attr_value(attrs, "value");
+    if (!value.empty()) {
+        return oof::platform::stream::ListValue::raw_atom(value);
+    }
+    std::vector<oof::platform::stream::ListValue> items;
+    items.push_back(oof::platform::stream::ListValue::raw_atom(anchor_relation_code(xml_attr_value(attrs, "relation"))));
+    items.push_back(oof::platform::stream::ListValue::raw_atom(anchor_target_id_from_attrs(attrs)));
+    items.push_back(oof::platform::stream::ListValue::raw_atom(anchor_side_code(xml_attr_value(attrs, "side"))));
+    const std::string offset = xml_attr_value(attrs, "offset");
+    items.push_back(oof::platform::stream::ListValue::raw_atom(offset.empty() ? "0" : offset));
+    return oof::platform::stream::ListValue::list(std::move(items));
+}
+
+std::vector<oof::platform::stream::ListValue> anchor_children_from_xml_body(std::string_view body) {
+    struct FoundAnchor {
+        std::size_t pos = 0;
+        std::string attrs;
+    };
+    std::vector<FoundAnchor> found;
+    for (const std::string& tag : {"From", "To", "Extra"}) {
+        std::size_t cursor = 0;
+        const std::string open = "<" + tag;
+        while (cursor < body.size()) {
+            const std::size_t start = body.find(open, cursor);
+            if (start == std::string::npos) {
+                break;
+            }
+            const std::size_t end = body.find("/>", start);
+            if (end == std::string::npos) {
+                break;
+            }
+            found.push_back({start, std::string(body.substr(start + open.size(), end - start - open.size()))});
+            cursor = end + 2;
+        }
+    }
+    std::sort(found.begin(), found.end(), [](const FoundAnchor& lhs, const FoundAnchor& rhs) {
+        return lhs.pos < rhs.pos;
+    });
+    std::vector<oof::platform::stream::ListValue> anchors;
+    for (const auto& item : found) {
+        anchors.push_back(anchor_record_from_xml_attrs(item.attrs));
+    }
+    return anchors;
 }
 
 std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::string& xml) {
@@ -2198,27 +2451,41 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                     const std::size_t position_close = body.find("</Position>", position_end);
                     if (position_close != std::string::npos) {
                         const std::string position_body = body.substr(position_end + 1, position_close - position_end - 1);
-                        const std::regex binding_pattern(R"(<Binding\b([^>]*)/?>)");
-                        for (std::sregex_iterator binding_it(position_body.begin(), position_body.end(), binding_pattern), binding_end;
-                             binding_it != binding_end;
-                             ++binding_it) {
-                            const std::string binding_attrs = (*binding_it)[1].str();
-                            const std::string coordinate = xml_attr_value(binding_attrs, "coordinate");
-                            const std::string value = xml_attr_value(binding_attrs, "value");
-                            if (!coordinate.empty() && !value.empty()) {
-                                edit.bindings.push_back({coordinate, value});
+                        for (const auto& binding_xml : find_xml_elements(position_body, "Binding")) {
+                            const std::string coordinate = xml_attr_value(binding_xml.attrs, "coordinate");
+                            const std::string value = xml_attr_value(binding_xml.attrs, "value");
+                            if (coordinate.empty()) {
+                                continue;
                             }
+                            if (!value.empty()) {
+                                edit.bindings.push_back({coordinate, oof::platform::stream::ListValue::raw_atom(value)});
+                                continue;
+                            }
+                            std::vector<oof::platform::stream::ListValue> record_items;
+                            const std::string mode = xml_attr_value(binding_xml.attrs, "mode");
+                            record_items.push_back(oof::platform::stream::ListValue::raw_atom(mode.empty() ? "0" : mode));
+                            auto anchors = anchor_children_from_xml_body(binding_xml.body);
+                            record_items.insert(record_items.end(), std::make_move_iterator(anchors.begin()), std::make_move_iterator(anchors.end()));
+                            edit.bindings.push_back({coordinate, oof::platform::stream::ListValue::list(std::move(record_items))});
                         }
-                        const std::regex dimension_binding_pattern(R"(<DimensionBinding\b([^>]*)/?>)");
-                        for (std::sregex_iterator dimension_it(position_body.begin(), position_body.end(), dimension_binding_pattern), dimension_end;
-                             dimension_it != dimension_end;
-                             ++dimension_it) {
-                            const std::string attrs = (*dimension_it)[1].str();
-                            const std::string dimension = xml_attr_value(attrs, "dimension");
-                            const std::string value = xml_attr_value(attrs, "value");
-                            if (!dimension.empty() && !value.empty()) {
-                                edit.dimension_bindings.push_back({dimension, value});
+                        for (const auto& binding_xml : find_xml_elements(position_body, "DimensionBinding")) {
+                            const std::string dimension = xml_attr_value(binding_xml.attrs, "dimension");
+                            const std::string value = xml_attr_value(binding_xml.attrs, "value");
+                            if (dimension.empty()) {
+                                continue;
                             }
+                            if (!value.empty()) {
+                                edit.dimension_bindings.push_back({dimension, oof::platform::stream::ListValue::raw_atom(value)});
+                                continue;
+                            }
+                            std::vector<oof::platform::stream::ListValue> record_items;
+                            const std::string mode = xml_attr_value(binding_xml.attrs, "mode");
+                            record_items.push_back(oof::platform::stream::ListValue::raw_atom(mode.empty() ? "0" : mode));
+                            record_items.push_back(oof::platform::stream::ListValue::raw_atom(anchor_target_id_from_attrs(binding_xml.attrs)));
+                            record_items.push_back(oof::platform::stream::ListValue::raw_atom(anchor_side_code(xml_attr_value(binding_xml.attrs, "side"))));
+                            auto anchors = anchor_children_from_xml_body(binding_xml.body);
+                            record_items.insert(record_items.end(), std::make_move_iterator(anchors.begin()), std::make_move_iterator(anchors.end()));
+                            edit.dimension_bindings.push_back({dimension, oof::platform::stream::ListValue::list(std::move(record_items))});
                         }
                     }
                 }
@@ -2267,10 +2534,10 @@ bool has_position_properties(const oof::platform::object_model::PlatformObject& 
            object.property("Bottom") != nullptr;
 }
 
-std::vector<std::pair<std::string, std::string>> simple_binding_properties(
+std::vector<GeometryBindingRecord> binding_properties(
     const oof::platform::object_model::PlatformObject& object
 ) {
-    std::vector<std::pair<std::string, std::string>> bindings;
+    std::vector<GeometryBindingRecord> bindings;
     for (const std::string& coordinate : {
              "top",
              "bottom",
@@ -2278,35 +2545,164 @@ std::vector<std::pair<std::string, std::string>> simple_binding_properties(
              "right",
              "verticalCenter",
              "horizontalCenter",
-         }) {
+    }) {
         const auto* prop = object.property("Binding." + coordinate);
         if (prop != nullptr) {
-            bindings.push_back({coordinate, prop->value});
+            bindings.push_back({coordinate, oof::platform::stream::parse(prop->value)});
         }
     }
     return bindings;
 }
 
-std::vector<std::pair<std::string, std::string>> simple_dimension_binding_properties(
+std::vector<GeometryBindingRecord> dimension_binding_properties(
     const oof::platform::object_model::PlatformObject& object
 ) {
-    std::vector<std::pair<std::string, std::string>> bindings;
+    std::vector<GeometryBindingRecord> bindings;
     for (const std::string& dimension : {
              "height",
              "minHeight",
              "stretch",
              "width",
-         }) {
+    }) {
         const auto* prop = object.property("DimensionBinding." + dimension);
         if (prop != nullptr) {
-            bindings.push_back({dimension, prop->value});
+            bindings.push_back({dimension, oof::platform::stream::parse(prop->value)});
         }
     }
     return bindings;
 }
 
+void append_anchor_xml(
+    std::string& out,
+    std::string_view tag,
+    const oof::platform::stream::ListValue& value,
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    int indent
+) {
+    append_indent(out, indent);
+    out += "<";
+    out += tag;
+    if (!value.is_list) {
+        out += " value=\"";
+        out += xml_escape(value.atom);
+        out += "\"/>\n";
+        return;
+    }
+    if (!is_simple_platform_anchor(value)) {
+        throw std::runtime_error("unsupported platform Binding anchor shape; public XML cannot expose raw list fallback");
+    }
+    out += " relation=\"";
+    out += xml_escape(anchor_relation_name(value.items[0].atom));
+    out += "\" target=\"";
+    out += xml_escape(anchor_target_name(value.items[1].atom));
+    out += "\"";
+    if (anchor_target_name(value.items[1].atom) == "element") {
+        out += " targetId=\"";
+        out += xml_escape(value.items[1].atom);
+        out += "\"";
+    }
+    if (const auto* target = find_object_by_id(form_object, value.items[1].atom)) {
+        out += " targetName=\"";
+        out += xml_escape(target->name);
+        out += "\"";
+    }
+    out += " side=\"";
+    out += xml_escape(anchor_side_name(value.items[2].atom));
+    out += "\" offset=\"";
+    out += xml_escape(value.items[3].atom);
+    out += "\"/>\n";
+}
+
+void append_binding_xml(
+    std::string& out,
+    const GeometryBindingRecord& binding,
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    int indent
+) {
+    append_indent(out, indent);
+    out += "<Binding coordinate=\"";
+    out += xml_escape(binding.name);
+    out += "\"";
+    if (!binding.value.is_list) {
+        out += " value=\"";
+        out += xml_escape(binding.value.atom);
+        out += "\"/>\n";
+        return;
+    }
+    if (binding.value.items.empty() || binding.value.items[0].is_list) {
+        throw std::runtime_error("unsupported platform Binding record shape; missing scalar mode");
+    }
+    out += " mode=\"";
+    out += xml_escape(binding.value.items[0].atom);
+    out += "\">\n";
+    if (binding.value.items.size() > 1) {
+        append_anchor_xml(out, "From", binding.value.items[1], form_object, indent + 2);
+    }
+    if (binding.value.items.size() > 2) {
+        append_anchor_xml(out, "To", binding.value.items[2], form_object, indent + 2);
+    }
+    for (std::size_t index = 3; index < binding.value.items.size(); ++index) {
+        append_anchor_xml(out, "Extra", binding.value.items[index], form_object, indent + 2);
+    }
+    append_indent(out, indent);
+    out += "</Binding>\n";
+}
+
+void append_dimension_binding_xml(
+    std::string& out,
+    const GeometryBindingRecord& binding,
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    int indent
+) {
+    append_indent(out, indent);
+    out += "<DimensionBinding dimension=\"";
+    out += xml_escape(binding.name);
+    out += "\"";
+    if (!binding.value.is_list) {
+        out += " value=\"";
+        out += xml_escape(binding.value.atom);
+        out += "\"/>\n";
+        return;
+    }
+    if (binding.value.items.size() < 3 ||
+        binding.value.items[0].is_list ||
+        binding.value.items[1].is_list ||
+        binding.value.items[2].is_list) {
+        throw std::runtime_error("unsupported platform DimensionBinding record shape; public XML cannot expose raw list fallback");
+    }
+    out += " mode=\"";
+    out += xml_escape(binding.value.items[0].atom);
+    out += "\" target=\"";
+    out += xml_escape(anchor_target_name(binding.value.items[1].atom));
+    out += "\"";
+    if (anchor_target_name(binding.value.items[1].atom) == "element") {
+        out += " targetId=\"";
+        out += xml_escape(binding.value.items[1].atom);
+        out += "\"";
+    }
+    if (const auto* target = find_object_by_id(form_object, binding.value.items[1].atom)) {
+        out += " targetName=\"";
+        out += xml_escape(target->name);
+        out += "\"";
+    }
+    out += " side=\"";
+    out += xml_escape(anchor_side_name(binding.value.items[2].atom));
+    out += "\"";
+    if (binding.value.items.size() == 3) {
+        out += "/>\n";
+        return;
+    }
+    out += ">\n";
+    for (std::size_t index = 3; index < binding.value.items.size(); ++index) {
+        append_anchor_xml(out, "Extra", binding.value.items[index], form_object, indent + 2);
+    }
+    append_indent(out, indent);
+    out += "</DimensionBinding>\n";
+}
+
 void append_position_xml(
     std::string& out,
+    const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object,
     int indent
 ) {
@@ -2317,8 +2713,8 @@ void append_position_xml(
     if (left == nullptr || top == nullptr || right == nullptr || bottom == nullptr) {
         return;
     }
-    const auto bindings = simple_binding_properties(object);
-    const auto dimension_bindings = simple_dimension_binding_properties(object);
+    const auto bindings = binding_properties(object);
+    const auto dimension_bindings = dimension_binding_properties(object);
     append_indent(out, indent);
     out += "<Position left=\"";
     out += xml_escape(left->value);
@@ -2336,21 +2732,11 @@ void append_position_xml(
     out += ">\n";
     append_indent(out, indent + 2);
     out += "<Bindings>\n";
-    for (const auto& [coordinate, value] : bindings) {
-        append_indent(out, indent + 4);
-        out += "<Binding coordinate=\"";
-        out += xml_escape(coordinate);
-        out += "\" value=\"";
-        out += xml_escape(value);
-        out += "\"/>\n";
+    for (const auto& binding : bindings) {
+        append_binding_xml(out, binding, form_object, indent + 4);
     }
-    for (const auto& [dimension, value] : dimension_bindings) {
-        append_indent(out, indent + 4);
-        out += "<DimensionBinding dimension=\"";
-        out += xml_escape(dimension);
-        out += "\" value=\"";
-        out += xml_escape(value);
-        out += "\"/>\n";
+    for (const auto& binding : dimension_bindings) {
+        append_dimension_binding_xml(out, binding, form_object, indent + 4);
     }
     append_indent(out, indent + 2);
     out += "</Bindings>\n";
@@ -2387,7 +2773,7 @@ void append_control_xml(
     }
     out += ">\n";
     append_named_text_property_xml(out, object, "Title", indent + 2);
-    append_position_xml(out, object, indent + 2);
+    append_position_xml(out, form_object, object, indent + 2);
     if (!object.children.empty()) {
         append_indent(out, indent + 2);
         out += "<ChildItems>\n";
@@ -2544,11 +2930,11 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << ",\"nativeXmlProjection\":true";
     std::cout << ",\"nativeXmlWriter\":true";
-    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Position\",\"Binding:value\",\"DimensionBinding:value\"]";
+    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Position\",\"Binding:value\",\"Binding:anchor-list\",\"DimensionBinding:value\",\"DimensionBinding:record\"]";
     std::cout << ",\"materializedItems\":" << summary.items.size();
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
-    std::cout << ",\"missingCodecs\":[\"Binding:anchor-list\",\"DimensionBinding:anchor-list\",\"Attributes\",\"Commands\",\"Events\",\"cf_form_controls8 typed payload fields\"]";
+    std::cout << ",\"missingCodecs\":[\"Attributes\",\"Commands\",\"Events\",\"cf_form_controls8 typed payload fields\"]";
     std::cout << "}\n";
 }
 
@@ -2587,12 +2973,35 @@ void print_formbin_xml_build_selftest() {
     const std::string redump_xml = form_object_to_public_xml(materialize_platform_form_object(redump_envelope));
     const auto& module = find_container_file(reparsed, "module");
 
+    const std::string anchor_form_text =
+        "{{\"MainCaption\",1,1,{\"ru\",\"Main\"}},"
+        "{6ff79819-710e-4145-97cd-1618da79e3e2,4,{1,{1,1,{\"ru\",\"Panel\"}}},"
+        "{8,0,0,200,100,0,0,0,0,0,0,0,0,0,0,0,0},{14,\"PanelHost\",4294967295,0,0,0},{0}},"
+        "{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{\"ru\",\"Run\"}}},"
+        "{8,1,2,101,22,0,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},"
+        "{0,{2,4,2,0},{2,-1,6,0}},0,0,0,0,{0,4,1},0,0,0},{14,\"Button1\",4294967295,0,0,0},{0}}}";
+    RuntimeFormEnvelope anchor_envelope = runtime_envelope_from_form_payload(
+        std::vector<std::uint8_t>(anchor_form_text.begin(), anchor_form_text.end()));
+    std::string anchor_xml = form_object_to_public_xml(materialize_platform_form_object(anchor_envelope));
+    const bool anchor_name_visible = anchor_xml.find("targetName=\"PanelHost\"") != std::string::npos;
+    replace_all(anchor_xml, "targetId=\"4\" targetName=\"PanelHost\" side=\"left\" offset=\"0\"",
+                "targetId=\"4\" targetName=\"PanelHost\" side=\"left\" offset=\"7\"");
+    const auto anchor_edits = parse_public_xml_control_edits(anchor_xml);
+    const auto anchor_result = apply_public_xml_edits(anchor_envelope, anchor_edits);
+    const std::string anchor_redump_xml = form_object_to_public_xml(materialize_platform_form_object(anchor_envelope));
+
     std::cout << "{\"operation\":\"formbin-xml-build-selftest\"";
     std::cout << ",\"nameEdits\":" << result.name_edits;
     std::cout << ",\"titleEdits\":" << result.title_edits;
     std::cout << ",\"positionEdits\":" << result.position_edits;
     std::cout << ",\"bindingEdits\":" << result.binding_edits;
     std::cout << ",\"dimensionBindingEdits\":" << result.dimension_binding_edits;
+    std::cout << ",\"anchorBindingEdits\":" << anchor_result.binding_edits;
+    std::cout << ",\"anchorTargetNameVisible\":" << (anchor_name_visible ? "true" : "false");
+    std::cout << ",\"anchorBindingRoundtrip\":"
+              << (anchor_redump_xml.find("targetId=\"4\" targetName=\"PanelHost\" side=\"left\" offset=\"7\"") != std::string::npos ? "true" : "false");
+    std::cout << ",\"dimensionRecordRoundtrip\":"
+              << (anchor_redump_xml.find("<DimensionBinding dimension=\"height\" mode=\"0\" target=\"element\" targetId=\"4\" targetName=\"PanelHost\" side=\"bottom\"/>") != std::string::npos ? "true" : "false");
     std::cout << ",\"nameRoundtrip\":"
               << (redump_xml.find("ButtonXmlEdited") != std::string::npos ? "true" : "false");
     std::cout << ",\"titleRoundtrip\":"
@@ -2899,7 +3308,7 @@ bool set_materialized_object_position_property(
 bool set_materialized_object_bindings(
     oof::platform::stream::ListValue& value,
     std::string_view object_id,
-    const std::vector<std::pair<std::string, std::string>>& bindings
+    const std::vector<GeometryBindingRecord>& bindings
 ) {
     if (!value.is_list) {
         return false;
@@ -2912,13 +3321,12 @@ bool set_materialized_object_bindings(
             return false;
         }
         bool changed = false;
-        for (const auto& [coordinate, binding_value] : bindings) {
-            const std::size_t slot = binding_coordinate_slot(coordinate);
-            if (slot == 0 || geometry->items.size() <= slot || geometry->items[slot].is_list) {
-                throw std::runtime_error("unsupported Binding coordinate or non-scalar binding slot: " + coordinate);
+        for (const auto& binding : bindings) {
+            const std::size_t slot = binding_coordinate_slot(binding.name);
+            if (slot == 0 || geometry->items.size() <= slot) {
+                throw std::runtime_error("unsupported Binding coordinate: " + binding.name);
             }
-            geometry->items[slot].atom = binding_value;
-            geometry->items[slot].atom_kind = oof::platform::stream::ListValue::AtomKind::raw;
+            geometry->items[slot] = binding.value;
             changed = true;
         }
         return changed;
@@ -2934,7 +3342,7 @@ bool set_materialized_object_bindings(
 bool set_materialized_object_dimension_bindings(
     oof::platform::stream::ListValue& value,
     std::string_view object_id,
-    const std::vector<std::pair<std::string, std::string>>& bindings
+    const std::vector<GeometryBindingRecord>& bindings
 ) {
     if (!value.is_list) {
         return false;
@@ -2947,13 +3355,12 @@ bool set_materialized_object_dimension_bindings(
             return false;
         }
         bool changed = false;
-        for (const auto& [dimension, binding_value] : bindings) {
-            const std::size_t slot = dimension_binding_slot(dimension);
-            if (slot == 0 || geometry->items.size() <= slot || geometry->items[slot].is_list) {
-                throw std::runtime_error("unsupported DimensionBinding dimension or non-scalar binding slot: " + dimension);
+        for (const auto& binding : bindings) {
+            const std::size_t slot = dimension_binding_slot(binding.name);
+            if (slot == 0 || geometry->items.size() <= slot) {
+                throw std::runtime_error("unsupported DimensionBinding dimension: " + binding.name);
             }
-            geometry->items[slot].atom = binding_value;
-            geometry->items[slot].atom_kind = oof::platform::stream::ListValue::AtomKind::raw;
+            geometry->items[slot] = binding.value;
             changed = true;
         }
         return changed;
