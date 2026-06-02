@@ -376,6 +376,23 @@ void print_mechanism() {
         print_json_string(value.native_role);
         std::cout << "}";
     }
+    std::cout << "],\"schemaValueSurface\":[";
+    for (size_t i = 0; i < oof::platform::value::schema_value_surface.size(); ++i) {
+        const auto& value = oof::platform::value::schema_value_surface[i];
+        if (i != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{";
+        std::cout << "\"type\":";
+        print_json_string(value.type_name);
+        std::cout << ",\"schemaSource\":";
+        print_json_string(value.schema_source);
+        std::cout << ",\"platformEvidence\":";
+        print_json_string(value.platform_evidence);
+        std::cout << ",\"nativeRole\":";
+        print_json_string(value.native_role);
+        std::cout << "}";
+    }
     std::cout << "],\"localizedValueLayout\":{";
     std::cout << "\"localWStringVersion\":" << oof::platform::value::LocalWString::platform_version << ",";
     std::cout << "\"firstItemLanguageOffset\":" << oof::platform::value::LocalWString::first_item_language_offset << ",";
@@ -466,6 +483,47 @@ void print_value_roundtrip() {
     const oof::platform::value::TypeDomainPattern restored_type_domain =
         oof::platform::value::TypeDomainPattern::deserialize(type_domain_stream);
 
+    oof::platform::value::GenericValue generic{"String", "Value"};
+    const std::string generic_serialized = generic.serialize_list_stream();
+    oof::platform::stream::ListInStream generic_stream(generic_serialized);
+    const oof::platform::value::GenericValue restored_generic =
+        oof::platform::value::GenericValue::deserialize(generic_stream);
+
+    const oof::platform::value::Color absolute_color =
+        oof::platform::value::Color::absolute_rgb(0x12, 0x34, 0x56);
+    const std::string absolute_color_serialized = absolute_color.serialize_list_stream();
+    oof::platform::stream::ListInStream color_stream(absolute_color_serialized);
+    const oof::platform::value::Color restored_color =
+        oof::platform::value::Color::deserialize(color_stream);
+
+    oof::platform::value::Font font;
+    font.kind = oof::platform::value::FontKind::absolute;
+    font.mask = 0x0f;
+    font.face_name = "Arial";
+    font.height = 10.0;
+    font.bold = true;
+    const std::string font_serialized = font.serialize_list_stream();
+    oof::platform::stream::ListInStream font_stream(font_serialized);
+    const oof::platform::value::Font restored_font =
+        oof::platform::value::Font::deserialize(font_stream);
+
+    oof::platform::value::V8Border border;
+    border.style = oof::platform::value::BorderType::single;
+    border.width = 1;
+    border.color = oof::platform::value::Color::auto_color();
+    const std::string border_serialized = border.serialize_list_stream();
+    oof::platform::stream::ListInStream border_stream(border_serialized);
+    const oof::platform::value::V8Border restored_border =
+        oof::platform::value::V8Border::deserialize(border_stream);
+
+    oof::platform::value::V8Picture picture;
+    picture.ref.ref = oof::platform::value::AbstractRef::named("ui:Picture");
+    picture.storage_id = "storage";
+    const std::string picture_serialized = picture.serialize_list_stream();
+    oof::platform::stream::ListInStream picture_stream(picture_serialized);
+    const oof::platform::value::V8Picture restored_picture =
+        oof::platform::value::V8Picture::deserialize(picture_stream);
+
     std::cout << "{";
     std::cout << "\"serialized\":";
     print_json_string(serialized);
@@ -483,6 +541,26 @@ void print_value_roundtrip() {
     std::cout << ",\"typeDomainPattern\":";
     print_json_string(type_domain_serialized);
     std::cout << ",\"typeDomainEntries\":" << restored_type_domain.entries.size();
+    std::cout << ",\"genericValue\":";
+    print_json_string(generic_serialized);
+    std::cout << ",\"genericType\":";
+    print_json_string(restored_generic.type_name);
+    std::cout << ",\"color\":";
+    print_json_string(absolute_color_serialized);
+    std::cout << ",\"colorSchema\":";
+    print_json_string(restored_color.schema_value());
+    std::cout << ",\"font\":";
+    print_json_string(font_serialized);
+    std::cout << ",\"fontFace\":";
+    print_json_string(restored_font.face_name);
+    std::cout << ",\"border\":";
+    print_json_string(border_serialized);
+    std::cout << ",\"borderStyle\":";
+    print_json_string(oof::platform::value::border_type_name(restored_border.style));
+    std::cout << ",\"picture\":";
+    print_json_string(picture_serialized);
+    std::cout << ",\"pictureRef\":";
+    print_json_string(restored_picture.ref.ref.schema_value());
     std::cout << "}\n";
 }
 

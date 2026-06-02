@@ -3,8 +3,10 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
+#include <iomanip>
 #include <stdexcept>
 #include <string>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -93,11 +95,21 @@ public:
         append(ListValue::raw_atom(std::to_string(value)));
     }
 
+    void write_double(double value) {
+        std::ostringstream out;
+        out << std::setprecision(17) << value;
+        append(ListValue::raw_atom(out.str()));
+    }
+
     void write_bool(bool value) {
         append(ListValue::raw_atom(value ? "1" : "0"));
     }
 
     void write_guid(std::string value) {
+        append(ListValue::raw_atom(std::move(value)));
+    }
+
+    void write_raw_atom(std::string value) {
         append(ListValue::raw_atom(std::move(value)));
     }
 
@@ -318,6 +330,19 @@ public:
         return static_cast<std::int64_t>(parsed);
     }
 
+    double read_double() {
+        const ListValue& value = take_value();
+        if (value.is_list || value.atom_kind != ListValue::AtomKind::raw || value.atom.empty()) {
+            throw std::runtime_error("ListInStream expected double atom");
+        }
+        char* end = nullptr;
+        const double parsed = std::strtod(value.atom.c_str(), &end);
+        if (end == nullptr || *end != '\0') {
+            throw std::runtime_error("ListInStream invalid double atom");
+        }
+        return parsed;
+    }
+
     bool read_bool() {
         const std::uint32_t value = read_uint32();
         if (value > 1) {
@@ -330,6 +355,14 @@ public:
         const ListValue& value = take_value();
         if (value.is_list || value.atom_kind != ListValue::AtomKind::raw || value.atom.empty()) {
             throw std::runtime_error("ListInStream expected guid atom");
+        }
+        return value.atom;
+    }
+
+    std::string read_raw_atom() {
+        const ListValue& value = take_value();
+        if (value.is_list || value.atom_kind != ListValue::AtomKind::raw) {
+            throw std::runtime_error("ListInStream expected raw atom");
         }
         return value.atom;
     }

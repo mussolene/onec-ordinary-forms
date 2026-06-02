@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <iomanip>
 #include <stdexcept>
 #include <sstream>
 #include <string>
@@ -83,6 +84,26 @@ constexpr std::array<ValueSurfaceEntry, 15> value_surface{{
     {"PersistenceStorage", "core::IInPersistenceStorage/core::IOutPersistenceStorage", "nested persisted object"},
     {"ListInStream", "core::ListInStream", "platform list reader"},
     {"ListOutStream", "core::ListOutStream", "platform list writer"},
+}};
+
+struct SchemaValueSurfaceEntry {
+    std::string_view type_name;
+    std::string_view schema_source;
+    std::string_view platform_evidence;
+    std::string_view native_role;
+};
+
+constexpr std::array<SchemaValueSurfaceEntry, 10> schema_value_surface{{
+    {"AbstractRef", "xdto_root.res:data_ui.xsd AbstractRef", "CompositeID/QName union", "schema-level reference wrapper"},
+    {"StyleRef", "xdto_root.res:data_ui.xsd StyleRef", "CompositeID/QName union", "style item reference"},
+    {"PictureRef", "xdto_root.res:data_ui.xsd PictureRef", "CompositeID/QName union", "picture reference"},
+    {"Color", "xdto_root.res:data_ui.xsd Color", "core82 Color::serialize/deserialize list arity 3", "AbsoluteColor/AutoColor/ref UI color"},
+    {"Font", "xdto_root.res:data_ui.xsd Font", "core82 Font::serialize/deserialize list arity 6", "absolute/windows/style/auto font"},
+    {"V8Border", "xdto_root.res:data_ui.xsd Border", "core82 V8Border::serialize/deserialize list arity 3", "control border with style/ref/color"},
+    {"V8Picture", "xdto_root.res:data_ui.xsd Picture/PictureRef", "core82 V8Picture storage entrypoints", "picture ref/storage object"},
+    {"GenericValue", "core value serializer", "core85 GenericValue serialize/fromString", "typed scalar envelope"},
+    {"ShortCut", "core value serializer", "core85/core82 ShortCut to_stream/from_stream", "keyboard shortcut value"},
+    {"PersistenceStorage", "core persistence interfaces", "IInPersistenceStorage/IOutPersistenceStorage", "nested persisted object bytes"},
 }};
 
 struct LocalWStringItem {
@@ -467,45 +488,439 @@ struct TypeDomainPattern {
 struct GenericValue {
     std::string type_name;
     std::string value;
+
+    void serialize(stream::ListOutStream& out) const {
+        out.begin_list();
+        out.write_string(type_name);
+        out.write_string(value);
+        out.end_list();
+    }
+
+    static GenericValue deserialize(stream::ListInStream& in) {
+        GenericValue value;
+        in.begin_list();
+        value.type_name = in.read_string();
+        value.value = in.read_string();
+        in.end_list();
+        return value;
+    }
+
+    std::string serialize_list_stream() const {
+        stream::ListOutStream out;
+        serialize(out);
+        return out.text();
+    }
+};
+
+enum class AbstractRefKind {
+    none,
+    composite_id,
+    qname,
+};
+
+inline std::string_view abstract_ref_kind_name(AbstractRefKind kind) {
+    switch (kind) {
+        case AbstractRefKind::none:
+            return "none";
+        case AbstractRefKind::composite_id:
+            return "CompositeID";
+        case AbstractRefKind::qname:
+            return "QName";
+    }
+    return "none";
+}
+
+struct AbstractRef {
+    AbstractRefKind kind = AbstractRefKind::none;
+    CompositeID composite_id;
+    std::string qname;
+
+    static AbstractRef composite(CompositeID id) {
+        AbstractRef ref;
+        ref.kind = AbstractRefKind::composite_id;
+        ref.composite_id = std::move(id);
+        return ref;
+    }
+
+    static AbstractRef named(std::string value) {
+        AbstractRef ref;
+        ref.kind = AbstractRefKind::qname;
+        ref.qname = std::move(value);
+        return ref;
+    }
+
+    bool empty() const {
+        return kind == AbstractRefKind::none;
+    }
+
+    void serialize(stream::ListOutStream& out) const {
+        out.begin_list();
+        out.write_string(std::string(abstract_ref_kind_name(kind)));
+        switch (kind) {
+            case AbstractRefKind::none:
+                break;
+            case AbstractRefKind::composite_id:
+                composite_id.serialize(out);
+                break;
+            case AbstractRefKind::qname:
+                out.write_string(qname);
+                break;
+        }
+        out.end_list();
+    }
+
+    static AbstractRef deserialize(stream::ListInStream& in) {
+        AbstractRef ref;
+        in.begin_list();
+        const std::string kind = in.read_string();
+        if (kind == "CompositeID") {
+            ref.kind = AbstractRefKind::composite_id;
+            ref.composite_id = CompositeID::deserialize(in);
+        } else if (kind == "QName") {
+            ref.kind = AbstractRefKind::qname;
+            ref.qname = in.read_string();
+        } else if (kind == "none") {
+            ref.kind = AbstractRefKind::none;
+        } else {
+            throw std::runtime_error("AbstractRef unsupported kind " + kind);
+        }
+        in.end_list();
+        return ref;
+    }
+
+    std::string schema_value() const {
+        if (kind == AbstractRefKind::qname) {
+            return qname;
+        }
+        if (kind == AbstractRefKind::composite_id) {
+            return composite_id.serialize_list_stream();
+        }
+        return {};
+    }
+};
+
+struct StyleRef {
+    AbstractRef ref;
+};
+
+struct PictureRef {
+    AbstractRef ref;
+};
+
+inline std::string hex_byte(std::uint8_t value) {
+    std::ostringstream out;
+    out << std::hex << std::nouppercase << std::setfill('0') << std::setw(2)
+        << static_cast<unsigned int>(value);
+    return out.str();
+}
+
+enum class ColorKind : std::uint32_t {
+    absolute = 0,
+    auto_color = 1,
+    style_ref = 2,
 };
 
 struct Color {
+    static constexpr std::uint32_t platform_serialize_arity = 3;
+
+    ColorKind kind = ColorKind::absolute;
     std::uint8_t red = 0;
     std::uint8_t green = 0;
     std::uint8_t blue = 0;
     std::uint8_t alpha = 255;
+    AbstractRef ref;
+
+    static Color absolute_rgb(std::uint8_t red, std::uint8_t green, std::uint8_t blue) {
+        Color color;
+        color.kind = ColorKind::absolute;
+        color.red = red;
+        color.green = green;
+        color.blue = blue;
+        color.alpha = 255;
+        return color;
+    }
+
+    static Color auto_color() {
+        Color color;
+        color.kind = ColorKind::auto_color;
+        return color;
+    }
+
+    static Color style(AbstractRef ref) {
+        Color color;
+        color.kind = ColorKind::style_ref;
+        color.ref = std::move(ref);
+        return color;
+    }
+
+    void serialize(stream::ListOutStream& out) const {
+        out.begin_list();
+        out.write_uint32(platform_serialize_arity);
+        out.write_uint32(static_cast<std::uint32_t>(kind));
+        out.begin_list();
+        out.write_uint32(red);
+        out.write_uint32(green);
+        out.write_uint32(blue);
+        out.write_uint32(alpha);
+        out.end_list();
+        ref.serialize(out);
+        out.end_list();
+    }
+
+    static Color deserialize(stream::ListInStream& in) {
+        Color color;
+        in.begin_list();
+        const std::uint32_t arity = in.read_uint32();
+        if (arity != platform_serialize_arity) {
+            throw std::runtime_error("Color unsupported serialize arity " + std::to_string(arity));
+        }
+        color.kind = static_cast<ColorKind>(in.read_uint32());
+        in.begin_list();
+        color.red = static_cast<std::uint8_t>(in.read_uint32());
+        color.green = static_cast<std::uint8_t>(in.read_uint32());
+        color.blue = static_cast<std::uint8_t>(in.read_uint32());
+        color.alpha = static_cast<std::uint8_t>(in.read_uint32());
+        in.end_list();
+        color.ref = AbstractRef::deserialize(in);
+        in.end_list();
+        return color;
+    }
+
+    std::string schema_value() const {
+        if (kind == ColorKind::auto_color) {
+            return "auto";
+        }
+        if (kind == ColorKind::style_ref) {
+            return ref.schema_value();
+        }
+        return "#" + hex_byte(red) + hex_byte(green) + hex_byte(blue);
+    }
+
+    std::string serialize_list_stream() const {
+        stream::ListOutStream out;
+        serialize(out);
+        return out.text();
+    }
+};
+
+enum class FontKind : std::uint32_t {
+    absolute = 0,
+    windows_font = 1,
+    style_item = 2,
+    auto_font = 3,
 };
 
 struct Font {
-    std::string name;
-    double size = 0.0;
+    static constexpr std::uint32_t platform_serialize_arity = 6;
+
+    FontKind kind = FontKind::auto_font;
+    std::uint32_t mask = 0;
+    AbstractRef ref;
+    std::string face_name;
+    double height = 0.0;
     bool bold = false;
     bool italic = false;
+    bool underline = false;
+    bool strikeout = false;
+
+    void serialize(stream::ListOutStream& out) const {
+        out.begin_list();
+        out.write_uint32(platform_serialize_arity);
+        out.write_uint32(static_cast<std::uint32_t>(kind));
+        out.write_uint32(mask);
+        ref.serialize(out);
+        out.write_string(face_name);
+        out.write_double(height);
+        out.begin_list();
+        out.write_bool(bold);
+        out.write_bool(italic);
+        out.write_bool(underline);
+        out.write_bool(strikeout);
+        out.end_list();
+        out.end_list();
+    }
+
+    static Font deserialize(stream::ListInStream& in) {
+        Font font;
+        in.begin_list();
+        const std::uint32_t arity = in.read_uint32();
+        if (arity != platform_serialize_arity) {
+            throw std::runtime_error("Font unsupported serialize arity " + std::to_string(arity));
+        }
+        font.kind = static_cast<FontKind>(in.read_uint32());
+        font.mask = in.read_uint32();
+        font.ref = AbstractRef::deserialize(in);
+        font.face_name = in.read_string();
+        font.height = in.read_double();
+        in.begin_list();
+        font.bold = in.read_bool();
+        font.italic = in.read_bool();
+        font.underline = in.read_bool();
+        font.strikeout = in.read_bool();
+        in.end_list();
+        in.end_list();
+        return font;
+    }
+
+    std::string serialize_list_stream() const {
+        stream::ListOutStream out;
+        serialize(out);
+        return out.text();
+    }
 };
 
+enum class BorderType : std::uint32_t {
+    without_border = 0,
+    single = 1,
+    double_line = 2,
+    embossed = 3,
+    indented = 4,
+    underline = 5,
+    double_underline = 6,
+    rounded = 7,
+    overline = 8,
+};
+
+inline std::string_view border_type_name(BorderType type) {
+    switch (type) {
+        case BorderType::without_border:
+            return "WithoutBorder";
+        case BorderType::single:
+            return "Single";
+        case BorderType::double_line:
+            return "Double";
+        case BorderType::embossed:
+            return "Embossed";
+        case BorderType::indented:
+            return "Indented";
+        case BorderType::underline:
+            return "Underline";
+        case BorderType::double_underline:
+            return "DoubleUnderline";
+        case BorderType::rounded:
+            return "Rounded";
+        case BorderType::overline:
+            return "Overline";
+    }
+    return "WithoutBorder";
+}
+
 struct V8Border {
-    std::string style;
+    static constexpr std::uint32_t platform_serialize_arity = 3;
+
+    BorderType style = BorderType::without_border;
     std::uint32_t width = 0;
+    AbstractRef ref;
+    Color color = Color::auto_color();
+
+    void serialize(stream::ListOutStream& out) const {
+        out.begin_list();
+        out.write_uint32(platform_serialize_arity);
+        out.write_uint32(static_cast<std::uint32_t>(style));
+        out.write_uint32(width);
+        ref.serialize(out);
+        color.serialize(out);
+        out.end_list();
+    }
+
+    static V8Border deserialize(stream::ListInStream& in) {
+        V8Border border;
+        in.begin_list();
+        const std::uint32_t arity = in.read_uint32();
+        if (arity != platform_serialize_arity) {
+            throw std::runtime_error("V8Border unsupported serialize arity " + std::to_string(arity));
+        }
+        border.style = static_cast<BorderType>(in.read_uint32());
+        border.width = in.read_uint32();
+        border.ref = AbstractRef::deserialize(in);
+        border.color = Color::deserialize(in);
+        in.end_list();
+        return border;
+    }
+
+    std::string serialize_list_stream() const {
+        stream::ListOutStream out;
+        serialize(out);
+        return out.text();
+    }
 };
 
 struct V8Picture {
+    PictureRef ref;
     std::string storage_id;
+
+    void serialize(stream::ListOutStream& out) const {
+        out.begin_list();
+        ref.ref.serialize(out);
+        out.write_string(storage_id);
+        out.end_list();
+    }
+
+    static V8Picture deserialize(stream::ListInStream& in) {
+        V8Picture picture;
+        in.begin_list();
+        picture.ref.ref = AbstractRef::deserialize(in);
+        picture.storage_id = in.read_string();
+        in.end_list();
+        return picture;
+    }
+
+    std::string serialize_list_stream() const {
+        stream::ListOutStream out;
+        serialize(out);
+        return out.text();
+    }
 };
 
 struct ShortCut {
     std::string key;
+
+    void serialize(stream::ListOutStream& out) const {
+        out.begin_list();
+        out.write_string(key);
+        out.end_list();
+    }
+
+    static ShortCut deserialize(stream::ListInStream& in) {
+        ShortCut shortcut;
+        in.begin_list();
+        shortcut.key = in.read_string();
+        in.end_list();
+        return shortcut;
+    }
 };
 
 struct Date {
     std::string iso_value;
+
+    void serialize(stream::ListOutStream& out) const {
+        out.write_string(iso_value);
+    }
+
+    static Date deserialize(stream::ListInStream& in) {
+        Date date;
+        date.iso_value = in.read_string();
+        return date;
+    }
 };
 
 struct Numeric {
     std::string decimal_value;
+
+    void serialize(stream::ListOutStream& out) const {
+        out.write_raw_atom(decimal_value);
+    }
+
+    static Numeric deserialize(stream::ListInStream& in) {
+        Numeric numeric;
+        numeric.decimal_value = in.read_raw_atom();
+        return numeric;
+    }
 };
 
 struct PersistenceStorage {
     std::string object_name;
+    std::vector<std::uint8_t> bytes;
 };
 
 }  // namespace oof::platform::value
