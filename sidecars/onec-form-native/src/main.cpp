@@ -268,6 +268,7 @@ void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip> runtime-form-stream.txt\n"
+              << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
               << "       oof-native runtime-form-rename runtime-form-stream.txt rebuilt-stream.txt objectId newName\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
@@ -1700,6 +1701,135 @@ void write_runtime_form_rename(
     std::cout << "}\n";
 }
 
+struct RuntimeSemanticDiffStats {
+    std::size_t structural_diffs = 0;
+    std::size_t semantic_diffs = 0;
+    std::size_t volatile_guid_diffs = 0;
+    std::size_t volatile_counter_diffs = 0;
+    std::vector<std::string> semantic_paths;
+};
+
+bool parse_int64_atom(std::string_view value, std::int64_t& parsed) {
+    if (value.empty()) {
+        return false;
+    }
+    std::size_t offset = 0;
+    bool negative = false;
+    if (value[0] == '-') {
+        negative = true;
+        offset = 1;
+    }
+    if (offset == value.size()) {
+        return false;
+    }
+    std::int64_t result = 0;
+    for (; offset < value.size(); ++offset) {
+        const char ch = value[offset];
+        if (ch < '0' || ch > '9') {
+            return false;
+        }
+        result = result * 10 + (ch - '0');
+    }
+    parsed = negative ? -result : result;
+    return true;
+}
+
+std::string node_type_scope(const oof::platform::stream::ListValue& value, std::string_view current_scope) {
+    if (is_materializable_object_candidate(value)) {
+        if (const auto* binding = oof::platform::form_descriptor::binding_for_guid(value.items[0].atom)) {
+            return std::string(binding->platform_type);
+        }
+    }
+    return std::string(current_scope);
+}
+
+void collect_runtime_semantic_diff(
+    const oof::platform::stream::ListValue& left,
+    const oof::platform::stream::ListValue& right,
+    std::string_view path,
+    std::string_view type_scope,
+    RuntimeSemanticDiffStats& stats
+) {
+    if (left.is_list != right.is_list) {
+        ++stats.structural_diffs;
+        stats.semantic_paths.push_back(std::string(path));
+        return;
+    }
+    if (!left.is_list) {
+        if (left.atom_kind == right.atom_kind && left.atom == right.atom) {
+            return;
+        }
+        std::int64_t left_int = 0;
+        std::int64_t right_int = 0;
+        if (path == "$/2/1/10" &&
+            left.atom_kind == oof::platform::stream::ListValue::AtomKind::raw &&
+            right.atom_kind == oof::platform::stream::ListValue::AtomKind::raw &&
+            parse_int64_atom(left.atom, left_int) &&
+            parse_int64_atom(right.atom, right_int) &&
+            right_int == left_int + 1) {
+            ++stats.volatile_counter_diffs;
+            return;
+        }
+        if (type_scope == "CommandBar" &&
+            left.atom_kind == oof::platform::stream::ListValue::AtomKind::raw &&
+            right.atom_kind == oof::platform::stream::ListValue::AtomKind::raw &&
+            is_guid_text(left.atom) &&
+            is_guid_text(right.atom)) {
+            ++stats.volatile_guid_diffs;
+            return;
+        }
+        ++stats.semantic_diffs;
+        if (stats.semantic_paths.size() < 16) {
+            stats.semantic_paths.push_back(std::string(path));
+        }
+        return;
+    }
+    if (left.items.size() != right.items.size()) {
+        ++stats.structural_diffs;
+        stats.semantic_paths.push_back(std::string(path));
+        return;
+    }
+
+    const std::string child_scope = node_type_scope(left, type_scope);
+    for (std::size_t index = 0; index < left.items.size(); ++index) {
+        collect_runtime_semantic_diff(
+            left.items[index],
+            right.items[index],
+            child_path(path, index),
+            child_scope,
+            stats);
+    }
+}
+
+void print_runtime_form_semantic_diff(const std::string& left_path, const std::string& right_path) {
+    const auto left_bytes = read_file_bytes(left_path);
+    const auto right_bytes = read_file_bytes(right_path);
+    const auto left = oof::platform::stream::parse(decode_text_file_bytes(left_bytes));
+    const auto right = oof::platform::stream::parse(decode_text_file_bytes(right_bytes));
+
+    RuntimeSemanticDiffStats stats;
+    collect_runtime_semantic_diff(left, right, "$", "", stats);
+    const bool normalized_equal =
+        stats.structural_diffs == 0 &&
+        stats.semantic_diffs == 0;
+
+    std::cout << "{\"leftBytes\":" << left_bytes.size();
+    std::cout << ",\"rightBytes\":" << right_bytes.size();
+    std::cout << ",\"normalizedEqual\":" << (normalized_equal ? "true" : "false");
+    std::cout << ",\"structuralDiffs\":" << stats.structural_diffs;
+    std::cout << ",\"semanticDiffs\":" << stats.semantic_diffs;
+    std::cout << ",\"volatileGuidDiffs\":" << stats.volatile_guid_diffs;
+    std::cout << ",\"volatileCounterDiffs\":" << stats.volatile_counter_diffs;
+    std::cout << ",\"semanticPaths\":[";
+    for (std::size_t index = 0; index < stats.semantic_paths.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_json_string(stats.semantic_paths[index]);
+    }
+    std::cout << "]}\n";
+}
+
 void print_transfer_descriptor_json(const oof::platform::ordinary::TransferDescriptor& descriptor) {
     std::cout << "{\"symbol\":";
     print_json_string(descriptor.symbol);
@@ -2511,6 +2641,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-roundtrip" && argc == 3) {
             print_runtime_form_roundtrip(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-form-semantic-diff" && argc == 4) {
+            print_runtime_form_semantic_diff(argv[2], argv[3]);
             return 0;
         }
         if (command == "runtime-form-rebuild" && argc == 4) {
