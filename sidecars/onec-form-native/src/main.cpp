@@ -273,6 +273,7 @@ void usage() {
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
               << "       oof-native runtime-form-rename runtime-form-stream.txt rebuilt-stream.txt objectId newName\n"
+              << "       oof-native runtime-platform-object-set runtime-form-stream.txt rebuilt-stream.txt objectId property value\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "       oof-native <platform-form-schema|platform-descriptor-join|platform-runtime-bindings>\n"
@@ -1612,7 +1613,8 @@ void add_api_surface(
                 name,
                 localized_property_name(name),
                 "",
-                "platform-api-catalog"));
+                "platform-api-catalog",
+                "GenericValue"));
         }
     }
     for (const auto& name : split_csv_list(api->sample_methods)) {
@@ -1641,13 +1643,15 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
     form_object.form.object_id = "0";
     form_object.form.name = "Form";
     form_object.form.platform_type = "Form";
+    form_object.form.type_category = "core::kLogFormTypeInfoCategory";
+    form_object.form.type_source = "core85 ContextCore + mngbase RTLogForm";
     form_object.form.path = "$";
     form_object.form.properties.push_back(oof::platform::object_model::make_property(
-        "Type", "Тип", "Form", "platform-api-catalog"));
+        "Type", "Тип", "Form", "platform-api-catalog", "TypeDescription"));
     form_object.form.properties.push_back(oof::platform::object_model::make_property(
-        "RuntimeUUID", "", envelope.runtime_uuid, "runtime-form-envelope"));
+        "RuntimeUUID", "", envelope.runtime_uuid, "runtime-form-envelope", "UUID"));
     form_object.form.properties.push_back(oof::platform::object_model::make_property(
-        "Items", "Элементы", std::to_string(summary.items.size()), "materialized-object-collection"));
+        "Items", "Элементы", std::to_string(summary.items.size()), "materialized-object-collection", "FormItems"));
     add_api_surface(form_object.form, api_object_for_type("Form"));
 
     for (const auto& item : summary.items) {
@@ -1655,22 +1659,24 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
         object.object_id = item.object_id;
         object.name = item.name;
         object.platform_type = std::string(item.descriptor_binding->platform_type);
+        object.type_category = "core::kLogFormTypeInfoCategory";
+        object.type_source = std::string(item.descriptor_binding->evidence);
         object.path = item.path;
         object.parent_object_id = item.parent_object_id;
         object.properties.push_back(oof::platform::object_model::make_property(
-            "ObjectID", "", item.object_id, "materialized-list-stream"));
+            "ObjectID", "", item.object_id, "materialized-list-stream", "CompositeID"));
         object.properties.push_back(oof::platform::object_model::make_property(
-            "Name", "Имя", item.name, "platform-name-record"));
+            "Name", "Имя", item.name, "platform-name-record", "String", "platform-name-record:{14,name,...}", true));
         object.properties.push_back(oof::platform::object_model::make_property(
-            "Type", "Тип", object.platform_type, "descriptor-binding"));
+            "Type", "Тип", object.platform_type, "descriptor-binding", "TypeDescription"));
         object.properties.push_back(oof::platform::object_model::make_property(
-            "Parent", "Родитель", item.parent_object_id, "materialized-parent-chain"));
+            "Parent", "Родитель", item.parent_object_id, "materialized-parent-chain", "FormItem"));
         object.properties.push_back(oof::platform::object_model::make_property(
-            "Path", "", item.path, "list-stream-node-path"));
+            "Path", "", item.path, "list-stream-node-path", "String"));
         if (object.platform_type == "Button" || object.platform_type == "PanelPage" ||
             object.platform_type == "Panel" || object.platform_type == "PivotChart") {
             object.properties.push_back(oof::platform::object_model::make_property(
-                "Title", "Заголовок", item.name, "platform-name-record-as-initial-title"));
+                "Title", "Заголовок", item.name, "platform-name-record-as-initial-title", "String", "platform-name-record:{14,name,...}", true));
         }
         add_api_surface(object, api_object_for_type(object.platform_type));
         form_object.items.add(std::move(object));
@@ -1700,6 +1706,10 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
     print_json_string(object.name);
     std::cout << ",\"platformType\":";
     print_json_string(object.platform_type);
+    std::cout << ",\"typeCategory\":";
+    print_json_string(object.type_category);
+    std::cout << ",\"typeSource\":";
+    print_json_string(object.type_source);
     std::cout << ",\"path\":";
     print_json_string(object.path);
     std::cout << ",\"parentObjectId\":";
@@ -1714,10 +1724,18 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
         print_json_string(prop.name);
         std::cout << ",\"localizedName\":";
         print_json_string(prop.localized_name);
+        std::cout << ",\"valueType\":";
+        print_json_string(prop.value_type);
         std::cout << ",\"value\":";
         print_json_string(prop.value);
         std::cout << ",\"source\":";
         print_json_string(prop.source);
+        std::cout << ",\"slotBinding\":";
+        print_json_string(prop.slot_binding);
+        std::cout << ",\"readable\":"
+                  << (prop.readable ? "true" : "false");
+        std::cout << ",\"writable\":"
+                  << (prop.writable ? "true" : "false");
         std::cout << "}";
     }
     std::cout << "],\"methods\":[";
@@ -1762,6 +1780,7 @@ void print_runtime_platform_object(const std::string& path) {
     std::cout << "{\"source\":\"RuntimeForm:PlatformObject\"";
     std::cout << ",\"runtimeUuid\":";
     print_json_string(envelope.runtime_uuid);
+    std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call\",\"model\":\"typeDescriptor + property/method/event descriptors + slot-backed values\",\"writableSlotCount\":1}";
     std::cout << ",\"form\":";
     print_platform_object_json(form_object.form);
     std::cout << ",\"items\":{\"count\":" << form_object.items.count();
@@ -1902,6 +1921,65 @@ bool rename_materialized_object(
         }
     }
     return false;
+}
+
+bool is_name_slot_property(std::string_view property_name) {
+    return property_name == "Name" ||
+           property_name == "Имя" ||
+           property_name == "Title" ||
+           property_name == "Caption" ||
+           property_name == "Заголовок";
+}
+
+void write_runtime_platform_object_set(
+    const std::string& input_path,
+    const std::string& output_path,
+    std::string_view object_id,
+    std::string_view property_name,
+    std::string_view new_value
+) {
+    if (!is_name_slot_property(property_name)) {
+        throw std::runtime_error("property is not writable yet through platform object slots: " + std::string(property_name));
+    }
+
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    if (!rename_materialized_object(envelope.payload, object_id, new_value)) {
+        throw std::runtime_error("runtime form object id was not found or has no platform name record: " + std::string(object_id));
+    }
+
+    const std::string rebuilt_text = dump_runtime_form_envelope(envelope);
+    const std::vector<std::uint8_t> output(rebuilt_text.begin(), rebuilt_text.end());
+    write_file_bytes(output_path, output);
+    const auto form_object = materialize_platform_form_object(envelope);
+    const oof::platform::object_model::PlatformObject* changed = nullptr;
+    for (const auto& object : form_object.items.objects()) {
+        if (object.object_id == object_id) {
+            changed = &object;
+            break;
+        }
+    }
+
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"bytes\":" << output.size();
+    std::cout << ",\"operation\":\"setPropVal\"";
+    std::cout << ",\"objectId\":";
+    print_json_string(object_id);
+    std::cout << ",\"property\":";
+    print_json_string(property_name);
+    std::cout << ",\"value\":";
+    print_json_string(new_value);
+    std::cout << ",\"slotBinding\":\"platform-name-record:{14,name,...}\"";
+    std::cout << ",\"runtimeUuid\":";
+    print_json_string(envelope.runtime_uuid);
+    std::cout << ",\"changedObject\":";
+    if (changed != nullptr) {
+        print_platform_object_json(*changed);
+    } else {
+        std::cout << "null";
+    }
+    std::cout << "}\n";
 }
 
 void write_runtime_form_rename(
@@ -2951,6 +3029,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-rename" && argc == 6) {
             write_runtime_form_rename(argv[2], argv[3], argv[4], argv[5]);
+            return 0;
+        }
+        if (command == "runtime-platform-object-set" && argc == 7) {
+            write_runtime_platform_object_set(argv[2], argv[3], argv[4], argv[5], argv[6]);
             return 0;
         }
         if (command == "form-transfer-linkage" && argc == 3) {

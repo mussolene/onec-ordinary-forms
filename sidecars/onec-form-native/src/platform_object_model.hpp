@@ -12,8 +12,12 @@ namespace oof::platform::object_model {
 struct PlatformObjectProperty {
     std::string name;
     std::string localized_name;
+    std::string value_type;
     std::string value;
     std::string source;
+    std::string slot_binding;
+    bool readable = true;
+    bool writable = false;
 };
 
 struct PlatformObjectMethod {
@@ -30,6 +34,8 @@ struct PlatformObject {
     std::string object_id;
     std::string name;
     std::string platform_type;
+    std::string type_category;
+    std::string type_source;
     std::string path;
     std::string parent_object_id;
     std::vector<PlatformObjectProperty> properties;
@@ -98,13 +104,19 @@ inline PlatformObjectProperty make_property(
     std::string name,
     std::string localized_name,
     std::string value,
-    std::string source
+    std::string source,
+    std::string value_type = {},
+    std::string slot_binding = {},
+    bool writable = false
 ) {
     PlatformObjectProperty property;
     property.name = std::move(name);
     property.localized_name = std::move(localized_name);
+    property.value_type = std::move(value_type);
     property.value = std::move(value);
     property.source = std::move(source);
+    property.slot_binding = std::move(slot_binding);
+    property.writable = writable;
     return property;
 }
 
