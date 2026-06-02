@@ -265,8 +265,8 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|raw-deflate-selftest> < stream.txt\n"
-              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure> Form.bin\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|form-object-graph-selftest|raw-deflate-selftest> < stream.txt\n"
+              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph> Form.bin\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "       oof-native <platform-form-schema|platform-descriptor-join>\n"
@@ -1000,6 +1000,16 @@ struct FormatAtomInfo {
     std::string path;
 };
 
+struct MaterializedFormItem {
+    std::string guid;
+    std::string path;
+    std::string object_id;
+    std::string parent_object_id;
+    std::string name;
+    std::size_t arity = 0;
+    const oof::platform::form_descriptor::DescriptorSchemaBinding* descriptor_binding = nullptr;
+};
+
 void collect_form_payload_structure(
     const oof::platform::stream::ListValue& value,
     std::string_view path,
@@ -1039,6 +1049,93 @@ void collect_form_payload_structure(
 
     for (std::size_t index = 0; index < value.items.size(); ++index) {
         collect_form_payload_structure(value.items[index], child_path(path, index), guid_nodes, format_atoms);
+    }
+}
+
+bool is_platform_name_record(const oof::platform::stream::ListValue& value) {
+    return value.is_list &&
+           value.items.size() >= 2 &&
+           !value.items[0].is_list &&
+           !value.items[1].is_list &&
+           value.items[0].atom == "14" &&
+           !value.items[1].atom.empty();
+}
+
+bool find_platform_name_record(
+    const oof::platform::stream::ListValue& value,
+    std::string& name
+) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (is_platform_name_record(value)) {
+        name = value.items[1].atom;
+        return true;
+    }
+    for (const auto& item : value.items) {
+        if (find_platform_name_record(item, name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_materializable_object_candidate(const oof::platform::stream::ListValue& value) {
+    if (!value.is_list || value.items.size() < 2 || value.items[0].is_list || value.items[1].is_list) {
+        return false;
+    }
+    if (!is_guid_text(value.items[0].atom) || value.items[1].atom.empty()) {
+        return false;
+    }
+    if (value.items.size() != 6 && value.items.size() != 7) {
+        return false;
+    }
+    return oof::platform::form_descriptor::binding_for_guid(value.items[0].atom) != nullptr;
+}
+
+void collect_materialized_form_items(
+    const oof::platform::stream::ListValue& value,
+    std::string_view path,
+    const std::string& parent_object_id,
+    std::vector<MaterializedFormItem>& items,
+    std::size_t& guid_head_nodes,
+    std::size_t& nested_unbound_guid_nodes
+) {
+    if (!value.is_list) {
+        return;
+    }
+
+    std::string next_parent = parent_object_id;
+    if (!value.items.empty() && !value.items[0].is_list && is_guid_text(value.items[0].atom)) {
+        ++guid_head_nodes;
+        const auto* binding = oof::platform::form_descriptor::binding_for_guid(value.items[0].atom);
+        if (is_materializable_object_candidate(value)) {
+            MaterializedFormItem item;
+            item.guid = value.items[0].atom;
+            item.path = std::string(path);
+            item.object_id = value.items[1].atom;
+            item.parent_object_id = parent_object_id;
+            item.arity = value.items.size();
+            item.descriptor_binding = binding;
+            std::string name;
+            if (find_platform_name_record(value, name)) {
+                item.name = std::move(name);
+            }
+            next_parent = item.object_id;
+            items.push_back(std::move(item));
+        } else if (binding == nullptr) {
+            ++nested_unbound_guid_nodes;
+        }
+    }
+
+    for (std::size_t index = 0; index < value.items.size(); ++index) {
+        collect_materialized_form_items(
+            value.items[index],
+            child_path(path, index),
+            next_parent,
+            items,
+            guid_head_nodes,
+            nested_unbound_guid_nodes);
     }
 }
 
@@ -1192,6 +1289,117 @@ void print_form_payload_structure(const std::string& path) {
     print_form_payload_structure_json(form_file.payload, "Form.bin:form");
 }
 
+void print_form_object_graph_json(
+    const std::vector<std::uint8_t>& form_payload,
+    std::string_view source_label
+) {
+    const std::string text = decode_form_payload_text(form_payload);
+    const auto root = oof::platform::stream::parse(text);
+    if (!root.is_list) {
+        throw std::runtime_error("form payload root is not a list");
+    }
+
+    std::vector<MaterializedFormItem> items;
+    std::size_t guid_head_nodes = 0;
+    std::size_t nested_unbound_guid_nodes = 0;
+    collect_materialized_form_items(root, "$", "", items, guid_head_nodes, nested_unbound_guid_nodes);
+
+    std::map<std::string_view, std::size_t> type_frequency;
+    std::map<std::string_view, std::size_t> status_frequency;
+    std::size_t named_items = 0;
+    std::size_t schema_backed = 0;
+    for (const auto& item : items) {
+        ++status_frequency[item.descriptor_binding->status];
+        ++type_frequency[item.descriptor_binding->platform_type];
+        if (!item.name.empty()) {
+            ++named_items;
+        }
+        if (oof::platform::form_descriptor::schema_for_binding(*item.descriptor_binding) != nullptr) {
+            ++schema_backed;
+        }
+    }
+
+    std::cout << "{\"source\":";
+    print_json_string(source_label);
+    std::cout << ",\"payloadSize\":" << form_payload.size();
+    std::cout << ",\"rootArity\":" << root.items.size();
+    if (!root.items.empty() && !root.items[0].is_list) {
+        std::cout << ",\"rootVersion\":";
+        print_json_string(root.items[0].atom);
+    }
+    if (root.items.size() > 1 && root.items[1].is_list && !root.items[1].items.empty() && !root.items[1].items[0].is_list) {
+        std::cout << ",\"formSectionVersion\":";
+        print_json_string(root.items[1].items[0].atom);
+    }
+    std::cout << ",\"guidHeadNodes\":" << guid_head_nodes;
+    std::cout << ",\"materializedItems\":" << items.size();
+    std::cout << ",\"namedItems\":" << named_items;
+    std::cout << ",\"schemaBackedItems\":" << schema_backed;
+    std::cout << ",\"nestedUnboundGuidNodes\":" << nested_unbound_guid_nodes;
+    std::cout << ",\"statusFrequency\":[";
+    std::size_t index = 0;
+    for (const auto& [status, count] : status_frequency) {
+        if (index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"status\":";
+        print_json_string(status);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"typeFrequency\":[";
+    index = 0;
+    for (const auto& [type, count] : type_frequency) {
+        if (index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"type\":";
+        print_json_string(type);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"items\":[";
+    for (std::size_t item_index = 0; item_index < items.size(); ++item_index) {
+        if (item_index != 0) {
+            std::cout << ",";
+        }
+        const auto& item = items[item_index];
+        const auto* schema = oof::platform::form_descriptor::schema_for_binding(*item.descriptor_binding);
+        std::cout << "{\"objectId\":";
+        print_json_string(item.object_id);
+        std::cout << ",\"name\":";
+        print_json_string(item.name);
+        std::cout << ",\"parentObjectId\":";
+        print_json_string(item.parent_object_id);
+        std::cout << ",\"path\":";
+        print_json_string(item.path);
+        std::cout << ",\"guid\":";
+        print_json_string(item.guid);
+        std::cout << ",\"arity\":" << item.arity;
+        std::cout << ",\"platformType\":";
+        print_json_string(item.descriptor_binding->platform_type);
+        std::cout << ",\"streamElement\":";
+        print_json_string(item.descriptor_binding->stream_element);
+        std::cout << ",\"status\":";
+        print_json_string(item.descriptor_binding->status);
+        std::cout << ",\"schemaBacked\":"
+                  << (schema != nullptr ? "true" : "false");
+        if (schema != nullptr) {
+            std::cout << ",\"schemaAttributes\":";
+            print_json_string(schema->attributes);
+            std::cout << ",\"schemaChildElements\":";
+            print_json_string(schema->child_elements);
+        }
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+}
+
+void print_form_object_graph(const std::string& path) {
+    const std::vector<std::uint8_t> data = read_file_bytes(path);
+    const auto container = oof::platform::formbin::parse_container(data);
+    const auto& form_file = find_container_file(container, "form");
+    print_form_object_graph_json(form_file.payload, "Form.bin:form");
+}
+
 void print_form_payload_structure_selftest() {
     oof::platform::formbin::OneCContainer container;
     container.block_size = oof::platform::formbin::container_block_size;
@@ -1205,6 +1413,21 @@ void print_form_payload_structure_selftest() {
     const auto reparsed = oof::platform::formbin::parse_container(bytes);
     const auto& form_file = find_container_file(reparsed, "form");
     print_form_payload_structure_json(form_file.payload, "selftest");
+}
+
+void print_form_object_graph_selftest() {
+    oof::platform::formbin::OneCContainer container;
+    container.block_size = oof::platform::formbin::container_block_size;
+    const std::string form_text =
+        "{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,\"Button1\",4294967295,0,0,0},{},{},{}},"
+        "{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,\"Check1\",4294967295,0,0,0},{},{},{}}}}";
+    container.files.push_back({"form", 1, 2, std::vector<std::uint8_t>(form_text.begin(), form_text.end())});
+    container.files.push_back({"module", 3, 4, {'/', '/', 'm'}});
+
+    const auto bytes = oof::platform::formbin::serialize_container(container);
+    const auto reparsed = oof::platform::formbin::parse_container(bytes);
+    const auto& form_file = find_container_file(reparsed, "form");
+    print_form_object_graph_json(form_file.payload, "selftest");
 }
 
 void print_platform_guid_scan(const std::string& path) {
@@ -1773,6 +1996,10 @@ int main(int argc, char** argv) {
             print_form_payload_structure_selftest();
             return 0;
         }
+        if (command == "form-object-graph-selftest") {
+            print_form_object_graph_selftest();
+            return 0;
+        }
         if (command == "raw-deflate-selftest") {
             print_raw_deflate_selftest();
             return 0;
@@ -1807,6 +2034,10 @@ int main(int argc, char** argv) {
         }
         if (command == "form-payload-structure" && argc == 3) {
             print_form_payload_structure(argv[2]);
+            return 0;
+        }
+        if (command == "form-object-graph" && argc == 3) {
+            print_form_object_graph(argv[2]);
             return 0;
         }
         if (command == "platform-guid-scan" && argc == 3) {
