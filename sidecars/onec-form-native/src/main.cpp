@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -255,8 +256,8 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest> < stream.txt\n"
-              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info> Form.bin\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest> < stream.txt\n"
+              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure> Form.bin\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n";
 }
 
@@ -844,6 +845,197 @@ void print_form_payload_info(const std::string& path) {
     std::cout << "]}\n";
 }
 
+bool is_known_descriptor_pool_guid(std::string_view guid) {
+    return guid == "09ccdc77-ea1a-4a6d-ab1c-3435eada2433" ||
+           guid == "e69bf21d-97b2-4f37-86db-675aea9ec2cb";
+}
+
+std::string child_path(std::string_view path, std::size_t index) {
+    std::string out(path);
+    out += "/";
+    out += std::to_string(index);
+    return out;
+}
+
+struct GuidNodeInfo {
+    std::string guid;
+    std::string path;
+    std::size_t arity = 0;
+    std::string slot1;
+    std::size_t scalar_children = 0;
+    std::size_t list_children = 0;
+    bool known_descriptor_pool_member = false;
+};
+
+struct FormatAtomInfo {
+    std::uint32_t format_id = 0;
+    std::string symbol;
+    std::string path;
+};
+
+void collect_form_payload_structure(
+    const oof::platform::stream::ListValue& value,
+    std::string_view path,
+    std::vector<GuidNodeInfo>& guid_nodes,
+    std::vector<FormatAtomInfo>& format_atoms
+) {
+    if (!value.is_list) {
+        if (value.atom == std::to_string(oof::platform::cf_form_controls8)) {
+            format_atoms.push_back({oof::platform::cf_form_controls8, "cf_form_controls8", std::string(path)});
+        } else if (value.atom == std::to_string(oof::platform::cf_form_controls_position8)) {
+            format_atoms.push_back({oof::platform::cf_form_controls_position8, "cf_form_controls_position8", std::string(path)});
+        } else if (value.atom == std::to_string(oof::platform::cf_form_controls_info8)) {
+            format_atoms.push_back({oof::platform::cf_form_controls_info8, "cf_form_controls_info8", std::string(path)});
+        }
+        return;
+    }
+
+    if (!value.items.empty() && !value.items[0].is_list && is_guid_text(value.items[0].atom)) {
+        GuidNodeInfo info;
+        info.guid = value.items[0].atom;
+        info.path = std::string(path);
+        info.arity = value.items.size();
+        info.known_descriptor_pool_member = is_known_descriptor_pool_guid(info.guid);
+        if (value.items.size() > 1 && !value.items[1].is_list) {
+            info.slot1 = value.items[1].atom;
+        }
+        for (const auto& child : value.items) {
+            if (child.is_list) {
+                ++info.list_children;
+            } else {
+                ++info.scalar_children;
+            }
+        }
+        guid_nodes.push_back(std::move(info));
+    }
+
+    for (std::size_t index = 0; index < value.items.size(); ++index) {
+        collect_form_payload_structure(value.items[index], child_path(path, index), guid_nodes, format_atoms);
+    }
+}
+
+void print_form_payload_structure_json(
+    const std::vector<std::uint8_t>& form_payload,
+    std::string_view source_label
+) {
+    const std::string text = decode_form_payload_text(form_payload);
+    const auto root = oof::platform::stream::parse(text);
+    if (!root.is_list) {
+        throw std::runtime_error("form payload root is not a list");
+    }
+
+    PayloadScanStats stats;
+    collect_payload_scan(root, stats);
+
+    std::vector<GuidNodeInfo> guid_nodes;
+    std::vector<FormatAtomInfo> format_atoms;
+    collect_form_payload_structure(root, "$", guid_nodes, format_atoms);
+
+    std::map<std::string, std::size_t> guid_frequency;
+    std::size_t candidate_object_nodes = 0;
+    std::size_t known_descriptor_candidate_nodes = 0;
+    for (const auto& node : guid_nodes) {
+        ++guid_frequency[node.guid];
+        if (node.arity == 6 && !node.slot1.empty()) {
+            ++candidate_object_nodes;
+            if (node.known_descriptor_pool_member) {
+                ++known_descriptor_candidate_nodes;
+            }
+        }
+    }
+
+    std::cout << "{";
+    std::cout << "\"source\":";
+    print_json_string(source_label);
+    std::cout << ",\"payloadSize\":" << form_payload.size();
+    std::cout << ",\"rootArity\":" << root.items.size();
+    if (!root.items.empty() && !root.items[0].is_list) {
+        std::cout << ",\"rootVersion\":";
+        print_json_string(root.items[0].atom);
+    }
+    if (root.items.size() > 1 && root.items[1].is_list && !root.items[1].items.empty() && !root.items[1].items[0].is_list) {
+        std::cout << ",\"formSectionVersion\":";
+        print_json_string(root.items[1].items[0].atom);
+    }
+    std::cout << ",\"lists\":" << stats.lists;
+    std::cout << ",\"atoms\":" << stats.atoms;
+    std::cout << ",\"guidHeadNodes\":" << guid_nodes.size();
+    std::cout << ",\"candidateObjectNodes\":" << candidate_object_nodes;
+    std::cout << ",\"knownDescriptorCandidateNodes\":" << known_descriptor_candidate_nodes;
+    std::cout << ",\"guidNodesTotal\":" << guid_nodes.size();
+    constexpr std::size_t max_guid_nodes_to_print = 64;
+    const std::size_t guid_nodes_to_print = std::min(guid_nodes.size(), max_guid_nodes_to_print);
+    std::cout << ",\"guidNodesTruncated\":" << (guid_nodes_to_print < guid_nodes.size() ? "true" : "false");
+    std::cout << ",\"guidFrequency\":[";
+    std::size_t frequency_index = 0;
+    for (const auto& [guid, count] : guid_frequency) {
+        if (frequency_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"guid\":";
+        print_json_string(guid);
+        std::cout << ",\"count\":" << count;
+        std::cout << ",\"knownDescriptorPoolMember\":"
+                  << (is_known_descriptor_pool_guid(guid) ? "true" : "false") << "}";
+    }
+    std::cout << "],\"guidNodes\":[";
+    for (std::size_t index = 0; index < guid_nodes_to_print; ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& node = guid_nodes[index];
+        std::cout << "{\"path\":";
+        print_json_string(node.path);
+        std::cout << ",\"guid\":";
+        print_json_string(node.guid);
+        std::cout << ",\"arity\":" << node.arity;
+        if (!node.slot1.empty()) {
+            std::cout << ",\"slot1\":";
+            print_json_string(node.slot1);
+        }
+        std::cout << ",\"scalarChildren\":" << node.scalar_children;
+        std::cout << ",\"listChildren\":" << node.list_children;
+        std::cout << ",\"knownDescriptorPoolMember\":"
+                  << (node.known_descriptor_pool_member ? "true" : "false") << "}";
+    }
+    std::cout << "],\"formatIdAtoms\":[";
+    for (std::size_t index = 0; index < format_atoms.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& atom = format_atoms[index];
+        std::cout << "{\"path\":";
+        print_json_string(atom.path);
+        std::cout << ",\"formatId\":" << atom.format_id;
+        std::cout << ",\"symbol\":";
+        print_json_string(atom.symbol);
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+}
+
+void print_form_payload_structure(const std::string& path) {
+    const std::vector<std::uint8_t> data = read_file_bytes(path);
+    const auto container = oof::platform::formbin::parse_container(data);
+    const auto& form_file = find_container_file(container, "form");
+    print_form_payload_structure_json(form_file.payload, "Form.bin:form");
+}
+
+void print_form_payload_structure_selftest() {
+    oof::platform::formbin::OneCContainer container;
+    container.block_size = oof::platform::formbin::container_block_size;
+    const std::string form_text =
+        "{27,{18,{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1}},"
+        "{e69bf21d-97b2-4f37-86db-675aea9ec2cb,2,{9472,21760,40192},{},{},{}}}}";
+    container.files.push_back({"form", 1, 2, std::vector<std::uint8_t>(form_text.begin(), form_text.end())});
+    container.files.push_back({"module", 3, 4, {'/', '/', 'm'}});
+
+    const auto bytes = oof::platform::formbin::serialize_container(container);
+    const auto reparsed = oof::platform::formbin::parse_container(bytes);
+    const auto& form_file = find_container_file(reparsed, "form");
+    print_form_payload_structure_json(form_file.payload, "selftest");
+}
+
 void print_platform_guid_scan(const std::string& path) {
     const std::vector<std::uint8_t> data = read_file_bytes(path);
     const auto scan = oof::platform::guid_registry::scan_dsgnfrm_guid_registry(data);
@@ -951,6 +1143,10 @@ int main(int argc, char** argv) {
             print_formbin_selftest();
             return 0;
         }
+        if (command == "form-payload-structure-selftest") {
+            print_form_payload_structure_selftest();
+            return 0;
+        }
         if (command == "formbin-info" && argc == 3) {
             print_formbin_info(argv[2]);
             return 0;
@@ -961,6 +1157,10 @@ int main(int argc, char** argv) {
         }
         if (command == "form-payload-info" && argc == 3) {
             print_form_payload_info(argv[2]);
+            return 0;
+        }
+        if (command == "form-payload-structure" && argc == 3) {
+            print_form_payload_structure(argv[2]);
             return 0;
         }
         if (command == "platform-guid-scan" && argc == 3) {

@@ -57,6 +57,13 @@ test: $(BIN)
 	$(BIN) transfer-sections | grep -F -q '"countOrBytes":40'
 	$(BIN) formbin-selftest | grep -q '"byteEqual":true'
 	$(BIN) formbin-selftest | grep -q '"firstName":"form"'
+	$(BIN) form-payload-structure-selftest | grep -q '"guidHeadNodes":2'
+	$(BIN) form-payload-structure-selftest | grep -q '"candidateObjectNodes":1'
+	$(BIN) form-payload-structure-selftest | grep -q '"knownDescriptorCandidateNodes":1'
+	$(BIN) form-payload-structure-selftest | grep -F -q '"knownDescriptorPoolMember":true'
+	$(BIN) form-payload-structure-selftest | grep -F -q '"symbol":"cf_form_controls8"'
+	$(BIN) form-payload-structure-selftest | grep -F -q '"symbol":"cf_form_controls_position8"'
+	$(BIN) form-payload-structure-selftest | grep -F -q '"symbol":"cf_form_controls_info8"'
 	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -q '"09ccdc77-ea1a-4a6d-ab1c-3435eada2433"'; fi
 	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -F -q '"repeatedGuidBlocks":["0x42370"'; fi
 
