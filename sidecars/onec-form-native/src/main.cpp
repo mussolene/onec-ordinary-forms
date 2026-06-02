@@ -1033,6 +1033,7 @@ struct MaterializedFormItem {
     std::string right;
     std::string bottom;
     std::vector<std::pair<std::string, std::string>> bindings;
+    std::vector<std::pair<std::string, std::string>> dimension_bindings;
     std::size_t arity = 0;
     const oof::platform::form_descriptor::DescriptorSchemaBinding* descriptor_binding = nullptr;
 };
@@ -1213,6 +1214,37 @@ std::size_t binding_coordinate_slot(std::string_view coordinate) {
     return 0;
 }
 
+std::string dimension_binding_name(std::size_t slot_index) {
+    switch (slot_index) {
+        case 13:
+            return "height";
+        case 14:
+            return "minHeight";
+        case 15:
+            return "stretch";
+        case 16:
+            return "width";
+        default:
+            return {};
+    }
+}
+
+std::size_t dimension_binding_slot(std::string_view dimension) {
+    if (dimension == "height") {
+        return 13;
+    }
+    if (dimension == "minHeight") {
+        return 14;
+    }
+    if (dimension == "stretch") {
+        return 15;
+    }
+    if (dimension == "width") {
+        return 16;
+    }
+    return 0;
+}
+
 bool is_materializable_object_candidate(const oof::platform::stream::ListValue& value) {
     if (!value.is_list || value.items.size() < 2 || value.items[0].is_list || value.items[1].is_list) {
         return false;
@@ -1268,6 +1300,11 @@ void collect_materialized_form_items(
                 for (std::size_t index = 6; index <= 11 && index < geometry->items.size(); ++index) {
                     if (!geometry->items[index].is_list) {
                         item.bindings.push_back({binding_coordinate_name(index), geometry->items[index].atom});
+                    }
+                }
+                for (std::size_t index = 13; index <= 16 && index < geometry->items.size(); ++index) {
+                    if (!geometry->items[index].is_list) {
+                        item.dimension_bindings.push_back({dimension_binding_name(index), geometry->items[index].atom});
                     }
                 }
             }
@@ -1846,6 +1883,9 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
             for (const auto& [coordinate, value] : item.bindings) {
                 object.properties.push_back(make_described_property("Binding." + coordinate, value));
             }
+            for (const auto& [dimension, value] : item.dimension_bindings) {
+                object.properties.push_back(make_described_property("DimensionBinding." + dimension, value));
+            }
         }
         add_api_surface(object, api_object_for_type(object.platform_type));
         form_object.items.add(std::move(object));
@@ -2070,6 +2110,7 @@ struct PublicXmlControlEdit {
     std::string bottom;
     bool has_position = false;
     std::vector<std::pair<std::string, std::string>> bindings;
+    std::vector<std::pair<std::string, std::string>> dimension_bindings;
 };
 
 struct PublicXmlApplyResult {
@@ -2078,6 +2119,7 @@ struct PublicXmlApplyResult {
     std::size_t title_edits = 0;
     std::size_t position_edits = 0;
     std::size_t binding_edits = 0;
+    std::size_t dimension_binding_edits = 0;
 };
 
 PublicXmlApplyResult apply_public_xml_edits(
@@ -2167,6 +2209,17 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                                 edit.bindings.push_back({coordinate, value});
                             }
                         }
+                        const std::regex dimension_binding_pattern(R"(<DimensionBinding\b([^>]*)/?>)");
+                        for (std::sregex_iterator dimension_it(position_body.begin(), position_body.end(), dimension_binding_pattern), dimension_end;
+                             dimension_it != dimension_end;
+                             ++dimension_it) {
+                            const std::string attrs = (*dimension_it)[1].str();
+                            const std::string dimension = xml_attr_value(attrs, "dimension");
+                            const std::string value = xml_attr_value(attrs, "value");
+                            if (!dimension.empty() && !value.empty()) {
+                                edit.dimension_bindings.push_back({dimension, value});
+                            }
+                        }
                     }
                 }
             }
@@ -2234,6 +2287,24 @@ std::vector<std::pair<std::string, std::string>> simple_binding_properties(
     return bindings;
 }
 
+std::vector<std::pair<std::string, std::string>> simple_dimension_binding_properties(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    std::vector<std::pair<std::string, std::string>> bindings;
+    for (const std::string& dimension : {
+             "height",
+             "minHeight",
+             "stretch",
+             "width",
+         }) {
+        const auto* prop = object.property("DimensionBinding." + dimension);
+        if (prop != nullptr) {
+            bindings.push_back({dimension, prop->value});
+        }
+    }
+    return bindings;
+}
+
 void append_position_xml(
     std::string& out,
     const oof::platform::object_model::PlatformObject& object,
@@ -2247,6 +2318,7 @@ void append_position_xml(
         return;
     }
     const auto bindings = simple_binding_properties(object);
+    const auto dimension_bindings = simple_dimension_binding_properties(object);
     append_indent(out, indent);
     out += "<Position left=\"";
     out += xml_escape(left->value);
@@ -2257,7 +2329,7 @@ void append_position_xml(
     out += "\" bottom=\"";
     out += xml_escape(bottom->value);
     out += "\"";
-    if (bindings.empty()) {
+    if (bindings.empty() && dimension_bindings.empty()) {
         out += "/>\n";
         return;
     }
@@ -2268,6 +2340,14 @@ void append_position_xml(
         append_indent(out, indent + 4);
         out += "<Binding coordinate=\"";
         out += xml_escape(coordinate);
+        out += "\" value=\"";
+        out += xml_escape(value);
+        out += "\"/>\n";
+    }
+    for (const auto& [dimension, value] : dimension_bindings) {
+        append_indent(out, indent + 4);
+        out += "<DimensionBinding dimension=\"";
+        out += xml_escape(dimension);
         out += "\" value=\"";
         out += xml_escape(value);
         out += "\"/>\n";
@@ -2413,6 +2493,7 @@ void write_runtime_form_from_xml(
     std::cout << ",\"titleEdits\":" << result.title_edits;
     std::cout << ",\"positionEdits\":" << result.position_edits;
     std::cout << ",\"bindingEdits\":" << result.binding_edits;
+    std::cout << ",\"dimensionBindingEdits\":" << result.dimension_binding_edits;
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << "}\n";
 }
@@ -2450,6 +2531,7 @@ void write_formbin_from_xml(
     std::cout << ",\"titleEdits\":" << result.title_edits;
     std::cout << ",\"positionEdits\":" << result.position_edits;
     std::cout << ",\"bindingEdits\":" << result.binding_edits;
+    std::cout << ",\"dimensionBindingEdits\":" << result.dimension_binding_edits;
     std::cout << ",\"preservedContainerFiles\":" << container.files.size();
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << "}\n";
@@ -2462,11 +2544,11 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << ",\"nativeXmlProjection\":true";
     std::cout << ",\"nativeXmlWriter\":true";
-    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Position\",\"Binding:value\"]";
+    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Position\",\"Binding:value\",\"DimensionBinding:value\"]";
     std::cout << ",\"materializedItems\":" << summary.items.size();
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
-    std::cout << ",\"missingCodecs\":[\"Binding:anchor-list\",\"DimensionBinding\",\"Attributes\",\"Commands\",\"Events\",\"cf_form_controls8 typed payload fields\"]";
+    std::cout << ",\"missingCodecs\":[\"Binding:anchor-list\",\"DimensionBinding:anchor-list\",\"Attributes\",\"Commands\",\"Events\",\"cf_form_controls8 typed payload fields\"]";
     std::cout << "}\n";
 }
 
@@ -2494,6 +2576,7 @@ void print_formbin_xml_build_selftest() {
     replace_all(xml, "<Title>Run</Title>", "<Title>RunXmlEdited</Title>");
     replace_all(xml, "left=\"1\"", "left=\"9\"");
     replace_all(xml, "coordinate=\"left\" value=\"0\"", "coordinate=\"left\" value=\"21\"");
+    replace_all(xml, "dimension=\"width\" value=\"0\"", "dimension=\"width\" value=\"2\"");
 
     const auto edits = parse_public_xml_control_edits(xml);
     const auto result = apply_public_xml_edits(envelope, edits);
@@ -2509,6 +2592,7 @@ void print_formbin_xml_build_selftest() {
     std::cout << ",\"titleEdits\":" << result.title_edits;
     std::cout << ",\"positionEdits\":" << result.position_edits;
     std::cout << ",\"bindingEdits\":" << result.binding_edits;
+    std::cout << ",\"dimensionBindingEdits\":" << result.dimension_binding_edits;
     std::cout << ",\"nameRoundtrip\":"
               << (redump_xml.find("ButtonXmlEdited") != std::string::npos ? "true" : "false");
     std::cout << ",\"titleRoundtrip\":"
@@ -2517,6 +2601,8 @@ void print_formbin_xml_build_selftest() {
               << (redump_xml.find("<Position left=\"9\" top=\"2\" right=\"101\" bottom=\"22\"") != std::string::npos ? "true" : "false");
     std::cout << ",\"bindingRoundtrip\":"
               << (redump_xml.find("<Binding coordinate=\"left\" value=\"21\"/>") != std::string::npos ? "true" : "false");
+    std::cout << ",\"dimensionBindingRoundtrip\":"
+              << (redump_xml.find("<DimensionBinding dimension=\"width\" value=\"2\"/>") != std::string::npos ? "true" : "false");
     std::cout << ",\"modulePreserved\":"
               << (module.payload == std::vector<std::uint8_t>({'m', 'o', 'd'}) ? "true" : "false");
     std::cout << ",\"noRawXml\":"
@@ -2845,6 +2931,41 @@ bool set_materialized_object_bindings(
     return false;
 }
 
+bool set_materialized_object_dimension_bindings(
+    oof::platform::stream::ListValue& value,
+    std::string_view object_id,
+    const std::vector<std::pair<std::string, std::string>>& bindings
+) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (is_materializable_object_candidate(value) &&
+        !value.items[1].is_list &&
+        value.items[1].atom == object_id) {
+        auto* geometry = find_immediate_geometry_record_mut(value);
+        if (geometry == nullptr) {
+            return false;
+        }
+        bool changed = false;
+        for (const auto& [dimension, binding_value] : bindings) {
+            const std::size_t slot = dimension_binding_slot(dimension);
+            if (slot == 0 || geometry->items.size() <= slot || geometry->items[slot].is_list) {
+                throw std::runtime_error("unsupported DimensionBinding dimension or non-scalar binding slot: " + dimension);
+            }
+            geometry->items[slot].atom = binding_value;
+            geometry->items[slot].atom_kind = oof::platform::stream::ListValue::AtomKind::raw;
+            changed = true;
+        }
+        return changed;
+    }
+    for (auto& item : value.items) {
+        if (set_materialized_object_dimension_bindings(item, object_id, bindings)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 PublicXmlApplyResult apply_public_xml_edits(
     RuntimeFormEnvelope& envelope,
     const std::vector<PublicXmlControlEdit>& edits
@@ -2881,6 +3002,12 @@ PublicXmlApplyResult apply_public_xml_edits(
                 throw std::runtime_error("XML control id has no writable scalar platform binding records: " + edit.object_id);
             }
             result.binding_edits += edit.bindings.size();
+        }
+        if (!edit.dimension_bindings.empty()) {
+            if (!set_materialized_object_dimension_bindings(envelope.payload, edit.object_id, edit.dimension_bindings)) {
+                throw std::runtime_error("XML control id has no writable scalar platform dimension binding records: " + edit.object_id);
+            }
+            result.dimension_binding_edits += edit.dimension_bindings.size();
         }
     }
     return result;
