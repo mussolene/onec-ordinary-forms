@@ -40,6 +40,24 @@ The xref surface also shows data-table references for the same three
 `cf_form_controls*` factories. That means the native implementation should
 model them as a descriptor registry, not as ad hoc per-form fallbacks.
 
+## Form Object Surface
+
+The `dsgnfrm.so` string surface around the ordinary-form mechanism includes
+these form/designer/runtime objects:
+
+- transfer/enumeration: `FormDataObject`, `FormFormatEnumerator`;
+- designer document/view: `FormDesDoc`, `FormDesView`,
+  `FormDesDocFactory`, `CustomFormLoader`, `ControlSite`;
+- runtime document/view: `FormDocument`, `FormDocumentView`,
+  `FormDocumentFactory`, `FormDocumentMoxelFactory`;
+- services/properties/undo: `FormDesignerService`, `FormProperties`,
+  `FormDocPropertiesWrapper`, `FormUndoManager`;
+- support dialogs/sites: `FormDesignerSite`, `TestForm`, `ControlSelDlg`,
+  `FieldsDialog`, `PropertiesEditDialog`, `GridParametersDialog`.
+
+The C++ engine should keep the same plain separation: transfer object,
+descriptor enumerator, designer graph, runtime graph, and control-site bridge.
+
 ## Transfer Formats
 
 - `cf_form_controls8`: `0x2500`.
@@ -65,6 +83,12 @@ the ordinary-form mechanism:
 This is the order to port into the native engine. Starting with controls
 without these value serializers repeats the current slot-guessing problem.
 
+The local `.so` resource extraction found no embedded XML/XSD fragments in
+`dsgnfrm.so`, `frmcore.so`, `mngui.so`, or `mngbase.so`. The model catalog from
+strings/imports found 12 metadata object candidates and 25 type tree
+candidates in the same local library set. If a fuller platform root with
+`.res`/`.hbk` resources is available, rerun the extractor against that root.
+
 ## Native Engine Mapping
 
 - `list_stream`: parse and write platform bracket/list stream syntax.
@@ -76,3 +100,13 @@ without these value serializers repeats the current slot-guessing problem.
   `cf_form_controls_info8`.
 - `object_model_bridge`: map descriptor records to public `Form.xml` concepts
   only after the internal platform graph is complete enough.
+
+## Direct Port Order
+
+1. Copy the current platform constants and object surfaces into native code.
+2. Implement `ListInStream`/`ListOutStream` behavior first.
+3. Implement core typed values exactly as observed by platform serializers.
+4. Implement `FormDataObject` and `FormFormatEnumerator` semantics for the
+   three `cf_form_controls*` transfer formats.
+5. Implement `FormDesDoc/FormDesView` and `FormDocument/FormDocumentView`
+   record graph structures only where persistence evidence requires them.

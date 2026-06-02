@@ -99,7 +99,7 @@ def scan_candidates(root: Path, candidates: dict[str, tuple[str, ...]]) -> list[
     files = [
         path
         for path in sorted(root.iterdir())
-        if path.is_file() and path.suffix.lower() in {".dll", ".exe", ".res", ".hbk"}
+        if path.is_file() and path.suffix.lower() in {".dll", ".exe", ".res", ".hbk", ".so"}
     ]
     for name, tokens in candidates.items():
         sources: list[str] = []

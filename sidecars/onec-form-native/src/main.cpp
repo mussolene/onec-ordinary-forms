@@ -299,6 +299,27 @@ void print_mechanism() {
         }
         print_json_string(oof::platform::core_value_surface[i]);
     }
+    std::cout << "],\"formObjectSurface\":[";
+    for (size_t i = 0; i < oof::platform::form_object_surface.size(); ++i) {
+        if (i != 0) {
+            std::cout << ",";
+        }
+        print_json_string(oof::platform::form_object_surface[i]);
+    }
+    std::cout << "],\"metadataObjectSurface\":[";
+    for (size_t i = 0; i < oof::platform::metadata_object_surface.size(); ++i) {
+        if (i != 0) {
+            std::cout << ",";
+        }
+        print_json_string(oof::platform::metadata_object_surface[i]);
+    }
+    std::cout << "],\"typeTreeSurface\":[";
+    for (size_t i = 0; i < oof::platform::type_tree_surface.size(); ++i) {
+        if (i != 0) {
+            std::cout << ",";
+        }
+        print_json_string(oof::platform::type_tree_surface[i]);
+    }
     std::cout << "]}\n";
 }
 

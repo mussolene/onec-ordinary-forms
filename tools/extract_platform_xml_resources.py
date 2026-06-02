@@ -74,6 +74,7 @@ def main() -> None:
     parser.add_argument("--root", required=True, help="1C platform bin/resource directory")
     parser.add_argument("--out-dir", required=True, help="Ignored output directory")
     parser.add_argument("--schemas-only", action="store_true", help="Write only fragments containing xs:schema")
+    parser.add_argument("--recursive", action="store_true", help="Scan platform root recursively")
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -81,8 +82,9 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     report: list[dict[str, object]] = []
-    for path in sorted(root.iterdir()):
-        if not path.is_file() or path.suffix.lower() not in {".dll", ".exe", ".res", ".hbk"}:
+    paths = root.rglob("*") if args.recursive else root.iterdir()
+    for path in sorted(paths):
+        if not path.is_file() or path.suffix.lower() not in {".dll", ".exe", ".res", ".hbk", ".so"}:
             continue
         try:
             data = path.read_bytes()

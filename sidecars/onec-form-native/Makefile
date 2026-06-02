@@ -18,6 +18,8 @@ test: $(BIN)
 	printf '{1,,{2,"x"}}' | $(BIN) listout | grep -q '{2,"x"}'
 	printf '{1,,{2,"x"}}' | $(BIN) stats | grep -q '"lists":2'
 	$(BIN) mechanism | grep -q '"cf_form_controls_info8":40192'
+	$(BIN) mechanism | grep -q '"FormDataObject"'
+	$(BIN) mechanism | grep -q '"TypeDomainPattern"'
 
 clean:
 	rm -rf $(BUILD_DIR)
