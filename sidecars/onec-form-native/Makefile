@@ -91,6 +91,7 @@ test: $(BIN)
 	$(BIN) formbin-xml-build-selftest | grep -F -q '"nameRoundtrip":true'
 	$(BIN) formbin-xml-build-selftest | grep -F -q '"titleRoundtrip":true'
 	$(BIN) formbin-xml-build-selftest | grep -F -q '"positionRoundtrip":true'
+	$(BIN) formbin-xml-build-selftest | grep -F -q '"bindingRoundtrip":true'
 	$(BIN) formbin-xml-build-selftest | grep -F -q '"modulePreserved":true'
 	$(BIN) formbin-xml-build-selftest | grep -F -q '"noRawXml":true'
 	$(BIN) raw-deflate-selftest | grep -q '"byteEqual":true'
@@ -123,17 +124,20 @@ test: $(BIN)
 	grep -F -q 'ButtonXmlEdited' $(BUILD_DIR)/runtime-form-xml-redump.xml
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{"ru","Run"}}},{8,1,2,101,22,0,0,0,0,0,0,0,0,0,0,0,0},{14,"Button1",4294967295,0,0,0},{0}}}}}' > $(BUILD_DIR)/runtime-form-position-selftest.txt
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
-	grep -F -q '<Position left="1" top="2" right="101" bottom="22"/>' $(BUILD_DIR)/runtime-form-position.xml
-	perl -0pi -e 's/left="1"/left="9"/' $(BUILD_DIR)/runtime-form-position.xml
+	grep -F -q '<Position left="1" top="2" right="101" bottom="22"' $(BUILD_DIR)/runtime-form-position.xml
+	grep -F -q '<Binding coordinate="left" value="0"/>' $(BUILD_DIR)/runtime-form-position.xml
+	perl -0pi -e 's/left="1"/left="9"/; s/coordinate="left" value="0"/coordinate="left" value="21"/' $(BUILD_DIR)/runtime-form-position.xml
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited.txt | grep -F -q '"positionEdits":1'
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited-2.txt | grep -F -q '"bindingEdits":6'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-position-edited.txt $(BUILD_DIR)/runtime-form-position-redump.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
-	grep -F -q '<Position left="9" top="2" right="101" bottom="22"/>' $(BUILD_DIR)/runtime-form-position-redump.xml
+	grep -F -q '<Position left="9" top="2" right="101" bottom="22"' $(BUILD_DIR)/runtime-form-position-redump.xml
+	grep -F -q '<Binding coordinate="left" value="21"/>' $(BUILD_DIR)/runtime-form-position-redump.xml
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-platform-left-set.txt 5 Лево 11 | grep -F -q '"slotCodec":"position-record"'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-platform-left-set.txt $(BUILD_DIR)/runtime-platform-left-set.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
-	grep -F -q '<Position left="11" top="2" right="101" bottom="22"/>' $(BUILD_DIR)/runtime-platform-left-set.xml
+	grep -F -q '<Position left="11" top="2" right="101" bottom="22"' $(BUILD_DIR)/runtime-platform-left-set.xml
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-platform-width-set.txt 5 Width 120 | grep -F -q '"slotCodec":"position-record"'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-platform-width-set.txt $(BUILD_DIR)/runtime-platform-width-set.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
-	grep -F -q '<Position left="1" top="2" right="121" bottom="22"/>' $(BUILD_DIR)/runtime-platform-width-set.xml
+	grep -F -q '<Position left="1" top="2" right="121" bottom="22"' $(BUILD_DIR)/runtime-platform-width-set.xml
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:PlatformObject"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"contextContract":{"platformEvidence":"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"platformType":"Form"'
