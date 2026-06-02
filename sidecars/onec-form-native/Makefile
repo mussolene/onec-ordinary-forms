@@ -4,7 +4,7 @@ LDLIBS ?= -lz
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_schema.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
@@ -31,6 +31,13 @@ test: $(BIN)
 	$(BIN) mechanism | grep -q '"formatEntry":40'
 	$(BIN) mechanism | grep -F -q '"countSemantics":"payload byte size"'
 	$(BIN) mechanism | grep -F -q '"boundary":"existing IFile/HGLOBAL payload returned by FUN_00270da0"'
+	$(BIN) platform-form-schema | grep -F -q '"source":"mngcore_root.res:http://v8.1c.ru/8.2/managed-application/logform/layouter"'
+	$(BIN) platform-form-schema | grep -F -q '"controlCount":24'
+	$(BIN) platform-form-schema | grep -F -q '"directGuidBindings":0'
+	$(BIN) platform-form-schema | grep -F -q '"guidBindingStatus":"not-present-in-xsd; use resource/binary evidence"'
+	$(BIN) platform-form-schema | grep -F -q '"typeName":"TextBox"'
+	$(BIN) platform-form-schema | grep -F -q '"streamElement":"txt"'
+	$(BIN) platform-form-schema | grep -F -q '"valueTypes":"Value,ui:Picture,v81:UUID,ui:Color,ui:Font,ui:ShortCutType,ContextMenu"'
 	$(BIN) value-roundtrip | grep -F -q '"serialized":"{1,{1,2,{\"ru\",\"Title\"},{\"en\",\"Caption\"}},1}"'
 	$(BIN) value-roundtrip | grep -q '"itemCount":2'
 	$(BIN) value-roundtrip | grep -F -q '"compositeID":"{42,09ccdc77-ea1a-4a6d-ab1c-3435eada2433}"'

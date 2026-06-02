@@ -21,6 +21,7 @@
 #include "ordinary_controls.hpp"
 #include "ordinary_form_graph.hpp"
 #include "platform_descriptor_registry.hpp"
+#include "platform_form_schema.hpp"
 #include "platform_guid_registry.hpp"
 #include "platform_mechanism.hpp"
 #include "platform_value.hpp"
@@ -267,6 +268,7 @@ void usage() {
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure> Form.bin\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
+              << "       oof-native platform-form-schema\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
               << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
@@ -1387,6 +1389,67 @@ void print_json_string_array(const std::vector<std::string>& values, std::size_t
     std::cout << "]";
 }
 
+void print_platform_form_schema() {
+    std::map<std::string_view, std::size_t> source_frequency;
+    std::map<std::string_view, std::size_t> value_type_frequency;
+    for (const auto& control : oof::platform::form_schema::logform_layouter_controls) {
+        ++source_frequency[control.schema_source];
+        std::string_view values = control.value_types;
+        while (!values.empty()) {
+            const std::size_t comma = values.find(',');
+            const std::string_view value = values.substr(0, comma);
+            if (!value.empty()) {
+                ++value_type_frequency[value];
+            }
+            if (comma == std::string_view::npos) {
+                break;
+            }
+            values.remove_prefix(comma + 1);
+        }
+    }
+
+    std::cout << "{\"source\":";
+    print_json_string(oof::platform::form_schema::logform_layouter_schema);
+    std::cout << ",\"controlCount\":" << oof::platform::form_schema::logform_layouter_controls.size();
+    std::cout << ",\"directGuidBindings\":0";
+    std::cout << ",\"guidBindingStatus\":\"not-present-in-xsd; use resource/binary evidence\"";
+    std::cout << ",\"controls\":[";
+    for (std::size_t index = 0; index < oof::platform::form_schema::logform_layouter_controls.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& control = oof::platform::form_schema::logform_layouter_controls[index];
+        std::cout << "{\"typeName\":";
+        print_json_string(control.type_name);
+        std::cout << ",\"streamElement\":";
+        print_json_string(control.stream_element);
+        std::cout << ",\"schemaSource\":";
+        print_json_string(control.schema_source);
+        std::cout << ",\"baseType\":";
+        print_json_string(control.base_type);
+        std::cout << ",\"childElements\":";
+        print_json_string(control.child_elements);
+        std::cout << ",\"attributes\":";
+        print_json_string(control.attributes);
+        std::cout << ",\"valueTypes\":";
+        print_json_string(control.value_types);
+        std::cout << ",\"evidence\":";
+        print_json_string(control.evidence);
+        std::cout << "}";
+    }
+    std::cout << "],\"valueTypeFrequency\":[";
+    std::size_t vt_index = 0;
+    for (const auto& [value_type, count] : value_type_frequency) {
+        if (vt_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"type\":";
+        print_json_string(value_type);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "]}\n";
+}
+
 void print_platform_xsd_inventory(int argc, char** argv) {
     const std::regex target_namespace_pattern("targetNamespace\\s*=\\s*\"([^\"]+)\"");
     const std::regex import_namespace_pattern("<xs:import[^>]*namespace\\s*=\\s*\"([^\"]+)\"");
@@ -1632,6 +1695,10 @@ int main(int argc, char** argv) {
         }
         if (command == "container-extract-inflate" && argc == 4) {
             extract_container_files(argv[2], argv[3], true);
+            return 0;
+        }
+        if (command == "platform-form-schema") {
+            print_platform_form_schema();
             return 0;
         }
         if (command == "form-payload-info" && argc == 3) {
