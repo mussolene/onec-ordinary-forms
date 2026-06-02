@@ -25,6 +25,7 @@
 #include "platform_form_schema.hpp"
 #include "platform_guid_registry.hpp"
 #include "platform_mechanism.hpp"
+#include "platform_object_model.hpp"
 #include "platform_runtime_binding.hpp"
 #include "platform_value.hpp"
 
@@ -268,7 +269,7 @@ std::string read_stdin() {
 void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
-              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip> runtime-form-stream.txt\n"
+              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-platform-object> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
               << "       oof-native runtime-form-rename runtime-form-stream.txt rebuilt-stream.txt objectId newName\n"
@@ -1466,6 +1467,8 @@ struct MaterializedGraphSummary {
     std::map<std::string_view, std::size_t> status_frequency;
 };
 
+RuntimeFormEnvelope read_runtime_form_envelope_file(const std::string& path, std::string& canonical_text);
+
 MaterializedGraphSummary summarize_materialized_graph(const oof::platform::stream::ListValue& payload) {
     MaterializedGraphSummary summary;
     collect_materialized_form_items(
@@ -1550,6 +1553,236 @@ void print_materialized_graph_json(const MaterializedGraphSummary& summary) {
         std::cout << "}";
     }
     std::cout << "]";
+}
+
+std::vector<std::string> split_csv_list(std::string_view value) {
+    std::vector<std::string> out;
+    while (!value.empty()) {
+        const std::size_t comma = value.find(',');
+        std::string_view item = value.substr(0, comma);
+        while (!item.empty() && item.front() == ' ') {
+            item.remove_prefix(1);
+        }
+        while (!item.empty() && item.back() == ' ') {
+            item.remove_suffix(1);
+        }
+        if (!item.empty()) {
+            out.emplace_back(item);
+        }
+        if (comma == std::string_view::npos) {
+            break;
+        }
+        value.remove_prefix(comma + 1);
+    }
+    return out;
+}
+
+std::string localized_property_name(std::string_view name) {
+    if (name == "Title" || name == "Caption") {
+        return "Заголовок";
+    }
+    if (name == "Name") {
+        return "Имя";
+    }
+    if (name == "Type") {
+        return "Тип";
+    }
+    if (name == "Parent") {
+        return "Родитель";
+    }
+    if (name == "Visible") {
+        return "Видимость";
+    }
+    if (name == "Enabled") {
+        return "Доступность";
+    }
+    return {};
+}
+
+void add_api_surface(
+    oof::platform::object_model::PlatformObject& object,
+    const oof::platform::runtime_binding::PlatformApiObject* api
+) {
+    if (api == nullptr) {
+        return;
+    }
+    for (const auto& name : split_csv_list(api->sample_properties)) {
+        if (object.property(name) == nullptr) {
+            object.properties.push_back(oof::platform::object_model::make_property(
+                name,
+                localized_property_name(name),
+                "",
+                "platform-api-catalog"));
+        }
+    }
+    for (const auto& name : split_csv_list(api->sample_methods)) {
+        object.methods.push_back(oof::platform::object_model::make_method(name));
+    }
+    for (const auto& name : split_csv_list(api->sample_events)) {
+        object.events.push_back(oof::platform::object_model::make_event(name));
+    }
+}
+
+const oof::platform::runtime_binding::PlatformApiObject* api_object_for_type(std::string_view type_name) {
+    for (const auto& api : oof::platform::runtime_binding::api_objects) {
+        if (api.name == type_name) {
+            return &api;
+        }
+    }
+    return nullptr;
+}
+
+oof::platform::object_model::PlatformFormObject materialize_platform_form_object(
+    const RuntimeFormEnvelope& envelope
+) {
+    const auto summary = summarize_materialized_graph(envelope.payload);
+
+    oof::platform::object_model::PlatformFormObject form_object;
+    form_object.form.object_id = "0";
+    form_object.form.name = "Form";
+    form_object.form.platform_type = "Form";
+    form_object.form.path = "$";
+    form_object.form.properties.push_back(oof::platform::object_model::make_property(
+        "Type", "Тип", "Form", "platform-api-catalog"));
+    form_object.form.properties.push_back(oof::platform::object_model::make_property(
+        "RuntimeUUID", "", envelope.runtime_uuid, "runtime-form-envelope"));
+    form_object.form.properties.push_back(oof::platform::object_model::make_property(
+        "Items", "Элементы", std::to_string(summary.items.size()), "materialized-object-collection"));
+    add_api_surface(form_object.form, api_object_for_type("Form"));
+
+    for (const auto& item : summary.items) {
+        oof::platform::object_model::PlatformObject object;
+        object.object_id = item.object_id;
+        object.name = item.name;
+        object.platform_type = std::string(item.descriptor_binding->platform_type);
+        object.path = item.path;
+        object.parent_object_id = item.parent_object_id;
+        object.properties.push_back(oof::platform::object_model::make_property(
+            "ObjectID", "", item.object_id, "materialized-list-stream"));
+        object.properties.push_back(oof::platform::object_model::make_property(
+            "Name", "Имя", item.name, "platform-name-record"));
+        object.properties.push_back(oof::platform::object_model::make_property(
+            "Type", "Тип", object.platform_type, "descriptor-binding"));
+        object.properties.push_back(oof::platform::object_model::make_property(
+            "Parent", "Родитель", item.parent_object_id, "materialized-parent-chain"));
+        object.properties.push_back(oof::platform::object_model::make_property(
+            "Path", "", item.path, "list-stream-node-path"));
+        if (object.platform_type == "Button" || object.platform_type == "PanelPage" ||
+            object.platform_type == "Panel" || object.platform_type == "PivotChart") {
+            object.properties.push_back(oof::platform::object_model::make_property(
+                "Title", "Заголовок", item.name, "platform-name-record-as-initial-title"));
+        }
+        add_api_surface(object, api_object_for_type(object.platform_type));
+        form_object.items.add(std::move(object));
+    }
+
+    for (std::size_t index = 0; index < form_object.items.objects().size(); ++index) {
+        const auto& object = form_object.items.objects()[index];
+        if (object.parent_object_id.empty()) {
+            form_object.form.children.push_back(index);
+            continue;
+        }
+        for (auto& maybe_parent : form_object.items.mutable_objects()) {
+            if (maybe_parent.object_id == object.parent_object_id) {
+                maybe_parent.children.push_back(index);
+                break;
+            }
+        }
+    }
+
+    return form_object;
+}
+
+void print_platform_object_json(const oof::platform::object_model::PlatformObject& object) {
+    std::cout << "{\"objectId\":";
+    print_json_string(object.object_id);
+    std::cout << ",\"name\":";
+    print_json_string(object.name);
+    std::cout << ",\"platformType\":";
+    print_json_string(object.platform_type);
+    std::cout << ",\"path\":";
+    print_json_string(object.path);
+    std::cout << ",\"parentObjectId\":";
+    print_json_string(object.parent_object_id);
+    std::cout << ",\"properties\":[";
+    for (std::size_t index = 0; index < object.properties.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& prop = object.properties[index];
+        std::cout << "{\"name\":";
+        print_json_string(prop.name);
+        std::cout << ",\"localizedName\":";
+        print_json_string(prop.localized_name);
+        std::cout << ",\"value\":";
+        print_json_string(prop.value);
+        std::cout << ",\"source\":";
+        print_json_string(prop.source);
+        std::cout << "}";
+    }
+    std::cout << "],\"methods\":[";
+    for (std::size_t index = 0; index < object.methods.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"name\":";
+        print_json_string(object.methods[index].name);
+        std::cout << ",\"localizedName\":";
+        print_json_string(object.methods[index].localized_name);
+        std::cout << "}";
+    }
+    std::cout << "],\"events\":[";
+    for (std::size_t index = 0; index < object.events.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"name\":";
+        print_json_string(object.events[index].name);
+        std::cout << ",\"localizedName\":";
+        print_json_string(object.events[index].localized_name);
+        std::cout << "}";
+    }
+    std::cout << "],\"children\":[";
+    for (std::size_t index = 0; index < object.children.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        std::cout << object.children[index];
+    }
+    std::cout << "]}";
+}
+
+void print_runtime_platform_object(const std::string& path) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
+    const auto form_object = materialize_platform_form_object(envelope);
+    const auto* first = form_object.items.count() == 0 ? nullptr : &form_object.items.get(0);
+    const auto* found = first == nullptr ? nullptr : form_object.items.find(first->name);
+
+    std::cout << "{\"source\":\"RuntimeForm:PlatformObject\"";
+    std::cout << ",\"runtimeUuid\":";
+    print_json_string(envelope.runtime_uuid);
+    std::cout << ",\"form\":";
+    print_platform_object_json(form_object.form);
+    std::cout << ",\"items\":{\"count\":" << form_object.items.count();
+    std::cout << ",\"methods\":[\"Count\",\"Find\",\"Get\",\"IndexOf\"]";
+    if (first != nullptr) {
+        std::cout << ",\"get0\":{\"name\":";
+        print_json_string(first->name);
+        std::cout << ",\"platformType\":";
+        print_json_string(first->platform_type);
+        std::cout << "}";
+        std::cout << ",\"findFirstName\":"
+                  << (found != nullptr ? "true" : "false");
+    }
+    std::cout << ",\"objects\":[";
+    for (std::size_t index = 0; index < form_object.items.count(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_platform_object_json(form_object.items.get(index));
+    }
+    std::cout << "]}}\n";
 }
 
 RuntimeFormEnvelope read_runtime_form_envelope_file(const std::string& path, std::string& canonical_text) {
@@ -2702,6 +2935,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-roundtrip" && argc == 3) {
             print_runtime_form_roundtrip(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-platform-object" && argc == 3) {
+            print_runtime_platform_object(argv[2]);
             return 0;
         }
         if (command == "runtime-form-semantic-diff" && argc == 4) {
