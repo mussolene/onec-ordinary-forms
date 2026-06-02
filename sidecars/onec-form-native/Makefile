@@ -20,6 +20,10 @@ test: $(BIN)
 	$(BIN) mechanism | grep -q '"cf_form_controls_info8":40192'
 	$(BIN) mechanism | grep -q '"FormDataObject"'
 	$(BIN) mechanism | grep -q '"TypeDomainPattern"'
+	$(BIN) mechanism | grep -q '"platformName":"Кнопка"'
+	printf '{"S","B"}' | $(BIN) type-domain | grep -q '"itemCount":2'
+	printf '"Caption"' | $(BIN) value | grep -q '"roundtrip":"\\"Caption\\""'
+	printf '{1,1,{"ru","Caption"}}' | $(BIN) localized | grep -q '"encoding":"LocalizedStringRecord"'
 
 clean:
 	rm -rf $(BUILD_DIR)
