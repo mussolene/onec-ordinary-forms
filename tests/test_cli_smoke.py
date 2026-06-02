@@ -4009,6 +4009,41 @@ class CliSmokeTest(unittest.TestCase):
 
         self.assertEqual(geometry[-5:], ["0", "0", "1", "0", "0"])
 
+    def test_table_layout_primary_counted_dimensions_keep_counted_profile(self) -> None:
+        position = ET.fromstring(
+            """
+            <Position left="8" top="70" right="792" bottom="339">
+              <LayoutFlow group="4" order="4"/>
+              <Bindings>
+                <Binding coordinate="top" mode="0"><From relation="targetEdgeOffset" target="none" side="none" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="bottom" mode="0"><From relation="targetEdgeOffset" target="parent" side="bottom" offset="-44"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="left" mode="0"><From relation="targetEdgeOffset" target="none" side="none" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="right" mode="0"><From relation="targetEdgeOffset" target="parent" side="right" offset="-8"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="verticalCenter" mode="0"><From relation="targetEdgeOffset" target="none" side="none" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <Binding coordinate="horizontalCenter" mode="0"><From relation="targetEdgeOffset" target="none" side="none" offset="0"/><To relation="targetEdgeOffset" target="none" side="none" offset="0"/></Binding>
+                <DimensionBinding dimension="height" section="primary" mode="0" targetId="28" side="top"/>
+                <DimensionBinding dimension="minHeight" section="primary" mode="0" targetId="29" side="top"/>
+              </Bindings>
+            </Position>
+            """
+        )
+
+        geometry = geometry_stream_from_xml("Table", position, page_index=4, page_order=4)
+
+        self.assertEqual(
+            geometry,
+            [
+                "8", "8", "70", "792", "339", "1",
+                ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+                ["0", ["2", "0", "1", "-44"], ["2", "-1", "6", "0"]],
+                ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+                ["0", ["2", "0", "3", "-8"], ["2", "-1", "6", "0"]],
+                ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+                ["0", ["2", "-1", "6", "0"], ["2", "-1", "6", "0"]],
+                "0", "2", ["0", "28", "0"], ["0", "29", "0"], "0", "0", "0", "0", "4", "4", "5", "0", "0",
+            ],
+        )
+
     def test_old_root_panel_page_profile_is_decoded_as_typed_layout(self) -> None:
         from onec_ordinary_forms.cli import (
             form_root_panel_page_layout_header,

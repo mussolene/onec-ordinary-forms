@@ -5189,6 +5189,10 @@ def geometry_stream_from_xml(
             if control_type == "Splitter":
                 dimensions = ["1", ["0", object_id, "0"], "0", "0"]
     if control_type == "Table" and layout_flow is not None:
+        counted_geometry = counted_dimension_geometry_from_xml(position, left, top, right, bottom, bindings)
+        if counted_geometry is not None:
+            counted_geometry[5] = layout_mode
+            return counted_geometry
         group_tail = layout_group_tail(
             layout_group,
             layout_order,
@@ -5659,12 +5663,16 @@ def counted_dimension_geometry_from_xml(
     primary: list[object] = []
     secondary: list[object] = []
     for binding in binding_container.findall("DimensionBinding"):
-        section = binding.get("section") or "primary"
+        section = binding.get("section")
         if section == "secondary":
             secondary.append(dimension_binding_to_raw(binding))
         elif section == "primary":
             primary.append(dimension_binding_to_raw(binding))
-    if not primary or not secondary:
+        elif section:
+            return None
+        else:
+            return None
+    if not primary or (not secondary and not has_named_layout_group(position)):
         return None
     return [
         "8",
