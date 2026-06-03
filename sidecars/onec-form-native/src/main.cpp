@@ -2273,20 +2273,87 @@ std::string localized_property_name(std::string_view name) {
     return {};
 }
 
+bool property_value_type_is(std::string_view value_type, std::string_view type_name) {
+    return value_type == type_name || value_type == ("ui:" + std::string(type_name));
+}
+
+std::string platform_value_object_storage(
+    std::string_view object_class,
+    std::string_view value
+) {
+    if (object_class == "Picture") {
+        if (value.empty() || value == "V8Picture()") {
+            return "empty";
+        }
+        if (value.rfind("#base64:", 0) == 0) {
+            return "inline-base64";
+        }
+        if (value.rfind("file:", 0) == 0 || value.rfind("relative:", 0) == 0) {
+            return "relative";
+        }
+        if (value.rfind("ref:", 0) == 0 || value.find("PictureRef") != std::string::npos) {
+            return "reference";
+        }
+        return "persistent";
+    }
+    if (object_class == "Color") {
+        if (value.empty() || value.find("eAutoColor") != std::string::npos || value == "auto") {
+            return "auto";
+        }
+        if (value.rfind("#", 0) == 0) {
+            return "absolute-rgb";
+        }
+        if (value.rfind("style:", 0) == 0 || value.find("IV8Style") != std::string::npos) {
+            return "style";
+        }
+        return "value";
+    }
+    if (object_class == "Font") {
+        if (value.empty() || value.find("eAutoFont") != std::string::npos || value == "auto") {
+            return "auto";
+        }
+        return "value";
+    }
+    return {};
+}
+
+void enrich_platform_value_object(
+    oof::platform::object_model::PlatformObjectProperty& property
+) {
+    if (property_value_type_is(property.value_type, "Picture")) {
+        property.value_object_class = "Picture";
+        property.value_object_constructor = "New Picture";
+    } else if (property_value_type_is(property.value_type, "Color")) {
+        property.value_object_class = "Color";
+        property.value_object_constructor = "New Color";
+    } else if (property_value_type_is(property.value_type, "Font")) {
+        property.value_object_class = "Font";
+        property.value_object_constructor = "New Font";
+    }
+    if (!property.value_object_class.empty()) {
+        property.value_object_storage = platform_value_object_storage(
+            property.value_object_class,
+            property.value);
+        property.value_object_literal = property.value;
+    }
+}
+
 oof::platform::object_model::PlatformObjectProperty make_described_property(
     std::string_view name,
     std::string value
 ) {
     const auto* descriptor = oof::platform::property_registry::find_descriptor(name);
     if (descriptor == nullptr) {
-        return oof::platform::object_model::make_property(
+        auto property = oof::platform::object_model::make_property(
             std::string(name),
             localized_property_name(name),
             std::move(value),
             "platform-api-catalog",
             "GenericValue");
+        enrich_platform_value_object(property);
+        return property;
     }
-    return oof::platform::object_model::make_property(
+    auto property = oof::platform::object_model::make_property(
         std::string(descriptor->name),
         std::string(descriptor->localized_name),
         std::move(value),
@@ -2295,6 +2362,8 @@ oof::platform::object_model::PlatformObjectProperty make_described_property(
         std::string(descriptor->slot_binding),
         descriptor->writable,
         std::string(oof::platform::property_registry::slot_codec_name(descriptor->slot_codec)));
+    enrich_platform_value_object(property);
+    return property;
 }
 
 oof::platform::object_model::PlatformObjectProperty make_platform_object_property(
@@ -2312,7 +2381,7 @@ oof::platform::object_model::PlatformObjectProperty make_platform_object_propert
     std::string platform_member = {},
     std::string platform_default = {}
 ) {
-    return oof::platform::object_model::make_property(
+    auto property = oof::platform::object_model::make_property(
         std::move(name),
         std::move(localized_name),
         std::move(value),
@@ -2326,6 +2395,8 @@ oof::platform::object_model::PlatformObjectProperty make_platform_object_propert
         std::move(value_origin),
         std::move(platform_member),
         std::move(platform_default));
+    enrich_platform_value_object(property);
+    return property;
 }
 
 oof::platform::object_model::PlatformObjectCollectionDescriptor make_described_collection(
@@ -2690,6 +2761,17 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
         print_json_string(prop.slot_binding);
         std::cout << ",\"slotCodec\":";
         print_json_string(prop.slot_codec);
+        if (!prop.value_object_class.empty()) {
+            std::cout << ",\"valueObject\":{\"class\":";
+            print_json_string(prop.value_object_class);
+            std::cout << ",\"constructor\":";
+            print_json_string(prop.value_object_constructor);
+            std::cout << ",\"storage\":";
+            print_json_string(prop.value_object_storage);
+            std::cout << ",\"literal\":";
+            print_json_string(prop.value_object_literal);
+            std::cout << "}";
+        }
         std::cout << ",\"readable\":"
                   << (prop.readable ? "true" : "false");
         std::cout << ",\"writable\":"
@@ -2897,6 +2979,17 @@ void print_platform_object_get_json(
     print_json_string(property->slot_binding);
     std::cout << ",\"slotCodec\":";
     print_json_string(property->slot_codec);
+    if (!property->value_object_class.empty()) {
+        std::cout << ",\"valueObject\":{\"class\":";
+        print_json_string(property->value_object_class);
+        std::cout << ",\"constructor\":";
+        print_json_string(property->value_object_constructor);
+        std::cout << ",\"storage\":";
+        print_json_string(property->value_object_storage);
+        std::cout << ",\"literal\":";
+        print_json_string(property->value_object_literal);
+        std::cout << "}";
+    }
     std::cout << "}\n";
 }
 
@@ -3123,6 +3216,25 @@ std::vector<XmlElementSlice> find_xml_elements(std::string_view text, std::strin
     return elements;
 }
 
+std::string public_value_object_xml_literal(std::string_view property_body) {
+    for (const std::string& value_tag : {"PictureValue", "ColorValue", "FontValue"}) {
+        for (const auto& value_xml : find_xml_elements(property_body, value_tag)) {
+            if (!value_xml.self_closing) {
+                return xml_unescape(value_xml.body);
+            }
+            const std::string literal = xml_attr_value(value_xml.attrs, "literal");
+            if (!literal.empty()) {
+                return literal;
+            }
+            const std::string value = xml_attr_value(value_xml.attrs, "value");
+            if (!value.empty()) {
+                return value;
+            }
+        }
+    }
+    return xml_unescape(std::string(property_body));
+}
+
 const std::set<std::string>& public_schema_property_names() {
     static const std::set<std::string> names = [] {
         std::set<std::string> result;
@@ -3284,7 +3396,7 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                     }
                     edit.schema_properties.push_back({
                         property_name,
-                        xml_unescape(property_xml.body),
+                        public_value_object_xml_literal(property_xml.body),
                     });
                 }
             }
@@ -3504,11 +3616,31 @@ void append_schema_properties_xml(
         append_indent(out, indent);
         out += "<";
         out += property.name;
-        out += ">";
-        out += xml_escape(property.value);
-        out += "</";
-        out += property.name;
-        out += ">\n";
+        if (!property.value_object_class.empty()) {
+            out += ">\n";
+            append_indent(out, indent + 2);
+            out += "<";
+            out += property.value_object_class;
+            out += "Value constructor=\"";
+            out += xml_escape(property.value_object_constructor);
+            out += "\" storage=\"";
+            out += xml_escape(property.value_object_storage);
+            out += "\">";
+            out += xml_escape(property.value_object_literal);
+            out += "</";
+            out += property.value_object_class;
+            out += "Value>\n";
+            append_indent(out, indent);
+            out += "</";
+            out += property.name;
+            out += ">\n";
+        } else {
+            out += ">";
+            out += xml_escape(property.value);
+            out += "</";
+            out += property.name;
+            out += ">\n";
+        }
     }
 }
 
@@ -4307,11 +4439,24 @@ void print_formbin_platform_object_selftest() {
 
     RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_it->payload);
     auto form_object = materialize_platform_form_object(envelope);
-    const auto* button = form_object.find_object_by_id("5");
-    const auto* picture = button == nullptr ? nullptr : button->property("Picture");
+    auto* button = form_object.find_object_by_id("5");
+    auto* picture = button == nullptr ? nullptr : button->property("Picture");
     const std::string before_name = button == nullptr ? "" : form_object.get_prop_val("5", "Name");
     const std::string picture_value = picture == nullptr ? "" : picture->value;
     const std::string picture_member = picture == nullptr ? "" : picture->platform_member;
+    const std::string picture_object_class = picture == nullptr ? "" : picture->value_object_class;
+    const std::string picture_constructor = picture == nullptr ? "" : picture->value_object_constructor;
+    const std::string picture_storage = picture == nullptr ? "" : picture->value_object_storage;
+    bool explicit_picture_xml = false;
+    if (picture != nullptr) {
+        picture->value = "#base64:R0lGODlh";
+        picture->value_origin = "stream";
+        enrich_platform_value_object(*picture);
+        const std::string value_xml = form_object_to_public_xml(form_object);
+        explicit_picture_xml =
+            value_xml.find("<Picture>") != std::string::npos &&
+            value_xml.find("<PictureValue constructor=\"New Picture\" storage=\"inline-base64\">#base64:R0lGODlh</PictureValue>") != std::string::npos;
+    }
 
     oof::platform::object_model::PlatformFormObjectEdit object_edit;
     object_edit.object("5").set_property("Title", "ButtonFromFormBinObject");
@@ -4332,6 +4477,14 @@ void print_formbin_platform_object_selftest() {
     print_json_string(picture_value);
     std::cout << ",\"picturePlatformMember\":";
     print_json_string(picture_member);
+    std::cout << ",\"pictureObjectClass\":";
+    print_json_string(picture_object_class);
+    std::cout << ",\"pictureConstructor\":";
+    print_json_string(picture_constructor);
+    std::cout << ",\"pictureStorage\":";
+    print_json_string(picture_storage);
+    std::cout << ",\"explicitPictureXml\":"
+              << (explicit_picture_xml ? "true" : "false");
     std::cout << ",\"titleEdits\":" << result.title_edits;
     std::cout << ",\"titleRoundtrip\":"
               << (redump_object.get_prop_val("5", "Title") == "ButtonFromFormBinObject" ? "true" : "false");

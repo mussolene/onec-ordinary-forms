@@ -22,6 +22,10 @@ struct PlatformObjectProperty {
     std::string platform_default;
     std::string slot_binding;
     std::string slot_codec;
+    std::string value_object_class;
+    std::string value_object_constructor;
+    std::string value_object_storage;
+    std::string value_object_literal;
     bool readable = true;
     bool writable = false;
 };
