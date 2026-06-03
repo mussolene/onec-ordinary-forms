@@ -2073,105 +2073,158 @@ const oof::platform::runtime_binding::PlatformApiObject* api_object_for_type(std
     return nullptr;
 }
 
+class PlatformObjectTypeHandler {
+public:
+    virtual ~PlatformObjectTypeHandler() = default;
+    virtual std::string_view platform_type() const = 0;
+    virtual oof::platform::object_model::PlatformFormObject materialize_form(
+        const RuntimeFormEnvelope& envelope
+    ) const = 0;
+};
+
+class FormPlatformObjectTypeHandler final : public PlatformObjectTypeHandler {
+public:
+    std::string_view platform_type() const override {
+        return "Form";
+    }
+
+    oof::platform::object_model::PlatformFormObject materialize_form(
+        const RuntimeFormEnvelope& envelope
+    ) const override {
+        const auto summary = summarize_materialized_graph(envelope.payload);
+
+        oof::platform::object_model::PlatformFormObject form_object;
+        materialize_form_root(form_object, envelope, summary);
+        materialize_attributes(form_object, summary);
+        materialize_items(form_object, summary);
+        link_item_children(form_object);
+        return form_object;
+    }
+
+private:
+    static void materialize_form_root(
+        oof::platform::object_model::PlatformFormObject& form_object,
+        const RuntimeFormEnvelope& envelope,
+        const MaterializedGraphSummary& summary
+    ) {
+        form_object.form.object_id = "0";
+        form_object.form.name = "Form";
+        form_object.form.platform_type = "Form";
+        form_object.form.type_category = "core::kLogFormTypeInfoCategory";
+        form_object.form.type_source = "PlatformObjectTypeHandler<Form> + core85 ContextCore + mngbase RTLogForm";
+        form_object.form.path = "$";
+        form_object.form.properties.push_back(make_described_property("Type", "Form"));
+        form_object.form.properties.push_back(make_described_property("RuntimeUUID", envelope.runtime_uuid));
+        form_object.form.properties.push_back(make_described_property("Items", std::to_string(summary.items.size())));
+        form_object.form.properties.push_back(make_described_property("Attributes", std::to_string(summary.attributes.size())));
+        form_object.form.properties.push_back(make_described_property("Commands", "0"));
+        form_object.form.properties.push_back(make_described_property("Events", "0"));
+        form_object.form.collections.push_back(make_described_collection("Items", summary.items.size()));
+        form_object.form.collections.push_back(make_described_collection("Attributes", summary.attributes.size()));
+        form_object.form.collections.push_back(make_described_collection("Commands", 0));
+        form_object.form.collections.push_back(make_described_collection("Events", 0));
+        add_api_surface(form_object.form, api_object_for_type("Form"));
+    }
+
+    static void materialize_attributes(
+        oof::platform::object_model::PlatformFormObject& form_object,
+        const MaterializedGraphSummary& summary
+    ) {
+        for (const auto& attribute : summary.attributes) {
+            oof::platform::object_model::PlatformObject object;
+            object.object_id = attribute.object_id;
+            object.name = attribute.name;
+            object.platform_type = "FormAttribute";
+            object.type_category = "core::kLogFormTypeInfoCategory";
+            object.type_source = "PlatformObjectTypeHandler<Form>.Attributes + mngcore logform.xsd Property";
+            object.path = attribute.path;
+            object.parent_object_id = "0";
+            object.properties.push_back(make_platform_object_property(
+                "ID", "Идентификатор", attribute.object_id, "CompositeID", "logform.xsd:Property@id"));
+            object.properties.push_back(make_platform_object_property(
+                "Name", "Имя", attribute.name, "String", "runtime property block"));
+            object.properties.push_back(make_platform_object_property(
+                "Main", "Основной", attribute.main, "Boolean", "logform.xsd:Property@main"));
+            object.properties.push_back(make_platform_object_property(
+                "StoredData", "СохраняемыеДанные", attribute.stored_data, "Boolean", "logform.xsd:Property@storedData"));
+            object.properties.push_back(make_platform_object_property(
+                "Type", "Тип", attribute.type_pattern, "TypeDomainPattern", "runtime property block TypeDomainPattern"));
+            add_api_surface(object, api_object_for_type("FormAttribute"));
+            form_object.attributes.add(std::move(object));
+        }
+    }
+
+    static void materialize_items(
+        oof::platform::object_model::PlatformFormObject& form_object,
+        const MaterializedGraphSummary& summary
+    ) {
+        for (const auto& item : summary.items) {
+            oof::platform::object_model::PlatformObject object;
+            object.object_id = item.object_id;
+            object.name = item.name;
+            object.platform_type = std::string(item.descriptor_binding->platform_type);
+            object.type_category = "core::kLogFormTypeInfoCategory";
+            object.type_source = "PlatformObjectTypeHandler<Form>.Items + " + std::string(item.descriptor_binding->evidence);
+            object.path = item.path;
+            object.parent_object_id = item.parent_object_id;
+            object.properties.push_back(make_described_property("ObjectID", item.object_id));
+            object.properties.push_back(make_described_property("Name", item.name));
+            object.properties.push_back(make_described_property("Type", object.platform_type));
+            object.properties.push_back(make_described_property("Parent", item.parent_object_id));
+            object.properties.push_back(make_described_property("Path", item.path));
+            if (!item.title.empty()) {
+                object.properties.push_back(make_described_property("Title", item.title));
+            }
+            object.properties.push_back(make_described_property("Events", "0"));
+            object.collections.push_back(make_described_collection("Events", 0));
+            if (!item.left.empty()) {
+                object.properties.push_back(make_described_property("Left", item.left));
+                object.properties.push_back(make_described_property("Top", item.top));
+                object.properties.push_back(make_described_property("Width", std::to_string(std::stoll(item.right) - std::stoll(item.left))));
+                object.properties.push_back(make_described_property("Height", std::to_string(std::stoll(item.bottom) - std::stoll(item.top))));
+                object.properties.push_back(make_described_property("Right", item.right));
+                object.properties.push_back(make_described_property("Bottom", item.bottom));
+                for (const auto& binding : item.bindings) {
+                    object.properties.push_back(make_described_property("Binding." + binding.name, oof::platform::stream::dump_compact(binding.value)));
+                }
+                for (const auto& binding : item.dimension_bindings) {
+                    object.properties.push_back(make_described_property("DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value)));
+                }
+            }
+            add_api_surface(object, api_object_for_type(object.platform_type));
+            form_object.items.add(std::move(object));
+        }
+    }
+
+    static void link_item_children(oof::platform::object_model::PlatformFormObject& form_object) {
+        for (std::size_t index = 0; index < form_object.items.objects().size(); ++index) {
+            const auto& object = form_object.items.objects()[index];
+            if (object.parent_object_id.empty()) {
+                form_object.form.children.push_back(index);
+                continue;
+            }
+            for (auto& maybe_parent : form_object.items.mutable_objects()) {
+                if (maybe_parent.object_id == object.parent_object_id) {
+                    maybe_parent.children.push_back(index);
+                    break;
+                }
+            }
+        }
+    }
+};
+
+const PlatformObjectTypeHandler& platform_object_type_handler_for(std::string_view platform_type) {
+    static const FormPlatformObjectTypeHandler form_handler;
+    if (platform_type == form_handler.platform_type()) {
+        return form_handler;
+    }
+    throw std::runtime_error("platform object type handler is not registered: " + std::string(platform_type));
+}
+
 oof::platform::object_model::PlatformFormObject materialize_platform_form_object(
     const RuntimeFormEnvelope& envelope
 ) {
-    const auto summary = summarize_materialized_graph(envelope.payload);
-
-    oof::platform::object_model::PlatformFormObject form_object;
-    form_object.form.object_id = "0";
-    form_object.form.name = "Form";
-    form_object.form.platform_type = "Form";
-    form_object.form.type_category = "core::kLogFormTypeInfoCategory";
-    form_object.form.type_source = "core85 ContextCore + mngbase RTLogForm";
-    form_object.form.path = "$";
-    form_object.form.properties.push_back(make_described_property("Type", "Form"));
-    form_object.form.properties.push_back(make_described_property("RuntimeUUID", envelope.runtime_uuid));
-    form_object.form.properties.push_back(make_described_property("Items", std::to_string(summary.items.size())));
-    form_object.form.properties.push_back(make_described_property("Attributes", std::to_string(summary.attributes.size())));
-    form_object.form.properties.push_back(make_described_property("Commands", "0"));
-    form_object.form.properties.push_back(make_described_property("Events", "0"));
-    form_object.form.collections.push_back(make_described_collection("Items", summary.items.size()));
-    form_object.form.collections.push_back(make_described_collection("Attributes", summary.attributes.size()));
-    form_object.form.collections.push_back(make_described_collection("Commands", 0));
-    form_object.form.collections.push_back(make_described_collection("Events", 0));
-    add_api_surface(form_object.form, api_object_for_type("Form"));
-
-    for (const auto& attribute : summary.attributes) {
-        oof::platform::object_model::PlatformObject object;
-        object.object_id = attribute.object_id;
-        object.name = attribute.name;
-        object.platform_type = "FormAttribute";
-        object.type_category = "core::kLogFormTypeInfoCategory";
-        object.type_source = "mngcore logform.xsd Property + runtime property block";
-        object.path = attribute.path;
-        object.parent_object_id = "0";
-        object.properties.push_back(make_platform_object_property(
-            "ID", "Идентификатор", attribute.object_id, "CompositeID", "logform.xsd:Property@id"));
-        object.properties.push_back(make_platform_object_property(
-            "Name", "Имя", attribute.name, "String", "runtime property block"));
-        object.properties.push_back(make_platform_object_property(
-            "Main", "Основной", attribute.main, "Boolean", "logform.xsd:Property@main"));
-        object.properties.push_back(make_platform_object_property(
-            "StoredData", "СохраняемыеДанные", attribute.stored_data, "Boolean", "logform.xsd:Property@storedData"));
-        object.properties.push_back(make_platform_object_property(
-            "Type", "Тип", attribute.type_pattern, "TypeDomainPattern", "runtime property block TypeDomainPattern"));
-        add_api_surface(object, api_object_for_type("FormAttribute"));
-        form_object.attributes.add(std::move(object));
-    }
-
-    for (const auto& item : summary.items) {
-        oof::platform::object_model::PlatformObject object;
-        object.object_id = item.object_id;
-        object.name = item.name;
-        object.platform_type = std::string(item.descriptor_binding->platform_type);
-        object.type_category = "core::kLogFormTypeInfoCategory";
-        object.type_source = std::string(item.descriptor_binding->evidence);
-        object.path = item.path;
-        object.parent_object_id = item.parent_object_id;
-        object.properties.push_back(make_described_property("ObjectID", item.object_id));
-        object.properties.push_back(make_described_property("Name", item.name));
-        object.properties.push_back(make_described_property("Type", object.platform_type));
-        object.properties.push_back(make_described_property("Parent", item.parent_object_id));
-        object.properties.push_back(make_described_property("Path", item.path));
-        if (!item.title.empty()) {
-            object.properties.push_back(make_described_property("Title", item.title));
-        }
-        object.properties.push_back(make_described_property("Events", "0"));
-        object.collections.push_back(make_described_collection("Events", 0));
-        if (!item.left.empty()) {
-            object.properties.push_back(make_described_property("Left", item.left));
-            object.properties.push_back(make_described_property("Top", item.top));
-            object.properties.push_back(make_described_property("Width", std::to_string(std::stoll(item.right) - std::stoll(item.left))));
-            object.properties.push_back(make_described_property("Height", std::to_string(std::stoll(item.bottom) - std::stoll(item.top))));
-            object.properties.push_back(make_described_property("Right", item.right));
-            object.properties.push_back(make_described_property("Bottom", item.bottom));
-            for (const auto& binding : item.bindings) {
-                object.properties.push_back(make_described_property("Binding." + binding.name, oof::platform::stream::dump_compact(binding.value)));
-            }
-            for (const auto& binding : item.dimension_bindings) {
-                object.properties.push_back(make_described_property("DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value)));
-            }
-        }
-        add_api_surface(object, api_object_for_type(object.platform_type));
-        form_object.items.add(std::move(object));
-    }
-
-    for (std::size_t index = 0; index < form_object.items.objects().size(); ++index) {
-        const auto& object = form_object.items.objects()[index];
-        if (object.parent_object_id.empty()) {
-            form_object.form.children.push_back(index);
-            continue;
-        }
-        for (auto& maybe_parent : form_object.items.mutable_objects()) {
-            if (maybe_parent.object_id == object.parent_object_id) {
-                maybe_parent.children.push_back(index);
-                break;
-            }
-        }
-    }
-
-    return form_object;
+    return platform_object_type_handler_for("Form").materialize_form(envelope);
 }
 
 void print_platform_object_json(const oof::platform::object_model::PlatformObject& object) {

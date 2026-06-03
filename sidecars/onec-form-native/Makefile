@@ -162,6 +162,7 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"name":"Attributes","localizedName":"Реквизиты"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"platformType":"Form"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"typeCategory":"core::kLogFormTypeInfoCategory"'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q 'PlatformObjectTypeHandler<Form>'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"valueType":"FormItems"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"items":{"count":2'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"attributes":{"name":"Attributes","localizedName":"Реквизиты","valueType":"FormAttributes"'
