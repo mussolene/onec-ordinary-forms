@@ -5,6 +5,7 @@
 #include <string_view>
 #include <vector>
 
+#include "platform_object_schema.hpp"
 #include "platform_runtime_binding.hpp"
 
 namespace oof::platform::property_registry {
@@ -107,6 +108,47 @@ inline constexpr std::string_view slot_codec_name(SlotCodec codec) {
     return "unknown";
 }
 
+inline SlotCodec slot_codec_from_name(std::string_view codec) {
+    if (codec == "name-record") {
+        return SlotCodec::name_record;
+    }
+    if (codec == "scalar-flag") {
+        return SlotCodec::scalar_flag;
+    }
+    if (codec == "position-record") {
+        return SlotCodec::position_record;
+    }
+    if (codec == "color-record") {
+        return SlotCodec::color_record;
+    }
+    if (codec == "font-record") {
+        return SlotCodec::font_record;
+    }
+    if (codec == "border-record") {
+        return SlotCodec::border_record;
+    }
+    if (codec == "picture-record") {
+        return SlotCodec::picture_record;
+    }
+    if (codec == "event-action-record") {
+        return SlotCodec::event_action_record;
+    }
+    if (codec == "binding-record") {
+        return SlotCodec::binding_record;
+    }
+    if (codec == "collection-record") {
+        return SlotCodec::collection_record;
+    }
+    return SlotCodec::none;
+}
+
+struct GeneratedDescriptorCatalog {
+    std::vector<PlatformPropertyDescriptor> descriptors;
+    std::size_t schema_count = 0;
+    std::size_t api_count = 0;
+};
+
+inline const GeneratedDescriptorCatalog& generated_descriptor_catalog();
 inline const std::vector<PlatformPropertyDescriptor>& generated_api_descriptors();
 
 inline const PlatformPropertyDescriptor* find_descriptor(std::string_view property_name) {
@@ -194,41 +236,80 @@ inline std::string_view inferred_api_value_type(std::string_view name) {
     return "PlatformApiValue";
 }
 
-inline std::vector<std::string>& generated_api_descriptor_name_storage() {
+inline std::vector<std::string>& generated_api_descriptor_string_storage() {
     static std::vector<std::string> storage;
     return storage;
 }
 
-inline const std::vector<PlatformPropertyDescriptor>& generated_api_descriptors() {
-    static const std::vector<PlatformPropertyDescriptor> generated = [] {
-        auto& names = generated_api_descriptor_name_storage();
-        names.clear();
-        names.reserve(256);
+inline std::string_view store_generated_descriptor_string(std::string value) {
+    auto& storage = generated_api_descriptor_string_storage();
+    storage.push_back(std::move(value));
+    return storage.back();
+}
 
-        std::vector<PlatformPropertyDescriptor> out;
-        out.reserve(256);
+inline const GeneratedDescriptorCatalog& generated_descriptor_catalog() {
+    static const GeneratedDescriptorCatalog catalog = [] {
+        auto& strings = generated_api_descriptor_string_storage();
+        strings.clear();
+        strings.reserve(4096);
+
+        GeneratedDescriptorCatalog generated;
+        generated.descriptors.reserve(512);
+
+        for (const auto& schema : object_schema::build_platform_object_schemas()) {
+            for (const auto& member : schema.xsd_members) {
+                if (find_base_descriptor(member.name) != nullptr ||
+                    generated_descriptor_exists(generated.descriptors, member.name)) {
+                    continue;
+                }
+                generated.descriptors.push_back({
+                    store_generated_descriptor_string(member.name),
+                    "",
+                    store_generated_descriptor_string(member.value_type),
+                    slot_codec_from_name(member.slot_codec),
+                    store_generated_descriptor_string(member.slot_binding),
+                    true,
+                    member.writable,
+                    store_generated_descriptor_string(member.source),
+                });
+                ++generated.schema_count;
+            }
+        }
+
         for (const auto& api : runtime_binding::api_objects) {
             for (const auto& property_name : split_descriptor_csv(api.sample_properties)) {
                 if (find_base_descriptor(property_name) != nullptr ||
-                    generated_descriptor_exists(out, property_name)) {
+                    generated_descriptor_exists(generated.descriptors, property_name)) {
                     continue;
                 }
-                names.push_back(property_name);
-                out.push_back({
-                    names.back(),
+                generated.descriptors.push_back({
+                    store_generated_descriptor_string(property_name),
                     "",
-                    inferred_api_value_type(names.back()),
+                    inferred_api_value_type(property_name),
                     SlotCodec::none,
                     "",
                     true,
                     false,
                     api.api_source,
                 });
+                ++generated.api_count;
             }
         }
-        return out;
+        return generated;
     }();
-    return generated;
+    return catalog;
+}
+
+inline const std::vector<PlatformPropertyDescriptor>& generated_api_descriptors() {
+    return generated_descriptor_catalog().descriptors;
+}
+
+inline std::size_t generated_schema_descriptor_count() {
+    return generated_descriptor_catalog().schema_count;
+}
+
+inline std::size_t generated_api_descriptor_count() {
+    return generated_descriptor_catalog().api_count;
 }
 
 inline bool can_set_with_current_codec(const PlatformPropertyDescriptor& descriptor) {

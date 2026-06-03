@@ -5527,11 +5527,15 @@ void print_platform_property_registry() {
     std::size_t writable = 0;
     const auto& base_descriptors = oof::platform::property_registry::descriptors;
     const auto& generated_descriptors = oof::platform::property_registry::generated_api_descriptors();
+    const std::size_t generated_schema_count = oof::platform::property_registry::generated_schema_descriptor_count();
+    const std::size_t generated_api_count = oof::platform::property_registry::generated_api_descriptor_count();
     const std::size_t descriptor_count = base_descriptors.size() + generated_descriptors.size();
     std::cout << "{\"source\":\"PlatformPropertyDescriptorRegistry\"";
     std::cout << ",\"descriptorCount\":" << descriptor_count;
     std::cout << ",\"baseDescriptorCount\":" << base_descriptors.size();
-    std::cout << ",\"generatedApiDescriptorCount\":" << generated_descriptors.size();
+    std::cout << ",\"generatedDescriptorCount\":" << generated_descriptors.size();
+    std::cout << ",\"generatedSchemaDescriptorCount\":" << generated_schema_count;
+    std::cout << ",\"generatedApiDescriptorCount\":" << generated_api_count;
     std::cout << ",\"descriptors\":[";
     std::size_t printed = 0;
     const auto print_descriptor = [&](const oof::platform::property_registry::PlatformPropertyDescriptor& descriptor,
@@ -5566,8 +5570,10 @@ void print_platform_property_registry() {
     for (const auto& descriptor : base_descriptors) {
         print_descriptor(descriptor, "static-platform-descriptor");
     }
-    for (const auto& descriptor : generated_descriptors) {
-        print_descriptor(descriptor, "generated-platform-api-catalog");
+    for (std::size_t index = 0; index < generated_descriptors.size(); ++index) {
+        print_descriptor(
+            generated_descriptors[index],
+            index < generated_schema_count ? "generated-platform-schema-catalog" : "generated-platform-api-catalog");
     }
     std::cout << "],\"writableCount\":" << writable;
     std::cout << ",\"slotCodecCounts\":[";
