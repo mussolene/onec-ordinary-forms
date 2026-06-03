@@ -280,6 +280,7 @@ void usage() {
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
               << "       oof-native runtime-form-rename runtime-form-stream.txt rebuilt-stream.txt objectId newName\n"
+              << "       oof-native runtime-platform-object-get runtime-form-stream.txt objectId property\n"
               << "       oof-native runtime-platform-object-set runtime-form-stream.txt rebuilt-stream.txt objectId property value\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
@@ -2217,6 +2218,49 @@ void print_runtime_platform_object(const std::string& path) {
     std::cout << "]}}\n";
 }
 
+void print_runtime_platform_object_get(
+    const std::string& path,
+    std::string_view object_id,
+    std::string_view property_name
+) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
+    const auto form_object = materialize_platform_form_object(envelope);
+    const auto* object = form_object.find_object_by_id(object_id);
+    if (object == nullptr) {
+        throw std::runtime_error("platform object is not found: " + std::string(object_id));
+    }
+    const auto* property = object->property(property_name);
+    if (property == nullptr) {
+        throw std::runtime_error("platform object property is not found: " + std::string(property_name));
+    }
+
+    std::cout << "{\"operation\":\"getPropVal\"";
+    std::cout << ",\"objectId\":";
+    print_json_string(object_id);
+    std::cout << ",\"objectName\":";
+    print_json_string(object->name);
+    std::cout << ",\"platformType\":";
+    print_json_string(object->platform_type);
+    std::cout << ",\"property\":";
+    print_json_string(property_name);
+    std::cout << ",\"descriptorName\":";
+    print_json_string(property->name);
+    std::cout << ",\"localizedName\":";
+    print_json_string(property->localized_name);
+    std::cout << ",\"valueType\":";
+    print_json_string(property->value_type);
+    std::cout << ",\"value\":";
+    print_json_string(form_object.get_prop_val(object_id, property_name));
+    std::cout << ",\"readable\":" << (property->readable ? "true" : "false");
+    std::cout << ",\"writable\":" << (property->writable ? "true" : "false");
+    std::cout << ",\"slotBinding\":";
+    print_json_string(property->slot_binding);
+    std::cout << ",\"slotCodec\":";
+    print_json_string(property->slot_codec);
+    std::cout << "}\n";
+}
+
 std::string xml_escape(std::string_view value) {
     std::string out;
     for (const char ch : value) {
@@ -3566,13 +3610,7 @@ void write_runtime_platform_object_set(
     const std::vector<std::uint8_t> output(rebuilt_text.begin(), rebuilt_text.end());
     write_file_bytes(output_path, output);
     const auto form_object = materialize_platform_form_object(envelope);
-    const oof::platform::object_model::PlatformObject* changed = nullptr;
-    for (const auto& object : form_object.items.objects()) {
-        if (object.object_id == object_id) {
-            changed = &object;
-            break;
-        }
-    }
+    const auto* changed = form_object.find_object_by_id(object_id);
 
     std::cout << "{\"output\":";
     print_json_string(output_path);
@@ -4711,6 +4749,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-platform-object" && argc == 3) {
             print_runtime_platform_object(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-platform-object-get" && argc == 5) {
+            print_runtime_platform_object_get(argv[2], argv[3], argv[4]);
             return 0;
         }
         if (command == "runtime-form-semantic-diff" && argc == 4) {

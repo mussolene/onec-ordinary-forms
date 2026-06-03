@@ -65,6 +65,46 @@ struct PlatformObject {
         }
         return nullptr;
     }
+
+    PlatformObjectProperty* property(std::string_view property_name) {
+        for (auto& prop : properties) {
+            if (prop.name == property_name || prop.localized_name == property_name) {
+                return &prop;
+            }
+        }
+        return nullptr;
+    }
+
+    std::string get_prop_val(std::string_view property_name) const {
+        const auto* prop = property(property_name);
+        if (prop == nullptr) {
+            throw std::runtime_error("platform object property is not found: " + std::string(property_name));
+        }
+        if (!prop->readable) {
+            throw std::runtime_error("platform object property is not readable: " + std::string(property_name));
+        }
+        return prop->value;
+    }
+
+    void set_prop_val(std::string_view property_name, std::string value) {
+        auto* prop = property(property_name);
+        if (prop == nullptr) {
+            throw std::runtime_error("platform object property is not found: " + std::string(property_name));
+        }
+        if (!prop->writable) {
+            throw std::runtime_error("platform object property is not writable: " + std::string(property_name));
+        }
+        prop->value = std::move(value);
+    }
+
+    bool has_method(std::string_view method_name) const {
+        for (const auto& method : methods) {
+            if (method.name == method_name || method.localized_name == method_name) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 class PlatformObjectCollection {
@@ -93,6 +133,15 @@ public:
         return nullptr;
     }
 
+    std::ptrdiff_t index_of(std::string_view object_id) const {
+        for (std::size_t index = 0; index < objects_.size(); ++index) {
+            if (objects_[index].object_id == object_id) {
+                return static_cast<std::ptrdiff_t>(index);
+            }
+        }
+        return -1;
+    }
+
     const std::vector<PlatformObject>& objects() const {
         return objects_;
     }
@@ -111,6 +160,46 @@ struct PlatformFormObject {
 
     const PlatformObjectProperty* property(std::string_view property_name) const {
         return form.property(property_name);
+    }
+
+    const PlatformObject* find_object_by_id(std::string_view object_id) const {
+        if (form.object_id == object_id) {
+            return &form;
+        }
+        for (const auto& object : items.objects()) {
+            if (object.object_id == object_id) {
+                return &object;
+            }
+        }
+        return nullptr;
+    }
+
+    PlatformObject* find_object_by_id(std::string_view object_id) {
+        if (form.object_id == object_id) {
+            return &form;
+        }
+        for (auto& object : items.mutable_objects()) {
+            if (object.object_id == object_id) {
+                return &object;
+            }
+        }
+        return nullptr;
+    }
+
+    std::string get_prop_val(std::string_view object_id, std::string_view property_name) const {
+        const auto* object = find_object_by_id(object_id);
+        if (object == nullptr) {
+            throw std::runtime_error("platform object is not found: " + std::string(object_id));
+        }
+        return object->get_prop_val(property_name);
+    }
+
+    void set_prop_val(std::string_view object_id, std::string_view property_name, std::string value) {
+        auto* object = find_object_by_id(object_id);
+        if (object == nullptr) {
+            throw std::runtime_error("platform object is not found: " + std::string(object_id));
+        }
+        object->set_prop_val(property_name, std::move(value));
     }
 };
 
