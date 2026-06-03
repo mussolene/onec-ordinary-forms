@@ -2314,24 +2314,6 @@ std::string localized_property_name(std::string_view name) {
     if (const auto* descriptor = oof::platform::property_registry::find_descriptor(name)) {
         return std::string(descriptor->localized_name);
     }
-    if (name == "Title" || name == "Caption") {
-        return "Заголовок";
-    }
-    if (name == "Name") {
-        return "Имя";
-    }
-    if (name == "Type") {
-        return "Тип";
-    }
-    if (name == "Parent") {
-        return "Родитель";
-    }
-    if (name == "Visible") {
-        return "Видимость";
-    }
-    if (name == "Enabled") {
-        return "Доступность";
-    }
     return {};
 }
 
@@ -2551,14 +2533,7 @@ oof::platform::object_model::PlatformObjectProperty make_described_property(
 ) {
     const auto* descriptor = oof::platform::property_registry::find_descriptor(name);
     if (descriptor == nullptr) {
-        auto property = oof::platform::object_model::make_property(
-            std::string(name),
-            localized_property_name(name),
-            std::move(value),
-            "platform-api-catalog",
-            "GenericValue");
-        enrich_platform_value_object(property);
-        return property;
+        throw std::runtime_error("platform property descriptor coverage gap: " + std::string(name));
     }
     auto property = oof::platform::object_model::make_property(
         std::string(descriptor->name),
@@ -2612,12 +2587,7 @@ oof::platform::object_model::PlatformObjectCollectionDescriptor make_described_c
 ) {
     const auto* descriptor = oof::platform::property_registry::find_descriptor(name);
     if (descriptor == nullptr) {
-        return oof::platform::object_model::make_collection_descriptor(
-            std::string(name),
-            {},
-            "ObjectCollection",
-            count,
-            "platform-api-catalog");
+        throw std::runtime_error("platform collection descriptor coverage gap: " + std::string(name));
     }
     return oof::platform::object_model::make_collection_descriptor(
         std::string(descriptor->name),
@@ -2639,7 +2609,14 @@ void add_api_surface(
     }
     for (const auto& name : split_csv_list(api->sample_properties)) {
         if (object.property(name) == nullptr) {
-            object.properties.push_back(make_described_property(name, ""));
+            if (oof::platform::property_registry::find_descriptor(name) != nullptr) {
+                object.properties.push_back(make_described_property(name, ""));
+            } else {
+                object.coverage_gaps.push_back(oof::platform::object_model::make_coverage_gap(
+                    name,
+                    std::string(api->api_source),
+                    "api property has no PlatformPropertyDescriptor binding"));
+            }
         }
     }
     for (const auto& name : split_csv_list(api->sample_methods)) {
@@ -2674,7 +2651,14 @@ void add_platform_object_schema_surface(
     }
     for (const auto& name : schema.api_properties) {
         if (object.property(name) == nullptr) {
-            object.properties.push_back(make_described_property(name, ""));
+            if (oof::platform::property_registry::find_descriptor(name) != nullptr) {
+                object.properties.push_back(make_described_property(name, ""));
+            } else {
+                object.coverage_gaps.push_back(oof::platform::object_model::make_coverage_gap(
+                    name,
+                    schema.schema_source.empty() ? schema.api_source : schema.schema_source,
+                    "schema api property has no PlatformPropertyDescriptor binding"));
+            }
         }
     }
     for (const auto& name : schema.api_methods) {
@@ -3041,6 +3025,20 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
         print_json_string(object.events[index].name);
         std::cout << ",\"localizedName\":";
         print_json_string(object.events[index].localized_name);
+        std::cout << "}";
+    }
+    std::cout << "],\"descriptorCoverageGaps\":[";
+    for (std::size_t index = 0; index < object.coverage_gaps.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& gap = object.coverage_gaps[index];
+        std::cout << "{\"name\":";
+        print_json_string(gap.name);
+        std::cout << ",\"source\":";
+        print_json_string(gap.source);
+        std::cout << ",\"reason\":";
+        print_json_string(gap.reason);
         std::cout << "}";
     }
     std::cout << "],\"children\":[";

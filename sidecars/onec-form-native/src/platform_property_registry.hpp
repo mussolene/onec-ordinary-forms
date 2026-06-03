@@ -112,14 +112,6 @@ inline const PlatformPropertyDescriptor* find_descriptor(std::string_view proper
     return nullptr;
 }
 
-inline const PlatformPropertyDescriptor& generic_value_descriptor(std::string_view property_name) {
-    static constexpr PlatformPropertyDescriptor fallback{
-        "", "", "GenericValue", SlotCodec::none, "", true, false, "platform-api-catalog"
-    };
-    const auto* descriptor = find_descriptor(property_name);
-    return descriptor == nullptr ? fallback : *descriptor;
-}
-
 inline bool can_set_with_current_codec(const PlatformPropertyDescriptor& descriptor) {
     return descriptor.writable &&
            (descriptor.slot_codec == SlotCodec::name_record ||

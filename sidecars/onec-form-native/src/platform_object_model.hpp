@@ -44,6 +44,12 @@ struct PlatformObjectEvent {
     std::string localized_name;
 };
 
+struct PlatformObjectCoverageGap {
+    std::string name;
+    std::string source;
+    std::string reason;
+};
+
 struct PlatformObjectCollectionDescriptor {
     std::string name;
     std::string localized_name;
@@ -68,6 +74,7 @@ struct PlatformObject {
     std::vector<PlatformObjectCollectionDescriptor> collections;
     std::vector<PlatformObjectMethod> methods;
     std::vector<PlatformObjectEvent> events;
+    std::vector<PlatformObjectCoverageGap> coverage_gaps;
     std::vector<std::size_t> children;
 
     const PlatformObjectProperty* property(std::string_view property_name) const {
@@ -384,6 +391,18 @@ inline PlatformObjectEvent make_event(std::string name, std::string localized_na
     event.name = std::move(name);
     event.localized_name = std::move(localized_name);
     return event;
+}
+
+inline PlatformObjectCoverageGap make_coverage_gap(
+    std::string name,
+    std::string source,
+    std::string reason
+) {
+    PlatformObjectCoverageGap gap;
+    gap.name = std::move(name);
+    gap.source = std::move(source);
+    gap.reason = std::move(reason);
+    return gap;
 }
 
 inline PlatformObjectCollectionDescriptor make_collection_descriptor(
