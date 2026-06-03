@@ -2265,14 +2265,23 @@ oof::platform::object_model::PlatformObjectProperty make_platform_object_propert
     std::string localized_name,
     std::string value,
     std::string value_type,
-    std::string source
+    std::string source,
+    std::string default_value = {},
+    std::string write_policy = {},
+    std::string value_origin = "stream"
 ) {
     return oof::platform::object_model::make_property(
         std::move(name),
         std::move(localized_name),
         std::move(value),
         std::move(source),
-        std::move(value_type));
+        std::move(value_type),
+        {},
+        false,
+        {},
+        std::move(default_value),
+        std::move(write_policy),
+        std::move(value_origin));
 }
 
 oof::platform::object_model::PlatformObjectCollectionDescriptor make_described_collection(
@@ -2328,9 +2337,12 @@ void add_platform_object_schema_surface(
             object.properties.push_back(make_platform_object_property(
                 member.name,
                 localized_property_name(member.name),
-                "",
+                member.default_value,
                 member.value_type,
-                member.source));
+                member.source,
+                member.default_value,
+                member.write_policy,
+                "schema-default"));
         }
     }
     for (const auto& name : schema.api_properties) {
@@ -2613,6 +2625,12 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
         print_json_string(prop.value_type);
         std::cout << ",\"value\":";
         print_json_string(prop.value);
+        std::cout << ",\"defaultValue\":";
+        print_json_string(prop.default_value);
+        std::cout << ",\"writePolicy\":";
+        print_json_string(prop.write_policy);
+        std::cout << ",\"valueOrigin\":";
+        print_json_string(prop.value_origin);
         std::cout << ",\"source\":";
         print_json_string(prop.source);
         std::cout << ",\"slotBinding\":";
@@ -2797,6 +2815,12 @@ void print_runtime_platform_object_get(
     print_json_string(property->value_type);
     std::cout << ",\"value\":";
     print_json_string(form_object.get_prop_val(object_id, property_name));
+    std::cout << ",\"defaultValue\":";
+    print_json_string(property->default_value);
+    std::cout << ",\"writePolicy\":";
+    print_json_string(property->write_policy);
+    std::cout << ",\"valueOrigin\":";
+    print_json_string(property->value_origin);
     std::cout << ",\"readable\":" << (property->readable ? "true" : "false");
     std::cout << ",\"writable\":" << (property->writable ? "true" : "false");
     std::cout << ",\"slotBinding\":";
@@ -2904,6 +2928,7 @@ struct PublicXmlControlEdit {
     std::string right;
     std::string bottom;
     bool has_position = false;
+    std::vector<oof::platform::object_model::PlatformObjectPropertyEdit> schema_properties;
     std::vector<GeometryBindingRecord> bindings;
     std::vector<GeometryBindingRecord> dimension_bindings;
 };
@@ -3012,6 +3037,36 @@ std::vector<XmlElementSlice> find_xml_elements(std::string_view text, std::strin
         elements.push_back(std::move(element));
     }
     return elements;
+}
+
+const std::set<std::string>& public_schema_property_names() {
+    static const std::set<std::string> names = [] {
+        std::set<std::string> result;
+        static const std::set<std::string> structural_names{
+            "Title", "Visible", "Enabled", "Position", "Events", "ChildItems",
+            "Attributes", "Commands", "Name", "Type", "Parent", "Path", "ObjectID",
+        };
+        for (const auto& schema : oof::platform::object_schema::build_platform_object_schemas()) {
+            for (const auto& member : schema.xsd_members) {
+                if (member.value_type == "ordinary form child controls" ||
+                    member.value_type == "Page" ||
+                    member.value_type == "Command" ||
+                    member.value_type == "Submenu" ||
+                    member.value_type == "MenuSeparator" ||
+                    member.value_type == "TableColumn" ||
+                    member.value_type == "TableColumnsGroup") {
+                    continue;
+                }
+                if (!member.name.empty() &&
+                    member.name.find('.') == std::string::npos &&
+                    structural_names.count(member.name) == 0) {
+                    result.insert(member.name);
+                }
+            }
+        }
+        return result;
+    }();
+    return names;
 }
 
 std::string anchor_target_id_from_attrs(std::string_view attrs) {
@@ -3136,6 +3191,17 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                 if (enabled_end != std::string::npos) {
                     edit.enabled = xml_unescape(body.substr(enabled_value_start, enabled_end - enabled_value_start));
                     edit.has_enabled = true;
+                }
+            }
+            for (const auto& property_name : public_schema_property_names()) {
+                for (const auto& property_xml : find_xml_elements(body, property_name)) {
+                    if (property_xml.self_closing) {
+                        continue;
+                    }
+                    edit.schema_properties.push_back({
+                        property_name,
+                        xml_unescape(property_xml.body),
+                    });
                 }
             }
             const std::size_t position_start = body.find("<Position");
@@ -3272,12 +3338,54 @@ std::string object_property_value(
     return {};
 }
 
-bool has_non_empty_property(
+bool property_is_explicit_for_xml(const oof::platform::object_model::PlatformObjectProperty& property) {
+    if (property.value.empty()) {
+        return false;
+    }
+    if (property.value_origin == "schema-default") {
+        return false;
+    }
+    if (property.write_policy == "omit-when-default" &&
+        !property.default_value.empty() &&
+        property.value == property.default_value) {
+        return false;
+    }
+    return true;
+}
+
+bool has_explicit_property_for_xml(
     const oof::platform::object_model::PlatformObject& object,
     std::string_view name
 ) {
     const auto* property = find_object_property(object, name);
-    return property != nullptr && !property->value.empty();
+    return property != nullptr && property_is_explicit_for_xml(*property);
+}
+
+bool is_public_schema_property_xml(
+    const oof::platform::object_model::PlatformObjectProperty& property
+) {
+    if (property.source.find("managed-application/logform/layouter") == std::string::npos) {
+        return false;
+    }
+    if (property.name.empty() || property.name.find('.') != std::string::npos) {
+        return false;
+    }
+    static const std::set<std::string> structural_names{
+        "Title", "Visible", "Enabled", "Position", "Events", "ChildItems",
+        "Attributes", "Commands", "Name", "Type", "Parent", "Path", "ObjectID",
+    };
+    return structural_names.count(property.name) == 0;
+}
+
+bool has_explicit_schema_properties_for_xml(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    for (const auto& property : object.properties) {
+        if (is_public_schema_property_xml(property) && property_is_explicit_for_xml(property)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void append_named_text_property_xml(
@@ -3287,7 +3395,7 @@ void append_named_text_property_xml(
     int indent
 ) {
     const auto* property = find_object_property(object, property_name);
-    if (property == nullptr || property->value.empty()) {
+    if (property == nullptr || !property_is_explicit_for_xml(*property)) {
         return;
     }
     append_indent(out, indent);
@@ -3298,6 +3406,26 @@ void append_named_text_property_xml(
     out += "</";
     out += property_name;
     out += ">\n";
+}
+
+void append_schema_properties_xml(
+    std::string& out,
+    const oof::platform::object_model::PlatformObject& object,
+    int indent
+) {
+    for (const auto& property : object.properties) {
+        if (!is_public_schema_property_xml(property) || !property_is_explicit_for_xml(property)) {
+            continue;
+        }
+        append_indent(out, indent);
+        out += "<";
+        out += property.name;
+        out += ">";
+        out += xml_escape(property.value);
+        out += "</";
+        out += property.name;
+        out += ">\n";
+    }
 }
 
 bool has_position_properties(const oof::platform::object_model::PlatformObject& object) {
@@ -3712,9 +3840,10 @@ void append_control_xml(
     }
     const auto object_events = event_objects_for_parent(form_object, object.object_id);
     if (object.children.empty() &&
-        !has_non_empty_property(object, "Title") &&
-        !has_non_empty_property(object, "Visible") &&
-        !has_non_empty_property(object, "Enabled") &&
+        !has_explicit_property_for_xml(object, "Title") &&
+        !has_explicit_property_for_xml(object, "Visible") &&
+        !has_explicit_property_for_xml(object, "Enabled") &&
+        !has_explicit_schema_properties_for_xml(object) &&
         !has_position_properties(object) &&
         object_events.empty()) {
         out += "/>\n";
@@ -3724,6 +3853,7 @@ void append_control_xml(
     append_named_text_property_xml(out, object, "Title", indent + 2);
     append_named_text_property_xml(out, object, "Visible", indent + 2);
     append_named_text_property_xml(out, object, "Enabled", indent + 2);
+    append_schema_properties_xml(out, object, indent + 2);
     append_position_xml(out, form_object, object, indent + 2);
     if (!object_events.empty()) {
         append_events_xml(out, object_events, indent + 2);
@@ -4517,6 +4647,9 @@ oof::platform::object_model::PlatformFormObjectEdit public_xml_edits_to_platform
         }
         if (edit.has_enabled) {
             object.set_property("Enabled", edit.enabled);
+        }
+        for (const auto& property : edit.schema_properties) {
+            object.set_property(property.name, property.value);
         }
         if (edit.has_position) {
             object.set_property("Left", edit.left);

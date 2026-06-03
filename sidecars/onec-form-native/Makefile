@@ -138,7 +138,9 @@ test: $(BIN)
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"materializedItems":2'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
 	grep -F -q '<ChildItems>' $(BUILD_DIR)/runtime-form.xml
-	grep -F -q '<Button name="Button1" id="5"' $(BUILD_DIR)/runtime-form.xml
+	grep -F -q '<Button name="Button1" id="5"/>' $(BUILD_DIR)/runtime-form.xml
+	! grep -F -q '<Picture>' $(BUILD_DIR)/runtime-form.xml
+	! grep -F -q '<Font>' $(BUILD_DIR)/runtime-form.xml
 	! grep -F -q '<ListStream' $(BUILD_DIR)/runtime-form.xml
 	perl -0pi -e 's/name="Button1"/name="ButtonXmlEdited"/' $(BUILD_DIR)/runtime-form.xml
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml $(BUILD_DIR)/runtime-form-xml-edited.txt | grep -F -q '"nameEdits":2'
@@ -188,6 +190,10 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"writable":true'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Имя | grep -F -q '"operation":"getPropVal"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Имя | grep -F -q '"value":"Button1"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"value":"V8Picture()"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"defaultValue":"V8Picture()"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"writePolicy":"omit-when-default"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"valueOrigin":"schema-default"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-position-selftest.txt 5 Заголовок | grep -F -q '"descriptorName":"Title"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-position-selftest.txt 5 Заголовок | grep -F -q '"value":"Run"'
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{{10,1,0,0,0,1,0,0,0,0,0,0,0},14,{1,{1,1,{"ru","Run"}}},1,1,0,0,0,0,{0,0,0},0,0,0,0,0,2},{}},{14,"ButtonWithBaseInfo",4294967295,0,0,0},{},{}}}}}' > $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt
@@ -232,7 +238,8 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"events":{"name":"Events","localizedName":"События","valueType":"FormEvents"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"platformType":"FormEvent"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"name":"ButtonWithEventClick"'
-	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"value":"1","source":"mngcore logform.xsd Event"'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"value":"1"'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"source":"mngcore logform.xsd Event"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c' Handler | grep -F -q '"value":"ButtonWithEventClick"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c' Parent | grep -F -q '"value":"5"'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-event-selftest.txt $(BUILD_DIR)/runtime-form-event.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
