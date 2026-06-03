@@ -34,6 +34,7 @@ from onec_ordinary_forms.ordinary_stream import (
     shortcut_record_to_xml_attrs,
 )
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
+from onec_ordinary_forms.public_contract import assert_v1_public_form_xml
 from onec_ordinary_forms.platform_value_xml import (
     add_color_node_from_record,
     add_font_node_from_record,
@@ -50,7 +51,7 @@ from onec_ordinary_forms.value_codec import (
 )
 
 
-SCHEMA_VERSION = "0.1"
+SCHEMA_VERSION = "1.0"
 XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
 ORDINARY_FORM_SCHEMA = "OrdinaryForm.xsd"
 PLATFORM_CONFIG_SCHEMA = "PlatformConfigStructure.xsd"
@@ -3442,6 +3443,7 @@ def validate_xml_file(xml_path: Path, xsd_path: Path | None = None) -> None:
         from lxml import etree
     except ImportError as exc:
         raise RuntimeError("XML schema validation requires lxml") from exc
+    assert_v1_public_form_xml(ET.parse(xml_path).getroot())
     schema_doc = etree.parse(str(xsd_path or schema_path()))
     schema = etree.XMLSchema(schema_doc)
     document = etree.parse(str(xml_path))

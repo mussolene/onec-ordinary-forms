@@ -88,6 +88,23 @@ The workflow publishes only package artifacts from `dist/`. It does not use
 private EPF/ERF fixtures, platform containers, license files, or local corpus
 exports.
 
+## v1.0 Release Gate
+
+`v1.0.0` is a hard public contract break. Do not publish it until all of these
+checks are true in current evidence:
+
+- public `Form.xml` validation rejects pre-v1 XML and raw/list-stream/profile/
+  slot/indexed platform shapes;
+- native `PlatformFormObject` / ordinary form graph is the canonical dump,
+  build, and mutation path;
+- codec coverage classifies and handles all known ordinary-form platform
+  property rows, with no unmapped, XSD-only, or no-public-XML gaps;
+- representative corpora pass native semantic diff and strict Designer
+  validation through `tools/platform_validate_epf.sh`;
+- Linux, macOS, and Windows wheels plus sdist install and pass CLI smoke;
+- release artifacts are published to GitHub Release and PyPI only after the
+  same gates pass for the tagged commit.
+
 ## Next Refactor
 
 Split `src/onec_ordinary_forms/cli.py` into:

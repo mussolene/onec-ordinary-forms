@@ -1,4 +1,4 @@
-.PHONY: test smoke format-xml clean
+.PHONY: test smoke format-xml v1-release-gate clean
 
 PYTHON ?= python3
 
@@ -16,6 +16,9 @@ smoke:
 format-xml:
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/OrdinaryForm.xsd
 	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/PlatformConfigStructure.xsd
+
+v1-release-gate:
+	PYTHONPATH=src $(PYTHON) tools/v1_release_gate.py --repo .
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

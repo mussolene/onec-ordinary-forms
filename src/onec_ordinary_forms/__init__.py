@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from onec_ordinary_forms.cli import build_bin, dump_bin, validate_xml_file
+from onec_ordinary_forms.public_contract import V1_CONTRACT_VERSION
 from onec_ordinary_forms.semantic_digest import semantic_graph, semantic_graph_digest, semantic_graph_from_xml
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "semantic_graph_digest",
     "semantic_graph_from_xml",
     "validate_form_xml",
+    "V1_CONTRACT_VERSION",
 ]
 
 __version__ = "0.4.6"

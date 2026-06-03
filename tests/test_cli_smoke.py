@@ -2103,7 +2103,7 @@ class CliSmokeTest(unittest.TestCase):
 
             validate_xml_file(xml)
 
-    def test_schema_accepts_command_bar_menu_buttons_without_name(self) -> None:
+    def test_validate_rejects_raw_command_bar_button_shape(self) -> None:
         with TemporaryDirectory() as temp_dir:
             xml = Path(temp_dir) / "Form.xml"
             xml.write_text(
@@ -2128,7 +2128,8 @@ class CliSmokeTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            validate_xml_file(xml)
+            with self.assertRaisesRegex(ValueError, "rootKind"):
+                validate_xml_file(xml)
 
     def test_base_style_attributes_roundtrip_control_style_slots(self) -> None:
         base = [
