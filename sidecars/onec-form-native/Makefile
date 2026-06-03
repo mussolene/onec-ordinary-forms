@@ -192,6 +192,13 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}' Handler | grep -F -q '"value":"RunCommandHandler"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}' ModifiesData | grep -F -q '"value":"1"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'attribute:{1}' Name | grep -F -q '"value":"AttrAfterCommand"'
+	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,"ButtonWithEvent",4294967295,0,0,0},{event,0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c,"ButtonWithEventClick"},{},{}}}}}' > $(BUILD_DIR)/runtime-form-event-selftest.txt
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"events":{"name":"Events","localizedName":"События","valueType":"FormEvents"'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"platformType":"FormEvent"'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"name":"ButtonWithEventClick"'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"value":"1","source":"mngcore logform.xsd Event"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c' Handler | grep -F -q '"value":"ButtonWithEventClick"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c' Parent | grep -F -q '"value":"5"'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"canonicalRoundtripEqual":true'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"payloadRoundtripEqual":true'
 	$(BIN) runtime-form-rebuild $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form-rebuilt.txt | grep -F -q '"schemaBackedItems":2'

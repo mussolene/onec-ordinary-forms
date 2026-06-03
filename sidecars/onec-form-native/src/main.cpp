@@ -1028,6 +1028,14 @@ struct GeometryBindingRecord {
     oof::platform::stream::ListValue value;
 };
 
+struct MaterializedFormEvent {
+    std::string object_id;
+    std::string owner_object_id;
+    std::string id;
+    std::string handler;
+    std::string path;
+};
+
 struct MaterializedFormItem {
     std::string guid;
     std::string path;
@@ -1041,6 +1049,7 @@ struct MaterializedFormItem {
     std::string bottom;
     std::vector<GeometryBindingRecord> bindings;
     std::vector<GeometryBindingRecord> dimension_bindings;
+    std::vector<MaterializedFormEvent> events;
     std::size_t arity = 0;
     const oof::platform::form_descriptor::DescriptorSchemaBinding* descriptor_binding = nullptr;
 };
@@ -1425,6 +1434,46 @@ bool is_materializable_object_candidate(const oof::platform::stream::ListValue& 
     return oof::platform::form_descriptor::binding_for_guid(value.items[0].atom) != nullptr;
 }
 
+bool looks_like_materialized_form_event_record(const oof::platform::stream::ListValue& value) {
+    if (!value.is_list || value.items.size() < 3 || value.items[0].is_list) {
+        return false;
+    }
+    return value.items[0].atom == "event" ||
+           value.items[0].atom == "Event" ||
+           value.items[0].atom == "evt";
+}
+
+std::vector<MaterializedFormEvent> collect_materialized_form_events(
+    const oof::platform::stream::ListValue& value,
+    std::string_view owner_object_id,
+    std::string_view path
+) {
+    std::vector<MaterializedFormEvent> events;
+    if (!value.is_list) {
+        return events;
+    }
+    if (looks_like_materialized_form_event_record(value)) {
+        MaterializedFormEvent event;
+        event.owner_object_id = std::string(owner_object_id);
+        event.id = oof::platform::stream::dump_compact(value.items[1]);
+        event.handler = !value.items[2].is_list ? value.items[2].atom : "";
+        event.object_id = "event:" + std::string(owner_object_id) + ":" + event.id;
+        event.path = std::string(path);
+        if (!event.id.empty() && !event.handler.empty()) {
+            events.push_back(std::move(event));
+        }
+        return events;
+    }
+    for (std::size_t index = 0; index < value.items.size(); ++index) {
+        auto nested = collect_materialized_form_events(
+            value.items[index],
+            owner_object_id,
+            child_path(path, index));
+        events.insert(events.end(), std::make_move_iterator(nested.begin()), std::make_move_iterator(nested.end()));
+    }
+    return events;
+}
+
 void collect_materialized_form_items(
     const oof::platform::stream::ListValue& value,
     std::string_view path,
@@ -1471,6 +1520,7 @@ void collect_materialized_form_items(
                     item.dimension_bindings.push_back({dimension_binding_name(index), geometry->items[index]});
                 }
             }
+            item.events = collect_materialized_form_events(value, item.object_id, path);
             next_parent = item.object_id;
             items.push_back(std::move(item));
         } else if (binding == nullptr) {
@@ -1967,6 +2017,7 @@ struct MaterializedGraphSummary {
     std::vector<MaterializedFormItem> items;
     std::vector<MaterializedFormAttribute> attributes;
     std::vector<MaterializedFormCommand> commands;
+    std::vector<MaterializedFormEvent> events;
     std::size_t guid_head_nodes = 0;
     std::size_t nested_unbound_guid_nodes = 0;
     std::size_t named_items = 0;
@@ -1995,6 +2046,7 @@ MaterializedGraphSummary summarize_materialized_graph(const oof::platform::strea
         if (!item.name.empty()) {
             ++summary.named_items;
         }
+        summary.events.insert(summary.events.end(), item.events.begin(), item.events.end());
         if (oof::platform::form_descriptor::schema_for_binding(*item.descriptor_binding) != nullptr) {
             ++summary.schema_backed_items;
         }
@@ -2229,6 +2281,7 @@ public:
         materialize_attributes(form_object, summary);
         materialize_commands(form_object, summary);
         materialize_items(form_object, summary);
+        materialize_events(form_object, summary);
         link_item_children(form_object);
         return form_object;
     }
@@ -2250,11 +2303,11 @@ private:
         form_object.form.properties.push_back(make_described_property("Items", std::to_string(summary.items.size())));
         form_object.form.properties.push_back(make_described_property("Attributes", std::to_string(summary.attributes.size())));
         form_object.form.properties.push_back(make_described_property("Commands", std::to_string(summary.commands.size())));
-        form_object.form.properties.push_back(make_described_property("Events", "0"));
+        form_object.form.properties.push_back(make_described_property("Events", std::to_string(summary.events.size())));
         form_object.form.collections.push_back(make_described_collection("Items", summary.items.size()));
         form_object.form.collections.push_back(make_described_collection("Attributes", summary.attributes.size()));
         form_object.form.collections.push_back(make_described_collection("Commands", summary.commands.size()));
-        form_object.form.collections.push_back(make_described_collection("Events", 0));
+        form_object.form.collections.push_back(make_described_collection("Events", summary.events.size()));
         add_api_surface(form_object.form, api_object_for_type("Form"));
     }
 
@@ -2333,8 +2386,8 @@ private:
             if (!item.title.empty()) {
                 object.properties.push_back(make_described_property("Title", item.title));
             }
-            object.properties.push_back(make_described_property("Events", "0"));
-            object.collections.push_back(make_described_collection("Events", 0));
+            object.properties.push_back(make_described_property("Events", std::to_string(item.events.size())));
+            object.collections.push_back(make_described_collection("Events", item.events.size()));
             if (!item.left.empty()) {
                 object.properties.push_back(make_described_property("Left", item.left));
                 object.properties.push_back(make_described_property("Top", item.top));
@@ -2351,6 +2404,30 @@ private:
             }
             add_api_surface(object, api_object_for_type(object.platform_type));
             form_object.items.add(std::move(object));
+        }
+    }
+
+    static void materialize_events(
+        oof::platform::object_model::PlatformFormObject& form_object,
+        const MaterializedGraphSummary& summary
+    ) {
+        for (const auto& event : summary.events) {
+            oof::platform::object_model::PlatformObject object;
+            object.object_id = event.object_id;
+            object.name = event.handler;
+            object.platform_type = "FormEvent";
+            object.type_category = "core::kLogFormTypeInfoCategory";
+            object.type_source = "PlatformObjectTypeHandler<Form>.Items.Events + mngcore logform.xsd Event";
+            object.path = event.path;
+            object.parent_object_id = event.owner_object_id;
+            object.properties.push_back(make_platform_object_property(
+                "ID", "Идентификатор", event.id, "UUID", "logform.xsd:Event/id"));
+            object.properties.push_back(make_platform_object_property(
+                "Handler", "Обработчик", event.handler, "String", "logform.xsd:Event@handler"));
+            object.properties.push_back(make_platform_object_property(
+                "Parent", "Родитель", event.owner_object_id, "FormItem", "m_elementEvents owner"));
+            add_api_surface(object, api_object_for_type("FormEvent"));
+            form_object.events.add(std::move(object));
         }
     }
 
