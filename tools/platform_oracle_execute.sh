@@ -226,7 +226,7 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
       /Out '$container_base/logs/load.log' -NoTruncate /DisableStartupDialogs \
       >'$container_base/logs/load-stdout.log' 2>'$container_base/logs/load-stderr.log'
     set +e
-    xvfb-run -a timeout 120 /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
+    xvfb-run -a timeout 300 /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
       /F \"\$base/\$db\" /RunModeOrdinaryApplication \
       /Execute '$container_base/oracle.epf' \
       /C 'InputFile=$container_base/input.txt;OutputFile=$container_base/output.txt;ScriptFile=$container_base/script.bsl' \
@@ -269,7 +269,7 @@ docker run --rm --platform linux/amd64 --entrypoint sh \
       /Out \"/workspace/$out_rel/logs/load.log\" -NoTruncate /DisableStartupDialogs \
       >\"/workspace/$out_rel/logs/load-stdout.log\" 2>\"/workspace/$out_rel/logs/load-stderr.log\"
     set +e
-    xvfb-run -a timeout 120 /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
+    xvfb-run -a timeout 300 /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
       /F \"\$base/\$db\" /RunModeOrdinaryApplication \
       /Execute \"/workspace/$out_rel/oracle.epf\" \
       /C \"InputFile=$input_container;OutputFile=$output_container;ScriptFile=$script_container\" \

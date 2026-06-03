@@ -6,13 +6,25 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from onec_ordinary_forms.cli import build_bin, dump_bin, validate_xml_file
+from onec_ordinary_forms.native_bridge import (
+    NativeBridgeError,
+    assert_payload_lossless,
+    formbin_roundtrip_report,
+    native_binary,
+    platform_object_report,
+)
 from onec_ordinary_forms.public_contract import V1_CONTRACT_VERSION
 from onec_ordinary_forms.semantic_digest import semantic_graph, semantic_graph_digest, semantic_graph_from_xml
 
 __all__ = [
     "__version__",
+    "NativeBridgeError",
+    "assert_payload_lossless",
     "build_form_bin",
     "dump_form_bin",
+    "formbin_roundtrip_report",
+    "native_binary",
+    "platform_object_report",
     "semantic_graph",
     "semantic_graph_digest",
     "semantic_graph_from_xml",
@@ -35,7 +47,13 @@ def dump_form_bin(form_bin: str | Path, out_xml: str | Path, metadata_json: str 
     )
 
 
-def build_form_bin(xml: str | Path, out_bin: str | Path, asset_root: str | Path | None = None) -> None:
+def build_form_bin(
+    xml: str | Path,
+    out_bin: str | Path,
+    asset_root: str | Path | None = None,
+    *,
+    native_lossless_check: bool = True,
+) -> None:
     """Build ordinary ``Form.bin`` from public ``Form.xml`` and sidecars."""
 
     build_bin(
@@ -45,6 +63,8 @@ def build_form_bin(xml: str | Path, out_bin: str | Path, asset_root: str | Path 
             asset_root=None if asset_root is None else str(asset_root),
         )
     )
+    if native_lossless_check:
+        assert_payload_lossless(Path(out_bin))
 
 
 def validate_form_xml(xml: str | Path, schema: str | Path | None = None) -> None:

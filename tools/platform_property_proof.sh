@@ -16,9 +16,9 @@ set -euo pipefail
 # Usage:
 #   OOF_PLATFORM_CONTAINER=oof-1c85-licensed \
 #   tools/platform_property_proof.sh \
-#     --source-root work/oracle-runtime/source/root.xml \
+#     --source-root work/oracle-runtime/blank-source/root.xml \
 #     --property TextColor \
-#     --mutation 'ЭтаФорма.ЭлементыФормы.SeedButton.ЦветТекста = Новый Цвет(255,0,0);' \
+#     --mutation $'Кнопка = ЭлементыФормы.Добавить(Тип("Кнопка"), "ProofButton", Истина);\nКнопка.ЦветТекста = Новый Цвет(255, 0, 0);' \
 #     --runs 2
 
 usage() {
@@ -69,8 +69,23 @@ mkdir -p "$prop_dir/scripts" "$prop_dir/streams" "$prop_dir/oracle"
 
 baseline_script="$prop_dir/scripts/baseline.bsl"
 mutated_script="$prop_dir/scripts/mutated.bsl"
-printf 'Результат = ЭтаФорма;\n' > "$baseline_script"
-printf '%s\nРезультат = ЭтаФорма;\n' "$mutation" > "$mutated_script"
+if [[ "$property_label" == "TextColor" || "$property_label" == "BackColor" || "$property_label" == "Font" || "$property_label" == "Picture" ]]; then
+  {
+    printf '%s\n' 'Кнопка = ЭлементыФормы.Добавить(Тип("Кнопка"), "ProofButton", Истина);'
+    printf '%s\n' 'Результат = ЭтаФорма;'
+  } > "$baseline_script"
+  {
+    printf '%s\n' 'Кнопка = ЭлементыФормы.Добавить(Тип("Кнопка"), "ProofButton", Истина);'
+    printf '%s\n' "$mutation"
+    printf '%s\n' 'Результат = ЭтаФорма;'
+  } > "$mutated_script"
+else
+  printf '%s\n' 'Результат = ЭтаФорма;' > "$baseline_script"
+  {
+    printf '%s\n' "$mutation"
+    printf '%s\n' 'Результат = ЭтаФорма;'
+  } > "$mutated_script"
+fi
 
 run_oracle() {
   local script="$1"
