@@ -256,6 +256,11 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
         for item in event_matrix
         if item["status"] == "mapped-no-public-xml"
     ]
+    xsd_only_public_properties = [
+        f"{item['control']}:{property_name}"
+        for item in controls
+        for property_name in item["xsdOnlyProperties"]
+    ]
 
     return {
         "summary": {
@@ -278,6 +283,7 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
             "mappedPlatformPropertyRows": len(property_matrix) - len(unmapped_properties),
             "unmappedPlatformProperties": sorted(unmapped_properties),
             "mappedPlatformPropertiesWithoutPublicXml": sorted(mapped_without_public_xml),
+            "xsdOnlyPublicProperties": sorted(xsd_only_public_properties),
             "platformEventRows": len(event_matrix),
             "eventsWithoutPublicXml": sorted(events_without_public_xml),
         },

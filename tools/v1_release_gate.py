@@ -52,6 +52,7 @@ def main() -> int:
         "writerFallbackTokens",
         "unmappedPlatformProperties",
         "mappedPlatformPropertiesWithoutPublicXml",
+        "xsdOnlyPublicProperties",
     ):
         if summary.get(key):
             failures.append(f"{key} is not empty")
@@ -64,6 +65,7 @@ def main() -> int:
             "platformPropertyRows": summary["platformPropertyRows"],
             "mappedPlatformPropertyRows": summary["mappedPlatformPropertyRows"],
             "mappedPlatformPropertiesWithoutPublicXml": len(summary["mappedPlatformPropertiesWithoutPublicXml"]),
+            "xsdOnlyPublicProperties": len(summary["xsdOnlyPublicProperties"]),
             "unmappedPlatformProperties": len(summary["unmappedPlatformProperties"]),
             "writerFallbackTokens": len(summary["writerFallbackTokens"]),
         },

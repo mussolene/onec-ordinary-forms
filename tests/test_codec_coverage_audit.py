@@ -20,6 +20,7 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     assert summary["legacyWriterBranches"] == 0
     assert summary["writerFallbackTokens"] == []
     assert summary["writerBranchesWithoutXsdControl"] == []
+    assert summary["xsdOnlyPublicProperties"] == []
     assert summary["controlsWithoutWriterDescriptor"] == []
     assert "ActiveXControl" not in summary["controlsWithoutSharedInfoDescriptor"]
     assert "Button" not in summary["controlsWithoutSharedInfoDescriptor"]
@@ -120,6 +121,7 @@ def test_codec_coverage_audit_tracks_platform_property_name_mapping_matrix() -> 
     assert summary["platformPropertyRows"] == 417
     assert summary["mappedPlatformPropertyRows"] == summary["platformPropertyRows"]
     assert summary["unmappedPlatformProperties"] == []
+    assert summary["mappedPlatformPropertiesWithoutPublicXml"] == []
     assert matrix[("Button", "Заголовок")]["xmlName"] == "Title"
     assert matrix[("Button", "МногострочныйРежим")]["xmlName"] == "MultiLine"
     assert matrix[("Button", "МногострочныйРежим")]["status"] == "mapped-descriptor"
@@ -144,3 +146,24 @@ def test_codec_coverage_audit_tracks_platform_event_name_mapping_matrix() -> Non
     assert summary["eventsWithoutPublicXml"] == []
     assert matrix[("Button", "Нажатие")]["xmlName"] == "Нажатие"
     assert matrix[("InputField", "ПриИзменении")]["status"] == "mapped-xsd"
+
+
+def test_public_property_xsd_types_follow_platform_types() -> None:
+    root = audit_codec_coverage.xsd_root(ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd")
+
+    def property_type(control: str, property_name: str) -> str:
+        choice = root.find(
+            f"xs:complexType[@name='{control}Type']/xs:complexContent/xs:extension/xs:choice",
+            audit_codec_coverage.XS,
+        )
+        assert choice is not None
+        for element in choice.findall("xs:element", audit_codec_coverage.XS):
+            if element.get("name") == property_name:
+                return element.get("type", "")
+        raise AssertionError(f"{control}.{property_name} not found")
+
+    assert property_type("Chart", "TransparentBackColor") == "xs:boolean"
+    assert property_type("Chart", "ColorPalette") == "xs:string"
+    assert property_type("CalendarField", "WeekendTextColor") == "ColorType"
+    assert property_type("ChoiceField", "Picture") == "FileRefType"
+    assert property_type("ListBox", "ShowPicture") == "xs:boolean"

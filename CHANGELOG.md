@@ -12,3 +12,6 @@
   ordinary-form property rows classified and handled, corpus semantic diff
   gates clean, strict Designer validation clean, and Linux/macOS/Windows wheels
   plus sdist published to GitHub Release and PyPI.
+- Public XML coverage now exposes all 417 known ordinary-form property rows as
+  named schema/descriptor properties; the local release gate rejects unmapped,
+  no-public-XML, and XSD-only property gaps.

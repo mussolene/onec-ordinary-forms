@@ -10,6 +10,8 @@ import importlib.resources
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
+from onec_ordinary_forms.ordinary_platform_mappings import platform_property_xml_name
+
 
 @dataclass(frozen=True)
 class PlatformMember:
@@ -69,6 +71,24 @@ def platform_members(control: str, key: str) -> tuple[PlatformMember, ...]:
             continue
         result.append(PlatformMember(name=str(item["name"]), type=str(item.get("type", ""))))
     return tuple(result)
+
+
+def mapped_platform_property_names(control: str) -> tuple[str, ...]:
+    names: list[str] = []
+    for member in platform_members(control, "properties"):
+        xml_name = platform_property_xml_name(control, member.name)
+        if xml_name and xml_name not in names:
+            names.append(xml_name)
+    return tuple(names)
+
+
+def merge_property_names(*items: tuple[str, ...]) -> tuple[str, ...]:
+    names: list[str] = []
+    for group in items:
+        for name in group:
+            if name not in names:
+                names.append(name)
+    return tuple(names)
 
 
 PLATFORM_MEMBER_PALETTE = load_platform_palette(include_nested=True)
@@ -246,7 +266,7 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "ActiveXControl",
         "ЭлементУправленияActiveX",
         "ActiveXControl",
-        COMMON_CONTROL_PROPERTIES + ("Clsid", "State"),
+        COMMON_CONTROL_PROPERTIES + ("DataBindingMode", "DataBindingFlag", "Clsid", "State"),
     ),
     "Panel": OrdinaryControlDescriptor(
         "Panel",
@@ -258,7 +278,7 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "LabelDecoration",
         "Надпись",
         "LabelDecoration",
-        COMMON_CONTROL_PROPERTIES + TEXT_CONTROL_PROPERTIES + ("DefaultAction",),
+        COMMON_CONTROL_PROPERTIES + TEXT_CONTROL_PROPERTIES + ("Action", "DefaultAction",),
     ),
     "Image": OrdinaryControlDescriptor(
         "PictureDecoration",
@@ -316,7 +336,7 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "ChoiceField",
         "ПолеВыбора",
         "ChoiceField",
-        COMMON_CONTROL_PROPERTIES + INPUT_CONTROL_PROPERTIES + ("ChoiceList",),
+        COMMON_CONTROL_PROPERTIES + INPUT_CONTROL_PROPERTIES + ("Action", "ChoiceList",),
     ),
     "SpreadsheetDocumentField": OrdinaryControlDescriptor(
         "SpreadsheetDocumentField",
@@ -329,7 +349,7 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "RadioButton",
         "Переключатель",
         "RadioButton",
-        COMMON_CONTROL_PROPERTIES + ("FirstInGroup", "ValueType", "Items"),
+        COMMON_CONTROL_PROPERTIES + ("FirstInGroup", "Type", "ValueType", "Items"),
     ),
     "Splitter": OrdinaryControlDescriptor("Splitter", "Разделитель", "Splitter", COMMON_CONTROL_PROPERTIES),
     "Chart": OrdinaryControlDescriptor("Chart", "Диаграмма", "ChartField", COMMON_CONTROL_PROPERTIES + ("ValueType",)),
@@ -353,7 +373,7 @@ ORDINARY_CONTROL_DESCRIPTORS: dict[str, OrdinaryControlDescriptor] = {
         "HTMLDocumentField",
         COMMON_CONTROL_PROPERTIES,
     ),
-    "ProgressBar": OrdinaryControlDescriptor("ProgressBar", "Индикатор", "ProgressBar", COMMON_CONTROL_PROPERTIES + ("MinWidth", "MaxWidth")),
+    "ProgressBar": OrdinaryControlDescriptor("ProgressBar", "Индикатор", "ProgressBar", COMMON_CONTROL_PROPERTIES + ("MinWidth", "MaxWidth", "BigStep")),
     "TrackBar": OrdinaryControlDescriptor(
         "TrackBar",
         "ПолосаРегулирования",
@@ -395,7 +415,7 @@ ORDINARY_CONTROL_DESCRIPTORS = {
         xml_tag=value.xml_tag,
         platform_name=value.platform_name,
         managed_equivalent=value.managed_equivalent,
-        properties=value.properties,
+        properties=merge_property_names(value.properties, mapped_platform_property_names(value.xml_tag)),
         platform_properties=platform_members(value.xml_tag, "properties"),
         platform_events=platform_members(value.xml_tag, "events"),
     )

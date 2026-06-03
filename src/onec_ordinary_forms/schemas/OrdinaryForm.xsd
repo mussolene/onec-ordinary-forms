@@ -854,6 +854,7 @@
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="Clsid" type="GuidType"/>
+          <xs:element name="State" type="OpenElementType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -1343,6 +1344,12 @@
           <xs:element name="HorizontalStretch" type="xs:boolean"/>
           <xs:element name="Hyperlink" type="xs:boolean"/>
           <xs:element name="DefaultAction" type="xs:boolean"/>
+          <xs:element name="Marquee" type="xs:string"/>
+          <xs:element name="HighlightNegative" type="xs:boolean"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="Shortcut" type="ShortcutType"/>
+          <xs:element name="Format" type="xs:string"/>
           <xs:element name="Events" type="LabelDecorationEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1375,6 +1382,12 @@
           <xs:element name="PictureRendering" type="PictureRenderingType"/>
           <xs:element name="PictureStyle" type="PictureDecorationPictureStyleType"/>
           <xs:element name="Border" type="xs:string"/>
+          <xs:element name="Hyperlink" type="xs:boolean"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="AllowDragStart" type="xs:boolean"/>
+          <xs:element name="AllowDrag" type="xs:boolean"/>
+          <xs:element name="Shortcut" type="ShortcutType"/>
+          <xs:element name="UnselectedPictureText" type="xs:string"/>
           <xs:element name="Events" type="PictureDecorationEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1689,6 +1702,13 @@
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
           <xs:element name="TextPosition" type="xs:string"/>
+          <xs:element name="VerticalAlign" type="xs:string"/>
+          <xs:element name="HorizontalAlign" type="xs:string"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="ThreeState" type="xs:boolean"/>
+          <xs:element name="FieldTextColor" type="ColorType"/>
+          <xs:element name="FieldBackColor" type="ColorType"/>
           <xs:element name="Events" type="CheckBoxEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1799,6 +1819,16 @@
           <xs:element name="EditButton" type="xs:boolean"/>
           <xs:element name="RegulationButton" type="xs:boolean"/>
           <xs:element name="ChoiceList" type="ChoiceListType"/>
+          <xs:element name="ChoiceListHeight" type="xs:integer"/>
+          <xs:element name="Picture" type="FileRefType"/>
+          <xs:element name="ChoiceButtonPicture" type="FileRefType"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="ButtonTextColor" type="ColorType"/>
+          <xs:element name="FieldTextColor" type="ColorType"/>
+          <xs:element name="ButtonBackColor" type="ColorType"/>
+          <xs:element name="FieldBackColor" type="ColorType"/>
+          <xs:element name="ChoiceListWidth" type="xs:integer"/>
           <xs:element name="Events" type="ChoiceFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1824,6 +1854,12 @@
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="VerticalScrollBar" type="xs:boolean"/>
+          <xs:element name="HorizontalScrollBar" type="xs:boolean"/>
+          <xs:element name="ShowSelection" type="xs:string"/>
+          <xs:element name="AllowDragStart" type="xs:boolean"/>
+          <xs:element name="AllowDrag" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
           <xs:element name="Events" type="SpreadsheetDocumentFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1851,6 +1887,8 @@
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ShowTitle" type="xs:boolean"/>
           <xs:element name="Representation" type="xs:string"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -1880,6 +1918,13 @@
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
           <xs:element name="Items" type="OpenElementType"/>
+          <xs:element name="VerticalAlign" type="xs:string"/>
+          <xs:element name="HorizontalAlign" type="xs:string"/>
+          <xs:element name="TextPosition" type="xs:string"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="FieldTextColor" type="ColorType"/>
+          <xs:element name="FieldBackColor" type="ColorType"/>
           <xs:element name="Events" type="RadioButtonEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -1937,6 +1982,8 @@
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="Orientation" type="xs:string"/>
+          <xs:element name="Border" type="xs:string"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -1963,6 +2010,62 @@
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
           <xs:element name="ChartKind" type="xs:string"/>
+          <xs:element name="AutoMaximumValue" type="xs:boolean"/>
+          <xs:element name="AutoMinimumValue" type="xs:boolean"/>
+          <xs:element name="AutoSeriesSpread" type="xs:string"/>
+          <xs:element name="AutoTranspose" type="xs:boolean"/>
+          <xs:element name="AutoSeriesText" type="xs:boolean"/>
+          <xs:element name="AutoPointText" type="xs:boolean"/>
+          <xs:element name="ActiveSeries" type="OpenElementType"/>
+          <xs:element name="ActivePoint" type="OpenElementType"/>
+          <xs:element name="BaseValue" type="xs:decimal"/>
+          <xs:element name="LabelsView" type="xs:string"/>
+          <xs:element name="Gradient" type="xs:boolean"/>
+          <xs:element name="SourceData" type="OpenElementType"/>
+          <xs:element name="SeriesCount" type="xs:integer"/>
+          <xs:element name="PointsCount" type="xs:integer"/>
+          <xs:element name="GaugeEndAngle" type="xs:decimal"/>
+          <xs:element name="MaximumValue" type="xs:decimal"/>
+          <xs:element name="MaxSeries" type="xs:string"/>
+          <xs:element name="MaxSeriesCount" type="xs:integer"/>
+          <xs:element name="MaxSeriesPercent" type="xs:decimal"/>
+          <xs:element name="MinimumValue" type="xs:decimal"/>
+          <xs:element name="GaugeStartAngle" type="xs:decimal"/>
+          <xs:element name="TitleArea" type="OpenElementType"/>
+          <xs:element name="LegendArea" type="OpenElementType"/>
+          <xs:element name="PlotArea" type="OpenElementType"/>
+          <xs:element name="Refresh" type="xs:boolean"/>
+          <xs:element name="Outline" type="xs:boolean"/>
+          <xs:element name="Orientation" type="xs:string"/>
+          <xs:element name="ShowTitle" type="xs:boolean"/>
+          <xs:element name="ShowLegend" type="xs:boolean"/>
+          <xs:element name="GaugeValueDisplay" type="xs:string"/>
+          <xs:element name="ColorPalette" type="xs:string"/>
+          <xs:element name="GaugeScaleLabelsAlongScale" type="xs:boolean"/>
+          <xs:element name="LabelsPosition" type="xs:string"/>
+          <xs:element name="GaugeScaleLabelsPosition" type="xs:string"/>
+          <xs:element name="GaugeBands" type="OpenElementType"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="TransparentLabelsBackColor" type="xs:boolean"/>
+          <xs:element name="SkipBaseValue" type="xs:boolean"/>
+          <xs:element name="LabelsSeparator" type="xs:string"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="LabelsBorder" type="xs:string"/>
+          <xs:element name="SpaceMode" type="xs:string"/>
+          <xs:element name="Light" type="xs:boolean"/>
+          <xs:element name="PivotSeries" type="OpenElementType"/>
+          <xs:element name="Series" type="OpenElementType"/>
+          <xs:element name="SeriesInRows" type="xs:boolean"/>
+          <xs:element name="GaugeHubThickness" type="xs:decimal"/>
+          <xs:element name="GaugeScaleThickness" type="xs:decimal"/>
+          <xs:element name="Points" type="OpenElementType"/>
+          <xs:element name="LabelValueFormat" type="xs:string"/>
+          <xs:element name="LabelPercentFormat" type="xs:string"/>
+          <xs:element name="GaugeHubColor" type="ColorType"/>
+          <xs:element name="LabelsBorderColor" type="ColorType"/>
+          <xs:element name="LabelsTextColor" type="ColorType"/>
+          <xs:element name="LabelsBackColor" type="ColorType"/>
+          <xs:element name="LabelsFont" type="FontType"/>
           <xs:element name="Events" type="ChartEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -2057,6 +2160,8 @@
           <xs:element name="Scale" type="xs:decimal"/>
           <xs:element name="ScaleSupport" type="xs:string"/>
           <xs:element name="DisplayedArea" type="OpenElementType"/>
+          <xs:element name="Height" type="xs:integer"/>
+          <xs:element name="Width" type="xs:integer"/>
           <xs:element name="Events" type="GeographicalSchemaFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -2087,6 +2192,8 @@
           <xs:element name="Output" type="xs:string"/>
           <xs:element name="CurrentItem" type="OpenElementType"/>
           <xs:element name="Editing" type="xs:boolean"/>
+          <xs:element name="Height" type="xs:integer"/>
+          <xs:element name="Width" type="xs:integer"/>
           <xs:element name="Events" type="GraphicalSchemaFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -2115,6 +2222,12 @@
           <xs:element name="ValueType" type="OpenElementType"/>
           <xs:element name="Items" type="OpenElementType"/>
           <xs:element name="MultiLine" type="xs:boolean"/>
+          <xs:element name="ShowPicture" type="xs:boolean"/>
+          <xs:element name="ShowMark" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="CurrentRow" type="OpenElementType"/>
+          <xs:element name="FieldTextColor" type="ColorType"/>
+          <xs:element name="FieldBackColor" type="ColorType"/>
           <xs:element name="Events" type="ListBoxEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -2140,6 +2253,9 @@
           <xs:element name="ContextMenu" type="NamedRefType"/>
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
+          <xs:element name="Output" type="xs:string"/>
+          <xs:element name="Document" type="OpenElementType"/>
+          <xs:element name="Border" type="xs:string"/>
           <xs:element name="Events" type="HTMLDocumentFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -2202,6 +2318,15 @@
           <xs:element name="Orientation" type="xs:string"/>
           <xs:element name="MinWidth" type="xs:integer"/>
           <xs:element name="MaxWidth" type="xs:integer"/>
+          <xs:element name="BigStep" type="xs:decimal"/>
+          <xs:element name="MaximumValue" type="xs:decimal"/>
+          <xs:element name="MinimumValue" type="xs:decimal"/>
+          <xs:element name="DisplayStyle" type="xs:string"/>
+          <xs:element name="TransparentBackColor" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="ButtonBackColor" type="ColorType"/>
+          <xs:element name="Step" type="xs:decimal"/>
+          <xs:element name="MarkStep" type="xs:decimal"/>
           <xs:element name="Events" type="TrackBarEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -2228,6 +2353,23 @@
           <xs:element name="AutoContextMenu" type="xs:boolean"/>
           <xs:element name="ExtendedTooltip" type="NamedRefType"/>
           <xs:element name="ValueType" type="OpenElementType"/>
+          <xs:element name="SelectedDates" type="OpenElementType"/>
+          <xs:element name="PeriodEnd" type="xs:string"/>
+          <xs:element name="PeriodStart" type="xs:string"/>
+          <xs:element name="ShowCurrentDate" type="xs:boolean"/>
+          <xs:element name="CalendarNavigation" type="xs:boolean"/>
+          <xs:element name="AllowDragStart" type="xs:boolean"/>
+          <xs:element name="AllowDrag" type="xs:boolean"/>
+          <xs:element name="Border" type="xs:string"/>
+          <xs:element name="SelectionMode" type="xs:string"/>
+          <xs:element name="CurrentDate" type="xs:string"/>
+          <xs:element name="WeekendTextColor" type="ColorType"/>
+          <xs:element name="SelectionTextColor" type="ColorType"/>
+          <xs:element name="ButtonTextColor" type="ColorType"/>
+          <xs:element name="FieldTextColor" type="ColorType"/>
+          <xs:element name="SelectionBackColor" type="ColorType"/>
+          <xs:element name="ButtonBackColor" type="ColorType"/>
+          <xs:element name="FieldBackColor" type="ColorType"/>
           <xs:element name="Events" type="CalendarFieldEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
@@ -2256,6 +2398,7 @@
           <xs:element name="Border" type="xs:string"/>
           <xs:element name="HorizontalStretch" type="xs:boolean"/>
           <xs:element name="VerticalStretch" type="xs:boolean"/>
+          <xs:element name="SelectedText" type="xs:string"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
       </xs:extension>
@@ -2315,6 +2458,8 @@
           <xs:element name="MaxHeight" type="xs:integer"/>
           <xs:element name="HorizontalStretch" type="xs:boolean"/>
           <xs:element name="VerticalStretch" type="xs:boolean"/>
+          <xs:element name="Height" type="xs:integer"/>
+          <xs:element name="Width" type="xs:integer"/>
           <xs:element name="Events" type="DendrogramEventsType"/>
           <xs:group ref="ControlElementGroup"/>
         </xs:choice>
