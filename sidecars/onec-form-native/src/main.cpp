@@ -5554,6 +5554,24 @@ void print_platform_form_schema() {
         print_json_string(control.attributes);
         std::cout << ",\"valueTypes\":";
         print_json_string(control.value_types);
+        std::cout << ",\"rootComplexType\":";
+        print_json_string(control.root_complex_type);
+        std::cout << ",\"variantElement\":";
+        print_json_string(control.variant_element);
+        std::cout << ",\"variantComplexType\":";
+        print_json_string(control.variant_complex_type);
+        std::cout << ",\"rootSequence\":";
+        print_json_string(control.root_sequence);
+        std::cout << ",\"variantSequence\":";
+        print_json_string(control.variant_sequence);
+        std::cout << ",\"rootAttributes\":";
+        print_json_string(control.root_attributes);
+        std::cout << ",\"variantAttributes\":";
+        print_json_string(control.variant_attributes);
+        std::cout << ",\"platformMembers\":";
+        print_json_string(control.platform_members);
+        std::cout << ",\"defaultContract\":";
+        print_json_string(control.default_contract);
         std::cout << ",\"evidence\":";
         print_json_string(control.evidence);
         std::cout << "}";
@@ -5582,7 +5600,7 @@ void print_platform_object_schema() {
         member_count += schema.xsd_members.size();
     }
 
-    std::cout << "{\"source\":\"platform object schema join: mngcore logform_layouter XSD + shcntx API catalog + localization resource evidence\"";
+    std::cout << "{\"source\":\"platform object schema join: 8.5 mngcore logform XSD resource + shcntx API catalog + localization resource evidence\"";
     std::cout << ",\"schemaCount\":" << schemas.size();
     std::cout << ",\"apiBackedCount\":" << api_backed;
     std::cout << ",\"xsdMemberCount\":" << member_count;
@@ -5599,6 +5617,24 @@ void print_platform_object_schema() {
         print_json_string(schema.stream_element);
         std::cout << ",\"schemaSource\":";
         print_json_string(schema.schema_source);
+        std::cout << ",\"rootComplexType\":";
+        print_json_string(schema.root_complex_type);
+        std::cout << ",\"variantElement\":";
+        print_json_string(schema.variant_element);
+        std::cout << ",\"variantComplexType\":";
+        print_json_string(schema.variant_complex_type);
+        std::cout << ",\"rootSequence\":";
+        print_json_string(schema.root_sequence);
+        std::cout << ",\"variantSequence\":";
+        print_json_string(schema.variant_sequence);
+        std::cout << ",\"rootAttributes\":";
+        print_json_string(schema.root_attributes);
+        std::cout << ",\"variantAttributes\":";
+        print_json_string(schema.variant_attributes);
+        std::cout << ",\"platformMembers\":";
+        print_json_string(schema.platform_members);
+        std::cout << ",\"defaultContract\":";
+        print_json_string(schema.default_contract);
         std::cout << ",\"apiSource\":";
         print_json_string(schema.api_source);
         std::cout << ",\"runtimeSource\":";

@@ -28,6 +28,15 @@ struct PlatformObjectSchema {
     std::string type_name;
     std::string stream_element;
     std::string schema_source;
+    std::string root_complex_type;
+    std::string variant_element;
+    std::string variant_complex_type;
+    std::string root_sequence;
+    std::string variant_sequence;
+    std::string root_attributes;
+    std::string variant_attributes;
+    std::string platform_members;
+    std::string default_contract;
     std::string api_source;
     std::string runtime_source;
     std::string persistence_source;
@@ -58,6 +67,57 @@ inline std::vector<std::string> split_csv(std::string_view text) {
         text.remove_prefix(comma + 1);
     }
     return result;
+}
+
+inline std::string entry_name(std::string_view entry, char delimiter) {
+    if (delimiter == '>') {
+        const std::size_t arrow = entry.find("->");
+        if (arrow == std::string_view::npos) {
+            return std::string(entry);
+        }
+        return std::string(entry.substr(0, arrow));
+    }
+    const std::size_t pos = entry.find(delimiter);
+    if (pos == std::string_view::npos) {
+        return std::string(entry);
+    }
+    return std::string(entry.substr(0, pos));
+}
+
+inline std::string entry_value(std::string_view entry, char delimiter) {
+    if (delimiter == '>') {
+        const std::size_t arrow = entry.find("->");
+        if (arrow == std::string_view::npos) {
+            return {};
+        }
+        return std::string(entry.substr(arrow + 2));
+    }
+    const std::size_t pos = entry.find(delimiter);
+    if (pos == std::string_view::npos) {
+        return {};
+    }
+    return std::string(entry.substr(pos + 1));
+}
+
+inline std::string lookup_entry_value(std::string_view entries, std::string_view name, char delimiter) {
+    while (!entries.empty()) {
+        const std::size_t pos = entries.find(delimiter == '=' ? ';' : ',');
+        std::string_view entry = entries.substr(0, pos);
+        while (!entry.empty() && entry.front() == ' ') {
+            entry.remove_prefix(1);
+        }
+        while (!entry.empty() && entry.back() == ' ') {
+            entry.remove_suffix(1);
+        }
+        if (!entry.empty() && entry_name(entry, delimiter) == name) {
+            return entry_value(entry, delimiter);
+        }
+        if (pos == std::string_view::npos) {
+            break;
+        }
+        entries.remove_prefix(pos + 1);
+    }
+    return {};
 }
 
 inline std::string public_member_name(std::string_view stream_name) {
@@ -347,6 +407,15 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
     schema.type_name = std::string(control.type_name);
     schema.stream_element = std::string(control.stream_element);
     schema.schema_source = std::string(control.schema_source);
+    schema.root_complex_type = std::string(control.root_complex_type);
+    schema.variant_element = std::string(control.variant_element);
+    schema.variant_complex_type = std::string(control.variant_complex_type);
+    schema.root_sequence = std::string(control.root_sequence);
+    schema.variant_sequence = std::string(control.variant_sequence);
+    schema.root_attributes = std::string(control.root_attributes);
+    schema.variant_attributes = std::string(control.variant_attributes);
+    schema.platform_members = std::string(control.platform_members);
+    schema.default_contract = std::string(control.default_contract);
     if (const auto* api = api_object_by_name(control.type_name)) {
         schema.api_source = std::string(api->api_source);
         schema.runtime_source = std::string(api->runtime_source);
@@ -356,9 +425,19 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
         schema.api_methods = split_csv(api->sample_methods);
         schema.api_events = split_csv(api->sample_events);
     }
-    for (const auto& member : split_csv(control.child_elements)) {
-        const std::string value_type = xsd_value_type_for_stream_member(control, member);
-        const std::string default_value = xsd_default_for_stream_member(control, member, value_type);
+    const std::string typed_elements =
+        std::string(control.root_sequence) + "," + std::string(control.variant_sequence);
+    const std::string typed_attributes =
+        std::string(control.root_attributes) + "," + std::string(control.variant_attributes);
+    for (const auto& typed_member : split_csv(typed_elements)) {
+        const std::string member = entry_name(typed_member, ':');
+        std::string value_type = entry_value(typed_member, ':');
+        if (value_type.empty()) {
+            value_type = xsd_value_type_for_stream_member(control, member);
+        }
+        const std::string platform_default = lookup_entry_value(control.default_contract, member, '=');
+        const std::string default_value =
+            platform_default.empty() ? xsd_default_for_stream_member(control, member, value_type) : platform_default;
         const std::string slot_codec = slot_codec_for_schema_value_type(value_type);
         schema.xsd_members.push_back({
             public_member_name(member),
@@ -366,8 +445,8 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
             value_type,
             default_value,
             write_policy_for_schema_default(default_value),
-            platform_member_for_stream_member(member),
-            default_value,
+            lookup_entry_value(control.platform_members, member, '>'),
+            platform_default,
             slot_binding_for_schema_member(member, value_type),
             slot_codec,
             codec_status_for_schema_value_type(value_type),
@@ -375,16 +454,23 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
             std::string(control.schema_source) + ":" + std::string(control.type_name) + "/" + member,
         });
     }
-    for (const auto& attribute : split_csv(control.attributes)) {
-        const std::string default_value = xsd_default_for_attribute(control, attribute);
+    for (const auto& typed_attribute : split_csv(typed_attributes)) {
+        const std::string attribute = entry_name(typed_attribute, ':');
+        std::string value_type = entry_value(typed_attribute, ':');
+        if (value_type.empty()) {
+            value_type = "attribute";
+        }
+        const std::string platform_default = lookup_entry_value(control.default_contract, attribute, '=');
+        const std::string default_value =
+            platform_default.empty() ? xsd_default_for_attribute(control, attribute) : platform_default;
         schema.xsd_members.push_back({
             public_member_name(attribute),
             attribute,
-            "attribute",
+            value_type,
             default_value,
             write_policy_for_schema_default(default_value),
-            {},
-            default_value,
+            lookup_entry_value(control.platform_members, attribute, '>'),
+            platform_default,
             {},
             {},
             {},
