@@ -2303,7 +2303,8 @@ std::string platform_value_object_storage(
         if (value.rfind("#", 0) == 0) {
             return "absolute-rgb";
         }
-        if (value.rfind("style:", 0) == 0 || value.find("IV8Style") != std::string::npos) {
+        if (value.rfind("style:", 0) == 0 || value.find("IV8Style") != std::string::npos ||
+            value.find("kLogForm") != std::string::npos) {
             return "style";
         }
         return "value";
@@ -2311,6 +2312,10 @@ std::string platform_value_object_storage(
     if (object_class == "Font") {
         if (value.empty() || value.find("eAutoFont") != std::string::npos || value == "auto") {
             return "auto";
+        }
+        if (value.rfind("style:", 0) == 0 || value.find("kLogForm") != std::string::npos ||
+            value.rfind("sys:", 0) == 0) {
+            return "style";
         }
         return "value";
     }
@@ -2360,6 +2365,31 @@ std::string style_ref_name_from_platform_literal(std::string_view value) {
     }
     if (value.rfind("style:", 0) == 0) {
         return std::string(value);
+    }
+    if (text.find("kLogFormButtonDefTextColor") != std::string::npos) {
+        return "style:ButtonTextColor";
+    }
+    if (text.find("kLogFormButtonDefBackColor") != std::string::npos) {
+        return "style:ButtonBkgrndColor";
+    }
+    if (text.find("BorderColor") != std::string::npos) {
+        return "style:BorderColor";
+    }
+    if (text.find("BackColor") != std::string::npos || text.find("BkClr") != std::string::npos) {
+        return "style:BackColor";
+    }
+    if (text.find("TextColor") != std::string::npos || text.find("TxtClr") != std::string::npos) {
+        return "style:TextColor";
+    }
+    return {};
+}
+
+std::string font_ref_name_from_platform_literal(std::string_view value) {
+    if (value.rfind("style:", 0) == 0 || value.rfind("sys:", 0) == 0) {
+        return std::string(value);
+    }
+    if (value.find("kLogForm") != std::string::npos && value.find("Font") != std::string::npos) {
+        return "sys:DefaultGUIFont";
     }
     return {};
 }
@@ -2414,10 +2444,11 @@ void project_platform_value_object(
 
     if (property.value_object_class == "Font") {
         oof::platform::value::Font font;
-        if (property.value.rfind("style:", 0) == 0) {
+        const std::string font_ref_name = font_ref_name_from_platform_literal(property.value);
+        if (!font_ref_name.empty()) {
             font.kind = oof::platform::value::FontKind::style_item;
-            font.ref = oof::platform::value::AbstractRef::named(property.value);
-            property.value_object_schema_value = property.value;
+            font.ref = oof::platform::value::AbstractRef::named(font_ref_name);
+            property.value_object_schema_value = font_ref_name;
         } else if (property.value == "auto" || property.value.find("eAutoFont") != std::string::npos) {
             font.kind = oof::platform::value::FontKind::auto_font;
             property.value_object_schema_value = "AutoFont";
@@ -2664,6 +2695,9 @@ private:
         form_object.form.collections.push_back(make_described_collection("Attributes", summary.attributes.size()));
         form_object.form.collections.push_back(make_described_collection("Commands", summary.commands.size()));
         form_object.form.collections.push_back(make_described_collection("Events", summary.events.size()));
+        add_platform_object_schema_surface(
+            form_object.form,
+            oof::platform::object_schema::build_schema_for_root_form());
         add_api_surface(form_object.form, api_object_for_type("Form"));
     }
 
@@ -4581,14 +4615,34 @@ void print_formbin_platform_object_selftest() {
     const std::string picture_constructor = picture == nullptr ? "" : picture->value_object_constructor;
     const std::string picture_storage = picture == nullptr ? "" : picture->value_object_storage;
     bool explicit_picture_xml = false;
+    bool explicit_color_xml = false;
+    bool explicit_font_xml = false;
     if (picture != nullptr) {
         picture->value = "#base64:R0lGODlh";
         picture->value_origin = "stream";
         enrich_platform_value_object(*picture);
+    }
+    if (button != nullptr) {
+        if (auto* text_color = button->property("TextColor")) {
+            text_color->value = "#123456";
+            text_color->value_origin = "stream";
+            enrich_platform_value_object(*text_color);
+        }
+        if (auto* font = button->property("Font")) {
+            font->value = "sys:DefaultGUIFont";
+            font->value_origin = "stream";
+            enrich_platform_value_object(*font);
+        }
         const std::string value_xml = form_object_to_public_xml(form_object);
         explicit_picture_xml =
             value_xml.find("<Picture>") != std::string::npos &&
             value_xml.find("<PictureValue constructor=\"New Picture\" storage=\"inline-base64\">#base64:R0lGODlh</PictureValue>") != std::string::npos;
+        explicit_color_xml =
+            value_xml.find("<TextColor>") != std::string::npos &&
+            value_xml.find("<ColorValue constructor=\"New Color\" storage=\"absolute-rgb\">#123456</ColorValue>") != std::string::npos;
+        explicit_font_xml =
+            value_xml.find("<Font>") != std::string::npos &&
+            value_xml.find("<FontValue constructor=\"New Font\" storage=\"style\">sys:DefaultGUIFont</FontValue>") != std::string::npos;
     }
 
     oof::platform::object_model::PlatformFormObjectEdit object_edit;
@@ -4618,6 +4672,10 @@ void print_formbin_platform_object_selftest() {
     print_json_string(picture_storage);
     std::cout << ",\"explicitPictureXml\":"
               << (explicit_picture_xml ? "true" : "false");
+    std::cout << ",\"explicitColorXml\":"
+              << (explicit_color_xml ? "true" : "false");
+    std::cout << ",\"explicitFontXml\":"
+              << (explicit_font_xml ? "true" : "false");
     std::cout << ",\"titleEdits\":" << result.title_edits;
     std::cout << ",\"titleRoundtrip\":"
               << (redump_object.get_prop_val("5", "Title") == "ButtonFromFormBinObject" ? "true" : "false");

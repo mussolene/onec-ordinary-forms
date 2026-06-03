@@ -145,6 +145,18 @@ inline std::string public_member_name(std::string_view stream_name) {
     if (stream_name == "brd") {
         return "Border";
     }
+    if (stream_name == "realHeight") {
+        return "RealHeight";
+    }
+    if (stream_name == "enter") {
+        return "EnterKeyBehavior";
+    }
+    if (stream_name == "verScroll") {
+        return "VerticalScrolling";
+    }
+    if (stream_name == "convRepr") {
+        return "ConversationsRepresentation";
+    }
     if (stream_name == "cntm") {
         return "ContextMenu";
     }
@@ -481,9 +493,49 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
     return schema;
 }
 
+inline PlatformObjectSchema build_schema_for_root_form() {
+    PlatformObjectSchema schema;
+    schema.type_name = "Form";
+    schema.stream_element = "Form";
+    schema.schema_source =
+        "platform-resource:mngcore_root-170-http_v8.1c.ru_8.2_managed-application_logform_layouter.xsd:"
+        "http://v8.1c.ru/8.2/managed-application/logform/layouter";
+    schema.root_complex_type = "Form";
+    schema.root_attributes =
+        "realHeight:xs:decimal,enter:tns:FormEnterKeyBehavior,verScroll:xs:boolean,convRepr:lf:LogFormShowConversations";
+    schema.platform_members =
+        "realHeight->m_realHeight,enter->m_enterKeyBehavior,verScroll->m_verticalScrolling,convRepr->m_showECSButton";
+    schema.default_contract =
+        "realHeight=0;enter=ControlNavigation;verScroll=false;convRepr=eLFSECShow";
+    schema.runtime_source = "mngbase RTLogForm / core85 ordinary form materialization";
+    schema.localization_source = "mngcore logform_layouter.xsd comments";
+
+    for (const auto& typed_attribute : split_csv(schema.root_attributes)) {
+        const std::string attribute = entry_name(typed_attribute, ':');
+        const std::string value_type = entry_value(typed_attribute, ':');
+        const std::string default_value = lookup_entry_value(schema.default_contract, attribute, '=');
+        schema.xsd_members.push_back({
+            public_member_name(attribute),
+            attribute,
+            value_type,
+            default_value,
+            write_policy_for_schema_default(default_value),
+            lookup_entry_value(schema.platform_members, attribute, '>'),
+            default_value,
+            std::string("logform_layouter.xsd:Form@") + attribute,
+            "schema-attribute",
+            "xsd-root-form-attribute",
+            false,
+            schema.schema_source + ":Form@" + attribute,
+        });
+    }
+    return schema;
+}
+
 inline std::vector<PlatformObjectSchema> build_platform_object_schemas() {
     std::vector<PlatformObjectSchema> schemas;
-    schemas.reserve(form_schema::logform_layouter_controls.size());
+    schemas.reserve(form_schema::logform_layouter_controls.size() + 1);
+    schemas.push_back(build_schema_for_root_form());
     for (const auto& control : form_schema::logform_layouter_controls) {
         schemas.push_back(build_schema_for_control(control));
     }
