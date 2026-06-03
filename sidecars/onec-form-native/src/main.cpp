@@ -318,11 +318,35 @@ std::string decode_text_file_bytes(const std::vector<std::uint8_t>& bytes) {
 
 void print_json_string(std::string_view value) {
     std::cout << '"';
-    for (char ch : value) {
-        if (ch == '"' || ch == '\\') {
-            std::cout << '\\' << ch;
-        } else {
-            std::cout << ch;
+    constexpr char hex[] = "0123456789abcdef";
+    for (unsigned char ch : value) {
+        switch (ch) {
+            case '"':
+            case '\\':
+                std::cout << '\\' << static_cast<char>(ch);
+                break;
+            case '\b':
+                std::cout << "\\b";
+                break;
+            case '\f':
+                std::cout << "\\f";
+                break;
+            case '\n':
+                std::cout << "\\n";
+                break;
+            case '\r':
+                std::cout << "\\r";
+                break;
+            case '\t':
+                std::cout << "\\t";
+                break;
+            default:
+                if (ch < 0x20) {
+                    std::cout << "\\u00" << hex[(ch >> 4) & 0x0F] << hex[ch & 0x0F];
+                } else {
+                    std::cout << static_cast<char>(ch);
+                }
+                break;
         }
     }
     std::cout << '"';
