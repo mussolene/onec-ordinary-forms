@@ -201,6 +201,11 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-platform-binding-set.txt 5 Binding.left 21 | grep -F -q '"slotCodec":"binding-record"'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-platform-binding-set.txt $(BUILD_DIR)/runtime-platform-binding-set.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
 	grep -F -q '<Binding coordinate="left" value="21"/>' $(BUILD_DIR)/runtime-platform-binding-set.xml
+	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{"ru","Run"}}},{8,1,2,101,22,0,0,0,0,0,0,{8,1,1,{"ru","Русский"},{128,72}},0,0,0,0,0},{14,"ButtonWithInnerPayload",4294967295,0,0,0},{0}}}}}' > $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt $(BUILD_DIR)/runtime-form-inner-payload.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	grep -F -q '<Binding coordinate="left" value="0"/>' $(BUILD_DIR)/runtime-form-inner-payload.xml
+	! grep -F -q 'horizontalCenter' $(BUILD_DIR)/runtime-form-inner-payload.xml
+	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt | grep -F -q '"payloadRoundtripEqual":true'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:PlatformObject"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"contextContract":{"platformEvidence":"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call; mngcore logform.xsd declares Form/elements/command/property'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"implementedWritableSlotCodecs":["name-record","scalar-flag","position-record","binding-record","attribute-record","command-record","event-action-record"]'

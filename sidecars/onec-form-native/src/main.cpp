@@ -1511,6 +1511,44 @@ bool is_simple_platform_anchor(const oof::platform::stream::ListValue& value) {
            !anchor_side_name(value.items[2].atom).empty();
 }
 
+bool is_xml_renderable_anchor_value(const oof::platform::stream::ListValue& value) {
+    return !value.is_list || is_simple_platform_anchor(value);
+}
+
+bool is_public_form_control_binding_value(const oof::platform::stream::ListValue& value) {
+    if (!value.is_list) {
+        return true;
+    }
+    if (value.items.empty() || value.items[0].is_list) {
+        return false;
+    }
+    for (std::size_t index = 1; index < value.items.size(); ++index) {
+        if (!is_xml_renderable_anchor_value(value.items[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool is_public_form_control_dimension_binding_value(const oof::platform::stream::ListValue& value) {
+    if (!value.is_list) {
+        return true;
+    }
+    if (value.items.size() < 3 ||
+        value.items[0].is_list ||
+        value.items[1].is_list ||
+        value.items[2].is_list ||
+        anchor_side_name(value.items[2].atom).empty()) {
+        return false;
+    }
+    for (std::size_t index = 3; index < value.items.size(); ++index) {
+        if (!is_xml_renderable_anchor_value(value.items[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 const oof::platform::object_model::PlatformObject* find_object_by_id(
     const oof::platform::object_model::PlatformFormObject& form_object,
     std::string_view object_id
@@ -1627,10 +1665,14 @@ void collect_materialized_form_items(
                 item.right = geometry->items[3].atom;
                 item.bottom = geometry->items[4].atom;
                 for (std::size_t index = 6; index <= 11 && index < geometry->items.size(); ++index) {
-                    item.bindings.push_back({binding_coordinate_name(index), geometry->items[index]});
+                    if (is_public_form_control_binding_value(geometry->items[index])) {
+                        item.bindings.push_back({binding_coordinate_name(index), geometry->items[index]});
+                    }
                 }
                 for (std::size_t index = 13; index <= 16 && index < geometry->items.size(); ++index) {
-                    item.dimension_bindings.push_back({dimension_binding_name(index), geometry->items[index]});
+                    if (is_public_form_control_dimension_binding_value(geometry->items[index])) {
+                        item.dimension_bindings.push_back({dimension_binding_name(index), geometry->items[index]});
+                    }
                 }
             }
             item.events = collect_materialized_form_events(value, item.object_id, path);
