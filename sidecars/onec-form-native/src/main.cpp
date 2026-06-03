@@ -270,7 +270,7 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-xml-build-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-xml-build-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-xml Form.bin Form.xml\n"
               << "       oof-native formbin-build-xml base-Form.bin Form.xml rebuilt-Form.bin\n"
@@ -659,6 +659,41 @@ void print_controls_codec() {
     std::cout << ",\"enumeratorHex\":";
     print_json_string(bytes_hex(enumerator.serialize_headers()));
     std::cout << ",\"transferSetSize\":" << transfer_set.serialize_records().size();
+    std::cout << "}\n";
+}
+
+void print_info8_codec() {
+    oof::platform::ordinary::ControlInfoRecord info;
+    info.words[0] = 0x9d00;
+    info.words[1] = 0x00000005;
+    info.words[2] = 0x0000000e;
+    info.words[3] = 0x00000014;
+
+    const auto bytes = info.serialize();
+    const auto restored = oof::platform::ordinary::ControlInfoRecord::deserialize(bytes);
+
+    std::cout << "{\"symbol\":\"cf_form_controls_info8\"";
+    std::cout << ",\"formatId\":" << oof::platform::cf_form_controls_info8;
+    std::cout << ",\"recordSize\":" << oof::platform::info_transfer_record_size;
+    std::cout << ",\"layoutStatus\":";
+    print_json_string(oof::platform::ordinary::ControlInfoRecord::layout_status());
+    std::cout << ",\"semanticsStatus\":";
+    print_json_string(oof::platform::ordinary::ControlInfoRecord::semantics_status());
+    std::cout << ",\"platformEvidence\":";
+    print_json_string("dsgnfrm FUN_00270da0 copies linked-list node payload as two uint64 words; exported HGLOBAL is uint32 count + N * 16-byte records");
+    std::cout << ",\"words\":[";
+    for (std::size_t index = 0; index < restored.words.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        std::cout << restored.words[index];
+    }
+    std::cout << "],\"low64\":" << restored.low64();
+    std::cout << ",\"high64\":" << restored.high64();
+    std::cout << ",\"bytesHex\":";
+    print_json_string(bytes_hex(bytes));
+    std::cout << ",\"objectBindingStatus\":";
+    print_json_string("pending binary/runtime correlation between record words and PlatformObjectSchemaMember platformMember values");
     std::cout << "}\n";
 }
 
@@ -5187,7 +5222,12 @@ void print_form_transfer_linkage_json(
               << (transfer_format_atoms_embedded ? "true" : "false");
     std::cout << ",\"controls8SectionDecoded\":false";
     std::cout << ",\"position8RecordsDecoded\":false";
-    std::cout << ",\"info8RecordsDecoded\":false";
+    std::cout << ",\"info8RecordLayoutDecoded\":true";
+    std::cout << ",\"info8ObjectSemanticsDecoded\":false";
+    std::cout << ",\"info8LayoutStatus\":";
+    print_json_string(oof::platform::ordinary::ControlInfoRecord::layout_status());
+    std::cout << ",\"info8SemanticsStatus\":";
+    print_json_string(oof::platform::ordinary::ControlInfoRecord::semantics_status());
     std::cout << ",\"reason\":";
     if (transfer_format_atoms_embedded) {
         print_json_string(
@@ -5957,6 +5997,10 @@ int main(int argc, char** argv) {
         }
         if (command == "controls-codec") {
             print_controls_codec();
+            return 0;
+        }
+        if (command == "info8-codec") {
+            print_info8_codec();
             return 0;
         }
         if (command == "graph-codec") {

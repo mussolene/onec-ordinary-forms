@@ -95,6 +95,10 @@ test: $(BIN)
 	$(BIN) controls-codec | grep -q '"infoSize":16'
 	$(BIN) controls-codec | grep -q '"transferSetSize":212'
 	$(BIN) controls-codec | grep -q '"enumeratorHex":"030000000055000020000000010000000000000000000000000000000000000000000000000000000000000000250000000000002800000000000000000000000000000000000000000000000000000000000000009d0000100000000100000000000000000000000000000000000000000000000000000000000000"'
+	$(BIN) info8-codec | grep -F -q '"layoutStatus":"record-layout-decoded"'
+	$(BIN) info8-codec | grep -F -q '"semanticsStatus":"object-semantics-pending"'
+	$(BIN) info8-codec | grep -F -q '"words":[40192,5,14,20]'
+	$(BIN) info8-codec | grep -F -q '"objectBindingStatus":"pending binary/runtime correlation between record words and PlatformObjectSchemaMember platformMember values"'
 	$(BIN) graph-codec | grep -q '"controlCount":1'
 	$(BIN) graph-codec | grep -q '"objectId":5'
 	$(BIN) graph-codec | grep -F -q '"title":"{1,{1,1,{\"ru\",\"Button title\"}},0}"'
@@ -284,6 +288,8 @@ test: $(BIN)
 	$(BIN) form-transfer-linkage-selftest | grep -F -q '"recordSize":32'
 	$(BIN) form-transfer-linkage-selftest | grep -F -q '"symbol":"cf_form_controls_info8"'
 	$(BIN) form-transfer-linkage-selftest | grep -F -q '"recordSize":16'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"info8RecordLayoutDecoded":true'
+	$(BIN) form-transfer-linkage-selftest | grep -F -q '"info8ObjectSemanticsDecoded":false'
 	$(BIN) form-transfer-linkage-selftest | grep -F -q '"facetLinkage":"pending-transfer-section-decode"'
 	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"knownDescriptorHitsTotal":12'; fi
 	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"nearestName":"GroupsCommandBar"'; fi

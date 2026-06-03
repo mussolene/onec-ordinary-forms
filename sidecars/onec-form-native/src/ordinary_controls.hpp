@@ -181,6 +181,24 @@ struct ControlInfoRecord {
 
     std::array<std::uint32_t, serialized_size / 4> words{};
 
+    std::uint64_t low64() const {
+        return static_cast<std::uint64_t>(words[0]) |
+               (static_cast<std::uint64_t>(words[1]) << 32);
+    }
+
+    std::uint64_t high64() const {
+        return static_cast<std::uint64_t>(words[2]) |
+               (static_cast<std::uint64_t>(words[3]) << 32);
+    }
+
+    static constexpr std::string_view layout_status() {
+        return "record-layout-decoded";
+    }
+
+    static constexpr std::string_view semantics_status() {
+        return "object-semantics-pending";
+    }
+
     std::vector<std::uint8_t> serialize() const {
         std::vector<std::uint8_t> out;
         out.reserve(serialized_size);
