@@ -48,6 +48,8 @@ test: $(BIN)
 	$(BIN) platform-object-schema | grep -F -q '"name":"Font","streamName":"fnt","valueType":"ui:Font"'
 	$(BIN) platform-object-schema | grep -F -q '"name":"TextColor","streamName":"txtClr","valueType":"ui:Color","defaultValue":"Color(Color::eV8Color, IV8Style::eButtonTextColor)","writePolicy":"omit-when-default"'
 	$(BIN) platform-object-schema | grep -F -q '"name":"Picture","streamName":"pic","valueType":"ui:Picture","defaultValue":"V8Picture()","writePolicy":"omit-when-default"'
+	$(BIN) platform-object-schema | grep -F -q '"name":"Picture","streamName":"pic","valueType":"ui:Picture","defaultValue":"V8Picture()","writePolicy":"omit-when-default","slotBinding":"cf_form_controls_info8:pic","slotCodec":"picture-record","codecStatus":"pending-info8-codec","writable":false'
+	$(BIN) platform-object-schema | grep -F -q '"name":"TextColor","streamName":"txtClr","valueType":"ui:Color","defaultValue":"Color(Color::eV8Color, IV8Style::eButtonTextColor)","writePolicy":"omit-when-default","slotBinding":"cf_form_controls_info8:txtClr","slotCodec":"color-record","codecStatus":"pending-info8-codec","writable":false'
 	$(BIN) platform-object-schema | grep -F -q '"name":"Font","streamName":"fnt","valueType":"ui:Font","defaultValue":"Font(Font::eAutoFont, 0)","writePolicy":"omit-when-default"'
 	$(BIN) platform-object-schema | grep -F -q '"name":"defBtn","streamName":"defBtn","valueType":"attribute","defaultValue":"false","writePolicy":"omit-when-default"'
 	$(BIN) platform-object-schema | grep -F -q '"apiProperties":["Caption","Enabled","Font","Picture","Shortcut","ToolTip","Visible"]'
@@ -194,6 +196,9 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"defaultValue":"V8Picture()"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"writePolicy":"omit-when-default"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"valueOrigin":"schema-default"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"slotBinding":"cf_form_controls_info8:pic"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"slotCodec":"picture-record"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"writable":false'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-position-selftest.txt 5 Заголовок | grep -F -q '"descriptorName":"Title"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-position-selftest.txt 5 Заголовок | grep -F -q '"value":"Run"'
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{{10,1,0,0,0,1,0,0,0,0,0,0,0},14,{1,{1,1,{"ru","Run"}}},1,1,0,0,0,0,{0,0,0},0,0,0,0,0,2},{}},{14,"ButtonWithBaseInfo",4294967295,0,0,0},{},{}}}}}' > $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt

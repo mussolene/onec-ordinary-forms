@@ -15,6 +15,10 @@ struct PlatformObjectSchemaMember {
     std::string value_type;
     std::string default_value;
     std::string write_policy;
+    std::string slot_binding;
+    std::string slot_codec;
+    std::string codec_status;
+    bool writable = false;
     std::string source;
 };
 
@@ -248,6 +252,39 @@ inline std::string write_policy_for_schema_default(std::string_view default_valu
     return "omit-when-default";
 }
 
+inline std::string slot_codec_for_schema_value_type(std::string_view value_type) {
+    if (value_type == "ui:Picture") {
+        return "picture-record";
+    }
+    if (value_type == "ui:Font") {
+        return "font-record";
+    }
+    if (value_type == "ui:Color") {
+        return "color-record";
+    }
+    if (value_type == "ui:Border") {
+        return "border-record";
+    }
+    return {};
+}
+
+inline std::string slot_binding_for_schema_member(
+    std::string_view stream_name,
+    std::string_view value_type
+) {
+    if (slot_codec_for_schema_value_type(value_type).empty()) {
+        return {};
+    }
+    return "cf_form_controls_info8:" + std::string(stream_name);
+}
+
+inline std::string codec_status_for_schema_value_type(std::string_view value_type) {
+    if (slot_codec_for_schema_value_type(value_type).empty()) {
+        return {};
+    }
+    return "pending-info8-codec";
+}
+
 inline const runtime_binding::PlatformApiObject* api_object_by_name(std::string_view name) {
     for (const auto& object : runtime_binding::api_objects) {
         if (object.name == name) {
@@ -274,12 +311,17 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
     for (const auto& member : split_csv(control.child_elements)) {
         const std::string value_type = xsd_value_type_for_stream_member(control, member);
         const std::string default_value = xsd_default_for_stream_member(control, member, value_type);
+        const std::string slot_codec = slot_codec_for_schema_value_type(value_type);
         schema.xsd_members.push_back({
             public_member_name(member),
             member,
             value_type,
             default_value,
             write_policy_for_schema_default(default_value),
+            slot_binding_for_schema_member(member, value_type),
+            slot_codec,
+            codec_status_for_schema_value_type(value_type),
+            false,
             std::string(control.schema_source) + ":" + std::string(control.type_name) + "/" + member,
         });
     }
@@ -291,6 +333,10 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
             "attribute",
             default_value,
             write_policy_for_schema_default(default_value),
+            {},
+            {},
+            {},
+            false,
             std::string(control.schema_source) + ":" + std::string(control.type_name) + "@" + attribute,
         });
     }

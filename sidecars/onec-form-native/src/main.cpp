@@ -2268,7 +2268,10 @@ oof::platform::object_model::PlatformObjectProperty make_platform_object_propert
     std::string source,
     std::string default_value = {},
     std::string write_policy = {},
-    std::string value_origin = "stream"
+    std::string value_origin = "stream",
+    std::string slot_binding = {},
+    std::string slot_codec = {},
+    bool writable = false
 ) {
     return oof::platform::object_model::make_property(
         std::move(name),
@@ -2276,9 +2279,9 @@ oof::platform::object_model::PlatformObjectProperty make_platform_object_propert
         std::move(value),
         std::move(source),
         std::move(value_type),
-        {},
-        false,
-        {},
+        std::move(slot_binding),
+        writable,
+        std::move(slot_codec),
         std::move(default_value),
         std::move(write_policy),
         std::move(value_origin));
@@ -2342,7 +2345,10 @@ void add_platform_object_schema_surface(
                 member.source,
                 member.default_value,
                 member.write_policy,
-                "schema-default"));
+                "schema-default",
+                member.slot_binding,
+                member.slot_codec,
+                member.writable));
         }
     }
     for (const auto& name : schema.api_properties) {
@@ -5563,6 +5569,13 @@ void print_platform_object_schema() {
             print_json_string(member.default_value);
             std::cout << ",\"writePolicy\":";
             print_json_string(member.write_policy);
+            std::cout << ",\"slotBinding\":";
+            print_json_string(member.slot_binding);
+            std::cout << ",\"slotCodec\":";
+            print_json_string(member.slot_codec);
+            std::cout << ",\"codecStatus\":";
+            print_json_string(member.codec_status);
+            std::cout << ",\"writable\":" << (member.writable ? "true" : "false");
             std::cout << ",\"source\":";
             print_json_string(member.source);
             std::cout << "}";
