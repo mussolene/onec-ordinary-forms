@@ -176,7 +176,7 @@ test: $(BIN)
 	! grep -F -q '<Font>' $(BUILD_DIR)/runtime-form.xml
 	! grep -F -q '<ListStream' $(BUILD_DIR)/runtime-form.xml
 	perl -0pi -e 's/name="Button1"/name="ButtonXmlEdited"/' $(BUILD_DIR)/runtime-form.xml
-	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml $(BUILD_DIR)/runtime-form-xml-edited.txt | grep -F -q '"nameEdits":2'
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml $(BUILD_DIR)/runtime-form-xml-edited.txt | grep -F -q '"nameEdits":1'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-xml-edited.txt $(BUILD_DIR)/runtime-form-xml-redump.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
 	grep -F -q 'ButtonXmlEdited' $(BUILD_DIR)/runtime-form-xml-redump.xml
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{"ru","Run"}}},{8,1,2,101,22,0,0,0,0,0,0,0,0,0,0,0,0},{14,"Button1",4294967295,0,0,0},{0}}}}}' > $(BUILD_DIR)/runtime-form-position-selftest.txt
@@ -186,8 +186,8 @@ test: $(BIN)
 	grep -F -q '<DimensionBinding dimension="width" value="0"/>' $(BUILD_DIR)/runtime-form-position.xml
 	perl -0pi -e 's/left="1"/left="9"/; s/coordinate="left" value="0"/coordinate="left" value="21"/; s/dimension="width" value="0"/dimension="width" value="2"/' $(BUILD_DIR)/runtime-form-position.xml
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited.txt | grep -F -q '"positionEdits":1'
-	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited-2.txt | grep -F -q '"bindingEdits":6'
-	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited-3.txt | grep -F -q '"dimensionBindingEdits":4'
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited-2.txt | grep -F -q '"bindingEdits":1'
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited-3.txt | grep -F -q '"dimensionBindingEdits":1'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-position-edited.txt $(BUILD_DIR)/runtime-form-position-redump.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
 	grep -F -q '<Position left="9" top="2" right="101" bottom="22"' $(BUILD_DIR)/runtime-form-position-redump.xml
 	grep -F -q '<Binding coordinate="left" value="21"/>' $(BUILD_DIR)/runtime-form-position-redump.xml

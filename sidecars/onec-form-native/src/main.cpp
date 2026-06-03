@@ -1511,10 +1511,6 @@ bool is_simple_platform_anchor(const oof::platform::stream::ListValue& value) {
            !anchor_side_name(value.items[2].atom).empty();
 }
 
-bool is_xml_renderable_anchor_value(const oof::platform::stream::ListValue& value) {
-    return !value.is_list || is_simple_platform_anchor(value);
-}
-
 bool is_public_form_control_binding_value(const oof::platform::stream::ListValue& value) {
     if (!value.is_list) {
         return true;
@@ -1523,7 +1519,7 @@ bool is_public_form_control_binding_value(const oof::platform::stream::ListValue
         return false;
     }
     for (std::size_t index = 1; index < value.items.size(); ++index) {
-        if (!is_xml_renderable_anchor_value(value.items[index])) {
+        if (!is_simple_platform_anchor(value.items[index])) {
             return false;
         }
     }
@@ -1542,7 +1538,7 @@ bool is_public_form_control_dimension_binding_value(const oof::platform::stream:
         return false;
     }
     for (std::size_t index = 3; index < value.items.size(); ++index) {
-        if (!is_xml_renderable_anchor_value(value.items[index])) {
+        if (!is_simple_platform_anchor(value.items[index])) {
             return false;
         }
     }
@@ -3370,6 +3366,11 @@ oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_platform_ob
     const std::string& xml
 );
 
+oof::platform::object_model::PlatformFormObjectEdit keep_changed_platform_object_edits(
+    const oof::platform::object_model::PlatformFormObjectEdit& requested,
+    const oof::platform::object_model::PlatformFormObject& baseline
+);
+
 PublicXmlApplyResult apply_platform_object_edits(
     RuntimeFormEnvelope& envelope,
     const oof::platform::object_model::PlatformFormObjectEdit& object_edit
@@ -4420,7 +4421,9 @@ void write_runtime_form_from_xml(
 ) {
     std::string canonical_text;
     RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
-    const auto object_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
+    const auto baseline = materialize_platform_form_object(envelope);
+    const auto requested_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
+    const auto object_edits = keep_changed_platform_object_edits(requested_edits, baseline);
     const auto result = apply_platform_object_edits(envelope, object_edits);
     const std::string rebuilt_text = dump_runtime_form_envelope(envelope);
     write_file_bytes(output_path, std::vector<std::uint8_t>(rebuilt_text.begin(), rebuilt_text.end()));
@@ -4461,7 +4464,9 @@ void write_formbin_from_xml(
     }
 
     RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(file_it->payload);
-    const auto object_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
+    const auto baseline = materialize_platform_form_object(envelope);
+    const auto requested_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
+    const auto object_edits = keep_changed_platform_object_edits(requested_edits, baseline);
     const auto result = apply_platform_object_edits(envelope, object_edits);
     file_it->payload = encode_form_payload_text(file_it->payload, envelope.payload);
     const auto rebuilt = oof::platform::formbin::serialize_container(container);
@@ -5324,6 +5329,25 @@ oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_platform_ob
     auto edits = public_xml_edits_to_platform_object_edits(parse_public_xml_control_edits(xml));
     merge_platform_form_object_edits(edits, parse_public_xml_collection_edits(xml));
     return edits;
+}
+
+oof::platform::object_model::PlatformFormObjectEdit keep_changed_platform_object_edits(
+    const oof::platform::object_model::PlatformFormObjectEdit& requested,
+    const oof::platform::object_model::PlatformFormObject& baseline
+) {
+    oof::platform::object_model::PlatformFormObjectEdit changed;
+    for (const auto& requested_object : requested.objects) {
+        const auto* current_object = baseline.find_object_by_id(requested_object.object_id);
+        auto& changed_object = changed.object(requested_object.object_id, requested_object.platform_type);
+        for (const auto& property : requested_object.properties) {
+            const auto* current_property = current_object != nullptr ? current_object->property(property.name) : nullptr;
+            if (current_property != nullptr && current_property->value == property.value) {
+                continue;
+            }
+            changed_object.set_property(property.name, property.value);
+        }
+    }
+    return changed;
 }
 
 PublicXmlApplyResult apply_platform_object_edits(
