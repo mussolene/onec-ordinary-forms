@@ -157,7 +157,7 @@ test: $(BIN)
 	grep -F -q '<Binding coordinate="left" value="21"/>' $(BUILD_DIR)/runtime-platform-binding-set.xml
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:PlatformObject"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"contextContract":{"platformEvidence":"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call; mngcore logform.xsd declares Form/elements/command/property'
-	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"implementedWritableSlotCodecs":["name-record","position-record","binding-record","attribute-record","command-record","event-action-record"]'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"implementedWritableSlotCodecs":["name-record","scalar-flag","position-record","binding-record","attribute-record","command-record","event-action-record"]'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"collections":[{"name":"Items"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"name":"Attributes","localizedName":"Реквизиты"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"platformType":"Form"'
@@ -179,6 +179,16 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Имя | grep -F -q '"value":"Button1"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-position-selftest.txt 5 Заголовок | grep -F -q '"descriptorName":"Title"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-position-selftest.txt 5 Заголовок | grep -F -q '"value":"Run"'
+	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{{10,1,0,0,0,1,0,0,0,0,0,0,0},14,{1,{1,1,{"ru","Run"}}},1,1,0,0,0,0,{0,0,0},0,0,0,0,0,2},{}},{14,"ButtonWithBaseInfo",4294967295,0,0,0},{},{}}}}}' > $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt 5 Visible | grep -F -q '"value":"true"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt 5 Enabled | grep -F -q '"value":"true"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt $(BUILD_DIR)/runtime-form-baseinfo.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	grep -F -q '<Visible>true</Visible>' $(BUILD_DIR)/runtime-form-baseinfo.xml
+	grep -F -q '<Enabled>true</Enabled>' $(BUILD_DIR)/runtime-form-baseinfo.xml
+	perl -0pi -e 's#<Visible>true</Visible>#<Visible>false</Visible>#; s#<Enabled>true</Enabled>#<Enabled>false</Enabled>#' $(BUILD_DIR)/runtime-form-baseinfo.xml
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt $(BUILD_DIR)/runtime-form-baseinfo.xml $(BUILD_DIR)/runtime-form-baseinfo-edited.txt | grep -F -q '"scalarFlagEdits":2'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-baseinfo-edited.txt 5 Visible | grep -F -q '"value":"false"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-baseinfo-edited.txt 5 Enabled | grep -F -q '"value":"false"'
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18},{{1},17,{1,{{1},0,1,1,"Attr1",{"Pattern",{"#",7861785a-a6a1-485c-94c1-5f4a4e882abe}}}},{0}}}}' > $(BUILD_DIR)/runtime-form-attributes-selftest.txt
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-attributes-selftest.txt | grep -F -q '"attributes":{"name":"Attributes","localizedName":"Реквизиты","valueType":"FormAttributes"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-attributes-selftest.txt | grep -F -q '"count":1'
