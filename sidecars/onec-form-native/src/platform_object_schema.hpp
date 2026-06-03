@@ -406,10 +406,14 @@ inline std::string codec_status_for_schema_value_type(std::string_view value_typ
 }
 
 inline bool writable_for_schema_value_type(std::string_view value_type) {
-    return value_type == "ui:Picture" ||
-           value_type == "ui:Color" ||
-           value_type == "ui:Font" ||
-           value_type == "ui:Border";
+    // Picture/Color/Font/Border live in the cf_form_controls_info8 value layer.
+    // Their info8 object-property slot semantics are not yet proven by the
+    // runtime differential oracle, so they are readable coverage gaps, never
+    // writable. Writability is promoted only by a proven slot binding, not by
+    // schema existence. See docs/ordinary-form-pattern-audit.md and
+    // tools/object_model_gate.py.
+    (void)value_type;
+    return false;
 }
 
 inline const runtime_binding::PlatformApiObject* api_object_by_name(std::string_view name) {

@@ -75,9 +75,9 @@ inline constexpr std::array<PlatformPropertyDescriptor, 42> descriptors{{
     {"Command.Name", "Команда.Имя", "String", SlotCodec::event_action_record, "logform.xsd:Command@name", true, true, "mngcore logform.xsd Command"},
     {"Command.Handler", "Команда.Обработчик", "String", SlotCodec::event_action_record, "logform.xsd:Command@handler", true, true, "mngcore logform.xsd Command"},
     {"Command.ModifiesData", "Команда.ИзменяетДанные", "Boolean", SlotCodec::event_action_record, "logform.xsd:Command@modifiesData", true, true, "mngcore logform.xsd Command"},
-    {"Attribute.ID", "Реквизит.Идентификатор", "CompositeID", SlotCodec::collection_record, "logform.xsd:Property@id", true, true, "mngcore logform.xsd Property"},
-    {"Attribute.Main", "Реквизит.Основной", "Boolean", SlotCodec::collection_record, "logform.xsd:Property@main", true, true, "mngcore logform.xsd Property"},
-    {"Attribute.StoredData", "Реквизит.СохраняемыеДанные", "Boolean", SlotCodec::collection_record, "logform.xsd:Property@storedData", true, true, "mngcore logform.xsd Property"},
+    {"Attribute.ID", "Реквизит.Идентификатор", "CompositeID", SlotCodec::collection_record, "logform.xsd:Property@id", true, false, "mngcore logform.xsd Property"},
+    {"Attribute.Main", "Реквизит.Основной", "Boolean", SlotCodec::collection_record, "logform.xsd:Property@main", true, false, "mngcore logform.xsd Property"},
+    {"Attribute.StoredData", "Реквизит.СохраняемыеДанные", "Boolean", SlotCodec::collection_record, "logform.xsd:Property@storedData", true, false, "mngcore logform.xsd Property"},
 }};
 
 inline constexpr std::string_view slot_codec_name(SlotCodec codec) {

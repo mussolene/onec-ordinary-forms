@@ -62,7 +62,7 @@ test: $(BIN)
 	$(BIN) platform-object-schema | grep -F -q '"platformMember":"m_textColor","platformDefault":"kLogFormButtonDefTextColor"'
 	$(BIN) platform-object-schema | grep -F -q '"name":"TextColor","streamName":"txtClr","valueType":"ui:Color","defaultValue":"kLogFormButtonDefTextColor","writePolicy":"omit-when-default"'
 	$(BIN) platform-object-schema | grep -F -q '"name":"Picture","streamName":"pic","valueType":"ui:Picture","defaultValue":"V8Picture()","writePolicy":"omit-when-default"'
-	$(BIN) platform-object-schema | grep -F -q '"name":"Picture","streamName":"pic","valueType":"ui:Picture","defaultValue":"V8Picture()","writePolicy":"omit-when-default","platformMember":"m_picture","platformDefault":"V8Picture()","slotBinding":"cf_form_controls_info8:pic","slotCodec":"picture-record","codecStatus":"pending-info8-codec","writable":true'
+	$(BIN) platform-object-schema | grep -F -q '"name":"Picture","streamName":"pic","valueType":"ui:Picture","defaultValue":"V8Picture()","writePolicy":"omit-when-default","platformMember":"m_picture","platformDefault":"V8Picture()","slotBinding":"cf_form_controls_info8:pic","slotCodec":"picture-record","codecStatus":"pending-info8-codec","writable":false'
 	$(BIN) platform-object-schema | grep -F -q '"name":"Font","streamName":"fnt","valueType":"ui:Font","defaultValue":"kLogFormButtonDefFont","writePolicy":"omit-when-default"'
 	$(BIN) platform-object-schema | grep -F -q '"name":"defButton","streamName":"defButton","valueType":"xs:boolean","defaultValue":"false","writePolicy":"omit-when-default"'
 	$(BIN) platform-object-schema | grep -F -q '"apiProperties":["Caption","Enabled","Font","Picture","Shortcut","ToolTip","Visible"]'
@@ -94,9 +94,9 @@ test: $(BIN)
 	$(BIN) platform-property-registry | grep -F -q '"slotCodec":"binding-record"'
 	$(BIN) platform-property-registry | grep -F -q '"slotCodec":"event-action-record"'
 	$(BIN) platform-property-registry | grep -F -q '"name":"AllowClose","localizedName":"","valueType":"Boolean","slotCodec":"none","slotBinding":"","readable":true,"writable":false,"source":"shcntx_root.hbk objects/catalog56/catalog246/Form","origin":"generated-platform-api-catalog"'
-	$(BIN) platform-property-registry | grep -F -q '"name":"TextColor","localizedName":"","valueType":"ui:Color","slotCodec":"color-record","slotBinding":"cf_form_controls_info8:txtClr","readable":true,"writable":true'
-	$(BIN) platform-property-registry | grep -F -q '"name":"BackColor","localizedName":"","valueType":"ui:Color","slotCodec":"color-record","slotBinding":"cf_form_controls_info8:bkClr","readable":true,"writable":true'
-	$(BIN) platform-property-registry | grep -F -q '"name":"BorderColor","localizedName":"","valueType":"ui:Color","slotCodec":"color-record","slotBinding":"cf_form_controls_info8:brdClr","readable":true,"writable":true'
+	$(BIN) platform-property-registry | grep -F -q '"name":"TextColor","localizedName":"","valueType":"ui:Color","slotCodec":"color-record","slotBinding":"cf_form_controls_info8:txtClr","readable":true,"writable":false'
+	$(BIN) platform-property-registry | grep -F -q '"name":"BackColor","localizedName":"","valueType":"ui:Color","slotCodec":"color-record","slotBinding":"cf_form_controls_info8:bkClr","readable":true,"writable":false'
+	$(BIN) platform-property-registry | grep -F -q '"name":"BorderColor","localizedName":"","valueType":"ui:Color","slotCodec":"color-record","slotBinding":"cf_form_controls_info8:brdClr","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"name":"ToolTip","localizedName":"","valueType":"xs:string","slotCodec":"none","slotBinding":"","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"origin":"generated-platform-schema-catalog"'
 	$(BIN) platform-property-registry | grep -F -q '"name":"Events"'
@@ -106,7 +106,7 @@ test: $(BIN)
 	$(BIN) platform-property-registry | grep -F -q '"name":"Color","localizedName":"Цвет","valueType":"Color","slotCodec":"color-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"name":"Font","localizedName":"Шрифт","valueType":"Font","slotCodec":"font-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"name":"Picture","localizedName":"Картинка","valueType":"Picture","slotCodec":"picture-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
-	$(BIN) platform-property-registry | grep -F -q '"writableCount":52'
+	$(BIN) platform-property-registry | grep -F -q '"writableCount":27'
 	$(BIN) value-roundtrip | grep -F -q '"serialized":"{1,{1,2,{\"ru\",\"Title\"},{\"en\",\"Caption\"}},1}"'
 	$(BIN) value-roundtrip | grep -q '"itemCount":2'
 	$(BIN) value-roundtrip | grep -F -q '"compositeID":"{42,09ccdc77-ea1a-4a6d-ab1c-3435eada2433}"'
@@ -256,9 +256,9 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"platformDefault":"V8Picture()"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"slotBinding":"cf_form_controls_info8:pic"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"slotCodec":"picture-record"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"writable":false'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"valueObject":{"class":"Picture","constructor":"New Picture","storage":"empty","literal":"V8Picture()","schemaValue":"","listStream":"{{\"none\"},\"\"}","ownerMember":"m_picture"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"evidence":"xdto_root.res:data_ui.xsd Picture/PictureRef + core::V8Picture::to_storage/from_storage"'
-	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 Picture | grep -F -q '"writable":true'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 TextColor | grep -F -q '"valueObject":{"class":"Color","constructor":"New Color"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 TextColor | grep -F -q '"storage":"style","literal":"kLogFormButtonDefTextColor","schemaValue":"style:ButtonTextColor"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-selftest.txt 5 TextColor | grep -F -q '"ownerMember":"m_textColor","evidence":"xdto_root.res:data_ui.xsd Color + core::Color::serialize/deserialize"'
@@ -358,6 +358,13 @@ test: $(BIN)
 	if [ -f ../../work/platform85-xml-resources/chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd ]; then grep -F -q 'complexType name="PivotChart"' ../../work/platform85-xml-resources/chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd; fi
 	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -q '"09ccdc77-ea1a-4a6d-ab1c-3435eada2433"'; fi
 	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -F -q '"repeatedGuidBlocks":["0x42370"'; fi
+	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection-object.txt 5 Имя DualProjectionName | grep -F -q '"operation":"setPropVal"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	perl -0pi -e 's/name="Button1"/name="DualProjectionName"/' $(BUILD_DIR)/dual-projection.xml
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection.xml $(BUILD_DIR)/dual-projection-xml.txt | grep -F -q '"nameEdits":1'
+	$(BIN) runtime-form-semantic-diff $(BUILD_DIR)/dual-projection-object.txt $(BUILD_DIR)/dual-projection-xml.txt | grep -F -q '"normalizedEqual":true'
+	python3 ../../tools/object_model_gate.py --native-bin $(BIN)
+	python3 ../../tools/lossless_roundtrip_gate.py --native-bin $(BIN)
 
 clean:
 	rm -rf $(BUILD_DIR)
