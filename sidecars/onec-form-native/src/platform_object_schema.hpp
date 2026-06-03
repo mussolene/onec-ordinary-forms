@@ -15,6 +15,8 @@ struct PlatformObjectSchemaMember {
     std::string value_type;
     std::string default_value;
     std::string write_policy;
+    std::string platform_member;
+    std::string platform_default;
     std::string slot_binding;
     std::string slot_codec;
     std::string codec_status;
@@ -252,6 +254,52 @@ inline std::string write_policy_for_schema_default(std::string_view default_valu
     return "omit-when-default";
 }
 
+inline std::string platform_member_for_stream_member(std::string_view stream_name) {
+    if (stream_name == "tooltip") {
+        return "m_tooltip";
+    }
+    if (stream_name == "shortCut" || stream_name == "stcut") {
+        return "m_shortCut";
+    }
+    if (stream_name == "pic") {
+        return "m_picture";
+    }
+    if (stream_name == "picVal" || stream_name == "picValues") {
+        return "m_pictureValues";
+    }
+    if (stream_name == "choiceBtnPic") {
+        return "m_choiceButtonPicture";
+    }
+    if (stream_name == "rowsPic") {
+        return "m_rowsPicture";
+    }
+    if (stream_name == "headerPic") {
+        return "m_headerPicture";
+    }
+    if (stream_name == "footerPic") {
+        return "m_footerPicture";
+    }
+    if (stream_name == "txtClr") {
+        return "m_textColor";
+    }
+    if (stream_name == "bkClr") {
+        return "m_backColor";
+    }
+    if (stream_name == "brdClr") {
+        return "m_borderColor";
+    }
+    if (stream_name == "fnt") {
+        return "m_font";
+    }
+    if (stream_name == "brd") {
+        return "m_border";
+    }
+    if (stream_name == "cntm") {
+        return "m_contextMenu";
+    }
+    return {};
+}
+
 inline std::string slot_codec_for_schema_value_type(std::string_view value_type) {
     if (value_type == "ui:Picture") {
         return "picture-record";
@@ -318,6 +366,8 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
             value_type,
             default_value,
             write_policy_for_schema_default(default_value),
+            platform_member_for_stream_member(member),
+            default_value,
             slot_binding_for_schema_member(member, value_type),
             slot_codec,
             codec_status_for_schema_value_type(value_type),
@@ -333,6 +383,8 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
             "attribute",
             default_value,
             write_policy_for_schema_default(default_value),
+            {},
+            default_value,
             {},
             {},
             {},

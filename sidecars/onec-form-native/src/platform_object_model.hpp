@@ -18,6 +18,8 @@ struct PlatformObjectProperty {
     std::string write_policy;
     std::string value_origin;
     std::string source;
+    std::string platform_member;
+    std::string platform_default;
     std::string slot_binding;
     std::string slot_codec;
     bool readable = true;
@@ -341,7 +343,9 @@ inline PlatformObjectProperty make_property(
     std::string slot_codec = {},
     std::string default_value = {},
     std::string write_policy = {},
-    std::string value_origin = "stream"
+    std::string value_origin = "stream",
+    std::string platform_member = {},
+    std::string platform_default = {}
 ) {
     PlatformObjectProperty property;
     property.name = std::move(name);
@@ -352,6 +356,8 @@ inline PlatformObjectProperty make_property(
     property.write_policy = std::move(write_policy);
     property.value_origin = std::move(value_origin);
     property.source = std::move(source);
+    property.platform_member = std::move(platform_member);
+    property.platform_default = std::move(platform_default);
     property.slot_binding = std::move(slot_binding);
     property.slot_codec = std::move(slot_codec);
     property.writable = writable;
