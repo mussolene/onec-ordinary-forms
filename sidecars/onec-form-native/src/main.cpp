@@ -5426,6 +5426,10 @@ void print_platform_object_schema() {
             print_json_string(member.stream_name);
             std::cout << ",\"valueType\":";
             print_json_string(member.value_type);
+            std::cout << ",\"defaultValue\":";
+            print_json_string(member.default_value);
+            std::cout << ",\"writePolicy\":";
+            print_json_string(member.write_policy);
             std::cout << ",\"source\":";
             print_json_string(member.source);
             std::cout << "}";

@@ -13,6 +13,8 @@ struct PlatformObjectSchemaMember {
     std::string name;
     std::string stream_name;
     std::string value_type;
+    std::string default_value;
+    std::string write_policy;
     std::string source;
 };
 
@@ -167,6 +169,85 @@ inline std::string xsd_value_type_for_stream_member(
     return "Value";
 }
 
+inline std::string xsd_default_for_stream_member(
+    const form_schema::PlatformFormSchemaControl& control,
+    std::string_view stream_name,
+    std::string_view value_type
+) {
+    if (value_type == "ui:Picture") {
+        return "V8Picture()";
+    }
+    if (value_type == "ui:Font") {
+        return "Font(Font::eAutoFont, 0)";
+    }
+    if (value_type == "ui:Color") {
+        if (stream_name == "brdClr") {
+            if (control.type_name == "TextBox" || control.type_name == "CheckBox" ||
+                control.type_name == "RadioButton" || control.type_name == "SpreadSheet" ||
+                control.type_name == "TextDocument" || control.type_name == "FormattedDocument" ||
+                control.type_name == "Calendar" || control.type_name == "ProgressBar" ||
+                control.type_name == "TrackBar" || control.type_name == "Chart" ||
+                control.type_name == "GeographicalSchema" ||
+                control.type_name == "Dendrogram" || control.type_name == "Flowchart" ||
+                control.type_name == "HTMLDocument" || control.type_name == "GraphicalSchema") {
+                return "Color(Color::eV8Color, IV8Style::eBorderColor)";
+            }
+        }
+        if (control.type_name == "Button" && stream_name == "txtClr") {
+            return "Color(Color::eV8Color, IV8Style::eButtonTextColor)";
+        }
+        if (control.type_name == "Button" && stream_name == "bkClr") {
+            return "Color(Color::eV8Color, IV8Style::eButtonBkgrndColor)";
+        }
+        if (control.type_name == "Button" && stream_name == "brdClr") {
+            return "Color(Color::eV8Color, IV8Style::eBorderColor)";
+        }
+        return "Color(Color::eAutoColor, 0)";
+    }
+    if (value_type == "ui:Border") {
+        return "Border()";
+    }
+    if (stream_name == "tooltip" || stream_name == "shortCut" || stream_name == "stcut" ||
+        stream_name == "cntm" || stream_name == "cmd" || stream_name == "menu" ||
+        stream_name == "msep") {
+        return "empty";
+    }
+    return {};
+}
+
+inline std::string xsd_default_for_attribute(
+    const form_schema::PlatformFormSchemaControl& control,
+    std::string_view attribute
+) {
+    if (attribute == "defBtn" || attribute == "depBtn" || attribute == "threeState" ||
+        attribute == "hyper" || attribute == "listChoiceMode" || attribute == "secCB") {
+        return "false";
+    }
+    if (attribute == "wrap" || attribute == "choice" || attribute == "textEdit") {
+        return "true";
+    }
+    if (attribute == "hAlign") {
+        return "Left";
+    }
+    if (attribute == "vAlign") {
+        return "Center";
+    }
+    if (attribute == "pwd" || attribute == "markNegatives" || attribute == "choiceBtn" ||
+        attribute == "clearBtn" || attribute == "spinBtn" || attribute == "openBtn" ||
+        attribute == "multiLine") {
+        return "auto";
+    }
+    (void)control;
+    return {};
+}
+
+inline std::string write_policy_for_schema_default(std::string_view default_value) {
+    if (default_value.empty()) {
+        return "explicit";
+    }
+    return "omit-when-default";
+}
+
 inline const runtime_binding::PlatformApiObject* api_object_by_name(std::string_view name) {
     for (const auto& object : runtime_binding::api_objects) {
         if (object.name == name) {
@@ -191,18 +272,25 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
         schema.api_events = split_csv(api->sample_events);
     }
     for (const auto& member : split_csv(control.child_elements)) {
+        const std::string value_type = xsd_value_type_for_stream_member(control, member);
+        const std::string default_value = xsd_default_for_stream_member(control, member, value_type);
         schema.xsd_members.push_back({
             public_member_name(member),
             member,
-            xsd_value_type_for_stream_member(control, member),
+            value_type,
+            default_value,
+            write_policy_for_schema_default(default_value),
             std::string(control.schema_source) + ":" + std::string(control.type_name) + "/" + member,
         });
     }
     for (const auto& attribute : split_csv(control.attributes)) {
+        const std::string default_value = xsd_default_for_attribute(control, attribute);
         schema.xsd_members.push_back({
             public_member_name(attribute),
             attribute,
             "attribute",
+            default_value,
+            write_policy_for_schema_default(default_value),
             std::string(control.schema_source) + ":" + std::string(control.type_name) + "@" + attribute,
         });
     }
