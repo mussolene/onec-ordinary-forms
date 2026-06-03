@@ -270,11 +270,13 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-xml-build-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-xml-build-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-xml Form.bin Form.xml\n"
               << "       oof-native formbin-build-xml base-Form.bin Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-xml-coverage Form.bin\n"
+              << "       oof-native <formbin-platform-object|formbin-platform-object-get> Form.bin [objectId property]\n"
+              << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value\n"
               << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
               << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-platform-object> runtime-form-stream.txt\n"
@@ -2785,16 +2787,20 @@ void print_platform_object_collection_json(
     std::cout << "]}";
 }
 
-void print_runtime_platform_object(const std::string& path) {
-    std::string canonical_text;
-    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
-    const auto form_object = materialize_platform_form_object(envelope);
+void print_platform_form_object_document(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view source,
+    std::string_view runtime_uuid
+) {
     const auto* first = form_object.items.count() == 0 ? nullptr : &form_object.items.get(0);
     const auto* found = first == nullptr ? nullptr : form_object.items.find(first->name);
 
-    std::cout << "{\"source\":\"RuntimeForm:PlatformObject\"";
-    std::cout << ",\"runtimeUuid\":";
-    print_json_string(envelope.runtime_uuid);
+    std::cout << "{\"source\":";
+    print_json_string(source);
+    if (!runtime_uuid.empty()) {
+        std::cout << ",\"runtimeUuid\":";
+        print_json_string(runtime_uuid);
+    }
     std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call; mngcore logform.xsd declares Form/elements/command/property and element event/commands/autoCommandBar; cmi.xsd declares CommandInfo/Command/HandlerInfo\",\"model\":\"typeDescriptor + property/method/event/collection descriptors + slot-backed values\",\"descriptorRegistry\":\"PlatformPropertyDescriptor + PropertySlotBinding\",\"implementedWritableSlotCodecs\":[\"name-record\",\"scalar-flag\",\"position-record\",\"binding-record\",\"attribute-record\",\"command-record\",\"event-action-record\"]}";
     std::cout << ",\"form\":";
     print_platform_object_json(form_object.form);
@@ -2832,14 +2838,21 @@ void print_runtime_platform_object(const std::string& path) {
     std::cout << "}\n";
 }
 
-void print_runtime_platform_object_get(
-    const std::string& path,
+void print_runtime_platform_object(const std::string& path) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
+    print_platform_form_object_document(
+        materialize_platform_form_object(envelope),
+        "RuntimeForm:PlatformObject",
+        envelope.runtime_uuid);
+}
+
+void print_platform_object_get_json(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view source,
     std::string_view object_id,
     std::string_view property_name
 ) {
-    std::string canonical_text;
-    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
-    const auto form_object = materialize_platform_form_object(envelope);
     const auto* object = form_object.find_object_by_id(object_id);
     if (object == nullptr) {
         throw std::runtime_error("platform object is not found: " + std::string(object_id));
@@ -2850,6 +2863,8 @@ void print_runtime_platform_object_get(
     }
 
     std::cout << "{\"operation\":\"getPropVal\"";
+    std::cout << ",\"source\":";
+    print_json_string(source);
     std::cout << ",\"objectId\":";
     print_json_string(object_id);
     std::cout << ",\"objectName\":";
@@ -2883,6 +2898,20 @@ void print_runtime_platform_object_get(
     std::cout << ",\"slotCodec\":";
     print_json_string(property->slot_codec);
     std::cout << "}\n";
+}
+
+void print_runtime_platform_object_get(
+    const std::string& path,
+    std::string_view object_id,
+    std::string_view property_name
+) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
+    print_platform_object_get_json(
+        materialize_platform_form_object(envelope),
+        "RuntimeForm:PlatformObject",
+        object_id,
+        property_name);
 }
 
 std::string xml_escape(std::string_view value) {
@@ -3419,7 +3448,7 @@ bool has_explicit_property_for_xml(
 bool is_public_schema_property_xml(
     const oof::platform::object_model::PlatformObjectProperty& property
 ) {
-    if (property.source.find("managed-application/logform/layouter") == std::string::npos) {
+    if (property.source.find("managed-application/logform") == std::string::npos) {
         return false;
     }
     if (property.name.empty() || property.name.find('.') != std::string::npos) {
@@ -3980,6 +4009,27 @@ void write_formbin_xml(const std::string& input_path, const std::string& output_
     std::cout << "}\n";
 }
 
+void print_formbin_platform_object(const std::string& input_path) {
+    RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
+    print_platform_form_object_document(
+        materialize_platform_form_object(envelope),
+        "Form.bin:PlatformObject",
+        "");
+}
+
+void print_formbin_platform_object_get(
+    const std::string& input_path,
+    std::string_view object_id,
+    std::string_view property_name
+) {
+    RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
+    print_platform_object_get_json(
+        materialize_platform_form_object(envelope),
+        "Form.bin:PlatformObject",
+        object_id,
+        property_name);
+}
+
 std::vector<std::uint8_t> encode_form_payload_text(
     const std::vector<std::uint8_t>& original_payload,
     const oof::platform::stream::ListValue& payload
@@ -4070,6 +4120,71 @@ void write_formbin_from_xml(
     std::cout << "}\n";
 }
 
+void write_formbin_platform_object_set(
+    const std::string& input_path,
+    const std::string& output_path,
+    std::string_view object_id,
+    std::string_view property_name,
+    std::string_view new_value
+) {
+    const auto& descriptor = require_property_descriptor(property_name);
+    if (!oof::platform::property_registry::can_set_with_current_codec(descriptor)) {
+        throw std::runtime_error("property is registered but its slot codec is not writable yet through native Form.bin setPropVal: " +
+                                 std::string(property_name) + " codec=" +
+                                 std::string(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec)));
+    }
+
+    const std::vector<std::uint8_t> data = read_file_bytes(input_path);
+    auto container = oof::platform::formbin::parse_container(data);
+    auto file_it = container.files.end();
+    for (auto it = container.files.begin(); it != container.files.end(); ++it) {
+        if (it->name == "form") {
+            file_it = it;
+            break;
+        }
+    }
+    if (file_it == container.files.end()) {
+        throw std::runtime_error("Form.bin does not contain required logical file");
+    }
+
+    RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(file_it->payload);
+    oof::platform::object_model::PlatformFormObjectEdit object_edit;
+    object_edit.object(std::string(object_id)).set_property(std::string(descriptor.name), std::string(new_value));
+    apply_platform_object_edits(envelope, object_edit);
+    file_it->payload = encode_form_payload_text(file_it->payload, envelope.payload);
+
+    const auto rebuilt = oof::platform::formbin::serialize_container(container);
+    write_file_bytes(output_path, rebuilt);
+    const auto form_object = materialize_platform_form_object(envelope);
+    const auto* changed = form_object.find_object_by_id(object_id);
+
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"bytes\":" << rebuilt.size();
+    std::cout << ",\"operation\":\"setPropVal\"";
+    std::cout << ",\"source\":\"Form.bin:PlatformObject\"";
+    std::cout << ",\"objectId\":";
+    print_json_string(object_id);
+    std::cout << ",\"property\":";
+    print_json_string(property_name);
+    std::cout << ",\"descriptorName\":";
+    print_json_string(descriptor.name);
+    std::cout << ",\"value\":";
+    print_json_string(new_value);
+    std::cout << ",\"slotBinding\":";
+    print_json_string(descriptor.slot_binding);
+    std::cout << ",\"slotCodec\":";
+    print_json_string(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec));
+    std::cout << ",\"preservedContainerFiles\":" << container.files.size();
+    std::cout << ",\"changedObject\":";
+    if (changed != nullptr) {
+        print_platform_object_json(*changed);
+    } else {
+        std::cout << "null";
+    }
+    std::cout << "}\n";
+}
+
 void print_formbin_xml_coverage(const std::string& input_path) {
     RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
     const auto summary = summarize_materialized_graph(envelope.payload);
@@ -4077,7 +4192,7 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << ",\"nativeXmlProjection\":true";
     std::cout << ",\"nativeXmlWriter\":true";
-    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Visible\",\"Enabled\",\"Position\",\"Binding:value\",\"Binding:anchor-list\",\"DimensionBinding:value\",\"DimensionBinding:record\",\"Attribute.Name\",\"Command.Name\",\"Command.Handler\",\"Command.ModifiesData\",\"Event.Handler\"]";
+    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Visible\",\"Enabled\",\"Position\",\"Binding:value\",\"Binding:anchor-list\",\"DimensionBinding:value\",\"DimensionBinding:record\",\"Attribute.Name\",\"Command.Name\",\"Command.Handler\",\"Command.ModifiesData\",\"Event.Handler\",\"Form.bin.PlatformObject.getPropVal\",\"Form.bin.PlatformObject.setPropVal\"]";
     std::cout << ",\"materializedItems\":" << summary.items.size();
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
@@ -4164,6 +4279,65 @@ void print_formbin_xml_build_selftest() {
     std::cout << ",\"noRawXml\":"
               << (redump_xml.find("ListStream") == std::string::npos ? "true" : "false");
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << "}\n";
+}
+
+void print_formbin_platform_object_selftest() {
+    const std::string form_text =
+        "{{\"MainCaption\",1,1,{\"ru\",\"Main\"}},"
+        "{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{\"ru\",\"Run\"}}},"
+        "{8,1,2,101,22,0,0,0,0,0,0,0,0,0,0,0,0},{14,\"Button1\",4294967295,0,0,0},{0}}}";
+    oof::platform::formbin::OneCContainer container;
+    container.block_size = oof::platform::formbin::container_block_size;
+    container.files.push_back({"form", 11, 22, std::vector<std::uint8_t>(form_text.begin(), form_text.end())});
+    container.files.push_back({"module", 33, 44, {'m', 'o', 'd'}});
+
+    const auto encoded = oof::platform::formbin::serialize_container(container);
+    auto parsed = oof::platform::formbin::parse_container(encoded);
+    auto form_it = parsed.files.end();
+    for (auto it = parsed.files.begin(); it != parsed.files.end(); ++it) {
+        if (it->name == "form") {
+            form_it = it;
+            break;
+        }
+    }
+    if (form_it == parsed.files.end()) {
+        throw std::runtime_error("Form.bin selftest container lost form file");
+    }
+
+    RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_it->payload);
+    auto form_object = materialize_platform_form_object(envelope);
+    const auto* button = form_object.find_object_by_id("5");
+    const auto* picture = button == nullptr ? nullptr : button->property("Picture");
+    const std::string before_name = button == nullptr ? "" : form_object.get_prop_val("5", "Name");
+    const std::string picture_value = picture == nullptr ? "" : picture->value;
+    const std::string picture_member = picture == nullptr ? "" : picture->platform_member;
+
+    oof::platform::object_model::PlatformFormObjectEdit object_edit;
+    object_edit.object("5").set_property("Title", "ButtonFromFormBinObject");
+    const auto result = apply_platform_object_edits(envelope, object_edit);
+    form_it->payload = encode_form_payload_text(form_it->payload, envelope.payload);
+
+    const auto rebuilt = oof::platform::formbin::serialize_container(parsed);
+    const auto reparsed = oof::platform::formbin::parse_container(rebuilt);
+    const RuntimeFormEnvelope redump_envelope = runtime_envelope_from_form_payload(find_container_file(reparsed, "form").payload);
+    const auto redump_object = materialize_platform_form_object(redump_envelope);
+    const auto& module = find_container_file(reparsed, "module");
+
+    std::cout << "{\"operation\":\"formbin-platform-object-selftest\"";
+    std::cout << ",\"source\":\"Form.bin:PlatformObject\"";
+    std::cout << ",\"beforeName\":";
+    print_json_string(before_name);
+    std::cout << ",\"pictureValue\":";
+    print_json_string(picture_value);
+    std::cout << ",\"picturePlatformMember\":";
+    print_json_string(picture_member);
+    std::cout << ",\"titleEdits\":" << result.title_edits;
+    std::cout << ",\"titleRoundtrip\":"
+              << (redump_object.get_prop_val("5", "Title") == "ButtonFromFormBinObject" ? "true" : "false");
+    std::cout << ",\"modulePreserved\":"
+              << (module.payload == std::vector<std::uint8_t>({'m', 'o', 'd'}) ? "true" : "false");
+    std::cout << ",\"publicContract\":\"PlatformObject\"";
     std::cout << "}\n";
 }
 
@@ -6059,6 +6233,10 @@ int main(int argc, char** argv) {
             print_formbin_xml_build_selftest();
             return 0;
         }
+        if (command == "formbin-platform-object-selftest") {
+            print_formbin_platform_object_selftest();
+            return 0;
+        }
         if (command == "form-payload-structure-selftest") {
             print_form_payload_structure_selftest();
             return 0;
@@ -6133,6 +6311,18 @@ int main(int argc, char** argv) {
         }
         if (command == "formbin-xml-coverage" && argc == 3) {
             print_formbin_xml_coverage(argv[2]);
+            return 0;
+        }
+        if (command == "formbin-platform-object" && argc == 3) {
+            print_formbin_platform_object(argv[2]);
+            return 0;
+        }
+        if (command == "formbin-platform-object-get" && argc == 5) {
+            print_formbin_platform_object_get(argv[2], argv[3], argv[4]);
+            return 0;
+        }
+        if (command == "formbin-platform-object-set" && argc == 7) {
+            write_formbin_platform_object_set(argv[2], argv[3], argv[4], argv[5], argv[6]);
             return 0;
         }
         if (command == "runtime-form-dump-xml" && argc == 4) {
