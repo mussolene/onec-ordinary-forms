@@ -5525,14 +5525,21 @@ void write_runtime_platform_object_set(
 void print_platform_property_registry() {
     std::map<std::string, std::size_t> codec_counts;
     std::size_t writable = 0;
+    const auto& base_descriptors = oof::platform::property_registry::descriptors;
+    const auto& generated_descriptors = oof::platform::property_registry::generated_api_descriptors();
+    const std::size_t descriptor_count = base_descriptors.size() + generated_descriptors.size();
     std::cout << "{\"source\":\"PlatformPropertyDescriptorRegistry\"";
-    std::cout << ",\"descriptorCount\":" << oof::platform::property_registry::descriptors.size();
+    std::cout << ",\"descriptorCount\":" << descriptor_count;
+    std::cout << ",\"baseDescriptorCount\":" << base_descriptors.size();
+    std::cout << ",\"generatedApiDescriptorCount\":" << generated_descriptors.size();
     std::cout << ",\"descriptors\":[";
-    for (std::size_t index = 0; index < oof::platform::property_registry::descriptors.size(); ++index) {
-        if (index != 0) {
+    std::size_t printed = 0;
+    const auto print_descriptor = [&](const oof::platform::property_registry::PlatformPropertyDescriptor& descriptor,
+                                      std::string_view origin) {
+        if (printed != 0) {
             std::cout << ",";
         }
-        const auto& descriptor = oof::platform::property_registry::descriptors[index];
+        ++printed;
         const std::string codec(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec));
         codec_counts[codec] += 1;
         if (descriptor.writable) {
@@ -5552,7 +5559,15 @@ void print_platform_property_registry() {
         std::cout << ",\"writable\":" << (descriptor.writable ? "true" : "false");
         std::cout << ",\"source\":";
         print_json_string(descriptor.source);
+        std::cout << ",\"origin\":";
+        print_json_string(origin);
         std::cout << "}";
+    };
+    for (const auto& descriptor : base_descriptors) {
+        print_descriptor(descriptor, "static-platform-descriptor");
+    }
+    for (const auto& descriptor : generated_descriptors) {
+        print_descriptor(descriptor, "generated-platform-api-catalog");
     }
     std::cout << "],\"writableCount\":" << writable;
     std::cout << ",\"slotCodecCounts\":[";

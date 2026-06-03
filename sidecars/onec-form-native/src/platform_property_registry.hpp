@@ -1,7 +1,11 @@
 #pragma once
 
 #include <array>
+#include <string>
 #include <string_view>
+#include <vector>
+
+#include "platform_runtime_binding.hpp"
 
 namespace oof::platform::property_registry {
 
@@ -103,13 +107,128 @@ inline constexpr std::string_view slot_codec_name(SlotCodec codec) {
     return "unknown";
 }
 
+inline const std::vector<PlatformPropertyDescriptor>& generated_api_descriptors();
+
 inline const PlatformPropertyDescriptor* find_descriptor(std::string_view property_name) {
     for (const auto& descriptor : descriptors) {
         if (descriptor.name == property_name || descriptor.localized_name == property_name) {
             return &descriptor;
         }
     }
+    for (const auto& descriptor : generated_api_descriptors()) {
+        if (descriptor.name == property_name || descriptor.localized_name == property_name) {
+            return &descriptor;
+        }
+    }
     return nullptr;
+}
+
+inline std::vector<std::string> split_descriptor_csv(std::string_view value) {
+    std::vector<std::string> out;
+    while (!value.empty()) {
+        const std::size_t comma = value.find(',');
+        std::string_view item = value.substr(0, comma);
+        while (!item.empty() && item.front() == ' ') {
+            item.remove_prefix(1);
+        }
+        while (!item.empty() && item.back() == ' ') {
+            item.remove_suffix(1);
+        }
+        if (!item.empty()) {
+            out.emplace_back(item);
+        }
+        if (comma == std::string_view::npos) {
+            break;
+        }
+        value.remove_prefix(comma + 1);
+    }
+    return out;
+}
+
+inline const PlatformPropertyDescriptor* find_base_descriptor(std::string_view property_name) {
+    for (const auto& descriptor : descriptors) {
+        if (descriptor.name == property_name || descriptor.localized_name == property_name) {
+            return &descriptor;
+        }
+    }
+    return nullptr;
+}
+
+inline bool generated_descriptor_exists(
+    const std::vector<PlatformPropertyDescriptor>& generated,
+    std::string_view property_name
+) {
+    for (const auto& descriptor : generated) {
+        if (descriptor.name == property_name || descriptor.localized_name == property_name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline std::string_view inferred_api_value_type(std::string_view name) {
+    if (name == "CaptionPicture" || name == "TitlePicture" ||
+        name.find("Picture") != std::string_view::npos) {
+        return "Picture";
+    }
+    if (name.find("Font") != std::string_view::npos) {
+        return "Font";
+    }
+    if (name.find("Color") != std::string_view::npos) {
+        return "Color";
+    }
+    if (name == "AllowClose" || name == "AutoTitle" || name == "ChoiceMode" ||
+        name == "CloseOnChoice" || name == "ReadOnly" || name == "ShowTabs" ||
+        name.find("Enabled") != std::string_view::npos ||
+        name.find("Visible") != std::string_view::npos ||
+        name.find("Allow") != std::string_view::npos ||
+        name.rfind("Auto", 0) == 0 ||
+        name.rfind("Show", 0) == 0) {
+        return "Boolean";
+    }
+    if (name == "ToolTip" || name == "Shortcut" || name == "Format" ||
+        name.find("Title") != std::string_view::npos ||
+        name.find("Caption") != std::string_view::npos) {
+        return "String";
+    }
+    return "PlatformApiValue";
+}
+
+inline std::vector<std::string>& generated_api_descriptor_name_storage() {
+    static std::vector<std::string> storage;
+    return storage;
+}
+
+inline const std::vector<PlatformPropertyDescriptor>& generated_api_descriptors() {
+    static const std::vector<PlatformPropertyDescriptor> generated = [] {
+        auto& names = generated_api_descriptor_name_storage();
+        names.clear();
+        names.reserve(256);
+
+        std::vector<PlatformPropertyDescriptor> out;
+        out.reserve(256);
+        for (const auto& api : runtime_binding::api_objects) {
+            for (const auto& property_name : split_descriptor_csv(api.sample_properties)) {
+                if (find_base_descriptor(property_name) != nullptr ||
+                    generated_descriptor_exists(out, property_name)) {
+                    continue;
+                }
+                names.push_back(property_name);
+                out.push_back({
+                    names.back(),
+                    "",
+                    inferred_api_value_type(names.back()),
+                    SlotCodec::none,
+                    "",
+                    true,
+                    false,
+                    api.api_source,
+                });
+            }
+        }
+        return out;
+    }();
+    return generated;
 }
 
 inline bool can_set_with_current_codec(const PlatformPropertyDescriptor& descriptor) {
