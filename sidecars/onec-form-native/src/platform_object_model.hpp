@@ -183,6 +183,21 @@ struct PlatformFormObject {
                 return &object;
             }
         }
+        for (const auto& object : attributes.objects()) {
+            if (object.object_id == object_id) {
+                return &object;
+            }
+        }
+        for (const auto& object : commands.objects()) {
+            if (object.object_id == object_id) {
+                return &object;
+            }
+        }
+        for (const auto& object : events.objects()) {
+            if (object.object_id == object_id) {
+                return &object;
+            }
+        }
         return nullptr;
     }
 
@@ -191,6 +206,21 @@ struct PlatformFormObject {
             return &form;
         }
         for (auto& object : items.mutable_objects()) {
+            if (object.object_id == object_id) {
+                return &object;
+            }
+        }
+        for (auto& object : attributes.mutable_objects()) {
+            if (object.object_id == object_id) {
+                return &object;
+            }
+        }
+        for (auto& object : commands.mutable_objects()) {
+            if (object.object_id == object_id) {
+                return &object;
+            }
+        }
+        for (auto& object : events.mutable_objects()) {
             if (object.object_id == object_id) {
                 return &object;
             }

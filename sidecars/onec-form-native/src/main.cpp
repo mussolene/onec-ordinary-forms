@@ -1045,6 +1045,15 @@ struct MaterializedFormItem {
     const oof::platform::form_descriptor::DescriptorSchemaBinding* descriptor_binding = nullptr;
 };
 
+struct MaterializedFormAttribute {
+    std::string object_id;
+    std::string name;
+    std::string main;
+    std::string stored_data;
+    std::string type_pattern;
+    std::string path;
+};
+
 void collect_form_payload_structure(
     const oof::platform::stream::ListValue& value,
     std::string_view path,
@@ -1471,6 +1480,45 @@ void collect_materialized_form_items(
     }
 }
 
+std::vector<MaterializedFormAttribute> collect_materialized_form_attributes(
+    const oof::platform::stream::ListValue& payload
+) {
+    std::vector<MaterializedFormAttribute> attributes;
+    if (!payload.is_list || payload.items.size() <= 2 || !payload.items[2].is_list) {
+        return attributes;
+    }
+
+    // Platform logform.xsd Form sequence: elements, command*, property*.
+    // In the runtime payload the property collection is the root slot that
+    // contains the counted TypeDomainPattern/name records for form attributes.
+    const auto& property_block = payload.items[2];
+    if (property_block.items.size() < 3 || !property_block.items[2].is_list) {
+        return attributes;
+    }
+    const auto& counted_properties = property_block.items[2];
+    if (counted_properties.items.empty() || counted_properties.items[0].is_list) {
+        return attributes;
+    }
+    for (std::size_t index = 1; index < counted_properties.items.size(); ++index) {
+        const auto& record = counted_properties.items[index];
+        if (!record.is_list || record.items.size() < 5 || !record.items[0].is_list) {
+            continue;
+        }
+
+        MaterializedFormAttribute attribute;
+        attribute.object_id = "attribute:" + oof::platform::stream::dump_compact(record.items[0]);
+        attribute.path = "$/2/2/" + std::to_string(index);
+        attribute.main = record.items.size() > 1 && !record.items[1].is_list ? record.items[1].atom : "";
+        attribute.stored_data = record.items.size() > 2 && !record.items[2].is_list ? record.items[2].atom : "";
+        attribute.name = record.items.size() > 4 && !record.items[4].is_list ? record.items[4].atom : "";
+        if (record.items.size() > 5) {
+            attribute.type_pattern = oof::platform::stream::dump_compact(record.items[5]);
+        }
+        attributes.push_back(std::move(attribute));
+    }
+    return attributes;
+}
+
 void print_form_payload_structure_json(
     const std::vector<std::uint8_t>& form_payload,
     std::string_view source_label
@@ -1788,6 +1836,7 @@ std::string dump_runtime_form_envelope(const RuntimeFormEnvelope& envelope) {
 
 struct MaterializedGraphSummary {
     std::vector<MaterializedFormItem> items;
+    std::vector<MaterializedFormAttribute> attributes;
     std::size_t guid_head_nodes = 0;
     std::size_t nested_unbound_guid_nodes = 0;
     std::size_t named_items = 0;
@@ -1807,6 +1856,7 @@ MaterializedGraphSummary summarize_materialized_graph(const oof::platform::strea
         summary.items,
         summary.guid_head_nodes,
         summary.nested_unbound_guid_nodes);
+    summary.attributes = collect_materialized_form_attributes(payload);
 
     for (const auto& item : summary.items) {
         ++summary.status_frequency[item.descriptor_binding->status];
@@ -1955,6 +2005,21 @@ oof::platform::object_model::PlatformObjectProperty make_described_property(
         std::string(oof::platform::property_registry::slot_codec_name(descriptor->slot_codec)));
 }
 
+oof::platform::object_model::PlatformObjectProperty make_platform_object_property(
+    std::string name,
+    std::string localized_name,
+    std::string value,
+    std::string value_type,
+    std::string source
+) {
+    return oof::platform::object_model::make_property(
+        std::move(name),
+        std::move(localized_name),
+        std::move(value),
+        std::move(source),
+        std::move(value_type));
+}
+
 oof::platform::object_model::PlatformObjectCollectionDescriptor make_described_collection(
     std::string_view name,
     std::size_t count
@@ -2023,14 +2088,37 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
     form_object.form.properties.push_back(make_described_property("Type", "Form"));
     form_object.form.properties.push_back(make_described_property("RuntimeUUID", envelope.runtime_uuid));
     form_object.form.properties.push_back(make_described_property("Items", std::to_string(summary.items.size())));
-    form_object.form.properties.push_back(make_described_property("Attributes", "0"));
+    form_object.form.properties.push_back(make_described_property("Attributes", std::to_string(summary.attributes.size())));
     form_object.form.properties.push_back(make_described_property("Commands", "0"));
     form_object.form.properties.push_back(make_described_property("Events", "0"));
     form_object.form.collections.push_back(make_described_collection("Items", summary.items.size()));
-    form_object.form.collections.push_back(make_described_collection("Attributes", 0));
+    form_object.form.collections.push_back(make_described_collection("Attributes", summary.attributes.size()));
     form_object.form.collections.push_back(make_described_collection("Commands", 0));
     form_object.form.collections.push_back(make_described_collection("Events", 0));
     add_api_surface(form_object.form, api_object_for_type("Form"));
+
+    for (const auto& attribute : summary.attributes) {
+        oof::platform::object_model::PlatformObject object;
+        object.object_id = attribute.object_id;
+        object.name = attribute.name;
+        object.platform_type = "FormAttribute";
+        object.type_category = "core::kLogFormTypeInfoCategory";
+        object.type_source = "mngcore logform.xsd Property + runtime property block";
+        object.path = attribute.path;
+        object.parent_object_id = "0";
+        object.properties.push_back(make_platform_object_property(
+            "ID", "Идентификатор", attribute.object_id, "CompositeID", "logform.xsd:Property@id"));
+        object.properties.push_back(make_platform_object_property(
+            "Name", "Имя", attribute.name, "String", "runtime property block"));
+        object.properties.push_back(make_platform_object_property(
+            "Main", "Основной", attribute.main, "Boolean", "logform.xsd:Property@main"));
+        object.properties.push_back(make_platform_object_property(
+            "StoredData", "СохраняемыеДанные", attribute.stored_data, "Boolean", "logform.xsd:Property@storedData"));
+        object.properties.push_back(make_platform_object_property(
+            "Type", "Тип", attribute.type_pattern, "TypeDomainPattern", "runtime property block TypeDomainPattern"));
+        add_api_surface(object, api_object_for_type("FormAttribute"));
+        form_object.attributes.add(std::move(object));
+    }
 
     for (const auto& item : summary.items) {
         oof::platform::object_model::PlatformObject object;
@@ -2185,9 +2273,28 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
 }
 
 void print_platform_object_collection_json(
-    const oof::platform::object_model::PlatformObjectCollection& collection
+    const oof::platform::object_model::PlatformObjectCollection& collection,
+    const oof::platform::object_model::PlatformObjectCollectionDescriptor* descriptor = nullptr
 ) {
-    std::cout << "{\"count\":" << collection.count();
+    std::cout << "{";
+    if (descriptor != nullptr) {
+        std::cout << "\"name\":";
+        print_json_string(descriptor->name);
+        std::cout << ",\"localizedName\":";
+        print_json_string(descriptor->localized_name);
+        std::cout << ",\"valueType\":";
+        print_json_string(descriptor->value_type);
+        std::cout << ",\"source\":";
+        print_json_string(descriptor->source);
+        std::cout << ",\"slotBinding\":";
+        print_json_string(descriptor->slot_binding);
+        std::cout << ",\"slotCodec\":";
+        print_json_string(descriptor->slot_codec);
+        std::cout << ",\"readable\":" << (descriptor->readable ? "true" : "false");
+        std::cout << ",\"writable\":" << (descriptor->writable ? "true" : "false");
+        std::cout << ",";
+    }
+    std::cout << "\"count\":" << collection.count();
     std::cout << ",\"methods\":[\"Count\",\"Find\",\"Get\",\"IndexOf\"]";
     std::cout << ",\"objects\":[";
     for (std::size_t index = 0; index < collection.count(); ++index) {
@@ -2232,11 +2339,17 @@ void print_runtime_platform_object(const std::string& path) {
     }
     std::cout << "]}";
     std::cout << ",\"attributes\":";
-    print_platform_object_collection_json(form_object.collection("Attributes"));
+    print_platform_object_collection_json(
+        form_object.collection("Attributes"),
+        form_object.form.collection_descriptor("Attributes"));
     std::cout << ",\"commands\":";
-    print_platform_object_collection_json(form_object.collection("Commands"));
+    print_platform_object_collection_json(
+        form_object.collection("Commands"),
+        form_object.form.collection_descriptor("Commands"));
     std::cout << ",\"events\":";
-    print_platform_object_collection_json(form_object.collection("Events"));
+    print_platform_object_collection_json(
+        form_object.collection("Events"),
+        form_object.form.collection_descriptor("Events"));
     std::cout << "}\n";
 }
 
