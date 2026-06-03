@@ -34,6 +34,13 @@ struct PlatformObjectProperty {
     bool writable = false;
 };
 
+inline bool is_value_object_property(const PlatformObjectProperty& property) {
+    return property.value_object_class == "Picture" ||
+           property.value_object_class == "Color" ||
+           property.value_object_class == "Font" ||
+           property.value_object_class == "Border";
+}
+
 struct PlatformObjectMethod {
     std::string name;
     std::string localized_name;
@@ -115,6 +122,9 @@ struct PlatformObject {
             throw std::runtime_error("platform object property is not writable: " + std::string(property_name));
         }
         prop->value = std::move(value);
+        if (is_value_object_property(*prop)) {
+            prop->value_origin = "object-edit";
+        }
     }
 
     bool has_method(std::string_view method_name) const {

@@ -2448,6 +2448,9 @@ std::string platform_value_object_evidence(std::string_view object_class) {
     if (object_class == "Font") {
         return "xdto_root.res:data_ui.xsd Font + core::Font::serialize/deserialize";
     }
+    if (object_class == "Border") {
+        return "xdto_root.res:data_ui.xsd Border + core::V8Border::serialize/deserialize";
+    }
     return {};
 }
 
@@ -2502,6 +2505,19 @@ void project_platform_value_object(
             property.value_object_schema_value = property.value;
         }
         property.value_object_list_stream = font.serialize_list_stream();
+        return;
+    }
+
+    if (property.value_object_class == "Border") {
+        oof::platform::value::V8Border border;
+        if (property.value == "Single") {
+            border.style = oof::platform::value::BorderType::single;
+            border.width = 1;
+            property.value_object_schema_value = "Single";
+        } else {
+            property.value_object_schema_value = "WithoutBorder";
+        }
+        property.value_object_list_stream = border.serialize_list_stream();
     }
 }
 
@@ -2517,6 +2533,9 @@ void enrich_platform_value_object(
     } else if (property_value_type_is(property.value_type, "Font")) {
         property.value_object_class = "Font";
         property.value_object_constructor = "New Font";
+    } else if (property_value_type_is(property.value_type, "Border")) {
+        property.value_object_class = "Border";
+        property.value_object_constructor = "New Border";
     }
     if (!property.value_object_class.empty()) {
         property.value_object_storage = platform_value_object_storage(
@@ -3446,7 +3465,7 @@ std::vector<XmlElementSlice> find_xml_elements(std::string_view text, std::strin
 }
 
 std::string public_value_object_xml_literal(std::string_view property_body) {
-    for (const std::string& value_tag : {"PictureValue", "ColorValue", "FontValue"}) {
+    for (const std::string& value_tag : {"PictureValue", "ColorValue", "FontValue", "BorderValue"}) {
         for (const auto& value_xml : find_xml_elements(property_body, value_tag)) {
             if (!value_xml.self_closing) {
                 return xml_unescape(value_xml.body);

@@ -405,6 +405,13 @@ inline std::string codec_status_for_schema_value_type(std::string_view value_typ
     return "pending-info8-codec";
 }
 
+inline bool writable_for_schema_value_type(std::string_view value_type) {
+    return value_type == "ui:Picture" ||
+           value_type == "ui:Color" ||
+           value_type == "ui:Font" ||
+           value_type == "ui:Border";
+}
+
 inline const runtime_binding::PlatformApiObject* api_object_by_name(std::string_view name) {
     for (const auto& object : runtime_binding::api_objects) {
         if (object.name == name) {
@@ -462,7 +469,7 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
             slot_binding_for_schema_member(member, value_type),
             slot_codec,
             codec_status_for_schema_value_type(value_type),
-            false,
+            writable_for_schema_value_type(value_type),
             std::string(control.schema_source) + ":" + std::string(control.type_name) + "/" + member,
         });
     }
