@@ -2319,6 +2319,44 @@ void add_api_surface(
     }
 }
 
+void add_platform_object_schema_surface(
+    oof::platform::object_model::PlatformObject& object,
+    const oof::platform::object_schema::PlatformObjectSchema& schema
+) {
+    for (const auto& member : schema.xsd_members) {
+        if (object.property(member.name) == nullptr) {
+            object.properties.push_back(make_platform_object_property(
+                member.name,
+                localized_property_name(member.name),
+                "",
+                member.value_type,
+                member.source));
+        }
+    }
+    for (const auto& name : schema.api_properties) {
+        if (object.property(name) == nullptr) {
+            object.properties.push_back(make_described_property(name, ""));
+        }
+    }
+    for (const auto& name : schema.api_methods) {
+        if (!object.has_method(name)) {
+            object.methods.push_back(oof::platform::object_model::make_method(name));
+        }
+    }
+    for (const auto& name : schema.api_events) {
+        bool exists = false;
+        for (const auto& event : object.events) {
+            if (event.name == name || event.localized_name == name) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            object.events.push_back(oof::platform::object_model::make_event(name));
+        }
+    }
+}
+
 const oof::platform::runtime_binding::PlatformApiObject* api_object_for_type(std::string_view type_name) {
     for (const auto& api : oof::platform::runtime_binding::api_objects) {
         if (api.name == type_name) {
@@ -2480,7 +2518,13 @@ private:
                     object.properties.push_back(make_described_property("DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value)));
                 }
             }
-            add_api_surface(object, api_object_for_type(object.platform_type));
+            if (const auto* schema = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
+                add_platform_object_schema_surface(
+                    object,
+                    oof::platform::object_schema::build_schema_for_control(*schema));
+            } else {
+                add_api_surface(object, api_object_for_type(object.platform_type));
+            }
             form_object.items.add(std::move(object));
         }
     }
@@ -3228,6 +3272,14 @@ std::string object_property_value(
     return {};
 }
 
+bool has_non_empty_property(
+    const oof::platform::object_model::PlatformObject& object,
+    std::string_view name
+) {
+    const auto* property = find_object_property(object, name);
+    return property != nullptr && !property->value.empty();
+}
+
 void append_named_text_property_xml(
     std::string& out,
     const oof::platform::object_model::PlatformObject& object,
@@ -3660,9 +3712,9 @@ void append_control_xml(
     }
     const auto object_events = event_objects_for_parent(form_object, object.object_id);
     if (object.children.empty() &&
-        find_object_property(object, "Title") == nullptr &&
-        find_object_property(object, "Visible") == nullptr &&
-        find_object_property(object, "Enabled") == nullptr &&
+        !has_non_empty_property(object, "Title") &&
+        !has_non_empty_property(object, "Visible") &&
+        !has_non_empty_property(object, "Enabled") &&
         !has_position_properties(object) &&
         object_events.empty()) {
         out += "/>\n";
