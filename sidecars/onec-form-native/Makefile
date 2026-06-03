@@ -157,7 +157,7 @@ test: $(BIN)
 	grep -F -q '<Binding coordinate="left" value="21"/>' $(BUILD_DIR)/runtime-platform-binding-set.xml
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:PlatformObject"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"contextContract":{"platformEvidence":"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call; mngcore logform.xsd declares Form/elements/command/property'
-	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"implementedWritableSlotCodecs":["name-record","position-record","binding-record"]'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"implementedWritableSlotCodecs":["name-record","position-record","binding-record","attribute-record","command-record","event-action-record"]'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"collections":[{"name":"Items"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"name":"Attributes","localizedName":"Реквизиты"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"platformType":"Form"'
@@ -185,6 +185,13 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-attributes-selftest.txt | grep -F -q '"platformType":"FormAttribute"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-attributes-selftest.txt 'attribute:{1}' Name | grep -F -q '"value":"Attr1"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-attributes-selftest.txt 'attribute:{1}' Type | grep -F -q '"value":"{\"Pattern\",{\"#\",7861785a-a6a1-485c-94c1-5f4a4e882abe}}"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-attributes-selftest.txt $(BUILD_DIR)/runtime-form-attributes.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	grep -F -q '<Attributes>' $(BUILD_DIR)/runtime-form-attributes.xml
+	grep -F -q '<Attribute name="Attr1" id="{1}" objectId="attribute:{1}" main="0" storedData="1">' $(BUILD_DIR)/runtime-form-attributes.xml
+	cp $(BUILD_DIR)/runtime-form-attributes.xml $(BUILD_DIR)/runtime-form-attributes-edited.xml
+	perl -0pi -e 's/name="Attr1"/name="AttrXmlEdited"/' $(BUILD_DIR)/runtime-form-attributes-edited.xml
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-attributes-selftest.txt $(BUILD_DIR)/runtime-form-attributes-edited.xml $(BUILD_DIR)/runtime-form-attributes-edited.txt | grep -F -q '"attributeEdits":1'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-attributes-edited.txt 'attribute:{1}' Name | grep -F -q '"value":"AttrXmlEdited"'
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18},{command,{9},"RunCommand","RunCommandHandler",1},{{1},17,{1,{{1},0,1,1,"AttrAfterCommand",{"Pattern",{"#",7861785a-a6a1-485c-94c1-5f4a4e882abe}}}},{0}}}}' > $(BUILD_DIR)/runtime-form-command-selftest.txt
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-command-selftest.txt | grep -F -q '"commands":{"name":"Commands","localizedName":"Команды","valueType":"FormCommands"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-command-selftest.txt | grep -F -q '"platformType":"FormCommand"'
@@ -192,6 +199,14 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}' Handler | grep -F -q '"value":"RunCommandHandler"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}' ModifiesData | grep -F -q '"value":"1"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'attribute:{1}' Name | grep -F -q '"value":"AttrAfterCommand"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-command-selftest.txt $(BUILD_DIR)/runtime-form-command.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	grep -F -q '<Command id="{9}" name="RunCommand" handler="RunCommandHandler" modifiesData="1" objectId="command:{9}"/>' $(BUILD_DIR)/runtime-form-command.xml
+	cp $(BUILD_DIR)/runtime-form-command.xml $(BUILD_DIR)/runtime-form-command-edited.xml
+	perl -0pi -e 's/name="RunCommand"/name="RunCommandXml"/; s/handler="RunCommandHandler"/handler="RunCommandHandlerXml"/; s/modifiesData="1"/modifiesData="0"/' $(BUILD_DIR)/runtime-form-command-edited.xml
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-command-selftest.txt $(BUILD_DIR)/runtime-form-command-edited.xml $(BUILD_DIR)/runtime-form-command-edited.txt | grep -F -q '"commandEdits":3'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-edited.txt 'command:{9}' Name | grep -F -q '"value":"RunCommandXml"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-edited.txt 'command:{9}' Handler | grep -F -q '"value":"RunCommandHandlerXml"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-edited.txt 'command:{9}' ModifiesData | grep -F -q '"value":"0"'
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,"ButtonWithEvent",4294967295,0,0,0},{event,0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c,"ButtonWithEventClick"},{},{}}}}}' > $(BUILD_DIR)/runtime-form-event-selftest.txt
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"events":{"name":"Events","localizedName":"События","valueType":"FormEvents"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"platformType":"FormEvent"'
@@ -199,6 +214,13 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"value":"1","source":"mngcore logform.xsd Event"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c' Handler | grep -F -q '"value":"ButtonWithEventClick"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c' Parent | grep -F -q '"value":"5"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-event-selftest.txt $(BUILD_DIR)/runtime-form-event.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	grep -F -q '<Events>' $(BUILD_DIR)/runtime-form-event.xml
+	grep -F -q '<Event id="0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c" handler="ButtonWithEventClick" objectId="event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c" ownerId="5"/>' $(BUILD_DIR)/runtime-form-event.xml
+	cp $(BUILD_DIR)/runtime-form-event.xml $(BUILD_DIR)/runtime-form-event-edited.xml
+	perl -0pi -e 's/handler="ButtonWithEventClick"/handler="ButtonWithEventClickXml"/' $(BUILD_DIR)/runtime-form-event-edited.xml
+	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-event-selftest.txt $(BUILD_DIR)/runtime-form-event-edited.xml $(BUILD_DIR)/runtime-form-event-edited.txt | grep -F -q '"eventEdits":1'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-edited.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c' Handler | grep -F -q '"value":"ButtonWithEventClickXml"'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"canonicalRoundtripEqual":true'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"payloadRoundtripEqual":true'
 	$(BIN) runtime-form-rebuild $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form-rebuilt.txt | grep -F -q '"schemaBackedItems":2'

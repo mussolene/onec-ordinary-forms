@@ -1056,6 +1056,7 @@ struct MaterializedFormItem {
 
 struct MaterializedFormAttribute {
     std::string object_id;
+    std::string id;
     std::string name;
     std::string main;
     std::string stored_data;
@@ -1578,6 +1579,25 @@ const oof::platform::stream::ListValue* find_materialized_form_property_block(
     return nullptr;
 }
 
+oof::platform::stream::ListValue* find_materialized_form_property_block_mut(
+    oof::platform::stream::ListValue& payload,
+    std::size_t* root_index = nullptr
+) {
+    if (!payload.is_list || payload.items.size() <= 2) {
+        return nullptr;
+    }
+    for (std::size_t index = 2; index < payload.items.size(); ++index) {
+        auto& candidate = payload.items[index];
+        if (is_materialized_form_property_block(candidate)) {
+            if (root_index != nullptr) {
+                *root_index = index;
+            }
+            return &candidate;
+        }
+    }
+    return nullptr;
+}
+
 std::vector<MaterializedFormAttribute> collect_materialized_form_attributes(
     const oof::platform::stream::ListValue& payload
 ) {
@@ -1595,7 +1615,8 @@ std::vector<MaterializedFormAttribute> collect_materialized_form_attributes(
         }
 
         MaterializedFormAttribute attribute;
-        attribute.object_id = "attribute:" + oof::platform::stream::dump_compact(record.items[0]);
+        attribute.id = oof::platform::stream::dump_compact(record.items[0]);
+        attribute.object_id = "attribute:" + attribute.id;
         attribute.path = "$/" + std::to_string(property_root_index) + "/2/" + std::to_string(index);
         attribute.main = record.items.size() > 1 && !record.items[1].is_list ? record.items[1].atom : "";
         attribute.stored_data = record.items.size() > 2 && !record.items[2].is_list ? record.items[2].atom : "";
@@ -2325,7 +2346,7 @@ private:
             object.path = attribute.path;
             object.parent_object_id = "0";
             object.properties.push_back(make_platform_object_property(
-                "ID", "Идентификатор", attribute.object_id, "CompositeID", "logform.xsd:Property@id"));
+                "ID", "Идентификатор", attribute.id, "CompositeID", "logform.xsd:Property@id"));
             object.properties.push_back(make_platform_object_property(
                 "Name", "Имя", attribute.name, "String", "runtime property block"));
             object.properties.push_back(make_platform_object_property(
@@ -2604,7 +2625,7 @@ void print_runtime_platform_object(const std::string& path) {
     std::cout << "{\"source\":\"RuntimeForm:PlatformObject\"";
     std::cout << ",\"runtimeUuid\":";
     print_json_string(envelope.runtime_uuid);
-    std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call; mngcore logform.xsd declares Form/elements/command/property and element event/commands/autoCommandBar; cmi.xsd declares CommandInfo/Command/HandlerInfo\",\"model\":\"typeDescriptor + property/method/event/collection descriptors + slot-backed values\",\"descriptorRegistry\":\"PlatformPropertyDescriptor + PropertySlotBinding\",\"implementedWritableSlotCodecs\":[\"name-record\",\"position-record\",\"binding-record\"]}";
+    std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call; mngcore logform.xsd declares Form/elements/command/property and element event/commands/autoCommandBar; cmi.xsd declares CommandInfo/Command/HandlerInfo\",\"model\":\"typeDescriptor + property/method/event/collection descriptors + slot-backed values\",\"descriptorRegistry\":\"PlatformPropertyDescriptor + PropertySlotBinding\",\"implementedWritableSlotCodecs\":[\"name-record\",\"position-record\",\"binding-record\",\"attribute-record\",\"command-record\",\"event-action-record\"]}";
     std::cout << ",\"form\":";
     print_platform_object_json(form_object.form);
     std::cout << ",\"items\":{\"count\":" << form_object.collection("Items").count();
@@ -2789,6 +2810,9 @@ struct PublicXmlApplyResult {
     std::size_t position_edits = 0;
     std::size_t binding_edits = 0;
     std::size_t dimension_binding_edits = 0;
+    std::size_t attribute_edits = 0;
+    std::size_t command_edits = 0;
+    std::size_t event_edits = 0;
 };
 
 PublicXmlApplyResult apply_public_xml_edits(
@@ -2798,6 +2822,14 @@ PublicXmlApplyResult apply_public_xml_edits(
 
 oof::platform::object_model::PlatformFormObjectEdit public_xml_edits_to_platform_object_edits(
     const std::vector<PublicXmlControlEdit>& edits
+);
+
+oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_collection_edits(
+    const std::string& xml
+);
+
+oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_platform_object_edits(
+    const std::string& xml
 );
 
 PublicXmlApplyResult apply_platform_object_edits(
@@ -2811,6 +2843,8 @@ bool set_property_slot_value(
     const oof::platform::property_registry::PlatformPropertyDescriptor& descriptor,
     std::string_view new_value
 );
+
+bool string_view_starts_with(std::string_view value, std::string_view prefix);
 
 const oof::platform::property_registry::PlatformPropertyDescriptor& require_property_descriptor(
     std::string_view property_name
@@ -3041,6 +3075,58 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
     return edits;
 }
 
+oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_collection_edits(
+    const std::string& xml
+) {
+    oof::platform::object_model::PlatformFormObjectEdit edits;
+
+    for (const auto& attribute_xml : find_xml_elements(xml, "Attribute")) {
+        const std::string object_id = xml_attr_value(attribute_xml.attrs, "objectId");
+        if (object_id.empty()) {
+            continue;
+        }
+        auto& object = edits.object(object_id, "FormAttribute");
+        const std::string name = xml_attr_value(attribute_xml.attrs, "name");
+        if (!name.empty()) {
+            object.set_property("Name", name);
+        }
+    }
+
+    for (const auto& command_xml : find_xml_elements(xml, "Command")) {
+        const std::string object_id = xml_attr_value(command_xml.attrs, "objectId");
+        if (object_id.empty()) {
+            continue;
+        }
+        auto& object = edits.object(object_id, "FormCommand");
+        const std::string name = xml_attr_value(command_xml.attrs, "name");
+        if (!name.empty()) {
+            object.set_property("Name", name);
+        }
+        const std::string handler = xml_attr_value(command_xml.attrs, "handler");
+        if (!handler.empty()) {
+            object.set_property("Handler", handler);
+        }
+        const std::string modifies_data = xml_attr_value(command_xml.attrs, "modifiesData");
+        if (!modifies_data.empty()) {
+            object.set_property("ModifiesData", modifies_data);
+        }
+    }
+
+    for (const auto& event_xml : find_xml_elements(xml, "Event")) {
+        const std::string object_id = xml_attr_value(event_xml.attrs, "objectId");
+        if (object_id.empty()) {
+            continue;
+        }
+        auto& object = edits.object(object_id, "FormEvent");
+        const std::string handler = xml_attr_value(event_xml.attrs, "handler");
+        if (!handler.empty()) {
+            object.set_property("Handler", handler);
+        }
+    }
+
+    return edits;
+}
+
 void append_indent(std::string& out, int indent) {
     out.append(static_cast<std::size_t>(indent), ' ');
 }
@@ -3050,6 +3136,16 @@ const oof::platform::object_model::PlatformObjectProperty* find_object_property(
     std::string_view name
 ) {
     return object.property(name);
+}
+
+std::string object_property_value(
+    const oof::platform::object_model::PlatformObject& object,
+    std::string_view name
+) {
+    if (const auto* property = find_object_property(object, name)) {
+        return property->value;
+    }
+    return {};
 }
 
 void append_named_text_property_xml(
@@ -3115,6 +3211,178 @@ std::vector<GeometryBindingRecord> dimension_binding_properties(
         }
     }
     return bindings;
+}
+
+std::vector<const oof::platform::object_model::PlatformObject*> event_objects_for_parent(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view parent_object_id
+) {
+    std::vector<const oof::platform::object_model::PlatformObject*> events;
+    for (const auto& event : form_object.events.objects()) {
+        if (event.parent_object_id == parent_object_id) {
+            events.push_back(&event);
+        }
+    }
+    return events;
+}
+
+void append_event_xml(
+    std::string& out,
+    const oof::platform::object_model::PlatformObject& event,
+    int indent
+) {
+    append_indent(out, indent);
+    out += "<Event";
+    const std::string id = object_property_value(event, "ID");
+    if (!id.empty()) {
+        out += " id=\"";
+        out += xml_escape(id);
+        out += "\"";
+    }
+    const std::string handler = object_property_value(event, "Handler");
+    if (!handler.empty()) {
+        out += " handler=\"";
+        out += xml_escape(handler);
+        out += "\"";
+    }
+    if (!event.object_id.empty()) {
+        out += " objectId=\"";
+        out += xml_escape(event.object_id);
+        out += "\"";
+    }
+    if (!event.parent_object_id.empty()) {
+        out += " ownerId=\"";
+        out += xml_escape(event.parent_object_id);
+        out += "\"";
+    }
+    out += "/>\n";
+}
+
+void append_events_xml(
+    std::string& out,
+    const std::vector<const oof::platform::object_model::PlatformObject*>& events,
+    int indent
+) {
+    append_indent(out, indent);
+    if (events.empty()) {
+        out += "<Events/>\n";
+        return;
+    }
+    out += "<Events>\n";
+    for (const auto* event : events) {
+        append_event_xml(out, *event, indent + 2);
+    }
+    append_indent(out, indent);
+    out += "</Events>\n";
+}
+
+void append_attributes_xml(
+    std::string& out,
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    int indent
+) {
+    append_indent(out, indent);
+    if (form_object.attributes.count() == 0) {
+        out += "<Attributes/>\n";
+        return;
+    }
+    out += "<Attributes>\n";
+    for (const auto& attribute : form_object.attributes.objects()) {
+        append_indent(out, indent + 2);
+        out += "<Attribute";
+        const std::string name = object_property_value(attribute, "Name");
+        if (!name.empty()) {
+            out += " name=\"";
+            out += xml_escape(name);
+            out += "\"";
+        }
+        const std::string id = object_property_value(attribute, "ID");
+        if (!id.empty()) {
+            out += " id=\"";
+            out += xml_escape(id);
+            out += "\"";
+        }
+        if (!attribute.object_id.empty()) {
+            out += " objectId=\"";
+            out += xml_escape(attribute.object_id);
+            out += "\"";
+        }
+        const std::string main = object_property_value(attribute, "Main");
+        if (!main.empty()) {
+            out += " main=\"";
+            out += xml_escape(main);
+            out += "\"";
+        }
+        const std::string stored_data = object_property_value(attribute, "StoredData");
+        if (!stored_data.empty()) {
+            out += " storedData=\"";
+            out += xml_escape(stored_data);
+            out += "\"";
+        }
+        const std::string type = object_property_value(attribute, "Type");
+        if (type.empty()) {
+            out += "/>\n";
+            continue;
+        }
+        out += ">\n";
+        append_indent(out, indent + 4);
+        out += "<Type>";
+        out += xml_escape(type);
+        out += "</Type>\n";
+        append_indent(out, indent + 2);
+        out += "</Attribute>\n";
+    }
+    append_indent(out, indent);
+    out += "</Attributes>\n";
+}
+
+void append_commands_xml(
+    std::string& out,
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    int indent
+) {
+    append_indent(out, indent);
+    if (form_object.commands.count() == 0) {
+        out += "<Commands/>\n";
+        return;
+    }
+    out += "<Commands>\n";
+    for (const auto& command : form_object.commands.objects()) {
+        append_indent(out, indent + 2);
+        out += "<Command";
+        const std::string id = object_property_value(command, "ID");
+        if (!id.empty()) {
+            out += " id=\"";
+            out += xml_escape(id);
+            out += "\"";
+        }
+        const std::string name = object_property_value(command, "Name");
+        if (!name.empty()) {
+            out += " name=\"";
+            out += xml_escape(name);
+            out += "\"";
+        }
+        const std::string handler = object_property_value(command, "Handler");
+        if (!handler.empty()) {
+            out += " handler=\"";
+            out += xml_escape(handler);
+            out += "\"";
+        }
+        const std::string modifies_data = object_property_value(command, "ModifiesData");
+        if (!modifies_data.empty()) {
+            out += " modifiesData=\"";
+            out += xml_escape(modifies_data);
+            out += "\"";
+        }
+        if (!command.object_id.empty()) {
+            out += " objectId=\"";
+            out += xml_escape(command.object_id);
+            out += "\"";
+        }
+        out += "/>\n";
+    }
+    append_indent(out, indent);
+    out += "</Commands>\n";
 }
 
 void append_anchor_xml(
@@ -3310,15 +3578,20 @@ void append_control_xml(
         out += xml_escape(object.object_id);
         out += "\"";
     }
+    const auto object_events = event_objects_for_parent(form_object, object.object_id);
     if (object.children.empty() &&
         find_object_property(object, "Title") == nullptr &&
-        !has_position_properties(object)) {
+        !has_position_properties(object) &&
+        object_events.empty()) {
         out += "/>\n";
         return;
     }
     out += ">\n";
     append_named_text_property_xml(out, object, "Title", indent + 2);
     append_position_xml(out, form_object, object, indent + 2);
+    if (!object_events.empty()) {
+        append_events_xml(out, object_events, indent + 2);
+    }
     if (!object.children.empty()) {
         append_indent(out, indent + 2);
         out += "<ChildItems>\n";
@@ -3338,14 +3611,14 @@ std::string form_object_to_public_xml(const oof::platform::object_model::Platfor
     std::string out;
     out += "<?xml version='1.0' encoding='utf-8'?>\n";
     out += "<Form xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" ordinaryFormVersion=\"2.0-draft\" xsi:noNamespaceSchemaLocation=\"OrdinaryFormV2.xsd\">\n";
-    out += "  <Events/>\n";
+    append_events_xml(out, event_objects_for_parent(form_object, "0"), 2);
     out += "  <ChildItems>\n";
     for (const std::size_t child_index : form_object.form.children) {
         append_control_xml(out, form_object, child_index, 4);
     }
     out += "  </ChildItems>\n";
-    out += "  <Attributes/>\n";
-    out += "  <Commands/>\n";
+    append_attributes_xml(out, form_object, 2);
+    append_commands_xml(out, form_object, 2);
     out += "</Form>\n";
     return out;
 }
@@ -3411,8 +3684,8 @@ void write_runtime_form_from_xml(
 ) {
     std::string canonical_text;
     RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
-    const auto edits = parse_public_xml_control_edits(read_file_text_lossy(xml_path));
-    const auto result = apply_public_xml_edits(envelope, edits);
+    const auto object_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
+    const auto result = apply_platform_object_edits(envelope, object_edits);
     const std::string rebuilt_text = dump_runtime_form_envelope(envelope);
     write_file_bytes(output_path, std::vector<std::uint8_t>(rebuilt_text.begin(), rebuilt_text.end()));
     std::cout << "{\"output\":";
@@ -3425,6 +3698,9 @@ void write_runtime_form_from_xml(
     std::cout << ",\"positionEdits\":" << result.position_edits;
     std::cout << ",\"bindingEdits\":" << result.binding_edits;
     std::cout << ",\"dimensionBindingEdits\":" << result.dimension_binding_edits;
+    std::cout << ",\"attributeEdits\":" << result.attribute_edits;
+    std::cout << ",\"commandEdits\":" << result.command_edits;
+    std::cout << ",\"eventEdits\":" << result.event_edits;
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << "}\n";
 }
@@ -3448,8 +3724,8 @@ void write_formbin_from_xml(
     }
 
     RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(file_it->payload);
-    const auto edits = parse_public_xml_control_edits(read_file_text_lossy(xml_path));
-    const auto result = apply_public_xml_edits(envelope, edits);
+    const auto object_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
+    const auto result = apply_platform_object_edits(envelope, object_edits);
     file_it->payload = encode_form_payload_text(file_it->payload, envelope.payload);
     const auto rebuilt = oof::platform::formbin::serialize_container(container);
     write_file_bytes(output_path, rebuilt);
@@ -3463,6 +3739,9 @@ void write_formbin_from_xml(
     std::cout << ",\"positionEdits\":" << result.position_edits;
     std::cout << ",\"bindingEdits\":" << result.binding_edits;
     std::cout << ",\"dimensionBindingEdits\":" << result.dimension_binding_edits;
+    std::cout << ",\"attributeEdits\":" << result.attribute_edits;
+    std::cout << ",\"commandEdits\":" << result.command_edits;
+    std::cout << ",\"eventEdits\":" << result.event_edits;
     std::cout << ",\"preservedContainerFiles\":" << container.files.size();
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << "}\n";
@@ -3475,11 +3754,11 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
     std::cout << ",\"nativeXmlProjection\":true";
     std::cout << ",\"nativeXmlWriter\":true";
-    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Position\",\"Binding:value\",\"Binding:anchor-list\",\"DimensionBinding:value\",\"DimensionBinding:record\"]";
+    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Position\",\"Binding:value\",\"Binding:anchor-list\",\"DimensionBinding:value\",\"DimensionBinding:record\",\"Attribute.Name\",\"Command.Name\",\"Command.Handler\",\"Command.ModifiesData\",\"Event.Handler\"]";
     std::cout << ",\"materializedItems\":" << summary.items.size();
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
-    std::cout << ",\"missingCodecs\":[\"Attributes record codec\",\"Commands record codec\",\"Events action-table codec\",\"cf_form_controls8 remaining typed payload fields\"]";
+    std::cout << ",\"missingCodecs\":[\"cf_form_controls8 remaining typed payload fields\"]";
     std::cout << "}\n";
 }
 
@@ -3887,6 +4166,133 @@ bool set_materialized_object_dimension_bindings(
     return false;
 }
 
+bool set_materialized_attribute_property(
+    oof::platform::stream::ListValue& payload,
+    std::string_view object_id,
+    std::string_view property_name,
+    std::string_view new_value
+) {
+    constexpr std::string_view prefix = "attribute:";
+    if (object_id.size() <= prefix.size() || object_id.substr(0, prefix.size()) != prefix) {
+        return false;
+    }
+    if (property_name != "Name" && property_name != "Имя") {
+        return false;
+    }
+    const std::string wanted_id(object_id.substr(prefix.size()));
+    auto* property_block = find_materialized_form_property_block_mut(payload);
+    if (property_block == nullptr || property_block->items.size() < 3 || !property_block->items[2].is_list) {
+        return false;
+    }
+    auto& counted_properties = property_block->items[2];
+    for (std::size_t index = 1; index < counted_properties.items.size(); ++index) {
+        auto& record = counted_properties.items[index];
+        if (!record.is_list || record.items.size() <= 4 || !record.items[0].is_list) {
+            continue;
+        }
+        if (oof::platform::stream::dump_compact(record.items[0]) == wanted_id && !record.items[4].is_list) {
+            record.items[4].atom = std::string(new_value);
+            record.items[4].atom_kind = oof::platform::stream::ListValue::AtomKind::string;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool set_materialized_command_property_in_block(
+    oof::platform::stream::ListValue& block,
+    std::string_view wanted_id,
+    std::string_view property_name,
+    std::string_view new_value
+) {
+    if (!block.is_list || is_materialized_form_property_block(block)) {
+        return false;
+    }
+    if (looks_like_materialized_form_command_record(block) ||
+        (block.items.size() >= 4 && (block.items[0].is_list || !block.items[0].atom.empty()))) {
+        if (command_record_id_value(block) == wanted_id) {
+            const bool tagged = looks_like_materialized_form_command_record(block);
+            std::size_t slot = 0;
+            if (property_name == "Name" || property_name == "Имя") {
+                slot = tagged ? 2 : 1;
+            } else if (property_name == "Handler" || property_name == "Обработчик") {
+                slot = tagged ? 3 : 2;
+            } else if (property_name == "ModifiesData" || property_name == "ИзменяетДанные") {
+                slot = tagged ? 4 : 3;
+            }
+            if (slot != 0 && block.items.size() > slot && !block.items[slot].is_list) {
+                block.items[slot].atom = std::string(new_value);
+                block.items[slot].atom_kind = (property_name == "ModifiesData" || property_name == "ИзменяетДанные")
+                    ? oof::platform::stream::ListValue::AtomKind::raw
+                    : oof::platform::stream::ListValue::AtomKind::string;
+                return true;
+            }
+        }
+    }
+    for (auto& item : block.items) {
+        if (set_materialized_command_property_in_block(item, wanted_id, property_name, new_value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool set_materialized_command_property(
+    oof::platform::stream::ListValue& payload,
+    std::string_view object_id,
+    std::string_view property_name,
+    std::string_view new_value
+) {
+    constexpr std::string_view prefix = "command:";
+    if (object_id.size() <= prefix.size() || object_id.substr(0, prefix.size()) != prefix) {
+        return false;
+    }
+    const std::string wanted_id(object_id.substr(prefix.size()));
+    if (!payload.is_list || payload.items.size() <= 2) {
+        return false;
+    }
+    for (std::size_t index = 2; index < payload.items.size(); ++index) {
+        if (set_materialized_command_property_in_block(payload.items[index], wanted_id, property_name, new_value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool set_materialized_event_property(
+    oof::platform::stream::ListValue& value,
+    std::string_view object_id,
+    std::string_view property_name,
+    std::string_view new_value
+) {
+    constexpr std::string_view prefix = "event:";
+    if (object_id.size() <= prefix.size() || object_id.substr(0, prefix.size()) != prefix) {
+        return false;
+    }
+    if (property_name != "Handler" && property_name != "Обработчик") {
+        return false;
+    }
+    if (!value.is_list) {
+        return false;
+    }
+    if (looks_like_materialized_form_event_record(value)) {
+        const std::string event_id = oof::platform::stream::dump_compact(value.items[1]);
+        if (object_id.size() >= prefix.size() + event_id.size() &&
+            object_id.substr(object_id.size() - event_id.size()) == event_id &&
+            !value.items[2].is_list) {
+            value.items[2].atom = std::string(new_value);
+            value.items[2].atom_kind = oof::platform::stream::ListValue::AtomKind::string;
+            return true;
+        }
+    }
+    for (auto& item : value.items) {
+        if (set_materialized_event_property(item, object_id, property_name, new_value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 PublicXmlApplyResult apply_public_xml_edits(
     RuntimeFormEnvelope& envelope,
     const std::vector<PublicXmlControlEdit>& edits
@@ -3922,6 +4328,26 @@ oof::platform::object_model::PlatformFormObjectEdit public_xml_edits_to_platform
     return object_edit;
 }
 
+void merge_platform_form_object_edits(
+    oof::platform::object_model::PlatformFormObjectEdit& target,
+    const oof::platform::object_model::PlatformFormObjectEdit& source
+) {
+    for (const auto& source_object : source.objects) {
+        auto& target_object = target.object(source_object.object_id, source_object.platform_type);
+        for (const auto& property : source_object.properties) {
+            target_object.set_property(property.name, property.value);
+        }
+    }
+}
+
+oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_platform_object_edits(
+    const std::string& xml
+) {
+    auto edits = public_xml_edits_to_platform_object_edits(parse_public_xml_control_edits(xml));
+    merge_platform_form_object_edits(edits, parse_public_xml_collection_edits(xml));
+    return edits;
+}
+
 PublicXmlApplyResult apply_platform_object_edits(
     RuntimeFormEnvelope& envelope,
     const oof::platform::object_model::PlatformFormObjectEdit& object_edit
@@ -3931,8 +4357,37 @@ PublicXmlApplyResult apply_platform_object_edits(
         if (object.properties.empty()) {
             continue;
         }
-        ++result.controls;
+        const bool attribute_object = string_view_starts_with(object.object_id, "attribute:");
+        const bool command_object = string_view_starts_with(object.object_id, "command:");
+        const bool event_object = string_view_starts_with(object.object_id, "event:");
+        if (!attribute_object && !command_object && !event_object) {
+            ++result.controls;
+        }
         for (const auto& property : object.properties) {
+            if (attribute_object) {
+                if (!set_materialized_attribute_property(envelope.payload, object.object_id, property.name, property.value)) {
+                    throw std::runtime_error("FormAttribute property has no writable platform slot: object=" +
+                                             object.object_id + " property=" + property.name);
+                }
+                ++result.attribute_edits;
+                continue;
+            }
+            if (command_object) {
+                if (!set_materialized_command_property(envelope.payload, object.object_id, property.name, property.value)) {
+                    throw std::runtime_error("FormCommand property has no writable platform slot: object=" +
+                                             object.object_id + " property=" + property.name);
+                }
+                ++result.command_edits;
+                continue;
+            }
+            if (event_object) {
+                if (!set_materialized_event_property(envelope.payload, object.object_id, property.name, property.value)) {
+                    throw std::runtime_error("FormEvent property has no writable platform slot: object=" +
+                                             object.object_id + " property=" + property.name);
+                }
+                ++result.event_edits;
+                continue;
+            }
             const auto& descriptor = require_property_descriptor(property.name);
             if (!set_property_slot_value(envelope.payload, object.object_id, descriptor, property.value)) {
                 throw std::runtime_error("PlatformObject property has no writable platform slot: object=" +
