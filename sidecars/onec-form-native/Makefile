@@ -185,6 +185,13 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-attributes-selftest.txt | grep -F -q '"platformType":"FormAttribute"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-attributes-selftest.txt 'attribute:{1}' Name | grep -F -q '"value":"Attr1"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-attributes-selftest.txt 'attribute:{1}' Type | grep -F -q '"value":"{\"Pattern\",{\"#\",7861785a-a6a1-485c-94c1-5f4a4e882abe}}"'
+	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18},{command,{9},"RunCommand","RunCommandHandler",1},{{1},17,{1,{{1},0,1,1,"AttrAfterCommand",{"Pattern",{"#",7861785a-a6a1-485c-94c1-5f4a4e882abe}}}},{0}}}}' > $(BUILD_DIR)/runtime-form-command-selftest.txt
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-command-selftest.txt | grep -F -q '"commands":{"name":"Commands","localizedName":"Команды","valueType":"FormCommands"'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-command-selftest.txt | grep -F -q '"platformType":"FormCommand"'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-command-selftest.txt | grep -F -q '"name":"RunCommand"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}' Handler | grep -F -q '"value":"RunCommandHandler"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}' ModifiesData | grep -F -q '"value":"1"'
+	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'attribute:{1}' Name | grep -F -q '"value":"AttrAfterCommand"'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"canonicalRoundtripEqual":true'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"payloadRoundtripEqual":true'
 	$(BIN) runtime-form-rebuild $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form-rebuilt.txt | grep -F -q '"schemaBackedItems":2'

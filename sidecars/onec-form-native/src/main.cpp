@@ -1054,6 +1054,15 @@ struct MaterializedFormAttribute {
     std::string path;
 };
 
+struct MaterializedFormCommand {
+    std::string object_id;
+    std::string id;
+    std::string name;
+    std::string handler;
+    std::string modifies_data;
+    std::string path;
+};
+
 void collect_form_payload_structure(
     const oof::platform::stream::ListValue& value,
     std::string_view path,
@@ -1480,25 +1489,55 @@ void collect_materialized_form_items(
     }
 }
 
+bool is_materialized_form_property_block(const oof::platform::stream::ListValue& value) {
+    // Platform logform.xsd Form sequence: elements, command*, property*.
+    // In the runtime payload the property collection is the root slot that
+    // contains the counted TypeDomainPattern/name records for form attributes.
+    if (!value.is_list || value.items.size() < 3 || !value.items[2].is_list) {
+        return false;
+    }
+    const auto& counted_properties = value.items[2];
+    if (counted_properties.items.empty() || counted_properties.items[0].is_list) {
+        return false;
+    }
+    for (std::size_t index = 1; index < counted_properties.items.size(); ++index) {
+        const auto& record = counted_properties.items[index];
+        if (record.is_list && record.items.size() >= 5 && record.items[0].is_list) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const oof::platform::stream::ListValue* find_materialized_form_property_block(
+    const oof::platform::stream::ListValue& payload,
+    std::size_t* root_index = nullptr
+) {
+    if (!payload.is_list || payload.items.size() <= 2) {
+        return nullptr;
+    }
+    for (std::size_t index = 2; index < payload.items.size(); ++index) {
+        const auto& candidate = payload.items[index];
+        if (is_materialized_form_property_block(candidate)) {
+            if (root_index != nullptr) {
+                *root_index = index;
+            }
+            return &candidate;
+        }
+    }
+    return nullptr;
+}
+
 std::vector<MaterializedFormAttribute> collect_materialized_form_attributes(
     const oof::platform::stream::ListValue& payload
 ) {
     std::vector<MaterializedFormAttribute> attributes;
-    if (!payload.is_list || payload.items.size() <= 2 || !payload.items[2].is_list) {
+    std::size_t property_root_index = 0;
+    const auto* property_block = find_materialized_form_property_block(payload, &property_root_index);
+    if (property_block == nullptr) {
         return attributes;
     }
-
-    // Platform logform.xsd Form sequence: elements, command*, property*.
-    // In the runtime payload the property collection is the root slot that
-    // contains the counted TypeDomainPattern/name records for form attributes.
-    const auto& property_block = payload.items[2];
-    if (property_block.items.size() < 3 || !property_block.items[2].is_list) {
-        return attributes;
-    }
-    const auto& counted_properties = property_block.items[2];
-    if (counted_properties.items.empty() || counted_properties.items[0].is_list) {
-        return attributes;
-    }
+    const auto& counted_properties = property_block->items[2];
     for (std::size_t index = 1; index < counted_properties.items.size(); ++index) {
         const auto& record = counted_properties.items[index];
         if (!record.is_list || record.items.size() < 5 || !record.items[0].is_list) {
@@ -1507,7 +1546,7 @@ std::vector<MaterializedFormAttribute> collect_materialized_form_attributes(
 
         MaterializedFormAttribute attribute;
         attribute.object_id = "attribute:" + oof::platform::stream::dump_compact(record.items[0]);
-        attribute.path = "$/2/2/" + std::to_string(index);
+        attribute.path = "$/" + std::to_string(property_root_index) + "/2/" + std::to_string(index);
         attribute.main = record.items.size() > 1 && !record.items[1].is_list ? record.items[1].atom : "";
         attribute.stored_data = record.items.size() > 2 && !record.items[2].is_list ? record.items[2].atom : "";
         attribute.name = record.items.size() > 4 && !record.items[4].is_list ? record.items[4].atom : "";
@@ -1517,6 +1556,96 @@ std::vector<MaterializedFormAttribute> collect_materialized_form_attributes(
         attributes.push_back(std::move(attribute));
     }
     return attributes;
+}
+
+bool looks_like_materialized_form_command_record(const oof::platform::stream::ListValue& value) {
+    if (!value.is_list || value.items.size() < 2 || value.items[0].is_list) {
+        return false;
+    }
+    if (value.items.size() == 3 && value.items[2].is_list) {
+        return false;
+    }
+    return value.items[0].atom == "command" ||
+           value.items[0].atom == "Command" ||
+           value.items[0].atom == "cmd" ||
+           value.items[0].atom == "cmdi";
+}
+
+std::string command_record_id_value(const oof::platform::stream::ListValue& record) {
+    if (!record.is_list || record.items.empty()) {
+        return {};
+    }
+    if (looks_like_materialized_form_command_record(record) && record.items.size() > 1) {
+        return oof::platform::stream::dump_compact(record.items[1]);
+    }
+    return oof::platform::stream::dump_compact(record.items[0]);
+}
+
+std::string command_record_scalar_value(
+    const oof::platform::stream::ListValue& record,
+    std::size_t tagged_index,
+    std::size_t plain_index
+) {
+    if (!record.is_list) {
+        return {};
+    }
+    const std::size_t index = looks_like_materialized_form_command_record(record) ? tagged_index : plain_index;
+    if (record.items.size() > index && !record.items[index].is_list) {
+        return record.items[index].atom;
+    }
+    return {};
+}
+
+void collect_materialized_form_commands_from_block(
+    const oof::platform::stream::ListValue& block,
+    std::string_view path,
+    std::vector<MaterializedFormCommand>& commands
+) {
+    if (!block.is_list || is_materialized_form_property_block(block)) {
+        return;
+    }
+
+    if (looks_like_materialized_form_command_record(block) ||
+        (block.items.size() >= 4 && (block.items[0].is_list || !block.items[0].atom.empty()))) {
+        MaterializedFormCommand command;
+        command.id = command_record_id_value(block);
+        command.object_id = "command:" + command.id;
+        command.name = command_record_scalar_value(block, 2, 1);
+        command.handler = command_record_scalar_value(block, 3, 2);
+        command.modifies_data = command_record_scalar_value(block, 4, 3);
+        command.path = std::string(path);
+        if (!command.id.empty() && (!command.name.empty() || !command.handler.empty() || !command.modifies_data.empty())) {
+            commands.push_back(std::move(command));
+            return;
+        }
+    }
+
+    for (std::size_t index = 0; index < block.items.size(); ++index) {
+        collect_materialized_form_commands_from_block(
+            block.items[index],
+            child_path(path, index),
+            commands);
+    }
+}
+
+std::vector<MaterializedFormCommand> collect_materialized_form_commands(
+    const oof::platform::stream::ListValue& payload
+) {
+    std::vector<MaterializedFormCommand> commands;
+    if (!payload.is_list || payload.items.size() <= 2) {
+        return commands;
+    }
+    for (std::size_t index = 2; index < payload.items.size(); ++index) {
+        const auto& root_child = payload.items[index];
+        if (is_materialized_form_property_block(root_child)) {
+            continue;
+        }
+        collect_materialized_form_commands_from_block(
+            root_child,
+            "$/" + std::to_string(index),
+            commands);
+    }
+    return commands;
 }
 
 void print_form_payload_structure_json(
@@ -1837,6 +1966,7 @@ std::string dump_runtime_form_envelope(const RuntimeFormEnvelope& envelope) {
 struct MaterializedGraphSummary {
     std::vector<MaterializedFormItem> items;
     std::vector<MaterializedFormAttribute> attributes;
+    std::vector<MaterializedFormCommand> commands;
     std::size_t guid_head_nodes = 0;
     std::size_t nested_unbound_guid_nodes = 0;
     std::size_t named_items = 0;
@@ -1857,6 +1987,7 @@ MaterializedGraphSummary summarize_materialized_graph(const oof::platform::strea
         summary.guid_head_nodes,
         summary.nested_unbound_guid_nodes);
     summary.attributes = collect_materialized_form_attributes(payload);
+    summary.commands = collect_materialized_form_commands(payload);
 
     for (const auto& item : summary.items) {
         ++summary.status_frequency[item.descriptor_binding->status];
@@ -2096,6 +2227,7 @@ public:
         oof::platform::object_model::PlatformFormObject form_object;
         materialize_form_root(form_object, envelope, summary);
         materialize_attributes(form_object, summary);
+        materialize_commands(form_object, summary);
         materialize_items(form_object, summary);
         link_item_children(form_object);
         return form_object;
@@ -2117,11 +2249,11 @@ private:
         form_object.form.properties.push_back(make_described_property("RuntimeUUID", envelope.runtime_uuid));
         form_object.form.properties.push_back(make_described_property("Items", std::to_string(summary.items.size())));
         form_object.form.properties.push_back(make_described_property("Attributes", std::to_string(summary.attributes.size())));
-        form_object.form.properties.push_back(make_described_property("Commands", "0"));
+        form_object.form.properties.push_back(make_described_property("Commands", std::to_string(summary.commands.size())));
         form_object.form.properties.push_back(make_described_property("Events", "0"));
         form_object.form.collections.push_back(make_described_collection("Items", summary.items.size()));
         form_object.form.collections.push_back(make_described_collection("Attributes", summary.attributes.size()));
-        form_object.form.collections.push_back(make_described_collection("Commands", 0));
+        form_object.form.collections.push_back(make_described_collection("Commands", summary.commands.size()));
         form_object.form.collections.push_back(make_described_collection("Events", 0));
         add_api_surface(form_object.form, api_object_for_type("Form"));
     }
@@ -2151,6 +2283,32 @@ private:
                 "Type", "Тип", attribute.type_pattern, "TypeDomainPattern", "runtime property block TypeDomainPattern"));
             add_api_surface(object, api_object_for_type("FormAttribute"));
             form_object.attributes.add(std::move(object));
+        }
+    }
+
+    static void materialize_commands(
+        oof::platform::object_model::PlatformFormObject& form_object,
+        const MaterializedGraphSummary& summary
+    ) {
+        for (const auto& command : summary.commands) {
+            oof::platform::object_model::PlatformObject object;
+            object.object_id = command.object_id;
+            object.name = command.name;
+            object.platform_type = "FormCommand";
+            object.type_category = "core::kLogFormTypeInfoCategory";
+            object.type_source = "PlatformObjectTypeHandler<Form>.Commands + mngcore logform.xsd Command + cmi.xsd CommandInfo";
+            object.path = command.path;
+            object.parent_object_id = "0";
+            object.properties.push_back(make_platform_object_property(
+                "ID", "Идентификатор", command.id, "CompositeID", "logform.xsd:Command/id"));
+            object.properties.push_back(make_platform_object_property(
+                "Name", "Имя", command.name, "String", "logform.xsd:Command@name + cmi.xsd CommandInfo@name"));
+            object.properties.push_back(make_platform_object_property(
+                "Handler", "Обработчик", command.handler, "String", "logform.xsd:Command@handler + cmi.xsd HandlerInfo/name"));
+            object.properties.push_back(make_platform_object_property(
+                "ModifiesData", "ИзменяетДанные", command.modifies_data, "Boolean", "logform.xsd:Command@modifiesData + cmi.xsd HandlerInfo/modifiesData"));
+            add_api_surface(object, api_object_for_type("FormCommand"));
+            form_object.commands.add(std::move(object));
         }
     }
 
