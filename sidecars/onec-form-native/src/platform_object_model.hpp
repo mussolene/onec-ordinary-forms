@@ -105,6 +105,15 @@ struct PlatformObject {
         }
         return false;
     }
+
+    const PlatformObjectCollectionDescriptor* collection_descriptor(std::string_view collection_name) const {
+        for (const auto& collection : collections) {
+            if (collection.name == collection_name || collection.localized_name == collection_name) {
+                return &collection;
+            }
+        }
+        return nullptr;
+    }
 };
 
 class PlatformObjectCollection {
@@ -157,6 +166,9 @@ private:
 struct PlatformFormObject {
     PlatformObject form;
     PlatformObjectCollection items;
+    PlatformObjectCollection attributes;
+    PlatformObjectCollection commands;
+    PlatformObjectCollection events;
 
     const PlatformObjectProperty* property(std::string_view property_name) const {
         return form.property(property_name);
@@ -200,6 +212,38 @@ struct PlatformFormObject {
             throw std::runtime_error("platform object is not found: " + std::string(object_id));
         }
         object->set_prop_val(property_name, std::move(value));
+    }
+
+    const PlatformObjectCollection& collection(std::string_view collection_name) const {
+        if (collection_name == "Items" || collection_name == "Элементы") {
+            return items;
+        }
+        if (collection_name == "Attributes" || collection_name == "Реквизиты") {
+            return attributes;
+        }
+        if (collection_name == "Commands" || collection_name == "Команды") {
+            return commands;
+        }
+        if (collection_name == "Events" || collection_name == "События") {
+            return events;
+        }
+        throw std::runtime_error("platform form collection is not found: " + std::string(collection_name));
+    }
+
+    PlatformObjectCollection& collection(std::string_view collection_name) {
+        if (collection_name == "Items" || collection_name == "Элементы") {
+            return items;
+        }
+        if (collection_name == "Attributes" || collection_name == "Реквизиты") {
+            return attributes;
+        }
+        if (collection_name == "Commands" || collection_name == "Команды") {
+            return commands;
+        }
+        if (collection_name == "Events" || collection_name == "События") {
+            return events;
+        }
+        throw std::runtime_error("platform form collection is not found: " + std::string(collection_name));
     }
 };
 

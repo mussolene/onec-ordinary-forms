@@ -2184,6 +2184,21 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
     std::cout << "]}";
 }
 
+void print_platform_object_collection_json(
+    const oof::platform::object_model::PlatformObjectCollection& collection
+) {
+    std::cout << "{\"count\":" << collection.count();
+    std::cout << ",\"methods\":[\"Count\",\"Find\",\"Get\",\"IndexOf\"]";
+    std::cout << ",\"objects\":[";
+    for (std::size_t index = 0; index < collection.count(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_platform_object_json(collection.get(index));
+    }
+    std::cout << "]}";
+}
+
 void print_runtime_platform_object(const std::string& path) {
     std::string canonical_text;
     RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
@@ -2197,7 +2212,7 @@ void print_runtime_platform_object(const std::string& path) {
     std::cout << ",\"contextContract\":{\"platformEvidence\":\"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call; mngcore logform.xsd declares Form/elements/command/property and element event/commands/autoCommandBar; cmi.xsd declares CommandInfo/Command/HandlerInfo\",\"model\":\"typeDescriptor + property/method/event/collection descriptors + slot-backed values\",\"descriptorRegistry\":\"PlatformPropertyDescriptor + PropertySlotBinding\",\"implementedWritableSlotCodecs\":[\"name-record\",\"position-record\",\"binding-record\"]}";
     std::cout << ",\"form\":";
     print_platform_object_json(form_object.form);
-    std::cout << ",\"items\":{\"count\":" << form_object.items.count();
+    std::cout << ",\"items\":{\"count\":" << form_object.collection("Items").count();
     std::cout << ",\"methods\":[\"Count\",\"Find\",\"Get\",\"IndexOf\"]";
     if (first != nullptr) {
         std::cout << ",\"get0\":{\"name\":";
@@ -2215,7 +2230,14 @@ void print_runtime_platform_object(const std::string& path) {
         }
         print_platform_object_json(form_object.items.get(index));
     }
-    std::cout << "]}}\n";
+    std::cout << "]}";
+    std::cout << ",\"attributes\":";
+    print_platform_object_collection_json(form_object.collection("Attributes"));
+    std::cout << ",\"commands\":";
+    print_platform_object_collection_json(form_object.collection("Commands"));
+    std::cout << ",\"events\":";
+    print_platform_object_collection_json(form_object.collection("Events"));
+    std::cout << "}\n";
 }
 
 void print_runtime_platform_object_get(
