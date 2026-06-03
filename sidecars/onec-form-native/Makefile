@@ -4,7 +4,7 @@ LDLIBS ?= -lz
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_object_schema.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
@@ -40,6 +40,13 @@ test: $(BIN)
 	$(BIN) platform-form-schema | grep -F -q '"typeName":"Separator"'
 	$(BIN) platform-form-schema | grep -F -q '"streamElement":"sep"'
 	$(BIN) platform-form-schema | grep -F -q '"valueTypes":"Value,ui:Picture,v81:UUID,ui:Color,ui:Font,ui:ShortCutType,ContextMenu"'
+	$(BIN) platform-object-schema | grep -F -q '"source":"platform object schema join: mngcore logform_layouter XSD + shcntx API catalog + localization resource evidence"'
+	$(BIN) platform-object-schema | grep -F -q '"typeName":"Button"'
+	$(BIN) platform-object-schema | grep -F -q '"name":"TextColor","streamName":"txtClr","valueType":"ui:Color"'
+	$(BIN) platform-object-schema | grep -F -q '"name":"BackColor","streamName":"bkClr","valueType":"ui:Color"'
+	$(BIN) platform-object-schema | grep -F -q '"name":"BorderColor","streamName":"brdClr","valueType":"ui:Color"'
+	$(BIN) platform-object-schema | grep -F -q '"name":"Font","streamName":"fnt","valueType":"ui:Font"'
+	$(BIN) platform-object-schema | grep -F -q '"apiProperties":["Caption","Enabled","Font","Picture","Shortcut","ToolTip","Visible"]'
 	$(BIN) platform-descriptor-join | grep -F -q '"bindingCount":25'
 	$(BIN) platform-descriptor-join | grep -F -q '"schemaBackedCount":23'
 	$(BIN) platform-descriptor-join | grep -F -q '"directRegistryCount":7'

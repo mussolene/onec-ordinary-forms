@@ -27,6 +27,7 @@
 #include "platform_guid_registry.hpp"
 #include "platform_mechanism.hpp"
 #include "platform_object_model.hpp"
+#include "platform_object_schema.hpp"
 #include "platform_property_registry.hpp"
 #include "platform_runtime_binding.hpp"
 #include "platform_value.hpp"
@@ -284,7 +285,7 @@ void usage() {
               << "       oof-native runtime-platform-object-set runtime-form-stream.txt rebuilt-stream.txt objectId property value\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
-              << "       oof-native <platform-form-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry>\n"
+              << "       oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry>\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
               << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
@@ -5325,6 +5326,69 @@ void print_platform_form_schema() {
     std::cout << "]}\n";
 }
 
+void print_platform_object_schema() {
+    const auto schemas = oof::platform::object_schema::build_platform_object_schemas();
+    std::size_t api_backed = 0;
+    std::size_t member_count = 0;
+    for (const auto& schema : schemas) {
+        if (!schema.api_source.empty()) {
+            ++api_backed;
+        }
+        member_count += schema.xsd_members.size();
+    }
+
+    std::cout << "{\"source\":\"platform object schema join: mngcore logform_layouter XSD + shcntx API catalog + localization resource evidence\"";
+    std::cout << ",\"schemaCount\":" << schemas.size();
+    std::cout << ",\"apiBackedCount\":" << api_backed;
+    std::cout << ",\"xsdMemberCount\":" << member_count;
+    std::cout << ",\"publicXmlRole\":\"source-of-truth object schema for PlatformObject to Form.xml projection; not a raw list-stream dump\"";
+    std::cout << ",\"schemas\":[";
+    for (std::size_t index = 0; index < schemas.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& schema = schemas[index];
+        std::cout << "{\"typeName\":";
+        print_json_string(schema.type_name);
+        std::cout << ",\"streamElement\":";
+        print_json_string(schema.stream_element);
+        std::cout << ",\"schemaSource\":";
+        print_json_string(schema.schema_source);
+        std::cout << ",\"apiSource\":";
+        print_json_string(schema.api_source);
+        std::cout << ",\"runtimeSource\":";
+        print_json_string(schema.runtime_source);
+        std::cout << ",\"persistenceSource\":";
+        print_json_string(schema.persistence_source);
+        std::cout << ",\"localizationSource\":";
+        print_json_string(schema.localization_source);
+        std::cout << ",\"xsdMembers\":[";
+        for (std::size_t member_index = 0; member_index < schema.xsd_members.size(); ++member_index) {
+            if (member_index != 0) {
+                std::cout << ",";
+            }
+            const auto& member = schema.xsd_members[member_index];
+            std::cout << "{\"name\":";
+            print_json_string(member.name);
+            std::cout << ",\"streamName\":";
+            print_json_string(member.stream_name);
+            std::cout << ",\"valueType\":";
+            print_json_string(member.value_type);
+            std::cout << ",\"source\":";
+            print_json_string(member.source);
+            std::cout << "}";
+        }
+        std::cout << "],\"apiProperties\":";
+        print_json_string_array(schema.api_properties);
+        std::cout << ",\"apiMethods\":";
+        print_json_string_array(schema.api_methods);
+        std::cout << ",\"apiEvents\":";
+        print_json_string_array(schema.api_events);
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+}
+
 void print_descriptor_schema_binding_json(
     const oof::platform::form_descriptor::DescriptorSchemaBinding& binding
 ) {
@@ -5729,6 +5793,10 @@ int main(int argc, char** argv) {
         }
         if (command == "platform-form-schema") {
             print_platform_form_schema();
+            return 0;
+        }
+        if (command == "platform-object-schema") {
+            print_platform_object_schema();
             return 0;
         }
         if (command == "platform-descriptor-join") {
