@@ -26,6 +26,10 @@ struct PlatformObjectProperty {
     std::string value_object_constructor;
     std::string value_object_storage;
     std::string value_object_literal;
+    std::string value_object_schema_value;
+    std::string value_object_list_stream;
+    std::string value_object_owner_member;
+    std::string value_object_evidence;
     bool readable = true;
     bool writable = false;
 };

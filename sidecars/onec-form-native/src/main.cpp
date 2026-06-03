@@ -2317,6 +2317,119 @@ std::string platform_value_object_storage(
     return {};
 }
 
+int hex_digit_value(char ch) {
+    if (ch >= '0' && ch <= '9') {
+        return ch - '0';
+    }
+    if (ch >= 'a' && ch <= 'f') {
+        return 10 + ch - 'a';
+    }
+    if (ch >= 'A' && ch <= 'F') {
+        return 10 + ch - 'A';
+    }
+    return -1;
+}
+
+bool parse_hex_rgb(std::string_view value, std::uint8_t& red, std::uint8_t& green, std::uint8_t& blue) {
+    if (value.size() != 7 || value[0] != '#') {
+        return false;
+    }
+    const int r1 = hex_digit_value(value[1]);
+    const int r2 = hex_digit_value(value[2]);
+    const int g1 = hex_digit_value(value[3]);
+    const int g2 = hex_digit_value(value[4]);
+    const int b1 = hex_digit_value(value[5]);
+    const int b2 = hex_digit_value(value[6]);
+    if (r1 < 0 || r2 < 0 || g1 < 0 || g2 < 0 || b1 < 0 || b2 < 0) {
+        return false;
+    }
+    red = static_cast<std::uint8_t>((r1 << 4) | r2);
+    green = static_cast<std::uint8_t>((g1 << 4) | g2);
+    blue = static_cast<std::uint8_t>((b1 << 4) | b2);
+    return true;
+}
+
+std::string style_ref_name_from_platform_literal(std::string_view value) {
+    const std::string text(value);
+    const std::string marker = "IV8Style::e";
+    const auto marker_pos = text.find(marker);
+    if (marker_pos != std::string::npos) {
+        const auto start = marker_pos + marker.size();
+        const auto end = text.find_first_of("), ", start);
+        return "style:" + text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+    }
+    if (value.rfind("style:", 0) == 0) {
+        return std::string(value);
+    }
+    return {};
+}
+
+std::string platform_value_object_evidence(std::string_view object_class) {
+    if (object_class == "Picture") {
+        return "xdto_root.res:data_ui.xsd Picture/PictureRef + core::V8Picture::to_storage/from_storage";
+    }
+    if (object_class == "Color") {
+        return "xdto_root.res:data_ui.xsd Color + core::Color::serialize/deserialize";
+    }
+    if (object_class == "Font") {
+        return "xdto_root.res:data_ui.xsd Font + core::Font::serialize/deserialize";
+    }
+    return {};
+}
+
+void project_platform_value_object(
+    oof::platform::object_model::PlatformObjectProperty& property
+) {
+    property.value_object_owner_member = property.platform_member;
+    property.value_object_evidence = platform_value_object_evidence(property.value_object_class);
+
+    if (property.value_object_class == "Picture") {
+        oof::platform::value::V8Picture picture;
+        if (property.value != "V8Picture()" && !property.value.empty()) {
+            picture.storage_id = property.value;
+            property.value_object_schema_value = property.value;
+        }
+        property.value_object_list_stream = picture.serialize_list_stream();
+        return;
+    }
+
+    if (property.value_object_class == "Color") {
+        std::uint8_t red = 0;
+        std::uint8_t green = 0;
+        std::uint8_t blue = 0;
+        oof::platform::value::Color color = oof::platform::value::Color::auto_color();
+        if (parse_hex_rgb(property.value, red, green, blue)) {
+            color = oof::platform::value::Color::absolute_rgb(red, green, blue);
+        } else {
+            const std::string style_name = style_ref_name_from_platform_literal(property.value);
+            if (!style_name.empty()) {
+                color = oof::platform::value::Color::style(
+                    oof::platform::value::AbstractRef::named(style_name));
+            }
+        }
+        property.value_object_schema_value = color.schema_value();
+        property.value_object_list_stream = color.serialize_list_stream();
+        return;
+    }
+
+    if (property.value_object_class == "Font") {
+        oof::platform::value::Font font;
+        if (property.value.rfind("style:", 0) == 0) {
+            font.kind = oof::platform::value::FontKind::style_item;
+            font.ref = oof::platform::value::AbstractRef::named(property.value);
+            property.value_object_schema_value = property.value;
+        } else if (property.value == "auto" || property.value.find("eAutoFont") != std::string::npos) {
+            font.kind = oof::platform::value::FontKind::auto_font;
+            property.value_object_schema_value = "AutoFont";
+        } else {
+            font.kind = oof::platform::value::FontKind::absolute;
+            font.face_name = std::string(property.value);
+            property.value_object_schema_value = property.value;
+        }
+        property.value_object_list_stream = font.serialize_list_stream();
+    }
+}
+
 void enrich_platform_value_object(
     oof::platform::object_model::PlatformObjectProperty& property
 ) {
@@ -2335,6 +2448,7 @@ void enrich_platform_value_object(
             property.value_object_class,
             property.value);
         property.value_object_literal = property.value;
+        project_platform_value_object(property);
     }
 }
 
@@ -2770,6 +2884,14 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
             print_json_string(prop.value_object_storage);
             std::cout << ",\"literal\":";
             print_json_string(prop.value_object_literal);
+            std::cout << ",\"schemaValue\":";
+            print_json_string(prop.value_object_schema_value);
+            std::cout << ",\"listStream\":";
+            print_json_string(prop.value_object_list_stream);
+            std::cout << ",\"ownerMember\":";
+            print_json_string(prop.value_object_owner_member);
+            std::cout << ",\"evidence\":";
+            print_json_string(prop.value_object_evidence);
             std::cout << "}";
         }
         std::cout << ",\"readable\":"
@@ -2988,6 +3110,14 @@ void print_platform_object_get_json(
         print_json_string(property->value_object_storage);
         std::cout << ",\"literal\":";
         print_json_string(property->value_object_literal);
+        std::cout << ",\"schemaValue\":";
+        print_json_string(property->value_object_schema_value);
+        std::cout << ",\"listStream\":";
+        print_json_string(property->value_object_list_stream);
+        std::cout << ",\"ownerMember\":";
+        print_json_string(property->value_object_owner_member);
+        std::cout << ",\"evidence\":";
+        print_json_string(property->value_object_evidence);
         std::cout << "}";
     }
     std::cout << "}\n";
@@ -3619,6 +3749,9 @@ void append_schema_properties_xml(
         if (!property.value_object_class.empty()) {
             out += ">\n";
             append_indent(out, indent + 2);
+            const std::string value_text = property.value_object_schema_value.empty()
+                ? property.value_object_literal
+                : property.value_object_schema_value;
             out += "<";
             out += property.value_object_class;
             out += "Value constructor=\"";
@@ -3626,7 +3759,7 @@ void append_schema_properties_xml(
             out += "\" storage=\"";
             out += xml_escape(property.value_object_storage);
             out += "\">";
-            out += xml_escape(property.value_object_literal);
+            out += xml_escape(value_text);
             out += "</";
             out += property.value_object_class;
             out += "Value>\n";
