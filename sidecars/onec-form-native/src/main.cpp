@@ -270,11 +270,10 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-package-selftest|formbin-source-package-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
               << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin\n"
-              << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-xml-coverage Form.bin\n"
               << "       oof-native <formbin-platform-object|formbin-platform-object-get> Form.bin [objectId property]\n"
               << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value\n"
@@ -5360,290 +5359,6 @@ void write_formbin_from_package(
     std::cout << "}\n";
 }
 
-const char* canonical_source_writer_smoke_payload() {
-    // Internal canonical seed for the first baseline-free writer slice. The
-    // public contract remains PlatformFormObject/Form.xml; unsupported slots
-    // must fail explicitly until descriptor-specific constructors replace it.
-    return R"({27,
-{16,
-{
-{1,1,
-{"ru","Main"}
-},52,4294967295},
-{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,
-{1,
-{
-{19,1,
-{4,4,
-{0},4},
-{4,4,
-{0},4},
-{8,3,0,1,100},0,
-{4,3,
-{-22},3},
-{4,4,
-{0},4},
-{4,4,
-{0},4},
-{4,3,
-{-7},3},
-{4,3,
-{-21},3},
-{3,0,
-{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
-{1,0},0,0,100,2,2,1,2,
-{4,4,
-{0},4}
-},26,0,2,
-{0,3,1},
-{0,4,1},2,
-{0,2,2},
-{0,3,2},3,
-{0,2,3},
-{0,3,3},
-{0,4,3},0,0,
-{10,1,
-{4,0,
-{0},"",-1,-1,1,0,""},
-{4,0,
-{0},"",-1,-1,1,0,""},
-{4,0,
-{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,
-{1,1,
-{6,
-{1,1,
-{"ru","Страница1"}
-},
-{10,0,
-{4,0,
-{0},"",-1,-1,1,0,""},
-{4,0,
-{0},"",-1,-1,1,0,""},
-{4,0,
-{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,
-{4,4,
-{0},4},
-{4,4,
-{0},4},
-{8,3,0,1,100},1}
-},1,1,0,4,
-{2,8,1,1,1,0,0,0,0},
-{2,33,0,1,2,0,0,0,0},
-{2,877,1,1,3,0,0,8,0},
-{2,211,0,1,4,0,0,33,0},0,4294967295,5,64,0,
-{4,4,
-{0},4},0,0,57,0,0},
-{0}
-},
-{2,
-{6ff79819-710e-4145-97cd-1618da79e3e2,7,
-{1,
-{
-{19,1,
-{4,4,
-{0},4},
-{4,4,
-{0},4},
-{6,3,0,1},1,
-{4,4,
-{0},4},
-{4,4,
-{0},4},
-{4,4,
-{0},4},
-{4,3,
-{-7},3},
-{4,3,
-{-21},3},
-{3,0,
-{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
-{1,0},0,0,100,2,2,1,2,
-{4,4,
-{0},4}
-},14,
-{1,1,
-{"ru","Run"}
-},1,1,0,0,0,
-{4,0,
-{0},"",-1,-1,1,0,""},
-{0,0,0},0,0,0,0,0,2},
-{0}
-},
-{8,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0},
-{14,"Run",4294967295,0,0,0},
-{0}
-},
-{381ed624-9217-4e63-85db-c4c3cb87daae,8,
-{9,
-{"Pattern",
-{"S"}
-},
-{
-{
-{19,1,
-{4,4,
-{0},4},
-{4,4,
-{0},4},
-{6,3,0,1},1,
-{4,4,
-{0},4},
-{4,4,
-{0},4},
-{4,4,
-{0},4},
-{4,3,
-{-7},3},
-{4,3,
-{-21},3},
-{3,1,
-{-18},0,0,0},
-{1,0},0,0,100,0,0,0,0,
-{4,4,
-{0},4}
-},31,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,4,0,
-{"U"},
-{"U"},"",0,1,0,0,0,0,
-{4,0,
-{0},"",-1,-1,1,0,""},
-{4,0,
-{0},"",-1,-1,1,0,""},0,0,0,
-{0,0,0},
-{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
-},
-{0},
-{0},0,1,0,
-{1,0},0},
-{8,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,3,0,0},
-{14,"Input",4294967295,0,0,0},
-{0}
-}
-}
-},885,244,1,0,1,4,4,6},
-{
-{1},0,
-{0},
-{0}
-},
-{00000000-0000-0000-0000-000000000000,0},
-{0},1,4,1,0,0,0,
-{0},
-{0},
-{10,0,
-{4,0,
-{0},"",-1,-1,1,0,""},
-{4,0,
-{0},"",-1,-1,1,0,""},
-{4,0,
-{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1})";
-}
-
-void validate_source_writer_smoke_shape(
-    const oof::platform::object_model::PlatformFormObject& form_object
-) {
-    if (form_object.attributes.count() != 0 || form_object.commands.count() != 0) {
-        throw std::runtime_error(
-            "source Form.xml writer prototype supports only ChildItems; Attributes and Commands need native descriptor writers");
-    }
-    bool has_button = false;
-    bool has_input = false;
-    for (const auto& object : form_object.items.objects()) {
-        if (object.platform_type == "PanelPage") {
-            continue;
-        }
-        if (object.platform_type == "Button" && object.object_id == "7") {
-            has_button = true;
-            continue;
-        }
-        if (object.platform_type == "TextBox" && object.object_id == "8") {
-            has_input = true;
-            continue;
-        }
-        throw std::runtime_error(
-            "source Form.xml writer prototype supports only Button id=7 and InputField id=8 under optional Page; unsupported object " +
-            object.object_id + " type " + object.platform_type);
-    }
-    if (!has_button || !has_input) {
-        throw std::runtime_error(
-            "source Form.xml writer prototype requires Button id=7 and InputField id=8 smoke shape");
-    }
-}
-
-RuntimeFormEnvelope build_runtime_form_envelope_from_source_xml(const std::string& source_xml) {
-    const auto form_object = platform_form_object_from_public_xml(source_xml);
-    validate_source_writer_smoke_shape(form_object);
-
-    RuntimeFormEnvelope envelope;
-    envelope.marker = "#";
-    envelope.runtime_uuid = "00000000-0000-0000-0000-000000000000";
-    envelope.payload = oof::platform::stream::parse(canonical_source_writer_smoke_payload());
-
-    const auto requested_edits = parse_public_xml_platform_object_edits(source_xml);
-    oof::platform::object_model::PlatformFormObjectEdit supported_edits;
-    for (const auto& object_edit : requested_edits.objects) {
-        if (object_edit.object_id == "7" || object_edit.object_id == "8") {
-            supported_edits.objects.push_back(object_edit);
-        }
-    }
-    apply_platform_object_edits(envelope, supported_edits);
-    return envelope;
-}
-
-void write_formbin_from_source_package(
-    const std::string& xml_path,
-    const std::string& output_path
-) {
-    std::size_t picture_sidecars_read = 0;
-    const auto xml_package_path = std::filesystem::path(xml_path);
-    const std::string source_xml = read_file_text_lossy(xml_path);
-    const std::string package_xml = inline_picture_sidecars_for_build(
-        source_xml,
-        xml_package_path,
-        picture_sidecars_read);
-    if (picture_sidecars_read != 0) {
-        throw std::runtime_error("source Form.xml writer prototype does not yet create picture payload slots");
-    }
-
-    RuntimeFormEnvelope envelope = build_runtime_form_envelope_from_source_xml(package_xml);
-    const std::string form_text = oof::platform::stream::dump_compact(envelope.payload);
-
-    oof::platform::formbin::OneCContainer container;
-    container.block_size = oof::platform::formbin::container_block_size;
-    container.files.push_back({"form", 0, 0, std::vector<std::uint8_t>(form_text.begin(), form_text.end())});
-
-    const auto module_path = form_package_module_path(xml_package_path);
-    bool module_sidecar_used = false;
-    std::size_t module_bytes = 0;
-    if (std::filesystem::is_regular_file(module_path)) {
-        auto module_payload = read_file_bytes(module_path.string());
-        module_bytes = module_payload.size();
-        container.files.push_back({"module", 0, 0, std::move(module_payload)});
-        module_sidecar_used = true;
-    } else {
-        container.files.push_back({"module", 0, 0, {}});
-    }
-
-    const auto rebuilt = oof::platform::formbin::serialize_container(container);
-    write_file_bytes(output_path, rebuilt);
-
-    const auto reparsed = oof::platform::formbin::parse_container(rebuilt);
-    const auto redump_envelope = runtime_envelope_from_form_payload(find_container_file(reparsed, "form").payload);
-    const auto redump_object = materialize_platform_form_object(redump_envelope);
-    std::cout << "{\"output\":";
-    print_json_string(output_path);
-    std::cout << ",\"operation\":\"formbin-build-source-package\"";
-    std::cout << ",\"bytes\":" << rebuilt.size();
-    std::cout << ",\"source\":\"Form.xml\"";
-    std::cout << ",\"baseBinRequired\":false";
-    std::cout << ",\"controlCount\":" << redump_object.items.count();
-    std::cout << ",\"moduleSource\":";
-    print_json_string(module_sidecar_used ? "sidecar" : "empty");
-    std::cout << ",\"moduleBytes\":" << module_bytes;
-    std::cout << ",\"pictureSidecarsRead\":" << picture_sidecars_read;
-    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
-    std::cout << "}\n";
-}
-
 void write_formbin_platform_object_set(
     const std::string& input_path,
     const std::string& output_path,
@@ -5932,59 +5647,6 @@ void print_formbin_platform_object_selftest() {
     std::cout << ",\"modulePreserved\":"
               << (module.payload == std::vector<std::uint8_t>({'m', 'o', 'd'}) ? "true" : "false");
     std::cout << ",\"publicContract\":\"PlatformObject\"";
-    std::cout << "}\n";
-}
-
-void print_formbin_source_package_selftest() {
-    const std::string source_xml =
-        "<?xml version='1.0' encoding='utf-8'?>\n"
-        "<Form ordinaryFormVersion=\"2.0\">\n"
-        "  <ChildItems>\n"
-        "    <Page name=\"Main\" id=\"4\">\n"
-        "      <ChildItems>\n"
-        "        <Button name=\"ButtonSourceEdited\" id=\"7\">\n"
-        "          <Title>SourceTitle</Title>\n"
-        "          <Position left=\"9\" top=\"2\" right=\"101\" bottom=\"22\"/>\n"
-        "        </Button>\n"
-        "        <InputField name=\"InputSourceEdited\" id=\"8\"/>\n"
-        "      </ChildItems>\n"
-        "    </Page>\n"
-        "  </ChildItems>\n"
-        "</Form>\n";
-
-    RuntimeFormEnvelope envelope = build_runtime_form_envelope_from_source_xml(source_xml);
-    const std::string form_text = oof::platform::stream::dump_compact(envelope.payload);
-    oof::platform::formbin::OneCContainer container;
-    container.block_size = oof::platform::formbin::container_block_size;
-    container.files.push_back({"form", 1, 2, std::vector<std::uint8_t>(form_text.begin(), form_text.end())});
-    container.files.push_back({"module", 3, 4, {'/', '/', 'm'}});
-
-    const auto rebuilt = oof::platform::formbin::serialize_container(container);
-    const auto reparsed = oof::platform::formbin::parse_container(rebuilt);
-    const RuntimeFormEnvelope redump_envelope =
-        runtime_envelope_from_form_payload(find_container_file(reparsed, "form").payload);
-    const auto redump_object = materialize_platform_form_object(redump_envelope);
-    const std::string redump_xml = form_object_to_public_xml(redump_object);
-    const auto& module = find_container_file(reparsed, "module");
-
-    std::cout << "{\"operation\":\"formbin-source-package-selftest\"";
-    std::cout << ",\"source\":\"Form.xml\"";
-    std::cout << ",\"baseBinRequired\":false";
-    std::cout << ",\"controlCount\":" << redump_object.items.count();
-    std::cout << ",\"nameRoundtrip\":"
-              << (redump_xml.find("ButtonSourceEdited") != std::string::npos &&
-                  redump_xml.find("InputSourceEdited") != std::string::npos ? "true" : "false");
-    std::cout << ",\"titleRoundtrip\":"
-              << (redump_xml.find("SourceTitle") != std::string::npos ? "true" : "false");
-    std::cout << ",\"positionRoundtrip\":"
-              << (redump_xml.find("<Position left=\"9\" top=\"2\" right=\"101\" bottom=\"22\"") != std::string::npos ? "true" : "false");
-    std::cout << ",\"moduleWritten\":"
-              << (module.payload == std::vector<std::uint8_t>({'/', '/', 'm'}) ? "true" : "false");
-    std::cout << ",\"noRawXml\":"
-              << (redump_xml.find("ListStream") == std::string::npos &&
-                  redump_xml.find("RawBracket") == std::string::npos &&
-                  redump_xml.find("PlatformRecords") == std::string::npos ? "true" : "false");
-    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
 
@@ -7965,10 +7627,6 @@ int main(int argc, char** argv) {
             print_formbin_platform_object_selftest();
             return 0;
         }
-        if (command == "formbin-source-package-selftest") {
-            print_formbin_source_package_selftest();
-            return 0;
-        }
         if (command == "form-payload-structure-selftest") {
             print_form_payload_structure_selftest();
             return 0;
@@ -8039,10 +7697,6 @@ int main(int argc, char** argv) {
         }
         if (command == "formbin-build-package" && argc == 5) {
             write_formbin_from_package(argv[2], argv[3], argv[4]);
-            return 0;
-        }
-        if (command == "formbin-build-source-package" && argc == 4) {
-            write_formbin_from_source_package(argv[2], argv[3]);
             return 0;
         }
         if (command == "formbin-xml-coverage" && argc == 3) {

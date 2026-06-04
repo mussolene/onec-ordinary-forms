@@ -99,15 +99,9 @@ Apply supported public package edits back to a real `Form.bin` container, or
 public XML edits back to a runtime stream:
 
 ```bash
-sidecars/onec-form-native/build/oof-native formbin-build-source-package Form.xml rebuilt-Form.bin
 sidecars/onec-form-native/build/oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin
 sidecars/onec-form-native/build/oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt
 ```
-
-`formbin-build-source-package` is the native source-build path and does not read
-a source `Form.bin` baseline. Its current coverage is the focused
-`Page -> Button + InputField` smoke shape; unsupported controls or collections
-fail explicitly until their descriptor writers are implemented.
 
 The package projection is native C++ and emits `Form`, `ChildItems`,
 `Attributes`, `Commands`, `Events`, named control elements, and `Form/Module.bsl`.

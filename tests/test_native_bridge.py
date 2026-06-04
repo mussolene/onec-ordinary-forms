@@ -7,7 +7,6 @@ import pytest
 from onec_ordinary_forms.native_bridge import (
     assert_payload_lossless,
     build_formbin_package,
-    build_formbin_source_package,
     dump_formbin_package,
     formbin_roundtrip_report,
     native_binary,
@@ -59,42 +58,6 @@ def test_native_dump_and_build_package_use_cpp_backend(tmp_path: Path) -> None:
     assert report["publicContract"] == "OrdinaryForm"
     files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
     assert files["module"] == b"edited module"
-
-
-def test_native_source_package_builds_without_base_bin(tmp_path: Path) -> None:
-    xml = tmp_path / "Ext" / "Form.xml"
-    rebuilt = tmp_path / "rebuilt.bin"
-    module = xml.with_suffix("") / "Module.bsl"
-    module.parent.mkdir(parents=True)
-    xml.parent.mkdir(parents=True, exist_ok=True)
-    xml.write_text(
-        """<?xml version='1.0' encoding='utf-8'?>
-<Form ordinaryFormVersion="2.0">
-  <ChildItems>
-    <Page name="Main" id="4">
-      <ChildItems>
-        <Button name="ButtonSourceEdited" id="7">
-          <Title>SourceTitle</Title>
-          <Position left="9" top="2" right="101" bottom="22"/>
-        </Button>
-        <InputField name="InputSourceEdited" id="8"/>
-      </ChildItems>
-    </Page>
-  </ChildItems>
-</Form>
-""",
-        encoding="utf-8",
-    )
-    module.write_bytes(b"source module")
-
-    report = build_formbin_source_package(xml, rebuilt)
-
-    assert report["operation"] == "formbin-build-source-package"
-    assert report["baseBinRequired"] is False
-    assert report["moduleSource"] == "sidecar"
-    files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
-    assert b"ButtonSourceEdited" in files["form"]
-    assert files["module"] == b"source module"
 
 
 def test_native_package_roundtrips_picture_sidecar(tmp_path: Path) -> None:

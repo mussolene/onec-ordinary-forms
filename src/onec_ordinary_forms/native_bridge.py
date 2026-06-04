@@ -58,12 +58,6 @@ def build_formbin_package(base_form_bin: Path, xml: Path, out_bin: Path, *, bina
     return json.loads(stdout) if stdout.strip() else {}
 
 
-def build_formbin_source_package(xml: Path, out_bin: Path, *, binary: Path | None = None) -> dict:
-    out_bin.parent.mkdir(parents=True, exist_ok=True)
-    stdout = run_native("formbin-build-source-package", str(xml), str(out_bin), binary=binary)
-    return json.loads(stdout) if stdout.strip() else {}
-
-
 def formbin_roundtrip_report(form_bin: Path, *, binary: Path | None = None) -> dict:
     return run_native_json("formbin-roundtrip", str(form_bin), binary=binary)
 
