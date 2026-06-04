@@ -5931,6 +5931,10 @@ std::string source_writer_bool_prop(
     return value;
 }
 
+bool source_writer_top_command_bar(const oof::platform::object_model::PlatformObject& object) {
+    return object.platform_type == "CommandBar" && object.parent_object_id.empty();
+}
+
 LV source_writer_geometry(const oof::platform::object_model::PlatformObject& object) {
     std::vector<LV> items;
     items.push_back(raw("8"));
@@ -5938,7 +5942,7 @@ LV source_writer_geometry(const oof::platform::object_model::PlatformObject& obj
     items.push_back(raw(object_prop_or_default(object, "Top", "0")));
     items.push_back(raw(object_prop_or_default(object, "Right", "0")));
     items.push_back(raw(object_prop_or_default(object, "Bottom", "0")));
-    items.push_back(raw("0"));
+    items.push_back(raw(source_writer_top_command_bar(object) ? "1" : "0"));
     for (std::string_view name : {
              "Binding.top", "Binding.bottom", "Binding.left",
              "Binding.right", "Binding.verticalCenter", "Binding.horizontalCenter",
@@ -5948,7 +5952,7 @@ LV source_writer_geometry(const oof::platform::object_model::PlatformObject& obj
                             ? raw("0")
                             : oof::platform::stream::parse(property->value));
     }
-    items.push_back(raw("0"));
+    items.push_back(raw(source_writer_top_command_bar(object) ? "1" : "0"));
     for (std::string_view name : {
              "DimensionBinding.height", "DimensionBinding.minHeight",
              "DimensionBinding.stretch", "DimensionBinding.width",
@@ -5958,8 +5962,21 @@ LV source_writer_geometry(const oof::platform::object_model::PlatformObject& obj
                             ? raw("0")
                             : oof::platform::stream::parse(property->value));
     }
-    items.push_back(raw("0"));
-    items.push_back(raw("0"));
+    if (source_writer_top_command_bar(object)) {
+        items.push_back(raw("0"));
+        items.push_back(raw("0"));
+        items.push_back(raw("0"));
+        items.push_back(raw("0"));
+        items.push_back(raw("1"));
+        if (!object_prop_or_default(object, "Title", "").empty()) {
+            items.push_back(raw(object.object_id.empty() ? "0" : object.object_id));
+        }
+        items.push_back(raw("1"));
+        items.push_back(raw(object_prop_or_default(object, "Title", "").empty() ? "0" : "1"));
+    } else {
+        items.push_back(raw("0"));
+        items.push_back(raw("0"));
+    }
     return list(std::move(items));
 }
 
@@ -5967,7 +5984,7 @@ LV source_writer_metadata(const oof::platform::object_model::PlatformObject& obj
     return list({
         raw("14"),
         str_atom(object.name.empty() ? object.object_id : object.name),
-        raw("4294967295"),
+        raw(source_writer_top_command_bar(object) ? "0" : "4294967295"),
         raw("0"),
         raw("0"),
         raw("0"),
@@ -5983,6 +6000,18 @@ LV source_writer_font_placeholder() {
         raw("0"),
         raw("0"),
         raw("48312c09-257f-4b29-b280-284dd89efc1e"),
+    });
+}
+
+LV source_writer_command_bar_font_placeholder() {
+    return list({
+        raw("3"),
+        raw("0"),
+        list({raw("0")}),
+        raw("4"),
+        raw("1"),
+        raw("0"),
+        raw("00000000-0000-0000-0000-000000000000"),
     });
 }
 
@@ -6062,6 +6091,69 @@ LV source_writer_button_base_info(const oof::platform::object_model::PlatformObj
     });
 }
 
+LV source_writer_command_bar_base_info(const oof::platform::object_model::PlatformObject& object) {
+    return list({
+        raw("19"),
+        raw(source_writer_bool_prop(object, "Visible", "1")),
+        source_writer_auto_color_value(),
+        source_writer_auto_color_value(),
+        list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
+        raw("0"),
+        source_writer_color_value("-22"),
+        source_writer_auto_color_value(),
+        source_writer_auto_color_value(),
+        source_writer_auto_color_value(),
+        source_writer_color_value("-21"),
+        source_writer_command_bar_font_placeholder(),
+        list({raw("1"), raw("0")}),
+        raw("0"),
+        raw("0"),
+        raw("100"),
+        raw("2"),
+        raw("1"),
+        raw("1"),
+        raw("2"),
+        source_writer_auto_color_value(),
+    });
+}
+
+LV source_writer_empty_command_bar_payload(const oof::platform::object_model::PlatformObject& object) {
+    return list({
+        raw("2"),
+        list({
+            source_writer_command_bar_base_info(object),
+            raw("9"),
+            raw("2"),
+            raw("1"),
+            raw("0"),
+            raw("1"),
+            raw("1"),
+            list({
+                raw("5"),
+                raw("6013c551-1c48-4ef4-a466-6fbe824675ca"),
+                raw("12"),
+                raw("1"),
+                raw("0"),
+                raw("1"),
+                list({
+                    raw("5"),
+                    raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
+                    raw("4"),
+                    raw("0"),
+                    raw("0"),
+                    list({raw("0"), raw("0"), list({raw("0")})}),
+                }),
+            }),
+            raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
+            raw("4"),
+            raw("9d0a2e40-b978-11d4-84b6-008048da06df"),
+            raw("0"),
+            raw("0"),
+            raw("0"),
+        }),
+    });
+}
+
 LV source_writer_event_action_record(const oof::platform::object_model::PlatformObject& event) {
     const std::string handler = object_property_value(event, "Handler");
     std::string title = object_property_value(event, "Title");
@@ -6121,6 +6213,9 @@ LV source_writer_control_payload(
             source_writer_button_base_info(object),
             source_writer_event_table(form_object, object.object_id),
         });
+    }
+    if (source_writer_top_command_bar(object) && object_prop_or_default(object, "Title", "").empty()) {
+        return source_writer_empty_command_bar_payload(object);
     }
     return list({raw("1"), localized_text_record(title)});
 }
@@ -6283,7 +6378,7 @@ LV source_writer_root_record(
     });
     std::vector<LV> root_items{
         raw("16"),
-        list({localized_text_record(title), raw("52"), raw("4294967295")}),
+        list({localized_text_record(title), raw("42"), raw("3")}),
         root_panel,
         raw("885"),
         raw("244"),
@@ -6377,7 +6472,7 @@ LV source_writer_root_panel_base_info_record() {
         raw("0"),
         raw("100"),
         raw("2"),
-        raw("2"),
+        raw("1"),
         raw("1"),
         raw("2"),
         source_writer_default_color_record(),
@@ -6426,7 +6521,11 @@ std::vector<LV> source_writer_root_page_state_records(const XmlElementSlice& lay
 
 std::vector<LV> source_writer_layout_dependency_sequence(const XmlElementSlice& layout) {
     std::vector<LV> sequence;
-    for (const auto& group : find_xml_elements(layout.body, "LayoutDependencyGroup")) {
+    const auto groups = find_xml_elements(layout.body, "LayoutDependencyGroup");
+    if (!groups.empty()) {
+        sequence.push_back(raw("0"));
+    }
+    for (const auto& group : groups) {
         std::vector<LV> dependencies;
         for (const auto& dependency : find_xml_elements(group.body, "LayoutDependency")) {
             dependencies.push_back(list({
