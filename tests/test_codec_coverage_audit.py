@@ -12,60 +12,32 @@ SPEC.loader.exec_module(audit_codec_coverage)
 def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     report = audit_codec_coverage.audit(
         ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
-        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
 
     summary = report["summary"]
     assert summary["xsdControls"] == summary["paletteControls"] == 26
-    assert summary["legacyWriterBranches"] == 0
-    assert summary["writerFallbackTokens"] == []
-    assert summary["writerBranchesWithoutXsdControl"] == []
     assert summary["xsdOnlyPublicProperties"] == []
-    assert summary["controlsWithoutWriterDescriptor"] == []
-    assert "ActiveXControl" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "Button" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "Chart" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "CheckBox" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "ChoiceField" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "CalendarField" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "Dendrogram" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "GanttChart" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "GeographicalSchemaField" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "GraphicalSchemaField" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "GroupBox" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "HTMLDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "LabelDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "ListBox" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "PictureDecoration" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "PivotChart" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "ProgressBar" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "RadioButton" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "Splitter" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "SpreadsheetDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "TextDocumentField" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert "TrackBar" not in summary["controlsWithoutSharedInfoDescriptor"]
-    assert summary["controlsWithoutSharedInfoDescriptor"] == []
+    assert summary["controlsWithoutNativeSchema"] == []
+    assert summary["controlsWithoutPublicDescriptor"] == []
+    assert summary["nativeSchemaControls"] >= summary["xsdControls"]
+    assert summary["nativeRegistryProperties"] >= 300
 
 
 def test_codec_coverage_audit_normalizes_public_control_aliases() -> None:
     report = audit_codec_coverage.audit(
         ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
-        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     controls = {item["control"]: item for item in report["controls"]}
 
     assert controls["LabelDecoration"]["streamControl"] == "Label"
-    assert controls["LabelDecoration"]["writerDescriptor"] is True
-    assert controls["LabelDecoration"]["sharedInfoDescriptor"] is True
+    assert controls["LabelDecoration"]["nativeSchema"] is True
     assert controls["PictureDecoration"]["streamControl"] == "Image"
-    assert controls["PictureDecoration"]["writerDescriptor"] is True
-    assert controls["PictureDecoration"]["sharedInfoDescriptor"] is True
+    assert controls["PictureDecoration"]["nativeSchema"] is True
 
 
 def test_command_bar_command_source_is_public_descriptor_property() -> None:
     report = audit_codec_coverage.audit(
         ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
-        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     command_bar = {item["control"]: item for item in report["controls"]}["CommandBar"]
 
@@ -77,7 +49,6 @@ def test_command_bar_command_source_is_public_descriptor_property() -> None:
 def test_picture_decoration_picture_style_is_public_descriptor_property() -> None:
     report = audit_codec_coverage.audit(
         ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
-        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     picture = {item["control"]: item for item in report["controls"]}["PictureDecoration"]
 
@@ -88,7 +59,6 @@ def test_picture_decoration_picture_style_is_public_descriptor_property() -> Non
 def test_panel_layout_is_public_descriptor_property() -> None:
     report = audit_codec_coverage.audit(
         ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
-        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     panel = {item["control"]: item for item in report["controls"]}["Panel"]
 
@@ -99,7 +69,6 @@ def test_panel_layout_is_public_descriptor_property() -> None:
 def test_core_controls_have_no_xsd_only_public_properties() -> None:
     report = audit_codec_coverage.audit(
         ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
-        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     controls = {item["control"]: item for item in report["controls"]}
 
@@ -110,7 +79,6 @@ def test_core_controls_have_no_xsd_only_public_properties() -> None:
 def test_codec_coverage_audit_tracks_platform_property_name_mapping_matrix() -> None:
     report = audit_codec_coverage.audit(
         ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
-        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     summary = report["summary"]
     matrix = {
@@ -134,7 +102,6 @@ def test_codec_coverage_audit_tracks_platform_property_name_mapping_matrix() -> 
 def test_codec_coverage_audit_tracks_platform_event_name_mapping_matrix() -> None:
     report = audit_codec_coverage.audit(
         ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
-        ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     summary = report["summary"]
     matrix = {

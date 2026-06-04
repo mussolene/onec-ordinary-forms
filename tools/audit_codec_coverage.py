@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Audit ordinary-form codec coverage against palette/XSD/writer descriptors."""
+"""Audit ordinary-form public schema coverage against native platform descriptors."""
 
 from __future__ import annotations
 
-import ast
 import argparse
 import json
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -21,22 +21,27 @@ from onec_ordinary_forms.ordinary_platform_mappings import (  # noqa: E402
     platform_event_xml_name,
     platform_property_xml_name,
 )
-from onec_ordinary_forms.ordinary_stream import CONTROL_INFO_SLOT_DESCRIPTORS, CONTROL_INFO_WRITER_DESCRIPTORS  # noqa: E402
 
 
 XS = {"xs": "http://www.w3.org/2001/XMLSchema"}
 XML_TO_STREAM_CONTROL_TYPE = {
+    "ActiveXControl": "HTML",
+    "CalendarField": "Calendar",
+    "ChoiceField": "TextBox",
+    "GeographicalSchemaField": "GeographicalMap",
+    "GraphicalSchemaField": "Flowchart",
+    "HTMLDocumentField": "HTML",
+    "InputField": "TextBox",
     "LabelDecoration": "Label",
+    "ListBox": "TextBox",
     "PictureDecoration": "Image",
+    "PivotChart": "Chart",
+    "Splitter": "Separator",
+    "SpreadsheetDocumentField": "Spreadsheet",
+    "Table": "TableBox",
+    "TextDocumentField": "TextDocument",
 }
-FORBIDDEN_WRITER_FALLBACK_TOKENS = (
-    "control_templates",
-    "control_template",
-    "template_info",
-    "template_metadata",
-    "template_geometry",
-    "geometry_stream_from_template",
-)
+DEFAULT_NATIVE_BIN = ROOT / "sidecars/onec-form-native/build/oof-native"
 
 
 def xsd_root(path: Path) -> ET.Element:
@@ -94,88 +99,48 @@ def palette_controls(root: ET.Element, *, include_nested: bool = False) -> dict[
     return result
 
 
-class ControlInfoBranchVisitor(ast.NodeVisitor):
-    def __init__(self) -> None:
-        self.branches: dict[str, str] = {}
-        self._in_target = False
-
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        old = self._in_target
-        self._in_target = node.name == "control_info_from_xml"
-        self.generic_visit(node)
-        self._in_target = old
-
-    def visit_If(self, node: ast.If) -> None:
-        if self._in_target:
-            control = comparison_control_type(node.test)
-            if control:
-                self.branches.setdefault(control, return_function_name(node.body))
-        self.generic_visit(node)
+def native_json(command: str, native_bin: Path) -> dict[str, object]:
+    completed = subprocess.run(
+        [str(native_bin), command],
+        cwd=ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"native command failed: {command}: {completed.stderr or completed.stdout}")
+    return json.loads(completed.stdout)
 
 
-def comparison_control_type(node: ast.AST) -> str:
-    if not isinstance(node, ast.Compare) or len(node.ops) != 1 or not isinstance(node.ops[0], ast.Eq):
-        return ""
-    left_is_control_type = isinstance(node.left, ast.Name) and node.left.id == "control_type"
-    if not left_is_control_type or len(node.comparators) != 1:
-        return ""
-    comparator = node.comparators[0]
-    if isinstance(comparator, ast.Constant) and isinstance(comparator.value, str):
-        return comparator.value
-    return ""
-
-
-def return_function_name(body: list[ast.stmt]) -> str:
-    for statement in body:
-        if not isinstance(statement, ast.Return):
-            continue
-        value = statement.value
-        if isinstance(value, ast.Call):
-            if isinstance(value.func, ast.Name):
-                return value.func.id
-            if isinstance(value.func, ast.Attribute):
-                return value.func.attr
-    return ""
-
-
-def writer_branches(path: Path) -> dict[str, str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    visitor = ControlInfoBranchVisitor()
-    visitor.visit(tree)
-    return visitor.branches
-
-
-def writer_fallback_tokens(path: Path) -> list[str]:
-    text = path.read_text(encoding="utf-8")
-    return sorted(token for token in FORBIDDEN_WRITER_FALLBACK_TOKENS if token in text)
-
-
-def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
+def audit(xsd_path: Path, native_bin: Path = DEFAULT_NATIVE_BIN) -> dict[str, object]:
     root = xsd_root(xsd_path)
     xsd_control_set = xsd_controls(root)
     palette = palette_controls(root)
-    branches = writer_branches(stream_path)
-    fallback_tokens = writer_fallback_tokens(stream_path)
-    writer_descriptor_controls = set(CONTROL_INFO_WRITER_DESCRIPTORS)
-    shared_info_descriptor_controls = {
-        descriptor.control_type
-        for descriptor in CONTROL_INFO_SLOT_DESCRIPTORS.values()
-        if descriptor.control_type != "FormRootPanel"
+    native_schema = native_json("platform-object-schema", native_bin)
+    native_registry = native_json("platform-property-registry", native_bin)
+    native_schema_controls = {
+        str(schema.get("typeName", ""))
+        for schema in native_schema.get("schemas", [])
+        if isinstance(schema, dict)
+    }
+    native_registry_properties = {
+        str(descriptor.get("name", ""))
+        for descriptor in native_registry.get("descriptors", [])
+        if isinstance(descriptor, dict)
     }
     public_descriptors = {descriptor.xml_tag: descriptor for descriptor in ORDINARY_CONTROL_DESCRIPTORS.values()}
 
     controls: list[dict[str, object]] = []
     property_matrix: list[dict[str, object]] = []
     event_matrix: list[dict[str, object]] = []
-    for control in sorted(xsd_control_set | set(palette) | set(branches) | set(public_descriptors)):
+    for control in sorted(xsd_control_set | set(palette) | set(public_descriptors)):
         stream_control = XML_TO_STREAM_CONTROL_TYPE.get(control, control)
         xsd_props = xsd_control_properties(root, control)
         xsd_events = xsd_control_events(root, control)
         palette_item = palette.get(control, {})
         public_descriptor = public_descriptors.get(control)
         descriptor_props = set(public_descriptor.properties) if public_descriptor else set()
-        shared_descriptor = CONTROL_INFO_SLOT_DESCRIPTORS.get(stream_control)
-        shared_slots = {slot.name for slot in shared_descriptor.slots} if shared_descriptor else set()
         platform_properties = list(palette_item.get("platformProperties", []))
         platform_events = list(palette_item.get("platformEvents", []))
         for platform_property in platform_properties:
@@ -190,7 +155,7 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
                     "xmlName": xml_name,
                     "inXsd": in_xsd,
                     "inPublicDescriptor": in_descriptor,
-                    "sharedInfoSlot": xml_name in shared_slots,
+                    "inNativeRegistry": xml_name in native_registry_properties,
                     "status": (
                         "mapped-descriptor"
                         if xml_name and in_xsd and in_descriptor
@@ -220,11 +185,10 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
                 "streamControl": stream_control,
                 "inXsd": control in xsd_control_set,
                 "inPalette": control in palette,
-                "writerBranch": branches.get(stream_control, ""),
-                "writerDescriptor": stream_control in writer_descriptor_controls,
-                "sharedInfoDescriptor": stream_control in shared_info_descriptor_controls,
+                "nativeSchema": stream_control in native_schema_controls,
                 "xsdPropertyCount": len(xsd_props),
                 "publicDescriptorPropertyCount": len(descriptor_props),
+                "nativeRegistryPropertyCount": len(descriptor_props & native_registry_properties),
                 "platformPropertyCount": len(platform_properties),
                 "platformEventCount": len(platform_events),
                 "xsdOnlyProperties": sorted(xsd_props - descriptor_props),
@@ -266,19 +230,12 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
         "summary": {
             "xsdControls": len(xsd_control_set),
             "paletteControls": len(palette),
-            "legacyWriterBranches": len(branches),
-            "writerDescriptorControls": len(writer_descriptor_controls),
-            "sharedInfoDescriptorControls": len(shared_info_descriptor_controls),
-            "controlsWithoutWriterDescriptor": sorted(
-                control for control in xsd_control_set if XML_TO_STREAM_CONTROL_TYPE.get(control, control) not in writer_descriptor_controls
+            "nativeSchemaControls": len(native_schema_controls),
+            "nativeRegistryProperties": len(native_registry_properties),
+            "controlsWithoutNativeSchema": sorted(
+                control for control in xsd_control_set if XML_TO_STREAM_CONTROL_TYPE.get(control, control) not in native_schema_controls
             ),
-            "writerBranchesWithoutXsdControl": sorted(
-                control for control in set(branches) - {XML_TO_STREAM_CONTROL_TYPE.get(item, item) for item in xsd_control_set}
-            ),
-            "controlsWithoutSharedInfoDescriptor": sorted(
-                control for control in xsd_control_set if XML_TO_STREAM_CONTROL_TYPE.get(control, control) not in shared_info_descriptor_controls
-            ),
-            "writerFallbackTokens": fallback_tokens,
+            "controlsWithoutPublicDescriptor": sorted(control for control in xsd_control_set if control not in public_descriptors),
             "platformPropertyRows": len(property_matrix),
             "mappedPlatformPropertyRows": len(property_matrix) - len(unmapped_properties),
             "unmappedPlatformProperties": sorted(unmapped_properties),
@@ -296,10 +253,10 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--xsd", default=str(ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd"))
-    parser.add_argument("--stream", default=str(ROOT / "src/onec_ordinary_forms/ordinary_stream.py"))
+    parser.add_argument("--native-bin", default=str(DEFAULT_NATIVE_BIN))
     parser.add_argument("--out", help="Write JSON report")
     args = parser.parse_args()
-    report = audit(Path(args.xsd), Path(args.stream))
+    report = audit(Path(args.xsd), Path(args.native_bin))
     text = json.dumps(report, ensure_ascii=False, indent=2)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)

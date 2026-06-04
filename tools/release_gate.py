@@ -10,7 +10,6 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-import xml.etree.ElementTree as ET
 
 
 def run_codec_coverage(repo: Path, xsd: Path) -> dict[str, object]:
@@ -29,6 +28,31 @@ def run_codec_coverage(repo: Path, xsd: Path) -> dict[str, object]:
             check=True,
         )
         return json.loads(out.read_text(encoding="utf-8"))
+
+
+def run_native_selftests(repo: Path) -> dict[str, object]:
+    binary = repo / "sidecars" / "onec-form-native" / "build" / "oof-native"
+    commands = [
+        "formbin-xml-build-selftest",
+        "formbin-platform-object-selftest",
+        "form-payload-structure-selftest",
+    ]
+    results: list[dict[str, object]] = []
+    failures: list[str] = []
+    for command in commands:
+        completed = subprocess.run(
+            [str(binary), command],
+            cwd=repo,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+        output = completed.stdout.strip()
+        results.append({"command": command, "returncode": completed.returncode, "outputTail": output[-1200:]})
+        if completed.returncode != 0:
+            failures.append(f"native {command} failed")
+    return {"binary": str(binary), "results": results, "failures": failures}
 
 
 def run_pytest(repo: Path) -> dict[str, object]:
@@ -54,7 +78,6 @@ def run_pytest(repo: Path) -> dict[str, object]:
 def run_public_contract_probes(repo: Path) -> list[str]:
     sys.path.insert(0, str(repo / "src"))
     from onec_ordinary_forms.cli import validate_xml_file
-    from onec_ordinary_forms.ordinary_stream import form_stream_from_object_xml
 
     failures: list[str] = []
     valid_xml = """<Form xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ordinaryFormVersion="2.0" xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
@@ -82,19 +105,6 @@ def run_public_contract_probes(repo: Path) -> list[str]:
             failures.append(f"invalid public property probe failed with wrong exception: {exc}")
         else:
             failures.append("invalid public property probe unexpectedly passed")
-
-    writer_probe = ET.fromstring(
-        '<Form><ChildItems><Page name="Main"><ChildItems><Button name="Run"><DefinitelyNotAContractProperty /></Button></ChildItems></Page></ChildItems></Form>'
-    )
-    try:
-        form_stream_from_object_xml(writer_probe)
-    except ValueError as exc:
-        if "unknown public property" not in str(exc):
-            failures.append(f"writer guard probe failed with wrong error: {exc}")
-    except Exception as exc:  # pragma: no cover - reported by release gate output
-        failures.append(f"writer guard probe failed with wrong exception: {exc}")
-    else:
-        failures.append("writer guard probe unexpectedly accepted unknown public property")
     return failures
 
 
@@ -106,6 +116,7 @@ def main() -> int:
     repo = Path(args.repo).resolve()
     xsd = repo / "src" / "onec_ordinary_forms" / "schemas" / "OrdinaryFormPalette.xsd"
     pytest_result = run_pytest(repo)
+    native_result = run_native_selftests(repo)
     public_contract_failures = run_public_contract_probes(repo)
     report = run_codec_coverage(repo, xsd)
     summary = report["summary"]
@@ -113,6 +124,7 @@ def main() -> int:
     failures: list[str] = []
     if pytest_result["returncode"] != 0:
         failures.append("pytest -q failed")
+    failures.extend(native_result["failures"])
     failures.extend(public_contract_failures)
     expected_rows = 417
     if summary["platformPropertyRows"] != expected_rows:
@@ -120,10 +132,8 @@ def main() -> int:
     if summary["mappedPlatformPropertyRows"] != summary["platformPropertyRows"]:
         failures.append("not all platform property rows are mapped")
     for key in (
-        "controlsWithoutWriterDescriptor",
-        "controlsWithoutSharedInfoDescriptor",
-        "writerBranchesWithoutXsdControl",
-        "writerFallbackTokens",
+        "controlsWithoutNativeSchema",
+        "controlsWithoutPublicDescriptor",
         "unmappedPlatformProperties",
         "mappedPlatformPropertiesWithoutPublicXml",
         "xsdOnlyPublicProperties",
@@ -136,13 +146,14 @@ def main() -> int:
         "status": "fail" if failures else "pass",
         "failures": failures,
         "pytest": pytest_result,
+        "native": native_result,
         "summary": {
             "platformPropertyRows": summary["platformPropertyRows"],
             "mappedPlatformPropertyRows": summary["mappedPlatformPropertyRows"],
             "mappedPlatformPropertiesWithoutPublicXml": len(summary["mappedPlatformPropertiesWithoutPublicXml"]),
             "xsdOnlyPublicProperties": len(summary["xsdOnlyPublicProperties"]),
             "unmappedPlatformProperties": len(summary["unmappedPlatformProperties"]),
-            "writerFallbackTokens": len(summary["writerFallbackTokens"]),
+            "controlsWithoutNativeSchema": len(summary["controlsWithoutNativeSchema"]),
         },
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
