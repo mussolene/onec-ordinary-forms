@@ -4,7 +4,7 @@ LDLIBS ?= -lz
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_object_schema.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+SRC := src/main.cpp src/control_info_descriptor_registry.hpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_object_schema.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
@@ -107,6 +107,15 @@ test: $(BIN)
 	$(BIN) platform-property-registry | grep -F -q '"name":"Font","localizedName":"Шрифт","valueType":"Font","slotCodec":"font-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"name":"Picture","localizedName":"Картинка","valueType":"Picture","slotCodec":"picture-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"writableCount":27'
+	$(BIN) platform-control-info-descriptors | grep -F -q '"descriptorCount":27'
+	$(BIN) platform-control-info-descriptors | grep -F -q '"writerDescriptorControls":26'
+	$(BIN) platform-control-info-descriptors | grep -F -q '"writablePromotions":0'
+	$(BIN) platform-control-info-descriptors | grep -F -q '"controlType":"Panel","infoKind":"1"'
+	$(BIN) platform-control-info-descriptors | grep -F -q '"name":"PagePositions","index":46'
+	$(BIN) platform-control-info-descriptors | grep -F -q '"controlType":"Table","infoKind":"5"'
+	$(BIN) platform-control-info-descriptors | grep -F -q '"name":"AutoMarkIncomplete","index":22'
+	$(BIN) object-model-gate | grep -F -q '"controlInfoDescriptorCount":27'
+	$(BIN) object-model-gate | grep -F -q '"controlInfoWritablePromotions":0'
 	$(BIN) value-roundtrip | grep -F -q '"serialized":"{1,{1,2,{\"ru\",\"Title\"},{\"en\",\"Caption\"}},1}"'
 	$(BIN) value-roundtrip | grep -q '"itemCount":2'
 	$(BIN) value-roundtrip | grep -F -q '"compositeID":"{42,09ccdc77-ea1a-4a6d-ab1c-3435eada2433}"'

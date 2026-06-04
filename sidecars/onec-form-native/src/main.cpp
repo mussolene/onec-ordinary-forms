@@ -18,6 +18,7 @@
 
 #include <zlib.h>
 
+#include "control_info_descriptor_registry.hpp"
 #include "form_bin_container.hpp"
 #include "ordinary_controls.hpp"
 #include "ordinary_form_graph.hpp"
@@ -289,7 +290,7 @@ void usage() {
               << "       oof-native runtime-platform-object-set runtime-form-stream.txt rebuilt-stream.txt objectId property value\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
-              << "       oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry>\n"
+              << "       oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry|platform-control-info-descriptors>\n"
               << "       oof-native object-model-gate\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
@@ -8572,6 +8573,12 @@ void print_object_model_gate() {
     std::cout << "{\"operation\":\"object-model-gate\"";
     std::cout << ",\"schemaMembersChecked\":" << schema_members_checked;
     std::cout << ",\"registryDescriptorsChecked\":" << registry_descriptors_checked;
+    std::cout << ",\"controlInfoDescriptorCount\":"
+              << oof::platform::control_info::descriptor_count();
+    std::cout << ",\"controlInfoWriterDescriptorControls\":"
+              << oof::platform::control_info::writer_descriptor_count();
+    std::cout << ",\"controlInfoWritablePromotions\":"
+              << oof::platform::control_info::writable_promotion_count();
     std::cout << ",\"writableValueCodecs\":" << writable_value_codecs;
     std::cout << ",\"readableValueCoverageGaps\":" << readable_value_coverage_gaps;
     std::cout << ",\"violations\":" << violations.size();
@@ -9502,6 +9509,46 @@ void print_platform_descriptor_join() {
     std::cout << "]}\n";
 }
 
+void print_platform_control_info_descriptors() {
+    std::cout << "{\"source\":\"native port of historical no-base writer control info descriptor profiles; platform persistence evidence cf_form_controls_info8\"";
+    std::cout << ",\"descriptorCount\":"
+              << oof::platform::control_info::descriptor_count();
+    std::cout << ",\"writerDescriptorControls\":"
+              << oof::platform::control_info::writer_descriptor_count();
+    std::cout << ",\"writablePromotions\":"
+              << oof::platform::control_info::writable_promotion_count();
+    std::cout << ",\"writablePromotion\":\"disabled until info8 slot/value semantic correlation is proven on corpus/platform validation\"";
+    std::cout << ",\"status\":\"descriptor-registry-ready\"";
+    std::cout << ",\"descriptors\":[";
+    for (std::size_t index = 0; index < oof::platform::control_info::descriptors.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& descriptor = oof::platform::control_info::descriptors[index];
+        std::cout << "{\"controlType\":";
+        print_json_string(descriptor.control_type);
+        std::cout << ",\"infoKind\":";
+        print_json_string(descriptor.info_kind);
+        std::cout << ",\"writerDescriptor\":"
+                  << (oof::platform::control_info::has_writer_descriptor(descriptor.control_type) ? "true" : "false");
+        std::cout << ",\"slotCount\":" << descriptor.slot_count;
+        std::cout << ",\"slots\":[";
+        for (std::size_t slot_index = 0; slot_index < descriptor.slot_count; ++slot_index) {
+            if (slot_index != 0) {
+                std::cout << ",";
+            }
+            const auto& slot = descriptor.slots[slot_index];
+            std::cout << "{\"name\":";
+            print_json_string(slot.name);
+            std::cout << ",\"index\":" << slot.index << "}";
+        }
+        std::cout << "],\"evidence\":";
+        print_json_string(descriptor.evidence);
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+}
+
 void print_platform_runtime_bindings() {
     std::cout << "{\"source\":\"platform help/resource/binary runtime binding evidence\"";
     std::cout << ",\"layerCount\":"
@@ -9843,6 +9890,10 @@ int main(int argc, char** argv) {
         }
         if (command == "platform-property-registry") {
             print_platform_property_registry();
+            return 0;
+        }
+        if (command == "platform-control-info-descriptors") {
+            print_platform_control_info_descriptors();
             return 0;
         }
         if (command == "object-model-gate") {
