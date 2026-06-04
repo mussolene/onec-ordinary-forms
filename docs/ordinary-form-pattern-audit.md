@@ -416,3 +416,48 @@ Remaining next steps:
 The goal is not to make every old source byte-identical. The goal is to make
 the public XML a complete editable object model and make the writer emit a
 platform-readable canonical ordinary form stream without hidden raw data.
+
+## Platform Oracle Control Traces
+
+Do not continue the no-base payload writer by guessing control payloads. The
+next control-payload evidence step is a platform oracle batch:
+
+```bash
+tools/run_control_oracle_batch.sh \
+  --source-root work/oracle-runtime/blank-source/root.xml \
+  --out-dir scan-output/platform-control-oracle
+```
+
+The batch generates 26 BSL scripts under `scan-output/`, one per currently
+writer-described ordinary control. Each script calls
+`ЭлементыФормы.Добавить(...)`, assigns simple geometry/title where the platform
+allows it, returns `ЭтаФорма`, and the injected oracle module writes
+`ЗначениеВСтрокуВнутр(Результат)`.
+
+The intended evidence product is not a writer patch. It is a corpus of platform
+runtime streams plus `runtime-form-object-graph` summaries that can be compared
+against `cf_form_controls8`, `cf_form_controls_position8`, and
+`cf_form_controls_info8` descriptor evidence. Only after those traces identify
+which values are public properties, graph relations, canonical generation
+details, or unknown residues should a C++ payload codec be changed.
+
+Current platform-oracle note:
+
+- The blank source carrier may open and wait for the `Выполнить` button instead
+  of firing the injected form `ПриОткрытии`. Use a carrier whose ordinary form
+  already has `ПриОткрытии` wired by the platform; the local carrier dump under
+  `scan-output/platform-control-oracle-carrier/` was produced from a private
+  EPF and must stay ignored.
+- With that carrier, the 26-control oracle batch completed and produced
+  runtime streams plus object-graph summaries under
+  `scan-output/platform-control-oracle/`. 25 controls produced a materialized
+  form graph; `ActiveXControl` returned a short non-form/error stream. The
+  `PivotChart` graph showed one schema-backed gap (`materializedItems=3`,
+  `schemaBackedItems=2`).
+- `LD_AUDIT` is useful for filtered symbol evidence but is not batch-safe in
+  this 8.5 container: even a fixed audit module with no-op hooks conflicts with
+  platform `libtcmalloc.so.4` and aborts with `Attempt to realloc invalid
+  pointer`. `LD_DEBUG=libs,bindings` does not inject audit callbacks, but a
+  `Button` pilot generated about 100k binding lines and timed out before the
+  oracle script completed. Treat LD tracing as targeted diagnostic evidence,
+  not as the primary 26-control corpus path.
