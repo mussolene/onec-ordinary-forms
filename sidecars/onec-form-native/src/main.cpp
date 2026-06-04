@@ -3084,6 +3084,16 @@ private:
         form_object.form.type_category = "core::kLogFormTypeInfoCategory";
         form_object.form.type_source = "PlatformObjectTypeHandler<Form> + core85 ContextCore + mngbase RTLogForm";
         form_object.form.path = "$";
+        form_object.form.identity = oof::platform::object_model::make_identity(
+            "Form",
+            "0",
+            "platform-root-fixed-id; UUID stored as FormObjectUuid when present",
+            {},
+            {},
+            {},
+            "core85 ContextCore + mngbase RTLogForm",
+            "Form",
+            "mngcore_root.res:logform.xsd + mngcore_root.res:logform_layouter.xsd");
         form_object.form.properties.push_back(make_described_property("Type", "Form"));
         form_object.form.properties.push_back(make_described_property("RuntimeUUID", envelope.runtime_uuid));
         if (envelope.payload.is_list && envelope.payload.items.size() > 1) {
@@ -3123,6 +3133,7 @@ private:
                 form_object.form.properties.push_back(make_platform_object_property(
                     "FormObjectUuid", "", info.items[0].atom, "UUID",
                     "ordinary form object info record", {}, {}, "stream"));
+                form_object.form.identity.uuid = info.items[0].atom;
                 form_object.form.properties.push_back(make_platform_object_property(
                     "FormObjectKind", "", info.items[1].atom, "xs:string",
                     "ordinary form object info record", {}, {}, "stream"));
@@ -3173,6 +3184,16 @@ private:
             object.type_source = "PlatformObjectTypeHandler<Form>.Attributes + mngcore logform.xsd Property";
             object.path = attribute.path;
             object.parent_object_id = "0";
+            object.identity = oof::platform::object_model::make_identity(
+                attribute.object_id,
+                {},
+                "CompositeID preserved from logform.xsd Property@id; new ids require allocator",
+                attribute.id,
+                {},
+                {},
+                "mngcore logform.xsd Property",
+                "Property",
+                "mngcore_root.res:logform.xsd");
             object.properties.push_back(make_platform_object_property(
                 "ID", "Идентификатор", attribute.id, "CompositeID", "logform.xsd:Property@id"));
             object.properties.push_back(make_platform_object_property(
@@ -3184,6 +3205,16 @@ private:
             object.properties.push_back(make_platform_object_property(
                 "Type", "Тип", attribute.type_pattern, "TypeDomainPattern", "runtime property block TypeDomainPattern"));
             add_api_surface(object, api_object_for_type("FormAttribute"));
+            form_object.add_edge(oof::platform::object_model::make_edge(
+                "collection-member",
+                "0",
+                object.object_id,
+                "Attributes",
+                "PlatformObjectTypeHandler<Form>.Attributes + mngcore logform.xsd Property",
+                "mngcore_root.res:logform.xsd",
+                "Property@id",
+                "CompositeID",
+                object.name));
             form_object.attributes.add(std::move(object));
         }
     }
@@ -3201,6 +3232,16 @@ private:
             object.type_source = "PlatformObjectTypeHandler<Form>.Commands + mngcore logform.xsd Command + cmi.xsd CommandInfo";
             object.path = command.path;
             object.parent_object_id = "0";
+            object.identity = oof::platform::object_model::make_identity(
+                command.object_id,
+                {},
+                "CompositeID preserved from logform.xsd Command/id; new ids require allocator",
+                command.id,
+                {},
+                {},
+                "mngcore logform.xsd Command + cmi.xsd CommandInfo",
+                "Command",
+                "mngcore_root.res:logform.xsd + mngcore_root.res:cmi.xsd");
             object.properties.push_back(make_platform_object_property(
                 "ID", "Идентификатор", command.id, "CompositeID", "logform.xsd:Command/id"));
             object.properties.push_back(make_platform_object_property(
@@ -3210,6 +3251,16 @@ private:
             object.properties.push_back(make_platform_object_property(
                 "ModifiesData", "ИзменяетДанные", command.modifies_data, "Boolean", "logform.xsd:Command@modifiesData + cmi.xsd HandlerInfo/modifiesData"));
             add_api_surface(object, api_object_for_type("FormCommand"));
+            form_object.add_edge(oof::platform::object_model::make_edge(
+                "collection-member",
+                "0",
+                object.object_id,
+                "Commands",
+                "PlatformObjectTypeHandler<Form>.Commands + mngcore logform.xsd Command + cmi.xsd CommandInfo",
+                "mngcore_root.res:logform.xsd + mngcore_root.res:cmi.xsd",
+                "Command/id",
+                "CompositeID",
+                object.name));
             form_object.commands.add(std::move(object));
         }
     }
@@ -3227,6 +3278,17 @@ private:
             object.type_source = "PlatformObjectTypeHandler<Form>.Items + " + std::string(item.descriptor_binding->evidence);
             object.path = item.path;
             object.parent_object_id = item.parent_object_id;
+            const auto* schema = oof::platform::form_descriptor::schema_for_binding(*item.descriptor_binding);
+            object.identity = oof::platform::object_model::make_identity(
+                item.object_id,
+                item.object_id,
+                "platform object id preserved from cf_form_controls8 item record; name is mutable presentation, not identity",
+                {},
+                {},
+                item.guid,
+                std::string(item.descriptor_binding->evidence),
+                std::string(item.descriptor_binding->stream_element),
+                schema != nullptr ? std::string(schema->schema_source) : std::string{});
             object.properties.push_back(make_described_property("ObjectID", item.object_id));
             object.properties.push_back(make_described_property("Name", item.name));
             object.properties.push_back(make_described_property("Type", object.platform_type));
@@ -3257,10 +3319,10 @@ private:
                     object.properties.push_back(make_described_property("DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value)));
                 }
             }
-            if (const auto* schema = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
+            if (const auto* control_schema = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
                 add_platform_object_schema_surface(
                     object,
-                    oof::platform::object_schema::build_schema_for_control(*schema));
+                    oof::platform::object_schema::build_schema_for_control(*control_schema));
             } else {
                 add_api_surface(object, api_object_for_type(object.platform_type));
             }
@@ -3273,6 +3335,17 @@ private:
                     object.properties.push_back(make_described_property("Picture", item.picture_payload));
                 }
             }
+            form_object.add_edge(oof::platform::object_model::make_edge(
+                "uses-schema",
+                object.object_id,
+                object.object_id,
+                object.platform_type,
+                object.type_source,
+                object.identity.schema_source,
+                object.identity.stream_element,
+                "ordinary-form-control",
+                object.name,
+                schema != nullptr));
             form_object.items.add(std::move(object));
         }
     }
@@ -3290,6 +3363,16 @@ private:
             object.type_source = "PlatformObjectTypeHandler<Form>.Items.Events + mngcore logform.xsd Event";
             object.path = event.path;
             object.parent_object_id = event.owner_object_id;
+            object.identity = oof::platform::object_model::make_identity(
+                event.object_id,
+                {},
+                "UUID preserved from logform.xsd Event/id; new event ids use platform UUID policy",
+                {},
+                event.id,
+                {},
+                "mngcore logform.xsd Event",
+                "Event",
+                "mngcore_root.res:logform.xsd");
             object.properties.push_back(make_platform_object_property(
                 "ID", "Идентификатор", event.id, "UUID", "logform.xsd:Event/id"));
             object.properties.push_back(make_platform_object_property(
@@ -3299,6 +3382,16 @@ private:
             object.properties.push_back(make_platform_object_property(
                 "Parent", "Родитель", event.owner_object_id, "FormItem", "m_elementEvents owner"));
             add_api_surface(object, api_object_for_type("FormEvent"));
+            form_object.add_edge(oof::platform::object_model::make_edge(
+                "owns-event",
+                event.owner_object_id,
+                object.object_id,
+                "Events",
+                "m_elementEvents owner + mngcore logform.xsd Event",
+                "mngcore_root.res:logform.xsd",
+                "Event/id",
+                "UUID",
+                event.handler));
             form_object.events.add(std::move(object));
         }
     }
@@ -3308,11 +3401,31 @@ private:
             const auto& object = form_object.items.objects()[index];
             if (object.parent_object_id.empty()) {
                 form_object.form.children.push_back(index);
+                form_object.add_edge(oof::platform::object_model::make_edge(
+                    "contains",
+                    "0",
+                    object.object_id,
+                    "ChildItems",
+                    "cf_form_controls8 containment + managed-form-style ChildItems projection",
+                    object.identity.schema_source,
+                    object.identity.stream_element,
+                    object.platform_type,
+                    object.name));
                 continue;
             }
             for (auto& maybe_parent : form_object.items.mutable_objects()) {
                 if (maybe_parent.object_id == object.parent_object_id) {
                     maybe_parent.children.push_back(index);
+                    form_object.add_edge(oof::platform::object_model::make_edge(
+                        "contains",
+                        maybe_parent.object_id,
+                        object.object_id,
+                        "ChildItems",
+                        "cf_form_controls8 containment + managed-form-style ChildItems projection",
+                        object.identity.schema_source,
+                        object.identity.stream_element,
+                        object.platform_type,
+                        object.name));
                     break;
                 }
             }
@@ -3349,7 +3462,25 @@ void print_platform_object_json(const oof::platform::object_model::PlatformObjec
     print_json_string(object.path);
     std::cout << ",\"parentObjectId\":";
     print_json_string(object.parent_object_id);
-    std::cout << ",\"properties\":[";
+    std::cout << ",\"identity\":{\"publicId\":";
+    print_json_string(object.identity.public_id);
+    std::cout << ",\"platformObjectId\":";
+    print_json_string(object.identity.platform_object_id);
+    std::cout << ",\"compositeId\":";
+    print_json_string(object.identity.composite_id);
+    std::cout << ",\"uuid\":";
+    print_json_string(object.identity.uuid);
+    std::cout << ",\"classGuid\":";
+    print_json_string(object.identity.class_guid);
+    std::cout << ",\"classGuidSource\":";
+    print_json_string(object.identity.class_guid_source);
+    std::cout << ",\"streamElement\":";
+    print_json_string(object.identity.stream_element);
+    std::cout << ",\"schemaSource\":";
+    print_json_string(object.identity.schema_source);
+    std::cout << ",\"identityPolicy\":";
+    print_json_string(object.identity.identity_policy);
+    std::cout << "},\"properties\":[";
     for (std::size_t index = 0; index < object.properties.size(); ++index) {
         if (index != 0) {
             std::cout << ",";
@@ -3557,6 +3688,34 @@ void print_platform_form_object_document(
     print_platform_object_collection_json(
         form_object.collection("Events"),
         form_object.form.collection_descriptor("Events"));
+    std::cout << ",\"edges\":[";
+    for (std::size_t index = 0; index < form_object.edges.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& edge = form_object.edges[index];
+        std::cout << "{\"kind\":";
+        print_json_string(edge.kind);
+        std::cout << ",\"fromObjectId\":";
+        print_json_string(edge.from_object_id);
+        std::cout << ",\"toObjectId\":";
+        print_json_string(edge.to_object_id);
+        std::cout << ",\"role\":";
+        print_json_string(edge.role);
+        std::cout << ",\"name\":";
+        print_json_string(edge.name);
+        std::cout << ",\"source\":";
+        print_json_string(edge.source);
+        std::cout << ",\"schemaSource\":";
+        print_json_string(edge.schema_source);
+        std::cout << ",\"slotBinding\":";
+        print_json_string(edge.slot_binding);
+        std::cout << ",\"valueType\":";
+        print_json_string(edge.value_type);
+        std::cout << ",\"required\":" << (edge.required ? "true" : "false");
+        std::cout << "}";
+    }
+    std::cout << "]";
     std::cout << "}\n";
 }
 
@@ -4539,6 +4698,8 @@ void set_or_add_described_property(
     object.properties.push_back(std::move(property));
 }
 
+std::string source_writer_control_guid(std::string_view platform_type);
+
 void add_public_xml_collection_objects(
     oof::platform::object_model::PlatformFormObject& form_object,
     const std::string& xml
@@ -4555,6 +4716,16 @@ void add_public_xml_collection_objects(
         object.type_category = "core::kLogFormTypeInfoCategory";
         object.type_source = "PublicOrdinaryFormXml.Attributes";
         object.parent_object_id = "0";
+        object.identity = oof::platform::object_model::make_identity(
+            object.object_id,
+            {},
+            "CompositeID preserved from public XML Attribute@id; new ids require allocator",
+            xml_attr_value(attribute_xml.attrs, "id"),
+            {},
+            {},
+            "mngcore logform.xsd Property",
+            "Property",
+            "mngcore_root.res:logform.xsd");
         object.properties.push_back(make_platform_object_property("ID", "Идентификатор", xml_attr_value(attribute_xml.attrs, "id"), "CompositeID", "OrdinaryForm.xml Attribute@id", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Name", "Имя", object.name, "String", "OrdinaryForm.xml Attribute@name", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Main", "Основной", xml_attr_value(attribute_xml.attrs, "main"), "Boolean", "OrdinaryForm.xml Attribute@main", {}, {}, "public-xml"));
@@ -4562,6 +4733,16 @@ void add_public_xml_collection_objects(
         const auto type_xml = first_xml_element(attribute_xml.body, "Type");
         object.properties.push_back(make_platform_object_property("Type", "Тип", xml_unescape(type_xml.body), "TypeDomainPattern", "OrdinaryForm.xml Attribute/Type", {}, {}, "public-xml"));
         add_api_surface(object, api_object_for_type("FormAttribute"));
+        form_object.add_edge(oof::platform::object_model::make_edge(
+            "collection-member",
+            "0",
+            object.object_id,
+            "Attributes",
+            "PublicOrdinaryFormXml.Attributes + mngcore logform.xsd Property",
+            "mngcore_root.res:logform.xsd",
+            "Property@id",
+            "CompositeID",
+            object.name));
         form_object.attributes.add(std::move(object));
     }
 
@@ -4577,11 +4758,31 @@ void add_public_xml_collection_objects(
         object.type_category = "core::kLogFormTypeInfoCategory";
         object.type_source = "PublicOrdinaryFormXml.Commands";
         object.parent_object_id = "0";
+        object.identity = oof::platform::object_model::make_identity(
+            object.object_id,
+            {},
+            "CompositeID preserved from public XML Command@id; new ids require allocator",
+            xml_attr_value(command_xml.attrs, "id"),
+            {},
+            {},
+            "mngcore logform.xsd Command + cmi.xsd CommandInfo",
+            "Command",
+            "mngcore_root.res:logform.xsd + mngcore_root.res:cmi.xsd");
         object.properties.push_back(make_platform_object_property("ID", "Идентификатор", xml_attr_value(command_xml.attrs, "id"), "CompositeID", "OrdinaryForm.xml Command@id", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Name", "Имя", object.name, "String", "OrdinaryForm.xml Command@name", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Handler", "Обработчик", xml_attr_value(command_xml.attrs, "handler"), "String", "OrdinaryForm.xml Command@handler", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("ModifiesData", "ИзменяетДанные", xml_attr_value(command_xml.attrs, "modifiesData"), "Boolean", "OrdinaryForm.xml Command@modifiesData", {}, {}, "public-xml"));
         add_api_surface(object, api_object_for_type("FormCommand"));
+        form_object.add_edge(oof::platform::object_model::make_edge(
+            "collection-member",
+            "0",
+            object.object_id,
+            "Commands",
+            "PublicOrdinaryFormXml.Commands + mngcore logform.xsd Command + cmi.xsd CommandInfo",
+            "mngcore_root.res:logform.xsd + mngcore_root.res:cmi.xsd",
+            "Command/id",
+            "CompositeID",
+            object.name));
         form_object.commands.add(std::move(object));
     }
 }
@@ -4607,11 +4808,31 @@ void add_public_xml_events(
         object.type_category = "core::kLogFormTypeInfoCategory";
         object.type_source = "PublicOrdinaryFormXml.Events";
         object.parent_object_id = std::string(owner_object_id);
+        object.identity = oof::platform::object_model::make_identity(
+            object.object_id,
+            {},
+            "UUID preserved from public XML Event@id; new event ids use platform UUID policy",
+            {},
+            xml_attr_value(event_xml.attrs, "id"),
+            {},
+            "mngcore logform.xsd Event",
+            "Event",
+            "mngcore_root.res:logform.xsd");
         object.properties.push_back(make_platform_object_property("ID", "Идентификатор", xml_attr_value(event_xml.attrs, "id"), "UUID", "OrdinaryForm.xml Event@id", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Handler", "Обработчик", object.name, "String", "OrdinaryForm.xml Event@handler", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Title", "Представление", xml_attr_value(event_xml.attrs, "title"), "String", "OrdinaryForm.xml Event@title", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Parent", "Родитель", std::string(owner_object_id), "FormItem", "OrdinaryForm.xml Event@ownerId", {}, {}, "public-xml"));
         add_api_surface(object, api_object_for_type("FormEvent"));
+        form_object.add_edge(oof::platform::object_model::make_edge(
+            "owns-event",
+            std::string(owner_object_id),
+            object.object_id,
+            "Events",
+            "PublicOrdinaryFormXml.Events + mngcore logform.xsd Event",
+            "mngcore_root.res:logform.xsd",
+            "Event/id",
+            "UUID",
+            object.name));
         form_object.events.add(std::move(object));
     }
 }
@@ -4667,16 +4888,30 @@ void collect_public_xml_controls(
         object.type_source = "PublicOrdinaryFormXml.ChildItems + platform schema palette";
         object.parent_object_id = std::string(parent_object_id);
         object.path = object.parent_object_id.empty() ? "$/items/" + object.object_id : "$/items/" + object.parent_object_id + "/" + object.object_id;
+        std::string schema_source;
+        std::string stream_element;
         object.properties.push_back(make_described_property("ObjectID", object.object_id));
         object.properties.push_back(make_described_property("Name", object.name));
         object.properties.push_back(make_described_property("Type", object.platform_type));
         object.properties.push_back(make_described_property("Parent", object.parent_object_id));
         object.properties.push_back(make_described_property("Path", object.path));
         if (const auto* schema = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
+            schema_source = schema->schema_source;
             add_platform_object_schema_surface(object, oof::platform::object_schema::build_schema_for_control(*schema));
         } else {
             add_api_surface(object, api_object_for_type(object.platform_type));
         }
+        const std::string class_guid = source_writer_control_guid(object.platform_type);
+        object.identity = oof::platform::object_model::make_identity(
+            object.object_id,
+            object.object_id,
+            "platform object id preserved from public XML control id; name is mutable presentation, not identity",
+            {},
+            {},
+            class_guid,
+            "PublicOrdinaryFormXml.ChildItems + OrdinaryFormPalette.xsd",
+            stream_element,
+            schema_source);
 
         for (const auto& edit : control_edits) {
             if (edit.object_id != object_id) {
@@ -4715,9 +4950,40 @@ void collect_public_xml_controls(
         form_object.items.add(std::move(object));
         if (parent_object_id.empty()) {
             form_object.form.children.push_back(new_index);
+            form_object.add_edge(oof::platform::object_model::make_edge(
+                "contains",
+                "0",
+                object_id,
+                "ChildItems",
+                "PublicOrdinaryFormXml.ChildItems + managed-form-style ChildItems projection",
+                schema_source,
+                stream_element,
+                platform_type_for_public_xml_tag(tag),
+                xml_attr_value(attrs, "name")));
         } else if (auto* parent = form_object.find_object_by_id(parent_object_id)) {
             parent->children.push_back(new_index);
+            form_object.add_edge(oof::platform::object_model::make_edge(
+                "contains",
+                std::string(parent_object_id),
+                object_id,
+                "ChildItems",
+                "PublicOrdinaryFormXml.ChildItems + managed-form-style ChildItems projection",
+                schema_source,
+                stream_element,
+                platform_type_for_public_xml_tag(tag),
+                xml_attr_value(attrs, "name")));
         }
+        form_object.add_edge(oof::platform::object_model::make_edge(
+            "uses-schema",
+            object_id,
+            object_id,
+            platform_type_for_public_xml_tag(tag),
+            "PublicOrdinaryFormXml.ChildItems + OrdinaryFormPalette.xsd",
+            schema_source,
+            stream_element,
+            "ordinary-form-control",
+            xml_attr_value(attrs, "name"),
+            !schema_source.empty()));
         add_public_xml_events(form_object, object_id, body);
         const auto nested_child_items = first_xml_element(body, "ChildItems");
         if (!nested_child_items.self_closing && !nested_child_items.body.empty()) {
@@ -4739,6 +5005,16 @@ oof::platform::object_model::PlatformFormObject platform_form_object_from_public
     form_object.form.type_category = "core::kLogFormTypeInfoCategory";
     form_object.form.type_source = "PublicOrdinaryFormXml -> PlatformFormObject";
     form_object.form.path = "$";
+    form_object.form.identity = oof::platform::object_model::make_identity(
+        "Form",
+        "0",
+        "platform-root-fixed-id; UUID stored as FormObjectUuid when present",
+        {},
+        xml_attr_value(form_xml.attrs, "formObjectUuid"),
+        {},
+        "PublicOrdinaryFormXml + mngbase RTLogForm",
+        "Form",
+        "mngcore_root.res:logform.xsd + mngcore_root.res:logform_layouter.xsd");
     form_object.form.properties.push_back(make_described_property("Type", "Form"));
     auto add_public_root_property = [&](std::string name, std::string value, std::string value_type, std::string source) {
         if (!value.empty()) {
@@ -5028,12 +5304,69 @@ std::vector<const oof::platform::object_model::PlatformObject*> event_objects_fo
     std::string_view parent_object_id
 ) {
     std::vector<const oof::platform::object_model::PlatformObject*> events;
+    for (const auto& edge : form_object.edges) {
+        if (edge.kind != "owns-event" || edge.from_object_id != parent_object_id) {
+            continue;
+        }
+        if (const auto* event = form_object.events.find(edge.to_object_id)) {
+            events.push_back(event);
+        }
+    }
+    if (!events.empty()) {
+        return events;
+    }
     for (const auto& event : form_object.events.objects()) {
         if (event.parent_object_id == parent_object_id) {
             events.push_back(&event);
         }
     }
     return events;
+}
+
+std::vector<std::size_t> child_indices_for_parent(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view parent_object_id
+) {
+    std::vector<std::size_t> children;
+    for (const auto& edge : form_object.edges) {
+        if (edge.kind != "contains" || edge.from_object_id != parent_object_id) {
+            continue;
+        }
+        const auto index = form_object.items.index_of(edge.to_object_id);
+        if (index >= 0) {
+            children.push_back(static_cast<std::size_t>(index));
+        }
+    }
+    if (!children.empty()) {
+        return children;
+    }
+    if (parent_object_id == "0" || parent_object_id.empty()) {
+        for (const auto index : form_object.form.children) {
+            if (index < form_object.items.count()) {
+                children.push_back(index);
+            }
+        }
+        return children;
+    }
+    if (const auto* parent = form_object.find_object_by_id(parent_object_id)) {
+        for (const auto index : parent->children) {
+            if (index < form_object.items.count()) {
+                children.push_back(index);
+            }
+        }
+    }
+    return children;
+}
+
+std::vector<const oof::platform::object_model::PlatformObject*> child_objects_for_parent(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view parent_object_id
+) {
+    std::vector<const oof::platform::object_model::PlatformObject*> children;
+    for (const auto index : child_indices_for_parent(form_object, parent_object_id)) {
+        children.push_back(&form_object.items.get(index));
+    }
+    return children;
 }
 
 void append_event_xml(
@@ -5396,7 +5729,8 @@ void append_control_xml(
         out += "\"";
     }
     const auto object_events = event_objects_for_parent(form_object, object.object_id);
-    if (object.children.empty() &&
+    const auto child_indices = child_indices_for_parent(form_object, object.object_id);
+    if (child_indices.empty() &&
         !has_explicit_property_for_xml(object, "Title") &&
         !has_explicit_property_for_xml(object, "Visible") &&
         !has_explicit_property_for_xml(object, "Enabled") &&
@@ -5415,10 +5749,10 @@ void append_control_xml(
     if (!object_events.empty()) {
         append_events_xml(out, object_events, indent + 2);
     }
-    if (!object.children.empty()) {
+    if (!child_indices.empty()) {
         append_indent(out, indent + 2);
         out += "<ChildItems>\n";
-        for (const std::size_t child_index : object.children) {
+        for (const std::size_t child_index : child_indices) {
             append_control_xml(out, form_object, child_index, indent + 4, sidecar_sink);
         }
         append_indent(out, indent + 2);
@@ -5467,7 +5801,7 @@ std::string form_object_to_public_xml(
     }
     append_events_xml(out, event_objects_for_parent(form_object, "0"), 2);
     out += "  <ChildItems>\n";
-    for (const std::size_t child_index : form_object.form.children) {
+    for (const std::size_t child_index : child_indices_for_parent(form_object, "0")) {
         append_control_xml(out, form_object, child_index, 4, sidecar_sink);
     }
     out += "  </ChildItems>\n";
@@ -5825,6 +6159,14 @@ LV list(std::vector<LV> value) {
     return LV::list(std::move(value));
 }
 
+LV source_writer_default_color_record();
+LV source_writer_empty_page_style_record();
+LV source_writer_root_panel_base_info_record();
+LV source_writer_event_table(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view parent_object_id
+);
+
 LV localized_text_record(std::string_view text) {
     return list({
         raw("1"),
@@ -6047,6 +6389,34 @@ LV source_writer_auto_color_value() {
     });
 }
 
+LV source_writer_extended_base_info(const oof::platform::object_model::PlatformObject& object) {
+    auto base = source_writer_root_panel_base_info_record();
+    base.items[1] = raw(source_writer_bool_prop(object, "Visible", "1"));
+    base.items[5] = raw(source_writer_bool_prop(object, "Enabled", "1"));
+    base.items[6] = source_writer_default_color_record();
+    base.items[17] = raw("1");
+    return base;
+}
+
+LV source_writer_type_domain_pattern_record(const oof::platform::object_model::PlatformObject& object) {
+    const std::string type = object_prop_or_default(object, "Type", "");
+    if (!type.empty() && type.front() == '{') {
+        return oof::platform::stream::parse(type);
+    }
+    return list({str_atom("Pattern"), list({str_atom("S")})});
+}
+
+LV source_writer_button_picture_record(const oof::platform::object_model::PlatformObject& object) {
+    const std::string picture = object_prop_or_default(object, "Picture", "");
+    if (picture.empty() || picture == "V8Picture()") {
+        return source_writer_empty_page_style_record();
+    }
+    return list({
+        raw("4"), raw("3"), list({raw("0")}), str_atom(""), raw("-1"), raw("-1"),
+        raw("0"), list({list({raw(picture)})}), raw("0"), str_atom(""),
+    });
+}
+
 LV source_writer_button_base_info(const oof::platform::object_model::PlatformObject& object) {
     const std::string title = object_prop_or_default(object, "Title", object.name);
     return list({
@@ -6088,6 +6458,152 @@ LV source_writer_button_base_info(const oof::platform::object_model::PlatformObj
         raw("0"),
         raw("0"),
         raw("2"),
+    });
+}
+
+LV source_writer_label_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    const std::string title = object_prop_or_default(object, "Title", object.name);
+    const std::string horizontal_align = object_prop_or_default(object, "HorizontalAlign", title.size() > 0 && title.back() == ':' ? "0" : "4");
+    const std::string vertical_align = object_prop_or_default(object, "VerticalAlign", "1");
+    const std::string picture_size = object_prop_or_default(object, "PictureSize", "1");
+    const std::string picture_position = object_prop_or_default(object, "PicturePosition", title.size() > 0 && title.back() == ':' ? "0" : horizontal_align);
+    const std::string text_position = object_prop_or_default(object, "TextPosition", picture_position);
+    const LV picture_style = list({
+        raw("10"),
+        raw(picture_position),
+        source_writer_button_picture_record(object),
+        source_writer_empty_page_style_record(),
+        source_writer_empty_page_style_record(),
+        raw("100"), raw("2"), raw("0"), raw("0"), raw("1"), raw("2"),
+    });
+    return list({
+        raw("3"),
+        list({
+            source_writer_extended_base_info(object),
+            raw("11"),
+            localized_text_record(title),
+            raw(horizontal_align),
+            raw(vertical_align),
+            raw(source_writer_bool_prop(object, "Hyperlink", event_objects_for_parent(form_object, object.object_id).empty() ? "0" : "1")),
+            raw("0"),
+            raw("0"),
+            list({raw("0"), raw("0"), raw("0")}),
+            raw("0"),
+            list({raw("1"), raw("0")}),
+            raw(picture_size),
+            picture_style,
+            raw(text_position),
+            raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+        }),
+        source_writer_event_table(form_object, object.object_id),
+    });
+}
+
+LV source_writer_image_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    const std::string display_mode = object_prop_or_default(object, "DisplayMode", "0");
+    const std::string display_state = object_prop_or_default(object, "DisplayState", "0");
+    const LV picture_style = list({
+        raw("10"),
+        raw("0"),
+        source_writer_button_picture_record(object),
+        source_writer_empty_page_style_record(),
+        source_writer_empty_page_style_record(),
+        raw("100"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+    });
+    return list({
+        raw("1"),
+        list({
+            source_writer_extended_base_info(object),
+            raw("20"),
+            raw(display_mode),
+            raw(display_state),
+            picture_style,
+            list({raw("0"), raw("0"), raw("0")}),
+            raw("1"), raw("1"), raw("0"), raw("0"),
+            list({raw("1"), raw("0")}),
+            raw("0"), raw("1"), raw("0"), raw("1"),
+        }),
+        source_writer_event_table(form_object, object.object_id),
+    });
+}
+
+LV source_writer_checkbox_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    const std::string title = object_prop_or_default(object, "Title", object.name);
+    return list({
+        raw("1"),
+        list({
+            list({
+                source_writer_extended_base_info(object),
+                raw("7"),
+                localized_text_record(title),
+                raw("1"), raw("0"), raw("1"), raw("0"), raw("100"), raw("1"),
+            }),
+            raw("4"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+        }),
+        source_writer_event_table(form_object, object.object_id),
+    });
+}
+
+LV source_writer_input_field_info_record(const oof::platform::object_model::PlatformObject& object) {
+    auto record = list({
+        source_writer_extended_base_info(object),
+        raw("31"),
+        raw("0"),
+        raw(object_prop_or_default(object, "EditMode", "0")),
+        raw(object_prop_or_default(object, "ChoiceMode", "1")),
+        raw(source_writer_bool_prop(object, "PasswordMode", "0")),
+        raw("0"),
+        raw(source_writer_bool_prop(object, "ExtendedEdit", "0")),
+        raw("0"), raw("0"), raw("0"), raw("1"),
+        raw(source_writer_bool_prop(object, "ReadOnly", "0")),
+        raw("0"), raw(object_prop_or_default(object, "MaxLength", "0")),
+        raw("0"), raw("0"), raw("4"), raw("0"),
+        list({str_atom("U")}),
+        list({str_atom("U")}),
+        str_atom(object_prop_or_default(object, "Mask", "")),
+        raw("0"), raw("1"), raw("0"), raw("0"),
+        raw(source_writer_bool_prop(object, "MultiLine", "0")),
+        raw("0"),
+        source_writer_empty_page_style_record(),
+        source_writer_empty_page_style_record(),
+        raw("0"), raw("0"), raw("0"),
+        list({raw("0"), raw("0"), raw("0")}),
+        list({raw("1"), raw("0")}),
+        raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+        raw("16777215"), raw("2"), raw("0"), raw("0"),
+    });
+    const std::string max_length = object_prop_or_default(object, "MaxLength", "0");
+    if (max_length != "0") {
+        record.items[13] = raw("1");
+        record.items[14] = raw(max_length);
+    }
+    return record;
+}
+
+LV source_writer_input_field_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    return list({
+        raw("9"),
+        source_writer_type_domain_pattern_record(object),
+        list({source_writer_input_field_info_record(object)}),
+        list({raw("0")}),
+        source_writer_event_table(form_object, object.object_id),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        list({raw("1"), raw("0")}),
+        raw("0"),
     });
 }
 
@@ -6207,6 +6723,18 @@ LV source_writer_control_payload(
     const oof::platform::object_model::PlatformObject& object
 ) {
     const std::string title = object_prop_or_default(object, "Title", object.name);
+    if (object.platform_type == "Label") {
+        return source_writer_label_payload(form_object, object);
+    }
+    if (object.platform_type == "Image") {
+        return source_writer_image_payload(form_object, object);
+    }
+    if (object.platform_type == "CheckBox") {
+        return source_writer_checkbox_payload(form_object, object);
+    }
+    if (object.platform_type == "TextBox" || object.platform_type == "InputField") {
+        return source_writer_input_field_payload(form_object, object);
+    }
     if (object.platform_type == "Button") {
         return list({
             raw("1"),
@@ -6220,17 +6748,63 @@ LV source_writer_control_payload(
     return list({raw("1"), localized_text_record(title)});
 }
 
+bool source_writer_has_typed_payload(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    if (object.platform_type == "Label" ||
+        object.platform_type == "Image" ||
+        object.platform_type == "CheckBox" ||
+        object.platform_type == "TextBox" ||
+        object.platform_type == "InputField" ||
+        object.platform_type == "Button") {
+        return true;
+    }
+    return source_writer_top_command_bar(object) &&
+           object_prop_or_default(object, "Title", "").empty();
+}
+
+struct SourceWriterCoverageSummary {
+    std::size_t typed_payload_controls = 0;
+    std::size_t minimal_payload_controls = 0;
+    std::map<std::string, std::size_t> minimal_payload_types;
+};
+
+SourceWriterCoverageSummary source_writer_coverage_summary(
+    const oof::platform::object_model::PlatformFormObject& form_object
+) {
+    SourceWriterCoverageSummary summary;
+    for (const auto& object : form_object.items.objects()) {
+        if (source_writer_has_typed_payload(object)) {
+            ++summary.typed_payload_controls;
+            continue;
+        }
+        ++summary.minimal_payload_controls;
+        ++summary.minimal_payload_types[object.platform_type];
+    }
+    return summary;
+}
+
+void print_source_writer_coverage_json(const SourceWriterCoverageSummary& summary) {
+    std::cout << ",\"sourceWriterTypedPayloadControls\":" << summary.typed_payload_controls;
+    std::cout << ",\"sourceWriterMinimalPayloadControls\":" << summary.minimal_payload_controls;
+    std::cout << ",\"sourceWriterMinimalPayloadTypes\":[";
+    std::size_t index = 0;
+    for (const auto& [type, count] : summary.minimal_payload_types) {
+        if (index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"type\":";
+        print_json_string(type);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "]";
+}
+
 std::vector<const oof::platform::object_model::PlatformObject*> source_writer_children(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& parent
 ) {
-    std::vector<const oof::platform::object_model::PlatformObject*> children;
-    for (const auto& index : parent.children) {
-        if (index < form_object.items.count()) {
-            children.push_back(&form_object.items.get(index));
-        }
-    }
-    return children;
+    return child_objects_for_parent(form_object, parent.object_id);
 }
 
 LV source_writer_child_table(
@@ -6664,6 +7238,7 @@ void write_formbin_from_source_package(
         picture_sidecars_read);
     const auto form_object = platform_form_object_from_public_xml(package_xml);
     const std::string title = public_form_title_from_xml(package_xml);
+    const auto writer_coverage = source_writer_coverage_summary(form_object);
 
     oof::platform::formbin::OneCContainer container;
     container.block_size = oof::platform::formbin::container_block_size;
@@ -6699,6 +7274,7 @@ void write_formbin_from_source_package(
     std::cout << ",\"pictureSidecarsRead\":" << picture_sidecars_read;
     std::cout << ",\"usesBaseBin\":false";
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
+    print_source_writer_coverage_json(writer_coverage);
     std::cout << "}\n";
 }
 

@@ -69,6 +69,31 @@ struct PlatformObjectCollectionDescriptor {
     bool writable = false;
 };
 
+struct PlatformObjectIdentity {
+    std::string public_id;
+    std::string platform_object_id;
+    std::string composite_id;
+    std::string uuid;
+    std::string class_guid;
+    std::string class_guid_source;
+    std::string stream_element;
+    std::string schema_source;
+    std::string identity_policy;
+};
+
+struct PlatformObjectEdge {
+    std::string kind;
+    std::string from_object_id;
+    std::string to_object_id;
+    std::string role;
+    std::string name;
+    std::string source;
+    std::string schema_source;
+    std::string slot_binding;
+    std::string value_type;
+    bool required = true;
+};
+
 struct PlatformObject {
     std::string object_id;
     std::string name;
@@ -77,6 +102,7 @@ struct PlatformObject {
     std::string type_source;
     std::string path;
     std::string parent_object_id;
+    PlatformObjectIdentity identity;
     std::vector<PlatformObjectProperty> properties;
     std::vector<PlatformObjectCollectionDescriptor> collections;
     std::vector<PlatformObjectMethod> methods;
@@ -199,9 +225,14 @@ struct PlatformFormObject {
     PlatformObjectCollection attributes;
     PlatformObjectCollection commands;
     PlatformObjectCollection events;
+    std::vector<PlatformObjectEdge> edges;
 
     const PlatformObjectProperty* property(std::string_view property_name) const {
         return form.property(property_name);
+    }
+
+    void add_edge(PlatformObjectEdge edge) {
+        edges.push_back(std::move(edge));
     }
 
     const PlatformObject* find_object_by_id(std::string_view object_id) const {
@@ -413,6 +444,56 @@ inline PlatformObjectCoverageGap make_coverage_gap(
     gap.source = std::move(source);
     gap.reason = std::move(reason);
     return gap;
+}
+
+inline PlatformObjectIdentity make_identity(
+    std::string public_id,
+    std::string platform_object_id,
+    std::string identity_policy,
+    std::string composite_id = {},
+    std::string uuid = {},
+    std::string class_guid = {},
+    std::string class_guid_source = {},
+    std::string stream_element = {},
+    std::string schema_source = {}
+) {
+    PlatformObjectIdentity identity;
+    identity.public_id = std::move(public_id);
+    identity.platform_object_id = std::move(platform_object_id);
+    identity.composite_id = std::move(composite_id);
+    identity.uuid = std::move(uuid);
+    identity.class_guid = std::move(class_guid);
+    identity.class_guid_source = std::move(class_guid_source);
+    identity.stream_element = std::move(stream_element);
+    identity.schema_source = std::move(schema_source);
+    identity.identity_policy = std::move(identity_policy);
+    return identity;
+}
+
+inline PlatformObjectEdge make_edge(
+    std::string kind,
+    std::string from_object_id,
+    std::string to_object_id,
+    std::string role,
+    std::string source,
+    std::string schema_source = {},
+    std::string slot_binding = {},
+    std::string value_type = {},
+    std::string name = {},
+    bool required = true
+) {
+    PlatformObjectEdge edge;
+    edge.kind = std::move(kind);
+    edge.from_object_id = std::move(from_object_id);
+    edge.to_object_id = std::move(to_object_id);
+    edge.role = std::move(role);
+    edge.name = std::move(name);
+    edge.source = std::move(source);
+    edge.schema_source = std::move(schema_source);
+    edge.slot_binding = std::move(slot_binding);
+    edge.value_type = std::move(value_type);
+    edge.required = required;
+    return edge;
 }
 
 inline PlatformObjectCollectionDescriptor make_collection_descriptor(
