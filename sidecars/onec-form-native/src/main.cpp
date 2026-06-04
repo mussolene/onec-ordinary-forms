@@ -274,6 +274,7 @@ void usage() {
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
               << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin\n"
+              << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-xml-coverage Form.bin\n"
               << "       oof-native <formbin-platform-object|formbin-platform-object-get> Form.bin [objectId property]\n"
               << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value\n"
@@ -3546,6 +3547,15 @@ std::string platform_type_for_public_xml_tag(std::string_view tag) {
     if (tag == "CalendarField") {
         return "Calendar";
     }
+    if (tag == "Separator") {
+        return "Splitter";
+    }
+    if (tag == "GeographicalMap") {
+        return "GeographicalSchemaField";
+    }
+    if (tag == "Flowchart") {
+        return "GraphicalSchemaField";
+    }
     if (tag == "Page") {
         return "PanelPage";
     }
@@ -5355,6 +5365,314 @@ void write_formbin_from_package(
     std::cout << ",\"pictureSidecarsRead\":" << picture_sidecars_read;
     std::cout << ",\"pictureSidecarEdits\":" << picture_sidecar_edits;
     std::cout << ",\"preservedContainerFiles\":" << container.files.size();
+    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
+    std::cout << "}\n";
+}
+
+using LV = oof::platform::stream::ListValue;
+
+LV raw(std::string value) {
+    return LV::raw_atom(std::move(value));
+}
+
+LV str_atom(std::string value) {
+    return LV::string_atom(std::move(value));
+}
+
+LV list(std::vector<LV> value) {
+    return LV::list(std::move(value));
+}
+
+LV localized_text_record(std::string_view text) {
+    return list({
+        raw("1"),
+        raw("1"),
+        list({str_atom("ru"), str_atom(std::string(text))})
+    });
+}
+
+std::string public_xml_text_content(std::string_view body) {
+    const auto item = first_xml_element(body, "Item");
+    if (!item.self_closing && !item.body.empty()) {
+        return xml_unescape(item.body);
+    }
+    return xml_unescape(std::string(body));
+}
+
+std::string public_form_title_from_xml(const std::string& xml) {
+    const auto title = first_xml_element(xml, "Title");
+    if (title.self_closing || title.body.empty()) {
+        return "Main";
+    }
+    const std::string text = public_xml_text_content(title.body);
+    return text.empty() ? "Main" : text;
+}
+
+std::string source_writer_control_guid(std::string_view platform_type) {
+    static const std::map<std::string_view, std::string_view> guids{
+        {"Panel", "09ccdc77-ea1a-4a6d-ab1c-3435eada2433"},
+        {"PanelPage", "09ccdc77-ea1a-4a6d-ab1c-3435eada2433"},
+        {"ActiveXControl", "621e95f1-064f-11d4-9400-008048da11f9"},
+        {"Label", "0fc7e20d-f241-460c-bdf4-5ad88e5474a5"},
+        {"Image", "151ef23e-6bb2-4681-83d0-35bc2217230c"},
+        {"Button", "6ff79819-710e-4145-97cd-1618da79e3e2"},
+        {"TextBox", "381ed624-9217-4e63-85db-c4c3cb87daae"},
+        {"InputField", "381ed624-9217-4e63-85db-c4c3cb87daae"},
+        {"CommandBar", "e69bf21d-97b2-4f37-86db-675aea9ec2cb"},
+        {"CheckBox", "35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26"},
+        {"TableBox", "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1"},
+        {"Table", "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1"},
+        {"ChoiceField", "64483e7f-3833-48e2-8c75-2c31aac49f6e"},
+        {"Spreadsheet", "236a17b3-7f44-46d9-a907-75f9cdc61ab5"},
+        {"SpreadsheetDocumentField", "236a17b3-7f44-46d9-a907-75f9cdc61ab5"},
+        {"GroupBox", "90db814a-c75f-4b54-bc96-df62e554d67d"},
+        {"RadioButton", "782e569a-79a7-4a4f-a936-b48d013936ec"},
+        {"Splitter", "36e52348-5d60-4770-8e89-a16ed50a2006"},
+        {"Chart", "a8b97779-1a4b-4059-b09c-807f86d2a461"},
+        {"ListBox", "19f8b798-314e-4b4e-8121-905b2a7a03f5"},
+        {"HTMLDocumentField", "d92a805c-98ae-4750-9158-d9ce7cec2f20"},
+        {"TrackBar", "6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef"},
+        {"Calendar", "e3c063d8-ef92-41be-9c89-b70290b5368b"},
+        {"CalendarField", "e3c063d8-ef92-41be-9c89-b70290b5368b"},
+        {"TextDocument", "14c4a229-bfc3-42fe-9ce1-2da049fd0109"},
+        {"TextDocumentField", "14c4a229-bfc3-42fe-9ce1-2da049fd0109"},
+        {"PivotChart", "a26da99e-184a-4823-b0d6-62816d38dc4e"},
+        {"GeographicalSchemaField", "ad37194e-555e-4305-b718-5dca84baf145"},
+        {"ProgressBar", "b1db1f86-abbb-4cf0-8852-fe6ae21650c2"},
+        {"GraphicalSchemaField", "42248403-7748-49da-b782-e4438fd7bff3"},
+        {"GanttChart", "e5fdc112-5c84-4a16-9728-72b85692b6e2"},
+        {"Dendrogram", "984981b1-622d-4ebc-94f7-885f0cdfb59a"},
+    };
+    const auto it = guids.find(platform_type);
+    if (it == guids.end()) {
+        throw std::runtime_error("native source writer does not know ordinary control GUID for type: " +
+                                 std::string(platform_type));
+    }
+    return std::string(it->second);
+}
+
+std::string object_prop_or_default(
+    const oof::platform::object_model::PlatformObject& object,
+    std::string_view name,
+    std::string fallback
+) {
+    if (const auto* property = object.property(name)) {
+        if (!property->value.empty()) {
+            return property->value;
+        }
+    }
+    return fallback;
+}
+
+LV source_writer_geometry(const oof::platform::object_model::PlatformObject& object) {
+    std::vector<LV> items;
+    items.push_back(raw("8"));
+    items.push_back(raw(object_prop_or_default(object, "Left", "0")));
+    items.push_back(raw(object_prop_or_default(object, "Top", "0")));
+    items.push_back(raw(object_prop_or_default(object, "Right", "0")));
+    items.push_back(raw(object_prop_or_default(object, "Bottom", "0")));
+    items.push_back(raw("0"));
+    for (std::string_view name : {
+             "Binding.top", "Binding.bottom", "Binding.left",
+             "Binding.right", "Binding.verticalCenter", "Binding.horizontalCenter",
+         }) {
+        const auto* property = object.property(name);
+        items.push_back(property == nullptr || property->value.empty()
+                            ? raw("0")
+                            : oof::platform::stream::parse(property->value));
+    }
+    items.push_back(raw("0"));
+    for (std::string_view name : {
+             "DimensionBinding.height", "DimensionBinding.minHeight",
+             "DimensionBinding.stretch", "DimensionBinding.width",
+         }) {
+        const auto* property = object.property(name);
+        items.push_back(property == nullptr || property->value.empty()
+                            ? raw("0")
+                            : oof::platform::stream::parse(property->value));
+    }
+    items.push_back(raw("0"));
+    items.push_back(raw("0"));
+    return list(std::move(items));
+}
+
+LV source_writer_metadata(const oof::platform::object_model::PlatformObject& object) {
+    return list({
+        raw("14"),
+        str_atom(object.name.empty() ? object.object_id : object.name),
+        raw("4294967295"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+    });
+}
+
+std::vector<const oof::platform::object_model::PlatformObject*> source_writer_children(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& parent
+) {
+    std::vector<const oof::platform::object_model::PlatformObject*> children;
+    for (const auto& index : parent.children) {
+        if (index < form_object.items.count()) {
+            children.push_back(&form_object.items.get(index));
+        }
+    }
+    return children;
+}
+
+LV source_writer_child_table(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& parent
+);
+
+LV source_writer_control_record(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    const std::string title = object_prop_or_default(object, "Title", object.name);
+    return list({
+        raw(source_writer_control_guid(object.platform_type)),
+        raw(object.object_id.empty() ? "0" : object.object_id),
+        list({raw("1"), localized_text_record(title)}),
+        source_writer_geometry(object),
+        source_writer_metadata(object),
+        source_writer_child_table(form_object, object),
+    });
+}
+
+LV source_writer_child_table(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& parent
+) {
+    std::vector<LV> items;
+    const auto children = source_writer_children(form_object, parent);
+    items.push_back(raw(std::to_string(children.size())));
+    for (const auto* child : children) {
+        items.push_back(source_writer_control_record(form_object, *child));
+    }
+    return list(std::move(items));
+}
+
+LV source_writer_root_record(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view title
+) {
+    std::vector<LV> root_children;
+    for (const auto* child : source_writer_children(form_object, form_object.form)) {
+        root_children.push_back(source_writer_control_record(form_object, *child));
+    }
+    std::vector<LV> child_table;
+    child_table.push_back(raw(std::to_string(root_children.size())));
+    child_table.insert(child_table.end(), std::make_move_iterator(root_children.begin()), std::make_move_iterator(root_children.end()));
+
+    const LV root_panel = list({
+        raw(source_writer_control_guid("Panel")),
+        list({raw("1"), localized_text_record(title)}),
+        list(std::move(child_table)),
+    });
+    return list({
+        raw("16"),
+        list({localized_text_record(title), raw("52"), raw("4294967295")}),
+        root_panel,
+        raw("885"),
+        raw("244"),
+        raw("1"),
+        raw("0"),
+        raw("1"),
+        raw("4"),
+        raw("4"),
+        raw("6"),
+    });
+}
+
+LV source_writer_form_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view title
+) {
+    return list({
+        raw("27"),
+        source_writer_root_record(form_object, title),
+        list({raw("0")}),
+        list({raw("00000000-0000-0000-0000-000000000000"), raw("0")}),
+        list({raw("0")}),
+        raw("1"),
+        raw("4"),
+        raw("1"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        list({raw("0")}),
+        list({raw("0")}),
+        list({
+            raw("10"), raw("0"),
+            list({raw("4"), raw("0"), list({raw("0")}), str_atom(""), raw("-1"), raw("-1"), raw("1"), raw("0"), str_atom("")}),
+            list({raw("4"), raw("0"), list({raw("0")}), str_atom(""), raw("-1"), raw("-1"), raw("1"), raw("0"), str_atom("")}),
+            list({raw("4"), raw("0"), list({raw("0")}), str_atom(""), raw("-1"), raw("-1"), raw("1"), raw("0"), str_atom("")}),
+            raw("100"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+        }),
+        raw("1"),
+        raw("2"),
+        raw("0"),
+        raw("0"),
+        raw("1"),
+        raw("1"),
+    });
+}
+
+std::vector<std::uint8_t> source_writer_form_payload_bytes(const LV& payload) {
+    const std::string text = oof::platform::stream::dump_compact(payload);
+    std::vector<std::uint8_t> out{0xef, 0xbb, 0xbf};
+    out.insert(out.end(), text.begin(), text.end());
+    return out;
+}
+
+void write_formbin_from_source_package(
+    const std::string& xml_path,
+    const std::string& output_path
+) {
+    const auto xml_package_path = std::filesystem::path(xml_path);
+    std::size_t picture_sidecars_read = 0;
+    const std::string source_xml = read_file_text_lossy(xml_path);
+    const std::string package_xml = inline_picture_sidecars_for_build(
+        source_xml,
+        xml_package_path,
+        picture_sidecars_read);
+    const auto form_object = platform_form_object_from_public_xml(package_xml);
+    const std::string title = public_form_title_from_xml(package_xml);
+
+    oof::platform::formbin::OneCContainer container;
+    container.block_size = oof::platform::formbin::container_block_size;
+    container.files.push_back({
+        "form",
+        0,
+        0,
+        source_writer_form_payload_bytes(source_writer_form_payload(form_object, title)),
+    });
+
+    const auto module_path = form_package_module_path(xml_package_path);
+    bool module_sidecar_used = false;
+    std::size_t module_bytes = 0;
+    std::vector<std::uint8_t> module_payload;
+    if (std::filesystem::is_regular_file(module_path)) {
+        module_payload = read_file_bytes(module_path.string());
+        module_sidecar_used = true;
+        module_bytes = module_payload.size();
+    }
+    container.files.push_back({"module", 0, 0, std::move(module_payload)});
+
+    const auto rebuilt = oof::platform::formbin::serialize_container(container);
+    write_file_bytes(output_path, rebuilt);
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"operation\":\"formbin-build-source-package\"";
+    std::cout << ",\"bytes\":" << rebuilt.size();
+    std::cout << ",\"source\":\"Form.xml\"";
+    std::cout << ",\"controls\":" << form_object.items.count();
+    std::cout << ",\"moduleSource\":";
+    print_json_string(module_sidecar_used ? "sidecar" : "empty");
+    std::cout << ",\"moduleBytes\":" << module_bytes;
+    std::cout << ",\"pictureSidecarsRead\":" << picture_sidecars_read;
+    std::cout << ",\"usesBaseBin\":false";
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
@@ -7697,6 +8015,10 @@ int main(int argc, char** argv) {
         }
         if (command == "formbin-build-package" && argc == 5) {
             write_formbin_from_package(argv[2], argv[3], argv[4]);
+            return 0;
+        }
+        if (command == "formbin-build-source-package" && argc == 4) {
+            write_formbin_from_source_package(argv[2], argv[3]);
             return 0;
         }
         if (command == "formbin-xml-coverage" && argc == 3) {

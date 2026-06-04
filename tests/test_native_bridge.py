@@ -7,6 +7,7 @@ import pytest
 from onec_ordinary_forms.native_bridge import (
     assert_payload_lossless,
     build_formbin_package,
+    build_formbin_source_package,
     dump_formbin_package,
     formbin_roundtrip_report,
     native_binary,
@@ -58,6 +59,39 @@ def test_native_dump_and_build_package_use_cpp_backend(tmp_path: Path) -> None:
     assert report["publicContract"] == "OrdinaryForm"
     files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
     assert files["module"] == b"edited module"
+
+
+def test_native_build_source_package_without_base_preserves_module_sidecar(tmp_path: Path) -> None:
+    xml = tmp_path / "Ext" / "Form.xml"
+    module = xml.with_suffix("") / "Module.bsl"
+    rebuilt = tmp_path / "Form.bin"
+    redump_xml = tmp_path / "redump" / "Form.xml"
+    xml.parent.mkdir(parents=True)
+    module.parent.mkdir(parents=True)
+    xml.write_text(
+        """<Form ordinaryFormVersion="2.0">
+          <Title><Item lang="ru">Main</Item></Title>
+          <ChildItems>
+            <Button name="Run" id="5">
+              <Title>Run</Title>
+              <Position left="1" top="2" right="101" bottom="22"/>
+            </Button>
+          </ChildItems>
+        </Form>""",
+        encoding="utf-8",
+    )
+    module.write_bytes(b"Procedure Run()\nEndProcedure\n")
+
+    report = build_formbin_source_package(xml, rebuilt)
+
+    assert report["operation"] == "formbin-build-source-package"
+    assert report["usesBaseBin"] is False
+    assert report["moduleSource"] == "sidecar"
+    assert report["moduleBytes"] == module.stat().st_size
+    assert formbin_roundtrip_report(rebuilt)["logicalEqual"] is True
+    dump_formbin_package(rebuilt, redump_xml)
+    assert (redump_xml.with_suffix("") / "Module.bsl").read_bytes() == module.read_bytes()
+    assert 'name="Run"' in redump_xml.read_text(encoding="utf-8")
 
 
 def test_native_package_roundtrips_picture_sidecar(tmp_path: Path) -> None:
