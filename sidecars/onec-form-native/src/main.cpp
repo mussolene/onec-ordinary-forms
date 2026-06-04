@@ -1105,6 +1105,34 @@ struct GeometryBindingRecord {
     oof::platform::stream::ListValue value;
 };
 
+std::string first_base64_picture_payload(const oof::platform::stream::ListValue& value) {
+    if (!value.is_list) {
+        if (value.atom.rfind("#base64:", 0) == 0) {
+            return value.atom;
+        }
+        return {};
+    }
+    for (std::size_t index = 0; index < value.items.size(); ++index) {
+        const auto& item = value.items[index];
+        if (!item.is_list && item.atom.rfind("#base64:", 0) == 0) {
+            std::string payload = item.atom;
+            for (std::size_t chunk_index = index + 1; chunk_index < value.items.size(); ++chunk_index) {
+                const auto& chunk = value.items[chunk_index];
+                if (chunk.is_list) {
+                    break;
+                }
+                payload += chunk.atom;
+            }
+            return payload;
+        }
+        const std::string found = first_base64_picture_payload(item);
+        if (!found.empty()) {
+            return found;
+        }
+    }
+    return {};
+}
+
 struct MaterializedFormEvent {
     std::string object_id;
     std::string owner_object_id;
@@ -1126,6 +1154,7 @@ struct MaterializedFormItem {
     std::string top;
     std::string right;
     std::string bottom;
+    std::string picture_payload;
     std::vector<GeometryBindingRecord> bindings;
     std::vector<GeometryBindingRecord> dimension_bindings;
     std::vector<MaterializedFormEvent> events;
@@ -1686,6 +1715,7 @@ void collect_materialized_form_items(
                     }
                 }
             }
+            item.picture_payload = first_base64_picture_payload(value);
             item.events = collect_materialized_form_events(value, item.object_id, path);
             next_parent = item.object_id;
             items.push_back(std::move(item));
@@ -2885,6 +2915,15 @@ private:
             } else {
                 add_api_surface(object, api_object_for_type(object.platform_type));
             }
+            if (!item.picture_payload.empty()) {
+                if (auto* picture = object.property("Picture")) {
+                    picture->value = item.picture_payload;
+                    picture->value_origin = "stream";
+                    enrich_platform_value_object(*picture);
+                } else {
+                    object.properties.push_back(make_described_property("Picture", item.picture_payload));
+                }
+            }
             form_object.items.add(std::move(object));
         }
     }
@@ -3310,6 +3349,138 @@ std::string xml_unescape(std::string value) {
     return value;
 }
 
+const char* base64_alphabet() {
+    return "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+}
+
+std::string base64_encode(const std::vector<std::uint8_t>& data) {
+    std::string out;
+    const char* alphabet = base64_alphabet();
+    std::size_t index = 0;
+    while (index + 2 < data.size()) {
+        const std::uint32_t triple =
+            (static_cast<std::uint32_t>(data[index]) << 16) |
+            (static_cast<std::uint32_t>(data[index + 1]) << 8) |
+            static_cast<std::uint32_t>(data[index + 2]);
+        out.push_back(alphabet[(triple >> 18) & 0x3f]);
+        out.push_back(alphabet[(triple >> 12) & 0x3f]);
+        out.push_back(alphabet[(triple >> 6) & 0x3f]);
+        out.push_back(alphabet[triple & 0x3f]);
+        index += 3;
+    }
+    if (index < data.size()) {
+        std::uint32_t triple = static_cast<std::uint32_t>(data[index]) << 16;
+        out.push_back(alphabet[(triple >> 18) & 0x3f]);
+        if (index + 1 < data.size()) {
+            triple |= static_cast<std::uint32_t>(data[index + 1]) << 8;
+            out.push_back(alphabet[(triple >> 12) & 0x3f]);
+            out.push_back(alphabet[(triple >> 6) & 0x3f]);
+            out.push_back('=');
+        } else {
+            out.push_back(alphabet[(triple >> 12) & 0x3f]);
+            out.push_back('=');
+            out.push_back('=');
+        }
+    }
+    return out;
+}
+
+int base64_value(char ch) {
+    if (ch >= 'A' && ch <= 'Z') {
+        return ch - 'A';
+    }
+    if (ch >= 'a' && ch <= 'z') {
+        return 26 + ch - 'a';
+    }
+    if (ch >= '0' && ch <= '9') {
+        return 52 + ch - '0';
+    }
+    if (ch == '+') {
+        return 62;
+    }
+    if (ch == '/') {
+        return 63;
+    }
+    return -1;
+}
+
+std::vector<std::uint8_t> base64_decode(std::string_view text) {
+    std::vector<std::uint8_t> out;
+    int buffer = 0;
+    int bits = -8;
+    for (const char ch : text) {
+        if (std::isspace(static_cast<unsigned char>(ch))) {
+            continue;
+        }
+        if (ch == '=') {
+            break;
+        }
+        const int value = base64_value(ch);
+        if (value < 0) {
+            throw std::runtime_error("invalid base64 picture payload");
+        }
+        buffer = (buffer << 6) | value;
+        bits += 6;
+        if (bits >= 0) {
+            out.push_back(static_cast<std::uint8_t>((buffer >> bits) & 0xff));
+            bits -= 8;
+        }
+    }
+    return out;
+}
+
+std::string base64_payload_body(std::string_view payload) {
+    std::string body;
+    if (payload.rfind("#base64:", 0) == 0) {
+        payload.remove_prefix(std::string_view("#base64:").size());
+    }
+    for (const char ch : payload) {
+        if (!std::isspace(static_cast<unsigned char>(ch))) {
+            body.push_back(ch);
+        }
+    }
+    return body;
+}
+
+std::vector<std::uint8_t> decode_picture_payload(std::string_view payload) {
+    return base64_decode(base64_payload_body(payload));
+}
+
+std::string wrap_base64_picture_payload(const std::vector<std::uint8_t>& data) {
+    const std::string encoded = base64_encode(data);
+    std::string out = "#base64:";
+    for (std::size_t index = 0; index < encoded.size(); index += 64) {
+        if (index != 0) {
+            out += "\r\r\n";
+        }
+        out += encoded.substr(index, 64);
+    }
+    return out;
+}
+
+std::string picture_extension_for_bytes(const std::vector<std::uint8_t>& data) {
+    if (data.size() >= 6 &&
+        data[0] == 'G' && data[1] == 'I' && data[2] == 'F' &&
+        data[3] == '8' && (data[4] == '7' || data[4] == '9') && data[5] == 'a') {
+        return "gif";
+    }
+    if (data.size() >= 8 &&
+        data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G' &&
+        data[4] == '\r' && data[5] == '\n' && data[6] == 0x1a && data[7] == '\n') {
+        return "png";
+    }
+    if (data.size() >= 2 && data[0] == 0xff && data[1] == 0xd8) {
+        return "jpg";
+    }
+    return "bin";
+}
+
+bool set_materialized_object_picture_payload(
+    oof::platform::stream::ListValue& value,
+    std::string_view object_id,
+    std::string_view payload
+);
+
 std::string public_xml_tag_for_platform_type(std::string_view platform_type) {
     if (platform_type == "TextBox") {
         return "InputField";
@@ -3523,6 +3694,11 @@ const std::set<std::string>& public_schema_property_names() {
                 }
             }
         }
+        result.insert("Picture");
+        result.insert("TextColor");
+        result.insert("BackColor");
+        result.insert("BorderColor");
+        result.insert("Font");
         return result;
     }();
     return names;
@@ -3867,13 +4043,43 @@ void append_named_text_property_xml(
     out += ">\n";
 }
 
+struct PublicXmlPackageSidecarSink {
+    std::filesystem::path package_root;
+    std::size_t picture_count = 0;
+};
+
+std::string package_item_name(const oof::platform::object_model::PlatformObject& object) {
+    if (!object.name.empty()) {
+        return safe_container_file_name(object.name);
+    }
+    if (!object.object_id.empty()) {
+        return safe_container_file_name(object.object_id);
+    }
+    return "Item";
+}
+
 void append_schema_properties_xml(
     std::string& out,
     const oof::platform::object_model::PlatformObject& object,
-    int indent
+    int indent,
+    PublicXmlPackageSidecarSink* sidecar_sink = nullptr
 ) {
     for (const auto& property : object.properties) {
         if (!is_public_schema_property_xml(property) || !property_is_explicit_for_xml(property)) {
+            continue;
+        }
+        if (sidecar_sink != nullptr &&
+            property.name == "Picture" &&
+            property.value_object_storage == "inline-base64") {
+            const auto picture_bytes = decode_picture_payload(property.value);
+            const std::string relative_path =
+                "Items/" + package_item_name(object) + "/Picture." + picture_extension_for_bytes(picture_bytes);
+            write_file_bytes(sidecar_sink->package_root / relative_path, picture_bytes);
+            ++sidecar_sink->picture_count;
+            append_indent(out, indent);
+            out += "<Picture file=\"";
+            out += xml_escape(relative_path);
+            out += "\"/>\n";
             continue;
         }
         append_indent(out, indent);
@@ -4303,7 +4509,8 @@ void append_control_xml(
     std::string& out,
     const oof::platform::object_model::PlatformFormObject& form_object,
     std::size_t object_index,
-    int indent
+    int indent,
+    PublicXmlPackageSidecarSink* sidecar_sink = nullptr
 ) {
     const auto& object = form_object.items.get(object_index);
     const std::string tag = public_xml_tag_for_platform_type(object.platform_type);
@@ -4335,7 +4542,7 @@ void append_control_xml(
     append_named_text_property_xml(out, object, "Title", indent + 2);
     append_named_text_property_xml(out, object, "Visible", indent + 2);
     append_named_text_property_xml(out, object, "Enabled", indent + 2);
-    append_schema_properties_xml(out, object, indent + 2);
+    append_schema_properties_xml(out, object, indent + 2, sidecar_sink);
     append_position_xml(out, form_object, object, indent + 2);
     if (!object_events.empty()) {
         append_events_xml(out, object_events, indent + 2);
@@ -4344,7 +4551,7 @@ void append_control_xml(
         append_indent(out, indent + 2);
         out += "<ChildItems>\n";
         for (const std::size_t child_index : object.children) {
-            append_control_xml(out, form_object, child_index, indent + 4);
+            append_control_xml(out, form_object, child_index, indent + 4, sidecar_sink);
         }
         append_indent(out, indent + 2);
         out += "</ChildItems>\n";
@@ -4355,14 +4562,17 @@ void append_control_xml(
     out += ">\n";
 }
 
-std::string form_object_to_public_xml(const oof::platform::object_model::PlatformFormObject& form_object) {
+std::string form_object_to_public_xml(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    PublicXmlPackageSidecarSink* sidecar_sink = nullptr
+) {
     std::string out;
     out += "<?xml version='1.0' encoding='utf-8'?>\n";
     out += "<Form xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" ordinaryFormVersion=\"2.0\" xsi:noNamespaceSchemaLocation=\"OrdinaryForm.xsd\">\n";
     append_events_xml(out, event_objects_for_parent(form_object, "0"), 2);
     out += "  <ChildItems>\n";
     for (const std::size_t child_index : form_object.form.children) {
-        append_control_xml(out, form_object, child_index, 4);
+        append_control_xml(out, form_object, child_index, 4, sidecar_sink);
     }
     out += "  </ChildItems>\n";
     append_attributes_xml(out, form_object, 2);
@@ -4403,14 +4613,142 @@ std::filesystem::path form_package_module_path(const std::filesystem::path& xml_
     return form_package_root_for_xml(xml_path) / "Module.bsl";
 }
 
+std::filesystem::path checked_package_relative_path(
+    const std::filesystem::path& package_root,
+    std::string_view relative
+) {
+    const std::filesystem::path rel{std::string(relative)};
+    if (rel.is_absolute()) {
+        throw std::runtime_error("Picture file path must be relative to the Form package");
+    }
+    for (const auto& part : rel) {
+        if (part == "..") {
+            throw std::runtime_error("Picture file path must not escape the Form package");
+        }
+    }
+    return package_root / rel;
+}
+
+std::string inline_picture_sidecars_for_build(
+    const std::string& xml,
+    const std::filesystem::path& xml_path,
+    std::size_t& picture_sidecars_read
+) {
+    const auto package_root = form_package_root_for_xml(xml_path);
+    std::string out;
+    std::size_t cursor = 0;
+    const std::string open = "<Picture";
+    while (cursor < xml.size()) {
+        const std::size_t start = xml.find(open, cursor);
+        if (start == std::string::npos) {
+            out += xml.substr(cursor);
+            break;
+        }
+        const std::size_t name_end = start + open.size();
+        if (name_end < xml.size()) {
+            const char after_name = xml[name_end];
+            if (std::isalnum(static_cast<unsigned char>(after_name)) || after_name == '_' || after_name == '-') {
+                out += xml.substr(cursor, name_end - cursor);
+                cursor = name_end;
+                continue;
+            }
+        }
+        const std::size_t tag_end = xml.find('>', start);
+        if (tag_end == std::string::npos) {
+            out += xml.substr(cursor);
+            break;
+        }
+        const std::string attrs = xml.substr(name_end, tag_end - name_end);
+        const std::string file = xml_attr_value(attrs, "file");
+        if (file.empty()) {
+            out += xml.substr(cursor, tag_end + 1 - cursor);
+            cursor = tag_end + 1;
+            continue;
+        }
+
+        std::size_t replace_end = tag_end + 1;
+        const std::size_t attr_end = attrs.find_last_not_of(" \t\r\n/");
+        const bool self_closing = attr_end == std::string::npos ||
+                                  attrs.find('/', attr_end + 1) != std::string::npos;
+        if (!self_closing) {
+            const std::size_t close_start = xml.find("</Picture>", tag_end + 1);
+            if (close_start == std::string::npos) {
+                throw std::runtime_error("Picture file element is not closed");
+            }
+            replace_end = close_start + std::string("</Picture>").size();
+        }
+
+        const auto picture_bytes = read_file_bytes(checked_package_relative_path(package_root, file).string());
+        const std::string payload = wrap_base64_picture_payload(picture_bytes);
+        out += xml.substr(cursor, start - cursor);
+        out += "<Picture><PictureValue constructor=\"New Picture\" storage=\"inline-base64\">";
+        out += xml_escape(payload);
+        out += "</PictureValue></Picture>";
+        ++picture_sidecars_read;
+        cursor = replace_end;
+    }
+    return out;
+}
+
+std::size_t apply_picture_sidecar_edits(
+    oof::platform::stream::ListValue& payload,
+    const std::string& xml,
+    const std::filesystem::path& xml_path
+) {
+    const auto package_root = form_package_root_for_xml(xml_path);
+    const std::set<std::string> section_tags{
+        "Form", "Events", "Event", "ChildItems", "Attributes", "Attribute", "Commands", "Command",
+        "Title", "Position", "Pages", "Picture", "PictureValue"
+    };
+    const std::regex start_tag_pattern(R"(<([A-Za-z][A-Za-z0-9]*)\b([^>]*)>)");
+    std::size_t edits = 0;
+    for (std::sregex_iterator it(xml.begin(), xml.end(), start_tag_pattern), end; it != end; ++it) {
+        const std::string tag = (*it)[1].str();
+        if (section_tags.count(tag) != 0) {
+            continue;
+        }
+        const std::string attrs = (*it)[2].str();
+        const std::string object_id = xml_attr_value(attrs, "id");
+        if (object_id.empty()) {
+            continue;
+        }
+        const std::size_t body_start = static_cast<std::size_t>(it->position() + it->length());
+        const std::string close_tag = "</" + tag + ">";
+        const std::size_t body_end = xml.find(close_tag, body_start);
+        if (body_end == std::string::npos) {
+            continue;
+        }
+        std::string body = xml.substr(body_start, body_end - body_start);
+        const std::size_t child_items_pos = body.find("<ChildItems>");
+        if (child_items_pos != std::string::npos) {
+            body.resize(child_items_pos);
+        }
+        for (const auto& picture_xml : find_xml_elements(body, "Picture")) {
+            const std::string file = xml_attr_value(picture_xml.attrs, "file");
+            if (file.empty()) {
+                continue;
+            }
+            const auto picture_bytes = read_file_bytes(checked_package_relative_path(package_root, file).string());
+            const std::string picture_payload = wrap_base64_picture_payload(picture_bytes);
+            if (!set_materialized_object_picture_payload(payload, object_id, picture_payload)) {
+                throw std::runtime_error("cannot apply Picture sidecar: baseline object has no writable picture payload slot: object=" +
+                                         object_id);
+            }
+            ++edits;
+        }
+    }
+    return edits;
+}
+
 void write_formbin_package(const std::string& input_path, const std::string& output_path) {
     const std::vector<std::uint8_t> data = read_file_bytes(input_path);
     const auto container = oof::platform::formbin::parse_container(data);
     const auto& form_file = find_container_file(container, "form");
     const RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
     const auto form_object = materialize_platform_form_object(envelope);
-    const std::string xml = form_object_to_public_xml(form_object);
     const std::filesystem::path xml_path(output_path);
+    PublicXmlPackageSidecarSink sidecar_sink{form_package_root_for_xml(xml_path)};
+    const std::string xml = form_object_to_public_xml(form_object, &sidecar_sink);
     write_file_bytes(xml_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
 
     bool module_written = false;
@@ -4435,6 +4773,7 @@ void write_formbin_package(const std::string& input_path, const std::string& out
     std::cout << ",\"controlCount\":" << form_object.items.count();
     std::cout << ",\"moduleWritten\":" << (module_written ? "true" : "false");
     std::cout << ",\"moduleBytes\":" << module_bytes;
+    std::cout << ",\"pictureSidecars\":" << sidecar_sink.picture_count;
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
@@ -4520,12 +4859,21 @@ void write_formbin_from_package(
 
     RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
     const auto baseline = materialize_platform_form_object(envelope);
-    const auto requested_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
+    std::size_t picture_sidecars_read = 0;
+    const auto xml_package_path = std::filesystem::path(xml_path);
+    const std::string source_xml = read_file_text_lossy(xml_path);
+    const std::string package_xml = inline_picture_sidecars_for_build(
+        source_xml,
+        xml_package_path,
+        picture_sidecars_read);
+    const auto requested_edits = parse_public_xml_platform_object_edits(package_xml);
     const auto object_edits = keep_changed_platform_object_edits(requested_edits, baseline);
     const auto result = apply_platform_object_edits(envelope, object_edits);
+    const std::size_t picture_sidecar_edits =
+        apply_picture_sidecar_edits(envelope.payload, source_xml, xml_package_path);
     form_file.payload = encode_form_payload_text(form_file.payload, envelope.payload);
 
-    const auto module_path = form_package_module_path(std::filesystem::path(xml_path));
+    const auto module_path = form_package_module_path(xml_package_path);
     bool module_sidecar_used = false;
     std::size_t module_bytes = 0;
     if (std::filesystem::is_regular_file(module_path)) {
@@ -4554,6 +4902,8 @@ void write_formbin_from_package(
     std::cout << ",\"moduleSource\":";
     print_json_string(module_sidecar_used ? "sidecar" : "baseline");
     std::cout << ",\"moduleBytes\":" << module_bytes;
+    std::cout << ",\"pictureSidecarsRead\":" << picture_sidecars_read;
+    std::cout << ",\"pictureSidecarEdits\":" << picture_sidecar_edits;
     std::cout << ",\"preservedContainerFiles\":" << container.files.size();
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
@@ -5209,6 +5559,44 @@ bool set_materialized_object_dimension_bindings(
     return false;
 }
 
+bool replace_first_base64_payload(oof::platform::stream::ListValue& value, std::string_view payload) {
+    if (!value.is_list) {
+        if (value.atom.rfind("#base64:", 0) == 0) {
+            value.atom = std::string(payload);
+            value.atom_kind = oof::platform::stream::ListValue::AtomKind::raw;
+            return true;
+        }
+        return false;
+    }
+    for (auto& item : value.items) {
+        if (replace_first_base64_payload(item, payload)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool set_materialized_object_picture_payload(
+    oof::platform::stream::ListValue& value,
+    std::string_view object_id,
+    std::string_view payload
+) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (is_materializable_object_candidate(value) &&
+        !value.items[1].is_list &&
+        value.items[1].atom == object_id) {
+        return replace_first_base64_payload(value, payload);
+    }
+    for (auto& item : value.items) {
+        if (set_materialized_object_picture_payload(item, object_id, payload)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool set_materialized_attribute_property(
     oof::platform::stream::ListValue& payload,
     std::string_view object_id,
@@ -5535,6 +5923,9 @@ bool set_property_slot_value(
             const std::string dimension(descriptor.name.substr(dimension_prefix.size()));
             return set_materialized_object_dimension_bindings(payload, object_id, {{dimension, parse_slot_value(new_value)}});
         }
+    }
+    if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::picture_record) {
+        return set_materialized_object_picture_payload(payload, object_id, new_value);
     }
     throw std::runtime_error("slot codec is registered but not implemented for setPropVal yet: " +
                              std::string(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec)));

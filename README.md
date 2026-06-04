@@ -195,8 +195,7 @@ Current native rebuild is deliberately conservative: `build-bin` applies the
 public package to the original ordinary `Form.bin` object graph passed as
 `--base-bin`. The baseline is a private codec input, not a public XML fallback or
 renamed raw stream. The native C++ package command owns both `Form.xml` and
-`Module.bsl`; picture sidecars are the next codec extension in the same command
-path.
+`Module.bsl` and existing picture sidecars in the same command path.
 
 ## Русский
 
@@ -391,7 +390,7 @@ python3 tools/vendor_platform_schemas.py \
 пакет к исходному графу объектов обычной формы, переданному через `--base-bin`.
 Этот baseline является приватным входом codec-слоя, а не публичным
 fallback/XML-дампом. Native C++ package-команда уже владеет `Form.xml` и
-`Module.bsl`; картинки являются следующим расширением codec-слоя в том же пути.
+`Module.bsl`, а также существующими sidecar-картинками в том же codec-пути.
 
 ## Status / Статус
 
@@ -407,12 +406,14 @@ Current implementation status:
   original native object graph passed with `--base-bin`;
 - read changed `Form/Module.bsl` back into `Form.bin` while rebuilding from the
   native baseline;
+- dump existing picture payloads to `Form/Items/.../Picture.*` sidecars and
+  apply changed picture sidecars back to existing baseline picture slots;
 - scan local EPF/ERF corpora without committing private artifacts.
 
 Target implementation status:
 
-- extend the managed-form-like package with picture sidecars under
-  `Ext/Form/Items/...`;
+- create new picture payload slots from the named package when the baseline
+  object does not already contain one;
 - build ordinary `Form.bin` from that named package without requiring a source
   `Form.bin` baseline;
 - keep this package codec in C++, with Python limited to orchestration and
@@ -428,11 +429,15 @@ Target implementation status:
   к исходному native-графу объектов, переданному через `--base-bin`;
 - чтение измененного `Form/Module.bsl` обратно в `Form.bin` при сборке из native
   baseline;
+- выгрузка существующих картинок в `Form/Items/.../Picture.*` sidecars и
+  применение измененных sidecar-картинок обратно к существующим picture-слотам
+  baseline;
 - сканирование локальных EPF/ERF-корпусов без коммита приватных артефактов.
 
 Целевой статус реализации:
 
-- расширение managed-form-like пакета картинками в `Ext/Form/Items/...`;
+- создание новых picture payload slots из именованного пакета, если в baseline
+  объекте еще нет такого слота;
 - сборка обычного `Form.bin` из этого именованного пакета без исходного
   `Form.bin` как baseline;
 - удержание package codec в C++, при Python только как слой orchestration и
@@ -538,6 +543,7 @@ and writes one managed-form-like package:
 ```text
 scan-output/exported/Object/Forms/Form/Ext/Form.xml
 scan-output/exported/Object/Forms/Form/Ext/Form/Module.bsl
+scan-output/exported/Object/Forms/Form/Ext/Form/Items/<ElementName>/Picture.gif
 ```
 
 Validate and format the XML:
@@ -569,9 +575,10 @@ keep their native `Ext/Form.xml`.
 
 Writer behavior is intentionally conservative while the named ordinary-form
 object model is being completed. The public source contract is the package
-`Form.xml` plus `Form/Module.bsl`; the rebuild algorithm uses the original
-native `Form.bin` as a private object-graph baseline and does not expose raw
-stream/profile data.
+`Form.xml`, `Form/Module.bsl`, and `Form/Items/.../Picture.*` sidecars. The
+rebuild algorithm uses the original native `Form.bin` as a private object-graph
+baseline and does not expose raw stream/profile data. Picture edits are applied
+to controls that already have a writable picture payload in that baseline.
 
 Diagnostic commands:
 
