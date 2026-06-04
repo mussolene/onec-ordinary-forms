@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
-from onec_ordinary_forms.formbin import build_form_bin_container
+from onec_ordinary_forms.formbin import (
+    build_form_bin_container,
+    container_file_times_from_xml,
+)
 from onec_ordinary_forms.native_bridge import (
     NativeBridgeError,
     assert_payload_lossless,
@@ -71,11 +74,14 @@ def build_form_bin(
         return
 
     package_root = Path(asset_root) if asset_root is not None else xml_path.with_suffix("")
-    form_payload = form_stream_from_object_xml(ET.parse(xml_path).getroot(), package_root)
+    root = ET.parse(xml_path).getroot()
+    form_payload = form_stream_from_object_xml(root, package_root)
     module_path = package_root / "Module.bsl"
     module_payload = module_path.read_bytes() if module_path.exists() else b""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_bytes(build_form_bin_container(form_payload, module_payload))
+    out_path.write_bytes(
+        build_form_bin_container(form_payload, module_payload, file_times=container_file_times_from_xml(root))
+    )
 
 
 def validate_form_xml(xml: str | Path, schema: str | Path | None = None) -> None:

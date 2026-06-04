@@ -121,9 +121,11 @@ class CliSmokeTest(unittest.TestCase):
             xml = root / "Forms" / "Form" / "Ext" / "Form.xml"
             form_dir = xml.with_suffix("")
             form_dir.mkdir(parents=True)
+            created_ticks = datetime_to_container_ticks(datetime(2024, 1, 2, 3, 4, 5))
+            modified_ticks = datetime_to_container_ticks(datetime(2024, 1, 2, 6, 7, 8))
             xml.write_text(
-                """<?xml version='1.0' encoding='utf-8'?>
-<Form ordinaryFormVersion="2.0">
+                f"""<?xml version='1.0' encoding='utf-8'?>
+<Form ordinaryFormVersion="2.0" containerCreatedTicks="{created_ticks}" containerModifiedTicks="{modified_ticks}">
   <Title><Item lang="ru">Main</Item></Title>
   <ChildItems>
     <Page name="Main" id="4">
@@ -150,10 +152,14 @@ class CliSmokeTest(unittest.TestCase):
             build_form_bin(xml, api_rebuilt)
 
             for rebuilt in (cli_rebuilt, api_rebuilt):
-                files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
-                self.assertIn(b"SourceButton", files["form"])
-                self.assertIn("Source title".encode("utf-8"), files["form"])
-                self.assertEqual(files["module"], b"source module")
+                files = {file.name: file for file in parse_form_bin_container(rebuilt.read_bytes()).files}
+                self.assertIn(b"SourceButton", files["form"].payload)
+                self.assertIn("Source title".encode("utf-8"), files["form"].payload)
+                self.assertEqual(files["module"].payload, b"source module")
+                self.assertEqual(files["form"].created, created_ticks)
+                self.assertEqual(files["form"].modified, modified_ticks)
+                self.assertEqual(files["module"].created, created_ticks)
+                self.assertEqual(files["module"].modified, modified_ticks)
 
     def test_geometry_writer_preserves_raw_list_anchors(self) -> None:
         position = ET.fromstring(

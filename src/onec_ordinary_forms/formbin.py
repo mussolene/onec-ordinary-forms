@@ -9,6 +9,7 @@ import json
 import re
 from struct import pack, unpack
 from typing import Mapping
+import xml.etree.ElementTree as ET
 
 
 MARKER_RE = re.compile(rb"(?:(?<=\n)|^)([0-9a-f]{8}) ([0-9a-f]{8}) ([0-9a-f]{8}) \r?\n")
@@ -269,6 +270,15 @@ def _container_file_ticks(
     created_ticks = _default_container_ticks() if file_created is None else file_created
     modified_ticks = created_ticks if file_modified is None else file_modified
     return created_ticks, modified_ticks
+
+
+def container_file_times_from_xml(root: ET.Element) -> dict[str, tuple[int | None, int | None]]:
+    try:
+        created = int(root.get("containerCreatedTicks", ""))
+        modified = int(root.get("containerModifiedTicks", ""))
+    except ValueError:
+        return {}
+    return {"form": (created, modified), "module": (created, modified)}
 
 
 def build_form_bin_container(

@@ -18,6 +18,7 @@ from onec_ordinary_forms.corpus import build_corpus_report, write_report
 from onec_ordinary_forms.formbin import (
     CONTAINER_INFO_NAME,
     build_form_bin_container,
+    container_file_times_from_xml,
     pack_form_bin,
     unpack_form_bin,
 )
@@ -3416,15 +3417,6 @@ def set_container_time_attributes(root: ET.Element, file_times: dict[str, tuple[
         root.set("containerModifiedTicks", str(modified))
 
 
-def container_file_times_from_xml(root: ET.Element) -> dict[str, tuple[int | None, int | None]]:
-    try:
-        created = int(root.get("containerCreatedTicks", ""))
-        modified = int(root.get("containerModifiedTicks", ""))
-    except ValueError:
-        return {}
-    return {"form": (created, modified), "module": (created, modified)}
-
-
 def semantic_model_hash(root: ET.Element) -> str:
     return semantic_graph_digest(root)
 
@@ -3501,7 +3493,9 @@ def build_bin(args: argparse.Namespace) -> None:
     form_payload = form_stream_from_object_xml(root, asset_root)
     module_payload = module_data_from_xml(root, asset_root)
     out_bin.parent.mkdir(parents=True, exist_ok=True)
-    out_bin.write_bytes(build_form_bin_container(form_payload, module_payload))
+    out_bin.write_bytes(
+        build_form_bin_container(form_payload, module_payload, file_times=container_file_times_from_xml(root))
+    )
 
 
 def scan_corpus(args: argparse.Namespace) -> None:
