@@ -24,6 +24,13 @@ from onec_ordinary_forms.ordinary_platform import (
     ORDINARY_CONTROL_GUID_BY_TYPE,
 )
 from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
+from onec_ordinary_forms.public_contract import (
+    assert_public_object_xml,
+    iter_control_elements,
+    iter_page_controls,
+    panel_pages,
+    top_level_pages,
+)
 from onec_ordinary_forms.ui_values import ordinary_color_code_from_style_ref
 from onec_ordinary_forms.value_codec import (
     NUMBER_ALLOWED_SIGN_CODE_BY_NAME,
@@ -476,35 +483,6 @@ SHORT_POSITION_FIXED_HEIGHT_TYPES = {
     "Splitter",
 }
 
-FORBIDDEN_PUBLIC_XML_ELEMENTS = frozenset(
-    {
-        "ObjectModel",
-        "ListStream",
-        "BracketStream",
-        "FormBin",
-        "LogicalStream",
-        "RawBracket",
-        "PlatformRecords",
-        "SerializationProfile",
-        "DataSourceProfile",
-        "ViewProfile",
-        "StateBlob",
-        "ValueDescriptor",
-    }
-)
-
-FORBIDDEN_PUBLIC_XML_ATTRIBUTES = frozenset(
-    {
-        "profileUuid",
-        "actionProfileState",
-        "actionProfileFlag1",
-        "actionProfileFlag2",
-        "linkModeShape",
-        "rawKey",
-    }
-)
-
-
 def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None) -> bytes:
     """Serialize public ordinary ``Form.xml`` into platform list-stream bytes."""
 
@@ -525,14 +503,14 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
             continue
         type_pattern = type_domain_pattern_from_xml(attribute)
         attribute_type_patterns[name] = type_pattern
-        if attribute.get("slot"):
-            attribute_slots[name] = attribute.get("slot", "")
+        if attribute.get("id"):
+            attribute_slots[name] = attribute.get("id", "")
         attributes.append(attribute_record_from_xml(attribute))
 
     controls: list[object] = []
     for page in top_level_pages(root):
         page_order = 0
-        for child in page:
+        for child in iter_page_controls(page):
             if control_type_from_xml_tag(child.tag) and top_level_control_needs_default_page_geometry(child):
                 control = control_stream_from_xml_with_page(
                     child,
@@ -568,21 +546,6 @@ def form_stream_from_object_xml(root: ET.Element, asset_root: Path | None = None
         serialization_counter=form_serialization_counter_from_xml(root),
     )
     return ("\ufeff" + dumps_list_out_stream(stream)).encode("utf-8")
-
-
-def assert_public_object_xml(root: ET.Element) -> None:
-    """Reject renamed raw/profile structures before writing platform streams."""
-
-    for element in root.iter():
-        tag = local_xml_name(element.tag)
-        if tag in FORBIDDEN_PUBLIC_XML_ELEMENTS:
-            raise ValueError(f"Public ordinary Form.xml must not contain <{tag}>")
-        for attr_name in element.attrib:
-            name = local_xml_name(attr_name)
-            if name in FORBIDDEN_PUBLIC_XML_ATTRIBUTES:
-                raise ValueError(f"Public ordinary Form.xml must not contain @{name}")
-            if "profile" in name.lower():
-                raise ValueError(f"Public ordinary Form.xml must not contain profile attribute @{name}")
 
 
 def top_level_control_needs_default_page_geometry(element: ET.Element) -> bool:
@@ -1210,6 +1173,13 @@ def color_record_from_xml(element: ET.Element | None, tag: str) -> list[object]:
     value = color_value_from_xml_node(node)
     if not value:
         return ["3", "4", ["0"]]
+    if node.get("kind") == "Auto":
+        sub_kind, tail_kind = {
+            "TextColor": ("2", "2"),
+            "BackColor": ("3", "3"),
+            "BorderColor": ("4", "4"),
+        }.get(tag, ("3", "3"))
+        return ["4", sub_kind, [value], tail_kind]
     if node.get("recordKind") == "4":
         return ["4", node.get("recordSubKind") or "3", [value], node.get("tailKind") or "3"]
     return ["3", "3", [value]]
@@ -1332,13 +1302,13 @@ def attribute_record_from_xml(
     template: list[object] | None = None,
 ) -> list[object]:
     object_id = attribute.get("id", "0")
-    visible_id = attribute.get("slot") or object_id
+    visible_id = object_id
     if record_flag is None and (attribute.get("controlData") or "").strip().lower() in {"false", "0"}:
         record_flag = "0"
     type_record = type_domain_record_from_xml(attribute)
     if template is not None and len(template) >= 5:
         result = copy.deepcopy(template)
-        if attribute.get("slot"):
+        if attribute.get("id"):
             result[0] = [visible_id]
         if len(result) > 1:
             result[1] = record_flag if record_flag is not None else result[1]
@@ -1449,10 +1419,6 @@ def is_localized_text_record(value: list[object]) -> bool:
         return False
     items = value[2]
     return isinstance(items, list) and len(items) >= 2 and isinstance(items[1], str)
-
-
-def top_level_pages(root: ET.Element) -> list[ET.Element]:
-    return root.findall("./Pages/Page")
 
 
 def get_multilang_text(parent: ET.Element | None, tag: str) -> str:
@@ -1624,30 +1590,30 @@ def control_stream_from_xml_with_page(
     if control_type == "Button" and bool_record_from_xml(element, "DefaultAction", default=False) == "1":
         metadata[5] = "1"
     children_by_id: list[tuple[int, list[object]]] = []
-    for child in element:
+    for child in iter_control_elements(element):
+        if not control_type_from_xml_tag(child.tag):
+            continue
         child_stream = control_stream_from_xml_with_page(child, asset_root, attribute_type_patterns, attribute_slots, None, None)
         if child_stream:
             children_by_id.append((int(child_stream[1]), child_stream))
-    pages = element.find("Pages")
-    if pages is not None:
-        child_parent_size = position_size(element.find("Position"))
-        for page_number, page in enumerate(pages.findall("Page")):
-            page_child_order = 0
-            for child in page:
-                if not control_type_from_xml_tag(child.tag):
-                    continue
-                child_stream = control_stream_from_xml_with_page(
-                    child,
-                    asset_root,
-                    attribute_type_patterns,
-                    attribute_slots,
-                    page_number,
-                    page_child_order,
-                    child_parent_size,
-                )
-                if child_stream:
-                    children_by_id.append((int(child_stream[1]), child_stream))
-                    page_child_order += 1
+    child_parent_size = position_size(element.find("Position"))
+    for page_number, page in enumerate(panel_pages(element)):
+        page_child_order = 0
+        for child in iter_page_controls(page):
+            if not control_type_from_xml_tag(child.tag):
+                continue
+            child_stream = control_stream_from_xml_with_page(
+                child,
+                asset_root,
+                attribute_type_patterns,
+                attribute_slots,
+                page_number,
+                page_child_order,
+                child_parent_size,
+            )
+            if child_stream:
+                children_by_id.append((int(child_stream[1]), child_stream))
+                page_child_order += 1
     children = [child for _, child in sorted(children_by_id, key=lambda item: item[0])]
     child_table: list[object] = [str(len(children)), *children]
     if control_type == "Chart":
@@ -1953,8 +1919,7 @@ def action_record_key(record: object) -> tuple[str, str, str]:
 
 def panel_control_info_from_xml(element: ET.Element, title_record: list[object], actions: list[object]) -> list[object]:
     descriptor = CORE_CONTROL_INFO_DESCRIPTORS["Panel"]
-    pages = element.find("Pages")
-    page_nodes = pages.findall("Page") if pages is not None else []
+    page_nodes = panel_pages(element)
     page_count = len(page_nodes) or 1
     layout_node = element.find("PanelLayout")
     explicit_page_capacity = panel_layout_page_capacity(layout_node)
@@ -2130,8 +2095,7 @@ def panel_state_table(
     extended: bool = False,
     capacity: int | None = None,
 ) -> list[object]:
-    pages = element.find("Pages")
-    page_nodes = pages.findall("Page") if pages is not None else []
+    page_nodes = panel_pages(element)
     if not page_nodes:
         name = element.get("name", "Страница1")
         page_nodes = []

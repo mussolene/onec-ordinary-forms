@@ -163,13 +163,13 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Splitter name="Разделитель2" id="16">
+                  <ChildItems><Splitter name="Разделитель2" id="16">
                     <Enabled>false</Enabled>
                   </Splitter>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -181,18 +181,22 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_gantt_chart_and_track_bar_events_are_serialized(self) -> None:
         root = ET.fromstring(
-            """<Form>
+            """<Form ordinaryFormVersion="2.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <TrackBar name="Месяц" id="1">
-                    <Events><Event name="ПриИзменении">МесяцПриИзменении</Event></Events>
-                  </TrackBar>
-                  <GanttChart name="ДиаграммаГанта" id="2">
-                    <Events><Event name="ПриОкончанииРедактированияИнтервала">ДиаграммаГантаПриОкончанииРедактированияИнтервала</Event></Events>
-                  </GanttChart>
+                  <ChildItems>
+                    <GanttChart name="ДиаграммаГанта" id="2">
+                      <Events><Event name="ПриОкончанииРедактированияИнтервала">ДиаграммаГантаПриОкончанииРедактированияИнтервала</Event></Events>
+                    </GanttChart>
+                    <TrackBar name="Месяц" id="1">
+                      <Events><Event name="ПриИзменении">МесяцПриИзменении</Event></Events>
+                    </TrackBar>
+                  </ChildItems>
                 </Page>
-              </Pages>
+              </ChildItems>
             </Form>"""
         )
 
@@ -261,22 +265,22 @@ class CliSmokeTest(unittest.TestCase):
     def test_activex_control_rejects_public_state_blob(self) -> None:
         root = ET.fromstring(
             """
-            <Form version="1" containerCreatedTicks="0" containerModifiedTicks="0">
+            <Form xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ordinaryFormVersion="2.0" containerCreatedTicks="0" containerModifiedTicks="0" xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
               <Title><Item lang="ru">Тест</Item></Title>
               <Width>800</Width>
               <Height>600</Height>
-              <Pages>
+              <ChildItems>
                 <Page name="Страница1">
-                  <ActiveXControl name="ЭлементУправления1" id="42">
-                    <Position left="95" top="64" right="736" bottom="507"/>
+                  <ChildItems><ActiveXControl name="ЭлементУправления1" id="42">
+                    <Position left="95" top="64" right="736" bottom="507" />
                     <Clsid>ca8a9780-280d-11cf-a24d-444553540000</Clsid>
                     <State>
                       <StateBlob slot="1" encoding="base64">AA4AAEBCAADJLQAA</StateBlob>
                       <StateBlob slot="2" encoding="base64">AQAJAAADHQAAAAAABQAAAAAAAwAAAB4ABQAAAAsCAAAAAAUAAAAMArsBgQIEAAAAJwH//wMAAAAAAA==</StateBlob>
                     </State>
                   </ActiveXControl>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>
             """
         )
@@ -286,25 +290,25 @@ class CliSmokeTest(unittest.TestCase):
     def test_panel_info_uses_platform_page_capacity_profile(self) -> None:
         root = ET.fromstring(
             """
-            <Form version="1" containerCreatedTicks="0" containerModifiedTicks="0">
+            <Form xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ordinaryFormVersion="2.0" containerCreatedTicks="0" containerModifiedTicks="0" xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
               <Title><Item lang="ru">Тест</Item></Title>
               <Width>800</Width>
               <Height>600</Height>
-              <Pages>
+              <ChildItems>
                 <Page name="Страница1">
-                  <Panel name="Панель1" id="4">
-                    <Position left="8" top="33" right="760" bottom="560" width="752" height="527"/>
-                    <Pages>
+                  <ChildItems><Panel name="Панель1" id="4">
+                    <Position left="8" top="33" right="760" bottom="560" width="752" height="527" />
+                    <ChildItems>
                       <Page name="Страница1">
-                        <ActiveXControl name="ЭлементУправления1" id="42">
-                          <Position left="16" top="48" right="360" bottom="260"/>
+                        <ChildItems><ActiveXControl name="ЭлементУправления1" id="42">
+                          <Position left="16" top="48" right="360" bottom="260" />
                           <Clsid>ca8a9780-280d-11cf-a24d-444553540000</Clsid>
                         </ActiveXControl>
-                      </Page>
-                    </Pages>
+                      </ChildItems></Page>
+                    </ChildItems>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>
             """
         )
@@ -629,13 +633,13 @@ class CliSmokeTest(unittest.TestCase):
             (form_dir / "Form.bin").write_bytes(b"bin")
             (form_dir.parent / "Form.xml").write_text(
                 """<Form>
-                  <Pages>
+                  <ChildItems>
                     <Page name="Main">
-                      <InputField name="Input" id="1">
-                        <Position left="1" top="2" right="3" bottom="4"/>
+                      <ChildItems><InputField name="Input" id="1">
+                        <Position left="1" top="2" right="3" bottom="4" />
                       </InputField>
-                    </Page>
-                  </Pages>
+                    </ChildItems></Page>
+                  </ChildItems>
                 </Form>""",
                 encoding="utf-8",
             )
@@ -657,13 +661,13 @@ class CliSmokeTest(unittest.TestCase):
             (form_dir / "Form.bin").write_bytes(b"bin")
             (form_dir.parent / "Form.xml").write_text(
                 f"""<Form>
-                  <Pages>
+                  <ChildItems>
                     <Page name="Main">
-                      <InputField name="Input" id="1">
-                        <Position left="{left}" top="2" right="3" bottom="4"/>
+                      <ChildItems><InputField name="Input" id="1">
+                        <Position left="{left}" top="2" right="3" bottom="4" />
                       </InputField>
-                    </Page>
-                  </Pages>
+                    </ChildItems></Page>
+                  </ChildItems>
                 </Form>""",
                 encoding="utf-8",
             )
@@ -821,12 +825,12 @@ class CliSmokeTest(unittest.TestCase):
     def test_stream_writer_requires_explicit_control_id(self) -> None:
         root = ET.fromstring(
             """
-            <Form version="0.1">
-              <Pages>
+            <Form>
+              <ChildItems>
                 <Page name="Main">
-                  <Button name="Run"/>
-                </Page>
-              </Pages>
+                  <ChildItems><Button name="Run" />
+                </ChildItems></Page>
+              </ChildItems>
             </Form>
             """
         )
@@ -952,11 +956,11 @@ class CliSmokeTest(unittest.TestCase):
             xml = out.read_text(encoding="utf-8")
             self.assertTrue(xml.startswith("<?xml version='1.0' encoding='utf-8'?>\n"))
             self.assertIn("<Form", xml)
-            self.assertIn("\n      <InputField ", xml)
+            self.assertIn("<InputField ", xml)
             self.assertNotIn("<OrdinaryForm", xml)
             self.assertNotIn("<Source", xml)
             self.assertNotIn("<FormStructure", xml)
-            self.assertNotIn("<ChildItems", xml)
+            self.assertIn("<ChildItems", xml)
             self.assertNotIn("<Commands", xml)
             self.assertIn("noNamespaceSchemaLocation", xml)
             self.assertIn("<Attributes>", xml)
@@ -1199,13 +1203,13 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <InputField name="Number" id="159">
+                  <ChildItems><InputField name="Number" id="159">
                     <ToolTip><Item lang="ru">Номер документа</Item></ToolTip>
                   </InputField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1232,13 +1236,13 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <InputField name="Date" id="160">
+                  <ChildItems><InputField name="Date" id="160">
                     <Events><Event name="ПриИзменении">DateOnChange</Event></Events>
                   </InputField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1251,17 +1255,17 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <ChoiceField name="Selected" id="44">
-                    <Action id="2147483647" name="SelectedOpen" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Selected open"/>
+                  <ChildItems><ChoiceField name="Selected" id="44">
+                    <Action id="2147483647" name="SelectedOpen" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Selected open" />
                     <Events>
                       <Event id="2147483647" name="Открытие" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Selected open">SelectedOpen</Event>
                       <Event id="2147483647" name="ПриИзменении" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Selected changed">SelectedChanged</Event>
                     </Events>
                   </ChoiceField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1277,13 +1281,13 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Panel name="ОсновнаяПанель" id="131">
+                  <ChildItems><Panel name="ОсновнаяПанель" id="131">
                     <Events><Event name="ПриСменеСтраницы">ОсновнаяПанельПриСменеСтраницы</Event></Events>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1296,17 +1300,17 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <CalendarField name="ПолеКалендаря" id="38">
+                  <ChildItems><CalendarField name="ПолеКалендаря" id="38">
                     <Events>
                       <Event name="ПроверкаПеретаскивания">ПолеКалендаряПроверкаПеретаскивания</Event>
                       <Event name="Перетаскивание">ПолеКалендаряПеретаскивание</Event>
                       <Event name="ПриИзменении">ПолеКалендаряПриИзменении</Event>
                     </Events>
                   </CalendarField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1318,27 +1322,31 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_build_bin_writes_extended_control_events_to_action_tables(self) -> None:
         root = ET.fromstring(
-            """<Form>
+            """<Form ordinaryFormVersion="2.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <PictureDecoration name="Картинка" id="41">
-                    <Events><Event name="Нажатие">КартинкаНажатие</Event></Events>
-                  </PictureDecoration>
-                  <ListBox name="Список" id="42">
-                    <Events><Event name="Выбор">СписокВыбор</Event></Events>
-                  </ListBox>
-                  <HTMLDocumentField name="HTML" id="43">
-                    <Events><Event name="ДокументСформирован">HTMLДокументСформирован</Event></Events>
-                  </HTMLDocumentField>
-                  <GraphicalSchemaField name="Карта" id="44">
-                    <Events><Event name="ПриАктивизации">КартаПриАктивизации</Event></Events>
-                  </GraphicalSchemaField>
-                  <Chart name="Диаграмма" id="45">
-                    <Events><Event name="ОбработкаРасшифровки">ДиаграммаОбработкаРасшифровки</Event></Events>
-                  </Chart>
+                  <ChildItems>
+                    <ListBox name="Список" id="42">
+                      <Events><Event name="Выбор">СписокВыбор</Event></Events>
+                    </ListBox>
+                    <GraphicalSchemaField name="Карта" id="44">
+                      <Events><Event name="ПриАктивизации">КартаПриАктивизации</Event></Events>
+                    </GraphicalSchemaField>
+                    <PictureDecoration name="Картинка" id="41">
+                      <Events><Event name="Нажатие">КартинкаНажатие</Event></Events>
+                    </PictureDecoration>
+                    <HTMLDocumentField name="HTML" id="43">
+                      <Events><Event name="ДокументСформирован">HTMLДокументСформирован</Event></Events>
+                    </HTMLDocumentField>
+                    <Chart name="Диаграмма" id="45">
+                      <Events><Event name="ОбработкаРасшифровки">ДиаграммаОбработкаРасшифровки</Event></Events>
+                    </Chart>
+                  </ChildItems>
                 </Page>
-              </Pages>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1354,17 +1362,17 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="48">
+                  <ChildItems><Table name="Rows" id="48">
                     <Columns>
                       <Column name="ВидСравнения" order="2">
                         <Title><Item lang="ru">Тип сравнения</Item></Title>
                       </Column>
                     </Columns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1376,17 +1384,17 @@ class CliSmokeTest(unittest.TestCase):
     def test_table_column_without_title_uses_platform_default_title_marker(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="6">
+                  <ChildItems><Table name="Rows" id="6">
                     <Columns>
                       <Column name="ИнформацияОбСертификате" order="9">
                         <DataPath>ИнформацияОбСертификате</DataPath>
                       </Column>
                     </Columns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1402,17 +1410,17 @@ class CliSmokeTest(unittest.TestCase):
     def test_table_column_value_descriptor_is_not_public_xml(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="6">
+                  <ChildItems><Table name="Rows" id="6">
                     <Columns>
                       <Column name="Hash" order="0">
                         <ValueDescriptor encoding="base64" trailingLineBreak="true">QUJD</ValueDescriptor>
                       </Column>
                     </Columns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1422,15 +1430,15 @@ class CliSmokeTest(unittest.TestCase):
     def test_table_default_border_color_uses_platform_default_color_record(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="6">
+                  <ChildItems><Table name="Rows" id="6">
                     <Columns>
-                      <Column name="Name" order="0"/>
+                      <Column name="Name" order="0" />
                     </Columns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1444,16 +1452,16 @@ class CliSmokeTest(unittest.TestCase):
     def test_table_data_source_profile_is_not_public_xml(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="6">
-                    <DataSourceProfile linkMode="1"/>
+                  <ChildItems><Table name="Rows" id="6">
+                    <DataSourceProfile linkMode="1" />
                     <Columns>
-                      <Column name="Name" order="0"/>
+                      <Column name="Name" order="0" />
                     </Columns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1463,22 +1471,16 @@ class CliSmokeTest(unittest.TestCase):
     def test_table_data_source_profile_shape_is_not_public_xml(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="6">
-                    <DataSourceProfile
-                      storageUuid="9ab3fa70-d2e0-4e44-baac-730682272ed2"
-                      profileKind="4"
-                      stateKind="1"
-                      stateMode="0"
-                      linkMode="0"
-                      linkModeShape="list"/>
+                  <ChildItems><Table name="Rows" id="6">
+                    <DataSourceProfile storageUuid="9ab3fa70-d2e0-4e44-baac-730682272ed2" profileKind="4" stateKind="1" stateMode="0" linkMode="0" linkModeShape="list" />
                     <Columns>
-                      <Column name="Name" order="0"/>
+                      <Column name="Name" order="0" />
                     </Columns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1488,13 +1490,13 @@ class CliSmokeTest(unittest.TestCase):
     def test_table_extended_view_without_columns_is_canonical(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="6">
+                  <ChildItems><Table name="Rows" id="6">
                     <LeftFixedColumns>2</LeftFixedColumns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1512,16 +1514,16 @@ class CliSmokeTest(unittest.TestCase):
     def test_bound_table_with_columns_uses_platform_bound_view_and_source_shape(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="6">
+                  <ChildItems><Table name="Rows" id="6">
                     <DataPath>Rows</DataPath>
                     <Columns>
-                      <Column name="Name" order="0"/>
+                      <Column name="Name" order="0" />
                     </Columns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1536,14 +1538,14 @@ class CliSmokeTest(unittest.TestCase):
     def test_button_enabled_false_and_default_border_are_written(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Button name="Choose" id="8">
+                  <ChildItems><Button name="Choose" id="8">
                     <Title><Item lang="ru">Выбрать</Item></Title>
                     <Enabled>false</Enabled>
                   </Button>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1559,15 +1561,15 @@ class CliSmokeTest(unittest.TestCase):
     def test_label_picture_position_updates_rendering_slot(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <LabelDecoration name="Logo" id="13">
+                  <ChildItems><LabelDecoration name="Logo" id="13">
                     <Title><Item lang="ru">Нужна помощь</Item></Title>
                     <PicturePosition>2</PicturePosition>
                     <PictureSize>2</PictureSize>
                   </LabelDecoration>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1582,15 +1584,15 @@ class CliSmokeTest(unittest.TestCase):
     def test_label_text_position_is_independent_from_picture_position(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <LabelDecoration name="FieldCaption" id="13">
+                  <ChildItems><LabelDecoration name="FieldCaption" id="13">
                     <Title><Item lang="ru">Поле ввода1:</Item></Title>
                     <PicturePosition>0</PicturePosition>
                     <TextPosition>4</TextPosition>
                   </LabelDecoration>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1605,24 +1607,24 @@ class CliSmokeTest(unittest.TestCase):
     def test_panel_layout_preserves_dependency_prefix_and_page_state(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Panel name="Панель1" id="4">
+                  <ChildItems><Panel name="Панель1" id="4">
                     <PanelLayout pageCapacity="1" pageStateFlag="1" currentPageIndex="1">
                       <LayoutDependencyGroup order="1">
-                        <LayoutDependency targetId="25" dimension="bottom"/>
+                        <LayoutDependency targetId="25" dimension="bottom" />
                       </LayoutDependencyGroup>
-                      <LayoutDependencyGroup order="2"/>
+                      <LayoutDependencyGroup order="2" />
                       <LayoutDependencyGroup order="3">
-                        <LayoutDependency targetId="7" dimension="right"/>
-                        <LayoutDependency targetId="8" dimension="right"/>
+                        <LayoutDependency targetId="7" dimension="right" />
+                        <LayoutDependency targetId="8" dimension="right" />
                       </LayoutDependencyGroup>
-                      <PageLayout page="0" left="6" top="6" width="1222" height="1030" horizontalMode="4" verticalMode="4"/>
+                      <PageLayout page="0" left="6" top="6" width="1222" height="1030" horizontalMode="4" verticalMode="4" />
                     </PanelLayout>
-                    <Pages><Page name="Страница1"/></Pages>
+                    <ChildItems><Page name="Страница1" /></ChildItems>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1667,12 +1669,13 @@ class CliSmokeTest(unittest.TestCase):
     def test_geographical_schema_preserves_base_style_slots(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <GeographicalSchemaField name="ПолеГеографическойСхемы1" id="31"
-                    baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2"/>
+                  <ChildItems>
+                    <GeographicalSchemaField name="ПолеГеографическойСхемы1" id="31" baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2" />
+                  </ChildItems>
                 </Page>
-              </Pages>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1687,16 +1690,16 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <InputField name="Number" id="159">
+                  <ChildItems><InputField name="Number" id="159">
                     <ReadOnly>true</ReadOnly>
                     <ExtendedEdit>true</ExtendedEdit>
                     <MaxLength>10</MaxLength>
                     <ToolTip><Item lang="ru">Номер документа</Item></ToolTip>
                   </InputField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1733,17 +1736,17 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Panel name="Панель1" id="4">
-                    <Position left="8" top="33" right="1236" bottom="1087" width="1228" height="1054"/>
-                    <Pages>
+                  <ChildItems><Panel name="Панель1" id="4">
+                    <Position left="8" top="33" right="1236" bottom="1087" width="1228" height="1054" />
+                    <ChildItems>
                       <Page name="Страница1"><Title><Item lang="ru">Страница1</Item></Title></Page>
                       <Page name="Страница2"><Title><Item lang="ru">Страница2</Item></Title></Page>
-                    </Pages>
+                    </ChildItems>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1769,26 +1772,26 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Panel name="Панель1" id="4">
-                    <Position left="8" top="33" right="760" bottom="560" width="752" height="527"/>
+                  <ChildItems><Panel name="Панель1" id="4">
+                    <Position left="8" top="33" right="760" bottom="560" width="752" height="527" />
                     <PanelLayout pageCapacity="2">
                       <LayoutDependencyGroup order="1">
-                        <LayoutDependency targetId="12" dimension="top"/>
-                        <LayoutDependency targetId="13" dimension="left"/>
+                        <LayoutDependency targetId="12" dimension="top" />
+                        <LayoutDependency targetId="13" dimension="left" />
                       </LayoutDependencyGroup>
-                      <LayoutDependencyGroup order="2"/>
-                      <PageLayout page="0" left="6" top="6" width="752" height="527" horizontalMode="4" verticalMode="8"/>
-                      <PageLayout page="1" left="6" top="6" width="750" height="529" horizontalMode="6" verticalMode="6"/>
+                      <LayoutDependencyGroup order="2" />
+                      <PageLayout page="0" left="6" top="6" width="752" height="527" horizontalMode="4" verticalMode="8" />
+                      <PageLayout page="1" left="6" top="6" width="750" height="529" horizontalMode="6" verticalMode="6" />
                     </PanelLayout>
-                    <Pages>
+                    <ChildItems>
                       <Page name="Страница1" styleMode="2"><Title><Item lang="ru">Страница1</Item></Title></Page>
                       <Page name="Страница2" styleMode="0"><Title><Item lang="ru">Страница2</Item></Title></Page>
-                    </Pages>
+                    </ChildItems>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1808,21 +1811,21 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Panel name="Панель1" id="4" baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2">
-                    <Position left="8" top="33" right="760" bottom="560" width="752" height="527"/>
+                  <ChildItems><Panel name="Панель1" id="4" baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2">
+                    <Position left="8" top="33" right="760" bottom="560" width="752" height="527" />
                     <PanelLayout pageCapacity="2" pageStateFlag="0" currentPageIndex="1">
-                      <PageLayout page="0" left="6" top="6" width="752" height="527" horizontalMode="4" verticalMode="8"/>
-                      <PageLayout page="1" left="6" top="6" width="750" height="529" horizontalMode="6" verticalMode="6"/>
+                      <PageLayout page="0" left="6" top="6" width="752" height="527" horizontalMode="4" verticalMode="8" />
+                      <PageLayout page="1" left="6" top="6" width="750" height="529" horizontalMode="6" verticalMode="6" />
                     </PanelLayout>
-                    <Pages>
+                    <ChildItems>
                       <Page name="Страница1" styleMode="2"><Title><Item lang="ru">Страница1</Item></Title></Page>
                       <Page name="Страница2" styleMode="0"><Title><Item lang="ru">Страница2</Item></Title></Page>
-                    </Pages>
+                    </ChildItems>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1850,19 +1853,19 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Button name="Run" id="26">
+                  <ChildItems><Button name="Run" id="26">
                     <Title><Item lang="ru">Run</Item></Title>
                     <Visible>false</Visible>
                     <TextColor>#112233</TextColor>
-                    <BackColor rgb="#445566"/>
-                    <BorderColor value="7829367"/>
-                    <Font kind="6" family="3" style="0" size="100"/>
+                    <BackColor rgb="#445566" />
+                    <BorderColor value="7829367" />
+                    <Font kind="6" family="3" style="0" size="100" />
                     <ToolTip><Item lang="ru">Run tooltip</Item></ToolTip>
                   </Button>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1890,14 +1893,14 @@ class CliSmokeTest(unittest.TestCase):
             root = ET.fromstring(
                 """<Form>
                   <Title><Item lang="#">Main</Item></Title>
-                  <Pages>
+                  <ChildItems>
                     <Page name="Main">
-                      <Button name="Run" id="26">
+                      <ChildItems><Button name="Run" id="26">
                         <Title><Item lang="ru">Run</Item></Title>
-                        <Picture file="Items/Run/Picture.png"/>
+                        <Picture file="Items/Run/Picture.png" />
                       </Button>
-                    </Page>
-                  </Pages>
+                    </ChildItems></Page>
+                  </ChildItems>
                 </Form>"""
             )
 
@@ -1915,11 +1918,11 @@ class CliSmokeTest(unittest.TestCase):
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
               <Attributes>
-                <Attribute name="Detached" id="10" slot="3" controlData="false">
-                  <Type><Pattern encoding="TypeDomainPattern"><PatternItem code="S"/></Pattern></Type>
+                <Attribute name="Detached" id="3" controlData="false">
+                  <Type><Pattern encoding="TypeDomainPattern"><PatternItem code="S" /></Pattern></Type>
                 </Attribute>
               </Attributes>
-              <Pages><Page name="Main"/></Pages>
+              <ChildItems><Page name="Main" /></ChildItems>
             </Form>"""
         )
 
@@ -1934,15 +1937,15 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Button name="Run" id="26">
+                  <ChildItems><Button name="Run" id="26">
                     <TextColor>style:ButtonTextColor</TextColor>
                     <BackColor name="ButtonBackColor">auto</BackColor>
                     <BorderColor>style:BorderColor</BorderColor>
                   </Button>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -1960,13 +1963,13 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Button name="Run" id="26">
-                    <Font kind="AutoFont" height="14"/>
+                  <ChildItems><Button name="Run" id="26">
+                    <Font kind="AutoFont" height="14" />
                   </Button>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2086,17 +2089,17 @@ class CliSmokeTest(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             xml = Path(temp_dir) / "Form.xml"
             xml.write_text(
-                """<Form version="1" containerCreatedTicks="0" containerModifiedTicks="0">
+                """<Form xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ordinaryFormVersion="2.0" containerCreatedTicks="0" containerModifiedTicks="0" xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
                   <Title><Item lang="ru">Main</Item></Title>
-                  <Pages>
+                  <ChildItems>
                     <Page name="Main">
-                      <Button name="Run" id="26">
+                      <ChildItems><Button name="Run" id="26">
                         <TextColor>#112233</TextColor>
                         <BackColor>style:FormBackColor</BackColor>
-                        <Font ref="style:NormalTextFont" height="9" kind="StyleItem" scale="100"/>
+                        <Font ref="style:NormalTextFont" height="9" kind="StyleItem" scale="100" />
                       </Button>
-                    </Page>
-                  </Pages>
+                    </ChildItems></Page>
+                  </ChildItems>
                 </Form>""",
                 encoding="utf-8",
             )
@@ -2107,23 +2110,23 @@ class CliSmokeTest(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             xml = Path(temp_dir) / "Form.xml"
             xml.write_text(
-                """<Form version="1" containerCreatedTicks="0" containerModifiedTicks="0">
+                """<Form xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ordinaryFormVersion="2.0" containerCreatedTicks="0" containerModifiedTicks="0" xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
                   <Title><Item lang="ru">Main</Item></Title>
-                  <Pages>
+                  <ChildItems>
                     <Page name="Main">
-                      <CommandBar name="ДействияФормы" id="2">
+                      <ChildItems><CommandBar name="ДействияФормы" id="2">
                         <Buttons rootUuid="ad00c95e-dfa1-41f4-8bab-63a94f60a60e" rootKind="315" rootFlag="1">
-                          <Actions/>
+                          <Actions />
                           <Groups>
                             <Group order="1" uuid="875faa24-ba4b-4731-9f11-7a7cea99ef16" kind="6" mode="0" buttonCount="1">
-                              <Button order="1" actionUuid="927929e5-0547-4575-b493-2ba694620c72" descriptor="[&quot;7&quot;]"/>
-                              <Placement zone="1" order="0" targetCount="0"/>
+                              <Button order="1" actionUuid="927929e5-0547-4575-b493-2ba694620c72" descriptor="[&quot;7&quot;]" />
+                              <Placement zone="1" order="0" targetCount="0" />
                             </Group>
                           </Groups>
                         </Buttons>
                       </CommandBar>
-                    </Page>
-                  </Pages>
+                    </ChildItems></Page>
+                  </ChildItems>
                 </Form>""",
                 encoding="utf-8",
             )
@@ -2166,13 +2169,13 @@ class CliSmokeTest(unittest.TestCase):
 
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <LabelDecoration name="Label1" id="111" baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2">
+                  <ChildItems><LabelDecoration name="Label1" id="111" baseStyleMode="2" baseStyleState="1" baseStyleVisible="1" baseStyleDefaultMode="2">
                     <Title><Item lang="ru">Label</Item></Title>
                   </LabelDecoration>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
         stream = parse_list_stream_document(form_stream_from_object_xml(root).decode("utf-8-sig"), allow_trailing=True).value
@@ -2201,11 +2204,11 @@ class CliSmokeTest(unittest.TestCase):
     def test_build_bin_uses_default_title_marker_when_title_is_absent(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <LabelDecoration name="НадписьКомментарий1" id="13"/>
-                </Page>
-              </Pages>
+                  <ChildItems><LabelDecoration name="НадписьКомментарий1" id="13" />
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2230,21 +2233,21 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Panel name="PagesPanel" id="4">
-                    <Position left="8" top="8" right="400" bottom="300" width="392" height="292"/>
-                    <Pages>
+                  <ChildItems><Panel name="PagesPanel" id="4">
+                    <Position left="8" top="8" right="400" bottom="300" width="392" height="292" />
+                    <ChildItems>
                       <Page name="Page1">
-                        <Button name="AddedButton" id="53">
+                        <ChildItems><Button name="AddedButton" id="53">
                           <Title><Item lang="ru">Added</Item></Title>
-                          <Position left="13" top="172" right="190" bottom="196" width="177" height="24"/>
+                          <Position left="13" top="172" right="190" bottom="196" width="177" height="24" />
                         </Button>
-                      </Page>
-                    </Pages>
+                      </ChildItems></Page>
+                    </ChildItems>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2265,14 +2268,14 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <CheckBox name="UseColor" id="33">
+                  <ChildItems><CheckBox name="UseColor" id="33">
                     <Title><Item lang="ru">Use color</Item></Title>
                     <ToolTip><Item lang="ru">Use color tooltip</Item></ToolTip>
                   </CheckBox>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2291,9 +2294,9 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <ChoiceField name="Mode" id="44">
+                  <ChildItems><ChoiceField name="Mode" id="44">
                     <DataPath>Mode</DataPath>
                     <ReadOnly>true</ReadOnly>
                     <ChoiceButton>false</ChoiceButton>
@@ -2301,8 +2304,8 @@ class CliSmokeTest(unittest.TestCase):
                     <OpenButton>true</OpenButton>
                     <ToolTip><Item lang="ru">Mode tooltip</Item></ToolTip>
                   </ChoiceField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2324,12 +2327,12 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <ChoiceField name="Period" id="44">
+                  <ChildItems><ChoiceField name="Period" id="44">
                     <DataPath>Period</DataPath>
                     <OpenButton>true</OpenButton>
-                    <Action id="2147483647" name="FillPeriod" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Fill period"/>
+                    <Action id="2147483647" name="FillPeriod" uuid="e1692cc2-605b-4535-84dd-28440238746c" title="Fill period" />
                     <ChoiceList currentIndex="-1" selectionIndex="1">
                       <Item index="0" valueType="N" value="1" presentationType="87024738-fc2a-4436-ada1-df79d395c424">
                         <Presentation><Item lang="ru">January</Item></Presentation>
@@ -2339,8 +2342,8 @@ class CliSmokeTest(unittest.TestCase):
                       </Item>
                     </ChoiceList>
                   </ChoiceField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2361,14 +2364,14 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <RadioButton name="UseRules" id="45">
+                  <ChildItems><RadioButton name="UseRules" id="45">
                     <Title><Item lang="ru">Use rules</Item></Title>
                     <ToolTip><Item lang="ru">Use rules tooltip</Item></ToolTip>
                   </RadioButton>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2388,20 +2391,20 @@ class CliSmokeTest(unittest.TestCase):
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
               <Attributes>
-                <Attribute name="Mode1" slot="5">
+                <Attribute name="Mode1" id="5">
                   <Type source="TypeDomainPattern">
                     <Pattern encoding="TypeDomainPattern" itemCount="1">
-                      <PatternItem code="N" typeName="xs:decimal" kind="primitive" digits="1" fractionDigits="0" allowedSign="NonNegative"/>
+                      <PatternItem code="N" typeName="xs:decimal" kind="primitive" digits="1" fractionDigits="0" allowedSign="NonNegative" />
                     </Pattern>
                   </Type>
                 </Attribute>
               </Attributes>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Panel name="Panel" id="44">
-                    <Pages>
+                  <ChildItems><Panel name="Panel" id="44">
+                    <ChildItems>
                       <Page name="Group">
-                        <RadioButton name="Mode1" id="45">
+                        <ChildItems><RadioButton name="Mode1" id="45">
                           <DataPath>Mode1</DataPath>
                           <FirstInGroup>true</FirstInGroup>
                           <Title><Item lang="ru">One</Item></Title>
@@ -2411,11 +2414,11 @@ class CliSmokeTest(unittest.TestCase):
                           <FirstInGroup>false</FirstInGroup>
                           <Title><Item lang="ru">Two</Item></Title>
                         </RadioButton>
-                      </Page>
-                    </Pages>
+                      </ChildItems></Page>
+                    </ChildItems>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2433,20 +2436,20 @@ class CliSmokeTest(unittest.TestCase):
     def test_input_field_input_mask_roundtrips_to_info_and_data_source(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <InputField name="TaxId" id="35">
+                  <ChildItems><InputField name="TaxId" id="35">
                     <DataPath>TaxId</DataPath>
                     <Type source="TypeDomainPattern">
                       <Pattern encoding="TypeDomainPattern" itemCount="2">
-                        <PatternItem code="D" typeName="xs:dateTime"/>
-                        <PatternItem code="D" typeName="xs:dateTime"/>
+                        <PatternItem code="D" typeName="xs:dateTime" />
+                        <PatternItem code="D" typeName="xs:dateTime" />
                       </Pattern>
                     </Type>
                     <Mask>999999999999</Mask>
                   </InputField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2462,16 +2465,16 @@ class CliSmokeTest(unittest.TestCase):
     def test_input_field_empty_type_pattern_is_not_defaulted_to_string(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <InputField name="Value" id="35">
+                  <ChildItems><InputField name="Value" id="35">
                     <DataPath>Value</DataPath>
                     <Type source="emptyPattern">
-                      <Pattern encoding="TypeDomainPattern" itemCount="0"/>
+                      <Pattern encoding="TypeDomainPattern" itemCount="0" />
                     </Type>
                   </InputField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2485,19 +2488,19 @@ class CliSmokeTest(unittest.TestCase):
     def test_radio_button_type_and_data_value_are_written(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <RadioButton name="ByFile" id="46">
+                  <ChildItems><RadioButton name="ByFile" id="46">
                     <DataPath>ImportMode</DataPath>
                     <Type source="TypeDomainPattern">
                       <Pattern encoding="TypeDomainPattern" itemCount="1">
-                        <PatternItem code="N" typeName="xs:decimal" kind="primitive" digits="1" fractionDigits="0" allowedSign="NonNegative"/>
+                        <PatternItem code="N" typeName="xs:decimal" kind="primitive" digits="1" fractionDigits="0" allowedSign="NonNegative" />
                       </Pattern>
                     </Type>
                     <DataValue typeCode="N">1</DataValue>
                   </RadioButton>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2511,23 +2514,27 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_build_bin_uses_simple_remaining_control_info_kinds(self) -> None:
         root = ET.fromstring(
-            """<Form>
+            """<Form ordinaryFormVersion="2.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <GroupBox name="Group" id="51">
-                    <Title><Item lang="ru">Group title</Item></Title>
-                    <ToolTip><Item lang="ru">Group tooltip</Item></ToolTip>
-                  </GroupBox>
-                  <Splitter name="Split" id="52"/>
-                  <Chart name="Chart" id="53"/>
-                  <HTMLDocumentField name="Html" id="54"/>
-                  <ListBox name="Values" id="55">
-                    <ToolTip><Item lang="ru">Values tooltip</Item></ToolTip>
-                    <MultiLine>false</MultiLine>
-                  </ListBox>
+                  <ChildItems>
+                    <GroupBox name="Group" id="51">
+                      <Title><Item lang="ru">Group title</Item></Title>
+                      <ToolTip><Item lang="ru">Group tooltip</Item></ToolTip>
+                    </GroupBox>
+                    <ListBox name="Values" id="55">
+                      <ToolTip><Item lang="ru">Values tooltip</Item></ToolTip>
+                      <MultiLine>false</MultiLine>
+                    </ListBox>
+                    <Splitter name="Split" id="52" />
+                    <Chart name="Chart" id="53" />
+                    <HTMLDocumentField name="Html" id="54" />
+                  </ChildItems>
                 </Page>
-              </Pages>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2564,13 +2571,13 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <SpreadsheetDocumentField name="0" id="173">
+                  <ChildItems><SpreadsheetDocumentField name="0" id="173">
                     <DataPath>ПечатнаяФормаДокумента</DataPath>
                   </SpreadsheetDocumentField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2587,32 +2594,32 @@ class CliSmokeTest(unittest.TestCase):
               <Title><Item lang="ru">Main</Item></Title>
               <Width>1244</Width>
               <Height>1120</Height>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Panel name="Panel" id="4">
-                    <Position left="8" top="33" right="1236" bottom="1087" width="1228" height="1054"/>
-                    <Pages>
+                  <ChildItems><Panel name="Panel" id="4">
+                    <Position left="8" top="33" right="1236" bottom="1087" width="1228" height="1054" />
+                    <ChildItems>
                       <Page name="Page">
-                        <CommandBar name="NestedBar" id="7">
-                          <Position left="16" top="56" right="580" bottom="81" width="564" height="25"/>
+                        <ChildItems><CommandBar name="NestedBar" id="7">
+                          <Position left="16" top="56" right="580" bottom="81" width="564" height="25" />
                         </CommandBar>
                         <Splitter name="Split" id="25">
-                          <Position left="16" top="278" right="580" bottom="286" width="564" height="8"/>
+                          <Position left="16" top="278" right="580" bottom="286" width="564" height="8" />
                         </Splitter>
                         <SpreadsheetDocumentField name="Sheet" id="26">
-                          <Position left="16" top="674" right="360" bottom="850" width="344" height="176"/>
+                          <Position left="16" top="674" right="360" bottom="850" width="344" height="176" />
                         </SpreadsheetDocumentField>
                         <TextDocumentField name="Text" id="29">
-                          <Position left="640" top="674" right="960" bottom="850" width="320" height="176"/>
+                          <Position left="640" top="674" right="960" bottom="850" width="320" height="176" />
                         </TextDocumentField>
                         <PivotChart name="Pivot" id="30">
-                          <Position left="16" top="870" right="360" bottom="1040" width="344" height="170"/>
+                          <Position left="16" top="870" right="360" bottom="1040" width="344" height="170" />
                         </PivotChart>
-                      </Page>
-                    </Pages>
+                      </ChildItems></Page>
+                    </ChildItems>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2632,54 +2639,58 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_build_bin_uses_heavy_control_info_kinds(self) -> None:
         root = ET.fromstring(
-            """<Form>
+            """<Form ordinaryFormVersion="2.0"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
               <Title><Item lang="ru">Main</Item></Title>
               <Attributes>
                 <Attribute name="DateRange">
                   <Type source="TypeDomainPattern">
                     <Pattern encoding="TypeDomainPattern" itemCount="2">
-                      <PatternItem code="D" typeName="xs:dateTime"/>
-                      <PatternItem code="D" typeName="xs:dateTime"/>
+                      <PatternItem code="D" typeName="xs:dateTime" />
+                      <PatternItem code="D" typeName="xs:dateTime" />
                     </Pattern>
                   </Type>
                 </Attribute>
               </Attributes>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <CommandBar name="Commands" id="61">
-                    <Autofill>false</Autofill>
-                  </CommandBar>
-                  <Table name="Rows" id="62">
-                    <DataPath>Rows</DataPath>
-                    <ReadOnly>true</ReadOnly>
-                    <ColumnsCount>3</ColumnsCount>
-                    <RowsCount>2</RowsCount>
-                    <AutoMarkIncomplete>false</AutoMarkIncomplete>
-                  </Table>
-                  <SpreadsheetDocumentField name="Sheet" id="63">
-                    <Position left="0" top="0" right="200" bottom="100" width="200" height="100"/>
-                  </SpreadsheetDocumentField>
-                  <TrackBar name="Track" id="64"/>
-                  <ProgressBar name="Progress" id="65"/>
-                  <CalendarField name="Calendar" id="66"/>
-                  <TextDocumentField name="Text" id="67"/>
-                  <InputField name="DateRange" id="73">
-                    <DataPath>DateRange</DataPath>
-                  </InputField>
-                  <GeographicalSchemaField name="Geo" id="68"/>
-                  <GraphicalSchemaField name="Graph" id="69"/>
-                  <PivotChart name="Pivot" id="70">
-                    <Title><Item lang="ru">Pivot title</Item></Title>
-                    <PivotChartKind>5</PivotChartKind>
-                  </PivotChart>
-                  <GanttChart name="Gantt" id="71">
-                    <Title><Item lang="ru">Gantt title</Item></Title>
-                  </GanttChart>
-                  <Dendrogram name="Dendrogram" id="72">
-                    <Title><Item lang="ru">Dendrogram title</Item></Title>
-                  </Dendrogram>
+                  <ChildItems>
+                    <GeographicalSchemaField name="Geo" id="68" />
+                    <GraphicalSchemaField name="Graph" id="69" />
+                    <GanttChart name="Gantt" id="71">
+                      <Title><Item lang="ru">Gantt title</Item></Title>
+                    </GanttChart>
+                    <Dendrogram name="Dendrogram" id="72">
+                      <Title><Item lang="ru">Dendrogram title</Item></Title>
+                    </Dendrogram>
+                    <CommandBar name="Commands" id="61">
+                      <Autofill>false</Autofill>
+                    </CommandBar>
+                    <Table name="Rows" id="62">
+                      <DataPath>Rows</DataPath>
+                      <ReadOnly>true</ReadOnly>
+                      <ColumnsCount>3</ColumnsCount>
+                      <RowsCount>2</RowsCount>
+                      <AutoMarkIncomplete>false</AutoMarkIncomplete>
+                    </Table>
+                    <SpreadsheetDocumentField name="Sheet" id="63">
+                      <Position left="0" top="0" right="200" bottom="100" width="200" height="100" />
+                    </SpreadsheetDocumentField>
+                    <TrackBar name="Track" id="64" />
+                    <ProgressBar name="Progress" id="65" />
+                    <CalendarField name="Calendar" id="66" />
+                    <TextDocumentField name="Text" id="67" />
+                    <InputField name="DateRange" id="73">
+                      <DataPath>DateRange</DataPath>
+                    </InputField>
+                    <PivotChart name="Pivot" id="70">
+                      <Title><Item lang="ru">Pivot title</Item></Title>
+                      <PivotChartKind>5</PivotChartKind>
+                    </PivotChart>
+                  </ChildItems>
                 </Page>
-              </Pages>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2762,15 +2773,15 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="1">
+                  <ChildItems><Table name="Rows" id="1">
                     <Columns>
                       <Column name="Колонка1" order="0">
                         <Title><Item lang="ru">Колонка1</Item></Title>
                         <Type source="TypeDomainPattern">
                           <Pattern encoding="TypeDomainPattern" itemCount="1">
-                            <PatternItem code="S" typeName="xs:string"/>
+                            <PatternItem code="S" typeName="xs:string" />
                           </Pattern>
                         </Type>
                       </Column>
@@ -2778,14 +2789,14 @@ class CliSmokeTest(unittest.TestCase):
                         <Title><Item lang="ru">Колонка2</Item></Title>
                         <Type source="TypeDomainPattern">
                           <Pattern encoding="TypeDomainPattern" itemCount="1">
-                            <PatternItem code="S" typeName="xs:string"/>
+                            <PatternItem code="S" typeName="xs:string" />
                           </Pattern>
                         </Type>
                       </Column>
                     </Columns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2810,21 +2821,21 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="Rows" id="1">
+                  <ChildItems><Table name="Rows" id="1">
                     <Columns>
                       <Column name="ПроизвольнаяКолонка" order="0">
                         <Title><Item lang="ru">Произвольная колонка</Item></Title>
                         <EditorControl>ChoiceField</EditorControl>
                         <Type source="emptyPattern">
-                          <Pattern encoding="TypeDomainPattern" itemCount="0"/>
+                          <Pattern encoding="TypeDomainPattern" itemCount="0" />
                         </Type>
                       </Column>
                     </Columns>
                   </Table>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2846,31 +2857,31 @@ class CliSmokeTest(unittest.TestCase):
               <Height>244</Height>
               <SerializationCounter>12</SerializationCounter>
               <Attributes>
-                <Attribute name="РегистрНакопленияСписок" id="9" slot="0">
+                <Attribute name="РегистрНакопленияСписок" id="0">
                   <Type source="TypeDomainPattern">
                     <Pattern encoding="TypeDomainPattern" itemCount="1">
-                      <PatternItem code="#" uuid="acf6192e-81ca-46ef-93a6-5a6968b78663"/>
+                      <PatternItem code="#" uuid="acf6192e-81ca-46ef-93a6-5a6968b78663" />
                     </Pattern>
                   </Type>
                 </Attribute>
-                <Attribute name="ПолеВвода1" id="11" slot="1">
+                <Attribute name="ПолеВвода1" id="1">
                   <Type source="TypeDomainPattern">
                     <Pattern encoding="TypeDomainPattern" itemCount="1">
-                      <PatternItem code="S" typeName="xs:string"/>
+                      <PatternItem code="S" typeName="xs:string" />
                     </Pattern>
                   </Type>
                 </Attribute>
               </Attributes>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Table name="РегистрНакопленияСписок" id="1">
+                  <ChildItems><Table name="РегистрНакопленияСписок" id="1">
                     <DataPath>РегистрНакопленияСписок</DataPath>
                     <Columns>
                       <Column name="Колонка1" order="0">
                         <Title><Item lang="ru">Колонка1</Item></Title>
                         <Type source="TypeDomainPattern">
                           <Pattern encoding="TypeDomainPattern" itemCount="1">
-                            <PatternItem code="S" typeName="xs:string"/>
+                            <PatternItem code="S" typeName="xs:string" />
                           </Pattern>
                         </Type>
                       </Column>
@@ -2878,27 +2889,27 @@ class CliSmokeTest(unittest.TestCase):
                         <Title><Item lang="ru">Колонка2</Item></Title>
                         <Type source="TypeDomainPattern">
                           <Pattern encoding="TypeDomainPattern" itemCount="1">
-                            <PatternItem code="S" typeName="xs:string"/>
+                            <PatternItem code="S" typeName="xs:string" />
                           </Pattern>
                         </Type>
                       </Column>
                     </Columns>
                     <Position left="8" top="33" right="772" bottom="300">
                       <Bindings>
-                        <DimensionBinding dimension="height" value="0"/>
-                        <DimensionBinding dimension="minHeight" value="0"/>
-                        <DimensionBinding dimension="stretch" value="0"/>
-                        <DimensionBinding dimension="width" value="0"/>
+                        <DimensionBinding dimension="height" value="0" />
+                        <DimensionBinding dimension="minHeight" value="0" />
+                        <DimensionBinding dimension="stretch" value="0" />
+                        <DimensionBinding dimension="width" value="0" />
                       </Bindings>
                     </Position>
                   </Table>
                   <CommandBar name="ДействияФормы" id="2">
                     <Position left="0" top="0" right="780" bottom="25">
                       <Bindings>
-                        <DimensionBinding dimension="height" mode="0" targetId="2" side="bottom"/>
-                        <DimensionBinding dimension="minHeight" value="0"/>
-                        <DimensionBinding dimension="stretch" value="0"/>
-                        <DimensionBinding dimension="width" value="0"/>
+                        <DimensionBinding dimension="height" mode="0" targetId="2" side="bottom" />
+                        <DimensionBinding dimension="minHeight" value="0" />
+                        <DimensionBinding dimension="stretch" value="0" />
+                        <DimensionBinding dimension="width" value="0" />
                       </Bindings>
                     </Position>
                   </CommandBar>
@@ -2907,10 +2918,10 @@ class CliSmokeTest(unittest.TestCase):
                     <TextPosition>0</TextPosition>
                     <Position left="155" top="5" right="223" bottom="25">
                       <Bindings>
-                        <DimensionBinding dimension="height" mode="0" targetId="3" side="bottom"/>
-                        <DimensionBinding dimension="minHeight" value="0"/>
-                        <DimensionBinding dimension="stretch" value="1"/>
-                        <DimensionBinding dimension="width" mode="0" targetId="3" side="right"/>
+                        <DimensionBinding dimension="height" mode="0" targetId="3" side="bottom" />
+                        <DimensionBinding dimension="minHeight" value="0" />
+                        <DimensionBinding dimension="stretch" value="1" />
+                        <DimensionBinding dimension="width" mode="0" targetId="3" side="right" />
                       </Bindings>
                     </Position>
                   </LabelDecoration>
@@ -2918,15 +2929,15 @@ class CliSmokeTest(unittest.TestCase):
                     <DataPath>ПолеВвода1</DataPath>
                     <Position left="228" top="5" right="534" bottom="25">
                       <Bindings>
-                        <DimensionBinding dimension="height" mode="0" targetId="4" side="bottom"/>
-                        <DimensionBinding dimension="minHeight" value="0"/>
-                        <DimensionBinding dimension="stretch" value="0"/>
-                        <DimensionBinding dimension="width" value="0"/>
+                        <DimensionBinding dimension="height" mode="0" targetId="4" side="bottom" />
+                        <DimensionBinding dimension="minHeight" value="0" />
+                        <DimensionBinding dimension="stretch" value="0" />
+                        <DimensionBinding dimension="width" value="0" />
                       </Bindings>
                     </Position>
                   </InputField>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -2949,11 +2960,11 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_build_bin_uses_platform_extended_root_record_for_sized_forms(self) -> None:
         root = ET.fromstring(
-            """<Form version="0.1">
+            """<Form>
               <Title><Item lang="ru">Main</Item></Title>
               <Width>1244</Width>
               <Height>1120</Height>
-              <Pages><Page name="Main"/></Pages>
+              <ChildItems><Page name="Main" /></ChildItems>
             </Form>"""
         )
 
@@ -2967,33 +2978,33 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_form_root_panel_layout_writes_page_state(self) -> None:
         root = ET.fromstring(
-            """<Form version="0.1">
+            """<Form>
               <Title><Item lang="ru">Main</Item></Title>
               <Width>995</Width>
               <Height>503</Height>
               <SerializationCounter>2</SerializationCounter>
               <RootPanelLayout pageCapacity="2" currentPageIndex="0">
                 <BaseStyle>
-                  <TextColor value="143" recordKind="4" recordSubKind="2" tailKind="2">143</TextColor>
-                  <BackColor value="-11" recordKind="4" recordSubKind="3" tailKind="3">-11</BackColor>
-                  <BorderColor value="0" recordKind="4" recordSubKind="4" tailKind="4">auto</BorderColor>
+                  <TextColor kind="Auto" value="143">auto</TextColor>
+                  <BackColor kind="Auto" value="-11">auto</BackColor>
+                  <BorderColor kind="Auto" value="0">auto</BorderColor>
                 </BaseStyle>
                 <LayoutDependencyGroup order="1">
-                  <LayoutDependency targetId="47" dimension="bottom"/>
-                  <LayoutDependency targetId="119" dimension="bottom"/>
+                  <LayoutDependency targetId="47" dimension="bottom" />
+                  <LayoutDependency targetId="119" dimension="bottom" />
                 </LayoutDependencyGroup>
-                <LayoutDependencyGroup order="2"/>
+                <LayoutDependencyGroup order="2" />
                 <LayoutDependencyGroup order="3">
-                  <LayoutDependency targetId="119" dimension="right"/>
+                  <LayoutDependency targetId="119" dimension="right" />
                 </LayoutDependencyGroup>
-                <LayoutDependencyGroup order="4"/>
-                <LayoutDependencyGroup order="5"/>
+                <LayoutDependencyGroup order="4" />
+                <LayoutDependencyGroup order="5" />
                 <PageState name="СтраницаСтраницаНетОрганизаций" styleMode="2">
                   <Title><Item lang="ru">Пустой список организаций</Item></Title>
                 </PageState>
-                <PageLayout page="0" left="8" top="8" width="987" height="495" horizontalMode="8" verticalMode="8"/>
+                <PageLayout page="0" left="8" top="8" width="987" height="495" horizontalMode="8" verticalMode="8" />
               </RootPanelLayout>
-              <Pages><Page name="Main"/></Pages>
+              <ChildItems><Page name="Main" /></ChildItems>
             </Form>"""
         )
 
@@ -3031,17 +3042,17 @@ class CliSmokeTest(unittest.TestCase):
 
     def test_form_root_panel_layout_preserves_empty_page_states(self) -> None:
         root = ET.fromstring(
-            """<Form version="0.1">
+            """<Form>
               <Title><Item lang="ru">Main</Item></Title>
               <Width>1058</Width>
               <Height>424</Height>
               <RootPanelLayout pageStateFlag="0" currentPageIndex="1">
                 <LayoutDependencyGroup order="1">
-                  <LayoutDependency targetId="76" dimension="right"/>
+                  <LayoutDependency targetId="76" dimension="right" />
                 </LayoutDependencyGroup>
-                <PageLayout page="0" left="8" top="33" width="1050" height="391" horizontalMode="8" verticalMode="9"/>
+                <PageLayout page="0" left="8" top="33" width="1050" height="391" horizontalMode="8" verticalMode="9" />
               </RootPanelLayout>
-              <Pages><Page name="Main"/></Pages>
+              <ChildItems><Page name="Main" /></ChildItems>
             </Form>"""
         )
 
@@ -3055,30 +3066,30 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <CommandBar name="КоманднаяПанель1" id="2">
+                  <ChildItems><CommandBar name="КоманднаяПанель1" id="2">
                     <Position left="0" top="0" right="100" bottom="25">
                       <Bindings>
-                        <DimensionBinding dimension="height" mode="0" targetId="2" side="bottom"/>
-                        <DimensionBinding dimension="minHeight" value="0"/>
-                        <DimensionBinding dimension="stretch" value="0"/>
-                        <DimensionBinding dimension="width" value="0"/>
+                        <DimensionBinding dimension="height" mode="0" targetId="2" side="bottom" />
+                        <DimensionBinding dimension="minHeight" value="0" />
+                        <DimensionBinding dimension="stretch" value="0" />
+                        <DimensionBinding dimension="width" value="0" />
                       </Bindings>
                     </Position>
                   </CommandBar>
                   <CommandBar name="ДействияФормы" id="3">
                     <Position left="0" top="75" right="100" bottom="100">
                       <Bindings>
-                        <DimensionBinding dimension="height" mode="0" targetId="3" side="bottom"/>
-                        <DimensionBinding dimension="minHeight" value="1"/>
-                        <DimensionBinding dimension="stretch" value="0"/>
-                        <DimensionBinding dimension="width" value="0"/>
+                        <DimensionBinding dimension="height" mode="0" targetId="3" side="bottom" />
+                        <DimensionBinding dimension="minHeight" value="1" />
+                        <DimensionBinding dimension="stretch" value="0" />
+                        <DimensionBinding dimension="width" value="0" />
                       </Bindings>
                     </Position>
                   </CommandBar>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -3092,24 +3103,24 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <CommandBar name="КонтекстноеМенюМокселя" id="126">
+                  <ChildItems><CommandBar name="КонтекстноеМенюМокселя" id="126">
                     <Position left="2" top="18" right="102" bottom="36">
                       <Bindings>
-                        <Binding coordinate="top" value="20"/>
-                        <Binding coordinate="bottom" value="6"/>
-                        <Binding coordinate="left" value="21"/>
-                        <Binding coordinate="right" value="0"/>
-                        <Binding coordinate="verticalCenter" value="0"/>
-                        <Binding coordinate="horizontalCenter" value="0"/>
-                        <DimensionBinding dimension="height" value="0"/>
-                        <DimensionBinding dimension="minHeight" value="4"/>
+                        <Binding coordinate="top" value="20" />
+                        <Binding coordinate="bottom" value="6" />
+                        <Binding coordinate="left" value="21" />
+                        <Binding coordinate="right" value="0" />
+                        <Binding coordinate="verticalCenter" value="0" />
+                        <Binding coordinate="horizontalCenter" value="0" />
+                        <DimensionBinding dimension="height" value="0" />
+                        <DimensionBinding dimension="minHeight" value="4" />
                       </Bindings>
                     </Position>
                   </CommandBar>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -3287,16 +3298,16 @@ class CliSmokeTest(unittest.TestCase):
             root = ET.fromstring(
                 """<Form>
                   <Title><Item lang="ru">Main</Item></Title>
-                  <Pages>
+                  <ChildItems>
                     <Page name="Main">
-                      <PictureDecoration name="Image1" id="5">
-                        <Picture file="Items/Image1/Picture.gif"/>
+                      <ChildItems><PictureDecoration name="Image1" id="5">
+                        <Picture file="Items/Image1/Picture.gif" />
                         <PictureStyle displayMode="4" displayState="1" mode="4">
-                          <BaseStyle mode="2" state="1" visible="1" defaultMode="2"/>
+                          <BaseStyle mode="2" state="1" visible="1" defaultMode="2" />
                         </PictureStyle>
                       </PictureDecoration>
-                    </Page>
-                  </Pages>
+                    </ChildItems></Page>
+                  </ChildItems>
                 </Form>"""
             )
 
@@ -3314,18 +3325,18 @@ class CliSmokeTest(unittest.TestCase):
     def test_picture_decoration_keeps_style_group_without_picture_payload(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <PictureDecoration name="Image1" id="5">
+                  <ChildItems><PictureDecoration name="Image1" id="5">
                     <PictureStyle displayMode="0" displayState="0" mode="0" renderingFlag="1">
-                      <BaseStyle mode="2" state="1" visible="1" defaultMode="2"/>
+                      <BaseStyle mode="2" state="1" visible="1" defaultMode="2" />
                     </PictureStyle>
                     <PictureSize>2</PictureSize>
                     <ScalePicture>false</ScalePicture>
-                    <PictureRendering horizontalMode="1" verticalMode="2"/>
+                    <PictureRendering horizontalMode="1" verticalMode="2" />
                   </PictureDecoration>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -3355,13 +3366,13 @@ class CliSmokeTest(unittest.TestCase):
     def test_picture_decoration_writes_style_group_kind8(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <PictureDecoration name="Image1" id="5">
-                    <PictureStyle groupKind="8" mode="2"/>
+                  <ChildItems><PictureDecoration name="Image1" id="5">
+                    <PictureStyle groupKind="8" mode="2" />
                   </PictureDecoration>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -3488,27 +3499,13 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <CommandBar name="Commands" id="6">
-                    <CommandSource
-                      actionPlacement="3"
-                      actionAlignment="4"
-                      sourceMode="5"
-                      presentationScope="7"
-                      presentationScopeEnabled="0"
-                      presentationScopeUuid="00000000-0000-0000-0000-000000000000"
-                      buttonPanelMode="0"
-                      buttonPanelState="0"
-                      buttonPanelVisible="0"
-                      buttonPanelDefaultMode="0"/>
-                    <Buttons rootUuid="48312c09-257f-4b29-b280-284dd89efc1e" rootKind="3" rootFlag="1">
-                      <Actions/>
-                      <Groups/>
-                    </Buttons>
+                  <ChildItems><CommandBar name="Commands" id="6">
+                    <CommandSource actionPlacement="3" actionAlignment="4" sourceMode="5" presentationScope="7" presentationScopeEnabled="0" presentationScopeUuid="00000000-0000-0000-0000-000000000000" buttonPanelMode="0" buttonPanelState="0" buttonPanelVisible="0" buttonPanelDefaultMode="0" />
                   </CommandBar>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -3808,7 +3805,7 @@ class CliSmokeTest(unittest.TestCase):
         fields = root.findall(".//InputField[@name='RepeatedName']")
         self.assertEqual(len(fields), 1)
         second_page = root.findall(".//Page")[1]
-        self.assertIsNotNone(second_page.find("./InputField[@name='RepeatedName']"))
+        self.assertIsNotNone(second_page.find(".//InputField[@name='RepeatedName']"))
 
     def test_dump_preserves_counted_dimension_geometry_profile(self) -> None:
         from onec_ordinary_forms.cli import add_semantic_item
@@ -3969,15 +3966,15 @@ class CliSmokeTest(unittest.TestCase):
     def test_panel_layout_empty_dependencies_preserve_platform_padding(self) -> None:
         root = ET.fromstring(
             """<Form>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Panel name="ModePanel" id="29">
+                  <ChildItems><Panel name="ModePanel" id="29">
                     <PanelLayout pageCapacity="1" pageStateFlag="0" currentPageIndex="1">
-                      <PageLayout page="0" left="6" top="6" width="303" height="29" horizontalMode="22" verticalMode="4"/>
+                      <PageLayout page="0" left="6" top="6" width="303" height="29" horizontalMode="22" verticalMode="4" />
                     </PanelLayout>
                   </Panel>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -4127,30 +4124,18 @@ class CliSmokeTest(unittest.TestCase):
         rebuilt = command_bar_items_record_from_xml(root.find("Buttons"))
         self.assertEqual(rebuilt[5][0], "7")
 
-    def test_button_menu_mode_roundtrips_as_typed_buttons_graph(self) -> None:
+    def test_button_menu_mode_roundtrips_as_named_property(self) -> None:
         root = ET.fromstring(
             """<Form>
               <Title><Item lang="ru">Main</Item></Title>
-              <Pages>
+              <ChildItems>
                 <Page name="Main">
-                  <Button name="Run" id="7">
+                  <ChildItems><Button name="Run" id="7">
                     <Title><Item lang="ru">Run</Item></Title>
                     <MenuMode>UseAdditional</MenuMode>
-                    <Buttons rootUuid="root" rootKind="1" rootFlag="1">
-                      <Actions>
-                        <Action order="1" recordKind="8" uuid="action" enabled="1" eventUuid="e1692cc2-605b-4535-84dd-28440238746c" handler="RunAction" title="Run action" handlerKind="3" changesData="0" display="0" mode="0"/>
-                      </Actions>
-                      <Groups>
-                        <Group order="1" uuid="group" kind="0" mode="0" buttonCount="1">
-                          <Button order="1" actionUuid="action" name="Действие" state="0" visible="1" hasAction="1" ownerUuid="root" position="1" style="1e2" kind="0" groupMode="0" enabled="1" checked="0" showText="1" shortcut="0" default="0">
-                            <Title><Item lang="ru">Действие</Item></Title>
-                          </Button>
-                        </Group>
-                      </Groups>
-                    </Buttons>
                   </Button>
-                </Page>
-              </Pages>
+                </ChildItems></Page>
+              </ChildItems>
             </Form>"""
         )
 
@@ -4162,8 +4147,6 @@ class CliSmokeTest(unittest.TestCase):
         assert button is not None
         info = button[2][1]
         self.assertEqual(info[11], "2")
-        self.assertEqual(info[12][0:5], ["5", "root", "1", "1", "1"])
-        self.assertEqual(info[12][5][4][1], '"RunAction"')
 
     def test_form_bin_pipeline_keeps_cli_out_of_section_details(self) -> None:
         with TemporaryDirectory() as temp_dir:

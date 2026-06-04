@@ -81,9 +81,10 @@ and record shape.
 
 The public schema boundary is intentionally narrow:
 
-- `OrdinaryForm.xsd` is the editable ordinary-form object model: form root,
-  controls, named properties, events, reusable value/layout types, and platform
-  palette annotations.
+- `OrdinaryForm.xsd` is the public managed-style ordinary-form object model:
+  `ChildItems`, controls, `Attributes`, `Commands`, and `Events`.
+- `OrdinaryFormPalette.xsd` is the platform palette and typed property
+  descriptor schema used by codec/coverage tooling.
 - `PlatformConfigStructure.xsd` is codec evidence for configuration metadata,
   type-domain patterns, `CompositeID`, and platform serializer concepts.
 

@@ -29,7 +29,9 @@ Forms/Form/Ext/Form/Items/<ElementName>/Picture.gif
 named controls and properties, not with raw platform records:
 
 ```xml
-<Form>
+<Form ordinaryFormVersion="2.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
   <Title>
     <Item lang="ru">Form title</Item>
   </Title>
@@ -38,29 +40,31 @@ named controls and properties, not with raw platform records:
       <Type>...</Type>
     </Attribute>
   </Attributes>
-  <Pages>
+  <ChildItems>
     <Page name="Main">
-      <Panel name="MainPanel">
-        <Position left="8" top="8" right="640" bottom="480"/>
-        <LabelDecoration name="Caption">
-          <Title>
-            <Item lang="ru">Caption text</Item>
-          </Title>
-        </LabelDecoration>
-        <Button name="RunButton">
-          <Title>
-            <Item lang="ru">Run</Item>
-          </Title>
-          <Events>
-            <Event name="Нажатие">Run</Event>
-          </Events>
-        </Button>
-        <PictureDecoration name="Logo">
-          <Picture file="Items/Logo/Picture.gif"/>
-        </PictureDecoration>
-      </Panel>
+      <ChildItems>
+        <Panel name="MainPanel">
+          <Position left="8" top="8" right="640" bottom="480"/>
+          <LabelDecoration name="Caption">
+            <Title>
+              <Item lang="ru">Caption text</Item>
+            </Title>
+          </LabelDecoration>
+          <Button name="RunButton">
+            <Title>
+              <Item lang="ru">Run</Item>
+            </Title>
+            <Events>
+              <Event name="Нажатие">Run</Event>
+            </Events>
+          </Button>
+          <PictureDecoration name="Logo">
+            <Picture file="Items/Logo/Picture.gif"/>
+          </PictureDecoration>
+        </Panel>
+      </ChildItems>
     </Page>
-  </Pages>
+  </ChildItems>
 </Form>
 ```
 
@@ -70,12 +74,11 @@ set on the form; platform defaults should stay implicit.
 
 Public XML uses one English vocabulary for element and attribute names. Russian
 platform names for ordinary-form controls, properties, events, and value types
-belong in `OrdinaryForm.xsd` as `xs:annotation/xs:appinfo` metadata, not in a
-separate mapping file and not as public XML tag names.
+belong in `OrdinaryFormPalette.xsd` as `xs:annotation/xs:appinfo` metadata, not
+in a separate mapping file and not as public XML tag names.
 
-The exact schema is still being expanded, but the target direction is fixed:
-public XML must be managed-form-like, named, and understandable to a 1C
-developer.
+Public `Form.xml` follows the managed-form-style tree in `OrdinaryForm.xsd`:
+`ChildItems`, nested controls, `Attributes`, `Commands`, and `Events`.
 
 ### Reading Form.xml
 
@@ -90,7 +93,8 @@ Inside `Form.xml`, the main sections are:
 - `Title` - localized form title.
 - `Events` - form-level event handlers, for example `ПриОткрытии`.
 - `Attributes` - form attributes and their 1C type descriptions.
-- `Pages` - top-level form pages and their nested controls.
+- `ChildItems` - top-level pages, panels, and nested controls (managed-form style).
+- `Commands` - form commands when the platform materializes them.
 - control nodes such as `Panel`, `InputField`, `Button`, `Table`,
   `CommandBar`, `LabelDecoration`, and `PictureDecoration`.
 - `Position` - control geometry and bindings.
@@ -125,7 +129,8 @@ Form.xml -> platform object model -> ListOutStream -> form raw stream -> Form.bi
 
 The schema layer is intentionally small and focused on ordinary forms:
 
-- `OrdinaryForm.xsd` describes the public `Form.xml` root, ordinary-form controls, reusable value/layout types, property/event vocabulary, and platform palette annotations;
+- `OrdinaryForm.xsd` describes the public managed-style `Form.xml` root and control tree;
+- `OrdinaryFormPalette.xsd` holds the platform palette, per-control property/event vocabulary, and reusable value types for tooling;
 - `PlatformConfigStructure.xsd` records platform-derived configuration,
   metadata tree, type-domain, `CompositeID`, `ValueToStringInternal`/
   `ValueFromStringInternal`, and serializer evidence used by the codec layer.
@@ -217,7 +222,9 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 записями:
 
 ```xml
-<Form>
+<Form ordinaryFormVersion="2.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="OrdinaryForm.xsd">
   <Title>
     <Item lang="ru">Заголовок формы</Item>
   </Title>
@@ -226,40 +233,42 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
       <Type>...</Type>
     </Attribute>
   </Attributes>
-  <Pages>
+  <ChildItems>
     <Page name="Основная">
-      <Panel name="ОсновнаяПанель">
-        <Position left="8" top="8" right="640" bottom="480"/>
-        <LabelDecoration name="Надпись">
-          <Title>
-            <Item lang="ru">Текст надписи</Item>
-          </Title>
-        </LabelDecoration>
-        <Button name="КнопкаВыполнить">
-          <Title>
-            <Item lang="ru">Выполнить</Item>
-          </Title>
-          <Events>
-            <Event name="Нажатие">Выполнить</Event>
-          </Events>
-        </Button>
-        <PictureDecoration name="Логотип">
-          <Picture file="Items/Логотип/Picture.gif"/>
-        </PictureDecoration>
-      </Panel>
+      <ChildItems>
+        <Panel name="ОсновнаяПанель">
+          <Position left="8" top="8" right="640" bottom="480"/>
+          <LabelDecoration name="Надпись">
+            <Title>
+              <Item lang="ru">Текст надписи</Item>
+            </Title>
+          </LabelDecoration>
+          <Button name="КнопкаВыполнить">
+            <Title>
+              <Item lang="ru">Выполнить</Item>
+            </Title>
+            <Events>
+              <Event name="Нажатие">Выполнить</Event>
+            </Events>
+          </Button>
+          <PictureDecoration name="Логотип">
+            <Picture file="Items/Логотип/Picture.gif"/>
+          </PictureDecoration>
+        </Panel>
+      </ChildItems>
     </Page>
-  </Pages>
+  </ChildItems>
 </Form>
 ```
 
 Публичный XML использует единый английский словарь элементов и свойств.
 Платформенные русские имена свойств, событий и типов обычной формы хранятся в
-`OrdinaryForm.xsd` как `xs:annotation/xs:appinfo`, а не отдельным mapping файлом и
-не публичными XML-тегами. В XML должны попадать только явно заданные значения;
-дефолты платформы остаются неявными.
+`OrdinaryFormPalette.xsd` как `xs:annotation/xs:appinfo`, а не отдельным mapping
+файлом и не публичными XML-тегами. В XML должны попадать только явно заданные
+значения; дефолты платформы остаются неявными.
 
-Схема еще расширяется, но направление фиксированное: публичный XML должен быть
-похож на XML управляемой формы, быть именованным и понятным разработчику 1С.
+Публичный `Form.xml` следует дереву управляемой формы из `OrdinaryForm.xsd`:
+`ChildItems`, вложенные контролы, `Attributes`, `Commands` и `Events`.
 
 ### Как читать Form.xml
 
@@ -274,7 +283,8 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 - `Title` - локализованный заголовок формы.
 - `Events` - события самой формы, например `ПриОткрытии`.
 - `Attributes` - реквизиты формы и описания их типов 1С.
-- `Pages` - страницы формы и вложенные в них элементы.
+- `ChildItems` - страницы, панели и вложенные элементы (как в управляемой форме).
+- `Commands` - команды формы, если платформа их материализует.
 - узлы контролов: `Panel`, `InputField`, `Button`, `Table`, `CommandBar`,
   `LabelDecoration`, `PictureDecoration` и другие элементы палитры.
 - `Position` - геометрия элемента и привязки.
@@ -309,9 +319,8 @@ Form.xml -> объектная модель платформы -> ListOutStream 
 
 Слой схем специально небольшой и сфокусирован на обычных формах:
 
-- `OrdinaryForm.xsd` описывает публичный корень `Form.xml`, элементы обычной
-  формы, переиспользуемые типы значений/раскладки, единый английский словарь
-  свойств/событий и аннотации платформенной палитры;
+- `OrdinaryForm.xsd` описывает публичный managed-style корень `Form.xml` и дерево контролов;
+- `OrdinaryFormPalette.xsd` хранит палитру платформы, словарь свойств/событий и типы значений для tooling;
 - `PlatformConfigStructure.xsd` фиксирует платформенные сведения о структуре
   конфигурации, дереве метаданных, type-domain, `CompositeID`,
   `ValueToStringInternal`/`ValueFromStringInternal` и сведения о

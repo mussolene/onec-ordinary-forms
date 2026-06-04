@@ -3577,10 +3577,10 @@ std::vector<oof::platform::stream::ListValue> anchor_children_from_xml_body(std:
 std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::string& xml) {
     if (xml.find("<ListStream") != std::string::npos || xml.find("<RawBracket") != std::string::npos ||
         xml.find("<PlatformRecords") != std::string::npos || xml.find("<FormBin") != std::string::npos) {
-        throw std::runtime_error("OrdinaryFormV2 XML must not contain raw/list-stream fallback nodes");
+        throw std::runtime_error("OrdinaryForm XML must not contain raw/list-stream fallback nodes");
     }
     if (xml.find("ordinaryFormVersion=\"2.") == std::string::npos) {
-        throw std::runtime_error("expected OrdinaryFormV2 XML with ordinaryFormVersion=\"2.*\"");
+        throw std::runtime_error("expected OrdinaryForm XML with ordinaryFormVersion=\"2.*\"");
     }
 
     const std::set<std::string> section_tags{
@@ -4343,7 +4343,7 @@ void append_control_xml(
 std::string form_object_to_public_xml(const oof::platform::object_model::PlatformFormObject& form_object) {
     std::string out;
     out += "<?xml version='1.0' encoding='utf-8'?>\n";
-    out += "<Form xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" ordinaryFormVersion=\"2.0-draft\" xsi:noNamespaceSchemaLocation=\"OrdinaryFormV2.xsd\">\n";
+    out += "<Form xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" ordinaryFormVersion=\"2.0\" xsi:noNamespaceSchemaLocation=\"OrdinaryForm.xsd\">\n";
     append_events_xml(out, event_objects_for_parent(form_object, "0"), 2);
     out += "  <ChildItems>\n";
     for (const std::size_t child_index : form_object.form.children) {
@@ -4367,7 +4367,7 @@ void write_runtime_form_xml(const std::string& input_path, const std::string& ou
     std::cout << ",\"bytes\":" << xml.size();
     std::cout << ",\"source\":\"RuntimeForm:PlatformObject\"";
     std::cout << ",\"controlCount\":" << form_object.items.count();
-    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
 
@@ -4388,7 +4388,7 @@ void write_formbin_xml(const std::string& input_path, const std::string& output_
     std::cout << ",\"bytes\":" << xml.size();
     std::cout << ",\"source\":\"Form.bin:form\"";
     std::cout << ",\"controlCount\":" << form_object.items.count();
-    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
 
@@ -4458,7 +4458,7 @@ void write_runtime_form_from_xml(
     std::cout << ",\"attributeEdits\":" << result.attribute_edits;
     std::cout << ",\"commandEdits\":" << result.command_edits;
     std::cout << ",\"eventEdits\":" << result.event_edits;
-    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
 
@@ -4503,7 +4503,7 @@ void write_formbin_from_xml(
     std::cout << ",\"commandEdits\":" << result.command_edits;
     std::cout << ",\"eventEdits\":" << result.event_edits;
     std::cout << ",\"preservedContainerFiles\":" << container.files.size();
-    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
 
@@ -4576,7 +4576,7 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
     const auto summary = summarize_materialized_graph(envelope.payload);
     std::cout << "{\"source\":\"Form.bin:form\"";
-    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << ",\"nativeXmlProjection\":true";
     std::cout << ",\"nativeXmlWriter\":true";
     std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Visible\",\"Enabled\",\"Position\",\"Binding:value\",\"Binding:anchor-list\",\"DimensionBinding:value\",\"DimensionBinding:record\",\"Attribute.Name\",\"Command.Name\",\"Command.Handler\",\"Command.ModifiesData\",\"Event.Handler\",\"Form.bin.PlatformObject.getPropVal\",\"Form.bin.PlatformObject.setPropVal\"]";
@@ -4665,7 +4665,7 @@ void print_formbin_xml_build_selftest() {
               << (module.payload == std::vector<std::uint8_t>({'m', 'o', 'd'}) ? "true" : "false");
     std::cout << ",\"noRawXml\":"
               << (redump_xml.find("ListStream") == std::string::npos ? "true" : "false");
-    std::cout << ",\"publicContract\":\"OrdinaryFormV2\"";
+    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
 

@@ -87,7 +87,7 @@ Print the native transfer sections with proven count/byte semantics:
 sidecars/onec-form-native/build/oof-native transfer-sections
 ```
 
-Dump the current native materialized form graph as public `OrdinaryFormV2`
+Dump the current native materialized form graph as public `OrdinaryForm`
 managed-style XML:
 
 ```bash

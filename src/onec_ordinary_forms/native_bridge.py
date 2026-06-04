@@ -1,7 +1,7 @@
 """Thin subprocess bridge to the native ``oof-native`` ordinary-form engine.
 
 The native sidecar is the canonical object/Form.bin codec. Python keeps the
-public v1 ``Form.xml`` contract, corpus tooling, and orchestration; it calls
+public ``Form.xml`` contract, corpus tooling, and orchestration; it calls
 into native code for materialization checks and (incrementally) dump/build.
 """
 

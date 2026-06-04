@@ -1,7 +1,7 @@
 """DTO bridge between platform objects and public ordinary Form.xml.
 
-The public XML shape is defined by ``OrdinaryForm.xsd`` and its embedded
-``PlatformPalette`` annotations. This module connects that vocabulary to the
+The public XML shape is defined by ``OrdinaryForm.xsd``. Platform palette
+metadata lives in ``OrdinaryFormPalette.xsd``. This module connects that vocabulary to the
 internal ``OrdinaryPlatformObject`` without making bracket/list-stream data
 part of the XML contract.
 """
@@ -15,13 +15,10 @@ from pathlib import Path
 
 from onec_ordinary_forms.bracket import control_index_from_list_stream_root
 from onec_ordinary_forms.cli import (
-    ORDINARY_FORM_SCHEMA,
-    SCHEMA_VERSION,
-    XSI_NS,
     add_form_events,
     add_form_properties,
     add_multilang_text,
-    add_semantic_pages,
+    add_semantic_child_items,
     add_type,
     add_type_from_domain_record,
     attribute_control_data_flag,
@@ -48,6 +45,16 @@ from onec_ordinary_forms.ordinary_stream import (
     control_stream_from_xml,
     form_stream_from_object_xml,
     type_domain_pattern_from_xml,
+)
+from onec_ordinary_forms.public_contract import (
+    ORDINARY_FORM_SCHEMA,
+    PUBLIC_FORM_VERSION,
+    XSI_NS,
+    form_child_items,
+    iter_control_elements,
+    iter_page_controls,
+    panel_pages,
+    top_level_pages,
 )
 from onec_ordinary_forms.value_codec import clean_atom
 
@@ -271,10 +278,8 @@ def _xml_parent_map(root: ET.Element) -> dict[str, str]:
             result[node_id] = parent_id
             walk(child, node_id)
 
-    pages = root.find("Pages")
-    if pages is not None:
-        for page in pages.findall("Page"):
-            walk(page, "")
+    for page in top_level_pages(root):
+        walk(page, "")
     return result
 
 
@@ -286,8 +291,8 @@ def _attribute_type_maps(root: ET.Element) -> tuple[dict[str, list[object]], dic
         if not name:
             continue
         attribute_type_patterns[name] = type_domain_pattern_from_xml(attribute)
-        if attribute.get("slot"):
-            attribute_slots[name] = attribute.get("slot", "")
+        if attribute.get("id"):
+            attribute_slots[name] = attribute.get("id", "")
     return attribute_type_patterns, attribute_slots
 
 
@@ -376,7 +381,7 @@ def _ordinary_form_xml_from_platform_object(
     root_title_lang, root_title = form_root_title_parts(form_root)
 
     root = ET.Element("Form")
-    root.set("version", SCHEMA_VERSION)
+    root.set("ordinaryFormVersion", PUBLIC_FORM_VERSION)
     root.set(f"{{{XSI_NS}}}noNamespaceSchemaLocation", ORDINARY_FORM_SCHEMA)
     root.set("containerCreatedTicks", str(container_created_ticks))
     root.set("containerModifiedTicks", str(container_modified_ticks))
@@ -385,7 +390,7 @@ def _ordinary_form_xml_from_platform_object(
     add_form_properties(root, form_root)
     add_form_events(root, form_root)
     _add_attributes(root, form_root, control_index, object_types)
-    add_semantic_pages(root, control_index, element_index, asset_root)
+    add_semantic_child_items(root, control_index, element_index, asset_root)
     return root
 
 
@@ -412,8 +417,6 @@ def _add_attributes(
             attr = ET.SubElement(attrs, "Attribute")
             attr.set("name", prop_name)
             attr.set("id", str(prop.get("id", "")))
-            if prop_name in attribute_slots:
-                attr.set("slot", attribute_slots[prop_name])
             if len(record) > 1 and clean_atom(record[1]) == "0":
                 attr.set("controlData", "false")
             if len(record) >= 2:
@@ -429,8 +432,6 @@ def _add_attributes(
         attr = ET.SubElement(attrs, "Attribute")
         attr.set("name", prop_name)
         attr.set("id", str(prop.get("id", "")))
-        if prop_name in attribute_slots:
-            attr.set("slot", attribute_slots[prop_name])
         if attribute_control_data_flag(form_root, prop_name) == "0":
             attr.set("controlData", "false")
         pattern = pattern_node_from_prop(prop)
@@ -439,41 +440,52 @@ def _add_attributes(
 
 def _public_control_elements(root: ET.Element) -> tuple[ET.Element, ...]:
     result: list[ET.Element] = []
-    pages = root.find("Pages")
-    if pages is not None:
-        for page in pages.findall("Page"):
-            _collect_public_controls(page, result)
+    for page in top_level_pages(root):
+        _collect_public_controls(page, result)
+    child_items = form_child_items(root)
+    if child_items is not None:
+        for child in child_items:
+            if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG:
+                _collect_public_controls(child, result)
     return tuple(result)
 
 
 def _public_top_level_control_elements(root: ET.Element) -> tuple[ET.Element, ...]:
     result: list[ET.Element] = []
-    pages = root.find("Pages")
-    if pages is None:
-        return ()
-    for page in pages.findall("Page"):
-        result.extend(child for child in list(page) if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG)
+    for page in top_level_pages(root):
+        result.extend(
+            child
+            for child in iter_page_controls(page)
+            if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG
+        )
+    child_items = form_child_items(root)
+    if child_items is not None:
+        result.extend(child for child in child_items if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG)
     return tuple(result)
 
 
 def _public_direct_child_control_elements(element: ET.Element) -> tuple[ET.Element, ...]:
-    result = [child for child in list(element) if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG]
-    pages = element.find("Pages")
-    if pages is not None:
-        for page in pages.findall("Page"):
-            result.extend(child for child in list(page) if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG)
+    result = [
+        child
+        for child in iter_control_elements(element)
+        if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG
+    ]
+    for page in panel_pages(element):
+        result.extend(
+            child
+            for child in iter_page_controls(page)
+            if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG
+        )
     return tuple(result)
 
 
 def _collect_public_controls(parent: ET.Element, result: list[ET.Element]) -> None:
-    for child in list(parent):
+    for child in iter_control_elements(parent):
         if child.tag in PLATFORM_TYPE_BY_CONTROL_XML_TAG:
             result.append(child)
             _collect_public_controls(child, result)
-            pages = child.find("Pages")
-            if pages is not None:
-                for page in pages.findall("Page"):
-                    _collect_public_controls(page, result)
+    for page in panel_pages(parent):
+        _collect_public_controls(page, result)
 
 
 def _public_control_ids(elements: tuple[ET.Element, ...]) -> list[str]:

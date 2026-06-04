@@ -1,6 +1,6 @@
 """Platform-to-public ordinary-form XML mapping tables.
 
-The platform palette in ``OrdinaryForm.xsd`` stores 1C Russian object,
+The platform palette in ``OrdinaryFormPalette.xsd`` stores 1C Russian object,
 property, and event names. Public ordinary ``Form.xml`` uses an English XML
 vocabulary. This module is the explicit bridge between those two layers; it is
 name mapping only, not proof that a property has a verified platform slot

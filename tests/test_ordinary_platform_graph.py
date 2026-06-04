@@ -83,14 +83,14 @@ def test_platform_graph_from_list_stream_text_uses_writer_output_controls() -> N
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -114,14 +114,14 @@ def test_platform_object_from_list_stream_text_exposes_typed_controls() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -148,15 +148,15 @@ def test_platform_object_title_does_not_use_event_titles() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <InputField name="Input" id="8">
+              <ChildItems><InputField name="Input" id="8">
                 <Events>
                   <Event name="ПриИзменении" title="Input changed title">InputOnChange</Event>
                 </Events>
               </InputField>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -172,14 +172,14 @@ def test_platform_object_roundtrips_back_to_list_stream_text() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -201,14 +201,14 @@ def test_platform_object_writes_control_name_and_title_to_bracket_stream() -> No
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -239,14 +239,14 @@ def test_platform_form_object_edits_control_identity_and_title_by_object_name() 
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -265,14 +265,14 @@ def test_platform_form_object_sets_input_field_property_by_platform_name() -> No
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -281,7 +281,7 @@ def test_platform_form_object_sets_input_field_property_by_platform_name() -> No
     updated = form.set_control_property("Input", "ТолькоПросмотр", True)
     platform_object = updated.to_platform_object()
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    read_only = public_xml.find("./Pages/Page/InputField[@name='Input']/ReadOnly")
+    read_only = public_xml.find(".//Page/ChildItems/InputField[@name='Input']/ReadOnly")
 
     assert updated.get_control_property("Input", "ReadOnly") == "true"
     assert read_only is not None
@@ -295,13 +295,13 @@ def test_platform_form_object_sets_common_base_info_properties() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -313,7 +313,7 @@ def test_platform_form_object_sets_common_base_info_properties() -> None:
     platform_object = updated.to_platform_object()
     reparsed = platform_object_from_list_stream_text(platform_object.to_list_stream_text())
     public_xml = ordinary_form_xml_from_platform_object(reparsed)
-    button = public_xml.find("./Pages/Page/Button[@name='Run']")
+    button = public_xml.find(".//Page/ChildItems/Button[@name='Run']")
 
     assert updated.get_control_property("Run", "Visible") == "false"
     assert updated.get_control_property("Run", "Enabled") == "false"
@@ -329,13 +329,13 @@ def test_platform_form_object_rejects_unverified_property_writer() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -354,14 +354,14 @@ def test_platform_object_xml_roundtrips_without_stream_payload() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -393,14 +393,14 @@ def test_platform_object_xml_edit_writes_control_name_and_title_to_bracket_strea
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -433,14 +433,14 @@ def test_platform_object_xml_edit_writes_common_properties_to_bracket_stream() -
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -459,8 +459,8 @@ def test_platform_object_xml_edit_writes_common_properties_to_bracket_stream() -
     updated = platform_object_from_xml(xml_root, platform_object)
     reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
     public_xml = ordinary_form_xml_from_platform_object(reparsed)
-    public_button = public_xml.find("./Pages/Page/Button[@name='Run']")
-    public_input = public_xml.find("./Pages/Page/InputField[@name='Input']")
+    public_button = public_xml.find(".//Page/ChildItems/Button[@name='Run']")
+    public_input = public_xml.find(".//Page/ChildItems/InputField[@name='Input']")
 
     assert reparsed.control_property("control:7", "Visible") == "false"
     assert reparsed.control_property("control:7", "Enabled") == "false"
@@ -479,13 +479,13 @@ def test_platform_object_xml_edit_writes_color_and_font_to_bracket_stream() -> N
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -504,7 +504,7 @@ def test_platform_object_xml_edit_writes_color_and_font_to_bracket_stream() -> N
     rematerialized = platform_object_to_xml(reparsed)
     public_xml = ordinary_form_xml_from_platform_object(reparsed)
     internal_button = rematerialized.find("./Controls/Control[@nodeId='control:7']")
-    public_button = public_xml.find("./Pages/Page/Button[@name='Run']")
+    public_button = public_xml.find(".//Page/ChildItems/Button[@name='Run']")
 
     assert internal_button is not None
     assert internal_button.find("BackColor").get("rgb") == "#445566"
@@ -523,18 +523,18 @@ def test_platform_object_xml_edit_writes_position_bindings_to_bracket_stream() -
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Anchor" id="7">
+              <ChildItems><Button name="Anchor" id="7">
                 <Title><Item lang="ru">Anchor</Item></Title>
-                <Position left="20" top="20" right="120" bottom="45"/>
+                <Position left="20" top="20" right="120" bottom="45" />
               </Button>
               <Button name="Follower" id="8">
                 <Title><Item lang="ru">Follower</Item></Title>
-                <Position left="150" top="20" right="250" bottom="45"/>
+                <Position left="150" top="20" right="250" bottom="45" />
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -564,7 +564,7 @@ def test_platform_object_xml_edit_writes_position_bindings_to_bracket_stream() -
     internal_binding = rematerialized.find(
         "./Controls/Control[@nodeId='control:8']/Position/Bindings/Binding[@coordinate='left']/From"
     )
-    public_binding = public_xml.find("./Pages/Page/Button[@name='Follower']/Position/Bindings/Binding[@coordinate='left']/From")
+    public_binding = public_xml.find(".//Page/ChildItems/Button[@name='Follower']/Position/Bindings/Binding[@coordinate='left']/From")
 
     assert internal_binding is not None
     assert internal_binding.get("targetId") == "7"
@@ -576,7 +576,7 @@ def test_platform_object_xml_edit_writes_position_bindings_to_bracket_stream() -
     assert public_binding.get("targetName") == "Anchor"
     assert public_binding.get("side") == "right"
     assert public_binding.get("offset") == "10"
-    assert public_xml.find("./Pages/Page/Button[@name='Follower']/Position").get("left") == "130"
+    assert public_xml.find(".//Page/ChildItems/Button[@name='Follower']/Position").get("left") == "130"
 
 
 def test_platform_object_xml_edit_computes_binding_offset_from_geometry() -> None:
@@ -584,18 +584,18 @@ def test_platform_object_xml_edit_computes_binding_offset_from_geometry() -> Non
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Anchor" id="7">
+              <ChildItems><Button name="Anchor" id="7">
                 <Title><Item lang="ru">Anchor</Item></Title>
-                <Position left="20" top="40" right="120" bottom="65"/>
+                <Position left="20" top="40" right="120" bottom="65" />
               </Button>
               <Button name="Follower" id="8">
                 <Title><Item lang="ru">Follower</Item></Title>
-                <Position left="150" top="40" right="250" bottom="65"/>
+                <Position left="150" top="40" right="250" bottom="65" />
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -640,13 +640,13 @@ def test_platform_object_xml_rejects_control_identity_changes() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -670,14 +670,14 @@ def test_platform_object_materializes_public_xsd_form_xml(tmp_path: Path) -> Non
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -691,8 +691,8 @@ def test_platform_object_materializes_public_xsd_form_xml(tmp_path: Path) -> Non
 
     validate_xml_file(xml_path)
     assert public_xml.tag == "Form"
-    assert public_xml.find("./Pages/Page/Button[@name='Run']") is not None
-    assert public_xml.find("./Pages/Page/InputField[@name='Input']") is not None
+    assert public_xml.find(".//Page/ChildItems/Button[@name='Run']") is not None
+    assert public_xml.find(".//Page/ChildItems/InputField[@name='Input']") is not None
     assert public_xml.find(".//Control") is None
     xml_text = xml_bytes.decode("utf-8")
     for forbidden in (
@@ -712,21 +712,21 @@ def test_public_xsd_form_xml_dematerializes_name_and_title_to_platform_object() 
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    button = public_xml.find("./Pages/Page/Button[@id='7']")
+    button = public_xml.find(".//Page/ChildItems/Button[@id='7']")
     assert button is not None
     title = button.find("./Title/Item[@lang='ru']")
     assert title is not None
@@ -749,22 +749,22 @@ def test_public_xsd_form_xml_dematerializes_common_properties_to_platform_object
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <InputField name="Input" id="8"/>
-            </Page>
-          </Pages>
+              <InputField name="Input" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    button = public_xml.find("./Pages/Page/Button[@id='7']")
-    input_field = public_xml.find("./Pages/Page/InputField[@id='8']")
+    button = public_xml.find(".//Page/ChildItems/Button[@id='7']")
+    input_field = public_xml.find(".//Page/ChildItems/InputField[@id='8']")
     assert button is not None
     assert input_field is not None
     ET.SubElement(button, "Visible").text = "false"
@@ -775,8 +775,8 @@ def test_public_xsd_form_xml_dematerializes_common_properties_to_platform_object
     updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
     reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
     rematerialized = ordinary_form_xml_from_platform_object(reparsed)
-    public_button = rematerialized.find("./Pages/Page/Button[@name='Run']")
-    public_input = rematerialized.find("./Pages/Page/InputField[@name='Input']")
+    public_button = rematerialized.find(".//Page/ChildItems/Button[@name='Run']")
+    public_input = rematerialized.find(".//Page/ChildItems/InputField[@name='Input']")
 
     assert reparsed.control_property("control:7", "Visible") == "false"
     assert reparsed.control_property("control:7", "Enabled") == "false"
@@ -795,22 +795,22 @@ def test_public_xsd_form_xml_dematerializes_descriptor_scalar_properties() -> No
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-              <ChoiceField name="Choice" id="8"/>
-            </Page>
-          </Pages>
+              <ChoiceField name="Choice" id="8" />
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    button = public_xml.find("./Pages/Page/Button[@id='7']")
-    choice = public_xml.find("./Pages/Page/ChoiceField[@id='8']")
+    button = public_xml.find(".//Page/ChildItems/Button[@id='7']")
+    choice = public_xml.find(".//Page/ChildItems/ChoiceField[@id='8']")
     assert button is not None
     assert choice is not None
     ET.SubElement(button, "MultiLine").text = "true"
@@ -820,7 +820,7 @@ def test_public_xsd_form_xml_dematerializes_descriptor_scalar_properties() -> No
     updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
     reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
     rematerialized = ordinary_form_xml_from_platform_object(reparsed)
-    public_button = rematerialized.find("./Pages/Page/Button[@name='Run']")
+    public_button = rematerialized.find(".//Page/ChildItems/Button[@name='Run']")
 
     assert reparsed.control_property("control:7", "MultiLine") == "1"
     assert reparsed.control_property("control:8", "ChoiceButton") == "0"
@@ -834,20 +834,20 @@ def test_public_xsd_form_xml_dematerializes_button_enum_properties() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    button = public_xml.find("./Pages/Page/Button[@id='7']")
+    button = public_xml.find(".//Page/ChildItems/Button[@id='7']")
     assert button is not None
     ET.SubElement(button, "HorizontalAlign").text = "2"
     ET.SubElement(button, "VerticalAlign").text = "2"
@@ -857,7 +857,7 @@ def test_public_xsd_form_xml_dematerializes_button_enum_properties() -> None:
     updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
     reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
     rematerialized = ordinary_form_xml_from_platform_object(reparsed)
-    public_button = rematerialized.find("./Pages/Page/Button[@name='Run']")
+    public_button = rematerialized.find(".//Page/ChildItems/Button[@name='Run']")
 
     assert reparsed.control_property("control:7", "HorizontalAlign") == "2"
     assert reparsed.control_property("control:7", "VerticalAlign") == "2"
@@ -878,13 +878,13 @@ def test_public_xsd_form_xml_keeps_button_enabled_default_true() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -893,7 +893,7 @@ def test_public_xsd_form_xml_keeps_button_enabled_default_true() -> None:
 
     assert platform_object.control_property("control:7", "Enabled") == "true"
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    button = public_xml.find("./Pages/Page/Button[@id='7']")
+    button = public_xml.find(".//Page/ChildItems/Button[@id='7']")
     assert button is not None
     assert button.find("Enabled") is None
 
@@ -903,20 +903,20 @@ def test_public_xsd_form_xml_dematerializes_color_and_font_to_platform_object() 
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    button = public_xml.find("./Pages/Page/Button[@id='7']")
+    button = public_xml.find(".//Page/ChildItems/Button[@id='7']")
     assert button is not None
     ET.SubElement(button, "BackColor", {"rgb": "#112233"})
     ET.SubElement(button, "Font", {"kind": "8", "family": "3", "style": "0", "size": "140"})
@@ -924,7 +924,7 @@ def test_public_xsd_form_xml_dematerializes_color_and_font_to_platform_object() 
     updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
     reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
     rematerialized = ordinary_form_xml_from_platform_object(reparsed)
-    public_button = rematerialized.find("./Pages/Page/Button[@name='Run']")
+    public_button = rematerialized.find(".//Page/ChildItems/Button[@name='Run']")
 
     assert public_button is not None
     assert public_button.find("BackColor").get("rgb") == "#112233"
@@ -936,25 +936,25 @@ def test_public_xsd_form_xml_dematerializes_position_bindings_to_platform_object
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Anchor" id="7">
+              <ChildItems><Button name="Anchor" id="7">
                 <Title><Item lang="ru">Anchor</Item></Title>
-                <Position left="20" top="20" right="120" bottom="45"/>
+                <Position left="20" top="20" right="120" bottom="45" />
               </Button>
               <Button name="Follower" id="8">
                 <Title><Item lang="ru">Follower</Item></Title>
-                <Position left="150" top="20" right="250" bottom="45"/>
+                <Position left="150" top="20" right="250" bottom="45" />
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    follower = public_xml.find("./Pages/Page/Button[@id='8']")
+    follower = public_xml.find(".//Page/ChildItems/Button[@id='8']")
     assert follower is not None
     position = follower.find("Position")
     assert position is not None
@@ -974,7 +974,7 @@ def test_public_xsd_form_xml_dematerializes_position_bindings_to_platform_object
     reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
     rematerialized = ordinary_form_xml_from_platform_object(reparsed)
     public_binding = rematerialized.find(
-        "./Pages/Page/Button[@name='Follower']/Position/Bindings/Binding[@coordinate='top']/From"
+        ".//Page/ChildItems/Button[@name='Follower']/Position/Bindings/Binding[@coordinate='top']/From"
     )
 
     assert public_binding is not None
@@ -982,7 +982,7 @@ def test_public_xsd_form_xml_dematerializes_position_bindings_to_platform_object
     assert public_binding.get("targetName") == "Anchor"
     assert public_binding.get("side") == "bottom"
     assert public_binding.get("offset") == "5"
-    assert rematerialized.find("./Pages/Page/Button[@name='Follower']/Position").get("top") == "32"
+    assert rematerialized.find(".//Page/ChildItems/Button[@name='Follower']/Position").get("top") == "32"
 
 
 def test_public_xsd_form_xml_computes_binding_offset_from_geometry() -> None:
@@ -990,24 +990,24 @@ def test_public_xsd_form_xml_computes_binding_offset_from_geometry() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Anchor" id="7">
+              <ChildItems><Button name="Anchor" id="7">
                 <Title><Item lang="ru">Anchor</Item></Title>
-                <Position left="20" top="40" right="120" bottom="65"/>
+                <Position left="20" top="40" right="120" bottom="65" />
               </Button>
               <InputField name="Follower" id="8">
-                <Position left="20" top="90" right="250" bottom="115"/>
+                <Position left="20" top="90" right="250" bottom="115" />
               </InputField>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    follower = public_xml.find("./Pages/Page/InputField[@id='8']")
+    follower = public_xml.find(".//Page/ChildItems/InputField[@id='8']")
     assert follower is not None
     position = follower.find("Position")
     assert position is not None
@@ -1022,7 +1022,7 @@ def test_public_xsd_form_xml_computes_binding_offset_from_geometry() -> None:
     reparsed = platform_object_from_list_stream_text(updated.to_list_stream_text())
     rematerialized = ordinary_form_xml_from_platform_object(reparsed)
     public_binding = rematerialized.find(
-        "./Pages/Page/InputField[@name='Follower']/Position/Bindings/Binding[@coordinate='top']/From"
+        ".//Page/ChildItems/InputField[@name='Follower']/Position/Bindings/Binding[@coordinate='top']/From"
     )
 
     assert public_binding is not None
@@ -1037,30 +1037,32 @@ def test_public_xsd_form_xml_adds_and_deletes_top_level_controls() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Keep" id="7">
+              <ChildItems><Button name="Keep" id="7">
                 <Title><Item lang="ru">Keep</Item></Title>
-                <Position left="20" top="20" right="120" bottom="45"/>
+                <Position left="20" top="20" right="120" bottom="45" />
               </Button>
               <Button name="Drop" id="8">
                 <Title><Item lang="ru">Drop</Item></Title>
-                <Position left="140" top="20" right="240" bottom="45"/>
+                <Position left="140" top="20" right="240" bottom="45" />
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    page = public_xml.find("./Pages/Page")
+    page = public_xml.find(".//Page")
     assert page is not None
-    drop = page.find("Button[@id='8']")
+    page_items = page.find("ChildItems")
+    assert page_items is not None
+    drop = page_items.find("Button[@id='8']")
     assert drop is not None
-    page.remove(drop)
-    new_button = ET.SubElement(page, "Button", {"name": "Added", "id": "9"})
+    page_items.remove(drop)
+    new_button = ET.SubElement(page_items, "Button", {"name": "Added", "id": "9"})
     title = ET.SubElement(new_button, "Title")
     item = ET.SubElement(title, "Item", {"lang": "ru"})
     item.text = "Added title"
@@ -1071,9 +1073,9 @@ def test_public_xsd_form_xml_adds_and_deletes_top_level_controls() -> None:
     rematerialized = ordinary_form_xml_from_platform_object(reparsed)
 
     assert [control.name for control in reparsed.controls] == ["Keep", "Added"]
-    assert rematerialized.find("./Pages/Page/Button[@name='Keep']") is not None
-    assert rematerialized.find("./Pages/Page/Button[@name='Drop']") is None
-    added = rematerialized.find("./Pages/Page/Button[@name='Added']")
+    assert rematerialized.find(".//Page/ChildItems/Button[@name='Keep']") is not None
+    assert rematerialized.find(".//Page/ChildItems/Button[@name='Drop']") is None
+    added = rematerialized.find(".//Page/ChildItems/Button[@name='Added']")
     assert added is not None
     assert added.findtext("./Title/Item[@lang='ru']") == "Added title"
     assert added.find("Position").get("left") == "160"
@@ -1084,14 +1086,14 @@ def test_top_level_button_without_bindings_uses_platform_page_geometry_defaults(
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="5">
+              <ChildItems><Button name="Run" id="5">
                 <Title><Item lang="ru">Run</Item></Title>
-                <Position left="20" top="60" right="180" bottom="86"/>
+                <Position left="20" top="60" right="180" bottom="86" />
               </Button>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -1122,37 +1124,39 @@ def test_public_xsd_form_xml_adds_and_deletes_nested_controls() -> None:
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Panel name="PagesPanel" id="4">
-                <Position left="8" top="8" right="400" bottom="300"/>
-                <Pages>
+              <ChildItems><Panel name="PagesPanel" id="4">
+                <Position left="8" top="8" right="400" bottom="300" />
+                <ChildItems>
                   <Page name="Page1">
-                    <Button name="KeepNested" id="7">
+                    <ChildItems><Button name="KeepNested" id="7">
                       <Title><Item lang="ru">Keep nested</Item></Title>
-                      <Position left="13" top="30" right="160" bottom="54"/>
+                      <Position left="13" top="30" right="160" bottom="54" />
                     </Button>
                     <Button name="DropNested" id="8">
                       <Title><Item lang="ru">Drop nested</Item></Title>
-                      <Position left="13" top="70" right="160" bottom="94"/>
+                      <Position left="13" top="70" right="160" bottom="94" />
                     </Button>
-                  </Page>
-                </Pages>
+                  </ChildItems></Page>
+                </ChildItems>
               </Panel>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
     text = form_stream_from_object_xml(root).decode("utf-8-sig")
     platform_object = platform_object_from_list_stream_text(text)
     public_xml = ordinary_form_xml_from_platform_object(platform_object)
-    page = public_xml.find("./Pages/Page/Panel[@id='4']/Pages/Page")
+    page = public_xml.find(".//Page/ChildItems/Panel[@id='4']/ChildItems/Page")
     assert page is not None
-    drop = page.find("Button[@id='8']")
+    page_items = page.find("ChildItems")
+    assert page_items is not None
+    drop = page_items.find("Button[@id='8']")
     assert drop is not None
-    page.remove(drop)
-    added = ET.SubElement(page, "InputField", {"name": "AddedNested", "id": "9"})
+    page_items.remove(drop)
+    added = ET.SubElement(page_items, "InputField", {"name": "AddedNested", "id": "9"})
     ET.SubElement(added, "Position", {"left": "20", "top": "110", "right": "220", "bottom": "134"})
 
     updated = platform_object_from_ordinary_form_xml(public_xml, platform_object)
@@ -1173,16 +1177,16 @@ def test_public_xsd_form_xml_full_rebuild_roundtrip_is_semantically_stable() -> 
         """
         <Form>
           <Title><Item lang="ru">Main</Item></Title>
-          <Pages>
+          <ChildItems>
             <Page name="Main">
-              <Button name="Run" id="7">
+              <ChildItems><Button name="Run" id="7">
                 <Title><Item lang="ru">Run</Item></Title>
               </Button>
               <InputField name="Input" id="8">
                 <ReadOnly>true</ReadOnly>
               </InputField>
-            </Page>
-          </Pages>
+            </ChildItems></Page>
+          </ChildItems>
         </Form>
         """
     )
@@ -1197,7 +1201,7 @@ def test_public_xsd_form_xml_full_rebuild_roundtrip_is_semantically_stable() -> 
 
     assert rebuilt.control_by_name("Run").title == "Run"
     assert rebuilt.control_by_name("Input").control_type == "InputField"
-    read_only = rematerialized.find("./Pages/Page/InputField[@name='Input']/ReadOnly")
+    read_only = rematerialized.find(".//Page/ChildItems/InputField[@name='Input']/ReadOnly")
     assert read_only is not None
     assert read_only.text == "true"
     assert semantic_graph_digest(rematerialized_again) == semantic_graph_digest(rematerialized)

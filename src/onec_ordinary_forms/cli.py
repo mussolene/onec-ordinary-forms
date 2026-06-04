@@ -34,7 +34,14 @@ from onec_ordinary_forms.ordinary_stream import (
     shortcut_record_to_xml_attrs,
 )
 from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
-from onec_ordinary_forms.public_contract import assert_v1_public_form_xml
+from onec_ordinary_forms.public_contract import (
+    ORDINARY_FORM_SCHEMA,
+    PUBLIC_FORM_VERSION,
+    XSI_NS,
+    assert_public_form_xml,
+    form_child_items,
+    top_level_pages,
+)
 from onec_ordinary_forms.platform_value_xml import (
     add_color_node_from_record,
     add_font_node_from_record,
@@ -51,9 +58,6 @@ from onec_ordinary_forms.value_codec import (
 )
 
 
-SCHEMA_VERSION = "1.0"
-XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
-ORDINARY_FORM_SCHEMA = "OrdinaryForm.xsd"
 PLATFORM_CONFIG_SCHEMA = "PlatformConfigStructure.xsd"
 KNOWN_SCHEMAS = (ORDINARY_FORM_SCHEMA, PLATFORM_CONFIG_SCHEMA)
 
@@ -1258,7 +1262,7 @@ def add_semantic_item(
         else [{"name": str(page_name), "title": page_title(data.get(f"{raw_key}/{page_name}"))} for page_name in page_names]
     )
     if page_descriptors:
-        pages = ET.SubElement(node, "Pages")
+        pages = form_child_items(node, create=True)
         placed_child_keys: set[str] = set()
 
         def child_key_for_page(child: dict) -> str:
@@ -1286,7 +1290,7 @@ def add_semantic_item(
                 for child in children
                 if child_belongs_to_page(child, page_index, page_name, page_path)
             ]
-            page_items_node = page
+            page_items_node = form_child_items(page, create=True)
             for child in page_items:
                 child_key = child_key_for_page(child)
                 placed_child_keys.add(child_key)
@@ -1297,13 +1301,15 @@ def add_semantic_item(
             if child_key_for_page(child) not in placed_child_keys
         ]
         if loose_children:
+            loose_child_items = form_child_items(node, create=True)
             for child in loose_children:
                 child_key = child_key_for_page(child)
-                add_semantic_item(node, child, data, child_key, element_index, asset_root)
+                add_semantic_item(loose_child_items, child, data, child_key, element_index, asset_root)
     elif children:
+        child_items = form_child_items(node, create=True)
         for child in children:
             child_key = str(child.get("rawKey") or f"{raw_key}/{child.get('name', '')}")
-            add_semantic_item(node, child, data, child_key, element_index, asset_root)
+            add_semantic_item(child_items, child, data, child_key, element_index, asset_root)
 
 
 DATA_BOUND_CONTROL_TYPES = {
@@ -2804,26 +2810,27 @@ def find_base_info_record(value: object) -> list[object] | None:
     return None
 
 
-def add_semantic_pages(
+def add_semantic_child_items(
     parent: ET.Element,
     control_index: dict,
     element_index: dict[str, dict[str, str]],
     asset_root: Path,
 ) -> None:
     data = control_index.get("data", {})
-    pages = ET.SubElement(parent, "Pages")
+    child_items = form_child_items(parent, create=True)
     for page_name in data.get("-pages-", []):
         page_path = str(page_name)
-        page = ET.SubElement(pages, "Page")
+        page = ET.SubElement(child_items, "Page")
         page.set("name", page_path)
         title_lang, title = page_title_parts(data.get(page_path))
         if title:
             add_multilang_text(page, "Title", title, lang=title_lang)
+        page_child_items = form_child_items(page, create=True)
         for item in control_index.get("tree", []):
             if str(item.get("page", "")) != page_path:
                 continue
             raw_key = str(item.get("rawKey") or f"{page_path}/{item.get('name', '')}")
-            add_semantic_item(page, item, data, raw_key, element_index, asset_root)
+            add_semantic_item(page_child_items, item, data, raw_key, element_index, asset_root)
 
 
 def dump_xml_from_paths(
@@ -2844,7 +2851,7 @@ def dump_xml_from_paths(
     root_title_lang, root_title = form_root_title_parts(form_root)
 
     root = ET.Element("Form")
-    root.set("version", SCHEMA_VERSION)
+    root.set("ordinaryFormVersion", PUBLIC_FORM_VERSION)
     root.set(f"{{{XSI_NS}}}noNamespaceSchemaLocation", ORDINARY_FORM_SCHEMA)
     set_container_time_attributes(root, container_file_times)
 
@@ -2871,8 +2878,6 @@ def dump_xml_from_paths(
             attr = ET.SubElement(attrs, "Attribute")
             attr.set("name", prop_name)
             attr.set("id", str(prop.get("id", "")))
-            if prop_name in attribute_slots:
-                attr.set("slot", attribute_slots[prop_name])
             if len(record) > 1 and clean_token(record[1]) == "0":
                 attr.set("controlData", "false")
             if len(record) >= 2:
@@ -2885,14 +2890,12 @@ def dump_xml_from_paths(
             attr = ET.SubElement(attrs, "Attribute")
             attr.set("name", prop_name)
             attr.set("id", str(prop.get("id", "")))
-            if prop_name in attribute_slots:
-                attr.set("slot", attribute_slots[prop_name])
             if attribute_control_data_flag(form_root, prop_name) == "0":
                 attr.set("controlData", "false")
             pattern_node = pattern_node_from_prop(prop)
             add_type(attr, pattern_node, object_types)
 
-    add_semantic_pages(root, control_index, element_index, asset_root)
+    add_semantic_child_items(root, control_index, element_index, asset_root)
     write_form_shadow(control_index, asset_root)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2987,11 +2990,8 @@ def add_form_attribute_layout_attributes(parent: ET.Element, form_root: object) 
     if len(attributes) < 2:
         return
     marker = clean_token(attributes[0][0]) if isinstance(attributes[0], list) and attributes[0] else ""
-    slot_count = clean_token(attributes[1])
     if marker:
         parent.set("layoutMarker", marker)
-    if slot_count.isdigit():
-        parent.set("slotCount", slot_count)
 
 
 def add_form_object_attributes(parent: ET.Element, form_root: object) -> None:
@@ -3088,9 +3088,6 @@ def add_root_panel_base_color_node(parent: ET.Element, tag: str, value: object) 
         node = ET.SubElement(parent, tag)
         node.set("kind", "Auto")
         node.set("value", clean_token(value[2][0]))
-        node.set("recordKind", clean_token(value[0]))
-        node.set("recordSubKind", clean_token(value[1]))
-        node.set("tailKind", clean_token(value[3]))
         node.text = "auto"
         return
     add_color_node_from_record(parent, tag, value)
@@ -3443,7 +3440,7 @@ def validate_xml_file(xml_path: Path, xsd_path: Path | None = None) -> None:
         from lxml import etree
     except ImportError as exc:
         raise RuntimeError("XML schema validation requires lxml") from exc
-    assert_v1_public_form_xml(ET.parse(xml_path).getroot())
+    assert_public_form_xml(ET.parse(xml_path).getroot())
     schema_doc = etree.parse(str(xsd_path or schema_path()))
     schema = etree.XMLSchema(schema_doc)
     document = etree.parse(str(xml_path))
@@ -3483,10 +3480,6 @@ def module_data_from_xml(root: ET.Element, asset_root: Path) -> bytes:
 
 def form_title_from_xml(root: ET.Element) -> str:
     return get_multilang_text(root, "Title")
-
-
-def top_level_pages(root: ET.Element) -> list[ET.Element]:
-    return root.findall("./Pages/Page")
 
 
 def item_container(element: ET.Element) -> ET.Element | None:

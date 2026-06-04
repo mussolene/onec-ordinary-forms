@@ -179,7 +179,7 @@ test: $(BIN)
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,"Button1",4294967295,0,0,0},{},{},{}},{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,"Check1",4294967295,0,0,0},{},{},{}}}}}' > $(BUILD_DIR)/runtime-form-selftest.txt
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:payload"'
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"materializedItems":2'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<ChildItems>' $(BUILD_DIR)/runtime-form.xml
 	grep -F -q '<Button name="Button1" id="5"/>' $(BUILD_DIR)/runtime-form.xml
 	! grep -F -q '<Picture>' $(BUILD_DIR)/runtime-form.xml
@@ -187,10 +187,10 @@ test: $(BIN)
 	! grep -F -q '<ListStream' $(BUILD_DIR)/runtime-form.xml
 	perl -0pi -e 's/name="Button1"/name="ButtonXmlEdited"/' $(BUILD_DIR)/runtime-form.xml
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml $(BUILD_DIR)/runtime-form-xml-edited.txt | grep -F -q '"nameEdits":1'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-xml-edited.txt $(BUILD_DIR)/runtime-form-xml-redump.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-xml-edited.txt $(BUILD_DIR)/runtime-form-xml-redump.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q 'ButtonXmlEdited' $(BUILD_DIR)/runtime-form-xml-redump.xml
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{"ru","Run"}}},{8,1,2,101,22,0,0,0,0,0,0,0,0,0,0,0,0},{14,"Button1",4294967295,0,0,0},{0}}}}}' > $(BUILD_DIR)/runtime-form-position-selftest.txt
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Position left="1" top="2" right="101" bottom="22"' $(BUILD_DIR)/runtime-form-position.xml
 	grep -F -q '<Binding coordinate="left" value="0"/>' $(BUILD_DIR)/runtime-form-position.xml
 	grep -F -q '<DimensionBinding dimension="width" value="0"/>' $(BUILD_DIR)/runtime-form-position.xml
@@ -198,21 +198,21 @@ test: $(BIN)
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited.txt | grep -F -q '"positionEdits":1'
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited-2.txt | grep -F -q '"bindingEdits":1'
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-form-position.xml $(BUILD_DIR)/runtime-form-position-edited-3.txt | grep -F -q '"dimensionBindingEdits":1'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-position-edited.txt $(BUILD_DIR)/runtime-form-position-redump.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-position-edited.txt $(BUILD_DIR)/runtime-form-position-redump.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Position left="9" top="2" right="101" bottom="22"' $(BUILD_DIR)/runtime-form-position-redump.xml
 	grep -F -q '<Binding coordinate="left" value="21"/>' $(BUILD_DIR)/runtime-form-position-redump.xml
 	grep -F -q '<DimensionBinding dimension="width" value="2"/>' $(BUILD_DIR)/runtime-form-position-redump.xml
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-platform-left-set.txt 5 Лево 11 | grep -F -q '"slotCodec":"position-record"'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-platform-left-set.txt $(BUILD_DIR)/runtime-platform-left-set.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-platform-left-set.txt $(BUILD_DIR)/runtime-platform-left-set.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Position left="11" top="2" right="101" bottom="22"' $(BUILD_DIR)/runtime-platform-left-set.xml
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-platform-width-set.txt 5 Width 120 | grep -F -q '"slotCodec":"position-record"'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-platform-width-set.txt $(BUILD_DIR)/runtime-platform-width-set.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-platform-width-set.txt $(BUILD_DIR)/runtime-platform-width-set.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Position left="1" top="2" right="121" bottom="22"' $(BUILD_DIR)/runtime-platform-width-set.xml
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-position-selftest.txt $(BUILD_DIR)/runtime-platform-binding-set.txt 5 Binding.left 21 | grep -F -q '"slotCodec":"binding-record"'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-platform-binding-set.txt $(BUILD_DIR)/runtime-platform-binding-set.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-platform-binding-set.txt $(BUILD_DIR)/runtime-platform-binding-set.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Binding coordinate="left" value="21"/>' $(BUILD_DIR)/runtime-platform-binding-set.xml
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{"ru","Run"}}},{8,1,2,101,22,0,0,0,0,0,0,{8,1,1,{"ru","Русский"},{128,72}},0,0,0,0,0},{14,"ButtonWithInnerPayload",4294967295,0,0,0},{0}}}}}' > $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt $(BUILD_DIR)/runtime-form-inner-payload.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt $(BUILD_DIR)/runtime-form-inner-payload.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Binding coordinate="left" value="0"/>' $(BUILD_DIR)/runtime-form-inner-payload.xml
 	! grep -F -q 'horizontalCenter' $(BUILD_DIR)/runtime-form-inner-payload.xml
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt | grep -F -q '"payloadRoundtripEqual":true'
@@ -270,7 +270,7 @@ test: $(BIN)
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{{10,1,0,0,0,1,0,0,0,0,0,0,0},14,{1,{1,1,{"ru","Run"}}},1,1,0,0,0,0,{0,0,0},0,0,0,0,0,2},{}},{14,"ButtonWithBaseInfo",4294967295,0,0,0},{},{}}}}}' > $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt 5 Visible | grep -F -q '"value":"true"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt 5 Enabled | grep -F -q '"value":"true"'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt $(BUILD_DIR)/runtime-form-baseinfo.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-baseinfo-selftest.txt $(BUILD_DIR)/runtime-form-baseinfo.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Visible>true</Visible>' $(BUILD_DIR)/runtime-form-baseinfo.xml
 	grep -F -q '<Enabled>true</Enabled>' $(BUILD_DIR)/runtime-form-baseinfo.xml
 	perl -0pi -e 's#<Visible>true</Visible>#<Visible>false</Visible>#; s#<Enabled>true</Enabled>#<Enabled>false</Enabled>#' $(BUILD_DIR)/runtime-form-baseinfo.xml
@@ -283,7 +283,7 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-attributes-selftest.txt | grep -F -q '"platformType":"FormAttribute"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-attributes-selftest.txt 'attribute:{1}' Name | grep -F -q '"value":"Attr1"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-attributes-selftest.txt 'attribute:{1}' Type | grep -F -q '"value":"{\"Pattern\",{\"#\",7861785a-a6a1-485c-94c1-5f4a4e882abe}}"'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-attributes-selftest.txt $(BUILD_DIR)/runtime-form-attributes.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-attributes-selftest.txt $(BUILD_DIR)/runtime-form-attributes.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Attributes>' $(BUILD_DIR)/runtime-form-attributes.xml
 	grep -F -q '<Attribute name="Attr1" id="{1}" objectId="attribute:{1}" main="0" storedData="1">' $(BUILD_DIR)/runtime-form-attributes.xml
 	cp $(BUILD_DIR)/runtime-form-attributes.xml $(BUILD_DIR)/runtime-form-attributes-edited.xml
@@ -297,7 +297,7 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}' Handler | grep -F -q '"value":"RunCommandHandler"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}' ModifiesData | grep -F -q '"value":"1"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'attribute:{1}' Name | grep -F -q '"value":"AttrAfterCommand"'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-command-selftest.txt $(BUILD_DIR)/runtime-form-command.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-command-selftest.txt $(BUILD_DIR)/runtime-form-command.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Command id="{9}" name="RunCommand" handler="RunCommandHandler" modifiesData="1" objectId="command:{9}"/>' $(BUILD_DIR)/runtime-form-command.xml
 	cp $(BUILD_DIR)/runtime-form-command.xml $(BUILD_DIR)/runtime-form-command-edited.xml
 	perl -0pi -e 's/name="RunCommand"/name="RunCommandXml"/; s/handler="RunCommandHandler"/handler="RunCommandHandlerXml"/; s/modifiesData="1"/modifiesData="0"/' $(BUILD_DIR)/runtime-form-command-edited.xml
@@ -313,7 +313,7 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"source":"mngcore logform.xsd Event"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c' Handler | grep -F -q '"value":"ButtonWithEventClick"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c' Parent | grep -F -q '"value":"5"'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-event-selftest.txt $(BUILD_DIR)/runtime-form-event.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-event-selftest.txt $(BUILD_DIR)/runtime-form-event.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Events>' $(BUILD_DIR)/runtime-form-event.xml
 	grep -F -q '<Event id="0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c" handler="ButtonWithEventClick" objectId="event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c" ownerId="5"/>' $(BUILD_DIR)/runtime-form-event.xml
 	cp $(BUILD_DIR)/runtime-form-event.xml $(BUILD_DIR)/runtime-form-event-edited.xml
@@ -359,7 +359,7 @@ test: $(BIN)
 	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -q '"09ccdc77-ea1a-4a6d-ab1c-3435eada2433"'; fi
 	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -F -q '"repeatedGuidBlocks":["0x42370"'; fi
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection-object.txt 5 Имя DualProjectionName | grep -F -q '"operation":"setPropVal"'
-	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection.xml | grep -F -q '"publicContract":"OrdinaryFormV2"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	perl -0pi -e 's/name="Button1"/name="DualProjectionName"/' $(BUILD_DIR)/dual-projection.xml
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection.xml $(BUILD_DIR)/dual-projection-xml.txt | grep -F -q '"nameEdits":1'
 	$(BIN) runtime-form-semantic-diff $(BUILD_DIR)/dual-projection-object.txt $(BUILD_DIR)/dual-projection-xml.txt | grep -F -q '"normalizedEqual":true'

@@ -13,7 +13,7 @@ from onec_ordinary_forms.native_bridge import (
     native_binary,
     platform_object_report,
 )
-from onec_ordinary_forms.public_contract import V1_CONTRACT_VERSION
+from onec_ordinary_forms.public_contract import PUBLIC_FORM_VERSION
 from onec_ordinary_forms.semantic_digest import semantic_graph, semantic_graph_digest, semantic_graph_from_xml
 
 __all__ = [
@@ -29,7 +29,7 @@ __all__ = [
     "semantic_graph_digest",
     "semantic_graph_from_xml",
     "validate_form_xml",
-    "V1_CONTRACT_VERSION",
+    "PUBLIC_FORM_VERSION",
 ]
 
 __version__ = "0.4.6"

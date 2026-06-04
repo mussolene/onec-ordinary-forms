@@ -175,7 +175,7 @@ def summarize_candidates(candidates: dict[str, tuple[str, ...]], hits: dict[str,
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lib-root", default="scan-output/lib-inspect", help="Directory with copied platform libraries")
-    parser.add_argument("--xsd", default="src/onec_ordinary_forms/schemas/OrdinaryForm.xsd")
+    parser.add_argument("--xsd", default="src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd")
     parser.add_argument("--out", help="Write JSON report")
     args = parser.parse_args()
 

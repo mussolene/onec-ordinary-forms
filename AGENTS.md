@@ -104,12 +104,11 @@ Forms/<FormName>/Ext/Form/Items/<ElementName>/Picture.gif
 ```
 
 `Form.xml` is the public editable object model. It must contain named form
-objects and properties: `Form`, `Title`, `Attributes`, `Events`, `Pages`,
-`Page`, `Panel`, `Button`, `LabelDecoration`, `PictureDecoration`,
-`InputField`, `Position`, `Bindings`, and other platform-derived
-control/property names. Top-level `Commands` and generic `ChildItems` are not
-part of the public ordinary-form contract unless platform evidence proves a
-real ordinary-form object with that name. Events/actions should live on the
+objects and properties: `Form`, `Title`, `Attributes`, `Events`, `Commands`,
+`ChildItems`, `Page`, `Panel`, `Button`, `LabelDecoration`,
+`PictureDecoration`, `InputField`, `Position`, `Bindings`, and other
+platform-derived control/property names. Public `Form.xml` declares
+`ordinaryFormVersion="2.*"` and uses managed-form-style `ChildItems` nesting. Events/actions should live on the
 form or the concrete control where the platform exposes them. It should be
 understandable to a 1C developer in the same way managed-form XML is
 understandable.
@@ -149,14 +148,13 @@ Forms/<ИмяФормы>/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 
 `Form.xml` - это публичная редактируемая объектная модель. В нем должны быть
 именованные объекты и свойства формы: `Form`, `Title`, `Attributes`, `Events`,
-`Pages`, `Page`, `Panel`, `Button`, `LabelDecoration`, `PictureDecoration`,
-`InputField`, `Position`, `Bindings` и другие имена контролов/свойств. Публичный
-XML использует единый английский словарь; русские платформенные имена свойств,
-событий, типов и контролов хранятся в схемном слое элементов формы через
+`Commands`, `ChildItems`, `Page`, `Panel`, `Button`, `LabelDecoration`,
+`PictureDecoration`, `InputField`, `Position`, `Bindings` и другие имена
+контролов/свойств. Публичный `Form.xml` объявляет `ordinaryFormVersion="2.*"`
+и использует вложение `ChildItems` в стиле управляемой формы. Публичный XML
+использует единый английский словарь; русские платформенные имена свойств,
+событий, типов и контролов хранятся в `OrdinaryFormPalette.xsd` через
 `xs:annotation/xs:appinfo`. Отдельные mapping-файлы для этого слоя не нужны.
-Верхнеуровневый `Commands` и общий контейнер
-`ChildItems` не входят в публичный контракт обычной формы, пока платформенные
-данные не доказывают реальный объект обычной формы с таким именем.
 События/действия должны лежать на форме или конкретном контроле, где их
 показывает платформа. Публичный XML и служебные знания валидируются отдельными
 схемными слоями: форма, элементы формы, типы/значения и структура

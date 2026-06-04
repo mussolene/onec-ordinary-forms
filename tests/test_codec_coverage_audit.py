@@ -11,7 +11,7 @@ SPEC.loader.exec_module(audit_codec_coverage)
 
 def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
     report = audit_codec_coverage.audit(
-        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
         ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
 
@@ -49,7 +49,7 @@ def test_codec_coverage_audit_tracks_writer_and_descriptor_gap() -> None:
 
 def test_codec_coverage_audit_normalizes_public_control_aliases() -> None:
     report = audit_codec_coverage.audit(
-        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
         ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     controls = {item["control"]: item for item in report["controls"]}
@@ -64,7 +64,7 @@ def test_codec_coverage_audit_normalizes_public_control_aliases() -> None:
 
 def test_command_bar_command_source_is_public_descriptor_property() -> None:
     report = audit_codec_coverage.audit(
-        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
         ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     command_bar = {item["control"]: item for item in report["controls"]}["CommandBar"]
@@ -76,7 +76,7 @@ def test_command_bar_command_source_is_public_descriptor_property() -> None:
 
 def test_picture_decoration_picture_style_is_public_descriptor_property() -> None:
     report = audit_codec_coverage.audit(
-        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
         ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     picture = {item["control"]: item for item in report["controls"]}["PictureDecoration"]
@@ -87,7 +87,7 @@ def test_picture_decoration_picture_style_is_public_descriptor_property() -> Non
 
 def test_panel_layout_is_public_descriptor_property() -> None:
     report = audit_codec_coverage.audit(
-        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
         ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     panel = {item["control"]: item for item in report["controls"]}["Panel"]
@@ -98,7 +98,7 @@ def test_panel_layout_is_public_descriptor_property() -> None:
 
 def test_core_controls_have_no_xsd_only_public_properties() -> None:
     report = audit_codec_coverage.audit(
-        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
         ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     controls = {item["control"]: item for item in report["controls"]}
@@ -109,7 +109,7 @@ def test_core_controls_have_no_xsd_only_public_properties() -> None:
 
 def test_codec_coverage_audit_tracks_platform_property_name_mapping_matrix() -> None:
     report = audit_codec_coverage.audit(
-        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
         ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     summary = report["summary"]
@@ -133,7 +133,7 @@ def test_codec_coverage_audit_tracks_platform_property_name_mapping_matrix() -> 
 
 def test_codec_coverage_audit_tracks_platform_event_name_mapping_matrix() -> None:
     report = audit_codec_coverage.audit(
-        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd",
+        ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd",
         ROOT / "src/onec_ordinary_forms/ordinary_stream.py",
     )
     summary = report["summary"]
@@ -149,7 +149,7 @@ def test_codec_coverage_audit_tracks_platform_event_name_mapping_matrix() -> Non
 
 
 def test_public_property_xsd_types_follow_platform_types() -> None:
-    root = audit_codec_coverage.xsd_root(ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd")
+    root = audit_codec_coverage.xsd_root(ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd")
 
     def property_type(control: str, property_name: str) -> str:
         choice = root.find(

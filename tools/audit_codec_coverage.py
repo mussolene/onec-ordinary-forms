@@ -295,7 +295,7 @@ def audit(xsd_path: Path, stream_path: Path) -> dict[str, object]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--xsd", default=str(ROOT / "src/onec_ordinary_forms/schemas/OrdinaryForm.xsd"))
+    parser.add_argument("--xsd", default=str(ROOT / "src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd"))
     parser.add_argument("--stream", default=str(ROOT / "src/onec_ordinary_forms/ordinary_stream.py"))
     parser.add_argument("--out", help="Write JSON report")
     args = parser.parse_args()

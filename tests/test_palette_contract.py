@@ -8,12 +8,12 @@ from onec_ordinary_forms.ordinary_properties import ORDINARY_CONTROL_DESCRIPTORS
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ORDINARY_FORM_XSD = ROOT / "src" / "onec_ordinary_forms" / "schemas" / "OrdinaryForm.xsd"
+ORDINARY_FORM_PALETTE_XSD = ROOT / "src" / "onec_ordinary_forms" / "schemas" / "OrdinaryFormPalette.xsd"
 
 
 def test_xsd_control_group_matches_platform_palette() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     choice = root.find("xs:group[@name='ControlElementGroup']/xs:choice", ns)
     assert choice is not None
 
@@ -32,7 +32,7 @@ def test_descriptors_have_platform_palette_members() -> None:
 
 
 def test_elements_xsd_appinfo_contains_platform_palette() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     controls = {control.get("name", ""): control for control in root.findall(".//PlatformPalette/Control")}
 
     assert controls["Button"].get("platformName") == "Кнопка"
@@ -47,7 +47,7 @@ def test_elements_xsd_appinfo_contains_platform_palette() -> None:
 
 def test_elements_xsd_contains_platform_vocabulary() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
 
     def enum_values(type_name: str) -> set[str]:
         restriction = root.find(f"xs:simpleType[@name='{type_name}']/xs:restriction", ns)
@@ -74,7 +74,7 @@ def test_elements_xsd_contains_platform_vocabulary() -> None:
 
 def test_control_types_are_type_specific() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
 
     def child_names(type_name: str) -> set[str]:
         choice = root.find(
@@ -95,7 +95,7 @@ def test_control_types_are_type_specific() -> None:
 
 def test_core_control_types_cover_platform_property_surface() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
 
     def child_names(type_name: str) -> set[str]:
         choice = root.find(
@@ -175,7 +175,7 @@ def test_core_control_types_cover_platform_property_surface() -> None:
 
 def test_public_xsd_control_elements_use_english_vocabulary() -> None:
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     public_element_names = {
         element.get("name", "")
         for element in root.findall(".//xs:complexType/xs:complexContent/xs:extension/xs:choice/xs:element", ns)
@@ -205,7 +205,7 @@ def test_public_xsd_has_no_raw_or_extension_pockets() -> None:
         "TopLevel",
         "dimensionProfile",
     }
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     names = {node.get("name", "") for node in root.iter() if node.get("name")}
 
     assert forbidden.isdisjoint(names)
@@ -216,7 +216,7 @@ def test_public_xsd_has_no_raw_or_extension_pockets() -> None:
 
 
 def test_position_schema_does_not_expose_constant_unit_marker() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     position_type = root.find("xs:complexType[@name='PositionType']", ns)
     assert position_type is not None
@@ -227,7 +227,7 @@ def test_position_schema_does_not_expose_constant_unit_marker() -> None:
 
 
 def test_position_schema_does_not_expose_dimension_segments_marker() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     position_type = root.find("xs:complexType[@name='PositionType']", ns)
     assert position_type is not None
@@ -238,7 +238,7 @@ def test_position_schema_does_not_expose_dimension_segments_marker() -> None:
 
 
 def test_position_schema_does_not_expose_secondary_dimension_marker() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     position_type = root.find("xs:complexType[@name='PositionType']", ns)
     assert position_type is not None
@@ -249,7 +249,7 @@ def test_position_schema_does_not_expose_secondary_dimension_marker() -> None:
 
 
 def test_position_schema_does_not_expose_layout_tail_markers() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     position_type = root.find("xs:complexType[@name='PositionType']", ns)
     assert position_type is not None
@@ -269,7 +269,7 @@ def test_position_schema_does_not_expose_layout_tail_markers() -> None:
 
 
 def test_panel_layout_schema_does_not_expose_stream_prefixes() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     root_layout = root.find("xs:complexType[@name='RootPanelLayoutType']", ns)
     panel_group = root.find("xs:complexType[@name='PanelLayoutDependencyGroupType']", ns)
@@ -293,7 +293,7 @@ def test_panel_layout_schema_does_not_expose_stream_prefixes() -> None:
 
 
 def test_form_schema_has_root_panel_layout_not_serialization_profile() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     sequence = root.find("xs:complexType[@name='FormType']/xs:sequence", ns)
     assert sequence is not None
@@ -308,7 +308,7 @@ def test_form_schema_has_root_panel_layout_not_serialization_profile() -> None:
 
 
 def test_command_bar_schema_has_typed_command_source_not_profile_pocket() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     choice = root.find(
         "xs:complexType[@name='CommandBarType']/xs:complexContent/xs:extension/xs:choice",
@@ -329,7 +329,7 @@ def test_command_bar_schema_has_typed_command_source_not_profile_pocket() -> Non
 
 
 def test_picture_decoration_schema_has_typed_picture_style_not_profile_pocket() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     choice = root.find(
         "xs:complexType[@name='PictureDecorationType']/xs:complexContent/xs:extension/xs:choice",
@@ -345,7 +345,7 @@ def test_picture_decoration_schema_has_typed_picture_style_not_profile_pocket() 
 
 
 def test_panel_schema_has_typed_panel_layout_not_profile_pocket() -> None:
-    root = ET.parse(ORDINARY_FORM_XSD).getroot()
+    root = ET.parse(ORDINARY_FORM_PALETTE_XSD).getroot()
     ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
     choice = root.find(
         "xs:complexType[@name='PanelType']/xs:complexContent/xs:extension/xs:choice",

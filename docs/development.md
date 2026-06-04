@@ -88,13 +88,13 @@ The workflow publishes only package artifacts from `dist/`. It does not use
 private EPF/ERF fixtures, platform containers, license files, or local corpus
 exports.
 
-## v1.0 Release Gate
+## Release Gate
 
-`v1.0.0` is a hard public contract break. Do not publish it until all of these
+`1.0.0` is a hard public contract break. Do not publish it until all of these
 checks are true in current evidence:
 
-- public `Form.xml` validation rejects pre-v1 XML and raw/list-stream/profile/
-  slot/indexed platform shapes;
+- public `Form.xml` validation rejects legacy `<Pages>` trees, deprecated
+  `version` attributes, and raw/list-stream/profile/slot/indexed platform shapes;
 - native `PlatformFormObject` / ordinary form graph is the canonical dump,
   build, and mutation path;
 - codec coverage classifies and handles all known ordinary-form platform
