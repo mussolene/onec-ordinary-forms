@@ -510,12 +510,11 @@ onec-ordinary-forms dump-bin \
   --out scan-output/exported/Object/Forms/Form/Ext/Form.xml
 ```
 
-This writes:
+The command is backed by the native C++ `oof-native formbin-dump-xml` engine and
+writes:
 
 ```text
 scan-output/exported/Object/Forms/Form/Ext/Form.xml
-scan-output/exported/Object/Forms/Form/Ext/Form/Module.bsl
-scan-output/exported/Object/Forms/Form/Ext/Form/Items/<ElementName>/Picture.gif
 ```
 
 Validate and format the XML:
@@ -531,11 +530,12 @@ Show bundled schemas:
 onec-ordinary-forms schemas
 ```
 
-Build `Form.bin` back from the object XML package:
+Build `Form.bin` back by applying the object XML to the original native baseline:
 
 ```bash
 onec-ordinary-forms build-bin \
   --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
+  --base-bin scan-output/exported/Object/Forms/Form/Ext/Form.bin \
   --out-bin scan-output/rebuilt/Form.bin
 ```
 
@@ -544,13 +544,10 @@ Before platform import, use a copy of the source tree where the public ordinary
 source layout for ordinary forms should contain `Ext/Form.bin`; managed forms
 keep their native `Ext/Form.xml`.
 
-Use `--asset-root` only when sidecars are not next to the XML as
-`<Form.xml without suffix>/...`.
-
 Writer behavior is intentionally conservative while the named ordinary-form
-object model is being completed. The only public source contract is `Form.xml`
-with named form objects plus sidecars; old base-stream rebuild paths and raw
-diagnostic formats are not supported public workflows.
+object model is being completed. The public source contract is named `Form.xml`;
+the rebuild algorithm uses the original native `Form.bin` as a private
+object-graph baseline and does not expose raw stream/profile data.
 
 Diagnostic commands:
 
@@ -596,11 +593,13 @@ validate_form_xml("scan-output/exported/Object/Forms/Form/Ext/Form.xml")
 build_form_bin(
     "scan-output/exported/Object/Forms/Form/Ext/Form.xml",
     "scan-output/rebuilt/Form.bin",
+    "scan-output/exported/Object/Forms/Form/Ext/Form.bin",
 )
 ```
 
-The default asset root is the XML path without the `.xml` suffix. For
-`Forms/Form/Ext/Form.xml`, sidecars are read from `Forms/Form/Ext/Form/`.
+`dump_form_bin` and `build_form_bin` use the native C++ backend. Rebuild requires
+the original `Form.bin` as the object-graph baseline until native create-from-XML
+is proven separately.
 
 ## Platform Validation
 

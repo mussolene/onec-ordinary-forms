@@ -27,7 +27,7 @@ def native_binary(path: Path | None = None) -> Path:
     return binary
 
 
-def run_native_json(command: str, *args: str, binary: Path | None = None) -> dict:
+def run_native(command: str, *args: str, binary: Path | None = None) -> str:
     argv = [str(native_binary(binary)), command, *args]
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, check=True)
@@ -35,10 +35,26 @@ def run_native_json(command: str, *args: str, binary: Path | None = None) -> dic
         raise NativeBridgeError(
             f"native command failed ({' '.join(argv)}): {exc.stderr or exc.stdout}"
         ) from exc
+    return proc.stdout
+
+
+def run_native_json(command: str, *args: str, binary: Path | None = None) -> dict:
+    stdout = run_native(command, *args, binary=binary)
     try:
-        return json.loads(proc.stdout)
+        return json.loads(stdout)
     except json.JSONDecodeError as exc:
-        raise NativeBridgeError(f"native command returned non-JSON output: {argv}") from exc
+        raise NativeBridgeError(f"native command returned non-JSON output: {command}") from exc
+
+
+def dump_formbin_xml(form_bin: Path, out_xml: Path, *, binary: Path | None = None) -> None:
+    out_xml.parent.mkdir(parents=True, exist_ok=True)
+    run_native("formbin-dump-xml", str(form_bin), str(out_xml), binary=binary)
+
+
+def build_formbin_xml(base_form_bin: Path, xml: Path, out_bin: Path, *, binary: Path | None = None) -> dict:
+    out_bin.parent.mkdir(parents=True, exist_ok=True)
+    stdout = run_native("formbin-build-xml", str(base_form_bin), str(xml), str(out_bin), binary=binary)
+    return json.loads(stdout) if stdout.strip() else {}
 
 
 def formbin_roundtrip_report(form_bin: Path, *, binary: Path | None = None) -> dict:

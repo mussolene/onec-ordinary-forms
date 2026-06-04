@@ -17,7 +17,6 @@ import json
 from onec_ordinary_forms.corpus import build_corpus_report, write_report
 from onec_ordinary_forms.formbin import (
     CONTAINER_INFO_NAME,
-    build_form_bin_container,
     pack_form_bin,
     unpack_form_bin,
 )
@@ -29,11 +28,10 @@ from onec_ordinary_forms.ordinary_stream import (
     MENU_MODE_BY_CODE,
     ORDINARY_FORM_SHADOW_NAME,
     TABLE_COLUMN_VALUE_PAYLOAD_BY_PATTERN,
-    form_stream_from_object_xml,
     root_panel_base_info_record,
     shortcut_record_to_xml_attrs,
 )
-from onec_ordinary_forms.pipeline import dump_form_bin_to_xml
+from onec_ordinary_forms.native_bridge import build_formbin_xml, dump_formbin_xml
 from onec_ordinary_forms.public_contract import (
     ORDINARY_FORM_SCHEMA,
     PUBLIC_FORM_VERSION,
@@ -3489,18 +3487,13 @@ def item_container(element: ET.Element) -> ET.Element | None:
 def build_bin(args: argparse.Namespace) -> None:
     xml_path = Path(args.xml)
     out_bin = Path(args.out_bin)
-    asset_root = Path(args.asset_root) if args.asset_root else xml_path.with_suffix("")
+    base_bin_arg = getattr(args, "base_bin", None)
+    if not base_bin_arg:
+        raise RuntimeError("build-bin is native-only and requires --base-bin")
+    base_bin = Path(base_bin_arg)
     validate_xml_file(xml_path)
-    root = ET.parse(xml_path).getroot()
-    form_data = form_stream_from_object_xml(root, asset_root)
-    module_data = module_data_from_xml(root, asset_root)
-    bin_data = build_form_bin_container(
-        form_data,
-        module_data,
-        file_times=container_file_times_from_xml(root),
-    )
-    out_bin.parent.mkdir(parents=True, exist_ok=True)
-    out_bin.write_bytes(bin_data)
+    native_bin = getattr(args, "native_bin", None)
+    build_formbin_xml(base_bin, xml_path, out_bin, binary=Path(native_bin) if native_bin else None)
 
 
 def scan_corpus(args: argparse.Namespace) -> None:
@@ -3524,12 +3517,10 @@ def pack_bin(args: argparse.Namespace) -> None:
 
 
 def dump_bin(args: argparse.Namespace) -> None:
-    dump_form_bin_to_xml(
-        Path(args.bin),
-        Path(args.out),
-        model_xml_writer=dump_xml_from_paths,
-        metadata_json=Path(args.metadata_json) if args.metadata_json else None,
-    )
+    if getattr(args, "metadata_json", None):
+        raise RuntimeError("dump-bin is native-only; --metadata-json belonged to the removed Python dump path")
+    native_bin = getattr(args, "native_bin", None)
+    dump_formbin_xml(Path(args.bin), Path(args.out), binary=Path(native_bin) if native_bin else None)
 
 
 def digest_xml(args: argparse.Namespace) -> None:
@@ -3543,8 +3534,9 @@ def main() -> None:
 
     build_bin_parser = subparsers.add_parser("build-bin")
     build_bin_parser.add_argument("--xml", required=True, help="Form.xml produced by dump-bin")
+    build_bin_parser.add_argument("--base-bin", required=True, help="Original Form.bin used as native object graph baseline")
     build_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
-    build_bin_parser.add_argument("--asset-root", help="Directory with Module.bsl and extracted assets")
+    build_bin_parser.add_argument("--native-bin", help="Override oof-native binary path")
     build_bin_parser.set_defaults(func=build_bin)
 
     validate_parser = subparsers.add_parser("validate")
@@ -3583,6 +3575,7 @@ def main() -> None:
     dump_bin_parser.add_argument("--bin", required=True, help="Ordinary form Form.bin")
     dump_bin_parser.add_argument("--metadata-json")
     dump_bin_parser.add_argument("--out", required=True, help="Form.xml output path")
+    dump_bin_parser.add_argument("--native-bin", help="Override oof-native binary path")
     dump_bin_parser.set_defaults(func=dump_bin)
 
     digest_xml_parser = subparsers.add_parser("digest-xml")
