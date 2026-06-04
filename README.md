@@ -191,13 +191,13 @@ descriptor.
 Passing 1C Designer validation is required, but not sufficient by itself: the
 public XML must also remain a clean object model, not a renamed raw stream.
 
-Current native `--base-bin` rebuild is a compatibility path for the already
-supported edit codecs. It is not the target source-build architecture and must
-not be expanded with raw fallbacks, patch workers, or baseline-preservation
-profiles. The release target is `Form.xml -> platform object model ->
-ListOutStream -> Form.bin`; the native code now keeps the public XML parser and
-XML writer on the `PlatformFormObject` boundary so the remaining work can attach
-the bracket writer to that object, not to a diff from the original binary.
+`build-bin` can rebuild `Form.bin` directly from public `Form.xml`,
+`Form/Module.bsl`, and picture sidecars through the existing object writer. The
+native `--base-bin` rebuild is only a compatibility path for the already
+supported native edit codecs. It is not the target source-build architecture
+and must not be expanded with raw fallbacks, patch workers, or
+baseline-preservation profiles. The release target remains `Form.xml ->
+platform object model -> ListOutStream -> Form.bin`.
 
 ## Русский
 
@@ -388,13 +388,13 @@ python3 tools/vendor_platform_schemas.py \
 публичный XML все равно должен оставаться чистой объектной моделью, а не
 переименованным сырым потоком.
 
-Текущая native-сборка через `--base-bin` - это compatibility path для уже
-поддержанных edit-codec'ов. Это не целевая source-build архитектура, и ее нельзя
-расширять raw fallback'ами, patch-worker'ами или профилями сохранения baseline.
-Цель релиза: `Form.xml -> platform object model -> ListOutStream -> Form.bin`.
-Native-код теперь держит parser публичного XML и XML writer на границе
-`PlatformFormObject`, чтобы оставшийся writer подключался к объекту формы, а не
-к diff'у от исходного бинарника.
+`build-bin` может собирать `Form.bin` напрямую из публичного `Form.xml`,
+`Form/Module.bsl` и picture sidecars через существующий object writer.
+Native-сборка через `--base-bin` - это только compatibility path для уже
+поддержанных native edit-codec'ов. Это не целевая source-build архитектура, и
+ее нельзя расширять raw fallback'ами, patch-worker'ами или профилями сохранения
+baseline. Цель релиза остается `Form.xml -> platform object model ->
+ListOutStream -> Form.bin`.
 
 ## Status / Статус
 
@@ -570,14 +570,16 @@ Show bundled schemas:
 onec-ordinary-forms schemas
 ```
 
-Build `Form.bin` back by applying the package to the original native baseline:
+Build `Form.bin` directly from the source package:
 
 ```bash
 onec-ordinary-forms build-bin \
   --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
-  --base-bin scan-output/exported/Object/Forms/Form/Ext/Form.bin \
   --out-bin scan-output/rebuilt/Form.bin
 ```
+
+For native patch compatibility checks, `--base-bin` can still apply supported
+edits to an original `Form.bin` baseline.
 
 Before platform import, use a copy of the source tree where the public ordinary
 `Ext/Form.xml` and `Ext/Form/` sidecar directory are removed. The platform

@@ -115,6 +115,46 @@ class CliSmokeTest(unittest.TestCase):
             self.assertEqual(rebuilt_files["module"], b"module")
             self.assertIn(b"Main", rebuilt_files["form"])
 
+    def test_build_bin_rebuilds_source_package_without_base_bin(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            xml = root / "Forms" / "Form" / "Ext" / "Form.xml"
+            form_dir = xml.with_suffix("")
+            form_dir.mkdir(parents=True)
+            xml.write_text(
+                """<?xml version='1.0' encoding='utf-8'?>
+<Form ordinaryFormVersion="2.0">
+  <Title><Item lang="ru">Main</Item></Title>
+  <ChildItems>
+    <Page name="Main" id="4">
+      <ChildItems>
+        <Button name="SourceButton" id="7">
+          <Title><Item lang="ru">Source title</Item></Title>
+          <Position left="9" top="2" right="101" bottom="22"/>
+        </Button>
+      </ChildItems>
+    </Page>
+  </ChildItems>
+</Form>
+""",
+                encoding="utf-8",
+            )
+            (form_dir / "Module.bsl").write_bytes(b"source module")
+
+            from onec_ordinary_forms import build_form_bin
+            from onec_ordinary_forms.cli import build_bin
+
+            cli_rebuilt = root / "cli-rebuilt.bin"
+            api_rebuilt = root / "api-rebuilt.bin"
+            build_bin(type("Args", (), {"xml": str(xml), "out_bin": str(cli_rebuilt), "asset_root": None, "base_bin": None})())
+            build_form_bin(xml, api_rebuilt)
+
+            for rebuilt in (cli_rebuilt, api_rebuilt):
+                files = {file.name: file.payload for file in parse_form_bin_container(rebuilt.read_bytes()).files}
+                self.assertIn(b"SourceButton", files["form"])
+                self.assertIn("Source title".encode("utf-8"), files["form"])
+                self.assertEqual(files["module"], b"source module")
+
     def test_geometry_writer_preserves_raw_list_anchors(self) -> None:
         position = ET.fromstring(
             """
