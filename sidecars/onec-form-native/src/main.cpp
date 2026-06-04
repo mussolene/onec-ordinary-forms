@@ -1141,6 +1141,7 @@ struct MaterializedFormEvent {
     std::string owner_object_id;
     std::string id;
     std::string handler;
+    std::string title;
     std::string path;
 };
 
@@ -1629,6 +1630,24 @@ bool looks_like_materialized_form_event_record(const oof::platform::stream::List
            value.items[0].atom == "evt";
 }
 
+bool looks_like_platform_event_action_record(const oof::platform::stream::ListValue& value) {
+    return value.is_list &&
+           value.items.size() >= 2 &&
+           !value.items[0].is_list &&
+           value.items[0].atom == "3" &&
+           !value.items[1].is_list &&
+           !value.items[1].atom.empty();
+}
+
+bool looks_like_platform_element_event_record(const oof::platform::stream::ListValue& value) {
+    return value.is_list &&
+           value.items.size() >= 3 &&
+           !value.items[0].is_list &&
+           !value.items[1].is_list &&
+           is_guid_text(value.items[1].atom) &&
+           looks_like_platform_event_action_record(value.items[2]);
+}
+
 std::vector<MaterializedFormEvent> collect_materialized_form_events(
     const oof::platform::stream::ListValue& value,
     std::string_view owner_object_id,
@@ -1643,6 +1662,21 @@ std::vector<MaterializedFormEvent> collect_materialized_form_events(
         event.owner_object_id = std::string(owner_object_id);
         event.id = oof::platform::stream::dump_compact(value.items[1]);
         event.handler = !value.items[2].is_list ? value.items[2].atom : "";
+        event.object_id = "event:" + std::string(owner_object_id) + ":" + event.id;
+        event.path = std::string(path);
+        if (!event.id.empty() && !event.handler.empty()) {
+            events.push_back(std::move(event));
+        }
+        return events;
+    }
+    if (looks_like_platform_element_event_record(value)) {
+        MaterializedFormEvent event;
+        event.owner_object_id = std::string(owner_object_id);
+        event.id = value.items[1].atom;
+        event.handler = value.items[2].items[1].atom;
+        if (!find_first_localized_text(value.items[2], event.title)) {
+            event.title = event.handler;
+        }
         event.object_id = "event:" + std::string(owner_object_id) + ":" + event.id;
         event.path = std::string(path);
         if (!event.id.empty() && !event.handler.empty()) {
@@ -1719,7 +1753,16 @@ void collect_materialized_form_items(
                 }
             }
             item.picture_payload = first_base64_picture_payload(value);
-            item.events = collect_materialized_form_events(value, item.object_id, path);
+            if (value.items.size() > 2 && value.items[2].is_list) {
+                item.events = collect_materialized_form_events(value.items[2], item.object_id, child_path(path, 2));
+            }
+            if (value.items.size() > 3 && looks_like_materialized_form_event_record(value.items[3])) {
+                auto legacy_events = collect_materialized_form_events(value.items[3], item.object_id, child_path(path, 3));
+                item.events.insert(
+                    item.events.end(),
+                    std::make_move_iterator(legacy_events.begin()),
+                    std::make_move_iterator(legacy_events.end()));
+            }
             next_parent = item.object_id;
             items.push_back(std::move(item));
         } else if (binding == nullptr) {
@@ -3252,6 +3295,8 @@ private:
             object.properties.push_back(make_platform_object_property(
                 "Handler", "Обработчик", event.handler, "String", "logform.xsd:Event@handler"));
             object.properties.push_back(make_platform_object_property(
+                "Title", "Представление", event.title, "String", "cf_form_controls8 Event action presentation"));
+            object.properties.push_back(make_platform_object_property(
                 "Parent", "Родитель", event.owner_object_id, "FormItem", "m_elementEvents owner"));
             add_api_surface(object, api_object_for_type("FormEvent"));
             form_object.events.add(std::move(object));
@@ -4564,6 +4609,7 @@ void add_public_xml_events(
         object.parent_object_id = std::string(owner_object_id);
         object.properties.push_back(make_platform_object_property("ID", "Идентификатор", xml_attr_value(event_xml.attrs, "id"), "UUID", "OrdinaryForm.xml Event@id", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Handler", "Обработчик", object.name, "String", "OrdinaryForm.xml Event@handler", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("Title", "Представление", xml_attr_value(event_xml.attrs, "title"), "String", "OrdinaryForm.xml Event@title", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Parent", "Родитель", std::string(owner_object_id), "FormItem", "OrdinaryForm.xml Event@ownerId", {}, {}, "public-xml"));
         add_api_surface(object, api_object_for_type("FormEvent"));
         form_object.events.add(std::move(object));
@@ -5007,6 +5053,12 @@ void append_event_xml(
     if (!handler.empty()) {
         out += " handler=\"";
         out += xml_escape(handler);
+        out += "\"";
+    }
+    const std::string title = object_property_value(event, "Title");
+    if (!title.empty()) {
+        out += " title=\"";
+        out += xml_escape(title);
         out += "\"";
     }
     if (!event.object_id.empty()) {
@@ -5861,6 +5913,24 @@ std::string object_prop_or_default(
     return fallback;
 }
 
+std::string source_writer_bool_prop(
+    const oof::platform::object_model::PlatformObject& object,
+    std::string_view name,
+    std::string fallback
+) {
+    std::string value = object_prop_or_default(object, name, std::move(fallback));
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (value == "true") {
+        return "1";
+    }
+    if (value == "false") {
+        return "0";
+    }
+    return value;
+}
+
 LV source_writer_geometry(const oof::platform::object_model::PlatformObject& object) {
     std::vector<LV> items;
     items.push_back(raw("8"));
@@ -5904,6 +5974,157 @@ LV source_writer_metadata(const oof::platform::object_model::PlatformObject& obj
     });
 }
 
+LV source_writer_font_placeholder() {
+    return list({
+        raw("3"),
+        raw("0"),
+        list({raw("0")}),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("48312c09-257f-4b29-b280-284dd89efc1e"),
+    });
+}
+
+LV source_writer_empty_picture_value() {
+    return list({
+        raw("4"),
+        raw("0"),
+        list({raw("0")}),
+        str_atom(""),
+        raw("-1"),
+        raw("-1"),
+        raw("1"),
+        raw("0"),
+        str_atom(""),
+    });
+}
+
+LV source_writer_color_value(std::string value) {
+    return list({
+        raw("4"),
+        raw("3"),
+        list({raw(std::move(value))}),
+        raw("3"),
+    });
+}
+
+LV source_writer_auto_color_value() {
+    return list({
+        raw("4"),
+        raw("4"),
+        list({raw("0")}),
+        raw("4"),
+    });
+}
+
+LV source_writer_button_base_info(const oof::platform::object_model::PlatformObject& object) {
+    const std::string title = object_prop_or_default(object, "Title", object.name);
+    return list({
+        list({
+            raw("19"),
+            raw(source_writer_bool_prop(object, "Visible", "1")),
+            source_writer_auto_color_value(),
+            source_writer_auto_color_value(),
+            list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
+            raw("1"),
+            source_writer_color_value("-22"),
+            source_writer_auto_color_value(),
+            source_writer_auto_color_value(),
+            source_writer_color_value("-7"),
+            source_writer_color_value("-21"),
+            source_writer_font_placeholder(),
+            list({raw("1"), raw("0")}),
+            raw("0"),
+            raw("0"),
+            raw("100"),
+            raw("2"),
+            raw("1"),
+            raw(source_writer_bool_prop(object, "Enabled", "1")),
+            raw("2"),
+            source_writer_auto_color_value(),
+        }),
+        raw("14"),
+        localized_text_record(title),
+        raw("1"),
+        raw("1"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        source_writer_empty_picture_value(),
+        list({raw("0"), raw("0"), raw("0")}),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("2"),
+    });
+}
+
+LV source_writer_event_action_record(const oof::platform::object_model::PlatformObject& event) {
+    const std::string handler = object_property_value(event, "Handler");
+    std::string title = object_property_value(event, "Title");
+    if (title.empty()) {
+        title = handler;
+    }
+    return list({
+        raw("3"),
+        str_atom(handler),
+        list({
+            raw("1"),
+            str_atom(handler),
+            localized_text_record(title),
+            localized_text_record(title),
+            localized_text_record(title),
+            source_writer_empty_picture_value(),
+            list({raw("0"), raw("0"), raw("0")}),
+        }),
+    });
+}
+
+LV source_writer_event_record(const oof::platform::object_model::PlatformObject& event) {
+    return list({
+        raw("0"),
+        raw(object_property_value(event, "ID")),
+        source_writer_event_action_record(event),
+    });
+}
+
+LV source_writer_event_table(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view parent_object_id
+) {
+    std::vector<LV> items;
+    const auto events = event_objects_for_parent(form_object, parent_object_id);
+    for (const auto* event : events) {
+        const std::string id = object_property_value(*event, "ID");
+        const std::string handler = object_property_value(*event, "Handler");
+        if (!id.empty() && !handler.empty()) {
+            items.push_back(source_writer_event_record(*event));
+        }
+    }
+    std::vector<LV> table;
+    table.push_back(raw(std::to_string(items.size())));
+    table.insert(table.end(), std::make_move_iterator(items.begin()), std::make_move_iterator(items.end()));
+    return list(std::move(table));
+}
+
+LV source_writer_control_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    const std::string title = object_prop_or_default(object, "Title", object.name);
+    if (object.platform_type == "Button") {
+        return list({
+            raw("1"),
+            source_writer_button_base_info(object),
+            source_writer_event_table(form_object, object.object_id),
+        });
+    }
+    return list({raw("1"), localized_text_record(title)});
+}
+
 std::vector<const oof::platform::object_model::PlatformObject*> source_writer_children(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& parent
@@ -5926,11 +6147,10 @@ LV source_writer_control_record(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
-    const std::string title = object_prop_or_default(object, "Title", object.name);
     return list({
         raw(source_writer_control_guid(object.platform_type)),
         raw(object.object_id.empty() ? "0" : object.object_id),
-        list({raw("1"), localized_text_record(title)}),
+        source_writer_control_payload(form_object, object),
         source_writer_geometry(object),
         source_writer_metadata(object),
         source_writer_child_table(form_object, object),
