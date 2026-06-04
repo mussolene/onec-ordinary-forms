@@ -408,10 +408,13 @@ Current implementation status:
   native baseline;
 - dump existing picture payloads to `Form/Items/.../Picture.*` sidecars and
   apply changed picture sidecars back to existing baseline picture slots;
+- delete leaf form controls by removing the named control node from public
+  `ChildItems`;
 - scan local EPF/ERF corpora without committing private artifacts.
 
 Target implementation status:
 
+- add new controls from public `ChildItems` through the native package backend;
 - create new picture payload slots from the named package when the baseline
   object does not already contain one;
 - build ordinary `Form.bin` from that named package without requiring a source
@@ -432,10 +435,14 @@ Target implementation status:
 - выгрузка существующих картинок в `Form/Items/.../Picture.*` sidecars и
   применение измененных sidecar-картинок обратно к существующим picture-слотам
   baseline;
+- удаление leaf-элементов формы через удаление именованного узла из публичного
+  `ChildItems`;
 - сканирование локальных EPF/ERF-корпусов без коммита приватных артефактов.
 
 Целевой статус реализации:
 
+- добавление новых контролов из публичного `ChildItems` через native package
+  backend;
 - создание новых picture payload slots из именованного пакета, если в baseline
   объекте еще нет такого слота;
 - сборка обычного `Form.bin` из этого именованного пакета без исходного
@@ -578,7 +585,8 @@ object model is being completed. The public source contract is the package
 `Form.xml`, `Form/Module.bsl`, and `Form/Items/.../Picture.*` sidecars. The
 rebuild algorithm uses the original native `Form.bin` as a private object-graph
 baseline and does not expose raw stream/profile data. Picture edits are applied
-to controls that already have a writable picture payload in that baseline.
+to controls that already have a writable picture payload in that baseline. Leaf
+controls can be deleted by removing their public XML node.
 
 Diagnostic commands:
 

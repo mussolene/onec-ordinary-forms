@@ -3550,6 +3550,7 @@ struct PublicXmlApplyResult {
     std::size_t attribute_edits = 0;
     std::size_t command_edits = 0;
     std::size_t event_edits = 0;
+    std::size_t deleted_controls = 0;
 };
 
 PublicXmlApplyResult apply_public_xml_edits(
@@ -3584,6 +3585,13 @@ bool set_property_slot_value(
     std::string_view object_id,
     const oof::platform::property_registry::PlatformPropertyDescriptor& descriptor,
     std::string_view new_value
+);
+
+std::set<std::string> requested_public_control_ids(const std::string& xml);
+
+std::size_t delete_controls_missing_from_public_xml(
+    oof::platform::stream::ListValue& payload,
+    const std::set<std::string>& requested_ids
 );
 
 bool string_view_starts_with(std::string_view value, std::string_view prefix);
@@ -3898,6 +3906,92 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
         edits.push_back(std::move(edit));
     }
     return edits;
+}
+
+const std::set<std::string>& public_xml_section_tags() {
+    static const std::set<std::string> tags{
+        "Form", "Events", "Event", "ChildItems", "Attributes", "Attribute", "Commands", "Command",
+        "Title", "Position", "Pages", "Picture", "PictureValue", "Binding", "Bindings", "DimensionBinding",
+        "From", "To", "Extra", "Item"
+    };
+    return tags;
+}
+
+std::set<std::string> requested_public_control_ids(const std::string& xml) {
+    std::set<std::string> ids;
+    const std::regex start_tag_pattern(R"(<([A-Za-z][A-Za-z0-9]*)\b([^>]*)>)");
+    for (std::sregex_iterator it(xml.begin(), xml.end(), start_tag_pattern), end; it != end; ++it) {
+        const std::string tag = (*it)[1].str();
+        if (public_xml_section_tags().count(tag) != 0) {
+            continue;
+        }
+        const std::string id = xml_attr_value((*it)[2].str(), "id");
+        if (!id.empty()) {
+            ids.insert(id);
+        }
+    }
+    return ids;
+}
+
+bool has_nested_materializable_object(const oof::platform::stream::ListValue& value) {
+    if (!value.is_list) {
+        return false;
+    }
+    for (const auto& item : value.items) {
+        if (is_materializable_object_candidate(item) || has_nested_materializable_object(item)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool counted_child_container(const oof::platform::stream::ListValue& value) {
+    if (!value.is_list || value.items.empty() || value.items[0].is_list || !is_int_atom(value.items[0])) {
+        return false;
+    }
+    std::size_t materialized_children = 0;
+    for (std::size_t index = 1; index < value.items.size(); ++index) {
+        if (is_materializable_object_candidate(value.items[index])) {
+            ++materialized_children;
+        }
+    }
+    return materialized_children != 0 &&
+           value.items[0].atom == std::to_string(value.items.size() - 1);
+}
+
+std::size_t delete_controls_missing_from_public_xml(
+    oof::platform::stream::ListValue& payload,
+    const std::set<std::string>& requested_ids
+) {
+    if (!payload.is_list) {
+        return 0;
+    }
+
+    std::size_t deleted = 0;
+    if (counted_child_container(payload)) {
+        for (std::size_t index = 1; index < payload.items.size();) {
+            auto& item = payload.items[index];
+            if (is_materializable_object_candidate(item) &&
+                !item.items[1].is_list &&
+                requested_ids.count(item.items[1].atom) == 0) {
+                if (has_nested_materializable_object(item)) {
+                    throw std::runtime_error("cannot delete non-leaf control from public XML yet: object=" +
+                                             item.items[1].atom);
+                }
+                payload.items.erase(payload.items.begin() + static_cast<std::ptrdiff_t>(index));
+                payload.items[0].atom = std::to_string(payload.items.size() - 1);
+                payload.items[0].atom_kind = oof::platform::stream::ListValue::AtomKind::raw;
+                ++deleted;
+                continue;
+            }
+            ++index;
+        }
+    }
+
+    for (auto& item : payload.items) {
+        deleted += delete_controls_missing_from_public_xml(item, requested_ids);
+    }
+    return deleted;
 }
 
 oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_collection_edits(
@@ -4828,6 +4922,8 @@ void write_runtime_form_from_xml(
     const auto requested_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
     const auto object_edits = keep_changed_platform_object_edits(requested_edits, baseline);
     const auto result = apply_platform_object_edits(envelope, object_edits);
+    const std::size_t deleted_controls =
+        delete_controls_missing_from_public_xml(envelope.payload, requested_public_control_ids(read_file_text_lossy(xml_path)));
     const std::string rebuilt_text = dump_runtime_form_envelope(envelope);
     write_file_bytes(output_path, std::vector<std::uint8_t>(rebuilt_text.begin(), rebuilt_text.end()));
     std::cout << "{\"output\":";
@@ -4844,6 +4940,7 @@ void write_runtime_form_from_xml(
     std::cout << ",\"attributeEdits\":" << result.attribute_edits;
     std::cout << ",\"commandEdits\":" << result.command_edits;
     std::cout << ",\"eventEdits\":" << result.event_edits;
+    std::cout << ",\"deletedControls\":" << deleted_controls;
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
@@ -4871,6 +4968,8 @@ void write_formbin_from_package(
     const auto result = apply_platform_object_edits(envelope, object_edits);
     const std::size_t picture_sidecar_edits =
         apply_picture_sidecar_edits(envelope.payload, source_xml, xml_package_path);
+    const std::size_t deleted_controls =
+        delete_controls_missing_from_public_xml(envelope.payload, requested_public_control_ids(source_xml));
     form_file.payload = encode_form_payload_text(form_file.payload, envelope.payload);
 
     const auto module_path = form_package_module_path(xml_package_path);
@@ -4899,6 +4998,7 @@ void write_formbin_from_package(
     std::cout << ",\"attributeEdits\":" << result.attribute_edits;
     std::cout << ",\"commandEdits\":" << result.command_edits;
     std::cout << ",\"eventEdits\":" << result.event_edits;
+    std::cout << ",\"deletedControls\":" << deleted_controls;
     std::cout << ",\"moduleSource\":";
     print_json_string(module_sidecar_used ? "sidecar" : "baseline");
     std::cout << ",\"moduleBytes\":" << module_bytes;
@@ -4981,7 +5081,7 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << ",\"nativeXmlProjection\":true";
     std::cout << ",\"nativeXmlWriter\":true";
-    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Visible\",\"Enabled\",\"Position\",\"Binding:value\",\"Binding:anchor-list\",\"DimensionBinding:value\",\"DimensionBinding:record\",\"Attribute.Name\",\"Command.Name\",\"Command.Handler\",\"Command.ModifiesData\",\"Event.Handler\",\"Form.bin.PlatformObject.getPropVal\",\"Form.bin.PlatformObject.setPropVal\"]";
+    std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Visible\",\"Enabled\",\"Position\",\"Binding:value\",\"Binding:anchor-list\",\"DimensionBinding:value\",\"DimensionBinding:record\",\"Attribute.Name\",\"Command.Name\",\"Command.Handler\",\"Command.ModifiesData\",\"Event.Handler\",\"DeleteLeafControl\",\"Form.bin.PlatformObject.getPropVal\",\"Form.bin.PlatformObject.setPropVal\"]";
     std::cout << ",\"materializedItems\":" << summary.items.size();
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;

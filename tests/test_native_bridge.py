@@ -103,3 +103,50 @@ def test_native_package_roundtrips_picture_sidecar(tmp_path: Path) -> None:
     redump_report = dump_formbin_package(rebuilt, redump_xml)
     assert redump_report["pictureSidecars"] == 1
     assert (redump_xml.with_suffix("") / "Items" / "Run" / "Picture.gif").read_bytes() == gif
+
+
+def test_native_package_deletes_leaf_control_from_public_xml(tmp_path: Path) -> None:
+    root = ET.fromstring(
+        """<Form>
+          <Title><Item lang="ru">Main</Item></Title>
+          <ChildItems>
+            <Page name="Main">
+              <ChildItems>
+                <Button name="Keep" id="7">
+                  <Title><Item lang="ru">Keep</Item></Title>
+                  <Position left="20" top="20" right="120" bottom="45" />
+                </Button>
+                <Button name="Drop" id="8">
+                  <Title><Item lang="ru">Drop</Item></Title>
+                  <Position left="140" top="20" right="240" bottom="45" />
+                </Button>
+              </ChildItems>
+            </Page>
+          </ChildItems>
+        </Form>"""
+    )
+    source = tmp_path / "Form.bin"
+    source.write_bytes(build_form_bin_container(form_stream_from_object_xml(root), b"module"))
+
+    xml = tmp_path / "Ext" / "Form.xml"
+    rebuilt = tmp_path / "rebuilt.bin"
+    redump_xml = tmp_path / "redump" / "Form.xml"
+
+    dump_formbin_package(source, xml)
+    public_tree = ET.parse(xml)
+    public_root = public_tree.getroot()
+    drop = public_root.find(".//Button[@id='8']")
+    assert drop is not None
+    for child_items in public_root.findall(".//ChildItems"):
+        if drop in list(child_items):
+            child_items.remove(drop)
+            break
+    public_tree.write(xml, encoding="utf-8", xml_declaration=True)
+
+    build_report = build_formbin_package(source, xml, rebuilt)
+    assert build_report["deletedControls"] == 1
+
+    dump_formbin_package(rebuilt, redump_xml)
+    redump_text = redump_xml.read_text(encoding="utf-8")
+    assert 'name="Keep"' in redump_text
+    assert 'name="Drop"' not in redump_text
