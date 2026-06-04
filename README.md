@@ -1,7 +1,9 @@
 # onec-ordinary-forms
 
-Python tools for converting 1C ordinary form `Form.bin` into a Git-friendly
-source package and building it back.
+Tools for converting 1C ordinary form `Form.bin` into a Git-friendly source
+package and building it back. The ordinary-form codec is being moved into the
+native C++ sidecar; Python currently provides the CLI/API wrapper, schema
+validation, corpus diagnostics, and release gates.
 
 ## English
 
@@ -11,11 +13,13 @@ source package and building it back.
 module, pictures, and the ordinary-form layout/control data in the platform's
 internal list-stream format. This is hard to review, diff, edit, and merge.
 
-The goal of this project is to expose ordinary forms as source files that are
-close to managed-form source exports: readable XML for the form object model,
-`Module.bsl` as a separate file, and pictures as sidecar files.
+The product target is to expose ordinary forms as source files that are close to
+managed-form source exports: readable XML for the form object model,
+`Module.bsl` as a separate file, and pictures as sidecar files. This managed-form
+style package is the public architecture even though ordinary forms are stored
+by the platform in `Form.bin`.
 
-The public source layout mirrors managed forms:
+The target public source layout mirrors managed forms:
 
 ```text
 Forms/Form/Ext/Form.xml
@@ -113,10 +117,10 @@ For example, a button is edited as a named object:
 </Button>
 ```
 
-During `build-bin`, the writer serializes these named XML objects into the
-platform list-stream representation and then packs `form` and `module` into
-`Form.bin`. That container layer is internal; users edit `Form.xml`,
-`Module.bsl`, and sidecar files.
+In the target architecture, `build-bin` serializes these named XML objects into
+the platform list-stream representation and then packs `form`, `module`, and
+picture payloads into `Form.bin`. That container layer is internal; users edit
+`Form.xml`, `Module.bsl`, and sidecar files.
 
 ### Internal Platform Pipeline
 
@@ -187,12 +191,12 @@ descriptor.
 Passing 1C Designer validation is required, but not sufficient by itself: the
 public XML must also remain a clean object model, not a renamed raw stream.
 
-Current strict 1C validation uses `build-bin` without a public
-template/fallback `Form.bin`: the ordinary `Form.bin` is built from object
-`Form.xml`, `Module.bsl`, and sidecar files. Before platform import, validation
-uses a copy of the source tree where the public ordinary `Ext/Form.xml` and
-`Ext/Form/` sidecar directory are removed; for an ordinary form, the platform
-source layout keeps only `Ext/Form.bin`.
+Current native rebuild is deliberately conservative: `build-bin` applies the
+public package to the original ordinary `Form.bin` object graph passed as
+`--base-bin`. The baseline is a private codec input, not a public XML fallback or
+renamed raw stream. The native C++ package command owns both `Form.xml` and
+`Module.bsl`; picture sidecars are the next codec extension in the same command
+path.
 
 ## Русский
 
@@ -203,9 +207,11 @@ source layout keeps only `Ext/Form.bin`.
 скобкоформате платформы. Такой файл сложно смотреть в Git, сравнивать,
 редактировать и мержить.
 
-Цель проекта - разложить обычную форму в исходники примерно так же, как
+Цель продукта - разложить обычную форму в исходники примерно так же, как
 платформа раскладывает управляемую форму: человекочитаемый XML объектной
-модели, отдельный `Module.bsl` и картинки рядом.
+модели, отдельный `Module.bsl` и картинки рядом. Такая managed-form style
+структура остается целевой публичной архитектурой, хотя платформа хранит
+обычные формы внутри `Form.bin`.
 
 Целевая структура файлов:
 
@@ -303,10 +309,10 @@ Forms/Form/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 </Button>
 ```
 
-При `build-bin` writer сериализует эти именованные XML-объекты во внутренний
-list-stream/скобкоформат платформы и затем упаковывает документы `form` и
-`module` в `Form.bin`. Этот контейнерный слой внутренний; пользователь
-редактирует `Form.xml`, `Module.bsl` и файлы рядом.
+В целевой архитектуре `build-bin` сериализует эти именованные XML-объекты во
+внутренний list-stream/скобкоформат платформы и затем упаковывает документы
+`form`, `module` и картинки в `Form.bin`. Этот контейнерный слой внутренний;
+пользователь редактирует `Form.xml`, `Module.bsl` и файлы рядом.
 
 ### Внутренний платформенный конвейер
 
@@ -381,12 +387,11 @@ python3 tools/vendor_platform_schemas.py \
 публичный XML все равно должен оставаться чистой объектной моделью, а не
 переименованным сырым потоком.
 
-Текущая строгая проверка 1C выполняется без публичного шаблонного или
-резервного `Form.bin`: `build-bin` собирает обычный `Form.bin` из объектного
-`Form.xml`, `Module.bsl` и файлов рядом. Перед импортом платформой используется
-копия исходной раскладки, где публичный `Ext/Form.xml` обычной формы и каталог
-`Ext/Form/` удалены; для обычной формы в платформенной раскладке остается
-только `Ext/Form.bin`.
+Текущая native-сборка намеренно консервативна: `build-bin` применяет публичный
+пакет к исходному графу объектов обычной формы, переданному через `--base-bin`.
+Этот baseline является приватным входом codec-слоя, а не публичным
+fallback/XML-дампом. Native C++ package-команда уже владеет `Form.xml` и
+`Module.bsl`; картинки являются следующим расширением codec-слоя в том же пути.
 
 ## Status / Статус
 
@@ -395,26 +400,43 @@ Current release: `0.4.6`.
 Current implementation status:
 
 - read ordinary `Form.bin` containers;
-- dump readable object-model `Form.xml`;
-- extract `Module.bsl` and picture sidecars;
+- dump readable object-model `Form.xml` and `Form/Module.bsl` through one native
+  C++ package backend;
 - validate `Form.xml` against bundled schemas;
-- build ordinary `Form.bin` from the named XML package without a source
-  `Form.bin` fallback in the public package;
-- preserve module payloads and typed Color/Font properties through repeated
-  build/dump cycles without public raw sidecars;
+- build ordinary `Form.bin` by applying supported public XML edits to the
+  original native object graph passed with `--base-bin`;
+- read changed `Form/Module.bsl` back into `Form.bin` while rebuilding from the
+  native baseline;
 - scan local EPF/ERF corpora without committing private artifacts.
+
+Target implementation status:
+
+- extend the managed-form-like package with picture sidecars under
+  `Ext/Form/Items/...`;
+- build ordinary `Form.bin` from that named package without requiring a source
+  `Form.bin` baseline;
+- keep this package codec in C++, with Python limited to orchestration and
+  validation helpers.
 
 Текущий статус реализации:
 
 - чтение контейнеров обычных `Form.bin`;
-- выгрузка читаемого объектного `Form.xml`;
-- извлечение `Module.bsl` и файлов картинок рядом;
+- выгрузка читаемого объектного `Form.xml` и `Form/Module.bsl` через единый
+  native C++ package backend;
 - проверка `Form.xml` по встроенным схемам обычных форм;
-- сборка обычного `Form.bin` из именованного XML-пакета без исходного
-  `Form.bin` как публичного резервного источника;
-- сохранение данных модуля и типизированных свойств Color/Font при повторных
-  циклах сборки/разборки без публичных raw-sidecar файлов;
+- сборка обычного `Form.bin` путем применения поддержанных правок публичного XML
+  к исходному native-графу объектов, переданному через `--base-bin`;
+- чтение измененного `Form/Module.bsl` обратно в `Form.bin` при сборке из native
+  baseline;
 - сканирование локальных EPF/ERF-корпусов без коммита приватных артефактов.
+
+Целевой статус реализации:
+
+- расширение managed-form-like пакета картинками в `Ext/Form/Items/...`;
+- сборка обычного `Form.bin` из этого именованного пакета без исходного
+  `Form.bin` как baseline;
+- удержание package codec в C++, при Python только как слой orchestration и
+  validation.
 
 Validation status:
 
@@ -510,11 +532,12 @@ onec-ordinary-forms dump-bin \
   --out scan-output/exported/Object/Forms/Form/Ext/Form.xml
 ```
 
-The command is backed by the native C++ `oof-native formbin-dump-xml` engine and
-writes:
+The command is backed by the native C++ `oof-native formbin-dump-package` engine
+and writes one managed-form-like package:
 
 ```text
 scan-output/exported/Object/Forms/Form/Ext/Form.xml
+scan-output/exported/Object/Forms/Form/Ext/Form/Module.bsl
 ```
 
 Validate and format the XML:
@@ -530,7 +553,7 @@ Show bundled schemas:
 onec-ordinary-forms schemas
 ```
 
-Build `Form.bin` back by applying the object XML to the original native baseline:
+Build `Form.bin` back by applying the package to the original native baseline:
 
 ```bash
 onec-ordinary-forms build-bin \
@@ -545,9 +568,10 @@ source layout for ordinary forms should contain `Ext/Form.bin`; managed forms
 keep their native `Ext/Form.xml`.
 
 Writer behavior is intentionally conservative while the named ordinary-form
-object model is being completed. The public source contract is named `Form.xml`;
-the rebuild algorithm uses the original native `Form.bin` as a private
-object-graph baseline and does not expose raw stream/profile data.
+object model is being completed. The public source contract is the package
+`Form.xml` plus `Form/Module.bsl`; the rebuild algorithm uses the original
+native `Form.bin` as a private object-graph baseline and does not expose raw
+stream/profile data.
 
 Diagnostic commands:
 

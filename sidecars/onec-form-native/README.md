@@ -87,26 +87,26 @@ Print the native transfer sections with proven count/byte semantics:
 sidecars/onec-form-native/build/oof-native transfer-sections
 ```
 
-Dump the current native materialized form graph as public `OrdinaryForm`
-managed-style XML:
+Dump the current native materialized form graph as a public `OrdinaryForm`
+managed-style package:
 
 ```bash
-sidecars/onec-form-native/build/oof-native formbin-dump-xml Form.bin Form.xml
+sidecars/onec-form-native/build/oof-native formbin-dump-package Form.bin Form.xml
 sidecars/onec-form-native/build/oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml
 ```
 
-Apply supported public XML edits back to a runtime stream or a real `Form.bin`
-container:
+Apply supported public package edits back to a real `Form.bin` container, or
+public XML edits back to a runtime stream:
 
 ```bash
+sidecars/onec-form-native/build/oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin
 sidecars/onec-form-native/build/oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt
-sidecars/onec-form-native/build/oof-native formbin-build-xml base-Form.bin Form.xml rebuilt-Form.bin
 ```
 
-The XML projection is native C++ and emits `Form`, `ChildItems`, `Attributes`,
-`Commands`, `Events`, and named control elements. It does not expose raw
-list-stream, payload, or fallback nodes. Use the coverage command before
-treating a dump as rebuild-complete:
+The package projection is native C++ and emits `Form`, `ChildItems`,
+`Attributes`, `Commands`, `Events`, named control elements, and `Form/Module.bsl`.
+It does not expose raw list-stream, payload, or fallback nodes. Use the coverage
+command before treating a dump as rebuild-complete:
 
 ```bash
 sidecars/onec-form-native/build/oof-native formbin-xml-coverage Form.bin

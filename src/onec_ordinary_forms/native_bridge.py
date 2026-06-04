@@ -46,14 +46,15 @@ def run_native_json(command: str, *args: str, binary: Path | None = None) -> dic
         raise NativeBridgeError(f"native command returned non-JSON output: {command}") from exc
 
 
-def dump_formbin_xml(form_bin: Path, out_xml: Path, *, binary: Path | None = None) -> None:
+def dump_formbin_package(form_bin: Path, out_xml: Path, *, binary: Path | None = None) -> dict:
     out_xml.parent.mkdir(parents=True, exist_ok=True)
-    run_native("formbin-dump-xml", str(form_bin), str(out_xml), binary=binary)
+    stdout = run_native("formbin-dump-package", str(form_bin), str(out_xml), binary=binary)
+    return json.loads(stdout) if stdout.strip() else {}
 
 
-def build_formbin_xml(base_form_bin: Path, xml: Path, out_bin: Path, *, binary: Path | None = None) -> dict:
+def build_formbin_package(base_form_bin: Path, xml: Path, out_bin: Path, *, binary: Path | None = None) -> dict:
     out_bin.parent.mkdir(parents=True, exist_ok=True)
-    stdout = run_native("formbin-build-xml", str(base_form_bin), str(xml), str(out_bin), binary=binary)
+    stdout = run_native("formbin-build-package", str(base_form_bin), str(xml), str(out_bin), binary=binary)
     return json.loads(stdout) if stdout.strip() else {}
 
 

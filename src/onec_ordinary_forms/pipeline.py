@@ -20,7 +20,6 @@ class ModelXmlWriter(Protocol):
         form_path: Path,
         module_path: Path | None,
         control_index: dict[str, object],
-        metadata_json: Path | None,
         out_xml: Path,
     ) -> None: ...
 
@@ -30,7 +29,6 @@ def dump_form_bin_to_xml(
     out_xml: Path,
     *,
     model_xml_writer: ModelXmlWriter,
-    metadata_json: Path | None = None,
 ) -> None:
     """Convert ordinary ``Form.bin`` into object-model XML and sidecars.
 
@@ -51,6 +49,5 @@ def dump_form_bin_to_xml(
             form_stream,
             module if module.exists() else None,
             element_index,
-            metadata_json,
             out_xml,
         )

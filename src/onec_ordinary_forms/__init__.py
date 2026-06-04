@@ -7,8 +7,8 @@ from pathlib import Path
 from onec_ordinary_forms.native_bridge import (
     NativeBridgeError,
     assert_payload_lossless,
-    build_formbin_xml,
-    dump_formbin_xml,
+    build_formbin_package,
+    dump_formbin_package,
     formbin_roundtrip_report,
     native_binary,
     platform_object_report,
@@ -20,9 +20,9 @@ __all__ = [
     "__version__",
     "NativeBridgeError",
     "assert_payload_lossless",
-    "build_formbin_xml",
+    "build_formbin_package",
     "build_form_bin",
-    "dump_formbin_xml",
+    "dump_formbin_package",
     "dump_form_bin",
     "formbin_roundtrip_report",
     "native_binary",
@@ -37,12 +37,10 @@ __all__ = [
 __version__ = "0.4.6"
 
 
-def dump_form_bin(form_bin: str | Path, out_xml: str | Path, metadata_json: str | Path | None = None) -> None:
-    """Dump ordinary ``Form.bin`` into public ``Form.xml`` plus sidecars."""
+def dump_form_bin(form_bin: str | Path, out_xml: str | Path) -> None:
+    """Dump ordinary ``Form.bin`` into the public native package."""
 
-    if metadata_json is not None:
-        raise RuntimeError("metadata_json belonged to the removed Python dump path")
-    dump_formbin_xml(Path(form_bin), Path(out_xml))
+    dump_formbin_package(Path(form_bin), Path(out_xml))
 
 
 def build_form_bin(
@@ -53,9 +51,9 @@ def build_form_bin(
     native_bin: str | Path | None = None,
     native_lossless_check: bool = True,
 ) -> None:
-    """Build ordinary ``Form.bin`` by applying public ``Form.xml`` to a native baseline."""
+    """Build ordinary ``Form.bin`` by applying the public package to a native baseline."""
 
-    build_formbin_xml(Path(base_bin), Path(xml), Path(out_bin), binary=Path(native_bin) if native_bin is not None else None)
+    build_formbin_package(Path(base_bin), Path(xml), Path(out_bin), binary=Path(native_bin) if native_bin is not None else None)
     if native_lossless_check:
         assert_payload_lossless(Path(out_bin))
 

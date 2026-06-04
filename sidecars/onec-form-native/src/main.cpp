@@ -270,10 +270,10 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-xml-build-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
-              << "       oof-native formbin-dump-xml Form.bin Form.xml\n"
-              << "       oof-native formbin-build-xml base-Form.bin Form.xml rebuilt-Form.bin\n"
+              << "       oof-native formbin-dump-package Form.bin Form.xml\n"
+              << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-xml-coverage Form.bin\n"
               << "       oof-native <formbin-platform-object|formbin-platform-object-get> Form.bin [objectId property]\n"
               << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value\n"
@@ -851,6 +851,9 @@ std::string safe_container_file_name(const std::string& name) {
 }
 
 void write_file_bytes(const std::filesystem::path& path, const std::vector<std::uint8_t>& data) {
+    if (!path.parent_path().empty()) {
+        std::filesystem::create_directories(path.parent_path());
+    }
     std::ofstream file(path, std::ios::binary);
     if (!file) {
         throw std::runtime_error("cannot open output file: " + path.string());
@@ -965,6 +968,18 @@ const oof::platform::formbin::OneCContainerFile& find_container_file(
     std::string_view name
 ) {
     for (const auto& file : container.files) {
+        if (file.name == name) {
+            return file;
+        }
+    }
+    throw std::runtime_error("Form.bin does not contain required logical file");
+}
+
+oof::platform::formbin::OneCContainerFile& find_container_file_mut(
+    oof::platform::formbin::OneCContainer& container,
+    std::string_view name
+) {
+    for (auto& file : container.files) {
         if (file.name == name) {
             return file;
         }
@@ -4378,16 +4393,48 @@ RuntimeFormEnvelope read_formbin_runtime_envelope(const std::string& input_path)
     return runtime_envelope_from_form_payload(form_file.payload);
 }
 
-void write_formbin_xml(const std::string& input_path, const std::string& output_path) {
-    RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
+std::filesystem::path form_package_root_for_xml(const std::filesystem::path& xml_path) {
+    auto package_root = xml_path;
+    package_root.replace_extension("");
+    return package_root;
+}
+
+std::filesystem::path form_package_module_path(const std::filesystem::path& xml_path) {
+    return form_package_root_for_xml(xml_path) / "Module.bsl";
+}
+
+void write_formbin_package(const std::string& input_path, const std::string& output_path) {
+    const std::vector<std::uint8_t> data = read_file_bytes(input_path);
+    const auto container = oof::platform::formbin::parse_container(data);
+    const auto& form_file = find_container_file(container, "form");
+    const RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
     const auto form_object = materialize_platform_form_object(envelope);
     const std::string xml = form_object_to_public_xml(form_object);
-    write_file_bytes(output_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
+    const std::filesystem::path xml_path(output_path);
+    write_file_bytes(xml_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
+
+    bool module_written = false;
+    std::size_t module_bytes = 0;
+    for (const auto& file : container.files) {
+        if (file.name == "module") {
+            const auto module_path = form_package_module_path(xml_path);
+            write_file_bytes(module_path, file.payload);
+            module_written = true;
+            module_bytes = file.payload.size();
+            break;
+        }
+    }
+
     std::cout << "{\"output\":";
     print_json_string(output_path);
+    std::cout << ",\"packageRoot\":";
+    print_json_string(form_package_root_for_xml(xml_path).string());
+    std::cout << ",\"operation\":\"formbin-dump-package\"";
     std::cout << ",\"bytes\":" << xml.size();
-    std::cout << ",\"source\":\"Form.bin:form\"";
+    std::cout << ",\"source\":\"Form.bin\"";
     std::cout << ",\"controlCount\":" << form_object.items.count();
+    std::cout << ",\"moduleWritten\":" << (module_written ? "true" : "false");
+    std::cout << ",\"moduleBytes\":" << module_bytes;
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
@@ -4462,35 +4509,37 @@ void write_runtime_form_from_xml(
     std::cout << "}\n";
 }
 
-void write_formbin_from_xml(
+void write_formbin_from_package(
     const std::string& input_path,
     const std::string& xml_path,
     const std::string& output_path
 ) {
     const std::vector<std::uint8_t> data = read_file_bytes(input_path);
     auto container = oof::platform::formbin::parse_container(data);
-    auto file_it = container.files.end();
-    for (auto it = container.files.begin(); it != container.files.end(); ++it) {
-        if (it->name == "form") {
-            file_it = it;
-            break;
-        }
-    }
-    if (file_it == container.files.end()) {
-        throw std::runtime_error("Form.bin does not contain required logical file");
-    }
+    auto& form_file = find_container_file_mut(container, "form");
 
-    RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(file_it->payload);
+    RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
     const auto baseline = materialize_platform_form_object(envelope);
     const auto requested_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
     const auto object_edits = keep_changed_platform_object_edits(requested_edits, baseline);
     const auto result = apply_platform_object_edits(envelope, object_edits);
-    file_it->payload = encode_form_payload_text(file_it->payload, envelope.payload);
+    form_file.payload = encode_form_payload_text(form_file.payload, envelope.payload);
+
+    const auto module_path = form_package_module_path(std::filesystem::path(xml_path));
+    bool module_sidecar_used = false;
+    std::size_t module_bytes = 0;
+    if (std::filesystem::is_regular_file(module_path)) {
+        auto& module_file = find_container_file_mut(container, "module");
+        module_file.payload = read_file_bytes(module_path.string());
+        module_sidecar_used = true;
+        module_bytes = module_file.payload.size();
+    }
+
     const auto rebuilt = oof::platform::formbin::serialize_container(container);
     write_file_bytes(output_path, rebuilt);
     std::cout << "{\"output\":";
     print_json_string(output_path);
-    std::cout << ",\"operation\":\"formbin-build-xml\"";
+    std::cout << ",\"operation\":\"formbin-build-package\"";
     std::cout << ",\"bytes\":" << rebuilt.size();
     std::cout << ",\"controls\":" << result.controls;
     std::cout << ",\"nameEdits\":" << result.name_edits;
@@ -4502,6 +4551,9 @@ void write_formbin_from_xml(
     std::cout << ",\"attributeEdits\":" << result.attribute_edits;
     std::cout << ",\"commandEdits\":" << result.command_edits;
     std::cout << ",\"eventEdits\":" << result.event_edits;
+    std::cout << ",\"moduleSource\":";
+    print_json_string(module_sidecar_used ? "sidecar" : "baseline");
+    std::cout << ",\"moduleBytes\":" << module_bytes;
     std::cout << ",\"preservedContainerFiles\":" << container.files.size();
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
@@ -4595,7 +4647,7 @@ void replace_all(std::string& value, std::string_view needle, std::string_view r
     }
 }
 
-void print_formbin_xml_build_selftest() {
+void print_formbin_package_selftest() {
     const std::string form_text =
         "{{\"MainCaption\",1,1,{\"ru\",\"Main\"}},"
         "{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{\"ru\",\"Run\"}}},"
@@ -4639,7 +4691,7 @@ void print_formbin_xml_build_selftest() {
     const auto anchor_result = apply_public_xml_edits(anchor_envelope, anchor_edits);
     const std::string anchor_redump_xml = form_object_to_public_xml(materialize_platform_form_object(anchor_envelope));
 
-    std::cout << "{\"operation\":\"formbin-xml-build-selftest\"";
+    std::cout << "{\"operation\":\"formbin-package-selftest\"";
     std::cout << ",\"nameEdits\":" << result.name_edits;
     std::cout << ",\"titleEdits\":" << result.title_edits;
     std::cout << ",\"positionEdits\":" << result.position_edits;
@@ -6701,8 +6753,8 @@ int main(int argc, char** argv) {
             print_formbin_selftest();
             return 0;
         }
-        if (command == "formbin-xml-build-selftest") {
-            print_formbin_xml_build_selftest();
+        if (command == "formbin-package-selftest") {
+            print_formbin_package_selftest();
             return 0;
         }
         if (command == "formbin-platform-object-selftest") {
@@ -6773,12 +6825,12 @@ int main(int argc, char** argv) {
             print_form_object_graph(argv[2]);
             return 0;
         }
-        if (command == "formbin-dump-xml" && argc == 4) {
-            write_formbin_xml(argv[2], argv[3]);
+        if (command == "formbin-dump-package" && argc == 4) {
+            write_formbin_package(argv[2], argv[3]);
             return 0;
         }
-        if (command == "formbin-build-xml" && argc == 5) {
-            write_formbin_from_xml(argv[2], argv[3], argv[4]);
+        if (command == "formbin-build-package" && argc == 5) {
+            write_formbin_from_package(argv[2], argv[3], argv[4]);
             return 0;
         }
         if (command == "formbin-xml-coverage" && argc == 3) {

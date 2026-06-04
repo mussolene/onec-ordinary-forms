@@ -226,7 +226,7 @@ class CliSmokeTest(unittest.TestCase):
 
             from onec_ordinary_forms.cli import build_bin, dump_bin
 
-            dump_bin(type("Args", (), {"bin": str(source), "out": str(xml), "metadata_json": None})())
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(xml)})())
             xml_text = xml.read_text(encoding="utf-8")
             self.assertIn(f'containerCreatedTicks="{ticks}"', xml_text)
             self.assertIn(f'containerModifiedTicks="{ticks}"', xml_text)
@@ -860,7 +860,7 @@ class CliSmokeTest(unittest.TestCase):
             out = root / "Form.xml"
             from onec_ordinary_forms.cli import build_bin, dump_bin
 
-            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out)})())
             xml = out.read_text(encoding="utf-8")
             self.assertIn('<Action name="RunCommand" uuid="e1692cc2-605b-4535-84dd-28440238746c"/>', xml)
             validate_xml_file(out)
@@ -954,7 +954,7 @@ class CliSmokeTest(unittest.TestCase):
             out = root / "Form.xml"
             from onec_ordinary_forms.cli import dump_bin
 
-            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out)})())
 
             xml = out.read_text(encoding="utf-8")
             self.assertTrue(xml.startswith("<?xml version='1.0' encoding='utf-8'?>\n"))
@@ -1016,7 +1016,7 @@ class CliSmokeTest(unittest.TestCase):
             out = root / "Form.xml"
             from onec_ordinary_forms.cli import build_bin, dump_bin
 
-            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out)})())
             xml = out.read_text(encoding="utf-8")
             self.assertIn('<InputField name="InputValue" id="159">', xml)
             self.assertIn("<DataPath>InputValue</DataPath>", xml)
@@ -1049,7 +1049,7 @@ class CliSmokeTest(unittest.TestCase):
             out = root / "Form.xml"
             from onec_ordinary_forms.cli import build_bin, dump_bin
 
-            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out)})())
             xml = out.read_text(encoding="utf-8")
             self.assertIn("<Visible>false</Visible>", xml)
             validate_xml_file(out)
@@ -1081,7 +1081,7 @@ class CliSmokeTest(unittest.TestCase):
             out = root / "Form.xml"
             from onec_ordinary_forms.cli import dump_bin
 
-            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out)})())
             xml_root = ET.parse(out).getroot()
             field = xml_root.find(".//InputField[@name='Number']")
             self.assertIsNotNone(field)
@@ -3603,7 +3603,7 @@ class CliSmokeTest(unittest.TestCase):
             out = root / "Forms" / "Form" / "Ext" / "Form.xml"
             from onec_ordinary_forms.cli import dump_bin
 
-            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out)})())
 
             form_dir = out.with_suffix("")
             xml = out.read_text(encoding="utf-8")
@@ -3645,7 +3645,7 @@ class CliSmokeTest(unittest.TestCase):
             out = root / "Forms" / "Form" / "Ext" / "Form.xml"
             from onec_ordinary_forms.cli import build_bin, dump_bin
 
-            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out)})())
             tree = ET.parse(out)
             xml_root = tree.getroot()
             image = xml_root.find(".//PictureDecoration[@name='Image1']")
@@ -3692,7 +3692,7 @@ class CliSmokeTest(unittest.TestCase):
             out = root / "Form.xml"
             from onec_ordinary_forms.cli import dump_bin
 
-            dump_bin(type("Args", (), {"bin": str(source), "out": str(out), "metadata_json": None})())
+            dump_bin(type("Args", (), {"bin": str(source), "out": str(out)})())
 
             xml = out.read_text(encoding="utf-8")
             self.assertIn('modeName="compound"', xml)
@@ -4190,8 +4190,8 @@ class CliSmokeTest(unittest.TestCase):
             calls = []
             observed = {}
 
-            def writer(form_path, module_path, control_index, metadata_path, out_path):
-                calls.append((form_path, module_path, control_index, metadata_path, out_path))
+            def writer(form_path, module_path, control_index, out_path):
+                calls.append((form_path, module_path, control_index, out_path))
                 observed["module"] = module_path.read_bytes()
                 observed["control_index_pages"] = control_index["data"]["-pages-"]
                 out_path.write_text("ok", encoding="utf-8")

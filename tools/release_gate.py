@@ -33,7 +33,7 @@ def run_codec_coverage(repo: Path, xsd: Path) -> dict[str, object]:
 def run_native_selftests(repo: Path) -> dict[str, object]:
     binary = repo / "sidecars" / "onec-form-native" / "build" / "oof-native"
     commands = [
-        "formbin-xml-build-selftest",
+        "formbin-package-selftest",
         "formbin-platform-object-selftest",
         "form-payload-structure-selftest",
     ]

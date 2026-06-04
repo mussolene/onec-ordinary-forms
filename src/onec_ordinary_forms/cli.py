@@ -31,7 +31,7 @@ from onec_ordinary_forms.ordinary_stream import (
     root_panel_base_info_record,
     shortcut_record_to_xml_attrs,
 )
-from onec_ordinary_forms.native_bridge import build_formbin_xml, dump_formbin_xml
+from onec_ordinary_forms.native_bridge import build_formbin_package, dump_formbin_package
 from onec_ordinary_forms.public_contract import (
     ORDINARY_FORM_SCHEMA,
     PUBLIC_FORM_VERSION,
@@ -3493,7 +3493,7 @@ def build_bin(args: argparse.Namespace) -> None:
     base_bin = Path(base_bin_arg)
     validate_xml_file(xml_path)
     native_bin = getattr(args, "native_bin", None)
-    build_formbin_xml(base_bin, xml_path, out_bin, binary=Path(native_bin) if native_bin else None)
+    build_formbin_package(base_bin, xml_path, out_bin, binary=Path(native_bin) if native_bin else None)
 
 
 def scan_corpus(args: argparse.Namespace) -> None:
@@ -3517,10 +3517,8 @@ def pack_bin(args: argparse.Namespace) -> None:
 
 
 def dump_bin(args: argparse.Namespace) -> None:
-    if getattr(args, "metadata_json", None):
-        raise RuntimeError("dump-bin is native-only; --metadata-json belonged to the removed Python dump path")
     native_bin = getattr(args, "native_bin", None)
-    dump_formbin_xml(Path(args.bin), Path(args.out), binary=Path(native_bin) if native_bin else None)
+    dump_formbin_package(Path(args.bin), Path(args.out), binary=Path(native_bin) if native_bin else None)
 
 
 def digest_xml(args: argparse.Namespace) -> None:
@@ -3573,7 +3571,6 @@ def main() -> None:
 
     dump_bin_parser = subparsers.add_parser("dump-bin")
     dump_bin_parser.add_argument("--bin", required=True, help="Ordinary form Form.bin")
-    dump_bin_parser.add_argument("--metadata-json")
     dump_bin_parser.add_argument("--out", required=True, help="Form.xml output path")
     dump_bin_parser.add_argument("--native-bin", help="Override oof-native binary path")
     dump_bin_parser.set_defaults(func=dump_bin)

@@ -3,7 +3,7 @@
 #
 # When licensed ENTERPRISE auto-execute hangs, this still produces slot evidence:
 # baseline payload vs payload after applying one named XML property edit through
-# the native PlatformObject build path (formbin-build-xml).
+# the native PlatformObject package build path (formbin-build-package).
 #
 # Usage:
 #   tools/native_property_slot_proof.sh \
@@ -66,7 +66,7 @@ baseline_xml="$prop_dir/baseline.xml"
 edited_xml="$prop_dir/edited.xml"
 mutated_bin="$prop_dir/mutated.bin"
 
-"$native_bin" formbin-dump-xml "$form_bin" "$baseline_xml" >/dev/null
+"$native_bin" formbin-dump-package "$form_bin" "$baseline_xml" >/dev/null
 
 python3 - "$baseline_xml" "$edited_xml" "$property_label" "$xml_value" <<'PY'
 import sys
@@ -119,7 +119,7 @@ ET.ElementTree(root).write(edited_path, encoding="utf-8", xml_declaration=True)
 print(f"edited {prop_name} on Button")
 PY
 
-"$native_bin" formbin-build-xml "$form_bin" "$edited_xml" "$mutated_bin" >/dev/null
+"$native_bin" formbin-build-package "$form_bin" "$edited_xml" "$mutated_bin" >/dev/null
 
 python3 - <<'PY' "$form_bin" "$mutated_bin" "$prop_dir"
 import json
