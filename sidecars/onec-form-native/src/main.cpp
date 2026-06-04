@@ -22,6 +22,7 @@
 
 #include "control_info_descriptor_registry.hpp"
 #include "form_bin_container.hpp"
+#include "ordinary_control_type_registry.hpp"
 #include "ordinary_controls.hpp"
 #include "ordinary_form_graph.hpp"
 #include "platform_descriptor_registry.hpp"
@@ -3276,14 +3277,24 @@ private:
     ) {
         for (const auto& item : summary.items) {
             oof::platform::object_model::PlatformObject object;
+            const auto* control_binding = oof::ordinary::control_type::binding_for_guid(item.guid);
+            const std::string writer_control_type = control_binding != nullptr
+                ? std::string(control_binding->writer_control_type)
+                : std::string(item.descriptor_binding->platform_type);
+            const std::string platform_schema_type = control_binding != nullptr
+                ? std::string(control_binding->platform_type)
+                : std::string(item.descriptor_binding->platform_type);
+            const std::string stream_element = control_binding != nullptr
+                ? std::string(control_binding->stream_element)
+                : std::string(item.descriptor_binding->stream_element);
             object.object_id = item.object_id;
             object.name = item.name;
-            object.platform_type = std::string(item.descriptor_binding->platform_type);
+            object.platform_type = writer_control_type;
             object.type_category = "core::kLogFormTypeInfoCategory";
             object.type_source = "PlatformObjectTypeHandler<Form>.Items + " + std::string(item.descriptor_binding->evidence);
             object.path = item.path;
             object.parent_object_id = item.parent_object_id;
-            const auto* schema = oof::platform::form_descriptor::schema_for_binding(*item.descriptor_binding);
+            const auto* schema = oof::platform::form_schema::control_by_type_name(platform_schema_type);
             object.identity = oof::platform::object_model::make_identity(
                 item.object_id,
                 item.object_id,
@@ -3292,7 +3303,7 @@ private:
                 {},
                 item.guid,
                 std::string(item.descriptor_binding->evidence),
-                std::string(item.descriptor_binding->stream_element),
+                stream_element,
                 schema != nullptr ? std::string(schema->schema_source) : std::string{});
             object.properties.push_back(make_described_property("ObjectID", item.object_id));
             object.properties.push_back(make_described_property("Name", item.name));
@@ -3324,7 +3335,7 @@ private:
                     object.properties.push_back(make_described_property("DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value)));
                 }
             }
-            if (const auto* control_schema = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
+            if (const auto* control_schema = oof::platform::form_schema::control_by_type_name(platform_schema_type)) {
                 add_platform_object_schema_surface(
                     object,
                     oof::platform::object_schema::build_schema_for_control(*control_schema));
@@ -3996,36 +4007,20 @@ bool set_materialized_object_picture_payload(
     std::string_view payload
 );
 
-std::string public_xml_tag_for_platform_type(std::string_view platform_type) {
-    if (platform_type == "TextBox") {
-        return "InputField";
+std::string public_xml_tag_for_platform_type(std::string_view platform_type, std::string_view class_guid = {}) {
+    if (!class_guid.empty()) {
+        if (const auto* binding = oof::ordinary::control_type::binding_for_guid(class_guid)) {
+            return std::string(binding->public_xml_tag);
+        }
     }
-    if (platform_type == "TableBox") {
-        return "Table";
+    if (const auto* binding = oof::ordinary::control_type::binding_for_writer_control_type(platform_type)) {
+        return std::string(binding->public_xml_tag);
     }
-    if (platform_type == "Image") {
-        return "PictureDecoration";
-    }
-    if (platform_type == "Label") {
-        return "LabelDecoration";
-    }
-    if (platform_type == "GroupBox") {
-        return "UsualGroup";
-    }
-    if (platform_type == "Spreadsheet") {
-        return "SpreadsheetDocumentField";
-    }
-    if (platform_type == "TextDocument") {
-        return "TextDocumentField";
+    if (const auto* binding = oof::ordinary::control_type::unambiguous_binding_for_platform_type(platform_type)) {
+        return std::string(binding->public_xml_tag);
     }
     if (platform_type == "FormattedDocument") {
         return "FormattedDocumentField";
-    }
-    if (platform_type == "Calendar") {
-        return "CalendarField";
-    }
-    if (platform_type == "TrackBar") {
-        return "TrackBar";
     }
     if (platform_type == "PanelPage") {
         return "Page";
@@ -4034,46 +4029,30 @@ std::string public_xml_tag_for_platform_type(std::string_view platform_type) {
 }
 
 std::string platform_type_for_public_xml_tag(std::string_view tag) {
-    if (tag == "InputField") {
-        return "TextBox";
-    }
-    if (tag == "Table") {
-        return "TableBox";
-    }
-    if (tag == "PictureDecoration") {
-        return "Image";
-    }
-    if (tag == "LabelDecoration") {
-        return "Label";
-    }
-    if (tag == "UsualGroup") {
-        return "GroupBox";
-    }
-    if (tag == "SpreadsheetDocumentField") {
-        return "Spreadsheet";
-    }
-    if (tag == "TextDocumentField") {
-        return "TextDocument";
+    if (const auto* binding = oof::ordinary::control_type::binding_for_public_xml_tag(tag)) {
+        return std::string(binding->writer_control_type);
     }
     if (tag == "FormattedDocumentField") {
         return "FormattedDocument";
-    }
-    if (tag == "CalendarField") {
-        return "Calendar";
-    }
-    if (tag == "Separator") {
-        return "Splitter";
-    }
-    if (tag == "GeographicalMap") {
-        return "GeographicalSchemaField";
-    }
-    if (tag == "Flowchart") {
-        return "GraphicalSchemaField";
     }
     if (tag == "Page") {
         return "PanelPage";
     }
     return std::string(tag);
+}
+
+std::string platform_schema_type_for_public_xml_tag(std::string_view tag) {
+    if (const auto* binding = oof::ordinary::control_type::binding_for_public_xml_tag(tag)) {
+        return std::string(binding->platform_type);
+    }
+    return platform_type_for_public_xml_tag(tag);
+}
+
+std::string stream_element_for_public_xml_tag(std::string_view tag) {
+    if (const auto* binding = oof::ordinary::control_type::binding_for_public_xml_tag(tag)) {
+        return std::string(binding->stream_element);
+    }
+    return {};
 }
 
 struct PublicXmlControlEdit {
@@ -4894,13 +4873,14 @@ void collect_public_xml_controls(
         object.parent_object_id = std::string(parent_object_id);
         object.path = object.parent_object_id.empty() ? "$/items/" + object.object_id : "$/items/" + object.parent_object_id + "/" + object.object_id;
         std::string schema_source;
-        std::string stream_element;
+        std::string stream_element = stream_element_for_public_xml_tag(tag);
+        const std::string platform_schema_type = platform_schema_type_for_public_xml_tag(tag);
         object.properties.push_back(make_described_property("ObjectID", object.object_id));
         object.properties.push_back(make_described_property("Name", object.name));
         object.properties.push_back(make_described_property("Type", object.platform_type));
         object.properties.push_back(make_described_property("Parent", object.parent_object_id));
         object.properties.push_back(make_described_property("Path", object.path));
-        if (const auto* schema = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
+        if (const auto* schema = oof::platform::form_schema::control_by_type_name(platform_schema_type)) {
             schema_source = schema->schema_source;
             add_platform_object_schema_surface(object, oof::platform::object_schema::build_schema_for_control(*schema));
         } else {
@@ -4963,7 +4943,7 @@ void collect_public_xml_controls(
                 "PublicOrdinaryFormXml.ChildItems + managed-form-style ChildItems projection",
                 schema_source,
                 stream_element,
-                platform_type_for_public_xml_tag(tag),
+                object.platform_type,
                 xml_attr_value(attrs, "name")));
         } else if (auto* parent = form_object.find_object_by_id(parent_object_id)) {
             parent->children.push_back(new_index);
@@ -4975,14 +4955,14 @@ void collect_public_xml_controls(
                 "PublicOrdinaryFormXml.ChildItems + managed-form-style ChildItems projection",
                 schema_source,
                 stream_element,
-                platform_type_for_public_xml_tag(tag),
+                object.platform_type,
                 xml_attr_value(attrs, "name")));
         }
         form_object.add_edge(oof::platform::object_model::make_edge(
             "uses-schema",
             object_id,
             object_id,
-            platform_type_for_public_xml_tag(tag),
+            object.platform_type,
             "PublicOrdinaryFormXml.ChildItems + OrdinaryFormPalette.xsd",
             schema_source,
             stream_element,
@@ -5719,7 +5699,7 @@ void append_control_xml(
     PublicXmlPackageSidecarSink* sidecar_sink = nullptr
 ) {
     const auto& object = form_object.items.get(object_index);
-    const std::string tag = public_xml_tag_for_platform_type(object.platform_type);
+    const std::string tag = public_xml_tag_for_platform_type(object.platform_type, object.identity.class_guid);
     append_indent(out, indent);
     out += "<";
     out += tag;
@@ -6205,39 +6185,18 @@ std::string public_form_title_from_xml(const std::string& xml) {
 }
 
 std::string source_writer_control_guid(std::string_view platform_type) {
+    if (const auto* binding = oof::ordinary::control_type::binding_for_writer_control_type(platform_type)) {
+        return std::string(binding->guid);
+    }
+    if (const auto* binding = oof::ordinary::control_type::binding_for_public_xml_tag(platform_type)) {
+        return std::string(binding->guid);
+    }
+    if (const auto* binding = oof::ordinary::control_type::unambiguous_binding_for_platform_type(platform_type)) {
+        return std::string(binding->guid);
+    }
     static const std::map<std::string_view, std::string_view> guids{
         {"Panel", "09ccdc77-ea1a-4a6d-ab1c-3435eada2433"},
         {"PanelPage", "09ccdc77-ea1a-4a6d-ab1c-3435eada2433"},
-        {"ActiveXControl", "621e95f1-064f-11d4-9400-008048da11f9"},
-        {"Label", "0fc7e20d-f241-460c-bdf4-5ad88e5474a5"},
-        {"Image", "151ef23e-6bb2-4681-83d0-35bc2217230c"},
-        {"Button", "6ff79819-710e-4145-97cd-1618da79e3e2"},
-        {"TextBox", "381ed624-9217-4e63-85db-c4c3cb87daae"},
-        {"InputField", "381ed624-9217-4e63-85db-c4c3cb87daae"},
-        {"CommandBar", "e69bf21d-97b2-4f37-86db-675aea9ec2cb"},
-        {"CheckBox", "35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26"},
-        {"TableBox", "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1"},
-        {"Table", "ea83fe3a-ac3c-4cce-8045-3dddf35b28b1"},
-        {"ChoiceField", "64483e7f-3833-48e2-8c75-2c31aac49f6e"},
-        {"Spreadsheet", "236a17b3-7f44-46d9-a907-75f9cdc61ab5"},
-        {"SpreadsheetDocumentField", "236a17b3-7f44-46d9-a907-75f9cdc61ab5"},
-        {"GroupBox", "90db814a-c75f-4b54-bc96-df62e554d67d"},
-        {"RadioButton", "782e569a-79a7-4a4f-a936-b48d013936ec"},
-        {"Splitter", "36e52348-5d60-4770-8e89-a16ed50a2006"},
-        {"Chart", "a8b97779-1a4b-4059-b09c-807f86d2a461"},
-        {"ListBox", "19f8b798-314e-4b4e-8121-905b2a7a03f5"},
-        {"HTMLDocumentField", "d92a805c-98ae-4750-9158-d9ce7cec2f20"},
-        {"TrackBar", "6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef"},
-        {"Calendar", "e3c063d8-ef92-41be-9c89-b70290b5368b"},
-        {"CalendarField", "e3c063d8-ef92-41be-9c89-b70290b5368b"},
-        {"TextDocument", "14c4a229-bfc3-42fe-9ce1-2da049fd0109"},
-        {"TextDocumentField", "14c4a229-bfc3-42fe-9ce1-2da049fd0109"},
-        {"PivotChart", "a26da99e-184a-4823-b0d6-62816d38dc4e"},
-        {"GeographicalSchemaField", "ad37194e-555e-4305-b718-5dca84baf145"},
-        {"ProgressBar", "b1db1f86-abbb-4cf0-8852-fe6ae21650c2"},
-        {"GraphicalSchemaField", "42248403-7748-49da-b782-e4438fd7bff3"},
-        {"GanttChart", "e5fdc112-5c84-4a16-9728-72b85692b6e2"},
-        {"Dendrogram", "984981b1-622d-4ebc-94f7-885f0cdfb59a"},
     };
     const auto it = guids.find(platform_type);
     if (it == guids.end()) {

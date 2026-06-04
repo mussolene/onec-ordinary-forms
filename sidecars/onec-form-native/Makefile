@@ -4,7 +4,7 @@ LDLIBS ?= -lz
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/control_info_descriptor_registry.hpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_object_schema.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+SRC := src/main.cpp src/control_info_descriptor_registry.hpp src/ordinary_control_type_registry.hpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_object_schema.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
