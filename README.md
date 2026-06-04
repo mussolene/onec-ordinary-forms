@@ -191,11 +191,13 @@ descriptor.
 Passing 1C Designer validation is required, but not sufficient by itself: the
 public XML must also remain a clean object model, not a renamed raw stream.
 
-Current native rebuild is deliberately conservative: `build-bin` applies the
-public package to the original ordinary `Form.bin` object graph passed as
-`--base-bin`. The baseline is a private codec input, not a public XML fallback or
-renamed raw stream. The native C++ package command owns both `Form.xml` and
-`Module.bsl` and existing picture sidecars in the same command path.
+Current native `--base-bin` rebuild is a compatibility path for the already
+supported edit codecs. It is not the target source-build architecture and must
+not be expanded with raw fallbacks, patch workers, or baseline-preservation
+profiles. The release target is `Form.xml -> platform object model ->
+ListOutStream -> Form.bin`; the native code now keeps the public XML parser and
+XML writer on the `PlatformFormObject` boundary so the remaining work can attach
+the bracket writer to that object, not to a diff from the original binary.
 
 ## Русский
 
@@ -386,11 +388,13 @@ python3 tools/vendor_platform_schemas.py \
 публичный XML все равно должен оставаться чистой объектной моделью, а не
 переименованным сырым потоком.
 
-Текущая native-сборка намеренно консервативна: `build-bin` применяет публичный
-пакет к исходному графу объектов обычной формы, переданному через `--base-bin`.
-Этот baseline является приватным входом codec-слоя, а не публичным
-fallback/XML-дампом. Native C++ package-команда уже владеет `Form.xml` и
-`Module.bsl`, а также существующими sidecar-картинками в том же codec-пути.
+Текущая native-сборка через `--base-bin` - это compatibility path для уже
+поддержанных edit-codec'ов. Это не целевая source-build архитектура, и ее нельзя
+расширять raw fallback'ами, patch-worker'ами или профилями сохранения baseline.
+Цель релиза: `Form.xml -> platform object model -> ListOutStream -> Form.bin`.
+Native-код теперь держит parser публичного XML и XML writer на границе
+`PlatformFormObject`, чтобы оставшийся writer подключался к объекту формы, а не
+к diff'у от исходного бинарника.
 
 ## Status / Статус
 
@@ -402,8 +406,8 @@ Current implementation status:
 - dump readable object-model `Form.xml` and `Form/Module.bsl` through one native
   C++ package backend;
 - validate `Form.xml` against bundled schemas;
-- build ordinary `Form.bin` by applying supported public XML edits to the
-  original native object graph passed with `--base-bin`;
+- build ordinary `Form.bin` through a compatibility `--base-bin` path for
+  supported edits while the target native source writer is completed;
 - read changed `Form/Module.bsl` back into `Form.bin` while rebuilding from the
   native baseline;
 - dump existing picture payloads to `Form/Items/.../Picture.*` sidecars and
@@ -414,11 +418,11 @@ Current implementation status:
 
 Target implementation status:
 
+- write the platform list-stream from `PlatformFormObject` built from public
+  `Form.xml`, without requiring a source `Form.bin` baseline;
 - add new controls from public `ChildItems` through the native package backend;
 - create new picture payload slots from the named package when the baseline
   object does not already contain one;
-- build ordinary `Form.bin` from that named package without requiring a source
-  `Form.bin` baseline;
 - keep this package codec in C++, with Python limited to orchestration and
   validation helpers.
 
@@ -428,8 +432,8 @@ Target implementation status:
 - выгрузка читаемого объектного `Form.xml` и `Form/Module.bsl` через единый
   native C++ package backend;
 - проверка `Form.xml` по встроенным схемам обычных форм;
-- сборка обычного `Form.bin` путем применения поддержанных правок публичного XML
-  к исходному native-графу объектов, переданному через `--base-bin`;
+- сборка обычного `Form.bin` через compatibility-путь `--base-bin` для
+  поддержанных правок, пока завершается целевой native source writer;
 - чтение измененного `Form/Module.bsl` обратно в `Form.bin` при сборке из native
   baseline;
 - выгрузка существующих картинок в `Form/Items/.../Picture.*` sidecars и
@@ -441,12 +445,12 @@ Target implementation status:
 
 Целевой статус реализации:
 
+- запись platform list-stream из `PlatformFormObject`, собранного из публичного
+  `Form.xml`, без исходного `Form.bin` как baseline;
 - добавление новых контролов из публичного `ChildItems` через native package
   backend;
 - создание новых picture payload slots из именованного пакета, если в baseline
   объекте еще нет такого слота;
-- сборка обычного `Form.bin` из этого именованного пакета без исходного
-  `Form.bin` как baseline;
 - удержание package codec в C++, при Python только как слой orchestration и
   validation.
 

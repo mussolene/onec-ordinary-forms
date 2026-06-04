@@ -3518,6 +3518,40 @@ std::string public_xml_tag_for_platform_type(std::string_view platform_type) {
     return std::string(platform_type);
 }
 
+std::string platform_type_for_public_xml_tag(std::string_view tag) {
+    if (tag == "InputField") {
+        return "TextBox";
+    }
+    if (tag == "Table") {
+        return "TableBox";
+    }
+    if (tag == "PictureDecoration") {
+        return "Image";
+    }
+    if (tag == "LabelDecoration") {
+        return "Label";
+    }
+    if (tag == "UsualGroup") {
+        return "GroupBox";
+    }
+    if (tag == "SpreadsheetDocumentField") {
+        return "Spreadsheet";
+    }
+    if (tag == "TextDocumentField") {
+        return "TextDocument";
+    }
+    if (tag == "FormattedDocumentField") {
+        return "FormattedDocument";
+    }
+    if (tag == "CalendarField") {
+        return "Calendar";
+    }
+    if (tag == "Page") {
+        return "PanelPage";
+    }
+    return std::string(tag);
+}
+
 struct PublicXmlControlEdit {
     std::string tag;
     std::string object_id;
@@ -3640,10 +3674,10 @@ std::vector<XmlElementSlice> find_xml_elements(std::string_view text, std::strin
         }
         XmlElementSlice element;
         element.attrs = std::string(text.substr(start + open.size(), tag_end - start - open.size()));
-        std::size_t attr_end = element.attrs.find_last_not_of(" \t\r\n/");
-        element.self_closing = attr_end == std::string::npos || element.attrs.find('/', attr_end + 1) != std::string::npos;
+        std::size_t attr_end = element.attrs.find_last_not_of(" \t\r\n");
+        element.self_closing = attr_end != std::string::npos && element.attrs[attr_end] == '/';
         if (element.self_closing) {
-            element.attrs = element.attrs.substr(0, attr_end == std::string::npos ? 0 : attr_end + 1);
+            element.attrs = element.attrs.substr(0, attr_end);
             cursor = tag_end + 1;
         } else {
             const std::size_t close_start = text.find(close, tag_end + 1);
@@ -4044,6 +4078,322 @@ oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_collection_
     }
 
     return edits;
+}
+
+std::size_t find_matching_xml_close(
+    std::string_view text,
+    std::string_view tag,
+    std::size_t open_tag_end
+) {
+    const std::string open = "<" + std::string(tag);
+    const std::string close = "</" + std::string(tag) + ">";
+    std::size_t cursor = open_tag_end;
+    std::size_t depth = 1;
+    while (cursor < text.size()) {
+        const std::size_t next_open = text.find(open, cursor);
+        const std::size_t next_close = text.find(close, cursor);
+        if (next_close == std::string::npos) {
+            return std::string::npos;
+        }
+        if (next_open != std::string::npos && next_open < next_close) {
+            const std::size_t name_end = next_open + open.size();
+            if (name_end < text.size()) {
+                const char after_name = text[name_end];
+                if (std::isalnum(static_cast<unsigned char>(after_name)) || after_name == '_' || after_name == '-') {
+                    cursor = name_end;
+                    continue;
+                }
+            }
+            const std::size_t nested_tag_end = text.find('>', next_open);
+            if (nested_tag_end == std::string::npos) {
+                return std::string::npos;
+            }
+            const std::string nested_attrs(text.substr(next_open + open.size(), nested_tag_end - next_open - open.size()));
+            const std::size_t attr_end = nested_attrs.find_last_not_of(" \t\r\n");
+            const bool nested_self_closing =
+                attr_end != std::string::npos && nested_attrs[attr_end] == '/';
+            if (!nested_self_closing) {
+                ++depth;
+            }
+            cursor = nested_tag_end + 1;
+            continue;
+        }
+        --depth;
+        if (depth == 0) {
+            return next_close;
+        }
+        cursor = next_close + close.size();
+    }
+    return std::string::npos;
+}
+
+XmlElementSlice first_xml_element(std::string_view text, std::string_view tag) {
+    const std::string open = "<" + std::string(tag);
+    const std::size_t start = text.find(open);
+    if (start == std::string::npos) {
+        return {};
+    }
+    const std::size_t name_end = start + open.size();
+    if (name_end < text.size()) {
+        const char after_name = text[name_end];
+        if (std::isalnum(static_cast<unsigned char>(after_name)) || after_name == '_' || after_name == '-') {
+            return {};
+        }
+    }
+    const std::size_t tag_end = text.find('>', start);
+    if (tag_end == std::string::npos) {
+        return {};
+    }
+    XmlElementSlice element;
+    element.attrs = std::string(text.substr(name_end, tag_end - name_end));
+    std::size_t attr_end = element.attrs.find_last_not_of(" \t\r\n");
+    element.self_closing = attr_end != std::string::npos && element.attrs[attr_end] == '/';
+    if (element.self_closing) {
+        element.attrs = element.attrs.substr(0, attr_end);
+        return element;
+    }
+    const std::size_t close_start = find_matching_xml_close(text, tag, tag_end + 1);
+    if (close_start == std::string::npos) {
+        return {};
+    }
+    element.body = std::string(text.substr(tag_end + 1, close_start - tag_end - 1));
+    return element;
+}
+
+void set_or_add_described_property(
+    oof::platform::object_model::PlatformObject& object,
+    std::string_view name,
+    std::string value
+) {
+    if (auto* property = object.property(name)) {
+        property->value = std::move(value);
+        property->value_origin = "public-xml";
+        enrich_platform_value_object(*property);
+        return;
+    }
+    auto property = make_described_property(name, std::move(value));
+    property.value_origin = "public-xml";
+    enrich_platform_value_object(property);
+    object.properties.push_back(std::move(property));
+}
+
+void add_public_xml_collection_objects(
+    oof::platform::object_model::PlatformFormObject& form_object,
+    const std::string& xml
+) {
+    for (const auto& attribute_xml : find_xml_elements(xml, "Attribute")) {
+        const std::string object_id = xml_attr_value(attribute_xml.attrs, "objectId");
+        if (object_id.empty()) {
+            continue;
+        }
+        oof::platform::object_model::PlatformObject object;
+        object.object_id = object_id;
+        object.name = xml_attr_value(attribute_xml.attrs, "name");
+        object.platform_type = "FormAttribute";
+        object.type_category = "core::kLogFormTypeInfoCategory";
+        object.type_source = "PublicOrdinaryFormXml.Attributes";
+        object.parent_object_id = "0";
+        object.properties.push_back(make_platform_object_property("ID", "Идентификатор", xml_attr_value(attribute_xml.attrs, "id"), "CompositeID", "OrdinaryForm.xml Attribute@id", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("Name", "Имя", object.name, "String", "OrdinaryForm.xml Attribute@name", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("Main", "Основной", xml_attr_value(attribute_xml.attrs, "main"), "Boolean", "OrdinaryForm.xml Attribute@main", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("StoredData", "СохраняемыеДанные", xml_attr_value(attribute_xml.attrs, "storedData"), "Boolean", "OrdinaryForm.xml Attribute@storedData", {}, {}, "public-xml"));
+        const auto type_xml = first_xml_element(attribute_xml.body, "Type");
+        object.properties.push_back(make_platform_object_property("Type", "Тип", xml_unescape(type_xml.body), "TypeDomainPattern", "OrdinaryForm.xml Attribute/Type", {}, {}, "public-xml"));
+        add_api_surface(object, api_object_for_type("FormAttribute"));
+        form_object.attributes.add(std::move(object));
+    }
+
+    for (const auto& command_xml : find_xml_elements(xml, "Command")) {
+        const std::string object_id = xml_attr_value(command_xml.attrs, "objectId");
+        if (object_id.empty()) {
+            continue;
+        }
+        oof::platform::object_model::PlatformObject object;
+        object.object_id = object_id;
+        object.name = xml_attr_value(command_xml.attrs, "name");
+        object.platform_type = "FormCommand";
+        object.type_category = "core::kLogFormTypeInfoCategory";
+        object.type_source = "PublicOrdinaryFormXml.Commands";
+        object.parent_object_id = "0";
+        object.properties.push_back(make_platform_object_property("ID", "Идентификатор", xml_attr_value(command_xml.attrs, "id"), "CompositeID", "OrdinaryForm.xml Command@id", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("Name", "Имя", object.name, "String", "OrdinaryForm.xml Command@name", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("Handler", "Обработчик", xml_attr_value(command_xml.attrs, "handler"), "String", "OrdinaryForm.xml Command@handler", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("ModifiesData", "ИзменяетДанные", xml_attr_value(command_xml.attrs, "modifiesData"), "Boolean", "OrdinaryForm.xml Command@modifiesData", {}, {}, "public-xml"));
+        add_api_surface(object, api_object_for_type("FormCommand"));
+        form_object.commands.add(std::move(object));
+    }
+}
+
+void add_public_xml_events(
+    oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view owner_object_id,
+    const std::string& body
+) {
+    const auto events_xml = first_xml_element(body, "Events");
+    if (events_xml.self_closing && events_xml.attrs.empty() && events_xml.body.empty()) {
+        return;
+    }
+    for (const auto& event_xml : find_xml_elements(events_xml.body, "Event")) {
+        oof::platform::object_model::PlatformObject object;
+        object.object_id = xml_attr_value(event_xml.attrs, "objectId");
+        if (object.object_id.empty()) {
+            const std::string id = xml_attr_value(event_xml.attrs, "id");
+            object.object_id = "event:" + std::string(owner_object_id) + ":" + id;
+        }
+        object.name = xml_attr_value(event_xml.attrs, "handler");
+        object.platform_type = "FormEvent";
+        object.type_category = "core::kLogFormTypeInfoCategory";
+        object.type_source = "PublicOrdinaryFormXml.Events";
+        object.parent_object_id = std::string(owner_object_id);
+        object.properties.push_back(make_platform_object_property("ID", "Идентификатор", xml_attr_value(event_xml.attrs, "id"), "UUID", "OrdinaryForm.xml Event@id", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("Handler", "Обработчик", object.name, "String", "OrdinaryForm.xml Event@handler", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("Parent", "Родитель", std::string(owner_object_id), "FormItem", "OrdinaryForm.xml Event@ownerId", {}, {}, "public-xml"));
+        add_api_surface(object, api_object_for_type("FormEvent"));
+        form_object.events.add(std::move(object));
+    }
+}
+
+void collect_public_xml_controls(
+    oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view child_items_body,
+    std::string_view parent_object_id,
+    const std::vector<PublicXmlControlEdit>& control_edits
+) {
+    const std::regex start_tag_pattern(R"(<([A-Za-z][A-Za-z0-9]*)\b([^>]*)>)");
+    std::size_t cursor = 0;
+    while (cursor < child_items_body.size()) {
+        const std::string remaining(child_items_body.substr(cursor));
+        std::smatch match;
+        if (!std::regex_search(remaining, match, start_tag_pattern)) {
+            break;
+        }
+        const std::size_t start = cursor + static_cast<std::size_t>(match.position());
+        const std::string tag = match[1].str();
+        if (public_xml_section_tags().count(tag) != 0) {
+            cursor = start + static_cast<std::size_t>(match.length());
+            continue;
+        }
+        const std::size_t tag_end = child_items_body.find('>', start);
+        if (tag_end == std::string::npos) {
+            break;
+        }
+        const std::string attrs = match[2].str();
+        const std::size_t attr_end = attrs.find_last_not_of(" \t\r\n");
+        const bool self_closing = attr_end != std::string::npos && attrs[attr_end] == '/';
+        std::string body;
+        std::size_t element_end = tag_end + 1;
+        if (!self_closing) {
+            const std::size_t close_start = find_matching_xml_close(child_items_body, tag, tag_end + 1);
+            if (close_start == std::string::npos) {
+                throw std::runtime_error("OrdinaryForm XML control element is not closed: " + tag);
+            }
+            body = std::string(child_items_body.substr(tag_end + 1, close_start - tag_end - 1));
+            element_end = close_start + std::string("</" + tag + ">").size();
+        }
+
+        const std::string object_id = xml_attr_value(attrs, "id");
+        if (object_id.empty()) {
+            cursor = element_end;
+            continue;
+        }
+        oof::platform::object_model::PlatformObject object;
+        object.object_id = object_id;
+        object.name = xml_attr_value(attrs, "name");
+        object.platform_type = platform_type_for_public_xml_tag(tag);
+        object.type_category = "core::kLogFormTypeInfoCategory";
+        object.type_source = "PublicOrdinaryFormXml.ChildItems + platform schema palette";
+        object.parent_object_id = std::string(parent_object_id);
+        object.path = object.parent_object_id.empty() ? "$/items/" + object.object_id : "$/items/" + object.parent_object_id + "/" + object.object_id;
+        object.properties.push_back(make_described_property("ObjectID", object.object_id));
+        object.properties.push_back(make_described_property("Name", object.name));
+        object.properties.push_back(make_described_property("Type", object.platform_type));
+        object.properties.push_back(make_described_property("Parent", object.parent_object_id));
+        object.properties.push_back(make_described_property("Path", object.path));
+        if (const auto* schema = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
+            add_platform_object_schema_surface(object, oof::platform::object_schema::build_schema_for_control(*schema));
+        } else {
+            add_api_surface(object, api_object_for_type(object.platform_type));
+        }
+
+        for (const auto& edit : control_edits) {
+            if (edit.object_id != object_id) {
+                continue;
+            }
+            if (edit.has_title) {
+                set_or_add_described_property(object, "Title", edit.title);
+            }
+            if (edit.has_visible) {
+                set_or_add_described_property(object, "Visible", edit.visible);
+            }
+            if (edit.has_enabled) {
+                set_or_add_described_property(object, "Enabled", edit.enabled);
+            }
+            if (edit.has_position) {
+                set_or_add_described_property(object, "Left", edit.left);
+                set_or_add_described_property(object, "Top", edit.top);
+                set_or_add_described_property(object, "Right", edit.right);
+                set_or_add_described_property(object, "Bottom", edit.bottom);
+                set_or_add_described_property(object, "Width", std::to_string(std::stoll(edit.right) - std::stoll(edit.left)));
+                set_or_add_described_property(object, "Height", std::to_string(std::stoll(edit.bottom) - std::stoll(edit.top)));
+                for (const auto& binding : edit.bindings) {
+                    set_or_add_described_property(object, "Binding." + binding.name, oof::platform::stream::dump_compact(binding.value));
+                }
+                for (const auto& binding : edit.dimension_bindings) {
+                    set_or_add_described_property(object, "DimensionBinding." + binding.name, oof::platform::stream::dump_compact(binding.value));
+                }
+            }
+            for (const auto& property : edit.schema_properties) {
+                set_or_add_described_property(object, property.name, property.value);
+            }
+            break;
+        }
+
+        const std::size_t new_index = form_object.items.count();
+        form_object.items.add(std::move(object));
+        if (parent_object_id.empty()) {
+            form_object.form.children.push_back(new_index);
+        } else if (auto* parent = form_object.find_object_by_id(parent_object_id)) {
+            parent->children.push_back(new_index);
+        }
+        add_public_xml_events(form_object, object_id, body);
+        const auto nested_child_items = first_xml_element(body, "ChildItems");
+        if (!nested_child_items.self_closing && !nested_child_items.body.empty()) {
+            collect_public_xml_controls(form_object, nested_child_items.body, object_id, control_edits);
+        }
+        cursor = element_end;
+    }
+}
+
+oof::platform::object_model::PlatformFormObject platform_form_object_from_public_xml(
+    const std::string& xml
+) {
+    const auto control_edits = parse_public_xml_control_edits(xml);
+    oof::platform::object_model::PlatformFormObject form_object;
+    form_object.form.object_id = "0";
+    form_object.form.name = "Form";
+    form_object.form.platform_type = "Form";
+    form_object.form.type_category = "core::kLogFormTypeInfoCategory";
+    form_object.form.type_source = "PublicOrdinaryFormXml -> PlatformFormObject";
+    form_object.form.path = "$";
+    form_object.form.properties.push_back(make_described_property("Type", "Form"));
+    add_platform_object_schema_surface(form_object.form, oof::platform::object_schema::build_schema_for_root_form());
+    add_api_surface(form_object.form, api_object_for_type("Form"));
+
+    add_public_xml_events(form_object, "0", xml);
+    const auto child_items = first_xml_element(xml, "ChildItems");
+    if (!child_items.self_closing && !child_items.body.empty()) {
+        collect_public_xml_controls(form_object, child_items.body, "", control_edits);
+    }
+    add_public_xml_collection_objects(form_object, xml);
+    form_object.form.properties.push_back(make_described_property("Items", std::to_string(form_object.items.count())));
+    form_object.form.properties.push_back(make_described_property("Attributes", std::to_string(form_object.attributes.count())));
+    form_object.form.properties.push_back(make_described_property("Commands", std::to_string(form_object.commands.count())));
+    form_object.form.properties.push_back(make_described_property("Events", std::to_string(form_object.events.count())));
+    form_object.form.collections.push_back(make_described_collection("Items", form_object.items.count()));
+    form_object.form.collections.push_back(make_described_collection("Attributes", form_object.attributes.count()));
+    form_object.form.collections.push_back(make_described_collection("Commands", form_object.commands.count()));
+    form_object.form.collections.push_back(make_described_collection("Events", form_object.events.count()));
+    return form_object;
 }
 
 void append_indent(std::string& out, int indent) {
@@ -5114,6 +5464,8 @@ void print_formbin_package_selftest() {
     replace_all(xml, "left=\"1\"", "left=\"9\"");
     replace_all(xml, "coordinate=\"left\" value=\"0\"", "coordinate=\"left\" value=\"21\"");
     replace_all(xml, "dimension=\"width\" value=\"0\"", "dimension=\"width\" value=\"2\"");
+    const auto xml_form_object = platform_form_object_from_public_xml(xml);
+    const std::string object_redump_xml = form_object_to_public_xml(xml_form_object);
 
     const auto edits = parse_public_xml_control_edits(xml);
     const auto result = apply_public_xml_edits(envelope, edits);
@@ -5137,6 +5489,8 @@ void print_formbin_package_selftest() {
     const bool anchor_name_visible = anchor_xml.find("targetName=\"PanelHost\"") != std::string::npos;
     replace_all(anchor_xml, "targetId=\"4\" targetName=\"PanelHost\" side=\"left\" offset=\"0\"",
                 "targetId=\"4\" targetName=\"PanelHost\" side=\"left\" offset=\"7\"");
+    const auto anchor_xml_form_object = platform_form_object_from_public_xml(anchor_xml);
+    const std::string anchor_object_redump_xml = form_object_to_public_xml(anchor_xml_form_object);
     const auto anchor_edits = parse_public_xml_control_edits(anchor_xml);
     const auto anchor_result = apply_public_xml_edits(anchor_envelope, anchor_edits);
     const std::string anchor_redump_xml = form_object_to_public_xml(materialize_platform_form_object(anchor_envelope));
@@ -5149,6 +5503,27 @@ void print_formbin_package_selftest() {
     std::cout << ",\"dimensionBindingEdits\":" << result.dimension_binding_edits;
     std::cout << ",\"anchorBindingEdits\":" << anchor_result.binding_edits;
     std::cout << ",\"anchorTargetNameVisible\":" << (anchor_name_visible ? "true" : "false");
+    std::cout << ",\"xmlToPlatformFormObject\":true";
+    std::cout << ",\"xmlObjectItems\":" << xml_form_object.items.count();
+    std::cout << ",\"xmlObjectNestedItems\":" << anchor_xml_form_object.items.count();
+    std::cout << ",\"xmlObjectNameRoundtrip\":"
+              << (object_redump_xml.find("ButtonXmlEdited") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectTitleRoundtrip\":"
+              << (object_redump_xml.find("RunXmlEdited") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectPositionRoundtrip\":"
+              << (object_redump_xml.find("<Position left=\"9\" top=\"2\" right=\"101\" bottom=\"22\"") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectBindingRoundtrip\":"
+              << (object_redump_xml.find("<Binding coordinate=\"left\" value=\"21\"/>") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectDimensionBindingRoundtrip\":"
+              << (object_redump_xml.find("<DimensionBinding dimension=\"width\" value=\"2\"/>") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectChildItemsRoundtrip\":"
+              << (anchor_object_redump_xml.find("name=\"PanelHost\" id=\"4\"") != std::string::npos &&
+                  anchor_object_redump_xml.find("name=\"Button1\" id=\"5\"") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectNoRawXml\":"
+              << (object_redump_xml.find("<ListStream") == std::string::npos &&
+                  object_redump_xml.find("<RawBracket") == std::string::npos &&
+                  object_redump_xml.find("<PlatformRecords") == std::string::npos &&
+                  object_redump_xml.find("<FormBin") == std::string::npos ? "true" : "false");
     std::cout << ",\"anchorBindingRoundtrip\":"
               << (anchor_redump_xml.find("targetId=\"4\" targetName=\"PanelHost\" side=\"left\" offset=\"7\"") != std::string::npos ? "true" : "false");
     std::cout << ",\"dimensionRecordRoundtrip\":"
