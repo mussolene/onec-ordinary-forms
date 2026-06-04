@@ -1,9 +1,11 @@
 # onec-ordinary-forms
 
 Tools for converting 1C ordinary form `Form.bin` into a Git-friendly source
-package and building it back. The ordinary-form codec is being moved into the
-native C++ sidecar; Python currently provides the CLI/API wrapper, schema
-validation, corpus diagnostics, and release gates.
+package and building it back. The current release line uses a public source
+package as the source of truth: `Form.xml`, `Form/Module.bsl`, and picture
+sidecars. Python currently owns the proven direct source writer and the CLI/API
+wrapper; the native C++ sidecar provides package dump/projection and
+compatibility rebuild helpers.
 
 ## English
 
@@ -406,25 +408,26 @@ Current implementation status:
 - dump readable object-model `Form.xml` and `Form/Module.bsl` through one native
   C++ package backend;
 - validate `Form.xml` against bundled schemas;
-- build ordinary `Form.bin` through a compatibility `--base-bin` path for
-  supported edits while the target native source writer is completed;
-- read changed `Form/Module.bsl` back into `Form.bin` while rebuilding from the
-  native baseline;
+- build ordinary `Form.bin` directly from public `Form.xml`, `Form/Module.bsl`,
+  and picture sidecars without requiring a source `Form.bin`;
+- keep `--base-bin` as an optional native compatibility path for supported
+  baseline-patch checks, not as the source-package architecture;
+- read changed `Form/Module.bsl` back into `Form.bin` during direct source
+  rebuild;
 - dump existing picture payloads to `Form/Items/.../Picture.*` sidecars and
-  apply changed picture sidecars back to existing baseline picture slots;
+  apply changed picture sidecars through the source writer where supported;
 - delete leaf form controls by removing the named control node from public
   `ChildItems`;
 - scan local EPF/ERF corpora without committing private artifacts.
 
 Target implementation status:
 
-- write the platform list-stream from `PlatformFormObject` built from public
-  `Form.xml`, without requiring a source `Form.bin` baseline;
-- add new controls from public `ChildItems` through the native package backend;
-- create new picture payload slots from the named package when the baseline
-  object does not already contain one;
-- keep this package codec in C++, with Python limited to orchestration and
-  validation helpers.
+- keep the public package as the only editable source form;
+- harden and extend the direct source writer for more ordinary-form controls and
+  properties;
+- optionally port the proven Python writer algorithm into C++ once the behavior
+  is stable, without reintroducing seed templates, raw fallbacks, or mandatory
+  `--base-bin`.
 
 Текущий статус реализации:
 
@@ -432,27 +435,27 @@ Target implementation status:
 - выгрузка читаемого объектного `Form.xml` и `Form/Module.bsl` через единый
   native C++ package backend;
 - проверка `Form.xml` по встроенным схемам обычных форм;
-- сборка обычного `Form.bin` через compatibility-путь `--base-bin` для
-  поддержанных правок, пока завершается целевой native source writer;
-- чтение измененного `Form/Module.bsl` обратно в `Form.bin` при сборке из native
-  baseline;
+- сборка обычного `Form.bin` напрямую из публичного `Form.xml`,
+  `Form/Module.bsl` и picture sidecars без исходного `Form.bin`;
+- сохранение `--base-bin` только как optional native compatibility path для
+  проверок baseline-patch, а не как source-package архитектуры;
+- чтение измененного `Form/Module.bsl` обратно в `Form.bin` при прямой сборке
+  из source package;
 - выгрузка существующих картинок в `Form/Items/.../Picture.*` sidecars и
-  применение измененных sidecar-картинок обратно к существующим picture-слотам
-  baseline;
+  применение измененных sidecar-картинок через source writer там, где это
+  поддержано;
 - удаление leaf-элементов формы через удаление именованного узла из публичного
   `ChildItems`;
 - сканирование локальных EPF/ERF-корпусов без коммита приватных артефактов.
 
 Целевой статус реализации:
 
-- запись platform list-stream из `PlatformFormObject`, собранного из публичного
-  `Form.xml`, без исходного `Form.bin` как baseline;
-- добавление новых контролов из публичного `ChildItems` через native package
-  backend;
-- создание новых picture payload slots из именованного пакета, если в baseline
-  объекте еще нет такого слота;
-- удержание package codec в C++, при Python только как слой orchestration и
-  validation.
+- удержание публичного package как единственного редактируемого источника;
+- расширение и укрепление прямого source writer для большего числа контролов и
+  свойств обычных форм;
+- optional перенос доказанного Python writer-алгоритма в C++ после стабилизации
+  поведения, без возврата seed templates, raw fallback и обязательного
+  `--base-bin`.
 
 Validation status:
 
@@ -589,10 +592,12 @@ keep their native `Ext/Form.xml`.
 Writer behavior is intentionally conservative while the named ordinary-form
 object model is being completed. The public source contract is the package
 `Form.xml`, `Form/Module.bsl`, and `Form/Items/.../Picture.*` sidecars. The
-rebuild algorithm uses the original native `Form.bin` as a private object-graph
-baseline and does not expose raw stream/profile data. Picture edits are applied
-to controls that already have a writable picture payload in that baseline. Leaf
-controls can be deleted by removing their public XML node.
+direct rebuild path serializes that package into the internal platform
+list-stream and assembles a new `Form.bin` container without exposing raw
+stream/profile data. The optional `--base-bin` path is kept only for native
+compatibility checks and supported baseline-patch experiments. Leaf controls can
+be deleted by removing their public XML node where the writer supports that
+shape.
 
 Diagnostic commands:
 
@@ -638,13 +643,12 @@ validate_form_xml("scan-output/exported/Object/Forms/Form/Ext/Form.xml")
 build_form_bin(
     "scan-output/exported/Object/Forms/Form/Ext/Form.xml",
     "scan-output/rebuilt/Form.bin",
-    "scan-output/exported/Object/Forms/Form/Ext/Form.bin",
 )
 ```
 
-`dump_form_bin` and `build_form_bin` use the native C++ backend. Rebuild requires
-the original `Form.bin` as the object-graph baseline until native create-from-XML
-is proven separately.
+`dump_form_bin` writes the public source package. `build_form_bin` rebuilds
+`Form.bin` directly from that package when `base_bin` is omitted. Passing
+`base_bin=...` explicitly selects the native compatibility patch path.
 
 ## Platform Validation
 

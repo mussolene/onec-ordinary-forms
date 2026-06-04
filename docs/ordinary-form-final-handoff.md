@@ -3,8 +3,8 @@
 This document is the durable handoff for the ordinary-form work. It exists to
 stop repeating the same investigations and to keep the implementation aligned
 with the target product: an ordinary 1C form stored in Git as a managed-form
-style object model, editable by people and machines, and rebuildable through a
-native platform-like object graph.
+style object model, editable by people and machines, and rebuildable without a
+source `Form.bin` baseline.
 
 ## Acceptance Criteria For This Handoff
 
@@ -77,14 +77,12 @@ The repository went through four broad phases.
    platform object schema, property registry, runtime binding catalog, and
    control descriptor joins.
 
-4. Native sidecar consolidation.
-   The native C++ sidecar became the package backend. Current native package
-   commands can dump `Form.bin` to public `Form.xml`, write `Module.bsl`, dump
-   picture sidecars, apply supported edits through a compatibility `--base-bin`
-   path, read changed `Module.bsl`, apply changed picture sidecars when a
-   writable baseline picture slot exists, and delete leaf controls. The latest
-   architectural step added the missing public `Form.xml -> PlatformFormObject`
-   boundary in native C++.
+4. Native sidecar consolidation and direct writer restoration.
+   The native C++ sidecar became the package dump/projection backend and can
+   apply supported edits when `--base-bin` is explicitly supplied. The restored
+   release baseline uses the existing Python direct writer for source-package
+   rebuilds without a source `Form.bin`. Native C++ remains a deliberate porting
+   path for that proven behavior, not a replacement by seed/template logic.
 
 ## Platform Reverse Engineering Findings
 
@@ -212,11 +210,12 @@ Python layer:
   `PlatformFormObject` facade over the graph.
 - `src/onec_ordinary_forms/ordinary_platform_xml.py`: internal object XML
   transfer view.
-- `src/onec_ordinary_forms/ordinary_stream.py`: older Python public XML to
-  stream writer prototype. Useful as algorithm evidence, not the final backend.
+- `src/onec_ordinary_forms/ordinary_stream.py`: current proven direct writer
+  from public `Form.xml` to the internal platform list-stream payload.
 - `src/onec_ordinary_forms/native_bridge.py`: Python CLI bridge to native C++.
-- `src/onec_ordinary_forms/cli.py`: CLI wrapper. It should stay orchestration,
-  not codec ownership.
+- `src/onec_ordinary_forms/cli.py`: CLI entrypoint. `build-bin` without
+  `--base-bin` must dispatch to the direct source writer; `--base-bin` explicitly
+  selects the native compatibility patch path.
 
 Gates and tooling:
 
@@ -242,11 +241,9 @@ Gates and tooling:
 Verified current state before this handoff:
 
 - `git status --short`: clean before writing this document.
-- Latest commit before this handoff: `d8cf89c Add native XML to PlatformForm
-  object boundary`.
-- Current release gate before this handoff passed:
-  `make -C sidecars/onec-form-native test`, `make test`, `make smoke`,
-  `python3 tools/release_gate.py`.
+- This document was refreshed after `df86305 Restore direct source build path`.
+- Current release gate at that refresh passed:
+  focused source-build tests, `make smoke`, and `python3 tools/release_gate.py`.
 - Native package dump writes public `Form.xml`, `Form/Module.bsl`, and existing
   picture sidecars.
 - Native package build compatibility path can apply supported edits to an
@@ -255,8 +252,8 @@ Verified current state before this handoff:
   name/title, scalar flags, position, bindings, attributes, commands, events,
   and leaf control deletion.
 - Native public XML can now be parsed back to `PlatformFormObject`.
-- Python prototype can rebuild an ordinary platform object from public XML in
-  simple Page/Button/InputField cases and keep semantic digest stable.
+- The Python direct writer can rebuild `Form.bin` from public `Form.xml`,
+  `Form/Module.bsl`, and sidecars without a source `Form.bin` baseline.
 - Object-model gates reject raw public vocabulary and unproven writable value
   properties.
 - Release gate reports full platform property mapping coverage, but this means
@@ -265,12 +262,13 @@ Verified current state before this handoff:
 
 ## What Is Not Finished
 
-The release target is not complete until the native writer can do this without a
-source `Form.bin` baseline:
+The release target is not blocked on a mandatory native writer. The current
+working baseline already does this without a source `Form.bin` baseline through
+the Python direct writer:
 
 ```text
 public Form.xml
-  -> PlatformFormObject
+  -> object writer
   -> canonical ListOutStream payload
   -> Form.bin container
 ```
@@ -281,12 +279,12 @@ supported named edits. It is not the final source build architecture.
 
 Known missing or risky parts:
 
-- Native `PlatformFormObject -> ListOutStream` writer is not implemented as the
-  single production build path.
-- New controls from public `ChildItems` are not fully constructed in native
-  `Form.bin` without a baseline object.
-- Creating new picture payload slots from public XML is not complete when the
-  baseline object has no writable picture slot.
+- The direct writer must be hardened against real UT/Diadoc corpus coverage and
+  strict Designer validation before release readiness can be claimed.
+- Native C++ does not yet own the full direct writer. That is an optional porting
+  and hardening path, not the current release baseline.
+- New controls from public `ChildItems` and new picture payload slots need
+  explicit coverage tests for the direct source writer.
 - Value-layer codecs for color/font/picture/border are readable and
   schema-backed, but not writable until info8 object-property semantics are
   proven by oracle.
@@ -329,16 +327,16 @@ The repository already has the necessary algorithmic pieces:
 - platform-derived control and property descriptors;
 - value serializers derived from platform evidence;
 - platform runtime/object schema catalogs;
-- Python object graph prototype;
+- Python direct source writer;
 - native `PlatformFormObject` model;
 - native `Form.bin -> PlatformFormObject -> Form.xml`;
 - native `Form.xml -> PlatformFormObject`;
 - gates that prevent raw public fallback and unproven writable properties.
 
-The remaining problem is not research direction. It is a missing production
-writer boundary: native `PlatformFormObject -> canonical ListOutStream`. Until
-that writer owns build, any `--base-bin` path remains a compatibility shortcut
-and must not be expanded into the target architecture.
+The remaining problem is not research direction. It is cleanup, coverage, and
+hardening around one release line: public source package -> direct writer ->
+`Form.bin`. Any `--base-bin` path remains a compatibility shortcut and must not
+be expanded into the target architecture.
 
 ## Required Next Implementation Plan
 
@@ -346,28 +344,27 @@ and must not be expanded into the target architecture.
    Do not add raw/profile/fallback vocabulary. Use `object_model_gate.py` and
    schema validation as mandatory gates.
 
-2. Move writer ownership to native `PlatformFormObject`.
-   Add a C++ writer module/function that serializes `PlatformFormObject` to the
-   canonical ordinary-form payload. Start with the object shapes already proven
-   by tests: root form, top-level controls, `Button`, `InputField`, `Panel`/
-   `Page`, `Attributes`, `Commands`, `Events`, `Position`, and bindings.
+2. Stabilize the current direct writer baseline.
+   Treat `ordinary_stream.form_stream_from_object_xml` and
+   `formbin.build_form_bin_container` as the current working source-build
+   implementation. Expand tests for root form, top-level controls, `Button`,
+   `InputField`, `Panel`/`Page`, `Attributes`, `Commands`, `Events`,
+   `Position`, bindings, module sidecars, and picture sidecars.
 
-3. Use existing Python prototype as algorithm evidence, not production backend.
-   Port the useful `ordinary_platform_graph.py`,
-   `ordinary_platform_object.py`, `ordinary_platform_xml.py`, and
-   `ordinary_stream.py` behavior into C++ descriptor/object writer code.
+3. Keep native C++ as a deliberate porting path.
+   If the codec is moved to C++, port the proven Python writer behavior into
+   descriptor/object writer code. Do not replace it with seed templates,
+   profile preservation, raw fallback, or a mandatory baseline.
 
-4. Add a source-build command/gate.
-   Introduce or wire a native command that accepts `Form.xml` plus package
-   files and emits `Form.bin` without `--base-bin`. The command must fail fast
-   with typed coverage diagnostics if a required property/relation cannot be
-   written.
+4. Keep the source-build command/gate no-base by default.
+   `build-bin --xml ... --out-bin ...` must build without `--base-bin`.
+   Unsupported required concepts must fail fast with typed coverage diagnostics
+   instead of leaking raw data into public XML.
 
 5. Compare by semantic graph first, byte identity second.
    No-change source build should pass:
-   `Form.bin -> XML -> PlatformFormObject -> ListOutStream -> Form.bin ->
-   XML`, with stable semantic graph digest. Byte identity is a useful oracle for
-   controlled cases only.
+   `Form.bin -> XML -> direct writer -> Form.bin -> XML`, with stable semantic
+   graph digest. Byte identity is a useful oracle for controlled cases only.
 
 6. Validate on increasingly real corpora.
    Use small fixtures, all-controls fixture, Diadoc corpus, UT corpus, and
@@ -382,22 +379,21 @@ Use this prompt verbatim for the next implementation agent:
 You are working in the repository root.
 
 Goal:
-Complete the native C++ ordinary-form source build architecture:
-Form.bin -> PlatformFormObject -> public Form.xml and public Form.xml ->
-PlatformFormObject -> canonical ListOutStream -> Form.bin, without requiring a
-source Form.bin baseline for the target build command.
+Complete and harden the ordinary-form source build architecture:
+Form.bin -> public Form.xml source package and public Form.xml source package ->
+canonical ListOutStream -> Form.bin, without requiring a source Form.bin
+baseline for the target build command.
 
 Mandatory context:
 - Read AGENTS.md and follow OACS exactly.
 - Query OACS before implementation:
   export OACS_DB="$PWD/.agent/oacs/oacs.db"
-  acs memory query --query "ordinary form final handoff PlatformFormObject ListOutStream no baseline source build" --scope project --json
-  acs context build --intent "finish native PlatformFormObject to ListOutStream source build" --scope project --json
+  acs memory query --query "ordinary form direct source writer no baseline build-bin Form.xml Module.bsl sidecars" --scope project --json
+  acs context build --intent "finish and harden ordinary form no-base source build" --scope project --json
 - Read docs/ordinary-form-final-handoff.md, docs/ordinary-form-pattern-audit.md,
   docs/platform-mechanism-extraction.md, docs/architecture.md, README.md.
 
 Hard constraints:
-- Do not add Python production writer logic.
 - Do not expand --base-bin as the target architecture.
 - Do not add raw/profile/fallback public XML: no ObjectModel, ListStream,
   BracketStream, FormBin, LogicalStream, RawBracket, PlatformRecords,
@@ -406,19 +402,20 @@ Hard constraints:
   identity/relation, canonical writer detail, platform noise, validation loss,
   or unknown coverage gap. Unknown gaps must fail with diagnostics, not leak
   into public XML.
-- Use C++ PlatformFormObject as the central object. Public XML is a projection
-  of this object and an input to this object.
+- Use the public source package as the central release contract. Native C++ may
+  mirror this object model, but it must not replace no-base source build with a
+  seed/template/baseline-preservation path.
 
 Acceptance criteria:
 - AC1: OACS evidence and checkpoint exist for the iteration.
-- AC2: Add native PlatformFormObject -> ListOutStream writer code for a focused
-  vertical slice: root form, child items, Button, InputField, Panel/Page,
-  Position, bindings, Attributes, Commands, Events.
-- AC3: Add a native selftest proving XML -> PlatformFormObject -> ListOutStream
-  -> PlatformFormObject -> XML semantic stability without --base-bin.
+- AC2: Preserve and harden build-bin without --base-bin for a focused vertical
+  slice: root form, child items, Button, InputField, Panel/Page, Position,
+  bindings, Attributes, Commands, Events, Module.bsl, and picture sidecars where
+  supported.
+- AC3: Add tests proving XML -> direct writer -> Form.bin -> XML semantic
+  stability without --base-bin.
 - AC4: Add or update a command/gate for source build without source Form.bin
-  baseline. If not all controls/properties are supported, unsupported required
-  fields must produce typed coverage diagnostics.
+  baseline. Unsupported required fields must produce typed coverage diagnostics.
 - AC5: Existing gates pass:
   make -C sidecars/onec-form-native test
   make test
@@ -431,22 +428,19 @@ Acceptance criteria:
   artifacts unstaged.
 
 Implementation hints:
-- Start from sidecars/onec-form-native/src/platform_object_model.hpp and
-  sidecars/onec-form-native/src/main.cpp functions:
-  materialize_platform_form_object, form_object_to_public_xml,
-  platform_form_object_from_public_xml.
-- Use platform_list_stream.hpp and platform_value.hpp for canonical list-stream
-  and typed value serialization.
-- Reuse property descriptors from platform_property_registry.hpp and schema
-  data from platform_form_schema.hpp/platform_object_schema.hpp.
-- Use Python ordinary_stream.py/ordinary_platform_graph.py only as behavior
-  evidence to port into C++.
-- The first source writer does not need to support every rare control. It must
-  fail explicitly on unsupported required concepts and must never silently
-  preserve a baseline.
+- Start from src/onec_ordinary_forms/ordinary_stream.py,
+  ordinary_platform_graph.py, ordinary_platform_object.py,
+  ordinary_platform_xml.py, and formbin.py.
+- If porting to C++, mirror the proven behavior from those modules through
+  sidecars/onec-form-native/src/platform_object_model.hpp,
+  platform_list_stream.hpp, platform_value.hpp, platform_property_registry.hpp,
+  platform_form_schema.hpp, and platform_object_schema.hpp.
+- The source writer does not need to support every rare control in one
+  iteration. It must fail explicitly on unsupported required concepts and must
+  never silently preserve a baseline.
 
 Stop condition:
-If PlatformFormObject -> ListOutStream cannot be completed in the current
-iteration, record PARTIAL in OACS with exact missing writer concepts and the
-first failing selftest. Do not claim release completion.
+If source-package -> ListOutStream cannot be completed for the selected scope in
+the current iteration, record PARTIAL in OACS with exact missing writer concepts
+and the first failing selftest. Do not claim release completion.
 ```
