@@ -1,5 +1,6 @@
 #include <array>
 #include <algorithm>
+#include <chrono>
 #include <cctype>
 #include <exception>
 #include <filesystem>
@@ -13,6 +14,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -271,7 +273,7 @@ std::string read_stdin() {
 }
 
 void usage() {
-    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
+    std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-source-package-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
               << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin\n"
@@ -809,6 +811,8 @@ void print_formbin_info(const std::string& path) {
         std::cout << "\"name\":";
         print_json_string(file.name);
         std::cout << ",\"payloadSize\":" << file.payload.size();
+        std::cout << ",\"createdTicks\":" << file.created;
+        std::cout << ",\"modifiedTicks\":" << file.modified;
         std::cout << ",\"payloadHexPrefix\":";
         const auto prefix_end = file.payload.begin() + static_cast<std::ptrdiff_t>(std::min<size_t>(16, file.payload.size()));
         print_json_string(bytes_hex(std::vector<std::uint8_t>(file.payload.begin(), prefix_end)));
@@ -7226,56 +7230,162 @@ std::vector<std::uint8_t> source_writer_form_payload_bytes(const LV& payload) {
     return out;
 }
 
-void write_formbin_from_source_package(
-    const std::string& xml_path,
-    const std::string& output_path
+constexpr std::uint64_t default_source_container_ticks = 630822816000000000ULL;
+constexpr std::uint64_t unix_epoch_container_ticks = 621355968000000000ULL;
+
+std::optional<std::uint64_t> parse_optional_u64(std::string_view value) {
+    if (value.empty()) {
+        return std::nullopt;
+    }
+    try {
+        std::size_t consumed = 0;
+        const auto parsed = std::stoull(std::string(value), &consumed, 10);
+        if (consumed != value.size()) {
+            return std::nullopt;
+        }
+        return parsed;
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+std::optional<std::uint64_t> filesystem_mtime_container_ticks(const std::filesystem::path& path) {
+    try {
+        if (!std::filesystem::is_regular_file(path)) {
+            return std::nullopt;
+        }
+        const auto file_time = std::filesystem::last_write_time(path);
+        const auto system_time = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+            file_time - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+        using container_tick_duration = std::chrono::duration<std::int64_t, std::ratio<1, 10000000>>;
+        const auto ticks_since_unix_epoch =
+            std::chrono::duration_cast<container_tick_duration>(system_time.time_since_epoch()).count();
+        if (ticks_since_unix_epoch < 0 &&
+            static_cast<std::uint64_t>(-ticks_since_unix_epoch) > unix_epoch_container_ticks) {
+            return std::nullopt;
+        }
+        return unix_epoch_container_ticks + ticks_since_unix_epoch;
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
+struct SourcePackageContainerTimes {
+    std::uint64_t form_created = default_source_container_ticks;
+    std::uint64_t form_modified = default_source_container_ticks;
+    std::uint64_t module_created = default_source_container_ticks;
+    std::uint64_t module_modified = default_source_container_ticks;
+    std::string source = "default";
+};
+
+SourcePackageContainerTimes source_package_container_times(
+    const std::filesystem::path& xml_path,
+    const std::filesystem::path& module_path,
+    const std::string& source_xml
 ) {
-    const auto xml_package_path = std::filesystem::path(xml_path);
+    SourcePackageContainerTimes times;
+    const auto form_xml = first_xml_element(source_xml, "Form");
+    const auto legacy_created = parse_optional_u64(xml_attr_value(form_xml.attrs, "containerCreatedTicks"));
+    const auto legacy_modified = parse_optional_u64(xml_attr_value(form_xml.attrs, "containerModifiedTicks"));
+    if (legacy_created.has_value() || legacy_modified.has_value()) {
+        times.form_created = legacy_created.value_or(legacy_modified.value_or(default_source_container_ticks));
+        times.form_modified = legacy_modified.value_or(times.form_created);
+        times.module_created = times.form_created;
+        times.module_modified = times.form_modified;
+        times.source = "legacy-xml-container-ticks";
+        return times;
+    }
+
+    const auto form_mtime = filesystem_mtime_container_ticks(xml_path);
+    const auto module_mtime = filesystem_mtime_container_ticks(module_path);
+    if (form_mtime.has_value() || module_mtime.has_value()) {
+        times.form_modified = form_mtime.value_or(module_mtime.value_or(default_source_container_ticks));
+        times.form_created = times.form_modified;
+        times.module_modified = module_mtime.value_or(times.form_modified);
+        times.module_created = times.module_modified;
+        times.source = module_mtime.has_value() ? "file-mtime" : "form-xml-mtime";
+    }
+    return times;
+}
+
+struct SourcePackageBuildResult {
+    std::vector<std::uint8_t> bytes;
+    std::size_t control_count = 0;
+    bool module_sidecar_used = false;
+    std::size_t module_bytes = 0;
     std::size_t picture_sidecars_read = 0;
+    SourceWriterCoverageSummary writer_coverage;
+    SourcePackageContainerTimes container_times;
+};
+
+SourcePackageBuildResult build_formbin_source_package(const std::string& xml_path) {
+    const auto xml_package_path = std::filesystem::path(xml_path);
+    SourcePackageBuildResult result;
     const std::string source_xml = read_file_text_lossy(xml_path);
     const std::string package_xml = inline_picture_sidecars_for_build(
         source_xml,
         xml_package_path,
-        picture_sidecars_read);
+        result.picture_sidecars_read);
     const auto form_object = platform_form_object_from_public_xml(package_xml);
     const std::string title = public_form_title_from_xml(package_xml);
-    const auto writer_coverage = source_writer_coverage_summary(form_object);
+    result.control_count = form_object.items.count();
+    result.writer_coverage = source_writer_coverage_summary(form_object);
+
+    const auto module_path = form_package_module_path(xml_package_path);
+    result.container_times = source_package_container_times(xml_package_path, module_path, source_xml);
 
     oof::platform::formbin::OneCContainer container;
     container.block_size = oof::platform::formbin::container_block_size;
     container.files.push_back({
         "form",
-        0,
-        0,
+        result.container_times.form_created,
+        result.container_times.form_modified,
         source_writer_form_payload_bytes(source_writer_form_payload(form_object, title)),
     });
 
-    const auto module_path = form_package_module_path(xml_package_path);
-    bool module_sidecar_used = false;
-    std::size_t module_bytes = 0;
     std::vector<std::uint8_t> module_payload;
     if (std::filesystem::is_regular_file(module_path)) {
         module_payload = read_file_bytes(module_path.string());
-        module_sidecar_used = true;
-        module_bytes = module_payload.size();
+        result.module_sidecar_used = true;
+        result.module_bytes = module_payload.size();
     }
-    container.files.push_back({"module", 0, 0, std::move(module_payload)});
+    container.files.push_back({
+        "module",
+        result.container_times.module_created,
+        result.container_times.module_modified,
+        std::move(module_payload),
+    });
 
-    const auto rebuilt = oof::platform::formbin::serialize_container(container);
-    write_file_bytes(output_path, rebuilt);
+    result.bytes = oof::platform::formbin::serialize_container(container);
+    return result;
+}
+
+void write_formbin_from_source_package(
+    const std::string& xml_path,
+    const std::string& output_path
+) {
+    const auto result = build_formbin_source_package(xml_path);
+
+    write_file_bytes(output_path, result.bytes);
     std::cout << "{\"output\":";
     print_json_string(output_path);
     std::cout << ",\"operation\":\"formbin-build-source-package\"";
-    std::cout << ",\"bytes\":" << rebuilt.size();
+    std::cout << ",\"bytes\":" << result.bytes.size();
     std::cout << ",\"source\":\"Form.xml\"";
-    std::cout << ",\"controls\":" << form_object.items.count();
+    std::cout << ",\"controls\":" << result.control_count;
     std::cout << ",\"moduleSource\":";
-    print_json_string(module_sidecar_used ? "sidecar" : "empty");
-    std::cout << ",\"moduleBytes\":" << module_bytes;
-    std::cout << ",\"pictureSidecarsRead\":" << picture_sidecars_read;
+    print_json_string(result.module_sidecar_used ? "sidecar" : "empty");
+    std::cout << ",\"moduleBytes\":" << result.module_bytes;
+    std::cout << ",\"pictureSidecarsRead\":" << result.picture_sidecars_read;
+    std::cout << ",\"containerTicksSource\":";
+    print_json_string(result.container_times.source);
+    std::cout << ",\"formCreatedTicks\":" << result.container_times.form_created;
+    std::cout << ",\"formModifiedTicks\":" << result.container_times.form_modified;
+    std::cout << ",\"moduleCreatedTicks\":" << result.container_times.module_created;
+    std::cout << ",\"moduleModifiedTicks\":" << result.container_times.module_modified;
     std::cout << ",\"usesBaseBin\":false";
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
-    print_source_writer_coverage_json(writer_coverage);
+    print_source_writer_coverage_json(result.writer_coverage);
     std::cout << "}\n";
 }
 
@@ -9790,6 +9900,62 @@ void print_formbin_selftest() {
     std::cout << "}\n";
 }
 
+void print_formbin_source_package_selftest() {
+    const auto unique = std::chrono::steady_clock::now().time_since_epoch().count();
+    const auto root = std::filesystem::temp_directory_path() /
+        ("oof-native-source-package-selftest-" + std::to_string(unique));
+    const auto xml_path = root / "Forms" / "Form" / "Ext" / "Form.xml";
+    const auto module_path = form_package_module_path(xml_path);
+    const auto out_path = root / "rebuilt-Form.bin";
+
+    const std::string xml =
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+        "<Form ordinaryFormVersion=\"2.0\">\n"
+        "  <Title><Item lang=\"ru\">Source title</Item></Title>\n"
+        "  <ChildItems>\n"
+        "    <Button name=\"SourceButton\" id=\"7\"><Title><Item lang=\"ru\">Run</Item></Title></Button>\n"
+        "  </ChildItems>\n"
+        "</Form>\n";
+    const std::vector<std::uint8_t> xml_bytes(xml.begin(), xml.end());
+    const std::vector<std::uint8_t> module_bytes{'s', 'o', 'u', 'r', 'c', 'e', ' ', 'm', 'o', 'd', 'u', 'l', 'e'};
+
+    write_file_bytes(xml_path, xml_bytes);
+    write_file_bytes(module_path, module_bytes);
+    const auto build = build_formbin_source_package(xml_path.string());
+    write_file_bytes(out_path, build.bytes);
+    const auto parsed = oof::platform::formbin::parse_container(build.bytes);
+    if (parsed.files.size() != 2) {
+        throw std::runtime_error("source package selftest expected two logical files");
+    }
+
+    const auto& form = parsed.files.at(0);
+    const auto& module = parsed.files.at(1);
+    const bool form_ticks_match =
+        form.created == build.container_times.form_created &&
+        form.modified == build.container_times.form_modified;
+    const bool module_ticks_match =
+        module.created == build.container_times.module_created &&
+        module.modified == build.container_times.module_modified;
+    const bool module_payload_match = module.payload == module_bytes;
+    const bool no_zero_ticks =
+        form.created != 0 && form.modified != 0 && module.created != 0 && module.modified != 0;
+
+    std::error_code remove_error;
+    std::filesystem::remove_all(root, remove_error);
+
+    std::cout << "{";
+    std::cout << "\"bytes\":" << build.bytes.size();
+    std::cout << ",\"fileCount\":" << parsed.files.size();
+    std::cout << ",\"containerTicksSource\":";
+    print_json_string(build.container_times.source);
+    std::cout << ",\"formTicksMatch\":" << (form_ticks_match ? "true" : "false");
+    std::cout << ",\"moduleTicksMatch\":" << (module_ticks_match ? "true" : "false");
+    std::cout << ",\"modulePayloadMatch\":" << (module_payload_match ? "true" : "false");
+    std::cout << ",\"noZeroTicks\":" << (no_zero_ticks ? "true" : "false");
+    std::cout << ",\"moduleBytes\":" << module.payload.size();
+    std::cout << "}\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -9830,6 +9996,10 @@ int main(int argc, char** argv) {
         }
         if (command == "formbin-selftest") {
             print_formbin_selftest();
+            return 0;
+        }
+        if (command == "formbin-source-package-selftest") {
+            print_formbin_source_package_selftest();
             return 0;
         }
         if (command == "formbin-package-selftest") {
