@@ -282,6 +282,7 @@ void usage() {
               << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-platform-object> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
+              << "       oof-native runtime-form-node runtime-form-stream.txt node-path\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
               << "       oof-native runtime-form-rename runtime-form-stream.txt rebuilt-stream.txt objectId newName\n"
               << "       oof-native runtime-platform-object-get runtime-form-stream.txt objectId property\n"
@@ -7901,6 +7902,62 @@ void print_runtime_form_semantic_diff(const std::string& left_path, const std::s
     std::cout << "]}\n";
 }
 
+const oof::platform::stream::ListValue* runtime_node_at_path(
+    const oof::platform::stream::ListValue& root,
+    std::string_view path
+) {
+    if (path.empty() || path == "$") {
+        return &root;
+    }
+    if (path.front() != '$') {
+        return nullptr;
+    }
+
+    const auto* current = &root;
+    std::size_t cursor = 1;
+    while (cursor < path.size()) {
+        if (path[cursor] != '/') {
+            return nullptr;
+        }
+        ++cursor;
+        const std::size_t next = path.find('/', cursor);
+        const std::string_view token = path.substr(
+            cursor,
+            next == std::string_view::npos ? std::string_view::npos : next - cursor);
+        std::size_t index = 0;
+        try {
+            index = static_cast<std::size_t>(std::stoull(std::string(token)));
+        } catch (...) {
+            return nullptr;
+        }
+        if (!current->is_list || index >= current->items.size()) {
+            return nullptr;
+        }
+        current = &current->items[index];
+        if (next == std::string_view::npos) {
+            break;
+        }
+        cursor = next;
+    }
+    return current;
+}
+
+void print_runtime_form_node(const std::string& input_path, std::string_view path) {
+    std::string canonical_text;
+    const RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    const auto* node = runtime_node_at_path(envelope.payload, path);
+    if (node == nullptr) {
+        throw std::runtime_error("runtime form node path not found: " + std::string(path));
+    }
+    std::cout << "{\"operation\":\"runtime-form-node\",\"path\":";
+    print_json_string(path);
+    std::cout << ",\"summary\":";
+    print_json_string(runtime_diff_node_summary(*node));
+    std::cout << ",\"node\":";
+    print_json_string(oof::platform::stream::dump_compact(*node));
+    std::cout << "}\n";
+}
+
 void print_transfer_descriptor_json(const oof::platform::ordinary::TransferDescriptor& descriptor) {
     std::cout << "{\"symbol\":";
     print_json_string(descriptor.symbol);
@@ -8963,6 +9020,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-semantic-diff" && argc == 4) {
             print_runtime_form_semantic_diff(argv[2], argv[3]);
+            return 0;
+        }
+        if (command == "runtime-form-node" && argc == 4) {
+            print_runtime_form_node(argv[2], argv[3]);
             return 0;
         }
         if (command == "runtime-form-rebuild" && argc == 4) {

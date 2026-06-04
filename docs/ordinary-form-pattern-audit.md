@@ -218,6 +218,40 @@ preserved publicly. That created public `SerializationProfile`, `slotN`,
 Those fields are not the ordinary form object model. They are symptoms of
 missing named concepts or missing internal canonical writer rules.
 
+## Native No-Base Gap: 2026-06-04
+
+The current native-only implementation can dump and rebuild the all-controls
+fixture without Python, and it preserves `Module.bsl`. The remaining no-base
+failure is in the native public XML/object graph boundary:
+
+- public XML dump exposes names, titles, positions, bindings, attributes,
+  commands, and picture sidecars;
+- public XML dump does not yet expose or materialize all type-specific control
+  payload concepts, such as button event/action records, command-bar button
+  groups, table columns and type descriptors, chart state, calendar/list/value
+  lists, and other control-specific `cf_form_controls8` data;
+- the no-base writer therefore emits a minimal six-field control record
+  `{guid, id, title, position, metadata, children}` instead of the platform
+  typed payload in the third record field;
+- semantic comparison of the current all-controls no-base rebuild reports
+  `normalizedEqual=false`, `structuralDiffs=77`, and `semanticDiffs=17`.
+
+The platform library pattern supports the descriptor-driven fix:
+
+- `dsgnfrm.so` `FUN_002709e0` enumerates `cf_form_controls_position8`,
+  `cf_form_controls8`, and `cf_form_controls_info8`;
+- `FUN_00270da0` returns `cf_form_controls8` as the main existing payload and
+  returns `position8`/`info8` as counted transfer records;
+- `FUN_00255f70` and `FUN_00256510` are the write/read persistence entries
+  around `core::ListOutStream` and `core::ListInStream`.
+
+Therefore the release path is not to restore a Python implementation and not
+to expose raw stream data in XML. The native writer must materialize a typed
+ordinary form object graph, then serialize each control through descriptor
+codecs for the platform payload families. The first implementation checkpoint
+should cover the all-controls fixture by adding dump/build mappings for the
+named concepts currently lost by the minimal writer.
+
 The correct rule is:
 
 ```text
@@ -278,9 +312,9 @@ If a low-level value is required for rebuild, it must be classified:
   root layout/page state where it is a real form layout concept, stable object
   identity where the platform identity is meaningful, and canonical internal
   defaults for record generation fields.
-- Make root record and top-level form stream writing canonical inside
-  `ordinary_stream.py`; do not read record kind/title marker/top-level slots
-  from public XML.
+- Make root record and top-level form stream writing canonical inside the
+  native ordinary-control writer; do not read record kind/title
+  marker/top-level slots from public XML.
 - Move the root panel handling to the same pattern as `PanelLayout`: named page
   state, page layouts, layout dependencies, base style, and no raw profile
   wrapper.
@@ -294,9 +328,9 @@ If a low-level value is required for rebuild, it must be classified:
   internal geometry descriptors. The descriptor should choose the platform
   record shape from named bindings, page ownership, parent size, data binding,
   and control kind, not from XML tail attributes.
-- Move object-model XML construction out of `cli.py` into a model/dump module.
-  `cli.py` should orchestrate commands; it should not be the place where raw
-  geometry fragments become public XML.
+- Move object-model XML construction out of the native CLI body into a
+  model/dump module. CLI commands should orchestrate commands; they should not
+  be the place where raw geometry fragments become public XML.
 
 ## What To Add
 
@@ -360,12 +394,11 @@ Done after this audit:
   regression guard for these four core controls.
 - schema tests now guard against reintroducing the removed public raw-shape
   vocabulary.
-- semantic graph digest support was added as `digest-xml`; it hashes the
-  normalized object model across controls, positions, bindings, events,
-  attributes, table columns/editor controls, pictures, fonts, colors, and
-  command sources while ignoring container timestamps and current codec-shaped
-  position noise.
-- `scan-corpus` can now attach semantic digest summaries to exported forms and
+- semantic graph comparison support exists in native runtime diff commands; it
+  compares the normalized object model across controls, positions, bindings,
+  events, attributes, pictures, fonts, colors, and command sources while
+  ignoring container timestamps and current codec-shaped noise.
+- corpus checks should attach the same semantic summaries to exported forms and
   compare matching forms across two exported trees before byte-level analysis.
 
 Remaining next steps:

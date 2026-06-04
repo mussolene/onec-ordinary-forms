@@ -4,37 +4,39 @@ The repository is split by format boundary, not by CLI command.
 
 ## Layers
 
-- `formbin.py` owns the ordinary `Form.bin` section container. It parses,
-  unpacks, and packs sections byte-for-byte, including the service sections
-  that are not decoded yet.
-- `bracket.py` owns ordinary form list-stream reading. It converts that stream
-  into the internal control/attribute index used by the current XML writer.
-- `pipeline.py` owns orchestration between formats. For example, `dump-bin`
-  means `Form.bin -> section files -> internal control index -> object-model
-  XML`, but this module does not know the XML schema details.
-- `cli.py` owns command-line argument parsing plus the current object-model XML
-  reader/writer bridge. The public XML stays object-oriented; list-stream
-  serialization is internal to the build path.
-- `__init__.py` exposes the stable import wrappers: `dump_form_bin`,
-  `build_form_bin`, and `validate_form_xml`.
-- `corpus.py` owns portable corpus and exported-form scanning.
+- `form_bin` owns the ordinary `Form.bin` section container in native C++.
+  It parses, unpacks, and packs the platform section container.
+- `platform_list_stream` owns the bracket/list-stream reader and writer. This
+  is the native analogue of the platform `ListInStream`/`ListOutStream` layer.
+- `platform_value` owns typed value fragments used inside the ordinary form
+  graph: `CompositeID`, `TypeDomainPattern`, localized/formatted strings,
+  colors, fonts, borders, pictures, and generic scalar values.
+- `ordinary_controls` owns the internal ordinary-control codecs identified by
+  `cf_form_controls8`, `cf_form_controls_position8`, and
+  `cf_form_controls_info8`.
+- `object_model_bridge` maps the internal graph to public `Form.xml` concepts:
+  form, attributes, commands, events, controls, positions, bindings, typed
+  properties, and picture sidecars.
+- `main.cpp` is the current native CLI host. It should stay a thin command
+  wrapper around the native layers as code moves out into dedicated headers.
 
 ## Current Direction
 
 The next cleanup target is to move object-model XML writing/rebuild helpers out
-of `cli.py` into a dedicated model module and replace the remaining hand-built
-control-info writer records with platform-derived codec descriptors. After
-that, `cli.py` should contain only thin command wrappers.
+of the CLI body into dedicated native modules and replace the remaining
+hand-built control payload writer records with platform-derived codec
+descriptors. The public XML must stay object-model-only; list-stream details
+remain internal.
 
 Behavioral changes should stay separate from these moves. A pure architecture
-cleanup must keep CLI arguments stable and pass the existing round-trip checks.
+cleanup must keep native CLI arguments stable and pass the native round-trip
+checks.
 
-Byte identity is now a targeted correctness oracle, not a blanket claim for the
-whole corpus. The current writer preserves physical `Form.bin` container details
-and compact platform profile metadata where the platform baseline has been
-observed, while the public XML remains object-model-only. Verified oracle cases
-should stay byte-identical; broader UT/UPP corpus work should expand profile
-coverage incrementally and record the next mismatch class in OACS.
+Byte identity is now a diagnostic, not the public release contract. The release
+contract is semantic equality of the materialized ordinary form graph after
+`Form.xml -> Form.bin -> Form.xml/runtime` plus strict platform validation
+where the local platform is available. Broader corpus work should expand typed
+descriptor coverage incrementally and record the next mismatch class in OACS.
 
 ## Platform Codec Formula
 
@@ -53,10 +55,9 @@ are not, by themselves, evidence of a callable whole-form XML serializer. The
 ordinary form graph is still identified by the platform `cf_form_controls8`,
 `cf_form_controls_position8`, and `cf_form_controls_info8` payload families.
 
-The implementation consequence is concrete: new fixes should not add another
-control-specific branch in `ordinary_stream.py` unless it is only an adapter
-around a descriptor. A durable fix should add or update a platform-derived
-descriptor row:
+The implementation consequence is concrete: new fixes should not add ad hoc
+per-control writer branches unless they are adapters around descriptor rows.
+A durable fix should add or update a platform-derived descriptor:
 
 - public XML control/property/event name from `OrdinaryForm.xsd`;
 - platform palette name/type from schema `appinfo`;
@@ -65,9 +66,9 @@ descriptor row:
 - dump path and build path;
 - platform validation or bracket/list diff evidence.
 
-This gives us the same shape as the platform: read many old profiles, build one
-consistent current graph, and keep compatibility details as named schema-backed
-properties rather than raw sidecars.
+This gives us the same shape as the platform: read many old profile shapes,
+build one consistent current graph, and keep platform details either as named
+schema-backed properties or as private codec defaults, never as raw public XML.
 
 Use native gates before and after serializer work:
 `make -C sidecars/onec-form-native test` and
