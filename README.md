@@ -191,13 +191,14 @@ descriptor.
 Passing 1C Designer validation is required, but not sufficient by itself: the
 public XML must also remain a clean object model, not a renamed raw stream.
 
-Current native `--base-bin` rebuild is a compatibility path for the already
-supported edit codecs. It is not the target source-build architecture and must
-not be expanded with raw fallbacks, patch workers, or baseline-preservation
-profiles. The release target is `Form.xml -> platform object model ->
-ListOutStream -> Form.bin`; the native code now keeps the public XML parser and
-XML writer on the `PlatformFormObject` boundary so the remaining work can attach
-the bracket writer to that object, not to a diff from the original binary.
+Native source-build now has a first `Form.xml -> PlatformFormObject ->
+ListOutStream -> Form.bin` path for the focused smoke shape
+`Page -> Button + InputField`. Current `--base-bin` rebuild remains a
+compatibility path for the broader already supported edit codecs. It is not the
+target source-build architecture and must not be expanded with raw fallbacks,
+patch workers, or baseline-preservation profiles. The remaining release work is
+to replace the compatibility path with descriptor-specific native writers for
+the full ordinary-form object surface.
 
 ## Русский
 
@@ -388,13 +389,14 @@ python3 tools/vendor_platform_schemas.py \
 публичный XML все равно должен оставаться чистой объектной моделью, а не
 переименованным сырым потоком.
 
-Текущая native-сборка через `--base-bin` - это compatibility path для уже
-поддержанных edit-codec'ов. Это не целевая source-build архитектура, и ее нельзя
-расширять raw fallback'ами, patch-worker'ами или профилями сохранения baseline.
-Цель релиза: `Form.xml -> platform object model -> ListOutStream -> Form.bin`.
-Native-код теперь держит parser публичного XML и XML writer на границе
-`PlatformFormObject`, чтобы оставшийся writer подключался к объекту формы, а не
-к diff'у от исходного бинарника.
+Native source-build теперь имеет первый путь `Form.xml ->
+PlatformFormObject -> ListOutStream -> Form.bin` для узкой smoke-формы
+`Page -> Button + InputField`. Сборка через `--base-bin` остается
+compatibility path для более широкой поверхности уже поддержанных edit-codec'ов.
+Это не целевая source-build архитектура, и ее нельзя расширять raw fallback'ами,
+patch-worker'ами или профилями сохранения baseline. Оставшаяся релизная работа -
+заменить compatibility path descriptor-specific native writer'ами для полной
+объектной поверхности обычной формы.
 
 ## Status / Статус
 
@@ -570,7 +572,17 @@ Show bundled schemas:
 onec-ordinary-forms schemas
 ```
 
-Build `Form.bin` back by applying the package to the original native baseline:
+Build the focused source package without a source `Form.bin` baseline:
+
+```bash
+onec-ordinary-forms build-bin \
+  --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
+  --out-bin scan-output/rebuilt/Form.bin
+```
+
+For object surfaces not covered by the native source writer yet, the
+compatibility path can still apply supported edits to the original native
+baseline:
 
 ```bash
 onec-ordinary-forms build-bin \

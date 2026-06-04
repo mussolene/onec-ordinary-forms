@@ -31,7 +31,11 @@ from onec_ordinary_forms.ordinary_stream import (
     root_panel_base_info_record,
     shortcut_record_to_xml_attrs,
 )
-from onec_ordinary_forms.native_bridge import build_formbin_package, dump_formbin_package
+from onec_ordinary_forms.native_bridge import (
+    build_formbin_package,
+    build_formbin_source_package,
+    dump_formbin_package,
+)
 from onec_ordinary_forms.public_contract import (
     ORDINARY_FORM_SCHEMA,
     PUBLIC_FORM_VERSION,
@@ -3488,12 +3492,12 @@ def build_bin(args: argparse.Namespace) -> None:
     xml_path = Path(args.xml)
     out_bin = Path(args.out_bin)
     base_bin_arg = getattr(args, "base_bin", None)
-    if not base_bin_arg:
-        raise RuntimeError("build-bin is native-only and requires --base-bin")
-    base_bin = Path(base_bin_arg)
     validate_xml_file(xml_path)
     native_bin = getattr(args, "native_bin", None)
-    build_formbin_package(base_bin, xml_path, out_bin, binary=Path(native_bin) if native_bin else None)
+    if base_bin_arg:
+        build_formbin_package(Path(base_bin_arg), xml_path, out_bin, binary=Path(native_bin) if native_bin else None)
+    else:
+        build_formbin_source_package(xml_path, out_bin, binary=Path(native_bin) if native_bin else None)
 
 
 def scan_corpus(args: argparse.Namespace) -> None:
@@ -3532,7 +3536,7 @@ def main() -> None:
 
     build_bin_parser = subparsers.add_parser("build-bin")
     build_bin_parser.add_argument("--xml", required=True, help="Form.xml produced by dump-bin")
-    build_bin_parser.add_argument("--base-bin", required=True, help="Original Form.bin used as native object graph baseline")
+    build_bin_parser.add_argument("--base-bin", help="Optional compatibility baseline Form.bin for object graph patch rebuild")
     build_bin_parser.add_argument("--out-bin", required=True, help="Rebuilt ordinary form Form.bin")
     build_bin_parser.add_argument("--native-bin", help="Override oof-native binary path")
     build_bin_parser.set_defaults(func=build_bin)
