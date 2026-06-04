@@ -3,7 +3,7 @@
   <xs:annotation>
     <xs:documentation>Platform-derived configuration metadata and value schema used by the ordinary-form codec layer. This is the single bundled schema for configuration tree, type tree, type-domain patterns, and platform serializer evidence; it is not a public raw stream dump format.</xs:documentation>
     <xs:appinfo>
-      <PlatformSchemaResources source="1C platform embedded XML/XSD resources" storage="external-reference" count="0"/>
+      <PlatformSchemaResources source="1C 8.5 platform embedded XML/XSD resources" storage="vendored-text-xsd" platformVersion="8.5" manifest="platform/8.5/schemas.json" count="81"/>
       <PlatformObjectModel source="1C EDT EMF model jars">
         <MetadataClasses>
           <Class name="AdjustableBoolean"/>

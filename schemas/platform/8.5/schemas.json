@@ -1,0 +1,656 @@
+{
+  "platformVersion": "8.5",
+  "source": "1C platform embedded XML/XSD resources",
+  "normalization": "LF line endings, tabs expanded to spaces, trailing whitespace stripped for repository text hygiene",
+  "count": 81,
+  "schemas": [
+    {
+      "source": "backend_root.res",
+      "schema": "backend_root-07-http_v8.1c.ru_8.3_TestAndRepairExchangePlanIntegrityReport.xsd",
+      "namespace": "http://v8.1c.ru/8.3/TestAndRepairExchangePlanIntegrityReport",
+      "path": "8.5/backend/backend_root-07-http_v8.1c.ru_8.3_TestAndRepairExchangePlanIntegrityReport.xsd",
+      "bytes": 6958,
+      "sha256": "397767c7d881aa0b745f17c133db262c9cc01af16b4f8ac0cb33a6a6e947afbf"
+    },
+    {
+      "source": "backend_root.res",
+      "schema": "backend_root-106-http_v8.1c.ru_8.2_misc.xsd",
+      "namespace": "http://v8.1c.ru/8.2/misc",
+      "path": "8.5/backend/backend_root-106-http_v8.1c.ru_8.2_misc.xsd",
+      "bytes": 442,
+      "sha256": "56c4fe38f5980e1b5e311664fdaa77a47c8f6c26dd154b7c1de601334a38d884"
+    },
+    {
+      "source": "backend_root.res",
+      "schema": "backend_root-111-http_v8.1c.ru_8.2_roles.xsd",
+      "namespace": "http://v8.1c.ru/8.2/roles",
+      "path": "8.5/backend/backend_root-111-http_v8.1c.ru_8.2_roles.xsd",
+      "bytes": 2601,
+      "sha256": "9707f0d8a95bcf89bf496b424eca628439a5d3d286e3ab8a9dede13ceeac8322"
+    },
+    {
+      "source": "backend_root.res",
+      "schema": "backend_root-114-http_v8.1c.ru_8.3_xcf_dumpinfo.xsd",
+      "namespace": "http://v8.1c.ru/8.3/xcf/dumpinfo",
+      "path": "8.5/backend/backend_root-114-http_v8.1c.ru_8.3_xcf_dumpinfo.xsd",
+      "bytes": 5413,
+      "sha256": "ecd7f6160e4a3bd06c5e377e5786178e79744ceb63828f31b0503ca98c4f59ec"
+    },
+    {
+      "source": "bsl_root.res",
+      "schema": "bsl_root-01-http_v8.1c.ru_8.2_data_bsl.xsd",
+      "namespace": "http://v8.1c.ru/8.2/data/bsl",
+      "path": "8.5/bsl/bsl_root-01-http_v8.1c.ru_8.2_data_bsl.xsd",
+      "bytes": 5769,
+      "sha256": "cf1b5badc84007d0de27dd93c44cdb028ac95955a83455f141bbdb9564630cda"
+    },
+    {
+      "source": "chart_root.res",
+      "schema": "chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd",
+      "namespace": "http://v8.1c.ru/8.2/data/chart",
+      "path": "8.5/chart/chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd",
+      "bytes": 100048,
+      "sha256": "0857e3b94a9c88d89a23086e706d6caa8862fc7fae83832004c172fc6d754cd5"
+    },
+    {
+      "source": "config_root.res",
+      "schema": "config_root-01-http_v8.1c.ru_8.3_mobile-application_app.xsd",
+      "namespace": "http://v8.1c.ru/8.3/mobile-application/app",
+      "path": "8.5/config/config_root-01-http_v8.1c.ru_8.3_mobile-application_app.xsd",
+      "bytes": 158428,
+      "sha256": "d7a2fa40ecc4f55b1380ade0e645cd72ce786408c40f5cc15652292b8d7d0c61"
+    },
+    {
+      "source": "config_root.res",
+      "schema": "config_root-02-http_v8.1c.ru_8.3_mobile-application_form.xsd",
+      "namespace": "http://v8.1c.ru/8.3/mobile-application/form",
+      "path": "8.5/config/config_root-02-http_v8.1c.ru_8.3_mobile-application_form.xsd",
+      "bytes": 196500,
+      "sha256": "6a4f1fad9d635d8c62287e1ef99cc3344d4b37ca3a47bb87f878976935254bcc"
+    },
+    {
+      "source": "config_root.res",
+      "schema": "config_root-04-http_v8.1c.ru_8.3_xcf_dumpinfo.xsd",
+      "namespace": "http://v8.1c.ru/8.3/xcf/dumpinfo",
+      "path": "8.5/config/config_root-04-http_v8.1c.ru_8.3_xcf_dumpinfo.xsd",
+      "bytes": 5413,
+      "sha256": "ecd7f6160e4a3bd06c5e377e5786178e79744ceb63828f31b0503ca98c4f59ec"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-01-http_v8.1c.ru_8.3_debugger_debugArea.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugArea",
+      "path": "8.5/dbgbase/dbgbase_root-01-http_v8.1c.ru_8.3_debugger_debugArea.xsd",
+      "bytes": 4321,
+      "sha256": "3ae01aa84d3947c85077460863fa9a9ba7502a1a74f61aeaf4b2d051f1a0366b"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-02-http_v8.1c.ru_8.3_debugger_debugAutoAttach.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugAutoAttach",
+      "path": "8.5/dbgbase/dbgbase_root-02-http_v8.1c.ru_8.3_debugger_debugAutoAttach.xsd",
+      "bytes": 1892,
+      "sha256": "b43fa233a89100e6e1f832ab27bcd3420aeeb9e3fa35611f608aa3a6c5877473"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-03-http_v8.1c.ru_8.3_debugger_debugBaseData.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugBaseData",
+      "path": "8.5/dbgbase/dbgbase_root-03-http_v8.1c.ru_8.3_debugger_debugBaseData.xsd",
+      "bytes": 17490,
+      "sha256": "ca666a70dc3892deef49c3f10abc434563ef7af05a642bc7ec055e44dd842a86"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-04-http_v8.1c.ru_8.3_debugger_debugBreakpoints.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugBreakpoints",
+      "path": "8.5/dbgbase/dbgbase_root-04-http_v8.1c.ru_8.3_debugger_debugBreakpoints.xsd",
+      "bytes": 6724,
+      "sha256": "967a488c420c80db22594053803bd3bc6870147347ea5339ff19f7c5f245f496"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-05-http_v8.1c.ru_8.3_debugger_debugCalculations.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugCalculations",
+      "path": "8.5/dbgbase/dbgbase_root-05-http_v8.1c.ru_8.3_debugger_debugCalculations.xsd",
+      "bytes": 16260,
+      "sha256": "f89862bcca78ab1d20c1245d2a1d028f9045a25da913fee3491e63a36748227c"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-06-http_v8.1c.ru_8.3_debugger_debugDBGUICommands.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugDBGUICommands",
+      "path": "8.5/dbgbase/dbgbase_root-06-http_v8.1c.ru_8.3_debugger_debugDBGUICommands.xsd",
+      "bytes": 17720,
+      "sha256": "596fc8dfb923563bfa02af80a4c1058ff63cc1c39149b3b9f63890565b69b1b8"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-07-http_v8.1c.ru_8.3_debugger_debugForegroundData.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugForegroundData",
+      "path": "8.5/dbgbase/dbgbase_root-07-http_v8.1c.ru_8.3_debugger_debugForegroundData.xsd",
+      "bytes": 1290,
+      "sha256": "2b03da991ba5c2f494b0fa374a89f33009e44f9dcb22066dda25d1ba386e952f"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-08-http_v8.1c.ru_8.3_debugger_debugMeasure.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugMeasure",
+      "path": "8.5/dbgbase/dbgbase_root-08-http_v8.1c.ru_8.3_debugger_debugMeasure.xsd",
+      "bytes": 3773,
+      "sha256": "740983cf6d3d80d69289cc8fa0d6ae7103c0ee4f64eeeba1d843a674c69220d5"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-09-http_v8.1c.ru_8.3_debugger_debugRDBGRequestResponse.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugRDBGRequestResponse",
+      "path": "8.5/dbgbase/dbgbase_root-09-http_v8.1c.ru_8.3_debugger_debugRDBGRequestResponse.xsd",
+      "bytes": 41123,
+      "sha256": "96ad975521f487fd6b30d815473779b90ccd7c5bd3b48b6ac8b7a2028747971e"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-10-http_v8.1c.ru_8.3_debugger_debugRTEFilter.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugRTEFilter",
+      "path": "8.5/dbgbase/dbgbase_root-10-http_v8.1c.ru_8.3_debugger_debugRTEFilter.xsd",
+      "bytes": 2038,
+      "sha256": "9698de5a55592b86c18e800c1ff8e26a9205ee03a1697f76f8990c31db697af7"
+    },
+    {
+      "source": "dbgbase_root.res",
+      "schema": "dbgbase_root-11-http_v8.1c.ru_8.3_debugger_debugRTEInfo.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/debugRTEInfo",
+      "path": "8.5/dbgbase/dbgbase_root-11-http_v8.1c.ru_8.3_debugger_debugRTEInfo.xsd",
+      "bytes": 4314,
+      "sha256": "6c566b8917b6b613f3d6254f96f0d42d8ff460d3bcbda38bceb1988d3b39ebd3"
+    },
+    {
+      "source": "dbgtgt_root.res",
+      "schema": "dbgtgt_root-01-http_v8.1c.ru_8.3_debugger_dbgtgtBP.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/dbgtgtBP",
+      "path": "8.5/dbgtgt/dbgtgt_root-01-http_v8.1c.ru_8.3_debugger_dbgtgtBP.xsd",
+      "bytes": 4677,
+      "sha256": "5e36d4ac4489932b5bf37928bb5feeebd1bde67e7f63480ad6e02852917f9e62"
+    },
+    {
+      "source": "dbgtgt_root.res",
+      "schema": "dbgtgt_root-02-http_v8.1c.ru_8.3_debugger_dbgtgtCommands.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/dbgtgtCommands",
+      "path": "8.5/dbgtgt/dbgtgt_root-02-http_v8.1c.ru_8.3_debugger_dbgtgtCommands.xsd",
+      "bytes": 20428,
+      "sha256": "88d8eaac3d5bdd8ce7dd4c1f8e5613d19f9077867bdba41e6a6b33ee0db76025"
+    },
+    {
+      "source": "dbgtgt_root.res",
+      "schema": "dbgtgt_root-03-http_v8.1c.ru_8.3_debugger_dbgtgtData.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/dbgtgtData",
+      "path": "8.5/dbgtgt/dbgtgt_root-03-http_v8.1c.ru_8.3_debugger_dbgtgtData.xsd",
+      "bytes": 9923,
+      "sha256": "d26b1aec8a38b69964b9915e9035e5c669866269843fd5ba3d90406f6816b8ec"
+    },
+    {
+      "source": "dbgtgt_root.res",
+      "schema": "dbgtgt_root-04-http_v8.1c.ru_8.3_debugger_dbgtgtErrorInfo.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/dbgtgtErrorInfo",
+      "path": "8.5/dbgtgt/dbgtgt_root-04-http_v8.1c.ru_8.3_debugger_dbgtgtErrorInfo.xsd",
+      "bytes": 3030,
+      "sha256": "fe5c59bc04b8e9ad2e261c27ec32169ba6b5f15908d4f0ed64e3bf891bdc7502"
+    },
+    {
+      "source": "dbgtgt_root.res",
+      "schema": "dbgtgt_root-05-http_v8.1c.ru_8.3_debugger_dbgtgtRemoteRequestResponse.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/dbgtgtRemoteRequestResponse",
+      "path": "8.5/dbgtgt/dbgtgt_root-05-http_v8.1c.ru_8.3_debugger_dbgtgtRemoteRequestResponse.xsd",
+      "bytes": 29046,
+      "sha256": "08f9ee5bfd280296cdf70d5e507eb681d91d2bc65f7710d124262d1f8d390fb4"
+    },
+    {
+      "source": "dbgtgt_root.res",
+      "schema": "dbgtgt_root-06-http_v8.1c.ru_8.3_debugger_dbgtgtRequestResponse.xsd",
+      "namespace": "http://v8.1c.ru/8.3/debugger/dbgtgtRequestResponse",
+      "path": "8.5/dbgtgt/dbgtgt_root-06-http_v8.1c.ru_8.3_debugger_dbgtgtRequestResponse.xsd",
+      "bytes": 12996,
+      "sha256": "c30d28dd808857dcdd87ac0eebc26b343e0d2d673d3ab9ad52ed11f328ce33d7"
+    },
+    {
+      "source": "dcs_root.res",
+      "schema": "dcs_root-03-http_v8.1c.ru_8.1_data-composition-system_appearance-template.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data-composition-system/appearance-template",
+      "path": "8.5/dcs/dcs_root-03-http_v8.1c.ru_8.1_data-composition-system_appearance-template.xsd",
+      "bytes": 5702,
+      "sha256": "c2ed929026f8423c06b46da889120d3462cb02147f0af4795df53aa10d2df6de"
+    },
+    {
+      "source": "dcs_root.res",
+      "schema": "dcs_root-06-http_v8.1c.ru_8.1_data-composition-system_area-template.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data-composition-system/area-template",
+      "path": "8.5/dcs/dcs_root-06-http_v8.1c.ru_8.1_data-composition-system_area-template.xsd",
+      "bytes": 18842,
+      "sha256": "8683451f6659e04c45e5341c563b49ac8380bef253f728356006b2109545da04"
+    },
+    {
+      "source": "dcs_root.res",
+      "schema": "dcs_root-07-http_v8.1c.ru_8.1_data-composition-system_common.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data-composition-system/common",
+      "path": "8.5/dcs/dcs_root-07-http_v8.1c.ru_8.1_data-composition-system_common.xsd",
+      "bytes": 8337,
+      "sha256": "065af4e6181b34b383ab037adbfe759144e5c46d8ce233818474d24a900168f1"
+    },
+    {
+      "source": "dcs_root.res",
+      "schema": "dcs_root-08-http_v8.1c.ru_8.1_data-composition-system_composition-template.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data-composition-system/composition-template",
+      "path": "8.5/dcs/dcs_root-08-http_v8.1c.ru_8.1_data-composition-system_composition-template.xsd",
+      "bytes": 58645,
+      "sha256": "17c9be6e428b878913041c13747d14b2b34c6a49ceb47b71d951898e539eda4d"
+    },
+    {
+      "source": "dcs_root.res",
+      "schema": "dcs_root-18-http_v8.1c.ru_8.1_data-composition-system_result.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data-composition-system/result",
+      "path": "8.5/dcs/dcs_root-18-http_v8.1c.ru_8.1_data-composition-system_result.xsd",
+      "bytes": 3632,
+      "sha256": "caf45c42533140ce07296d17eb00862053688c20f1e75b97ebb460f17e82db17"
+    },
+    {
+      "source": "dcs_root.res",
+      "schema": "dcs_root-19-http_v8.1c.ru_8.1_data-composition-system_schema.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data-composition-system/schema",
+      "path": "8.5/dcs/dcs_root-19-http_v8.1c.ru_8.1_data-composition-system_schema.xsd",
+      "bytes": 34117,
+      "sha256": "36c7a055459f5ed86684192b06a90eab0e4f6128fd3af412c8b230eaf0d817bf"
+    },
+    {
+      "source": "dcscore_root.res",
+      "schema": "dcscore_root-42-http_v8.1c.ru_8.1_data-composition-system_core.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data-composition-system/core",
+      "path": "8.5/dcscore/dcscore_root-42-http_v8.1c.ru_8.1_data-composition-system_core.xsd",
+      "bytes": 12155,
+      "sha256": "0b92962e626d7e4b64b022a290b83089a5b4174a01e6f3860aa1fb54cd98ac39"
+    },
+    {
+      "source": "dcscore_root.res",
+      "schema": "dcscore_root-43-http_v8.1c.ru_8.1_data-composition-system_details.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data-composition-system/details",
+      "path": "8.5/dcscore/dcscore_root-43-http_v8.1c.ru_8.1_data-composition-system_details.xsd",
+      "bytes": 7537,
+      "sha256": "71b99104e4287e81adbb62a417b9cd4a65581f861377575cb18df2c0a43ce188"
+    },
+    {
+      "source": "dcscore_root.res",
+      "schema": "dcscore_root-45-http_v8.1c.ru_8.1_data-composition-system_settings.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data-composition-system/settings",
+      "path": "8.5/dcscore/dcscore_root-45-http_v8.1c.ru_8.1_data-composition-system_settings.xsd",
+      "bytes": 120981,
+      "sha256": "1574a8c051da2c61d718482c3e2ba862e65e971855ec652aeeb0c2e6d2d36233"
+    },
+    {
+      "source": "ecscore_root.res",
+      "schema": "ecscore_root-113-http_v8.1c.ru_8.3_ecs_core.xsd",
+      "namespace": "http://v8.1c.ru/8.3/ecs/core",
+      "path": "8.5/ecscore/ecscore_root-113-http_v8.1c.ru_8.3_ecs_core.xsd",
+      "bytes": 6352,
+      "sha256": "1373b75efc4771d2515df4461ec96531ae0e69db2b6be5ee230d6b518366cb73"
+    },
+    {
+      "source": "entext_root.res",
+      "schema": "entext_root-01-http_v8.1c.ru_8.3_data_entext.xsd",
+      "namespace": "http://v8.1c.ru/8.3/data/entext",
+      "path": "8.5/entext/entext_root-01-http_v8.1c.ru_8.3_data_entext.xsd",
+      "bytes": 2495,
+      "sha256": "287b0d982079552549b9de11a51eedc3f195ea3cafd22a7cdd492387285fbbba"
+    },
+    {
+      "source": "enums_root.res",
+      "schema": "enums_root-01-http_v8.1c.ru_8.2_data_data-analysis.xsd",
+      "namespace": "http://v8.1c.ru/8.2/data/data-analysis",
+      "path": "8.5/enums/enums_root-01-http_v8.1c.ru_8.2_data_data-analysis.xsd",
+      "bytes": 5765,
+      "sha256": "f4e80901d5d63143a5215b40f47b3404f40785da71011cc860cf3da492bf7d54"
+    },
+    {
+      "source": "enums_root.res",
+      "schema": "enums_root-02-http_v8.1c.ru_8.1_data_enterprise.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data/enterprise",
+      "path": "8.5/enums/enums_root-02-http_v8.1c.ru_8.1_data_enterprise.xsd",
+      "bytes": 20099,
+      "sha256": "691d2272c8211cc71c017d190f9045b1da27d4cfa1aa0576cf234b271c4c2952"
+    },
+    {
+      "source": "ext_root.res",
+      "schema": "ext_root-01-http_v8.1c.ru_8.3_data_ext.xsd",
+      "namespace": "http://v8.1c.ru/8.3/data/ext",
+      "path": "8.5/ext/ext_root-01-http_v8.1c.ru_8.3_data_ext.xsd",
+      "bytes": 11091,
+      "sha256": "2b9b0db60b466c254a2d8df3252f81bfe5b25b980abf9fd79d880538ae7989a7"
+    },
+    {
+      "source": "fmtd_root.res",
+      "schema": "fmtd_root-01-http_v8.1c.ru_8.2_data_formatted-document-internal.xsd",
+      "namespace": "http://v8.1c.ru/8.2/data/formatted-document-internal",
+      "path": "8.5/fmtd/fmtd_root-01-http_v8.1c.ru_8.2_data_formatted-document-internal.xsd",
+      "bytes": 25781,
+      "sha256": "61a5d2455cea3b837c7b710cd09f92cbeef4de89fd96f54a6635fef2cbcef464"
+    },
+    {
+      "source": "fmtd_root.res",
+      "schema": "fmtd_root-02-http_v8.1c.ru_8.2_data_formatted-document.xsd",
+      "namespace": "http://v8.1c.ru/8.2/data/formatted-document",
+      "path": "8.5/fmtd/fmtd_root-02-http_v8.1c.ru_8.2_data_formatted-document.xsd",
+      "bytes": 7250,
+      "sha256": "4481fbf7a77e4670f910bb8f51f0d2f65e01e11f3d669b4c657bc5478ce2713e"
+    },
+    {
+      "source": "frntend_root.res",
+      "schema": "frntend_root-01-http_v8.1c.ru_8.3_config_merge_settings.xsd",
+      "namespace": "http://v8.1c.ru/8.3/config/merge/settings",
+      "path": "8.5/frntend/frntend_root-01-http_v8.1c.ru_8.3_config_merge_settings.xsd",
+      "bytes": 36243,
+      "sha256": "dac8b1bc8250037fec37b0cc9a4993b9068c40e03b92c3ebf5333eb33cabc308"
+    },
+    {
+      "source": "frntend_root.res",
+      "schema": "frntend_root-02-http_v8.1c.ru_8.3_config_objects.xsd",
+      "namespace": "http://v8.1c.ru/8.3/config/objects",
+      "path": "8.5/frntend/frntend_root-02-http_v8.1c.ru_8.3_config_objects.xsd",
+      "bytes": 5276,
+      "sha256": "3e04119bc00632d74f48cb752c6706a8ac407e4c8b29a956bfd2a0c5c2fa6205"
+    },
+    {
+      "source": "map_root.res",
+      "schema": "map_root-02-http_v8.1c.ru_8.2_data_geo.xsd",
+      "namespace": "http://v8.1c.ru/8.2/data/geo",
+      "path": "8.5/map/map_root-02-http_v8.1c.ru_8.2_data_geo.xsd",
+      "bytes": 28997,
+      "sha256": "c50ae035e1b916d8bbd3f21daee56241d768274e46d3fda546331155ec0897e4"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-149-http_v8.1c.ru_8.2_managed-application_cmi.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/cmi",
+      "path": "8.5/mngcore/mngcore_root-149-http_v8.1c.ru_8.2_managed-application_cmi.xsd",
+      "bytes": 19461,
+      "sha256": "a4b2b63fd82fb925da2f373c894249220505bccde5ff7314e29f21c77b925c27"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-155-http_v8.1c.ru_8.2_managed-application_dynamic-list.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/dynamic-list",
+      "path": "8.5/mngcore/mngcore_root-155-http_v8.1c.ru_8.2_managed-application_dynamic-list.xsd",
+      "bytes": 6809,
+      "sha256": "29dbb6b97cd1394be46d4d9a0c7f8c8fe80a64a59f414ce7f0669765be1d5b7a"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-156-http_v8.1c.ru_8.2_managed-application_dynamic-list-data.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/dynamic-list-data",
+      "path": "8.5/mngcore/mngcore_root-156-http_v8.1c.ru_8.2_managed-application_dynamic-list-data.xsd",
+      "bytes": 7762,
+      "sha256": "6fa5b795d36fe4ccd5702d741cc5690c4808fc6056fc8be06801088e5421f0ea"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/logform",
+      "path": "8.5/mngcore/mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd",
+      "bytes": 194973,
+      "sha256": "d18e449004673a93adad94315d80a04c75e3948be44bdb6be2c5092e7d0f8b6d"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-169-http_v8.1c.ru_8.3_managed-application_logform_hippo.xsd",
+      "namespace": "http://v8.1c.ru/8.3/managed-application/logform/hippo",
+      "path": "8.5/mngcore/mngcore_root-169-http_v8.1c.ru_8.3_managed-application_logform_hippo.xsd",
+      "bytes": 146006,
+      "sha256": "83b2fdbad1d34542cd2daabd7108031e37387f17415d60df8501a4559722ff9c"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-170-http_v8.1c.ru_8.2_managed-application_logform_layouter.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/logform/layouter",
+      "path": "8.5/mngcore/mngcore_root-170-http_v8.1c.ru_8.2_managed-application_logform_layouter.xsd",
+      "bytes": 115612,
+      "sha256": "7a566d16566889c22c1bacc3954b2f95905ac8d0bb6983ef780bdefbdb81cd4a"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-171-http_v8.1c.ru_8.2_managed-application_core.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/core",
+      "path": "8.5/mngcore/mngcore_root-171-http_v8.1c.ru_8.2_managed-application_core.xsd",
+      "bytes": 72985,
+      "sha256": "02c41eedd014ad33b5476088e70d79f545f6828426ef3cbf4686507bf008d5d2"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-172-http_v8.1c.ru_8.2_mngsrv_ws.xsd",
+      "namespace": "http://v8.1c.ru/8.2/mngsrv/ws",
+      "path": "8.5/mngcore/mngcore_root-172-http_v8.1c.ru_8.2_mngsrv_ws.xsd",
+      "bytes": 243554,
+      "sha256": "344644070a7629c383eab10e43308e27c3dd6a193f18b864d5b6d4591e812467"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-198-http_v8.1c.ru_8.2_uobjects.xsd",
+      "namespace": "http://v8.1c.ru/8.2/uobjects",
+      "path": "8.5/mngcore/mngcore_root-198-http_v8.1c.ru_8.2_uobjects.xsd",
+      "bytes": 29299,
+      "sha256": "55bfe6b8b3f23c8da4a9b7fb7eaafd1edd1d877034b6d8910e70287e1fcb2402"
+    },
+    {
+      "source": "mngcore_root.res",
+      "schema": "mngcore_root-201-http_v8.1c.ru_8.2_managed-application_user-settings.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/user-settings",
+      "path": "8.5/mngcore/mngcore_root-201-http_v8.1c.ru_8.2_managed-application_user-settings.xsd",
+      "bytes": 3393,
+      "sha256": "7ff58a228ccaf75bac79decc3090b3d9e00230fc415e5342fae4a00c5302d028"
+    },
+    {
+      "source": "mob_root.res",
+      "schema": "mob_root-01-http_v8.1c.ru_8.3_data_mob.xsd",
+      "namespace": "http://v8.1c.ru/8.3/data/mob",
+      "path": "8.5/mob/mob_root-01-http_v8.1c.ru_8.3_data_mob.xsd",
+      "bytes": 12885,
+      "sha256": "14d4e171030e04584783c24e812ded80ccccbf2d3ed5950492c5981c8fdc3ad7"
+    },
+    {
+      "source": "moxel_root.res",
+      "schema": "moxel_root-69-http_v8.1c.ru_8.2_data_spreadsheet.xsd",
+      "namespace": "http://v8.1c.ru/8.2/data/spreadsheet",
+      "path": "8.5/moxel/moxel_root-69-http_v8.1c.ru_8.2_data_spreadsheet.xsd",
+      "bytes": 39206,
+      "sha256": "40c31c22d7563d1e15dc40588b3a3f6e2f3fa07e928afafc1ed0539a5a35a6f6"
+    },
+    {
+      "source": "pdf_root.res",
+      "schema": "pdf_root-05-http_v8.1c.ru_8.3_data_pdf.xsd",
+      "namespace": "http://v8.1c.ru/8.3/data/pdf",
+      "path": "8.5/pdf/pdf_root-05-http_v8.1c.ru_8.3_data_pdf.xsd",
+      "bytes": 4005,
+      "sha256": "155d0efea7772af61485d3dad33016be6379707578a9fc2928d8951937bd348d"
+    },
+    {
+      "source": "plnnr_root.res",
+      "schema": "plnnr_root-01-http_v8.1c.ru_8.3_data_planner.xsd",
+      "namespace": "http://v8.1c.ru/8.3/data/planner",
+      "path": "8.5/plnnr/plnnr_root-01-http_v8.1c.ru_8.3_data_planner.xsd",
+      "bytes": 12918,
+      "sha256": "df9fde670b907b9e43f414027663016fa40a18d8768dbf8822712e6863df185e"
+    },
+    {
+      "source": "scheme_root.res",
+      "schema": "scheme_root-14-http_v8.1c.ru_8.2_data_graphscheme.xsd",
+      "namespace": "http://v8.1c.ru/8.2/data/graphscheme",
+      "path": "8.5/scheme/scheme_root-14-http_v8.1c.ru_8.2_data_graphscheme.xsd",
+      "bytes": 8992,
+      "sha256": "37b6794f8f6144c0f99b5783356a72df4b58177b215d15370f29d790db0f7a96"
+    },
+    {
+      "source": "testbase_root.res",
+      "schema": "testbase_root-01-http_v8.1c.ru_8.2_data_test.xsd",
+      "namespace": "http://v8.1c.ru/8.2/data/test",
+      "path": "8.5/testbase/testbase_root-01-http_v8.1c.ru_8.2_data_test.xsd",
+      "bytes": 45166,
+      "sha256": "bf9cb549b7f997ad0312b0bc1cd80e5367e3d687f99df9c5e0c6bf5cfb2998be"
+    },
+    {
+      "source": "txtedt_root.res",
+      "schema": "txtedt_root-02-http_v8.1c.ru_8.1_data_txtedt.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data/txtedt",
+      "path": "8.5/txtedt/txtedt_root-02-http_v8.1c.ru_8.1_data_txtedt.xsd",
+      "bytes": 1323,
+      "sha256": "5c884ae64d6363ccd08e5391ecea579fdbe0702d2fa558ff2f3d791c3fc72e32"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-01-http_v8.1c.ru_8.2_managed-application_InteractiveSecurityException.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/InteractiveSecurityException",
+      "path": "8.5/vrscore/vrscore_root-01-http_v8.1c.ru_8.2_managed-application_InteractiveSecurityException.xsd",
+      "bytes": 1008,
+      "sha256": "3974ff0be892afbbf063f931270d7f1d661761bb2551062fb8b68e526a7d05d4"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-02-http_v8.1c.ru_8.2_managed-application_edbexception.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/edbexception",
+      "path": "8.5/vrscore/vrscore_root-02-http_v8.1c.ru_8.2_managed-application_edbexception.xsd",
+      "bytes": 924,
+      "sha256": "89779981694e66ddf4d13842a7aa0b84a778f140549ecab8c1f1f09d0dc63115"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-06-http_v8.1c.ru_8.2_managed-application_logformexception.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/logformexception",
+      "path": "8.5/vrscore/vrscore_root-06-http_v8.1c.ru_8.2_managed-application_logformexception.xsd",
+      "bytes": 1877,
+      "sha256": "0eace5538af7ceb08efd3075b4641001b13b5757af966e5d303f6e4f7ff40213"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-07-http_v8.1c.ru_8.2_managed-application_objectlocksexception.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/objectlocksexception",
+      "path": "8.5/vrscore/vrscore_root-07-http_v8.1c.ru_8.2_managed-application_objectlocksexception.xsd",
+      "bytes": 1969,
+      "sha256": "eb06bf31ad8c78a4de88607614b935d2e40f930c02fb252203afc56f22dad7d9"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-08-http_v8.1c.ru_8.2_managed-application_remoteexception.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/remoteexception",
+      "path": "8.5/vrscore/vrscore_root-08-http_v8.1c.ru_8.2_managed-application_remoteexception.xsd",
+      "bytes": 932,
+      "sha256": "7d106b9229f13bfc12044eff6e341dcad8c7209464da8d8b2080d60cc48df48c"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-09-http_v8.1c.ru_8.2_managed-application_seancecontextexception.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/seancecontextexception",
+      "path": "8.5/vrscore/vrscore_root-09-http_v8.1c.ru_8.2_managed-application_seancecontextexception.xsd",
+      "bytes": 829,
+      "sha256": "1bea004ace1b71691e929047dd7b50cc806c6deddc02e7c75b28f9310f3b74fa"
+    },
+    {
+      "source": "vrscore_root.res",
+      "schema": "vrscore_root-10-http_v8.1c.ru_8.2_managed-application_SecondFactorAuthException.xsd",
+      "namespace": "http://v8.1c.ru/8.2/managed-application/SecondFactorAuthException",
+      "path": "8.5/vrscore/vrscore_root-10-http_v8.1c.ru_8.2_managed-application_SecondFactorAuthException.xsd",
+      "bytes": 981,
+      "sha256": "4b89ca4f925f8087e4d1b4dfd45177a0c9639ad73c257c52642346d514e91b02"
+    },
+    {
+      "source": "ws_root.res",
+      "schema": "ws_root-01-http_schemas.xmlsoap.org_soap_encoding.xsd",
+      "namespace": "http://schemas.xmlsoap.org/soap/encoding/",
+      "path": "8.5/ws/ws_root-01-http_schemas.xmlsoap.org_soap_encoding.xsd",
+      "bytes": 18729,
+      "sha256": "e6a99fc7eafdc7b6126f7b12c56d12ef3384cd5d3e3b2a551cadfe85cc3deb98"
+    },
+    {
+      "source": "ws_root.res",
+      "schema": "ws_root-02-http_schemas.xmlsoap.org_wsdl.xsd",
+      "namespace": "http://schemas.xmlsoap.org/wsdl/",
+      "path": "8.5/ws/ws_root-02-http_schemas.xmlsoap.org_wsdl.xsd",
+      "bytes": 11544,
+      "sha256": "43c6f706ca95a45182dc9e45e1e2050dc9fbe28c104f3d3d21d4335437cd8a17"
+    },
+    {
+      "source": "ws_root.res",
+      "schema": "ws_root-03-http_v8.1c.ru_8.1_ws_wsdefinitions-model.xsd",
+      "namespace": "http://v8.1c.ru/8.1/ws/wsdefinitions-model",
+      "path": "8.5/ws/ws_root-03-http_v8.1c.ru_8.1_ws_wsdefinitions-model.xsd",
+      "bytes": 2576,
+      "sha256": "8db1b1b1d1808666113d6637de3cae997b708308a9a9aa6adcf6a7e6dc742005"
+    },
+    {
+      "source": "xdto_root.res",
+      "schema": "xdto_root-01-http_v8.1c.ru_8.1_xdto.xsd",
+      "namespace": "http://v8.1c.ru/8.1/xdto",
+      "path": "8.5/xdto/xdto_root-01-http_v8.1c.ru_8.1_xdto.xsd",
+      "bytes": 5459,
+      "sha256": "1de07ad8c11f4b3950a35948baa1ce732f56e3707997a82756b7c1f4c3addefd"
+    },
+    {
+      "source": "xdto_root.res",
+      "schema": "xdto_root-02-http_v8.1c.ru_8.2_bsl.xsd",
+      "namespace": "http://v8.1c.ru/8.2/bsl",
+      "path": "8.5/xdto/xdto_root-02-http_v8.1c.ru_8.2_bsl.xsd",
+      "bytes": 2649,
+      "sha256": "45888aef62e1b9fd9b9ad4d4480f86cd6bb9c76344006f9a036c3dfc1896ac39"
+    },
+    {
+      "source": "xdto_root.res",
+      "schema": "xdto_root-03-http_v8.1c.ru_8.1_data_core.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data/core",
+      "path": "8.5/xdto/xdto_root-03-http_v8.1c.ru_8.1_data_core.xsd",
+      "bytes": 21442,
+      "sha256": "012d589c77f18e2ec2d032c0825ab3a82dbcfa552b82a17803618d9ab615f3a0"
+    },
+    {
+      "source": "xdto_root.res",
+      "schema": "xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd",
+      "namespace": "http://v8.1c.ru/8.1/data/ui",
+      "path": "8.5/xdto/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd",
+      "bytes": 19039,
+      "sha256": "c6e6eadefff7717d22d7249110478e8c90cba99783541376c073d0bb6ae297b3"
+    },
+    {
+      "source": "xml2_root.res",
+      "schema": "xml2_root-01-http_www.w3.org_2001_XMLSchema.xsd",
+      "namespace": "http://www.w3.org/2001/XMLSchema",
+      "path": "8.5/xml2/xml2_root-01-http_www.w3.org_2001_XMLSchema.xsd",
+      "bytes": 844,
+      "sha256": "3fceeaf100cec5d9e014d9f3e1889a5dcfe967c0d5f8dbe5ada68e8f5b0764c9"
+    },
+    {
+      "source": "xml2_root.res",
+      "schema": "xml2_root-02-http_www.w3.org_2001_XMLSchema-instance.xsd",
+      "namespace": "http://www.w3.org/2001/XMLSchema-instance",
+      "path": "8.5/xml2/xml2_root-02-http_www.w3.org_2001_XMLSchema-instance.xsd",
+      "bytes": 876,
+      "sha256": "8ed343e59a1c6e223e3f9a6b3752ee8deab45462c0632edf2fcbd0ae0d893eeb"
+    },
+    {
+      "source": "xml2_root.res",
+      "schema": "xml2_root-03-http_www.w3.org_2001_XMLSchema.xsd",
+      "namespace": "http://www.w3.org/2001/XMLSchema",
+      "path": "8.5/xml2/xml2_root-03-http_www.w3.org_2001_XMLSchema.xsd",
+      "bytes": 87601,
+      "sha256": "06a977cf715e24b0a133128252fa4a21fbf5c442aeff1ec89ef288356103eadf"
+    },
+    {
+      "source": "xml2_root.res",
+      "schema": "xml2_root-04-http_www.w3.org_2001_XMLSchema.xsd",
+      "namespace": "http://www.w3.org/2001/XMLSchema",
+      "path": "8.5/xml2/xml2_root-04-http_www.w3.org_2001_XMLSchema.xsd",
+      "bytes": 44277,
+      "sha256": "f0bd7d1ef521d842af1489d251877e21f50ee65603f371a6257e3efcd7f9ac3f"
+    },
+    {
+      "source": "xml2_root.res",
+      "schema": "xml2_root-05-http_www.w3.org_XML_1998_namespace.xsd",
+      "namespace": "http://www.w3.org/XML/1998/namespace",
+      "path": "8.5/xml2/xml2_root-05-http_www.w3.org_XML_1998_namespace.xsd",
+      "bytes": 5672,
+      "sha256": "685960aa228726ed80911f5d4b4a6ca4bf21ea2603fbedaa64469bdd1897738f"
+    }
+  ]
+}

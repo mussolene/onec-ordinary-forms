@@ -88,6 +88,11 @@ The public schema boundary is intentionally narrow:
   descriptor schema used by codec/coverage tooling.
 - `PlatformConfigStructure.xsd` is codec evidence for configuration metadata,
   type-domain patterns, `CompositeID`, and platform serializer concepts.
+- `schemas/platform/8.5` vendors the full extracted 1C 8.5 platform XSD
+  resource layer. The manifest `schemas/platform/8.5/schemas.json` records
+  resource module names, namespaces, sizes, and hashes. Generated native
+  headers such as `platform_form_schema.hpp` are compact indexes over this
+  evidence, not replacements for the full schemas.
 
 Public `Form.xml` element and attribute names use the English vocabulary from
 `OrdinaryForm.xsd`. Russian platform names are schema annotations used by tools
