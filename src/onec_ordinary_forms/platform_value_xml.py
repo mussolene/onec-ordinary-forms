@@ -24,16 +24,15 @@ def add_color_node_from_record(parent: ET.Element, tag: str, value: object) -> E
     color_value = clean_atom(value[2][0])
     node = ET.SubElement(parent, tag)
     node.set("value", color_value)
-    node.set("recordKind", clean_atom(value[0]))
-    if len(value) > 1:
-        node.set("recordSubKind", clean_atom(value[1]))
-    if len(value) > 3:
-        node.set("tailKind", clean_atom(value[3]))
     style_name = ORDINARY_STYLE_COLOR_NAMES.get(color_value)
     if style_name:
         node.set("kind", "StyleItem")
         node.set("name", style_name)
         node.text = f"style:{style_name}"
+        return node
+    if clean_atom(value[0]) == "4":
+        node.set("kind", "Auto")
+        node.text = color_value
         return node
     node.set("kind", "Absolute")
     rgb = color_decimal_to_rgb(color_value)

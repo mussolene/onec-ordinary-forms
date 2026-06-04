@@ -1428,7 +1428,7 @@ def add_command_bar_command_source(parent: ET.Element, public_type: str, item_da
     source = ET.SubElement(parent, "CommandSource")
     source.set("rootUuid", clean_token(items[1]))
     if len(items) > 2:
-        source.set("rootKind", clean_token(items[2]))
+        source.set("rootType", clean_token(items[2]))
     for source_index, attr_name in (
         (3, "actionPlacement"),
         (4, "actionAlignment"),
@@ -1562,15 +1562,15 @@ def add_command_bar_buttons(
         return
     buttons = ET.SubElement(parent, "Buttons")
     buttons.set("rootUuid", clean_token(items[1]))
-    buttons.set("rootKind", clean_token(items[2]))
-    buttons.set("rootFlag", clean_token(items[3]))
+    buttons.set("rootType", clean_token(items[2]))
+    buttons.set("rootState", clean_token(items[3]))
     actions_node = ET.SubElement(buttons, "Actions")
     for order, action in enumerate(items[actions_start:actions_end], start=1):
         if not isinstance(action, list) or len(action) < 8 or clean_token(action[0]) not in {"7", "8"}:
             continue
         action_node = ET.SubElement(actions_node, "Action")
         action_node.set("order", str(order))
-        action_node.set("recordKind", clean_token(action[0]))
+        action_node.set("actionKind", clean_token(action[0]))
         action_node.set("uuid", clean_token(action[1]))
         action_node.set("enabled", clean_token(action[2]))
         action_node.set("eventUuid", clean_token(action[3]))

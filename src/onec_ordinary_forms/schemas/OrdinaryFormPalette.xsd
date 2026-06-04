@@ -1571,7 +1571,7 @@
   </xs:complexType>
   <xs:complexType name="CommandBarCommandSourceType">
     <xs:attribute name="rootUuid" type="xs:string"/>
-    <xs:attribute name="rootKind" type="xs:string"/>
+    <xs:attribute name="rootType" type="xs:string"/>
     <xs:attribute name="metadataScope" type="xs:string"/>
     <xs:attribute name="actionPlacement" type="xs:string"/>
     <xs:attribute name="actionAlignment" type="xs:string"/>
@@ -1599,8 +1599,8 @@
       <xs:element name="Groups" type="CommandBarGroupsType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="rootUuid" type="xs:string" use="required"/>
-    <xs:attribute name="rootKind" type="xs:string" use="required"/>
-    <xs:attribute name="rootFlag" type="xs:string"/>
+    <xs:attribute name="rootType" type="xs:string" use="required"/>
+    <xs:attribute name="rootState" type="xs:string"/>
   </xs:complexType>
   <xs:complexType name="CommandBarActionsType">
     <xs:sequence>
@@ -1616,7 +1616,7 @@
     </xs:choice>
     <xs:attribute name="order" type="xs:integer"/>
     <xs:attribute name="uuid" type="xs:string" use="required"/>
-    <xs:attribute name="recordKind" type="xs:string"/>
+    <xs:attribute name="actionKind" type="xs:string"/>
     <xs:attribute name="enabled" type="xs:string"/>
     <xs:attribute name="eventUuid" type="xs:string"/>
     <xs:attribute name="handlerKind" type="xs:string"/>
@@ -2574,9 +2574,6 @@
       <xs:extension base="PlatformColorValueType">
         <xs:attribute name="kind" type="xs:string"/>
         <xs:attribute name="value" type="xs:string"/>
-        <xs:attribute name="recordKind" type="xs:string"/>
-        <xs:attribute name="recordSubKind" type="xs:string"/>
-        <xs:attribute name="tailKind" type="xs:string"/>
         <xs:attribute name="decimal" type="xs:integer"/>
         <xs:attribute name="rgb" type="AbsoluteColorType"/>
         <xs:attribute name="name" type="xs:string"/>

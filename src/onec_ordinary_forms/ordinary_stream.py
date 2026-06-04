@@ -4149,7 +4149,7 @@ def command_bar_items_record(
         return [
             "5",
             source.get("rootUuid", palette_uuid),
-            source.get("rootKind", palette_kind),
+            source.get("rootType") or source.get("rootKind") or palette_kind,
             "1",
             "0",
             "1",
@@ -4215,7 +4215,7 @@ def command_bar_items_record(
 
 def command_bar_items_record_from_xml(buttons: ET.Element, asset_root: Path | None = None) -> list[object]:
     root_uuid = buttons.get("rootUuid")
-    root_kind = buttons.get("rootKind")
+    root_kind = buttons.get("rootType") or buttons.get("rootKind")
     if not root_uuid or not root_kind:
         return []
     actions = []
@@ -4228,7 +4228,7 @@ def command_bar_items_record_from_xml(buttons: ET.Element, asset_root: Path | No
         "5",
         root_uuid,
         root_kind,
-        buttons.get("rootFlag") or "1",
+        buttons.get("rootState") or buttons.get("rootFlag") or "1",
         str(len(actions)),
         *actions,
         str(len(groups)),
@@ -4238,7 +4238,7 @@ def command_bar_items_record_from_xml(buttons: ET.Element, asset_root: Path | No
 
 def command_bar_action_record_from_xml(action: ET.Element, asset_root: Path | None = None) -> list[object]:
     record = [
-        action.get("recordKind") or "8",
+        action.get("actionKind") or action.get("recordKind") or "8",
         action.get("uuid") or "",
         action.get("enabled") or "1",
         action.get("eventUuid") or DEFAULT_CONTROL_EVENT_UUID,

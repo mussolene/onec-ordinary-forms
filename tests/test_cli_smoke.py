@@ -4117,12 +4117,35 @@ class CliSmokeTest(unittest.TestCase):
         root = ET.Element("CommandBar")
         add_command_bar_buttons(root, items)
 
+        buttons = root.find("Buttons")
+        self.assertIsNotNone(buttons)
+        assert buttons is not None
+        self.assertEqual(buttons.get("rootType"), "3")
+        self.assertEqual(buttons.get("rootState"), "1")
+        self.assertIsNone(buttons.get("rootKind"))
+        self.assertIsNone(buttons.get("rootFlag"))
+
         action = root.find("./Buttons/Actions/Action")
         self.assertIsNotNone(action)
         assert action is not None
-        self.assertEqual(action.get("recordKind"), "7")
-        rebuilt = command_bar_items_record_from_xml(root.find("Buttons"))
+        self.assertEqual(action.get("actionKind"), "7")
+        self.assertIsNone(action.get("recordKind"))
+        rebuilt = command_bar_items_record_from_xml(buttons)
         self.assertEqual(rebuilt[5][0], "7")
+
+    def test_color_xml_does_not_emit_raw_record_shape_attrs(self) -> None:
+        from onec_ordinary_forms.platform_value_xml import add_color_node_from_record
+
+        parent = ET.Element("Table")
+        color = add_color_node_from_record(parent, "FieldBackColor", ["3", "3", ["-14"]])
+
+        self.assertIsNotNone(color)
+        assert color is not None
+        self.assertEqual(color.get("kind"), "Absolute")
+        self.assertEqual(color.get("value"), "-14")
+        self.assertIsNone(color.get("recordKind"))
+        self.assertIsNone(color.get("recordSubKind"))
+        self.assertIsNone(color.get("tailKind"))
 
     def test_button_menu_mode_roundtrips_as_named_property(self) -> None:
         root = ET.fromstring(
