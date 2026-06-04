@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag to publish, for example v0.4.0
+        description: Tag to publish, for example v0.5.0
         required: true
         type: string
 
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   release:
-    name: Build and publish release
+    name: Build native release
     runs-on: ubuntu-latest
 
     steps:
@@ -34,29 +34,17 @@ jobs:
         with:
           ref: ${{ steps.release.outputs.tag }}
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: pip
+      - name: Install native dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential zlib1g-dev
 
-      - name: Install release dependencies
+      - name: Run release gate
+        run: make release-gate
+
+      - name: Package native binary and schemas
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e '.[dev]'
-          python -m pip install build lxml pytest twine
-
-      - name: Run tests
-        run: PYTHONPATH=src python -m pytest -q
-
-      - name: Run CLI smoke
-        run: make smoke PYTHON=python
-
-      - name: Build package
-        run: python -m build
-
-      - name: Check package metadata
-        run: python -m twine check dist/*
+          mkdir -p dist
+          cp sidecars/onec-form-native/build/oof-native dist/oof-native-linux-x86_64
+          tar -czf dist/onec-ordinary-forms-native-linux-x86_64.tar.gz -C dist oof-native-linux-x86_64 -C .. schemas README.md LICENSE
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v3

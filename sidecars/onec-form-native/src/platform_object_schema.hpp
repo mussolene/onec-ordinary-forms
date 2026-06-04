@@ -411,7 +411,7 @@ inline bool writable_for_schema_value_type(std::string_view value_type) {
     // runtime differential oracle, so they are readable coverage gaps, never
     // writable. Writability is promoted only by a proven slot binding, not by
     // schema existence. See docs/ordinary-form-pattern-audit.md and
-    // tools/object_model_gate.py.
+    // oof-native object-model-gate.
     (void)value_type;
     return false;
 }

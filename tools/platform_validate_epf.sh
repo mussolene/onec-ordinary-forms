@@ -12,12 +12,19 @@ if [[ -z "${OOF_PLATFORM_CONTAINER:-}" && ( -z "${NETHASP_INI_PATH:-}" || ! -r "
 fi
 
 repo_root=$(pwd)
-input_path=$(python3 - "$1" <<'PY'
-from pathlib import Path
-import sys
-print(Path(sys.argv[1]).expanduser().resolve())
-PY
-)
+abs_path() {
+  local path="$1"
+  case "$path" in
+    ~/*) path="${HOME}${path#~}" ;;
+  esac
+  local dir
+  local base
+  dir="$(cd "$(dirname "$path")" && pwd -P)"
+  base="$(basename "$path")"
+  printf '%s/%s\n' "$dir" "$base"
+}
+
+input_path="$(abs_path "$1")"
 
 if [[ ! -f "$input_path" ]]; then
   echo "Input file does not exist: $input_path" >&2
@@ -34,12 +41,8 @@ else
   out_dir="scan-output/platform-validate/$stem"
 fi
 
-out_abs=$(python3 - "$out_dir" <<'PY'
-from pathlib import Path
-import sys
-print(Path(sys.argv[1]).expanduser().resolve())
-PY
-)
+mkdir -p "$out_dir"
+out_abs="$(cd "$out_dir" && pwd -P)"
 
 case "$out_abs" in
   "$repo_root"/*) ;;
@@ -50,7 +53,6 @@ case "$out_abs" in
 esac
 
 out_rel=${out_abs#"$repo_root"/}
-mkdir -p "$out_abs"
 
 if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
   if [[ "$(docker inspect -f '{{.State.Running}}' "$OOF_PLATFORM_CONTAINER" 2>/dev/null || true)" != "true" ]]; then

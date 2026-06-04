@@ -1,14 +1,14 @@
 # onec-form-native
 
-Native sidecar for ordinary-form codec work.
+Native ordinary-form codec and CLI.
 
-This directory is intentionally separate from the Python package. The first
-tool is a clean-room list-stream reader/writer used for oracle comparisons and
-future migration of stable codec pieces into a native component.
+This directory owns the current implementation surface. The old package
+was removed so ordinary-form parsing, package dump/build, object-model
+inspection, and validation gates live in one native C++ tool.
 
-The sidecar must not expose raw list streams in public `Form.xml`. Its outputs
-are diagnostic artifacts for ignored `scan-output/` runs and internal codec
-tests only.
+The native tool must not expose raw list streams in public `Form.xml`.
+Diagnostic outputs may inspect internal streams, but the release-facing source
+package is `Form.xml`, `Form/Module.bsl`, and picture sidecars.
 
 ## Build
 

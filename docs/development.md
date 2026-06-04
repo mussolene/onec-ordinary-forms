@@ -68,23 +68,20 @@ behavior.
 The repository has two GitHub Actions workflows:
 
 - `CI` runs on pushes to `main`, pull requests, and manual dispatch. It tests
-  Python 3.10, 3.11, and 3.12, then runs CLI smoke, builds the package, checks
-  the built artifacts with `twine`, and uploads the Python 3.12 artifacts.
+  the native C++ implementation with `make test` and `make smoke`.
 - `Release` runs on `v*` tags and manual dispatch with a tag input. It checks
-  out the requested tag, installs release dependencies, runs tests and smoke,
-  builds the package, checks artifacts, and publishes them to the GitHub
-  release for that tag.
+  out the requested tag, runs the native release gate, packages the native
+  binary and schemas, and publishes them to the GitHub release for that tag.
 
 For a normal release:
 
-1. Bump `pyproject.toml`, `src/onec_ordinary_forms/__init__.py`, and README
-   status.
-2. Run local tests, smoke, package build, `twine check`, and leak scan.
+1. Bump README/changelog status.
+2. Run local native tests, smoke, release gate, and leak scan.
 3. Commit the release bump.
 4. Create and push an annotated `vX.Y.Z` tag.
-5. Let the `Release` workflow publish wheel and sdist assets.
+5. Let the `Release` workflow publish native assets.
 
-The workflow publishes only package artifacts from `dist/`. It does not use
+The workflow publishes only native artifacts from `dist/`. It does not use
 private EPF/ERF fixtures, platform containers, license files, or local corpus
 exports.
 
@@ -101,17 +98,11 @@ checks are true in current evidence:
   property rows, with no unmapped, XSD-only, or no-public-XML gaps;
 - representative corpora pass native semantic diff and strict Designer
   validation through `tools/platform_validate_epf.sh`;
-- Linux, macOS, and Windows wheels plus sdist install and pass CLI smoke;
-- release artifacts are published to GitHub Release and PyPI only after the
-  same gates pass for the tagged commit.
+- native release artifacts install and pass CLI smoke;
+- release artifacts are published to GitHub Release only after the same gates
+  pass for the tagged commit.
 
 ## Next Refactor
 
-Split `src/onec_ordinary_forms/cli.py` into:
-
-- `model.py`
-- `xml_dump.py`
-- `bracket_writer.py`
-- `assets.py`
-- `types.py`
-- `cli.py`
+Continue collapsing native C++ writer gaps into named object-model concepts.
+Do not reintroduce a parallel implementation or raw public XML profile surface.

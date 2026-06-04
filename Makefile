@@ -1,27 +1,21 @@
-.PHONY: test smoke format-xml release-gate clean
+.PHONY: test smoke release-gate clean
 
-PYTHON ?= python3
+NATIVE_DIR := sidecars/onec-form-native
+NATIVE_BIN := $(NATIVE_DIR)/build/oof-native
+
+$(NATIVE_BIN):
+	$(MAKE) -C $(NATIVE_DIR)
 
 test:
-	PYTHONPATH=src $(PYTHON) -m pytest -q
+	$(MAKE) -C $(NATIVE_DIR) test
 
-smoke:
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli build-bin --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli unpack-bin --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli pack-bin --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli dump-bin --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli scan-corpus --help
+smoke: $(NATIVE_BIN)
+	$(NATIVE_BIN) mechanism >/dev/null
+	$(NATIVE_BIN) platform-object-schema >/dev/null
+	$(NATIVE_BIN) object-model-gate | grep -F -q '"status":"PASS"'
 
-format-xml:
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/OrdinaryForm.xsd
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/OrdinaryFormPalette.xsd
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/PlatformConfigStructure.xsd
-
-release-gate:
-	PYTHONPATH=src $(PYTHON) tools/release_gate.py --repo .
+release-gate: test smoke
 
 clean:
-	find . -type d -name __pycache__ -prune -exec rm -rf {} +
-	find . -type d -name '*.egg-info' -prune -exec rm -rf {} +
-	rm -rf build dist .pytest_cache
+	$(MAKE) -C $(NATIVE_DIR) clean
+	rm -rf build dist

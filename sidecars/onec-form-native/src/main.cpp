@@ -289,6 +289,7 @@ void usage() {
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "       oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry>\n"
+              << "       oof-native object-model-gate\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
               << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
@@ -7549,6 +7550,147 @@ void print_platform_property_registry() {
     std::cout << "]}\n";
 }
 
+bool object_model_gate_is_unproven_value_codec(std::string_view codec) {
+    return codec == "color-record" ||
+           codec == "font-record" ||
+           codec == "picture-record" ||
+           codec == "border-record";
+}
+
+bool object_model_gate_is_pending_status(std::string_view status) {
+    return status.find("pending") != std::string_view::npos ||
+           status.find("unproven") != std::string_view::npos ||
+           status.find("unknown-residue") != std::string_view::npos;
+}
+
+bool object_model_gate_has_raw_public_name(std::string_view name) {
+    static constexpr std::array<std::string_view, 8> forbidden{
+        "SerializationProfile",
+        "RawBracket",
+        "BracketStream",
+        "ListStream",
+        "FormBin",
+        "ObjectModel",
+        "LogicalStream",
+        "PlatformRecords",
+    };
+    for (const auto token : forbidden) {
+        if (name.find(token) != std::string_view::npos) {
+            return true;
+        }
+    }
+    const std::regex slotn(R"(\bslot\d+\b)", std::regex_constants::icase);
+    return std::regex_search(std::string(name), slotn);
+}
+
+bool object_model_gate_can_write_codec(std::string_view codec) {
+    return codec == "name-record" ||
+           codec == "scalar-flag" ||
+           codec == "position-record" ||
+           codec == "binding-record" ||
+           codec == "attribute-record" ||
+           codec == "command-record" ||
+           codec == "event-action-record";
+}
+
+void object_model_gate_add_violation(
+    std::vector<std::string>& violations,
+    std::string_view label,
+    std::string_view name,
+    std::string_view message
+) {
+    violations.push_back(std::string(label) + " " + std::string(name) + ": " + std::string(message));
+}
+
+void object_model_gate_check_member(
+    std::vector<std::string>& violations,
+    std::string_view label,
+    std::string_view name,
+    std::string_view codec,
+    std::string_view codec_status,
+    bool writable
+) {
+    if (object_model_gate_has_raw_public_name(name)) {
+        object_model_gate_add_violation(violations, label, name, "raw-shape vocabulary in public name");
+    }
+    if (!writable) {
+        return;
+    }
+    if (object_model_gate_is_unproven_value_codec(codec)) {
+        object_model_gate_add_violation(violations, label, name, "writable unproven value codec " + std::string(codec));
+    } else if (!object_model_gate_can_write_codec(codec)) {
+        object_model_gate_add_violation(violations, label, name, "writable codec is outside current native setPropVal surface: " + std::string(codec));
+    }
+    if (object_model_gate_is_pending_status(codec_status)) {
+        object_model_gate_add_violation(violations, label, name, "writable codec status is not proven: " + std::string(codec_status));
+    }
+}
+
+void print_object_model_gate() {
+    std::vector<std::string> violations;
+    std::size_t schema_members_checked = 0;
+    std::size_t registry_descriptors_checked = 0;
+    std::size_t writable_value_codecs = 0;
+    std::size_t readable_value_coverage_gaps = 0;
+
+    const auto schemas = oof::platform::object_schema::build_platform_object_schemas();
+    for (const auto& schema : schemas) {
+        const std::string label = "schema[" + schema.type_name + "]";
+        for (const auto& member : schema.xsd_members) {
+            ++schema_members_checked;
+            if (object_model_gate_is_unproven_value_codec(member.slot_codec)) {
+                if (member.writable) {
+                    ++writable_value_codecs;
+                } else {
+                    ++readable_value_coverage_gaps;
+                }
+            }
+            object_model_gate_check_member(
+                violations,
+                label,
+                member.name,
+                member.slot_codec,
+                member.codec_status,
+                member.writable);
+        }
+    }
+
+    const auto& generated_descriptors = oof::platform::property_registry::generated_api_descriptors();
+    const auto check_descriptor = [&](const oof::platform::property_registry::PlatformPropertyDescriptor& descriptor) {
+        ++registry_descriptors_checked;
+        object_model_gate_check_member(
+            violations,
+            "registry",
+            descriptor.name,
+            oof::platform::property_registry::slot_codec_name(descriptor.slot_codec),
+            "",
+            descriptor.writable);
+    };
+    for (const auto& descriptor : oof::platform::property_registry::descriptors) {
+        check_descriptor(descriptor);
+    }
+    for (const auto& descriptor : generated_descriptors) {
+        check_descriptor(descriptor);
+    }
+
+    std::cout << "{\"operation\":\"object-model-gate\"";
+    std::cout << ",\"schemaMembersChecked\":" << schema_members_checked;
+    std::cout << ",\"registryDescriptorsChecked\":" << registry_descriptors_checked;
+    std::cout << ",\"writableValueCodecs\":" << writable_value_codecs;
+    std::cout << ",\"readableValueCoverageGaps\":" << readable_value_coverage_gaps;
+    std::cout << ",\"violations\":" << violations.size();
+    std::cout << ",\"status\":";
+    print_json_string(violations.empty() ? "PASS" : "FAIL");
+    std::cout << ",\"details\":[";
+    for (std::size_t index = 0; index < violations.size() && index < 32; ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_json_string(violations[index]);
+    }
+    std::cout << "]}\n";
+}
+
 void write_runtime_form_rename(
     const std::string& input_path,
     const std::string& output_path,
@@ -7586,6 +7728,7 @@ struct RuntimeSemanticDiffStats {
     std::size_t volatile_guid_diffs = 0;
     std::size_t volatile_counter_diffs = 0;
     std::vector<std::string> semantic_paths;
+    std::vector<std::map<std::string, std::string>> diff_details;
 };
 
 bool parse_int64_atom(std::string_view value, std::int64_t& parsed) {
@@ -7622,6 +7765,36 @@ std::string node_type_scope(const oof::platform::stream::ListValue& value, std::
     return std::string(current_scope);
 }
 
+std::string runtime_diff_node_summary(const oof::platform::stream::ListValue& value) {
+    if (value.is_list) {
+        return "list:" + std::to_string(value.items.size());
+    }
+    std::string atom = value.atom;
+    if (atom.size() > 96) {
+        atom.resize(96);
+        atom += "...";
+    }
+    return std::string(value.atom_kind == oof::platform::stream::ListValue::AtomKind::string ? "string:" : "raw:") + atom;
+}
+
+void add_runtime_diff_detail(
+    RuntimeSemanticDiffStats& stats,
+    std::string_view kind,
+    std::string_view path,
+    const oof::platform::stream::ListValue& left,
+    const oof::platform::stream::ListValue& right
+) {
+    if (stats.diff_details.size() >= 24) {
+        return;
+    }
+    stats.diff_details.push_back({
+        {"kind", std::string(kind)},
+        {"path", std::string(path)},
+        {"left", runtime_diff_node_summary(left)},
+        {"right", runtime_diff_node_summary(right)},
+    });
+}
+
 void collect_runtime_semantic_diff(
     const oof::platform::stream::ListValue& left,
     const oof::platform::stream::ListValue& right,
@@ -7632,6 +7805,7 @@ void collect_runtime_semantic_diff(
     if (left.is_list != right.is_list) {
         ++stats.structural_diffs;
         stats.semantic_paths.push_back(std::string(path));
+        add_runtime_diff_detail(stats, "node-kind", path, left, right);
         return;
     }
     if (!left.is_list) {
@@ -7661,11 +7835,13 @@ void collect_runtime_semantic_diff(
         if (stats.semantic_paths.size() < 16) {
             stats.semantic_paths.push_back(std::string(path));
         }
+        add_runtime_diff_detail(stats, "atom", path, left, right);
         return;
     }
     if (left.items.size() != right.items.size()) {
         ++stats.structural_diffs;
         stats.semantic_paths.push_back(std::string(path));
+        add_runtime_diff_detail(stats, "list-size", path, left, right);
         return;
     }
 
@@ -7705,6 +7881,22 @@ void print_runtime_form_semantic_diff(const std::string& left_path, const std::s
             std::cout << ",";
         }
         print_json_string(stats.semantic_paths[index]);
+    }
+    std::cout << "],\"diffDetails\":[";
+    for (std::size_t index = 0; index < stats.diff_details.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& detail = stats.diff_details[index];
+        std::cout << "{\"kind\":";
+        print_json_string(detail.at("kind"));
+        std::cout << ",\"path\":";
+        print_json_string(detail.at("path"));
+        std::cout << ",\"left\":";
+        print_json_string(detail.at("left"));
+        std::cout << ",\"right\":";
+        print_json_string(detail.at("right"));
+        std::cout << "}";
     }
     std::cout << "]}\n";
 }
@@ -8699,6 +8891,10 @@ int main(int argc, char** argv) {
         }
         if (command == "platform-property-registry") {
             print_platform_property_registry();
+            return 0;
+        }
+        if (command == "object-model-gate") {
+            print_object_model_gate();
             return 0;
         }
         if (command == "form-payload-info" && argc == 3) {

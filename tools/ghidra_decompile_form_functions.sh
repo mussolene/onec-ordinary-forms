@@ -42,9 +42,18 @@ fi
 
 mkdir -p "$out_dir"
 
-input_abs="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$input_path")"
-out_abs="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$out_dir")"
-script_abs="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$(dirname "$0")/ghidra/ExtractFormDecompile.java")"
+abs_path() {
+  local path="$1"
+  local dir
+  local base
+  dir="$(cd "$(dirname "$path")" && pwd -P)"
+  base="$(basename "$path")"
+  printf '%s/%s\n' "$dir" "$base"
+}
+
+input_abs="$(abs_path "$input_path")"
+out_abs="$(cd "$out_dir" && pwd -P)"
+script_abs="$(abs_path "$(dirname "$0")/ghidra/ExtractFormDecompile.java")"
 input_dir="$(dirname "$input_abs")"
 input_file="$(basename "$input_abs")"
 project_dir="$out_abs/project-decompile"

@@ -69,13 +69,13 @@ This gives us the same shape as the platform: read many old profiles, build one
 consistent current graph, and keep compatibility details as named schema-backed
 properties rather than raw sidecars.
 
-Use `tools/audit_codec_coverage.py` before and after serializer work. It reports
-the current gap between the public palette/XSD, legacy writer branches, writer
-descriptor coverage, and shared slot descriptor coverage. The writer dispatch is
-now registry-based for all supported ordinary controls. Controls found only in
-managed-form documentation, such as `ПолеПериода`, are not part of the public
-ordinary-form schema until platform evidence gives an ordinary-control class id
-and record shape.
+Use native gates before and after serializer work:
+`make -C sidecars/onec-form-native test` and
+`sidecars/onec-form-native/build/oof-native object-model-gate`. The writer
+dispatch is registry-based for all supported ordinary controls. Controls found
+only in managed-form documentation, such as `ПолеПериода`, are not part of the
+public ordinary-form schema until platform evidence gives an ordinary-control
+class id and record shape.
 
 ## Schema Boundary
 

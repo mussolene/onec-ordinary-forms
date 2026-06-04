@@ -1,7 +1,7 @@
 # Container Validation
 
 Container runs are optional local validation tools. They are not part of the
-published Python package.
+native release artifact.
 
 Do not commit platform archives, mounted private volumes, license files,
 generated exports, EPF/ERF processors, or command logs that contain local

@@ -373,8 +373,22 @@ test: $(BIN)
 	perl -0pi -e 's/name="Button1"/name="DualProjectionName"/' $(BUILD_DIR)/dual-projection.xml
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection.xml $(BUILD_DIR)/dual-projection-xml.txt | grep -F -q '"nameEdits":1'
 	$(BIN) runtime-form-semantic-diff $(BUILD_DIR)/dual-projection-object.txt $(BUILD_DIR)/dual-projection-xml.txt | grep -F -q '"normalizedEqual":true'
-	python3 ../../tools/object_model_gate.py --native-bin $(BIN)
-	python3 ../../tools/lossless_roundtrip_gate.py --native-bin $(BIN)
+	$(BIN) object-model-gate | grep -F -q '"status":"PASS"'
+	total=0; ok=0; list_file="$(BUILD_DIR)/native-lossless-formbins.txt"; : > "$$list_file"; \
+	for root in ../../work/oracle-runtime/runtime-source/root ../../work/oracle-runtime/blank-source/root; do \
+		if [ -d "$$root" ]; then \
+			find "$$root" -path '*/Forms/*/Ext/Form.bin' -type f >> "$$list_file"; \
+		fi; \
+	done; \
+	sort "$$list_file" -o "$$list_file"; \
+	while IFS= read -r form_bin; do \
+		if [ -n "$$form_bin" ]; then \
+			total=$$((total + 1)); \
+			$(BIN) formbin-roundtrip "$$form_bin" | grep -F -q '"logicalEqual":true'; \
+			ok=$$((ok + 1)); \
+		fi; \
+	done < "$$list_file"; \
+	printf 'native-lossless-roundtrip-gate: PASS (%s/%s payload-lossless)\n' "$$ok" "$$total"
 
 clean:
 	rm -rf $(BUILD_DIR)

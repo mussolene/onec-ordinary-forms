@@ -12,12 +12,11 @@ if [[ -z "${OOF_NETHASP_INI:-}" || ! -r "$OOF_NETHASP_INI" ]]; then
 fi
 
 repo_root=$(pwd)
-nethasp_path=$(python3 - "$OOF_NETHASP_INI" <<'PY'
-from pathlib import Path
-import sys
-print(Path(sys.argv[1]).expanduser().resolve())
-PY
-)
+case "$OOF_NETHASP_INI" in
+  ~/*) nethasp_input="${HOME}${OOF_NETHASP_INI#~}" ;;
+  *) nethasp_input="$OOF_NETHASP_INI" ;;
+esac
+nethasp_path="$(cd "$(dirname "$nethasp_input")" && pwd -P)/$(basename "$nethasp_input")"
 
 docker rm -f "$container_name" >/dev/null 2>&1 || true
 docker run -d \

@@ -3,9 +3,9 @@
 Tools for converting 1C ordinary form `Form.bin` into a Git-friendly source
 package and building it back. The current release line uses a public source
 package as the source of truth: `Form.xml`, `Form/Module.bsl`, and picture
-sidecars. Python currently owns the proven direct source writer and the CLI/API
-wrapper; the native C++ sidecar provides package dump/projection and
-compatibility rebuild helpers.
+sidecars. The implementation and CLI surface are native C++ through
+`sidecars/onec-form-native/build/oof-native`; the old implementation has been
+removed to keep one product surface.
 
 ## English
 
@@ -145,19 +145,10 @@ These codec concepts are not a public raw-stream dump. Full platform XSD
 extractions are kept as reproducible research artifacts under ignored
 `scan-output/`, not vendored into the package.
 
-Regenerate platform schema evidence from a local platform mirror with:
-
-```bash
-python3 tools/extract_platform_xml_resources.py \
-  --root <platform-bin-dir> \
-  --out-dir scan-output/platform85/xml-clean \
-  --schemas-only
-python3 tools/vendor_platform_schemas.py \
-  --resources-json scan-output/platform85/xml-clean/resources.json \
-  --source-dir scan-output/platform85/xml-clean \
-  --out-dir scan-output/platform85/vendor-check \
-  --platform-version 8.5
-```
+Platform schema evidence is now maintained through native code/resources and
+OACS evidence. Historical extraction scripts were removed with the old
+implementation; use git history if a previous extraction helper is needed for
+research.
 
 ### What Must Not Be In Public XML
 
@@ -339,20 +330,10 @@ Form.xml -> объектная модель платформы -> ListOutStream 
 платформенных XSD хранятся как воспроизводимые исследовательские артефакты в
 игнорируемом `scan-output/`, а не поставляются внутри пакета.
 
-Обновить платформенные сведения для схем из локального зеркала платформы можно
-так:
-
-```bash
-python3 tools/extract_platform_xml_resources.py \
-  --root <platform-bin-dir> \
-  --out-dir scan-output/platform85/xml-clean \
-  --schemas-only
-python3 tools/vendor_platform_schemas.py \
-  --resources-json scan-output/platform85/xml-clean/resources.json \
-  --source-dir scan-output/platform85/xml-clean \
-  --out-dir scan-output/platform85/vendor-check \
-  --platform-version 8.5
-```
+Платформенные сведения для схем теперь поддерживаются через native-код,
+ресурсы и OACS evidence. Исторические скрипты извлечения удалены вместе со
+старой реализацией; при необходимости их можно поднять из git history для
+отдельного исследования.
 
 ### Чего не должно быть в публичном XML
 
@@ -425,9 +406,8 @@ Target implementation status:
 - keep the public package as the only editable source form;
 - harden and extend the direct source writer for more ordinary-form controls and
   properties;
-- optionally port the proven Python writer algorithm into C++ once the behavior
-  is stable, without reintroducing seed templates, raw fallbacks, or mandatory
-  `--base-bin`.
+- keep the implementation in native C++ without reintroducing seed templates,
+  raw fallbacks, mandatory `--base-bin`, or a parallel writer.
 
 Текущий статус реализации:
 
@@ -453,9 +433,8 @@ Target implementation status:
 - удержание публичного package как единственного редактируемого источника;
 - расширение и укрепление прямого source writer для большего числа контролов и
   свойств обычных форм;
-- optional перенос доказанного Python writer-алгоритма в C++ после стабилизации
-  поведения, без возврата seed templates, raw fallback и обязательного
-  `--base-bin`.
+- удержание реализации в native C++ без возврата seed templates, raw fallback,
+  обязательного `--base-bin` или параллельного writer.
 
 Validation status:
 
@@ -509,36 +488,30 @@ Validation status:
 
 Automation:
 
-- CI runs on GitHub Actions for pushes, pull requests, and manual dispatch on
-  Python 3.10, 3.11, and 3.12.
-- CI executes tests, CLI smoke, package build, and package metadata checks.
+- CI runs on GitHub Actions for pushes, pull requests, and manual dispatch.
+- CI builds the native C++ tool, runs native tests, and runs native smoke.
 - Release workflow runs for `v*` tags or manual dispatch with a tag input,
-  rebuilds the package, rechecks it, and publishes GitHub Release assets.
+  rebuilds the native binary, rechecks it, and publishes GitHub Release assets.
 
 Автоматизация:
 
-- CI запускается в GitHub Actions для push, pull request и manual dispatch на
-  Python 3.10, 3.11 и 3.12;
-- CI выполняет тесты, CLI smoke, сборку пакета и проверку package metadata;
+- CI запускается в GitHub Actions для push, pull request и manual dispatch;
+- CI собирает native C++ tool, выполняет native tests и native smoke;
 - релизный workflow запускается для тегов `v*` или вручную с указанием тега,
-  пересобирает пакет, проверяет его и публикует артефакты в GitHub Release.
+  пересобирает native binary, проверяет его и публикует артефакты в GitHub Release.
 
 ## Install
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install -e '.[dev]'
+make -C sidecars/onec-form-native
 make test
 ```
 
 For the same checks used in CI:
 
 ```bash
-PYTHONPATH=src pytest -q
+make test
 make smoke
-python -m build
-python -m twine check dist/*
 ```
 
 ## CLI
@@ -546,13 +519,12 @@ python -m twine check dist/*
 Dump an ordinary form binary:
 
 ```bash
-onec-ordinary-forms dump-bin \
-  --bin scan-output/exported/Object/Forms/Form/Ext/Form.bin \
-  --out scan-output/exported/Object/Forms/Form/Ext/Form.xml
+sidecars/onec-form-native/build/oof-native formbin-dump-package \
+  scan-output/exported/Object/Forms/Form/Ext/Form.bin \
+  scan-output/exported/Object/Forms/Form/Ext/Form.xml
 ```
 
-The command is backed by the native C++ `oof-native formbin-dump-package` engine
-and writes one managed-form-like package:
+The command writes one managed-form-like package:
 
 ```text
 scan-output/exported/Object/Forms/Form/Ext/Form.xml
@@ -560,29 +532,22 @@ scan-output/exported/Object/Forms/Form/Ext/Form/Module.bsl
 scan-output/exported/Object/Forms/Form/Ext/Form/Items/<ElementName>/Picture.gif
 ```
 
-Validate and format the XML:
+Schemas are kept in the repository-level `schemas/` directory:
 
 ```bash
-onec-ordinary-forms validate --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml
-onec-ordinary-forms format-xml --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml
-```
-
-Show bundled schemas:
-
-```bash
-onec-ordinary-forms schemas
+ls schemas
 ```
 
 Build `Form.bin` directly from the source package:
 
 ```bash
-onec-ordinary-forms build-bin \
-  --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml \
-  --out-bin scan-output/rebuilt/Form.bin
+sidecars/onec-form-native/build/oof-native formbin-build-source-package \
+  scan-output/exported/Object/Forms/Form/Ext/Form.xml \
+  scan-output/rebuilt/Form.bin
 ```
 
-For native patch compatibility checks, `--base-bin` can still apply supported
-edits to an original `Form.bin` baseline.
+The old `--base-bin` compatibility path is not the product contract. The
+release-facing path is source package to `Form.bin` through native C++.
 
 Before platform import, use a copy of the source tree where the public ordinary
 `Ext/Form.xml` and `Ext/Form/` sidecar directory are removed. The platform
@@ -602,53 +567,15 @@ shape.
 Diagnostic commands:
 
 ```bash
-onec-ordinary-forms unpack-bin --bin Form.bin --out-dir scan-output/form-parts
-onec-ordinary-forms pack-bin --parts-dir scan-output/form-parts --out-bin Form.bin
-onec-ordinary-forms digest-xml --xml scan-output/exported/Object/Forms/Form/Ext/Form.xml --out-json scan-output/form-digest.json
-onec-ordinary-forms scan-corpus --root "<private-processors-dir>" --out-json scan-output/corpus.json
-onec-ordinary-forms scan-corpus \
-  --root "<private-processors-dir>" \
-  --exported-root scan-output/platform-export \
-  --compare-exported-root scan-output/platform-redump \
-  --out-json scan-output/corpus-semantic.json
+sidecars/onec-form-native/build/oof-native container-extract Form.bin scan-output/form-parts
+sidecars/onec-form-native/build/oof-native formbin-roundtrip Form.bin
+sidecars/onec-form-native/build/oof-native formbin-info Form.bin
+sidecars/onec-form-native/build/oof-native object-model-gate
 ```
 
-`unpack-bin` and `pack-bin` are diagnostics for `Form.bin` container research.
-They are not the target public source layout and should not be used as the
-editable representation of a form.
-
-`digest-xml` reports a normalized semantic graph hash for object-model
-comparisons: controls, parent order, positions, bindings, events, attributes,
-table columns/editor controls, pictures, fonts, colors, and command sources.
-Use it before byte-level corpus reports to distinguish real semantic loss from
-platform serialization noise.
-
-`scan-corpus --semantic-digest` adds the same hash and summary to each exported
-ordinary `Form.xml`. `--compare-exported-root` compares matching forms in two
-exported trees and reports `equal`, `different`, `sourceUnavailable`, or
-`targetUnavailable` without exposing absolute local paths.
-
-## Python API
-
-```python
-from onec_ordinary_forms import build_form_bin, dump_form_bin, validate_form_xml
-
-dump_form_bin(
-    "scan-output/exported/Object/Forms/Form/Ext/Form.bin",
-    "scan-output/exported/Object/Forms/Form/Ext/Form.xml",
-)
-
-validate_form_xml("scan-output/exported/Object/Forms/Form/Ext/Form.xml")
-
-build_form_bin(
-    "scan-output/exported/Object/Forms/Form/Ext/Form.xml",
-    "scan-output/rebuilt/Form.bin",
-)
-```
-
-`dump_form_bin` writes the public source package. `build_form_bin` rebuilds
-`Form.bin` directly from that package when `base_bin` is omitted. Passing
-`base_bin=...` explicitly selects the native compatibility patch path.
+`container-extract` and `formbin-info` are diagnostics for `Form.bin` container
+research. They are not the target public source layout and should not be used as
+the editable representation of a form.
 
 ## Platform Validation
 

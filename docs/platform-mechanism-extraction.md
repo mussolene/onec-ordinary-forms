@@ -11,17 +11,11 @@ contain only the reproducible extraction tool and sanitized mechanism map.
 tools/ghidra_decompile_form_functions.sh \
   work/platform85-libs/dsgnfrm.so \
   work/ghidra-platform-mechanism-current
-
-python3 tools/extract_platform_mechanism.py \
-  --decompile-json work/ghidra-platform-mechanism-current/dsgnfrm.so.ghidra-decompile.json \
-  --xrefs-json work/ghidra-runtime-graph/xrefs/dsgnfrm.so.ghidra-xrefs.json \
-  --lib work/platform85-libs/dsgnfrm.so \
-  --lib work/platform85-libs/frmcore.so \
-  --lib work/platform85-libs/mngui.so \
-  --lib work/platform85-libs/mngbase.so \
-  --json-out scan-output/platform-mechanism-current/mechanism.json \
-  --md-out scan-output/platform-mechanism-current/mechanism.md
 ```
+
+Historical note: the old post-processor for mechanism JSON/Markdown was removed
+with the previous implementation. Use git history if that research helper is
+needed again; current product code should stay native C++.
 
 ## Platform Entry Points
 
@@ -124,9 +118,9 @@ The sanitized platform-derived shape is:
   and reads the two strings for each item through the platform list-stream
   string reader.
 
-Do not port the repository's existing Python localized-text helper shape as if
-it were platform evidence. Native `platform_value` work for localized values
-must be derived from `core85.so` serializer evidence or a live platform oracle.
+Do not port an old localized-text helper shape as if it were platform evidence.
+Native `platform_value` work for localized values must be derived from
+`core85.so` serializer evidence or a live platform oracle.
 
 The local `.so` resource extraction found no embedded XML/XSD fragments in
 `dsgnfrm.so`, `frmcore.so`, `mngui.so`, or `mngbase.so`. The model catalog from
