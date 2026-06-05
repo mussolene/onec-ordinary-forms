@@ -275,7 +275,7 @@ std::string read_stdin() {
 
 void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-source-package-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
-              << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
+              << "       oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
               << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin  # diagnostic base-backed path, not product build\n"
@@ -284,7 +284,7 @@ void usage() {
               << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value  # diagnostic base-backed setPropVal check\n"
               << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
               << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt  # diagnostic base-backed path\n"
-              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-platform-object> runtime-form-stream.txt\n"
+              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-platform-object> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-node runtime-form-stream.txt node-path\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
@@ -5274,6 +5274,93 @@ std::string object_property_value(
     return {};
 }
 
+void append_platform_object_signature(
+    std::ostringstream& out,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    out << "object{"
+        << "id=" << object.object_id
+        << ";name=" << object.name
+        << ";type=" << object.platform_type
+        << ";category=" << object.type_category
+        << ";path=" << object.path
+        << ";parent=" << object.parent_object_id
+        << ";publicId=" << object.identity.public_id
+        << ";platformObjectId=" << object.identity.platform_object_id
+        << ";compositeId=" << object.identity.composite_id
+        << ";uuid=" << object.identity.uuid
+        << ";classGuid=" << object.identity.class_guid
+        << ";streamElement=" << object.identity.stream_element
+        << ";children=";
+    for (const auto child : object.children) {
+        out << child << ",";
+    }
+    out << ";properties=[";
+    for (const auto& property : object.properties) {
+        out << property.name
+            << "/" << property.localized_name
+            << "=" << property.value
+            << "<" << property.value_type
+            << "|default=" << property.default_value
+            << "|origin=" << property.value_origin
+            << "|member=" << property.platform_member
+            << "|slot=" << property.slot_binding
+            << "|codec=" << property.slot_codec
+            << "|valueObject=" << property.value_object_class
+            << "|literal=" << property.value_object_literal
+            << "|schema=" << property.value_object_schema_value
+            << "|stream=" << property.value_object_list_stream
+            << ">;";
+    }
+    out << "];events=[";
+    for (const auto& event : object.events) {
+        out << event.name
+            << "/" << event.localized_name
+            << ";";
+    }
+    out << "]}";
+}
+
+std::string platform_form_object_signature(
+    const oof::platform::object_model::PlatformFormObject& form_object
+) {
+    std::ostringstream out;
+    out << "PlatformFormObject{form=";
+    append_platform_object_signature(out, form_object.form);
+    out << ";items=[";
+    for (const auto& object : form_object.items.objects()) {
+        append_platform_object_signature(out, object);
+        out << ";";
+    }
+    out << "];attributes=[";
+    for (const auto& object : form_object.attributes.objects()) {
+        append_platform_object_signature(out, object);
+        out << ";";
+    }
+    out << "];commands=[";
+    for (const auto& object : form_object.commands.objects()) {
+        append_platform_object_signature(out, object);
+        out << ";";
+    }
+    out << "];events=[";
+    for (const auto& object : form_object.events.objects()) {
+        append_platform_object_signature(out, object);
+        out << ";";
+    }
+    out << "];edges=[";
+    for (const auto& edge : form_object.edges) {
+        out << edge.kind
+            << ":" << edge.from_object_id
+            << "->" << edge.to_object_id
+            << "/" << edge.role
+            << "/" << edge.name
+            << "/" << edge.slot_binding
+            << ";";
+    }
+    out << "]}";
+    return out.str();
+}
+
 bool property_is_explicit_for_xml(const oof::platform::object_model::PlatformObjectProperty& property) {
     if (property.value.empty()) {
         return false;
@@ -6988,6 +7075,7 @@ bool source_writer_has_typed_payload(
 struct SourceWriterCoverageSummary {
     std::size_t typed_payload_controls = 0;
     std::size_t minimal_payload_controls = 0;
+    std::map<std::string, std::size_t> typed_payload_types;
     std::map<std::string, std::size_t> minimal_payload_types;
 };
 
@@ -6998,6 +7086,7 @@ SourceWriterCoverageSummary source_writer_coverage_summary(
     for (const auto& object : form_object.items.objects()) {
         if (source_writer_has_typed_payload(object)) {
             ++summary.typed_payload_controls;
+            ++summary.typed_payload_types[object.platform_type];
             continue;
         }
         ++summary.minimal_payload_controls;
@@ -7006,9 +7095,64 @@ SourceWriterCoverageSummary source_writer_coverage_summary(
     return summary;
 }
 
+std::string source_writer_payload_variant_note(std::string_view platform_type, bool typed_payload) {
+    if (!typed_payload) {
+        return "materialized and projected to public XML; source writer still emits minimal title payload until a typed platform payload codec is ported";
+    }
+    if (platform_type == "CommandBar") {
+        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled; source writer emits typed command-bar payload with title action shape";
+    }
+    if (platform_type == "Button") {
+        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled/Position/Events; source writer emits typed button base-info and event table";
+    }
+    if (platform_type == "Label") {
+        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled/Position; source writer emits typed label payload";
+    }
+    if (platform_type == "Image") {
+        return "materialized as PlatformObject; public XML preserves Picture and scalar properties; source writer emits typed image payload";
+    }
+    if (platform_type == "CheckBox") {
+        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled/Position; source writer emits typed checkbox payload";
+    }
+    if (platform_type == "TextBox" || platform_type == "InputField") {
+        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled/Position/type descriptor surface; source writer emits typed input-field payload";
+    }
+    return "materialized as PlatformObject and projected to public XML; source writer has a typed payload branch";
+}
+
+void print_source_writer_payload_variant_json(
+    std::string_view type,
+    std::size_t count,
+    bool typed_payload
+) {
+    std::cout << "{\"type\":";
+    print_json_string(type);
+    std::cout << ",\"count\":" << count;
+    std::cout << ",\"materializesToObject\":true";
+    std::cout << ",\"dematerializesToPublicXml\":true";
+    std::cout << ",\"sourceWriterPayload\":";
+    print_json_string(typed_payload ? "typed-object-payload" : "minimal-title-payload");
+    std::cout << ",\"status\":";
+    print_json_string(typed_payload ? "supported" : "partial");
+    std::cout << ",\"remark\":";
+    print_json_string(source_writer_payload_variant_note(type, typed_payload));
+    std::cout << "}";
+}
+
 void print_source_writer_coverage_json(const SourceWriterCoverageSummary& summary) {
     std::cout << ",\"sourceWriterTypedPayloadControls\":" << summary.typed_payload_controls;
     std::cout << ",\"sourceWriterMinimalPayloadControls\":" << summary.minimal_payload_controls;
+    std::cout << ",\"sourceWriterTypedPayloadTypes\":[";
+    std::size_t typed_index = 0;
+    for (const auto& [type, count] : summary.typed_payload_types) {
+        if (typed_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"type\":";
+        print_json_string(type);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "]";
     std::cout << ",\"sourceWriterMinimalPayloadTypes\":[";
     std::size_t index = 0;
     for (const auto& [type, count] : summary.minimal_payload_types) {
@@ -7018,6 +7162,23 @@ void print_source_writer_coverage_json(const SourceWriterCoverageSummary& summar
         std::cout << "{\"type\":";
         print_json_string(type);
         std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "]";
+    std::cout << ",\"sourceWriterPayloadVariants\":[";
+    bool first_variant = true;
+    for (const auto& [type, count] : summary.typed_payload_types) {
+        if (!first_variant) {
+            std::cout << ",";
+        }
+        first_variant = false;
+        print_source_writer_payload_variant_json(type, count, true);
+    }
+    for (const auto& [type, count] : summary.minimal_payload_types) {
+        if (!first_variant) {
+            std::cout << ",";
+        }
+        first_variant = false;
+        print_source_writer_payload_variant_json(type, count, false);
     }
     std::cout << "]";
 }
@@ -7678,14 +7839,18 @@ void write_formbin_platform_object_set(
 void print_formbin_xml_coverage(const std::string& input_path) {
     RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
     const auto summary = summarize_materialized_graph(envelope.payload);
+    const auto form_object = materialize_platform_form_object(envelope);
+    const auto writer_coverage = source_writer_coverage_summary(form_object);
     std::cout << "{\"source\":\"Form.bin:form\"";
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
+    std::cout << ",\"objectModel\":\"PlatformFormObject\"";
     std::cout << ",\"nativeXmlProjection\":true";
     std::cout << ",\"nativeXmlWriter\":true";
     std::cout << ",\"supportedEditCodecs\":[\"Name\",\"Title\",\"Visible\",\"Enabled\",\"Position\",\"Binding:value\",\"Binding:anchor-list\",\"DimensionBinding:value\",\"DimensionBinding:record\",\"Attribute.Name\",\"Command.Name\",\"Command.Handler\",\"Command.ModifiesData\",\"Event.Handler\",\"DeleteLeafControl\",\"Form.bin.PlatformObject.getPropVal\",\"Form.bin.PlatformObject.setPropVal\"]";
     std::cout << ",\"materializedItems\":" << summary.items.size();
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
+    print_source_writer_coverage_json(writer_coverage);
     std::cout << ",\"missingCodecs\":[\"cf_form_controls8 color/font/picture/control-specific typed payload fields\"]";
     std::cout << "}\n";
 }
@@ -7960,6 +8125,105 @@ void print_runtime_form_roundtrip(const std::string& path) {
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
     std::cout << ",\"nestedUnboundGuidNodes\":" << summary.nested_unbound_guid_nodes;
     std::cout << "}\n";
+}
+
+struct ObjectBracketRoundtripResult {
+    oof::platform::object_model::PlatformFormObject object1;
+    oof::platform::object_model::PlatformFormObject object2;
+    oof::platform::object_model::PlatformFormObject object3;
+    std::string payload1_text;
+    std::string payload2_text;
+    std::string payload3_text;
+    std::string signature1;
+    std::string signature2;
+    std::string signature3;
+    SourceWriterCoverageSummary writer_coverage;
+};
+
+ObjectBracketRoundtripResult object_bracket_roundtrip(const RuntimeFormEnvelope& envelope) {
+    ObjectBracketRoundtripResult result;
+    result.object1 = materialize_platform_form_object(envelope);
+    result.payload1_text = oof::platform::stream::dump_compact(envelope.payload);
+    result.signature1 = platform_form_object_signature(result.object1);
+
+    RuntimeFormEnvelope envelope2 = envelope;
+    envelope2.payload = source_writer_form_payload(
+        result.object1,
+        object_property_value(result.object1.form, "Title"));
+    result.payload2_text = oof::platform::stream::dump_compact(envelope2.payload);
+    result.object2 = materialize_platform_form_object(envelope2);
+    result.signature2 = platform_form_object_signature(result.object2);
+
+    RuntimeFormEnvelope envelope3 = envelope2;
+    envelope3.payload = source_writer_form_payload(
+        result.object2,
+        object_property_value(result.object2.form, "Title"));
+    result.payload3_text = oof::platform::stream::dump_compact(envelope3.payload);
+    result.object3 = materialize_platform_form_object(envelope3);
+    result.signature3 = platform_form_object_signature(result.object3);
+    result.writer_coverage = source_writer_coverage_summary(result.object1);
+    return result;
+}
+
+void print_object_bracket_roundtrip_json(
+    const RuntimeFormEnvelope& envelope,
+    std::string_view source,
+    std::size_t input_bytes
+) {
+    const auto result = object_bracket_roundtrip(envelope);
+    const bool input_payload_equal = result.payload1_text == result.payload2_text;
+    const bool object_equal_after_first_write = result.signature1 == result.signature2;
+    const bool object_stable_after_second_write = result.signature2 == result.signature3;
+    const bool payload_stable_after_second_write = result.payload2_text == result.payload3_text;
+
+    std::cout << "{\"source\":";
+    print_json_string(source);
+    std::cout << ",\"publicContract\":\"PlatformFormObject\"";
+    std::cout << ",\"path\":\"bracket -> PlatformFormObject -> bracket -> PlatformFormObject -> bracket\"";
+    std::cout << ",\"xmlUsed\":false";
+    std::cout << ",\"usesBaseBin\":false";
+    std::cout << ",\"inputBytes\":" << input_bytes;
+    std::cout << ",\"runtimeUuid\":";
+    print_json_string(envelope.runtime_uuid);
+    std::cout << ",\"payloadRootVersion\":";
+    print_json_string(envelope.payload.items.empty() ? "" : envelope.payload.items[0].atom);
+    std::cout << ",\"objectCounts\":{\"items\":" << result.object1.items.count()
+              << ",\"attributes\":" << result.object1.attributes.count()
+              << ",\"commands\":" << result.object1.commands.count()
+              << ",\"events\":" << result.object1.events.count()
+              << ",\"edges\":" << result.object1.edges.size() << "}";
+    std::cout << ",\"writtenObjectCounts\":{\"items\":" << result.object2.items.count()
+              << ",\"attributes\":" << result.object2.attributes.count()
+              << ",\"commands\":" << result.object2.commands.count()
+              << ",\"events\":" << result.object2.events.count()
+              << ",\"edges\":" << result.object2.edges.size() << "}";
+    std::cout << ",\"inputPayloadBytes\":" << result.payload1_text.size();
+    std::cout << ",\"firstWrittenPayloadBytes\":" << result.payload2_text.size();
+    std::cout << ",\"secondWrittenPayloadBytes\":" << result.payload3_text.size();
+    std::cout << ",\"inputPayloadEqualAfterObjectWrite\":"
+              << (input_payload_equal ? "true" : "false");
+    std::cout << ",\"objectSignatureEqualAfterFirstWrite\":"
+              << (object_equal_after_first_write ? "true" : "false");
+    std::cout << ",\"objectSignatureStableAfterSecondWrite\":"
+              << (object_stable_after_second_write ? "true" : "false");
+    std::cout << ",\"payloadStableAfterSecondWrite\":"
+              << (payload_stable_after_second_write ? "true" : "false");
+    print_source_writer_coverage_json(result.writer_coverage);
+    std::cout << "}\n";
+}
+
+void print_runtime_form_object_roundtrip(const std::string& path) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
+    print_object_bracket_roundtrip_json(envelope, "RuntimeForm:payload", canonical_text.size());
+}
+
+void print_formbin_object_roundtrip(const std::string& path) {
+    const auto input_bytes = read_file_bytes(path);
+    const auto container = oof::platform::formbin::parse_container(input_bytes);
+    const auto& form_file = find_container_file(container, "form");
+    RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
+    print_object_bracket_roundtrip_json(envelope, "Form.bin:form", form_file.payload.size());
 }
 
 void write_runtime_form_rebuild(const std::string& input_path, const std::string& output_path) {
@@ -10474,6 +10738,10 @@ int main(int argc, char** argv) {
             print_formbin_roundtrip(argv[2]);
             return 0;
         }
+        if (command == "formbin-object-roundtrip" && argc == 3) {
+            print_formbin_object_roundtrip(argv[2]);
+            return 0;
+        }
         if (command == "container-extract" && argc == 4) {
             extract_container_files(argv[2], argv[3], false);
             return 0;
@@ -10572,6 +10840,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-roundtrip" && argc == 3) {
             print_runtime_form_roundtrip(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-form-object-roundtrip" && argc == 3) {
+            print_runtime_form_object_roundtrip(argv[2]);
             return 0;
         }
         if (command == "runtime-platform-object" && argc == 3) {
