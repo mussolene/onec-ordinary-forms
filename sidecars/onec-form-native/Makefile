@@ -230,6 +230,15 @@ test: $(BIN)
 	! grep -F -q '"commands":{"count":1' $(BUILD_DIR)/runtime-platform-xsd-object.json
 	$(BIN) platform-xsd-xml-roundtrip $(BUILD_DIR)/runtime-platform-xsd.xml $(BUILD_DIR)/runtime-platform-xsd-redump.xml | grep -F -q '"path":"platform-XSD-XML -> PlatformXdtoObject -> PlatformFormObject -> PlatformXdtoObject -> platform-XSD-XML"'
 	cmp $(BUILD_DIR)/runtime-platform-xsd.xml $(BUILD_DIR)/runtime-platform-xsd-redump.xml
+	printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' '<Form xmlns="http://v8.1c.ru/8.2/managed-application/logform/layouter">' '  <btn xmlns="http://v8.1c.ru/8.2/managed-application/logform" id="5" name="Button1"><title>Wrong order</title><command></command></btn>' '</Form>' > $(BUILD_DIR)/runtime-platform-xsd-invalid-order.xml
+	! $(BIN) platform-xsd-xml-object $(BUILD_DIR)/runtime-platform-xsd-invalid-order.xml
+	$(BIN) platform-xsd-xml-build-runtime $(BUILD_DIR)/runtime-platform-xsd.xml $(BUILD_DIR)/runtime-platform-xsd-built.txt | grep -F -q '"path":"platform-XSD-XML -> PlatformXdtoObject -> PlatformFormObject -> bracket"'
+	$(BIN) platform-xsd-xml-build-runtime $(BUILD_DIR)/runtime-platform-xsd.xml $(BUILD_DIR)/runtime-platform-xsd-built.txt | grep -F -q '"usesBasePayload":false'
+	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-platform-xsd-built.txt > $(BUILD_DIR)/runtime-platform-xsd-built-object.json
+	grep -F -q '"items":{"count":2' $(BUILD_DIR)/runtime-platform-xsd-built-object.json
+	grep -F -q '"name":"Button1","platformType":"Button"' $(BUILD_DIR)/runtime-platform-xsd-built-object.json
+	grep -F -q '"name":"Check1","platformType":"CheckBox"' $(BUILD_DIR)/runtime-platform-xsd-built-object.json
+	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-platform-xsd-built.txt | grep -F -q '"payloadStableAfterSecondWrite":true'
 	perl -0pi -e 's/name="Button1"/name="ButtonXmlEdited"/' $(BUILD_DIR)/runtime-form.xml
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml $(BUILD_DIR)/runtime-form-xml-edited.txt | grep -F -q '"nameEdits":1'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-xml-edited.txt $(BUILD_DIR)/runtime-form-xml-redump.xml | grep -F -q '"publicContract":"OrdinaryForm"'
