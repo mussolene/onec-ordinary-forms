@@ -275,6 +275,7 @@ std::string read_stdin() {
 
 void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-source-package-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
+              << "       oof-native empty-form-object-roundtrip [title]\n"
               << "       oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|formbin-object-roundtrip-diff|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
               << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
@@ -2100,8 +2101,7 @@ void collect_materialized_form_commands_from_block(
         return;
     }
 
-    if (looks_like_materialized_form_command_record(block) ||
-        (block.items.size() >= 4 && (block.items[0].is_list || !block.items[0].atom.empty()))) {
+    if (looks_like_materialized_form_command_record(block)) {
         MaterializedFormCommand command;
         command.id = command_record_id_value(block);
         command.name = command_record_scalar_value(block, 2, 1);
@@ -3646,6 +3646,53 @@ oof::platform::object_model::PlatformFormObject materialize_platform_form_object
     const RuntimeFormEnvelope& envelope
 ) {
     return platform_object_type_handler_for("Form").materialize_form(envelope);
+}
+
+oof::platform::object_model::PlatformFormObject make_empty_platform_form_object(
+    std::string title = {}
+) {
+    oof::platform::object_model::PlatformFormObject form_object;
+    form_object.form.object_id = "0";
+    form_object.form.name = "Form";
+    form_object.form.platform_type = "Form";
+    form_object.form.type_category = "core::kLogFormTypeInfoCategory";
+    form_object.form.type_source = "EmptyOrdinaryFormObject.default-contract";
+    form_object.form.path = "$";
+    form_object.form.identity = oof::platform::object_model::make_identity(
+        "Form",
+        "0",
+        "platform-root-fixed-id; empty ordinary form starts from default object contract",
+        {},
+        {},
+        {},
+        "EmptyOrdinaryFormObject + mngbase RTLogForm",
+        "Form",
+        "mngcore_root.res:logform.xsd + mngcore_root.res:logform_layouter.xsd");
+    form_object.form.properties.push_back(make_described_property("Type", "Form"));
+    if (!title.empty()) {
+        form_object.form.properties.push_back(make_platform_object_property(
+            "Title",
+            "Заголовок",
+            std::move(title),
+            "LocalizedText",
+            "EmptyOrdinaryFormObject.Title",
+            {},
+            {},
+            "object-explicit"));
+    }
+    add_platform_object_schema_surface(
+        form_object.form,
+        oof::platform::object_schema::build_schema_for_root_form());
+    add_api_surface(form_object.form, api_object_for_type("Form"));
+    form_object.form.properties.push_back(make_described_property("Items", "0"));
+    form_object.form.properties.push_back(make_described_property("Attributes", "0"));
+    form_object.form.properties.push_back(make_described_property("Commands", "0"));
+    form_object.form.properties.push_back(make_described_property("Events", "0"));
+    form_object.form.collections.push_back(make_described_collection("Items", 0));
+    form_object.form.collections.push_back(make_described_collection("Attributes", 0));
+    form_object.form.collections.push_back(make_described_collection("Commands", 0));
+    form_object.form.collections.push_back(make_described_collection("Events", 0));
+    return form_object;
 }
 
 void print_platform_object_json(const oof::platform::object_model::PlatformObject& object) {
@@ -8165,6 +8212,66 @@ ObjectBracketRoundtripResult object_bracket_roundtrip(const RuntimeFormEnvelope&
     return result;
 }
 
+ObjectBracketRoundtripResult empty_object_bracket_roundtrip(std::string title) {
+    ObjectBracketRoundtripResult result;
+    result.object1 = make_empty_platform_form_object(std::move(title));
+    result.signature1 = platform_form_object_signature(result.object1);
+    result.payload1_text = "";
+
+    RuntimeFormEnvelope envelope2;
+    envelope2.payload = source_writer_form_payload(
+        result.object1,
+        object_property_value(result.object1.form, "Title"));
+    result.payload2_text = oof::platform::stream::dump_compact(envelope2.payload);
+    result.object2 = materialize_platform_form_object(envelope2);
+    result.signature2 = platform_form_object_signature(result.object2);
+
+    RuntimeFormEnvelope envelope3 = envelope2;
+    envelope3.payload = source_writer_form_payload(
+        result.object2,
+        object_property_value(result.object2.form, "Title"));
+    result.payload3_text = oof::platform::stream::dump_compact(envelope3.payload);
+    result.object3 = materialize_platform_form_object(envelope3);
+    result.signature3 = platform_form_object_signature(result.object3);
+    result.writer_coverage = source_writer_coverage_summary(result.object2);
+    return result;
+}
+
+void print_empty_form_object_roundtrip(std::string title) {
+    const auto result = empty_object_bracket_roundtrip(std::move(title));
+    const bool object_equal_after_first_write = result.signature1 == result.signature2;
+    const bool object_stable_after_second_write = result.signature2 == result.signature3;
+    const bool payload_stable_after_second_write = result.payload2_text == result.payload3_text;
+
+    std::cout << "{\"source\":\"EmptyOrdinaryFormObject\"";
+    std::cout << ",\"publicContract\":\"PlatformFormObject\"";
+    std::cout << ",\"path\":\"PlatformFormObject -> bracket -> PlatformFormObject -> bracket\"";
+    std::cout << ",\"xmlUsed\":false";
+    std::cout << ",\"usesBaseBin\":false";
+    std::cout << ",\"usesSourcePayload\":false";
+    std::cout << ",\"objectOrigin\":\"empty-default-object\"";
+    std::cout << ",\"objectCounts\":{\"items\":" << result.object1.items.count()
+              << ",\"attributes\":" << result.object1.attributes.count()
+              << ",\"commands\":" << result.object1.commands.count()
+              << ",\"events\":" << result.object1.events.count()
+              << ",\"edges\":" << result.object1.edges.size() << "}";
+    std::cout << ",\"writtenObjectCounts\":{\"items\":" << result.object2.items.count()
+              << ",\"attributes\":" << result.object2.attributes.count()
+              << ",\"commands\":" << result.object2.commands.count()
+              << ",\"events\":" << result.object2.events.count()
+              << ",\"edges\":" << result.object2.edges.size() << "}";
+    std::cout << ",\"firstWrittenPayloadBytes\":" << result.payload2_text.size();
+    std::cout << ",\"secondWrittenPayloadBytes\":" << result.payload3_text.size();
+    std::cout << ",\"objectSignatureEqualAfterFirstWrite\":"
+              << (object_equal_after_first_write ? "true" : "false");
+    std::cout << ",\"objectSignatureStableAfterSecondWrite\":"
+              << (object_stable_after_second_write ? "true" : "false");
+    std::cout << ",\"payloadStableAfterSecondWrite\":"
+              << (payload_stable_after_second_write ? "true" : "false");
+    print_source_writer_coverage_json(result.writer_coverage);
+    std::cout << "}\n";
+}
+
 void print_object_bracket_roundtrip_json(
     const RuntimeFormEnvelope& envelope,
     std::string_view source,
@@ -9093,8 +9200,7 @@ bool set_materialized_command_property_in_block(
     if (!block.is_list || is_materialized_form_property_block(block)) {
         return false;
     }
-    if (looks_like_materialized_form_command_record(block) ||
-        (block.items.size() >= 4 && (block.items[0].is_list || !block.items[0].atom.empty()))) {
+    if (looks_like_materialized_form_command_record(block)) {
         const std::string command_id = command_record_id_value(block);
         const bool visible_command = !command_id.empty() &&
             (!command_record_scalar_value(block, 2, 1).empty() ||
@@ -11090,6 +11196,10 @@ int main(int argc, char** argv) {
         }
         if (command == "raw-deflate-selftest") {
             print_raw_deflate_selftest();
+            return 0;
+        }
+        if (command == "empty-form-object-roundtrip" && (argc == 2 || argc == 3)) {
+            print_empty_form_object_roundtrip(argc == 3 ? argv[2] : "");
             return 0;
         }
         if (command == "formbin-info" && argc == 3) {
