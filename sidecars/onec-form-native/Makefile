@@ -239,6 +239,13 @@ test: $(BIN)
 	grep -F -q '"name":"Button1","platformType":"Button"' $(BUILD_DIR)/runtime-platform-xsd-built-object.json
 	grep -F -q '"name":"Check1","platformType":"CheckBox"' $(BUILD_DIR)/runtime-platform-xsd-built-object.json
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-platform-xsd-built.txt | grep -F -q '"payloadStableAfterSecondWrite":true'
+	$(BIN) platform-xsd-xml-build-formbin $(BUILD_DIR)/runtime-platform-xsd.xml $(BUILD_DIR)/runtime-platform-xsd-built-Form.bin | grep -F -q '"path":"platform-XSD-XML -> PlatformXdtoObject -> PlatformFormObject -> ListOutStream -> Form.bin"'
+	$(BIN) platform-xsd-xml-build-formbin $(BUILD_DIR)/runtime-platform-xsd.xml $(BUILD_DIR)/runtime-platform-xsd-built-Form.bin | grep -F -q '"usesBasePayload":false'
+	$(BIN) formbin-platform-object $(BUILD_DIR)/runtime-platform-xsd-built-Form.bin > $(BUILD_DIR)/runtime-platform-xsd-built-formbin-object.json
+	grep -F -q '"items":{"count":2' $(BUILD_DIR)/runtime-platform-xsd-built-formbin-object.json
+	grep -F -q '"name":"Button1","platformType":"Button"' $(BUILD_DIR)/runtime-platform-xsd-built-formbin-object.json
+	grep -F -q '"name":"Check1","platformType":"CheckBox"' $(BUILD_DIR)/runtime-platform-xsd-built-formbin-object.json
+	$(BIN) formbin-xsd-order-object-gate $(BUILD_DIR)/runtime-platform-xsd-built-Form.bin | grep -F -q '"status":"PASS"'
 	perl -0pi -e 's/name="Button1"/name="ButtonXmlEdited"/' $(BUILD_DIR)/runtime-form.xml
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml $(BUILD_DIR)/runtime-form-xml-edited.txt | grep -F -q '"nameEdits":1'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-xml-edited.txt $(BUILD_DIR)/runtime-form-xml-redump.xml | grep -F -q '"publicContract":"OrdinaryForm"'

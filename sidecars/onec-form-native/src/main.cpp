@@ -54,6 +54,7 @@ void usage() {
               << "       oof-native platform-xsd-xml-object PlatformForm.xml\n"
               << "       oof-native platform-xsd-xml-roundtrip PlatformForm.xml rebuilt-PlatformForm.xml\n"
               << "       oof-native platform-xsd-xml-build-runtime PlatformForm.xml runtime-form-stream.txt\n"
+              << "       oof-native platform-xsd-xml-build-formbin PlatformForm.xml Form.bin\n"
               << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt  # diagnostic base-backed path\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-xsd-order-object-roundtrip|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
@@ -7905,6 +7906,64 @@ void write_formbin_from_source_package(
     std::cout << "}\n";
 }
 
+void write_formbin_from_platform_xsd_xml(
+    const std::string& xml_path,
+    const std::string& output_path
+) {
+    const std::filesystem::path xml_package_path(xml_path);
+    const std::string source_xml = read_file_text_lossy(xml_path);
+    const auto form_object = platform_form_object_from_platform_xsd_xml(source_xml);
+    const auto container_times = source_package_container_times(
+        xml_package_path,
+        form_package_module_path(xml_package_path),
+        source_xml);
+    const auto payload = source_writer_form_payload(
+        form_object,
+        object_property_value(form_object.form, "Title"));
+
+    oof::platform::formbin::OneCContainer container;
+    container.block_size = oof::platform::formbin::container_block_size;
+    container.files.push_back({
+        "form",
+        container_times.form_created,
+        container_times.form_modified,
+        source_writer_form_payload_bytes(payload),
+    });
+    container.files.push_back({
+        "module",
+        container_times.module_created,
+        container_times.module_modified,
+        {},
+    });
+
+    const std::vector<std::uint8_t> bytes = oof::platform::formbin::serialize_container(container);
+    write_file_bytes(output_path, bytes);
+    const auto reparsed = oof::platform::formbin::parse_container(bytes);
+    const RuntimeFormEnvelope redump_envelope = runtime_envelope_from_form_payload(find_container_file(reparsed, "form").payload);
+    const auto redump_object = materialize_platform_form_object(redump_envelope);
+
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"operation\":\"platform-xsd-xml-build-formbin\"";
+    std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> PlatformFormObject -> ListOutStream -> Form.bin\"";
+    std::cout << ",\"usesBasePayload\":false";
+    std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
+    std::cout << ",\"bytes\":" << bytes.size();
+    std::cout << ",\"containerTicksSource\":";
+    print_json_string(container_times.source);
+    std::cout << ",\"objects\":{\"items\":" << form_object.items.count()
+              << ",\"attributes\":" << form_object.attributes.count()
+              << ",\"commands\":" << form_object.commands.count()
+              << ",\"events\":" << form_object.events.count()
+              << ",\"edges\":" << form_object.edges.size() << "}";
+    std::cout << ",\"redumpObjects\":{\"items\":" << redump_object.items.count()
+              << ",\"attributes\":" << redump_object.attributes.count()
+              << ",\"commands\":" << redump_object.commands.count()
+              << ",\"events\":" << redump_object.events.count()
+              << ",\"edges\":" << redump_object.edges.size() << "}";
+    std::cout << "}\n";
+}
+
 void write_formbin_platform_object_set(
     const std::string& input_path,
     const std::string& output_path,
@@ -11611,6 +11670,10 @@ int main(int argc, char** argv) {
         }
         if (command == "platform-xsd-xml-build-runtime" && argc == 4) {
             write_platform_xsd_xml_runtime_form(argv[2], argv[3]);
+            return 0;
+        }
+        if (command == "platform-xsd-xml-build-formbin" && argc == 4) {
+            write_formbin_from_platform_xsd_xml(argv[2], argv[3]);
             return 0;
         }
         if (command == "runtime-form-dump-xml" && argc == 4) {
