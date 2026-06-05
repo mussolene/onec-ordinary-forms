@@ -20,8 +20,30 @@ typedef struct Module {
 
 static void *fake_registrar_vtable[64];
 static void *fake_process_vtable[96];
+static void *fake_service_vtable[16];
 static void *fake_registrar[4];
 static unsigned char fake_process[4096];
+static void *fake_service[4];
+static const char *active_module_name = "";
+static const char *active_process_identity = "";
+
+void *oof_core_current_process(void) __asm__("_ZN4core15current_processEv");
+void *oof_core_current_process(void) {
+    fprintf(stderr, "OOF_SCOM_HOST_CURRENT_PROCESS process=%p\n", fake_process);
+    return fake_process;
+}
+
+static void *find_scom_module_object(void *scom_main) {
+    unsigned char *p = (unsigned char *)scom_main;
+    for (size_t i = 0; i + 7 < 256; i++) {
+        if (p[i] == 0x48 && p[i + 1] == 0x8d && p[i + 2] == 0x3d) {
+            int32_t rel = 0;
+            memcpy(&rel, p + i + 3, sizeof(rel));
+            return p + i + 7 + rel;
+        }
+    }
+    return NULL;
+}
 
 static void guid_text(uintptr_t value, char *out, size_t out_size) {
     const unsigned char *p = (const unsigned char *)value;
@@ -70,10 +92,23 @@ static uintptr_t fake_registrar_default(void *self, uintptr_t a, uintptr_t b,
 static uintptr_t fake_process_string_method(void *out, uintptr_t a, uintptr_t b,
                                             uintptr_t c, uintptr_t d, uintptr_t e) {
     memset(out, 0, 32);
-    ((unsigned char *)out)[0x16] = 0x0b;
+    const char *override_name = getenv("OOF_SCOM_HOST_FAKE_PROCESS_NAME");
+    const char *value = override_name && *override_name
+                            ? override_name
+                            : (active_process_identity && *active_process_identity
+                                   ? active_process_identity
+                                   : (active_module_name && *active_module_name ? active_module_name : ""));
+    size_t len = strlen(value);
+    if (len > 23) {
+        len = 23;
+    }
+    memcpy(out, value, len);
+    ((char *)out)[len] = 0;
+    ((unsigned char *)out)[0x17] = (unsigned char)(23 - len);
     fprintf(stderr,
-            "OOF_SCOM_HOST_FAKE_PROCESS_STRING out=%p a=0x%lx b=0x%lx c=0x%lx d=0x%lx e=0x%lx\n",
-            out, (unsigned long)a, (unsigned long)b, (unsigned long)c,
+            "OOF_SCOM_HOST_FAKE_PROCESS_STRING out=%p value=%s a=0x%lx b=0x%lx c=0x%lx d=0x%lx e=0x%lx\n",
+            out, value,
+            (unsigned long)a, (unsigned long)b, (unsigned long)c,
             (unsigned long)d, (unsigned long)e);
     return 0;
 }
@@ -87,15 +122,64 @@ static uintptr_t fake_process_method(void *self, uintptr_t a, uintptr_t b,
     return 0;
 }
 
+static uintptr_t fake_process_get_object_method(void *self, uintptr_t a, uintptr_t b,
+                                                uintptr_t c, uintptr_t d, uintptr_t e) {
+    if (c) {
+        *(uintptr_t *)c = (uintptr_t)fake_service;
+    }
+    fprintf(stderr,
+            "OOF_SCOM_HOST_FAKE_PROCESS_GET_OBJECT self=%p a=0x%lx b=0x%lx out=0x%lx d=0x%lx e=0x%lx service=%p\n",
+            self, (unsigned long)a, (unsigned long)b, (unsigned long)c,
+            (unsigned long)d, (unsigned long)e, fake_service);
+    return 1;
+}
+
+static uintptr_t fake_process_lookup_method(void *self, uintptr_t a, uintptr_t b,
+                                            uintptr_t c, uintptr_t d, uintptr_t e) {
+    fprintf(stderr,
+            "OOF_SCOM_HOST_FAKE_PROCESS_LOOKUP self=%p key=0x%lx b=0x%lx c=0x%lx d=0x%lx e=0x%lx service=%p\n",
+            self, (unsigned long)a, (unsigned long)b, (unsigned long)c,
+            (unsigned long)d, (unsigned long)e, fake_service);
+    return (uintptr_t)fake_service;
+}
+
+static uintptr_t fake_service_method(void *self, uintptr_t a, uintptr_t b,
+                                     uintptr_t c, uintptr_t d, uintptr_t e) {
+    fprintf(stderr,
+            "OOF_SCOM_HOST_FAKE_SERVICE_METHOD self=%p a=0x%lx b=0x%lx c=0x%lx d=0x%lx e=0x%lx\n",
+            self, (unsigned long)a, (unsigned long)b, (unsigned long)c,
+            (unsigned long)d, (unsigned long)e);
+    return 0;
+}
+
+static uintptr_t fake_service_acquire_method(void *self, uintptr_t a, uintptr_t b,
+                                             uintptr_t c, uintptr_t d, uintptr_t e) {
+    fprintf(stderr,
+            "OOF_SCOM_HOST_FAKE_SERVICE_ACQUIRE self=%p a=0x%lx b=0x%lx c=0x%lx d=0x%lx e=0x%lx\n",
+            self, (unsigned long)a, (unsigned long)b, (unsigned long)c,
+            (unsigned long)d, (unsigned long)e);
+    return (uintptr_t)self;
+}
+
 static void setup_fake_registrar(uintptr_t *process, uintptr_t *registrar) {
     for (size_t i = 0; i < sizeof(fake_process_vtable) / sizeof(fake_process_vtable[0]); ++i) {
         fake_process_vtable[i] = (void *)&fake_process_method;
     }
     fake_process_vtable[0x170 / sizeof(void *)] = (void *)&fake_process_string_method;
     fake_process_vtable[0x178 / sizeof(void *)] = (void *)&fake_process_string_method;
+    fake_process_vtable[0x20 / sizeof(void *)] = (void *)&fake_process_get_object_method;
+    fake_process_vtable[0x70 / sizeof(void *)] = (void *)&fake_process_lookup_method;
     fake_process_vtable[0x168 / sizeof(void *)] = (void *)&fake_process_method;
     fake_process_vtable[0x140 / sizeof(void *)] = (void *)&fake_process_method;
     *(void **)fake_process = fake_process_vtable;
+
+    for (size_t i = 0; i < sizeof(fake_service_vtable) / sizeof(fake_service_vtable[0]); ++i) {
+        fake_service_vtable[i] = (void *)&fake_service_method;
+    }
+    fake_service_vtable[0x10 / sizeof(void *)] = (void *)&fake_service_method;
+    fake_service_vtable[0x18 / sizeof(void *)] = (void *)&fake_service_acquire_method;
+    fake_service_vtable[0x48 / sizeof(void *)] = (void *)&fake_service_method;
+    fake_service[0] = fake_service_vtable;
 
     for (size_t i = 0; i < sizeof(fake_registrar_vtable) / sizeof(fake_registrar_vtable[0]); ++i) {
         fake_registrar_vtable[i] = (void *)&fake_registrar_default;
@@ -192,6 +276,24 @@ static int run_scom_child(Module *module, uintptr_t mode, uintptr_t process, uin
         signal(SIGSEGV, crash_handler);
         signal(SIGBUS, crash_handler);
         signal(SIGABRT, crash_handler);
+        active_module_name = module->name;
+        void *module_object = find_scom_module_object((void *)module->scom_main);
+        active_process_identity = "";
+        if (module_object) {
+            const char *identity = *(const char **)((unsigned char *)module_object + 0x10);
+            const char *version = *(const char **)((unsigned char *)module_object + 0x08);
+            const void *classes = *(const void **)((unsigned char *)module_object + 0x18);
+            const void *bundle = *(const void **)((unsigned char *)module_object + 0x20);
+            active_process_identity = identity ? identity : "";
+            fprintf(stderr,
+                    "OOF_SCOM_HOST_MODULE_OBJECT module=%s object=%p version=%s identity=%s classes=%p bundle=%p\n",
+                    module->name, module_object, version ? version : "",
+                    active_process_identity, classes, bundle);
+        } else {
+            fprintf(stderr,
+                    "OOF_SCOM_HOST_MODULE_OBJECT_MISSING module=%s scom_main=%p\n",
+                    module->name, (void *)module->scom_main);
+        }
         uintptr_t rc = module->scom_main(process, registrar, mode);
         fprintf(stderr,
                 "OOF_SCOM_HOST_CALL_RETURN module=%s mode=0x%lx process=0x%lx registrar=0x%lx rc=0x%lx\n",

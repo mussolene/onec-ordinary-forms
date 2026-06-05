@@ -41,11 +41,12 @@ docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "set -eu
     echo 'gcc is required in the 1C container to build the Linux SCOM host probe' >&2
     exit 127
   fi
-  gcc -O2 -ldl '$base/oof_scom_host.c' -o '$base/oof_scom_host'
+  gcc -O2 -rdynamic -ldl '$base/oof_scom_host.c' -o '$base/oof_scom_host'
   set +e
   OOF_SCOM_HOST_FAKE_REGISTRAR='${OOF_SCOM_HOST_FAKE_REGISTRAR:-0}' \
   OOF_SCOM_HOST_LOAD_EXTRA='${OOF_SCOM_HOST_LOAD_EXTRA:-0}' \
   OOF_SCOM_HOST_ONLY='${OOF_SCOM_HOST_ONLY:-}' \
+  OOF_SCOM_HOST_FAKE_PROCESS_NAME='${OOF_SCOM_HOST_FAKE_PROCESS_NAME:-}' \
   LD_LIBRARY_PATH=\"\$platform\" timeout 60 '$base/oof_scom_host' \"\$platform\" '$mode' \
     >'$base/out/stdout.log' 2>'$base/out/stderr.log'
   code=\$?
