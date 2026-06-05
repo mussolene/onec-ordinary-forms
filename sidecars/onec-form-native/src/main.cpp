@@ -1750,7 +1750,7 @@ struct RuntimeFormEnvelope {
 };
 
 RuntimeFormEnvelope read_formbin_runtime_envelope(const std::string& input_path);
-oof::platform::stream::ListValue source_writer_form_payload(
+oof::platform::stream::ListValue platform_form_listout_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
     std::string_view title
 );
@@ -6171,7 +6171,7 @@ PlatformXdtoListStreamWriteResult platform_xdto_schema_order_list_stream_payload
     result.xdto = std::move(xdto);
     validate_platform_xdto_object_for_schema_order(result.xdto, result.schema_objects, result.schema_members);
     result.form_object = platform_form_object_from_xdto_object(result.xdto);
-    result.payload = source_writer_form_payload(
+    result.payload = platform_form_listout_payload(
         result.form_object,
         object_property_value(result.form_object.form, "Title"));
     return result;
@@ -6272,7 +6272,6 @@ void write_platform_xsd_xml_runtime_form(const std::string& input_path, const st
     std::cout << ",\"operation\":\"platform-xsd-xml-build-runtime\"";
     std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> XSD schema-order ListOutStream -> bracket\"";
     std::cout << ",\"schemaOrderWriter\":\"PlatformXdtoObject\"";
-    std::cout << ",\"listStreamBackend\":\"source_writer_form_payload\"";
     std::cout << ",\"usesBasePayload\":false";
     std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
     std::cout << ",\"schemaObjects\":" << result.schema_objects;
@@ -7518,56 +7517,6 @@ LV source_writer_attributes_table(const oof::platform::object_model::PlatformFor
 
 LV source_writer_root_panel_info_from_layout_xml(const std::string& xml);
 
-LV source_writer_root_record(
-    const oof::platform::object_model::PlatformFormObject& form_object,
-    std::string_view title
-) {
-    std::vector<LV> root_children;
-    for (const auto* child : source_writer_children(form_object, form_object.form)) {
-        root_children.push_back(source_writer_control_record(form_object, *child));
-    }
-    std::vector<LV> child_table;
-    child_table.push_back(raw(std::to_string(root_children.size())));
-    child_table.insert(child_table.end(), std::make_move_iterator(root_children.begin()), std::make_move_iterator(root_children.end()));
-
-    LV root_panel_info = list({raw("1"), localized_text_record(title)});
-    if (const auto* root_layout = find_object_property(form_object.form, "RootPanelLayoutXml")) {
-        LV layout_info = source_writer_root_panel_info_from_layout_xml(root_layout->value);
-        if (layout_info.is_list) {
-            root_panel_info = std::move(layout_info);
-        }
-    }
-    const LV root_panel = list({
-        raw(source_writer_control_guid("Panel")),
-        std::move(root_panel_info),
-        list(std::move(child_table)),
-    });
-    std::vector<LV> root_items{
-        raw("16"),
-        list({localized_text_record(title), raw("42"), raw("3")}),
-        root_panel,
-        raw("885"),
-        raw("244"),
-        raw("1"),
-        raw("0"),
-        raw("1"),
-        raw("4"),
-        raw("4"),
-        raw("6"),
-    };
-    const std::string width = object_property_value(form_object.form, "Width");
-    const std::string height = object_property_value(form_object.form, "Height");
-    const std::string counter = object_property_value(form_object.form, "SerializationCounter");
-    if (!width.empty() || !height.empty() || !counter.empty()) {
-        root_items[0] = raw("18");
-        root_items[10] = raw(counter.empty() ? "3" : counter);
-        root_items.push_back(raw(width.empty() ? "0" : width));
-        root_items.push_back(raw(height.empty() ? "0" : height));
-        root_items.push_back(raw("96"));
-    }
-    return list(std::move(root_items));
-}
-
 LV source_writer_form_object_info(
     const oof::platform::object_model::PlatformFormObject& form_object
 ) {
@@ -7776,41 +7725,161 @@ LV source_writer_root_panel_info_from_layout_xml(const std::string& xml) {
     return list({raw("1"), list(std::move(body)), list({raw("0")})});
 }
 
-LV source_writer_form_payload(
+void listout_write_value(oof::platform::stream::ListOutStream& out, const LV& value) {
+    if (value.is_list) {
+        out.begin_list();
+        for (const auto& item : value.items) {
+            listout_write_value(out, item);
+        }
+        out.end_list();
+        return;
+    }
+    if (value.atom_kind == LV::AtomKind::string) {
+        out.write_string(value.atom);
+        return;
+    }
+    out.write_raw_atom(value.atom);
+}
+
+void platform_form_listout_write_control_record(
+    oof::platform::stream::ListOutStream& out,
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+);
+
+void platform_form_listout_write_child_table(
+    oof::platform::stream::ListOutStream& out,
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& parent
+) {
+    const auto children = source_writer_children(form_object, parent);
+    out.begin_list();
+    out.write_raw_atom(std::to_string(children.size()));
+    for (const auto* child : children) {
+        platform_form_listout_write_control_record(out, form_object, *child);
+    }
+    out.end_list();
+}
+
+void platform_form_listout_write_control_record(
+    oof::platform::stream::ListOutStream& out,
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    out.begin_list();
+    out.write_raw_atom(source_writer_control_guid(object.platform_type));
+    out.write_raw_atom(object.object_id.empty() ? "0" : object.object_id);
+    listout_write_value(out, source_writer_control_payload(form_object, object));
+    listout_write_value(out, source_writer_geometry(object));
+    listout_write_value(out, source_writer_metadata(object));
+    platform_form_listout_write_child_table(out, form_object, object);
+    out.end_list();
+}
+
+void platform_form_listout_write_root_child_table(
+    oof::platform::stream::ListOutStream& out,
+    const oof::platform::object_model::PlatformFormObject& form_object
+) {
+    const auto children = source_writer_children(form_object, form_object.form);
+    out.begin_list();
+    out.write_raw_atom(std::to_string(children.size()));
+    for (const auto* child : children) {
+        platform_form_listout_write_control_record(out, form_object, *child);
+    }
+    out.end_list();
+}
+
+void platform_form_listout_write_root_record(
+    oof::platform::stream::ListOutStream& out,
     const oof::platform::object_model::PlatformFormObject& form_object,
     std::string_view title
 ) {
-    return list({
-        raw("27"),
-        source_writer_root_record(form_object, title),
-        source_writer_attributes_table(form_object),
-        source_writer_form_object_info(form_object),
-        list({raw("0")}),
-        raw("1"),
-        raw("4"),
-        raw("1"),
-        raw("0"),
-        raw("0"),
-        raw("0"),
-        list({raw("0")}),
-        list({raw("0")}),
-        list({
-            raw("10"), raw("0"),
-            list({raw("4"), raw("0"), list({raw("0")}), str_atom(""), raw("-1"), raw("-1"), raw("1"), raw("0"), str_atom("")}),
-            list({raw("4"), raw("0"), list({raw("0")}), str_atom(""), raw("-1"), raw("-1"), raw("1"), raw("0"), str_atom("")}),
-            list({raw("4"), raw("0"), list({raw("0")}), str_atom(""), raw("-1"), raw("-1"), raw("1"), raw("0"), str_atom("")}),
-            raw("100"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
-        }),
-        raw("1"),
-        raw("2"),
-        raw("0"),
-        raw("0"),
-        raw("1"),
-        raw("1"),
-    });
+    LV root_panel_info = list({raw("1"), localized_text_record(title)});
+    if (const auto* root_layout = find_object_property(form_object.form, "RootPanelLayoutXml")) {
+        LV layout_info = source_writer_root_panel_info_from_layout_xml(root_layout->value);
+        if (layout_info.is_list) {
+            root_panel_info = std::move(layout_info);
+        }
+    }
+
+    const std::string width = object_property_value(form_object.form, "Width");
+    const std::string height = object_property_value(form_object.form, "Height");
+    const std::string counter = object_property_value(form_object.form, "SerializationCounter");
+    const bool extended_root = !width.empty() || !height.empty() || !counter.empty();
+
+    out.begin_list();
+    out.write_raw_atom(extended_root ? "18" : "16");
+    listout_write_value(out, list({localized_text_record(title), raw("42"), raw("3")}));
+    out.begin_list();
+    out.write_raw_atom(source_writer_control_guid("Panel"));
+    listout_write_value(out, root_panel_info);
+    platform_form_listout_write_root_child_table(out, form_object);
+    out.end_list();
+    out.write_raw_atom("885");
+    out.write_raw_atom("244");
+    out.write_raw_atom("1");
+    out.write_raw_atom("0");
+    out.write_raw_atom("1");
+    out.write_raw_atom("4");
+    out.write_raw_atom("4");
+    out.write_raw_atom(extended_root ? (counter.empty() ? "3" : counter) : "6");
+    if (extended_root) {
+        out.write_raw_atom(width.empty() ? "0" : width);
+        out.write_raw_atom(height.empty() ? "0" : height);
+        out.write_raw_atom("96");
+    }
+    out.end_list();
 }
 
-std::vector<std::uint8_t> source_writer_form_payload_bytes(const LV& payload) {
+LV platform_form_listout_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view title
+) {
+    oof::platform::stream::ListOutStream out;
+    out.begin_list();
+    out.write_raw_atom("27");
+    platform_form_listout_write_root_record(out, form_object, title);
+    listout_write_value(out, source_writer_attributes_table(form_object));
+    listout_write_value(out, source_writer_form_object_info(form_object));
+    out.begin_list();
+    out.write_raw_atom("0");
+    out.end_list();
+    out.write_raw_atom("1");
+    out.write_raw_atom("4");
+    out.write_raw_atom("1");
+    out.write_raw_atom("0");
+    out.write_raw_atom("0");
+    out.write_raw_atom("0");
+    out.begin_list();
+    out.write_raw_atom("0");
+    out.end_list();
+    out.begin_list();
+    out.write_raw_atom("0");
+    out.end_list();
+    out.begin_list();
+    out.write_raw_atom("10");
+    out.write_raw_atom("0");
+    listout_write_value(out, source_writer_empty_page_style_record());
+    listout_write_value(out, source_writer_empty_page_style_record());
+    listout_write_value(out, source_writer_empty_page_style_record());
+    out.write_raw_atom("100");
+    out.write_raw_atom("0");
+    out.write_raw_atom("0");
+    out.write_raw_atom("0");
+    out.write_raw_atom("0");
+    out.write_raw_atom("0");
+    out.end_list();
+    out.write_raw_atom("1");
+    out.write_raw_atom("2");
+    out.write_raw_atom("0");
+    out.write_raw_atom("0");
+    out.write_raw_atom("1");
+    out.write_raw_atom("1");
+    out.end_list();
+    return out.root();
+}
+
+std::vector<std::uint8_t> platform_form_listout_payload_bytes(const LV& payload) {
     const std::string text = oof::platform::stream::dump_listout(payload);
     std::vector<std::uint8_t> out{0xef, 0xbb, 0xbf};
     out.insert(out.end(), text.begin(), text.end());
@@ -7927,7 +7996,7 @@ SourcePackageBuildResult build_formbin_source_package(const std::string& xml_pat
         "form",
         result.container_times.form_created,
         result.container_times.form_modified,
-        source_writer_form_payload_bytes(source_writer_form_payload(form_object, title)),
+        platform_form_listout_payload_bytes(platform_form_listout_payload(form_object, title)),
     });
 
     std::vector<std::uint8_t> module_payload;
@@ -8000,7 +8069,7 @@ void write_formbin_from_platform_xsd_xml(
         "form",
         container_times.form_created,
         container_times.form_modified,
-        source_writer_form_payload_bytes(result.payload),
+        platform_form_listout_payload_bytes(result.payload),
     });
     container.files.push_back({
         "module",
@@ -8020,7 +8089,6 @@ void write_formbin_from_platform_xsd_xml(
     std::cout << ",\"operation\":\"platform-xsd-xml-build-formbin\"";
     std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> XSD schema-order ListOutStream -> Form.bin\"";
     std::cout << ",\"schemaOrderWriter\":\"PlatformXdtoObject\"";
-    std::cout << ",\"listStreamBackend\":\"source_writer_form_payload\"";
     std::cout << ",\"usesBasePayload\":false";
     std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
     std::cout << ",\"schemaObjects\":" << result.schema_objects;
@@ -8158,7 +8226,7 @@ void print_formbin_package_selftest() {
     const auto result = apply_platform_object_edits_to_object(
         edited_form_object,
         public_xml_edits_to_platform_object_edits(edits));
-    envelope.payload = source_writer_form_payload(
+    envelope.payload = platform_form_listout_payload(
         edited_form_object,
         object_property_value(edited_form_object.form, "Title"));
     container.files[0].payload = encode_form_payload_text(container.files[0].payload, envelope.payload);
@@ -8188,7 +8256,7 @@ void print_formbin_package_selftest() {
     const auto anchor_result = apply_platform_object_edits_to_object(
         anchor_edited_form_object,
         public_xml_edits_to_platform_object_edits(anchor_edits));
-    anchor_envelope.payload = source_writer_form_payload(
+    anchor_envelope.payload = platform_form_listout_payload(
         anchor_edited_form_object,
         object_property_value(anchor_edited_form_object.form, "Title"));
     const std::string anchor_redump_xml = form_object_to_public_xml(materialize_platform_form_object(anchor_envelope));
@@ -8429,7 +8497,7 @@ ObjectBracketRoundtripResult object_bracket_roundtrip(const RuntimeFormEnvelope&
     result.signature1 = platform_form_object_signature(result.object1);
 
     RuntimeFormEnvelope envelope2 = envelope;
-    envelope2.payload = source_writer_form_payload(
+    envelope2.payload = platform_form_listout_payload(
         result.object1,
         object_property_value(result.object1.form, "Title"));
     result.payload2_text = oof::platform::stream::dump_compact(envelope2.payload);
@@ -8437,7 +8505,7 @@ ObjectBracketRoundtripResult object_bracket_roundtrip(const RuntimeFormEnvelope&
     result.signature2 = platform_form_object_signature(result.object2);
 
     RuntimeFormEnvelope envelope3 = envelope2;
-    envelope3.payload = source_writer_form_payload(
+    envelope3.payload = platform_form_listout_payload(
         result.object2,
         object_property_value(result.object2.form, "Title"));
     result.payload3_text = oof::platform::stream::dump_compact(envelope3.payload);
@@ -8454,7 +8522,7 @@ ObjectBracketRoundtripResult empty_object_bracket_roundtrip(std::string title) {
     result.payload1_text = "";
 
     RuntimeFormEnvelope envelope2;
-    envelope2.payload = source_writer_form_payload(
+    envelope2.payload = platform_form_listout_payload(
         result.object1,
         object_property_value(result.object1.form, "Title"));
     result.payload2_text = oof::platform::stream::dump_compact(envelope2.payload);
@@ -8462,7 +8530,7 @@ ObjectBracketRoundtripResult empty_object_bracket_roundtrip(std::string title) {
     result.signature2 = platform_form_object_signature(result.object2);
 
     RuntimeFormEnvelope envelope3 = envelope2;
-    envelope3.payload = source_writer_form_payload(
+    envelope3.payload = platform_form_listout_payload(
         result.object2,
         object_property_value(result.object2.form, "Title"));
     result.payload3_text = oof::platform::stream::dump_compact(envelope3.payload);
