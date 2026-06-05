@@ -41,7 +41,7 @@ namespace {
 void usage() {
     std::cerr << "Usage: oof-native <mechanism|value-roundtrip|formbin-selftest|formbin-source-package-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-object-graph-selftest|object-graph-concept-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native empty-form-object-roundtrip [title]\n"
-              << "       oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|formbin-object-roundtrip-diff|form-object-graph> Form.bin\n"
+              << "       oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|formbin-object-roundtrip-diff|formbin-xsd-order-object-roundtrip|form-object-graph> Form.bin\n"
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
               << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin  # diagnostic base-backed path, not product build\n"
@@ -50,7 +50,7 @@ void usage() {
               << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value  # diagnostic base-backed setPropVal check\n"
               << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
               << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt  # diagnostic base-backed path\n"
-              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
+              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-xsd-order-object-roundtrip|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-node runtime-form-stream.txt node-path\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
@@ -61,7 +61,7 @@ void usage() {
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "       oof-native container-replace <1c-container> <file-name> <replacement-file> <out-container> [--raw-deflate]\n"
               << "       oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry|platform-control-info-descriptors>\n"
-              << "       oof-native <object-model-gate|xsd-order-object-gate>\n"
+              << "       oof-native <object-model-gate|xsd-order-object-gate|xsd-order-object-roundtrip>\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
               << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
@@ -9485,6 +9485,119 @@ void print_formbin_xsd_order_object_gate(const std::string& input_path) {
     print_xsd_order_object_gate_json(materialize_platform_form_object(envelope), "Form.bin:form");
 }
 
+void print_xsd_order_roundtrip_phase_json(std::string_view phase, const XsdOrderObjectGateStats& stats) {
+    std::cout << "{\"phase\":";
+    print_json_string(phase);
+    std::cout << ",\"status\":";
+    print_json_string(stats.violations.empty() ? "PASS" : "FAIL");
+    std::cout << ",\"objectsChecked\":" << stats.objects_checked;
+    std::cout << ",\"itemObjectsChecked\":" << stats.item_objects_checked;
+    std::cout << ",\"collectionObjectsSkipped\":" << stats.collection_objects_skipped;
+    std::cout << ",\"schemaSlotsChecked\":" << stats.schema_slots_checked;
+    std::cout << ",\"explicitSlots\":" << stats.explicit_slots;
+    std::cout << ",\"defaultSlots\":" << stats.default_slots;
+    std::cout << ",\"valueObjectSlots\":" << stats.value_object_slots;
+    std::cout << ",\"violations\":" << stats.violations.size();
+    std::cout << ",\"details\":[";
+    for (std::size_t index = 0; index < stats.violations.size() && index < 8; ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_json_string(stats.violations[index]);
+    }
+    std::cout << "]}";
+}
+
+void print_xsd_order_object_roundtrip_json(
+    const RuntimeFormEnvelope& envelope,
+    std::string_view source,
+    std::size_t input_bytes
+) {
+    const auto result = object_bracket_roundtrip(envelope);
+    XsdOrderObjectGateStats before_stats;
+    XsdOrderObjectGateStats after_first_write_stats;
+    XsdOrderObjectGateStats after_second_write_stats;
+    xsd_order_gate_check_form_object(result.object1, before_stats);
+    xsd_order_gate_check_form_object(result.object2, after_first_write_stats);
+    xsd_order_gate_check_form_object(result.object3, after_second_write_stats);
+
+    const bool input_payload_equal = result.payload1_text == result.payload2_text;
+    const bool object_equal_after_first_write = result.signature1 == result.signature2;
+    const bool object_stable_after_second_write = result.signature2 == result.signature3;
+    const bool payload_stable_after_second_write = result.payload2_text == result.payload3_text;
+    const bool xsd_order_pass =
+        before_stats.violations.empty() &&
+        after_first_write_stats.violations.empty() &&
+        after_second_write_stats.violations.empty();
+    const bool status_pass =
+        xsd_order_pass &&
+        object_equal_after_first_write &&
+        object_stable_after_second_write &&
+        payload_stable_after_second_write;
+
+    std::cout << "{\"operation\":\"xsd-order-object-roundtrip\"";
+    std::cout << ",\"source\":";
+    print_json_string(source);
+    std::cout << ",\"hypothesis\":\"platform XSD order descriptors survive bracket -> PlatformFormObject -> bracket roundtrip\"";
+    std::cout << ",\"publicXmlUsed\":false";
+    std::cout << ",\"payloadPatchUsed\":false";
+    std::cout << ",\"usesBaseBin\":false";
+    std::cout << ",\"inputBytes\":" << input_bytes;
+    std::cout << ",\"payloadRootVersion\":";
+    print_json_string(envelope.payload.items.empty() ? "" : envelope.payload.items[0].atom);
+    std::cout << ",\"objectCounts\":{\"items\":" << result.object1.items.count()
+              << ",\"attributes\":" << result.object1.attributes.count()
+              << ",\"commands\":" << result.object1.commands.count()
+              << ",\"events\":" << result.object1.events.count()
+              << ",\"edges\":" << result.object1.edges.size() << "}";
+    std::cout << ",\"writtenObjectCounts\":{\"items\":" << result.object2.items.count()
+              << ",\"attributes\":" << result.object2.attributes.count()
+              << ",\"commands\":" << result.object2.commands.count()
+              << ",\"events\":" << result.object2.events.count()
+              << ",\"edges\":" << result.object2.edges.size() << "}";
+    std::cout << ",\"inputPayloadEqualAfterObjectWrite\":"
+              << (input_payload_equal ? "true" : "false");
+    std::cout << ",\"objectSignatureEqualAfterFirstWrite\":"
+              << (object_equal_after_first_write ? "true" : "false");
+    std::cout << ",\"objectSignatureStableAfterSecondWrite\":"
+              << (object_stable_after_second_write ? "true" : "false");
+    std::cout << ",\"payloadStableAfterSecondWrite\":"
+              << (payload_stable_after_second_write ? "true" : "false");
+    std::cout << ",\"xsdOrderPass\":" << (xsd_order_pass ? "true" : "false");
+    std::cout << ",\"xsdOrderPhases\":[";
+    print_xsd_order_roundtrip_phase_json("beforeWrite", before_stats);
+    std::cout << ",";
+    print_xsd_order_roundtrip_phase_json("afterFirstWrite", after_first_write_stats);
+    std::cout << ",";
+    print_xsd_order_roundtrip_phase_json("afterSecondWrite", after_second_write_stats);
+    std::cout << "]";
+    print_source_writer_coverage_json(result.writer_coverage);
+    std::cout << ",\"status\":";
+    print_json_string(status_pass ? "PASS" : "FAIL");
+    std::cout << "}\n";
+}
+
+void print_xsd_order_object_roundtrip_selftest() {
+    constexpr std::string_view fixture =
+        "{\"#\",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,\"Button1\",4294967295,0,0,0},{},{},{}},{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,\"Check1\",4294967295,0,0,0},{},{},{}}}}}";
+    const auto envelope = parse_runtime_form_envelope(std::string(fixture));
+    print_xsd_order_object_roundtrip_json(envelope, "selftest:runtime-bracket", fixture.size());
+}
+
+void print_runtime_xsd_order_object_roundtrip(const std::string& input_path) {
+    std::string canonical_text;
+    const auto envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    print_xsd_order_object_roundtrip_json(envelope, "RuntimeForm:payload", canonical_text.size());
+}
+
+void print_formbin_xsd_order_object_roundtrip(const std::string& input_path) {
+    const auto input_bytes = read_file_bytes(input_path);
+    const auto container = oof::platform::formbin::parse_container(input_bytes);
+    const auto& form_file = find_container_file(container, "form");
+    const auto envelope = runtime_envelope_from_form_payload(form_file.payload);
+    print_xsd_order_object_roundtrip_json(envelope, "Form.bin:form", form_file.payload.size());
+}
+
 void print_object_graph_concept_selftest() {
     constexpr std::string_view fixture =
         "{\"#\",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,\"Button1\",4294967295,0,0,0},{},{},{}},{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,\"Check1\",4294967295,0,0,0},{},{},{}}}}}";
@@ -10666,6 +10779,10 @@ int main(int argc, char** argv) {
             print_formbin_object_roundtrip_diff(argv[2]);
             return 0;
         }
+        if (command == "formbin-xsd-order-object-roundtrip" && argc == 3) {
+            print_formbin_xsd_order_object_roundtrip(argv[2]);
+            return 0;
+        }
         if (command == "container-extract" && argc == 4) {
             extract_container_files(argv[2], argv[3], false);
             return 0;
@@ -10712,6 +10829,10 @@ int main(int argc, char** argv) {
         }
         if (command == "xsd-order-object-gate") {
             print_xsd_order_object_gate_selftest();
+            return 0;
+        }
+        if (command == "xsd-order-object-roundtrip") {
+            print_xsd_order_object_roundtrip_selftest();
             return 0;
         }
         if (command == "form-object-graph" && argc == 3) {
@@ -10772,6 +10893,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-object-roundtrip-diff" && argc == 3) {
             print_runtime_form_object_roundtrip_diff(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-xsd-order-object-roundtrip" && argc == 3) {
+            print_runtime_xsd_order_object_roundtrip(argv[2]);
             return 0;
         }
         if (command == "runtime-platform-object" && argc == 3) {
