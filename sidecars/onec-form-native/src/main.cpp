@@ -9317,11 +9317,12 @@ void print_json_string_array(const std::vector<std::string>& values, std::size_t
 }
 
 void print_platform_form_schema() {
+    const auto controls = oof::platform::form_schema::all_controls();
     std::map<std::string_view, std::size_t> source_frequency;
     std::map<std::string_view, std::size_t> value_type_frequency;
-    for (const auto& control : oof::platform::form_schema::logform_layouter_controls) {
-        ++source_frequency[control.schema_source];
-        std::string_view values = control.value_types;
+    for (const auto* control : controls) {
+        ++source_frequency[control->schema_source];
+        std::string_view values = control->value_types;
         while (!values.empty()) {
             const std::size_t comma = values.find(',');
             const std::string_view value = values.substr(0, comma);
@@ -9337,15 +9338,17 @@ void print_platform_form_schema() {
 
     std::cout << "{\"source\":";
     print_json_string(oof::platform::form_schema::logform_layouter_schema);
-    std::cout << ",\"controlCount\":" << oof::platform::form_schema::logform_layouter_controls.size();
+    std::cout << ",\"externalSchemaSource\":";
+    print_json_string(oof::platform::form_schema::data_chart_schema);
+    std::cout << ",\"controlCount\":" << controls.size();
     std::cout << ",\"directGuidBindings\":0";
     std::cout << ",\"guidBindingStatus\":\"not-present-in-xsd; use resource/binary evidence\"";
     std::cout << ",\"controls\":[";
-    for (std::size_t index = 0; index < oof::platform::form_schema::logform_layouter_controls.size(); ++index) {
+    for (std::size_t index = 0; index < controls.size(); ++index) {
         if (index != 0) {
             std::cout << ",";
         }
-        const auto& control = oof::platform::form_schema::logform_layouter_controls[index];
+        const auto& control = *controls[index];
         std::cout << "{\"typeName\":";
         print_json_string(control.type_name);
         std::cout << ",\"streamElement\":";

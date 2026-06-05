@@ -20,7 +20,7 @@ struct DescriptorSchemaBinding {
     std::string_view evidence;
 };
 
-constexpr std::array<DescriptorSchemaBinding, 25> descriptor_schema_bindings{{
+constexpr std::array<DescriptorSchemaBinding, 26> descriptor_schema_bindings{{
     {
         "09ccdc77-ea1a-4a6d-ab1c-3435eada2433",
         "platform-resource-backed",
@@ -284,6 +284,17 @@ constexpr std::array<DescriptorSchemaBinding, 25> descriptor_schema_bindings{{
         "",
         "Дендрограмма1",
         "all-controls Form.bin GUID-headed object name; logform layouter XSD Dendrogram/dndrgm",
+    },
+    {
+        "d92a805c-98ae-4750-9158-d9ce7cec2f20",
+        "platform-resource-backed-windows-oracle-pending",
+        "HTML",
+        "html",
+        "ordinary-form HTML document field descriptor",
+        "",
+        "",
+        "ПолеHTMLДокумента1",
+        "public ordinary HTMLDocumentField maps to logform layouter XSD HTML/html and logform Field/htmlData HTMLFieldData; Linux oracle did not materialize the runtime item, so Windows oracle validation is still pending",
     },
     {
         "621e95f1-064f-11d4-9400-008048da11f9",

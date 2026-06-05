@@ -26,10 +26,10 @@ Acceptance criteria for this investigation:
 | 09-GroupBox | РамкаГруппы | UsualGroup | GroupBox | 90db814a-c75f-4b54-bc96-df62e554d67d | grpb | yes | alias |
 | 10-Splitter | Разделитель | Splitter | Separator | 36e52348-5d60-4770-8e89-a16ed50a2006 | sep | yes | alias |
 | 11-Chart | Диаграмма | Chart | Chart | a8b97779-1a4b-4059-b09c-807f86d2a461 | chrt | yes | exact |
-| 12-PivotChart | СводнаяДиаграмма | PivotChart | PivotChart | a26da99e-184a-4823-b0d6-62816d38dc4e | - | no | partial |
+| 12-PivotChart | СводнаяДиаграмма | PivotChart | PivotChart | a26da99e-184a-4823-b0d6-62816d38dc4e | chart_root:PivotChart | yes | schema-backed special |
 | 13-GanttChart | ДиаграммаГанта | GanttChart | GanttChart | e5fdc112-5c84-4a16-9728-72b85692b6e2 | gchrt | yes | exact |
 | 14-Dendrogram | Дендрограмма | Dendrogram | Dendrogram | 984981b1-622d-4ebc-94f7-885f0cdfb59a | dndrgm | yes | exact |
-| 15-HTMLDocumentField | ПолеHTMLДокумента | HTMLDocumentField | - | - | - | no | gap |
+| 15-HTMLDocumentField | ПолеHTMLДокумента | HTMLDocumentField | HTML | d92a805c-98ae-4750-9158-d9ce7cec2f20 | html/htmlData | yes | alias; Windows oracle pending |
 | 16-ListBox | ПолеСписка | ListBox | TextBox | 19f8b798-314e-4b4e-8121-905b2a7a03f5 | txt | yes | alias by GUID |
 | 17-ProgressBar | Индикатор | ProgressBar | ProgressBar | b1db1f86-abbb-4cf0-8852-fe6ae21650c2 | prgb | yes | exact |
 | 18-TrackBar | ПолосаРегулирования | TrackBar | TrackBar | 6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef | trckb | yes | exact |
@@ -44,11 +44,12 @@ Acceptance criteria for this investigation:
 
 Coverage summary:
 
-- 23 controls are auto-mappable now.
-- 1 control is partial: `PivotChart` has a stable GUID and runtime type, but no
-  logform XSD stream element in the current evidence.
-- 1 control is an oracle gap: `HTMLDocumentField` script executed, but no
-  `OracleHTMLDocumentField` item materialized in the runtime graph.
+- 25 controls are schema-backed now.
+- `PivotChart` is schema-backed through `chart_root` `PivotChart`, but still has
+  no logform layouter stream element.
+- `HTMLDocumentField` is a public alias for platform `HTML/html` and
+  `Field/htmlData` `HTMLFieldData`; Linux oracle did not materialize the runtime
+  item, so Windows oracle validation is still pending.
 - 1 control is blocked: `ActiveXControl` returns a non-form error stream because
   the platform oracle cannot resolve `ЭлементУправления` as a form control type.
 

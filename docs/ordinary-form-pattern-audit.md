@@ -451,9 +451,10 @@ Current platform-oracle note:
 - With that carrier, the 26-control oracle batch completed and produced
   runtime streams plus object-graph summaries under
   `scan-output/platform-control-oracle/`. 25 controls produced a materialized
-  form graph; `ActiveXControl` returned a short non-form/error stream. The
-  `PivotChart` graph showed one schema-backed gap (`materializedItems=3`,
-  `schemaBackedItems=2`).
+  form graph; `ActiveXControl` returned a short non-form/error stream. Follow-up
+  schema join work maps `PivotChart` through `chart_root` `PivotChart` and maps
+  public `HTMLDocumentField` to platform `HTML/html` plus `Field/htmlData`
+  `HTMLFieldData`; Windows oracle validation for HTML remains pending.
 - `LD_AUDIT` is useful for filtered symbol evidence but is not batch-safe in
   this 8.5 container: even a fixed audit module with no-op hooks conflicts with
   platform `libtcmalloc.so.4` and aborts with `Attempt to realloc invalid

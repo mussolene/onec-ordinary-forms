@@ -545,10 +545,11 @@ inline PlatformObjectSchema build_schema_for_root_form() {
 
 inline std::vector<PlatformObjectSchema> build_platform_object_schemas() {
     std::vector<PlatformObjectSchema> schemas;
-    schemas.reserve(form_schema::logform_layouter_controls.size() + 1);
+    const auto controls = form_schema::all_controls();
+    schemas.reserve(controls.size() + 1);
     schemas.push_back(build_schema_for_root_form());
-    for (const auto& control : form_schema::logform_layouter_controls) {
-        schemas.push_back(build_schema_for_control(control));
+    for (const auto* control : controls) {
+        schemas.push_back(build_schema_for_control(*control));
     }
     return schemas;
 }

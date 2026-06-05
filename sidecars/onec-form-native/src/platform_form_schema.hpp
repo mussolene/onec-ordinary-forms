@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <vector>
 #include <string_view>
 
 namespace oof::platform::form_schema {
@@ -27,6 +28,9 @@ struct PlatformFormSchemaControl {
 
 constexpr std::string_view logform_layouter_schema =
     "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:http://v8.1c.ru/8.2/managed-application/logform";
+
+constexpr std::string_view data_chart_schema =
+    "platform-resource:chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd:http://v8.1c.ru/8.2/data/chart";
 
 constexpr std::array<PlatformFormSchemaControl, 27> logform_layouter_controls{{
     {
@@ -544,8 +548,47 @@ constexpr std::array<PlatformFormSchemaControl, 27> logform_layouter_controls{{
     },
 }};
 
+constexpr std::array<PlatformFormSchemaControl, 1> external_object_controls{{
+    {
+        "PivotChart",
+        "",
+        data_chart_schema,
+        "Chart",
+        "chart,horizontalScaleKeeping,horizontalScaleValueCount,horizontalScaleValueMinWidth,pivotChartType,pointsValuesShowMode,seriesValuesShowMode,horizontalScaleLabelsOrientation,horizontalScaleTopLevelCount,fieldAreasTransparent,fieldAreasBackColor,fieldAreasTextColor,showFields",
+        "",
+        "tns:Chart,tns:PivotChartScaleKeeping,xs:decimal,xs:decimal,tns:PivotChartType,tns:PivotChartValuesShowMode,tns:PivotChartValuesShowMode,tns:PivotChartLabelsOrientation,xs:decimal,xs:boolean,v8ui:Color,v8ui:Color,xs:boolean",
+        "PivotChart",
+        "",
+        "",
+        "chart:tns:Chart,horizontalScaleKeeping:tns:PivotChartScaleKeeping,horizontalScaleValueCount:xs:decimal,horizontalScaleValueMinWidth:xs:decimal,pivotChartType:tns:PivotChartType,pointsValuesShowMode:tns:PivotChartValuesShowMode,seriesValuesShowMode:tns:PivotChartValuesShowMode,horizontalScaleLabelsOrientation:tns:PivotChartLabelsOrientation,horizontalScaleTopLevelCount:xs:decimal,fieldAreasTransparent:xs:boolean,fieldAreasBackColor:v8ui:Color,fieldAreasTextColor:v8ui:Color,showFields:xs:boolean",
+        "",
+        "",
+        "",
+        "",
+        "horizontalScaleKeeping=AllValues;pivotChartType=Auto;pointsValuesShowMode=AllValues;seriesValuesShowMode=AllValues;horizontalScaleLabelsOrientation=Auto;horizontalScaleTopLevelCount=0;fieldAreasTransparent=false;showFields=true",
+        "PivotChart ordinary object surface from chart_root data/chart complexType PivotChart; GUID a26da99e-184a-4823-b0d6-62816d38dc4e is platform-ui-guid-table-backed; logform_layouter has no dedicated stream element",
+    },
+}};
+
+inline std::vector<const PlatformFormSchemaControl*> all_controls() {
+    std::vector<const PlatformFormSchemaControl*> controls;
+    controls.reserve(logform_layouter_controls.size() + external_object_controls.size());
+    for (const auto& control : logform_layouter_controls) {
+        controls.push_back(&control);
+    }
+    for (const auto& control : external_object_controls) {
+        controls.push_back(&control);
+    }
+    return controls;
+}
+
 inline const PlatformFormSchemaControl* control_by_type_name(std::string_view type_name) {
     for (const auto& control : logform_layouter_controls) {
+        if (control.type_name == type_name) {
+            return &control;
+        }
+    }
+    for (const auto& control : external_object_controls) {
         if (control.type_name == type_name) {
             return &control;
         }

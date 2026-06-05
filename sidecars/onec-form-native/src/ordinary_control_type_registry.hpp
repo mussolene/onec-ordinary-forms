@@ -29,7 +29,7 @@ constexpr std::array<OrdinaryControlTypeBinding, 26> bindings{{
     {"a26da99e-184a-4823-b0d6-62816d38dc4e", "platform-ui-guid-table-backed", "PivotChart", "", "PivotChart", "PivotChart"},
     {"e5fdc112-5c84-4a16-9728-72b85692b6e2", "corpus-xsd-correlated", "GanttChart", "gchrt", "GanttChart", "GanttChart"},
     {"984981b1-622d-4ebc-94f7-885f0cdfb59a", "corpus-xsd-correlated", "Dendrogram", "dndrgm", "Dendrogram", "Dendrogram"},
-    {"d92a805c-98ae-4750-9158-d9ce7cec2f20", "windows-harness-required", "HTMLDocumentField", "", "HTMLDocumentField", "HTMLDocumentField"},
+    {"d92a805c-98ae-4750-9158-d9ce7cec2f20", "platform-resource-backed-windows-oracle-pending", "HTML", "html", "HTMLDocumentField", "HTMLDocumentField"},
     {"19f8b798-314e-4b4e-8121-905b2a7a03f5", "corpus-xsd-resource-correlated", "TextBox", "txt", "ListBox", "ListBox"},
     {"b1db1f86-abbb-4cf0-8852-fe6ae21650c2", "corpus-xsd-resource-correlated", "ProgressBar", "prgb", "ProgressBar", "ProgressBar"},
     {"6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef", "corpus-xsd-resource-correlated", "TrackBar", "trckb", "TrackBar", "TrackBar"},
