@@ -5365,7 +5365,7 @@ void append_form_scalar_property_xml(
     out += ">\n";
 }
 
-struct PublicXmlPackageSidecarSink {
+struct PublicXmlPackageFileSink {
     std::filesystem::path package_root;
     std::size_t picture_count = 0;
 };
@@ -5384,20 +5384,20 @@ void append_schema_properties_xml(
     std::string& out,
     const oof::platform::object_model::PlatformObject& object,
     int indent,
-    PublicXmlPackageSidecarSink* sidecar_sink = nullptr
+    PublicXmlPackageFileSink* package_sink = nullptr
 ) {
     for (const auto& property : object.properties) {
         if (!is_public_schema_property_xml(property) || !property_is_explicit_for_xml(property)) {
             continue;
         }
-        if (sidecar_sink != nullptr &&
+        if (package_sink != nullptr &&
             property.name == "Picture" &&
             property.value_object_storage == "inline-base64") {
             const auto picture_bytes = decode_picture_payload(property.value);
             const std::string relative_path =
                 "Items/" + package_item_name(object) + "/Picture." + picture_extension_for_bytes(picture_bytes);
-            write_file_bytes(sidecar_sink->package_root / relative_path, picture_bytes);
-            ++sidecar_sink->picture_count;
+            write_file_bytes(package_sink->package_root / relative_path, picture_bytes);
+            ++package_sink->picture_count;
             append_indent(out, indent);
             out += "<Picture file=\"";
             out += xml_escape(relative_path);
@@ -5895,7 +5895,7 @@ void append_control_xml(
     const oof::platform::object_model::PlatformFormObject& form_object,
     std::size_t object_index,
     int indent,
-    PublicXmlPackageSidecarSink* sidecar_sink = nullptr
+    PublicXmlPackageFileSink* package_sink = nullptr
 ) {
     const auto& object = form_object.items.get(object_index);
     const std::string tag = public_xml_tag_for_platform_type(object.platform_type, object.identity.class_guid);
@@ -5928,7 +5928,7 @@ void append_control_xml(
     append_named_text_property_xml(out, object, "Title", indent + 2);
     append_named_text_property_xml(out, object, "Visible", indent + 2);
     append_named_text_property_xml(out, object, "Enabled", indent + 2);
-    append_schema_properties_xml(out, object, indent + 2, sidecar_sink);
+    append_schema_properties_xml(out, object, indent + 2, package_sink);
     append_position_xml(out, form_object, object, indent + 2);
     if (!object_events.empty()) {
         append_events_xml(out, object_events, indent + 2);
@@ -5937,7 +5937,7 @@ void append_control_xml(
         append_indent(out, indent + 2);
         out += "<ChildItems>\n";
         for (const std::size_t child_index : child_indices) {
-            append_control_xml(out, form_object, child_index, indent + 4, sidecar_sink);
+            append_control_xml(out, form_object, child_index, indent + 4, package_sink);
         }
         append_indent(out, indent + 2);
         out += "</ChildItems>\n";
@@ -5950,7 +5950,7 @@ void append_control_xml(
 
 std::string form_object_to_public_xml(
     const oof::platform::object_model::PlatformFormObject& form_object,
-    PublicXmlPackageSidecarSink* sidecar_sink = nullptr
+    PublicXmlPackageFileSink* package_sink = nullptr
 ) {
     std::string out;
     out += "<?xml version='1.0' encoding='utf-8'?>\n";
@@ -5986,7 +5986,7 @@ std::string form_object_to_public_xml(
     append_events_xml(out, event_objects_for_parent(form_object, "0"), 2);
     out += "  <ChildItems>\n";
     for (const std::size_t child_index : child_indices_for_parent(form_object, "0")) {
-        append_control_xml(out, form_object, child_index, 4, sidecar_sink);
+        append_control_xml(out, form_object, child_index, 4, package_sink);
     }
     out += "  </ChildItems>\n";
     append_attributes_xml(out, form_object, 2);
@@ -6043,10 +6043,10 @@ std::filesystem::path checked_package_relative_path(
     return package_root / rel;
 }
 
-std::string inline_picture_sidecars_for_build(
+std::string inline_picture_package_files_for_build(
     const std::string& xml,
     const std::filesystem::path& xml_path,
-    std::size_t& picture_sidecars_read
+    std::size_t& picture_files_read
 ) {
     const auto package_root = form_package_root_for_xml(xml_path);
     std::string out;
@@ -6098,13 +6098,13 @@ std::string inline_picture_sidecars_for_build(
         out += "<Picture><PictureValue constructor=\"New Picture\" storage=\"inline-base64\">";
         out += xml_escape(payload);
         out += "</PictureValue></Picture>";
-        ++picture_sidecars_read;
+        ++picture_files_read;
         cursor = replace_end;
     }
     return out;
 }
 
-std::size_t apply_picture_sidecar_edits(
+std::size_t apply_picture_package_file_edits(
     oof::platform::stream::ListValue& payload,
     const std::string& xml,
     const std::filesystem::path& xml_path
@@ -6145,7 +6145,7 @@ std::size_t apply_picture_sidecar_edits(
             const auto picture_bytes = read_file_bytes(checked_package_relative_path(package_root, file).string());
             const std::string picture_payload = wrap_base64_picture_payload(picture_bytes);
             if (!set_materialized_object_picture_payload(payload, object_id, picture_payload)) {
-                throw std::runtime_error("cannot apply Picture sidecar: baseline object has no writable picture payload slot: object=" +
+                throw std::runtime_error("cannot apply Picture package file: baseline object has no writable picture payload slot: object=" +
                                          object_id);
             }
             ++edits;
@@ -6161,8 +6161,8 @@ void write_formbin_package(const std::string& input_path, const std::string& out
     const RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
     const auto form_object = materialize_platform_form_object(envelope);
     const std::filesystem::path xml_path(output_path);
-    PublicXmlPackageSidecarSink sidecar_sink{form_package_root_for_xml(xml_path)};
-    const std::string xml = form_object_to_public_xml(form_object, &sidecar_sink);
+    PublicXmlPackageFileSink package_sink{form_package_root_for_xml(xml_path)};
+    const std::string xml = form_object_to_public_xml(form_object, &package_sink);
     write_file_bytes(xml_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
 
     bool module_written = false;
@@ -6187,7 +6187,7 @@ void write_formbin_package(const std::string& input_path, const std::string& out
     std::cout << ",\"controlCount\":" << form_object.items.count();
     std::cout << ",\"moduleWritten\":" << (module_written ? "true" : "false");
     std::cout << ",\"moduleBytes\":" << module_bytes;
-    std::cout << ",\"pictureSidecars\":" << sidecar_sink.picture_count;
+    std::cout << ",\"picturePackageFiles\":" << package_sink.picture_count;
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
@@ -6280,29 +6280,29 @@ void write_formbin_from_package(
 
     RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
     const auto baseline = materialize_platform_form_object(envelope);
-    std::size_t picture_sidecars_read = 0;
+    std::size_t picture_files_read = 0;
     const auto xml_package_path = std::filesystem::path(xml_path);
     const std::string source_xml = read_file_text_lossy(xml_path);
-    const std::string package_xml = inline_picture_sidecars_for_build(
+    const std::string package_xml = inline_picture_package_files_for_build(
         source_xml,
         xml_package_path,
-        picture_sidecars_read);
+        picture_files_read);
     const auto requested_edits = parse_public_xml_platform_object_edits(package_xml);
     const auto object_edits = keep_changed_platform_object_edits(requested_edits, baseline);
     const auto result = apply_platform_object_edits(envelope, object_edits);
-    const std::size_t picture_sidecar_edits =
-        apply_picture_sidecar_edits(envelope.payload, source_xml, xml_package_path);
+    const std::size_t picture_file_edits =
+        apply_picture_package_file_edits(envelope.payload, source_xml, xml_package_path);
     const std::size_t deleted_controls =
         delete_controls_missing_from_public_xml(envelope.payload, requested_public_control_ids(source_xml));
     form_file.payload = encode_form_payload_text(form_file.payload, envelope.payload);
 
     const auto module_path = form_package_module_path(xml_package_path);
-    bool module_sidecar_used = false;
+    bool module_package_file_used = false;
     std::size_t module_bytes = 0;
     if (std::filesystem::is_regular_file(module_path)) {
         auto& module_file = find_container_file_mut(container, "module");
         module_file.payload = read_file_bytes(module_path.string());
-        module_sidecar_used = true;
+        module_package_file_used = true;
         module_bytes = module_file.payload.size();
     }
 
@@ -6328,10 +6328,10 @@ void write_formbin_from_package(
     std::cout << ",\"eventEdits\":" << result.event_edits;
     std::cout << ",\"deletedControls\":" << deleted_controls;
     std::cout << ",\"moduleSource\":";
-    print_json_string(module_sidecar_used ? "sidecar" : "baseline");
+    print_json_string(module_package_file_used ? "package-file" : "baseline");
     std::cout << ",\"moduleBytes\":" << module_bytes;
-    std::cout << ",\"pictureSidecarsRead\":" << picture_sidecars_read;
-    std::cout << ",\"pictureSidecarEdits\":" << picture_sidecar_edits;
+    std::cout << ",\"picturePackageFilesRead\":" << picture_files_read;
+    std::cout << ",\"picturePackageFileEdits\":" << picture_file_edits;
     std::cout << ",\"preservedContainerFiles\":" << container.files.size();
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
@@ -6785,7 +6785,7 @@ LV source_writer_command_bar_base_info(const oof::platform::object_model::Platfo
         source_writer_auto_color_value(),
         source_writer_auto_color_value(),
         list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
-        raw("0"),
+        raw(source_writer_bool_prop(object, "Enabled", "0")),
         source_writer_color_value("-22"),
         source_writer_auto_color_value(),
         source_writer_auto_color_value(),
@@ -6804,37 +6804,89 @@ LV source_writer_command_bar_base_info(const oof::platform::object_model::Platfo
     });
 }
 
-LV source_writer_empty_command_bar_payload(const oof::platform::object_model::PlatformObject& object) {
+LV source_writer_command_bar_title_action_record(const oof::platform::object_model::PlatformObject& object) {
+    const std::string title = object_prop_or_default(object, "Title", object.name);
+    const std::string handler = object.name.empty() ? "CommandBarAction" : object.name;
+    return list({
+        raw("8"),
+        raw("d3fc7006-edf1-4b73-9867-1648ab142485"),
+        raw("1"),
+        raw("e1692cc2-605b-4535-84dd-28440238746c"),
+        list({
+            raw("3"),
+            str_atom(handler),
+            list({
+                raw("1"),
+                str_atom(handler),
+                localized_text_record(title),
+                localized_text_record(title),
+                localized_text_record(title),
+                source_writer_empty_picture_value(),
+                list({raw("0"), raw("0"), raw("0")}),
+            }),
+        }),
+        raw("0"),
+        raw("1"),
+        raw("1"),
+    });
+}
+
+LV source_writer_command_bar_actions_payload(const oof::platform::object_model::PlatformObject& object) {
+    const std::string title = object_prop_or_default(object, "Title", "");
+    if (title.empty()) {
+        return list({
+            raw("5"),
+            raw("6013c551-1c48-4ef4-a466-6fbe824675ca"),
+            raw("12"),
+            raw("1"),
+            raw("0"),
+            raw("1"),
+            list({
+                raw("5"),
+                raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
+                raw("4"),
+                raw("0"),
+                raw("0"),
+                list({raw("0"), raw("0"), list({raw("0")})}),
+            }),
+        });
+    }
+    return list({
+        raw("5"),
+        raw("87a7828f-3ea2-4ed5-9afd-292b4728c926"),
+        raw("3"),
+        raw("1"),
+        raw("1"),
+        source_writer_command_bar_title_action_record(object),
+        raw("1"),
+        list({
+            raw("5"),
+            raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
+            raw("4"),
+            raw("0"),
+            raw("0"),
+            list({raw("0"), raw("0"), list({raw("0")})}),
+        }),
+    });
+}
+
+LV source_writer_command_bar_payload(const oof::platform::object_model::PlatformObject& object) {
+    const bool has_title = !object_prop_or_default(object, "Title", "").empty();
     return list({
         raw("2"),
         list({
             source_writer_command_bar_base_info(object),
             raw("9"),
             raw("2"),
-            raw("1"),
+            raw(has_title ? "0" : "1"),
             raw("0"),
             raw("1"),
             raw("1"),
-            list({
-                raw("5"),
-                raw("6013c551-1c48-4ef4-a466-6fbe824675ca"),
-                raw("12"),
-                raw("1"),
-                raw("0"),
-                raw("1"),
-                list({
-                    raw("5"),
-                    raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
-                    raw("4"),
-                    raw("0"),
-                    raw("0"),
-                    list({raw("0"), raw("0"), list({raw("0")})}),
-                }),
-            }),
+            source_writer_command_bar_actions_payload(object),
             raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
             raw("4"),
-            raw("9d0a2e40-b978-11d4-84b6-008048da06df"),
-            raw("0"),
+            raw(has_title ? "2601b204-97f7-4060-b50c-9b68f10d8acd" : "9d0a2e40-b978-11d4-84b6-008048da06df"),
+            raw(has_title ? "1" : "0"),
             raw("0"),
             raw("0"),
         }),
@@ -6913,8 +6965,8 @@ LV source_writer_control_payload(
             source_writer_event_table(form_object, object.object_id),
         });
     }
-    if (source_writer_top_command_bar(object) && object_prop_or_default(object, "Title", "").empty()) {
-        return source_writer_empty_command_bar_payload(object);
+    if (object.platform_type == "CommandBar") {
+        return source_writer_command_bar_payload(object);
     }
     return list({raw("1"), localized_text_record(title)});
 }
@@ -6930,8 +6982,7 @@ bool source_writer_has_typed_payload(
         object.platform_type == "Button") {
         return true;
     }
-    return source_writer_top_command_bar(object) &&
-           object_prop_or_default(object, "Title", "").empty();
+    return object.platform_type == "CommandBar";
 }
 
 struct SourceWriterCoverageSummary {
@@ -7477,9 +7528,9 @@ SourcePackageContainerTimes source_package_container_times(
 struct SourcePackageBuildResult {
     std::vector<std::uint8_t> bytes;
     std::size_t control_count = 0;
-    bool module_sidecar_used = false;
+    bool module_package_file_used = false;
     std::size_t module_bytes = 0;
-    std::size_t picture_sidecars_read = 0;
+    std::size_t picture_files_read = 0;
     SourceWriterCoverageSummary writer_coverage;
     SourcePackageContainerTimes container_times;
 };
@@ -7488,10 +7539,10 @@ SourcePackageBuildResult build_formbin_source_package(const std::string& xml_pat
     const auto xml_package_path = std::filesystem::path(xml_path);
     SourcePackageBuildResult result;
     const std::string source_xml = read_file_text_lossy(xml_path);
-    const std::string package_xml = inline_picture_sidecars_for_build(
+    const std::string package_xml = inline_picture_package_files_for_build(
         source_xml,
         xml_package_path,
-        result.picture_sidecars_read);
+        result.picture_files_read);
     const auto form_object = platform_form_object_from_public_xml(package_xml);
     const std::string title = public_form_title_from_xml(package_xml);
     result.control_count = form_object.items.count();
@@ -7512,7 +7563,7 @@ SourcePackageBuildResult build_formbin_source_package(const std::string& xml_pat
     std::vector<std::uint8_t> module_payload;
     if (std::filesystem::is_regular_file(module_path)) {
         module_payload = read_file_bytes(module_path.string());
-        result.module_sidecar_used = true;
+        result.module_package_file_used = true;
         result.module_bytes = module_payload.size();
     }
     container.files.push_back({
@@ -7544,9 +7595,9 @@ void write_formbin_from_source_package(
     std::cout << ",\"source\":\"Form.xml\"";
     std::cout << ",\"controls\":" << result.control_count;
     std::cout << ",\"moduleSource\":";
-    print_json_string(result.module_sidecar_used ? "sidecar" : "empty");
+    print_json_string(result.module_package_file_used ? "package-file" : "empty");
     std::cout << ",\"moduleBytes\":" << result.module_bytes;
-    std::cout << ",\"pictureSidecarsRead\":" << result.picture_sidecars_read;
+    std::cout << ",\"picturePackageFilesRead\":" << result.picture_files_read;
     std::cout << ",\"containerTicksSource\":";
     print_json_string(result.container_times.source);
     std::cout << ",\"formCreatedTicks\":" << result.container_times.form_created;
