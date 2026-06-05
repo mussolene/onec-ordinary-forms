@@ -6107,6 +6107,76 @@ oof::platform::object_model::PlatformFormObject platform_form_object_from_platfo
     return platform_form_object_from_xdto_object(platform_xdto_object_from_xml(xml));
 }
 
+bool platform_xdto_property_is_schema_member(
+    const oof::platform::object_schema::PlatformObjectSchema& schema,
+    const PlatformXdtoProperty& property
+) {
+    for (const auto& member : schema.xsd_members) {
+        if (member.name == property.name || member.stream_name == property.stream_name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void validate_platform_xdto_object_for_schema_order(
+    const PlatformXdtoObject& xdto,
+    std::size_t& schema_objects,
+    std::size_t& schema_members
+) {
+    const auto schema = schema_for_platform_xsd_element(xdto.element_name, xdto.xsd_namespace);
+    if (!schema.has_value()) {
+        throw std::runtime_error("platform XDTO schema is not found for writer object: " + xdto.element_name);
+    }
+    ++schema_objects;
+    std::set<std::string> seen_properties;
+    for (const auto& property : xdto.properties) {
+        if (!platform_xdto_property_is_schema_member(*schema, property)) {
+            throw std::runtime_error(
+                "platform XDTO writer property is not declared by schema: " +
+                xdto.element_name + "." + property.stream_name);
+        }
+        if (!seen_properties.insert(property.stream_name).second) {
+            throw std::runtime_error(
+                "platform XDTO writer duplicate property: " +
+                xdto.element_name + "." + property.stream_name);
+        }
+        ++schema_members;
+    }
+    for (const auto& child : xdto.children) {
+        if (platform_xsd_element_is_member_of_parent(*schema, child.element_name)) {
+            throw std::runtime_error(
+                "platform XDTO writer object child collides with schema member: " +
+                xdto.element_name + "/" + child.element_name);
+        }
+        if (!schema_for_platform_xsd_element(child.element_name, child.xsd_namespace).has_value()) {
+            throw std::runtime_error("platform XDTO writer child object is not declared by platform schemas: " + child.element_name);
+        }
+        validate_platform_xdto_object_for_schema_order(child, schema_objects, schema_members);
+    }
+}
+
+struct PlatformXdtoListStreamWriteResult {
+    PlatformXdtoObject xdto;
+    oof::platform::object_model::PlatformFormObject form_object;
+    oof::platform::stream::ListValue payload;
+    std::size_t schema_objects = 0;
+    std::size_t schema_members = 0;
+};
+
+PlatformXdtoListStreamWriteResult platform_xdto_schema_order_list_stream_payload(
+    PlatformXdtoObject xdto
+) {
+    PlatformXdtoListStreamWriteResult result;
+    result.xdto = std::move(xdto);
+    validate_platform_xdto_object_for_schema_order(result.xdto, result.schema_objects, result.schema_members);
+    result.form_object = platform_form_object_from_xdto_object(result.xdto);
+    result.payload = source_writer_form_payload(
+        result.form_object,
+        object_property_value(result.form_object.form, "Title"));
+    return result;
+}
+
 void write_runtime_form_xml(const std::string& input_path, const std::string& output_path) {
     std::string canonical_text;
     RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
@@ -6187,22 +6257,26 @@ void write_platform_xsd_xml_roundtrip(const std::string& input_path, const std::
 }
 
 void write_platform_xsd_xml_runtime_form(const std::string& input_path, const std::string& output_path) {
-    const auto form_object = platform_form_object_from_platform_xsd_xml(read_file_text_lossy(input_path));
+    auto result = platform_xdto_schema_order_list_stream_payload(
+        platform_xdto_object_from_xml(read_file_text_lossy(input_path)));
+    const auto& form_object = result.form_object;
     RuntimeFormEnvelope envelope;
     envelope.marker = "#";
     envelope.runtime_uuid = "5c83cba4-7a20-4102-a5be-add0ee74f6a1";
-    envelope.payload = source_writer_form_payload(
-        form_object,
-        object_property_value(form_object.form, "Title"));
+    envelope.payload = result.payload;
     const std::string output = dump_runtime_form_envelope(envelope);
     write_file_bytes(output_path, std::vector<std::uint8_t>(output.begin(), output.end()));
     const auto redump_object = materialize_platform_form_object(envelope);
     std::cout << "{\"output\":";
     print_json_string(output_path);
     std::cout << ",\"operation\":\"platform-xsd-xml-build-runtime\"";
-    std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> PlatformFormObject -> bracket\"";
+    std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> XSD schema-order ListOutStream -> bracket\"";
+    std::cout << ",\"schemaOrderWriter\":\"PlatformXdtoObject\"";
+    std::cout << ",\"listStreamBackend\":\"source_writer_form_payload\"";
     std::cout << ",\"usesBasePayload\":false";
     std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
+    std::cout << ",\"schemaObjects\":" << result.schema_objects;
+    std::cout << ",\"schemaMembers\":" << result.schema_members;
     std::cout << ",\"objects\":{\"items\":" << form_object.items.count()
               << ",\"attributes\":" << form_object.attributes.count()
               << ",\"commands\":" << form_object.commands.count()
@@ -7912,14 +7986,13 @@ void write_formbin_from_platform_xsd_xml(
 ) {
     const std::filesystem::path xml_package_path(xml_path);
     const std::string source_xml = read_file_text_lossy(xml_path);
-    const auto form_object = platform_form_object_from_platform_xsd_xml(source_xml);
+    auto result = platform_xdto_schema_order_list_stream_payload(
+        platform_xdto_object_from_xml(source_xml));
+    const auto& form_object = result.form_object;
     const auto container_times = source_package_container_times(
         xml_package_path,
         form_package_module_path(xml_package_path),
         source_xml);
-    const auto payload = source_writer_form_payload(
-        form_object,
-        object_property_value(form_object.form, "Title"));
 
     oof::platform::formbin::OneCContainer container;
     container.block_size = oof::platform::formbin::container_block_size;
@@ -7927,7 +8000,7 @@ void write_formbin_from_platform_xsd_xml(
         "form",
         container_times.form_created,
         container_times.form_modified,
-        source_writer_form_payload_bytes(payload),
+        source_writer_form_payload_bytes(result.payload),
     });
     container.files.push_back({
         "module",
@@ -7945,9 +8018,13 @@ void write_formbin_from_platform_xsd_xml(
     std::cout << "{\"output\":";
     print_json_string(output_path);
     std::cout << ",\"operation\":\"platform-xsd-xml-build-formbin\"";
-    std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> PlatformFormObject -> ListOutStream -> Form.bin\"";
+    std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> XSD schema-order ListOutStream -> Form.bin\"";
+    std::cout << ",\"schemaOrderWriter\":\"PlatformXdtoObject\"";
+    std::cout << ",\"listStreamBackend\":\"source_writer_form_payload\"";
     std::cout << ",\"usesBasePayload\":false";
     std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
+    std::cout << ",\"schemaObjects\":" << result.schema_objects;
+    std::cout << ",\"schemaMembers\":" << result.schema_members;
     std::cout << ",\"bytes\":" << bytes.size();
     std::cout << ",\"containerTicksSource\":";
     print_json_string(container_times.source);
