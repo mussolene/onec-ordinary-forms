@@ -277,13 +277,13 @@ void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-source-package-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
               << "       oof-native <formbin-info|formbin-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
-              << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
+              << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin  # diagnostic base-backed path, not product build\n"
               << "       oof-native formbin-xml-coverage Form.bin\n"
               << "       oof-native <formbin-platform-object|formbin-platform-object-get> Form.bin [objectId property]\n"
-              << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value\n"
+              << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value  # diagnostic base-backed setPropVal check\n"
               << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
-              << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt\n"
+              << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt  # diagnostic base-backed path\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-platform-object> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-node runtime-form-stream.txt node-path\n"
@@ -1292,6 +1292,7 @@ struct MaterializedFormEvent {
     std::string handler;
     std::string title;
     std::string path;
+    std::size_t ordinal = 0;
 };
 
 struct MaterializedFormItem {
@@ -1333,7 +1334,37 @@ struct MaterializedFormCommand {
     std::string handler;
     std::string modifies_data;
     std::string path;
+    std::size_t ordinal = 0;
 };
+
+std::string materialized_command_object_id(std::string_view command_id, std::size_t ordinal) {
+    return "command:" + std::string(command_id) + ":" + std::to_string(ordinal);
+}
+
+void assign_materialized_command_object_ids(std::vector<MaterializedFormCommand>& commands) {
+    std::map<std::string, std::size_t> ordinals;
+    for (auto& command : commands) {
+        command.ordinal = ordinals[command.id]++;
+        command.object_id = materialized_command_object_id(command.id, command.ordinal);
+    }
+}
+
+std::string materialized_event_object_id(
+    std::string_view owner_object_id,
+    std::string_view event_id,
+    std::size_t ordinal
+) {
+    return "event:" + std::string(owner_object_id) + ":" + std::string(event_id) + ":" + std::to_string(ordinal);
+}
+
+void assign_materialized_event_object_ids(std::vector<MaterializedFormEvent>& events) {
+    std::map<std::pair<std::string, std::string>, std::size_t> ordinals;
+    for (auto& event : events) {
+        auto key = std::make_pair(event.owner_object_id, event.id);
+        event.ordinal = ordinals[key]++;
+        event.object_id = materialized_event_object_id(event.owner_object_id, event.id, event.ordinal);
+    }
+}
 
 void collect_form_payload_structure(
     const oof::platform::stream::ListValue& value,
@@ -1812,7 +1843,6 @@ std::vector<MaterializedFormEvent> collect_materialized_form_events(
         event.owner_object_id = std::string(owner_object_id);
         event.id = oof::platform::stream::dump_compact(value.items[1]);
         event.handler = !value.items[2].is_list ? value.items[2].atom : "";
-        event.object_id = "event:" + std::string(owner_object_id) + ":" + event.id;
         event.path = std::string(path);
         if (!event.id.empty() && !event.handler.empty()) {
             events.push_back(std::move(event));
@@ -1827,7 +1857,6 @@ std::vector<MaterializedFormEvent> collect_materialized_form_events(
         if (!find_first_localized_text(value.items[2], event.title)) {
             event.title = event.handler;
         }
-        event.object_id = "event:" + std::string(owner_object_id) + ":" + event.id;
         event.path = std::string(path);
         if (!event.id.empty() && !event.handler.empty()) {
             events.push_back(std::move(event));
@@ -1915,6 +1944,7 @@ void collect_materialized_form_items(
                     std::make_move_iterator(legacy_events.begin()),
                     std::make_move_iterator(legacy_events.end()));
             }
+            assign_materialized_event_object_ids(item.events);
             item.control_info_properties = control_info_slot_properties(value, item.descriptor_binding->platform_type);
             next_parent = item.object_id;
             items.push_back(std::move(item));
@@ -2074,7 +2104,6 @@ void collect_materialized_form_commands_from_block(
         (block.items.size() >= 4 && (block.items[0].is_list || !block.items[0].atom.empty()))) {
         MaterializedFormCommand command;
         command.id = command_record_id_value(block);
-        command.object_id = "command:" + command.id;
         command.name = command_record_scalar_value(block, 2, 1);
         command.handler = command_record_scalar_value(block, 3, 2);
         command.modifies_data = command_record_scalar_value(block, 4, 3);
@@ -2110,6 +2139,7 @@ std::vector<MaterializedFormCommand> collect_materialized_form_commands(
             "$/" + std::to_string(index),
             commands);
     }
+    assign_materialized_command_object_ids(commands);
     return commands;
 }
 
@@ -4893,10 +4923,13 @@ void add_public_xml_collection_objects(
         form_object.attributes.add(std::move(object));
     }
 
+    std::map<std::string, std::size_t> command_ordinals;
     for (const auto& command_xml : find_xml_elements(xml, "Command")) {
-        const std::string object_id = xml_attr_value(command_xml.attrs, "objectId");
+        const std::string id = xml_attr_value(command_xml.attrs, "id");
+        const std::size_t ordinal = command_ordinals[id]++;
+        std::string object_id = xml_attr_value(command_xml.attrs, "objectId");
         if (object_id.empty()) {
-            continue;
+            object_id = materialized_command_object_id(id, ordinal);
         }
         oof::platform::object_model::PlatformObject object;
         object.object_id = object_id;
@@ -4909,13 +4942,13 @@ void add_public_xml_collection_objects(
             object.object_id,
             {},
             "CompositeID preserved from public XML Command@id; new ids require allocator",
-            xml_attr_value(command_xml.attrs, "id"),
+            id,
             {},
             {},
             "mngcore logform.xsd Command + cmi.xsd CommandInfo",
             "Command",
             "mngcore_root.res:logform.xsd + mngcore_root.res:cmi.xsd");
-        object.properties.push_back(make_platform_object_property("ID", "Идентификатор", xml_attr_value(command_xml.attrs, "id"), "CompositeID", "OrdinaryForm.xml Command@id", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("ID", "Идентификатор", id, "CompositeID", "OrdinaryForm.xml Command@id", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Name", "Имя", object.name, "String", "OrdinaryForm.xml Command@name", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Handler", "Обработчик", xml_attr_value(command_xml.attrs, "handler"), "String", "OrdinaryForm.xml Command@handler", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("ModifiesData", "ИзменяетДанные", xml_attr_value(command_xml.attrs, "modifiesData"), "Boolean", "OrdinaryForm.xml Command@modifiesData", {}, {}, "public-xml"));
@@ -4943,12 +4976,14 @@ void add_public_xml_events(
     if (events_xml.self_closing && events_xml.attrs.empty() && events_xml.body.empty()) {
         return;
     }
+    std::map<std::string, std::size_t> event_ordinals;
     for (const auto& event_xml : find_xml_elements(events_xml.body, "Event")) {
         oof::platform::object_model::PlatformObject object;
+        const std::string id = xml_attr_value(event_xml.attrs, "id");
+        const std::size_t ordinal = event_ordinals[id]++;
         object.object_id = xml_attr_value(event_xml.attrs, "objectId");
         if (object.object_id.empty()) {
-            const std::string id = xml_attr_value(event_xml.attrs, "id");
-            object.object_id = "event:" + std::string(owner_object_id) + ":" + id;
+            object.object_id = materialized_event_object_id(owner_object_id, id, ordinal);
         }
         object.name = xml_attr_value(event_xml.attrs, "handler");
         object.platform_type = "FormEvent";
@@ -4959,13 +4994,13 @@ void add_public_xml_events(
             object.object_id,
             {},
             "UUID preserved from public XML Event@id; new event ids use platform UUID policy",
-            {},
-            xml_attr_value(event_xml.attrs, "id"),
-            {},
-            "mngcore logform.xsd Event",
-            "Event",
-            "mngcore_root.res:logform.xsd");
-        object.properties.push_back(make_platform_object_property("ID", "Идентификатор", xml_attr_value(event_xml.attrs, "id"), "UUID", "OrdinaryForm.xml Event@id", {}, {}, "public-xml"));
+                {},
+                id,
+                {},
+                "mngcore logform.xsd Event",
+                "Event",
+                "mngcore_root.res:logform.xsd");
+        object.properties.push_back(make_platform_object_property("ID", "Идентификатор", id, "UUID", "OrdinaryForm.xml Event@id", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Handler", "Обработчик", object.name, "String", "OrdinaryForm.xml Event@handler", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Title", "Представление", xml_attr_value(event_xml.attrs, "title"), "String", "OrdinaryForm.xml Event@title", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("Parent", "Родитель", std::string(owner_object_id), "FormItem", "OrdinaryForm.xml Event@ownerId", {}, {}, "public-xml"));
@@ -6214,6 +6249,10 @@ void write_runtime_form_from_xml(
     std::cout << "{\"output\":";
     print_json_string(output_path);
     std::cout << ",\"operation\":\"runtime-form-build-xml\"";
+    std::cout << ",\"diagnosticOnly\":true";
+    std::cout << ",\"baseBacked\":true";
+    std::cout << ",\"productPath\":false";
+    std::cout << ",\"architecture\":\"diagnostic baseline edit path; release path is Form.xml -> OrdinaryForm -> ListOutStream -> Form.bin\"";
     std::cout << ",\"bytes\":" << rebuilt_text.size();
     std::cout << ",\"controls\":" << result.controls;
     std::cout << ",\"nameEdits\":" << result.name_edits;
@@ -6272,6 +6311,10 @@ void write_formbin_from_package(
     std::cout << "{\"output\":";
     print_json_string(output_path);
     std::cout << ",\"operation\":\"formbin-build-package\"";
+    std::cout << ",\"diagnosticOnly\":true";
+    std::cout << ",\"baseBacked\":true";
+    std::cout << ",\"productPath\":false";
+    std::cout << ",\"architecture\":\"diagnostic baseline edit path; release path is Form.xml -> OrdinaryForm -> ListOutStream -> Form.bin\"";
     std::cout << ",\"bytes\":" << rebuilt.size();
     std::cout << ",\"controls\":" << result.controls;
     std::cout << ",\"nameEdits\":" << result.name_edits;
@@ -7493,6 +7536,10 @@ void write_formbin_from_source_package(
     std::cout << "{\"output\":";
     print_json_string(output_path);
     std::cout << ",\"operation\":\"formbin-build-source-package\"";
+    std::cout << ",\"diagnosticOnly\":false";
+    std::cout << ",\"baseBacked\":false";
+    std::cout << ",\"productPath\":true";
+    std::cout << ",\"architecture\":\"Form.xml -> OrdinaryForm -> ListOutStream -> Form.bin\"";
     std::cout << ",\"bytes\":" << result.bytes.size();
     std::cout << ",\"source\":\"Form.xml\"";
     std::cout << ",\"controls\":" << result.control_count;
@@ -8196,7 +8243,19 @@ bool replace_first_base64_payload(oof::platform::stream::ListValue& value, std::
         }
         return false;
     }
-    for (auto& item : value.items) {
+    for (std::size_t index = 0; index < value.items.size(); ++index) {
+        auto& item = value.items[index];
+        if (!item.is_list && item.atom.rfind("#base64:", 0) == 0) {
+            item.atom = std::string(payload);
+            item.atom_kind = oof::platform::stream::ListValue::AtomKind::raw;
+            std::size_t erase_end = index + 1;
+            while (erase_end < value.items.size() && !value.items[erase_end].is_list) {
+                ++erase_end;
+            }
+            value.items.erase(value.items.begin() + static_cast<std::ptrdiff_t>(index + 1),
+                              value.items.begin() + static_cast<std::ptrdiff_t>(erase_end));
+            return true;
+        }
         if (replace_first_base64_payload(item, payload)) {
             return true;
         }
@@ -8317,18 +8376,56 @@ bool set_materialized_attribute_property(
     return false;
 }
 
+struct ParsedCommandObjectId {
+    std::string command_id;
+    std::optional<std::size_t> ordinal;
+};
+
+std::optional<ParsedCommandObjectId> parse_command_object_id(std::string_view object_id) {
+    constexpr std::string_view prefix = "command:";
+    if (object_id.size() <= prefix.size() || object_id.substr(0, prefix.size()) != prefix) {
+        return std::nullopt;
+    }
+    std::string rest(object_id.substr(prefix.size()));
+    ParsedCommandObjectId parsed;
+    const std::size_t last_separator = rest.rfind(':');
+    if (last_separator != std::string::npos && last_separator + 1 < rest.size()) {
+        const std::string ordinal_text = rest.substr(last_separator + 1);
+        const bool digits_only = std::all_of(
+            ordinal_text.begin(),
+            ordinal_text.end(),
+            [](unsigned char ch) { return std::isdigit(ch) != 0; });
+        if (digits_only) {
+            parsed.command_id = rest.substr(0, last_separator);
+            parsed.ordinal = static_cast<std::size_t>(std::stoull(ordinal_text));
+        }
+    }
+    if (parsed.command_id.empty()) {
+        parsed.command_id = std::move(rest);
+    }
+    return parsed;
+}
+
 bool set_materialized_command_property_in_block(
     oof::platform::stream::ListValue& block,
-    std::string_view wanted_id,
+    const ParsedCommandObjectId& wanted,
     std::string_view property_name,
-    std::string_view new_value
+    std::string_view new_value,
+    std::map<std::string, std::size_t>& ordinals
 ) {
     if (!block.is_list || is_materialized_form_property_block(block)) {
         return false;
     }
     if (looks_like_materialized_form_command_record(block) ||
         (block.items.size() >= 4 && (block.items[0].is_list || !block.items[0].atom.empty()))) {
-        if (command_record_id_value(block) == wanted_id) {
+        const std::string command_id = command_record_id_value(block);
+        const bool visible_command = !command_id.empty() &&
+            (!command_record_scalar_value(block, 2, 1).empty() ||
+             !command_record_scalar_value(block, 3, 2).empty() ||
+             !command_record_scalar_value(block, 4, 3).empty());
+        if (visible_command) {
+            const std::size_t ordinal = ordinals[command_id]++;
+            if (command_id == wanted.command_id && (!wanted.ordinal.has_value() || *wanted.ordinal == ordinal)) {
             const bool tagged = looks_like_materialized_form_command_record(block);
             std::size_t slot = 0;
             if (property_name == "Name" || property_name == "Имя") {
@@ -8346,9 +8443,10 @@ bool set_materialized_command_property_in_block(
                 return true;
             }
         }
+        }
     }
     for (auto& item : block.items) {
-        if (set_materialized_command_property_in_block(item, wanted_id, property_name, new_value)) {
+        if (set_materialized_command_property_in_block(item, wanted, property_name, new_value, ordinals)) {
             return true;
         }
     }
@@ -8365,12 +8463,16 @@ bool set_materialized_command_property(
     if (object_id.size() <= prefix.size() || object_id.substr(0, prefix.size()) != prefix) {
         return false;
     }
-    const std::string wanted_id(object_id.substr(prefix.size()));
+    const auto wanted = parse_command_object_id(object_id);
+    if (!wanted.has_value()) {
+        return false;
+    }
     if (!payload.is_list || payload.items.size() <= 2) {
         return false;
     }
+    std::map<std::string, std::size_t> ordinals;
     for (std::size_t index = 2; index < payload.items.size(); ++index) {
-        if (set_materialized_command_property_in_block(payload.items[index], wanted_id, property_name, new_value)) {
+        if (set_materialized_command_property_in_block(payload.items[index], *wanted, property_name, new_value, ordinals)) {
             return true;
         }
     }
@@ -8383,6 +8485,111 @@ bool set_materialized_event_property(
     std::string_view property_name,
     std::string_view new_value
 ) {
+    struct ParsedEventObjectId {
+        std::string owner_object_id;
+        std::string event_id;
+        std::optional<std::size_t> ordinal;
+    };
+    auto parse_event_object_id = [](std::string_view value) -> std::optional<ParsedEventObjectId> {
+        constexpr std::string_view prefix = "event:";
+        if (value.size() <= prefix.size() || value.substr(0, prefix.size()) != prefix) {
+            return std::nullopt;
+        }
+        std::string rest(value.substr(prefix.size()));
+        const std::size_t first_separator = rest.find(':');
+        if (first_separator == std::string::npos || first_separator == 0 || first_separator + 1 >= rest.size()) {
+            return std::nullopt;
+        }
+        ParsedEventObjectId parsed;
+        parsed.owner_object_id = rest.substr(0, first_separator);
+        std::string event_and_ordinal = rest.substr(first_separator + 1);
+        const std::size_t last_separator = event_and_ordinal.rfind(':');
+        if (last_separator != std::string::npos && last_separator + 1 < event_and_ordinal.size()) {
+            const std::string ordinal_text = event_and_ordinal.substr(last_separator + 1);
+            const bool digits_only = std::all_of(
+                ordinal_text.begin(),
+                ordinal_text.end(),
+                [](unsigned char ch) { return std::isdigit(ch) != 0; });
+            if (digits_only) {
+                parsed.event_id = event_and_ordinal.substr(0, last_separator);
+                parsed.ordinal = static_cast<std::size_t>(std::stoull(ordinal_text));
+            }
+        }
+        if (parsed.event_id.empty()) {
+            parsed.event_id = std::move(event_and_ordinal);
+        }
+        return parsed;
+    };
+    auto set_event_record = [](
+        oof::platform::stream::ListValue& record,
+        const ParsedEventObjectId& parsed,
+        std::string_view replacement,
+        std::map<std::string, std::size_t>& ordinals,
+        const auto& self
+    ) -> bool {
+        if (!record.is_list) {
+            return false;
+        }
+        if (looks_like_materialized_form_event_record(record)) {
+            const std::string event_id = oof::platform::stream::dump_compact(record.items[1]);
+            const std::string handler = !record.items[2].is_list ? record.items[2].atom : "";
+            if (!event_id.empty() && !handler.empty()) {
+                const std::size_t ordinal = ordinals[event_id]++;
+                if (event_id == parsed.event_id && (!parsed.ordinal.has_value() || *parsed.ordinal == ordinal)) {
+                    record.items[2].atom = std::string(replacement);
+                    record.items[2].atom_kind = oof::platform::stream::ListValue::AtomKind::string;
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (looks_like_platform_element_event_record(record)) {
+            const std::string& event_id = record.items[1].atom;
+            const std::string handler = record.items[2].items[1].atom;
+            if (!event_id.empty() && !handler.empty()) {
+                const std::size_t ordinal = ordinals[event_id]++;
+                if (event_id == parsed.event_id && (!parsed.ordinal.has_value() || *parsed.ordinal == ordinal)) {
+                    record.items[2].items[1].atom = std::string(replacement);
+                    record.items[2].items[1].atom_kind = oof::platform::stream::ListValue::AtomKind::string;
+                    return true;
+                }
+            }
+            return false;
+        }
+        for (auto& item : record.items) {
+            if (self(item, parsed, replacement, ordinals, self)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    auto set_event_in_owner = [&](oof::platform::stream::ListValue& owner, const ParsedEventObjectId& parsed) -> bool {
+        std::map<std::string, std::size_t> ordinals;
+        if (owner.items.size() > 2 && set_event_record(owner.items[2], parsed, new_value, ordinals, set_event_record)) {
+            return true;
+        }
+        if (owner.items.size() > 3 && set_event_record(owner.items[3], parsed, new_value, ordinals, set_event_record)) {
+            return true;
+        }
+        return false;
+    };
+    auto find_owner_and_set = [&](oof::platform::stream::ListValue& node, const ParsedEventObjectId& parsed, const auto& self) -> bool {
+        if (!node.is_list) {
+            return false;
+        }
+        if (is_materializable_object_candidate(node) &&
+            node.items.size() > 1 &&
+            !node.items[1].is_list &&
+            node.items[1].atom == parsed.owner_object_id) {
+            return set_event_in_owner(node, parsed);
+        }
+        for (auto& item : node.items) {
+            if (self(item, parsed, self)) {
+                return true;
+            }
+        }
+        return false;
+    };
     constexpr std::string_view prefix = "event:";
     if (object_id.size() <= prefix.size() || object_id.substr(0, prefix.size()) != prefix) {
         return false;
@@ -8393,22 +8600,15 @@ bool set_materialized_event_property(
     if (!value.is_list) {
         return false;
     }
-    if (looks_like_materialized_form_event_record(value)) {
-        const std::string event_id = oof::platform::stream::dump_compact(value.items[1]);
-        if (object_id.size() >= prefix.size() + event_id.size() &&
-            object_id.substr(object_id.size() - event_id.size()) == event_id &&
-            !value.items[2].is_list) {
-            value.items[2].atom = std::string(new_value);
-            value.items[2].atom_kind = oof::platform::stream::ListValue::AtomKind::string;
-            return true;
-        }
+    const auto parsed = parse_event_object_id(object_id);
+    if (!parsed.has_value()) {
+        return false;
     }
-    for (auto& item : value.items) {
-        if (set_materialized_event_property(item, object_id, property_name, new_value)) {
-            return true;
-        }
+    if (parsed->owner_object_id == "0") {
+        std::map<std::string, std::size_t> ordinals;
+        return set_event_record(value, *parsed, new_value, ordinals, set_event_record);
     }
-    return false;
+    return find_owner_and_set(value, *parsed, find_owner_and_set);
 }
 
 PublicXmlApplyResult apply_public_xml_edits(

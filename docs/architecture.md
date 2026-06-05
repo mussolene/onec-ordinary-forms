@@ -1,42 +1,52 @@
 # Architecture Notes
 
+Read [`ordinary-form-target-contract.md`](ordinary-form-target-contract.md)
+first. It is the hard contract for this repository: the product is the
+`OrdinaryForm` object graph, not a `Form.bin` patcher.
+
 The repository is split by format boundary, not by CLI command.
 
 ## Layers
 
-- `form_bin` owns the ordinary `Form.bin` section container in native C++.
-  It parses, unpacks, and packs the platform section container.
+- `ordinary_form_object` is the product layer. It owns `Form`, properties,
+  attributes, commands, events, controls, nested controls, typed values,
+  defaults, `GetPropVal`, and `SetPropVal` behavior.
 - `platform_list_stream` owns the bracket/list-stream reader and writer. This
-  is the native analogue of the platform `ListInStream`/`ListOutStream` layer.
+  is the native analogue of the platform `ListInStream`/`ListOutStream` layer
+  and serializes/deserializes `OrdinaryForm`.
+- `form_bin` owns the ordinary `Form.bin` section container in native C++.
+  It parses, unpacks, and packs the platform section container. It must remain
+  a thin container boundary and must not become the form model or a patcher.
 - `platform_value` owns typed value fragments used inside the ordinary form
   graph: `CompositeID`, `TypeDomainPattern`, localized/formatted strings,
   colors, fonts, borders, pictures, and generic scalar values.
 - `ordinary_controls` owns the internal ordinary-control codecs identified by
   `cf_form_controls8`, `cf_form_controls_position8`, and
   `cf_form_controls_info8`.
-- `object_model_bridge` maps the internal graph to public `Form.xml` concepts:
+- `object_model_bridge` maps `OrdinaryForm` to public `Form.xml` concepts:
   form, attributes, commands, events, controls, positions, bindings, typed
-  properties, and picture sidecars.
+  properties, module text, and picture files.
 - `main.cpp` is the current native CLI host. It should stay a thin command
   wrapper around the native layers as code moves out into dedicated headers.
 
 ## Current Direction
 
-The next cleanup target is to move object-model XML writing/rebuild helpers out
-of the CLI body into dedicated native modules and replace the remaining
-hand-built control payload writer records with platform-derived codec
-descriptors. The public XML must stay object-model-only; list-stream details
-remain internal.
+The next cleanup target is to move `OrdinaryForm` materialization,
+`GetPropVal`/`SetPropVal`, XML writing, and list-stream writing out of the CLI
+body into dedicated native modules. Replace remaining hand-built control payload
+writer records with platform-derived codec descriptors. The public XML must
+stay object-model-only; list-stream details remain internal.
 
 Behavioral changes should stay separate from these moves. A pure architecture
 cleanup must keep native CLI arguments stable and pass the native round-trip
 checks.
 
-Byte identity is now a diagnostic, not the public release contract. The release
-contract is semantic equality of the materialized ordinary form graph after
-`Form.xml -> Form.bin -> Form.xml/runtime` plus strict platform validation
-where the local platform is available. Broader corpus work should expand typed
-descriptor coverage incrementally and record the next mismatch class in OACS.
+Byte identity and base-backed rebuilds are diagnostics, not the public release
+contract. The release contract is semantic equality of the materialized
+`OrdinaryForm` graph after `Form.xml -> OrdinaryForm -> Form.bin ->
+OrdinaryForm` plus strict platform validation where the local platform is
+available. Broader corpus work should expand typed descriptor coverage
+incrementally and record the next missing object/property class in OACS.
 
 ## Platform Codec Formula
 
@@ -44,8 +54,8 @@ The current platform evidence points to one generic persistence path, not to a
 separate public raw-stream format:
 
 ```text
-Form.bin -> form stream -> ListInStream -> ordinary form object graph -> Form.xml
-Form.xml -> ordinary form object graph -> ListOutStream -> form stream -> Form.bin
+Form.bin -> form stream -> ListInStream -> OrdinaryForm -> Form.xml
+Form.xml -> OrdinaryForm -> ListOutStream -> form stream -> Form.bin
 ```
 
 `ValueToStringInternal` and `ValueFromStringInternal` are still useful, but only
@@ -66,9 +76,10 @@ A durable fix should add or update a platform-derived descriptor:
 - dump path and build path;
 - platform validation or bracket/list diff evidence.
 
-This gives us the same shape as the platform: read many old profile shapes,
-build one consistent current graph, and keep platform details either as named
-schema-backed properties or as private codec defaults, never as raw public XML.
+This gives us the same shape as the platform: read many old stream/profile
+shapes into one `OrdinaryForm` graph, write one consistent current graph, and
+keep platform details either as named schema-backed properties or as private
+codec defaults, never as raw public XML or patch state.
 
 Use native gates before and after serializer work:
 `make -C sidecars/onec-form-native test` and

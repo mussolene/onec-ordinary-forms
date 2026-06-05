@@ -1,11 +1,18 @@
 # onec-ordinary-forms
 
-Tools for converting 1C ordinary form `Form.bin` into a Git-friendly source
-package and building it back. The current release line uses a public source
-package as the source of truth: `Form.xml`, `Form/Module.bsl`, and picture
-sidecars. The implementation and CLI surface are native C++ through
+Tools for converting 1C ordinary forms into a Git-friendly source package and
+building them back. The current release line uses a platform-like
+`OrdinaryForm` object graph as the product object and a public source package
+as the source of truth: `Form.xml`, `Form/Module.bsl`, and
+`Form/Items/.../Picture.*`. The implementation and CLI surface are native C++ through
 `sidecars/onec-form-native/build/oof-native`; the old implementation has been
 removed to keep one product surface.
+
+Hard architecture rule: `Form.bin` is only a container for the serialized form
+stream and module stream. It is not the model. Required `base-Form.bin`,
+baseline diff, patch workers, raw/list-stream preservation fields, hidden raw
+object models, and compatibility profiles are not the product path. See
+[`docs/ordinary-form-target-contract.md`](docs/ordinary-form-target-contract.md).
 
 ## English
 
@@ -17,9 +24,9 @@ internal list-stream format. This is hard to review, diff, edit, and merge.
 
 The product target is to expose ordinary forms as source files that are close to
 managed-form source exports: readable XML for the form object model,
-`Module.bsl` as a separate file, and pictures as sidecar files. This managed-form
-style package is the public architecture even though ordinary forms are stored
-by the platform in `Form.bin`.
+`Module.bsl` as a separate file, and picture files under `Form/Items`.
+This managed-form style package is the public architecture even though ordinary
+forms are stored by the platform in `Form.bin`.
 
 The target public source layout mirrors managed forms:
 
@@ -92,7 +99,7 @@ The ordinary form source package is meant to be read from the top down:
 
 - `Form.xml` is the form object model.
 - `Form/Module.bsl` is the ordinary form module.
-- `Form/Items/...` contains extracted sidecar files such as pictures.
+- `Form/Items/...` contains picture files that belong to object properties.
 
 Inside `Form.xml`, the main sections are:
 
@@ -105,7 +112,7 @@ Inside `Form.xml`, the main sections are:
   `CommandBar`, `LabelDecoration`, and `PictureDecoration`.
 - `Position` - control geometry and bindings.
 - `Action` or `Events` under a control - handlers connected to that control.
-- `Picture file="..."` - a reference to a sidecar image next to the XML.
+- `Picture file="..."` - a reference to a picture file in the source package.
 
 For example, a button is edited as a named object:
 
@@ -119,18 +126,19 @@ For example, a button is edited as a named object:
 </Button>
 ```
 
-In the target architecture, `build-bin` serializes these named XML objects into
-the platform list-stream representation and then packs `form`, `module`, and
-picture payloads into `Form.bin`. That container layer is internal; users edit
-`Form.xml`, `Module.bsl`, and sidecar files.
+In the target architecture, `build-bin` parses these named XML objects into the
+`OrdinaryForm` graph, serializes that graph into the platform list-stream
+representation, and then packs `form` and `module` streams into `Form.bin`.
+That container layer is internal; users edit `Form.xml`, `Module.bsl`, and
+`Items/.../Picture.*`.
 
 ### Internal Platform Pipeline
 
 The target internal pipeline is symmetric:
 
 ```text
-Form.bin -> form raw stream -> ListInStream -> platform object model -> XSD-backed Form.xml
-Form.xml -> platform object model -> ListOutStream -> form raw stream -> Form.bin
+Form.bin -> form stream -> ListInStream -> OrdinaryForm object graph -> XSD-backed Form.xml
+Form.xml -> OrdinaryForm object graph -> ListOutStream -> form stream -> Form.bin
 ```
 
 The schema layer is intentionally small and focused on ordinary forms:
@@ -184,13 +192,12 @@ descriptor.
 Passing 1C Designer validation is required, but not sufficient by itself: the
 public XML must also remain a clean object model, not a renamed raw stream.
 
-`build-bin` can rebuild `Form.bin` directly from public `Form.xml`,
-`Form/Module.bsl`, and picture sidecars through the existing object writer. The
-native `--base-bin` rebuild is only a compatibility path for the already
-supported native edit codecs. It is not the target source-build architecture
-and must not be expanded with raw fallbacks, patch workers, or
-baseline-preservation profiles. The release target remains `Form.xml ->
-platform object model -> ListOutStream -> Form.bin`.
+`build-bin` must rebuild `Form.bin` from public `Form.xml`, `Form/Module.bsl`,
+and `Form/Items/.../Picture.*` through `OrdinaryForm`. The native base-backed
+rebuild path is diagnostic-only for already supported edit codecs. It is not
+the source-package architecture and must not be expanded with raw fallbacks,
+patch workers, baseline diff logic, or baseline-preservation profiles. The
+release target remains `Form.xml -> OrdinaryForm -> ListOutStream -> Form.bin`.
 
 ## Русский
 
@@ -203,9 +210,9 @@ platform object model -> ListOutStream -> Form.bin`.
 
 Цель продукта - разложить обычную форму в исходники примерно так же, как
 платформа раскладывает управляемую форму: человекочитаемый XML объектной
-модели, отдельный `Module.bsl` и картинки рядом. Такая managed-form style
-структура остается целевой публичной архитектурой, хотя платформа хранит
-обычные формы внутри `Form.bin`.
+модели, отдельный `Module.bsl` и файлы картинок в `Form/Items`. Такая
+managed-form style структура остается целевой публичной архитектурой, хотя
+платформа хранит обычные формы внутри `Form.bin`.
 
 Целевая структура файлов:
 
@@ -371,13 +378,13 @@ Form.xml -> объектная модель платформы -> ListOutStream 
 публичный XML все равно должен оставаться чистой объектной моделью, а не
 переименованным сырым потоком.
 
-`build-bin` может собирать `Form.bin` напрямую из публичного `Form.xml`,
-`Form/Module.bsl` и picture sidecars через существующий object writer.
-Native-сборка через `--base-bin` - это только compatibility path для уже
-поддержанных native edit-codec'ов. Это не целевая source-build архитектура, и
-ее нельзя расширять raw fallback'ами, patch-worker'ами или профилями сохранения
-baseline. Цель релиза остается `Form.xml -> platform object model ->
-ListOutStream -> Form.bin`.
+`build-bin` должен собирать `Form.bin` из публичного `Form.xml`,
+`Form/Module.bsl` и `Form/Items/.../Picture.*` через `OrdinaryForm`.
+Native-сборка с исходным `Form.bin` - это только diagnostic-only путь для уже
+поддержанных edit-codec'ов. Это не целевая source-build архитектура, и ее
+нельзя расширять raw fallback'ами, patch-worker'ами, baseline diff logic или
+профилями сохранения baseline. Цель релиза остается `Form.xml ->
+OrdinaryForm -> ListOutStream -> Form.bin`.
 
 ## Status / Статус
 
@@ -390,13 +397,13 @@ Current implementation status:
   C++ package backend;
 - validate `Form.xml` against bundled schemas;
 - build ordinary `Form.bin` directly from public `Form.xml`, `Form/Module.bsl`,
-  and picture sidecars without requiring a source `Form.bin`;
-- keep `--base-bin` as an optional native compatibility path for supported
-  baseline-patch checks, not as the source-package architecture;
+  and `Form/Items/.../Picture.*` without requiring a source `Form.bin`;
+- keep base-backed rebuild commands diagnostic-only for supported checks, not
+  as the source-package architecture;
 - read changed `Form/Module.bsl` back into `Form.bin` during direct source
   rebuild;
-- dump existing picture payloads to `Form/Items/.../Picture.*` sidecars and
-  apply changed picture sidecars through the source writer where supported;
+- dump existing picture payloads to `Form/Items/.../Picture.*` and apply
+  changed picture properties through the source writer where supported;
 - delete leaf form controls by removing the named control node from public
   `ChildItems`;
 - scan local EPF/ERF corpora without committing private artifacts.
@@ -407,7 +414,7 @@ Target implementation status:
 - harden and extend the direct source writer for more ordinary-form controls and
   properties;
 - keep the implementation in native C++ without reintroducing seed templates,
-  raw fallbacks, mandatory `--base-bin`, or a parallel writer.
+  raw fallbacks, mandatory base bins, patch workers, or a parallel writer.
 
 Текущий статус реализации:
 
@@ -416,13 +423,13 @@ Target implementation status:
   native C++ package backend;
 - проверка `Form.xml` по встроенным схемам обычных форм;
 - сборка обычного `Form.bin` напрямую из публичного `Form.xml`,
-  `Form/Module.bsl` и picture sidecars без исходного `Form.bin`;
-- сохранение `--base-bin` только как optional native compatibility path для
-  проверок baseline-patch, а не как source-package архитектуры;
+  `Form/Module.bsl` и `Form/Items/.../Picture.*` без исходного `Form.bin`;
+- сохранение base-backed команд только как diagnostic-only пути для проверок,
+  а не как source-package архитектуры;
 - чтение измененного `Form/Module.bsl` обратно в `Form.bin` при прямой сборке
   из source package;
-- выгрузка существующих картинок в `Form/Items/.../Picture.*` sidecars и
-  применение измененных sidecar-картинок через source writer там, где это
+- выгрузка существующих картинок в `Form/Items/.../Picture.*` и применение
+  измененных картинок как свойств объекта через source writer там, где это
   поддержано;
 - удаление leaf-элементов формы через удаление именованного узла из публичного
   `ChildItems`;
@@ -434,7 +441,7 @@ Target implementation status:
 - расширение и укрепление прямого source writer для большего числа контролов и
   свойств обычных форм;
 - удержание реализации в native C++ без возврата seed templates, raw fallback,
-  обязательного `--base-bin` или параллельного writer.
+  обязательного исходного `Form.bin`, patch-worker'ов или параллельного writer.
 
 Validation status:
 
@@ -546,8 +553,9 @@ sidecars/onec-form-native/build/oof-native formbin-build-source-package \
   scan-output/rebuilt/Form.bin
 ```
 
-The old `--base-bin` compatibility path is not the product contract. The
-release-facing path is source package to `Form.bin` through native C++.
+The old base-backed compatibility path is not the product contract. The
+release-facing path is source package to `OrdinaryForm` to `Form.bin` through
+native C++.
 
 Before platform import, use a copy of the source tree where the public ordinary
 `Ext/Form.xml` and `Ext/Form/` sidecar directory are removed. The platform
@@ -556,13 +564,13 @@ keep their native `Ext/Form.xml`.
 
 Writer behavior is intentionally conservative while the named ordinary-form
 object model is being completed. The public source contract is the package
-`Form.xml`, `Form/Module.bsl`, and `Form/Items/.../Picture.*` sidecars. The
-direct rebuild path serializes that package into the internal platform
-list-stream and assembles a new `Form.bin` container without exposing raw
-stream/profile data. The optional `--base-bin` path is kept only for native
-compatibility checks and supported baseline-patch experiments. Leaf controls can
-be deleted by removing their public XML node where the writer supports that
-shape.
+`Form.xml`, `Form/Module.bsl`, and `Form/Items/.../Picture.*`. The direct
+rebuild path materializes that package into `OrdinaryForm`, serializes the graph
+into the internal platform list-stream, and assembles a new `Form.bin`
+container without exposing raw stream/profile data. Base-backed rebuild commands
+are kept only for diagnostics and must not be used as release evidence for the
+source package writer. Leaf controls can be deleted by removing their public XML
+node where the writer supports that shape.
 
 Diagnostic commands:
 
