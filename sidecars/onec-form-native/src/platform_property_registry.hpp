@@ -21,6 +21,7 @@ enum class SlotCodec {
     picture_record,
     event_action_record,
     binding_record,
+    control_info_slot,
     collection_record,
 };
 
@@ -35,7 +36,7 @@ struct PlatformPropertyDescriptor {
     std::string_view source;
 };
 
-inline constexpr std::array<PlatformPropertyDescriptor, 42> descriptors{{
+inline constexpr std::array<PlatformPropertyDescriptor, 45> descriptors{{
     {"ObjectID", "", "CompositeID", SlotCodec::none, "", true, false, "materialized-list-stream"},
     {"Name", "Имя", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record"},
     {"Title", "Заголовок", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record-as-initial-title"},
@@ -78,6 +79,9 @@ inline constexpr std::array<PlatformPropertyDescriptor, 42> descriptors{{
     {"Attribute.ID", "Реквизит.Идентификатор", "CompositeID", SlotCodec::collection_record, "logform.xsd:Property@id", true, false, "mngcore logform.xsd Property"},
     {"Attribute.Main", "Реквизит.Основной", "Boolean", SlotCodec::collection_record, "logform.xsd:Property@main", true, false, "mngcore logform.xsd Property"},
     {"Attribute.StoredData", "Реквизит.СохраняемыеДанные", "Boolean", SlotCodec::collection_record, "logform.xsd:Property@storedData", true, false, "mngcore logform.xsd Property"},
+    {"Clsid", "CLSID", "UUID", SlotCodec::control_info_slot, "cf_form_controls_info8:ActiveXControl:Clsid", true, true, "cf_form_controls_info8 ActiveXControl descriptor"},
+    {"State1", "Состояние1", "ActiveXStateBlob", SlotCodec::control_info_slot, "cf_form_controls_info8:ActiveXControl:State1", true, true, "cf_form_controls_info8 ActiveXControl descriptor"},
+    {"State2", "Состояние2", "ActiveXStateBlob", SlotCodec::control_info_slot, "cf_form_controls_info8:ActiveXControl:State2", true, true, "cf_form_controls_info8 ActiveXControl descriptor"},
 }};
 
 inline constexpr std::string_view slot_codec_name(SlotCodec codec) {
@@ -102,6 +106,8 @@ inline constexpr std::string_view slot_codec_name(SlotCodec codec) {
             return "event-action-record";
         case SlotCodec::binding_record:
             return "binding-record";
+        case SlotCodec::control_info_slot:
+            return "control-info-slot";
         case SlotCodec::collection_record:
             return "collection-record";
     }
@@ -135,6 +141,9 @@ inline SlotCodec slot_codec_from_name(std::string_view codec) {
     }
     if (codec == "binding-record") {
         return SlotCodec::binding_record;
+    }
+    if (codec == "control-info-slot") {
+        return SlotCodec::control_info_slot;
     }
     if (codec == "collection-record") {
         return SlotCodec::collection_record;
@@ -317,7 +326,8 @@ inline bool can_set_with_current_codec(const PlatformPropertyDescriptor& descrip
            (descriptor.slot_codec == SlotCodec::name_record ||
             descriptor.slot_codec == SlotCodec::scalar_flag ||
             descriptor.slot_codec == SlotCodec::position_record ||
-            descriptor.slot_codec == SlotCodec::binding_record);
+            descriptor.slot_codec == SlotCodec::binding_record ||
+            descriptor.slot_codec == SlotCodec::control_info_slot);
 }
 
 }  // namespace oof::platform::property_registry

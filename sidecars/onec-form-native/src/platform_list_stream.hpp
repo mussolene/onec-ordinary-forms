@@ -72,6 +72,59 @@ inline std::string dump_compact(const ListValue& value) {
     return out;
 }
 
+inline bool contains_list(const ListValue& value) {
+    for (const auto& item : value.items) {
+        if (item.is_list) {
+            return true;
+        }
+    }
+    return false;
+}
+
+inline bool is_base64_payload_list(const ListValue& value) {
+    return value.is_list &&
+           !value.items.empty() &&
+           !value.items[0].is_list &&
+           value.items[0].atom.rfind("#base64:", 0) == 0;
+}
+
+inline std::string dump_listout(const ListValue& value) {
+    if (!value.is_list) {
+        return dump_compact(value);
+    }
+    if (is_base64_payload_list(value)) {
+        std::string out = "{";
+        bool previous_was_atom = false;
+        for (std::size_t index = 0; index < value.items.size(); ++index) {
+            if (index != 0) {
+                out += (!value.items[index].is_list && previous_was_atom) ? "\r\n\r\n" : ",";
+            }
+            out += dump_listout(value.items[index]);
+            previous_was_atom = !value.items[index].is_list;
+        }
+        out += "}";
+        return out;
+    }
+    if (!contains_list(value)) {
+        return dump_compact(value);
+    }
+    std::string out = "{";
+    for (std::size_t index = 0; index < value.items.size(); ++index) {
+        if (index != 0) {
+            out += ",";
+        }
+        if (value.items[index].is_list) {
+            out += "\r\n";
+        }
+        out += dump_listout(value.items[index]);
+    }
+    if (!value.items.empty() && value.items.back().is_list) {
+        out += "\r\n";
+    }
+    out += "}";
+    return out;
+}
+
 class ListOutStream {
 public:
     void begin_list() {

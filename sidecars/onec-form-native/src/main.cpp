@@ -293,6 +293,7 @@ void usage() {
               << "       oof-native runtime-platform-object-set runtime-form-stream.txt rebuilt-stream.txt objectId property value\n"
               << "       oof-native container-extract <1c-container> <out-dir>\n"
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
+              << "       oof-native container-replace <1c-container> <file-name> <replacement-file> <out-container> [--raw-deflate]\n"
               << "       oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry|platform-control-info-descriptors>\n"
               << "       oof-native object-model-gate\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
@@ -899,6 +900,38 @@ std::vector<std::uint8_t> inflate_raw_deflate(const std::vector<std::uint8_t>& d
     return output;
 }
 
+std::vector<std::uint8_t> deflate_raw_deflate(const std::vector<std::uint8_t>& data) {
+    z_stream stream{};
+    stream.next_in = const_cast<Bytef*>(reinterpret_cast<const Bytef*>(data.data()));
+    stream.avail_in = static_cast<uInt>(data.size());
+    const int init_code = deflateInit2(
+        &stream,
+        Z_DEFAULT_COMPRESSION,
+        Z_DEFLATED,
+        -MAX_WBITS,
+        8,
+        Z_DEFAULT_STRATEGY);
+    if (init_code != Z_OK) {
+        throw std::runtime_error("cannot initialize raw deflate compressor");
+    }
+
+    std::vector<std::uint8_t> output;
+    std::array<std::uint8_t, 16384> buffer{};
+    int code = Z_OK;
+    while (code == Z_OK) {
+        stream.next_out = reinterpret_cast<Bytef*>(buffer.data());
+        stream.avail_out = static_cast<uInt>(buffer.size());
+        code = deflate(&stream, Z_FINISH);
+        const std::size_t produced = buffer.size() - stream.avail_out;
+        output.insert(output.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(produced));
+    }
+    deflateEnd(&stream);
+    if (code != Z_STREAM_END) {
+        throw std::runtime_error("raw deflate payload did not compress cleanly");
+    }
+    return output;
+}
+
 void extract_container_files(const std::string& input_path, const std::string& output_dir, bool inflate_payloads) {
     const std::vector<std::uint8_t> data = read_file_bytes(input_path);
     const auto container = oof::platform::formbin::parse_container(data);
@@ -936,14 +969,69 @@ void extract_container_files(const std::string& input_path, const std::string& o
     std::cout << "]}\n";
 }
 
+void replace_container_file(
+    const std::string& input_path,
+    const std::string& file_name,
+    const std::string& replacement_path,
+    const std::string& output_path,
+    bool raw_deflate
+) {
+    const std::vector<std::uint8_t> data = read_file_bytes(input_path);
+    auto container = oof::platform::formbin::parse_container(data);
+    auto replacement = read_file_bytes(replacement_path);
+    const std::size_t replacement_size = replacement.size();
+    if (raw_deflate) {
+        replacement = deflate_raw_deflate(replacement);
+    }
+
+    bool replaced = false;
+    std::size_t old_size = 0;
+    for (auto& file : container.files) {
+        if (file.name == file_name) {
+            old_size = file.payload.size();
+            file.payload = std::move(replacement);
+            replaced = true;
+            break;
+        }
+    }
+    if (!replaced) {
+        throw std::runtime_error("container file not found: " + file_name);
+    }
+
+    const auto rebuilt = oof::platform::formbin::serialize_container(container);
+    write_file_bytes(output_path, rebuilt);
+    std::cout << "{";
+    std::cout << "\"operation\":\"container-replace\"";
+    std::cout << ",\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"fileName\":";
+    print_json_string(file_name);
+    std::cout << ",\"fileCount\":" << container.files.size();
+    std::cout << ",\"oldPayloadSize\":" << old_size;
+    std::cout << ",\"replacementSize\":" << replacement_size;
+    std::cout << ",\"storedPayloadSize\":";
+    for (const auto& file : container.files) {
+        if (file.name == file_name) {
+            std::cout << file.payload.size();
+            break;
+        }
+    }
+    std::cout << ",\"rawDeflate\":" << (raw_deflate ? "true" : "false");
+    std::cout << ",\"bytes\":" << rebuilt.size();
+    std::cout << "}\n";
+}
+
 void print_raw_deflate_selftest() {
     const std::vector<std::uint8_t> compressed{0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00};
     const auto inflated = inflate_raw_deflate(compressed);
+    const auto recompressed = deflate_raw_deflate(inflated);
+    const auto reinflated = inflate_raw_deflate(recompressed);
     const std::string text(inflated.begin(), inflated.end());
     std::cout << "{";
     std::cout << "\"inflated\":";
     print_json_string(text);
     std::cout << ",\"byteEqual\":" << (text == "hello" ? "true" : "false");
+    std::cout << ",\"reinflateEqual\":" << (reinflated == inflated ? "true" : "false");
     std::cout << "}\n";
 }
 
@@ -1114,6 +1202,11 @@ struct GeometryBindingRecord {
     oof::platform::stream::ListValue value;
 };
 
+struct ControlInfoSlotProperty {
+    std::string name;
+    std::string value;
+};
+
 std::string first_base64_picture_payload(const oof::platform::stream::ListValue& value) {
     if (!value.is_list) {
         if (value.atom.rfind("#base64:", 0) == 0) {
@@ -1142,6 +1235,56 @@ std::string first_base64_picture_payload(const oof::platform::stream::ListValue&
     return {};
 }
 
+std::string public_control_info_slot_value(const oof::platform::stream::ListValue& value) {
+    if (!value.is_list) {
+        return value.atom;
+    }
+    if (!value.items.empty() &&
+        !value.items[0].is_list &&
+        value.items[0].atom.rfind("#base64:", 0) == 0) {
+        std::string payload;
+        for (const auto& item : value.items) {
+            if (item.is_list) {
+                break;
+            }
+            payload += item.atom;
+        }
+        return payload;
+    }
+    return oof::platform::stream::dump_compact(value);
+}
+
+std::vector<ControlInfoSlotProperty> control_info_slot_properties(
+    const oof::platform::stream::ListValue& object_value,
+    std::string_view platform_type
+) {
+    std::vector<ControlInfoSlotProperty> properties;
+    if (!object_value.is_list || object_value.items.size() <= 2 || !object_value.items[2].is_list) {
+        return properties;
+    }
+    const auto* descriptor = oof::platform::control_info::descriptor_for_control_type(platform_type);
+    if (descriptor == nullptr) {
+        return properties;
+    }
+    const auto& info = object_value.items[2];
+    for (std::size_t index = 0; index < descriptor->slot_count; ++index) {
+        const auto& slot = descriptor->slots[index];
+        const auto* property_descriptor = oof::platform::property_registry::find_descriptor(slot.name);
+        if (property_descriptor == nullptr ||
+            property_descriptor->slot_codec != oof::platform::property_registry::SlotCodec::control_info_slot) {
+            continue;
+        }
+        if (info.items.size() <= slot.index) {
+            continue;
+        }
+        const std::string value = public_control_info_slot_value(info.items[slot.index]);
+        if (!value.empty()) {
+            properties.push_back({std::string(slot.name), value});
+        }
+    }
+    return properties;
+}
+
 struct MaterializedFormEvent {
     std::string object_id;
     std::string owner_object_id;
@@ -1165,6 +1308,7 @@ struct MaterializedFormItem {
     std::string right;
     std::string bottom;
     std::string picture_payload;
+    std::vector<ControlInfoSlotProperty> control_info_properties;
     std::vector<GeometryBindingRecord> bindings;
     std::vector<GeometryBindingRecord> dimension_bindings;
     std::vector<MaterializedFormEvent> events;
@@ -1758,7 +1902,9 @@ void collect_materialized_form_items(
                     }
                 }
             }
-            item.picture_payload = first_base64_picture_payload(value);
+            if (item.descriptor_binding->platform_type != "ActiveXControl") {
+                item.picture_payload = first_base64_picture_payload(value);
+            }
             if (value.items.size() > 2 && value.items[2].is_list) {
                 item.events = collect_materialized_form_events(value.items[2], item.object_id, child_path(path, 2));
             }
@@ -1769,6 +1915,7 @@ void collect_materialized_form_items(
                     std::make_move_iterator(legacy_events.begin()),
                     std::make_move_iterator(legacy_events.end()));
             }
+            item.control_info_properties = control_info_slot_properties(value, item.descriptor_binding->platform_type);
             next_parent = item.object_id;
             items.push_back(std::move(item));
         } else if (binding == nullptr) {
@@ -3342,6 +3489,14 @@ private:
             } else {
                 add_api_surface(object, api_object_for_type(object.platform_type));
             }
+            for (const auto& property : item.control_info_properties) {
+                if (object.property(property.name) == nullptr) {
+                    object.properties.push_back(make_described_property(property.name, property.value));
+                } else if (auto* existing = object.property(property.name)) {
+                    existing->value = property.value;
+                    existing->value_origin = "stream";
+                }
+            }
             if (!item.picture_payload.empty()) {
                 if (auto* picture = object.property("Picture")) {
                     picture->value = item.picture_payload;
@@ -4244,6 +4399,9 @@ const std::set<std::string>& public_schema_property_names() {
         result.insert("BackColor");
         result.insert("BorderColor");
         result.insert("Font");
+        result.insert("Clsid");
+        result.insert("State1");
+        result.insert("State2");
         return result;
     }();
     return names;
@@ -4346,35 +4504,40 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
         const std::size_t body_end = xml.find(close_tag, body_start);
         if (body_end != std::string::npos) {
             const std::string body = xml.substr(body_start, body_end - body_start);
-            const std::size_t title_start = body.find("<Title>");
+            std::string own_body = body;
+            const std::size_t child_items_start = own_body.find("<ChildItems>");
+            if (child_items_start != std::string::npos) {
+                own_body.resize(child_items_start);
+            }
+            const std::size_t title_start = own_body.find("<Title>");
             if (title_start != std::string::npos) {
                 const std::size_t title_value_start = title_start + std::string("<Title>").size();
-                const std::size_t title_end = body.find("</Title>", title_value_start);
+                const std::size_t title_end = own_body.find("</Title>", title_value_start);
                 if (title_end != std::string::npos) {
-                    edit.title = xml_unescape(body.substr(title_value_start, title_end - title_value_start));
+                    edit.title = xml_unescape(own_body.substr(title_value_start, title_end - title_value_start));
                     edit.has_title = true;
                 }
             }
-            const std::size_t visible_start = body.find("<Visible>");
+            const std::size_t visible_start = own_body.find("<Visible>");
             if (visible_start != std::string::npos) {
                 const std::size_t visible_value_start = visible_start + std::string("<Visible>").size();
-                const std::size_t visible_end = body.find("</Visible>", visible_value_start);
+                const std::size_t visible_end = own_body.find("</Visible>", visible_value_start);
                 if (visible_end != std::string::npos) {
-                    edit.visible = xml_unescape(body.substr(visible_value_start, visible_end - visible_value_start));
+                    edit.visible = xml_unescape(own_body.substr(visible_value_start, visible_end - visible_value_start));
                     edit.has_visible = true;
                 }
             }
-            const std::size_t enabled_start = body.find("<Enabled>");
+            const std::size_t enabled_start = own_body.find("<Enabled>");
             if (enabled_start != std::string::npos) {
                 const std::size_t enabled_value_start = enabled_start + std::string("<Enabled>").size();
-                const std::size_t enabled_end = body.find("</Enabled>", enabled_value_start);
+                const std::size_t enabled_end = own_body.find("</Enabled>", enabled_value_start);
                 if (enabled_end != std::string::npos) {
-                    edit.enabled = xml_unescape(body.substr(enabled_value_start, enabled_end - enabled_value_start));
+                    edit.enabled = xml_unescape(own_body.substr(enabled_value_start, enabled_end - enabled_value_start));
                     edit.has_enabled = true;
                 }
             }
             for (const auto& property_name : public_schema_property_names()) {
-                for (const auto& property_xml : find_xml_elements(body, property_name)) {
+                for (const auto& property_xml : find_xml_elements(own_body, property_name)) {
                     if (property_xml.self_closing) {
                         continue;
                     }
@@ -4384,11 +4547,11 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                     });
                 }
             }
-            const std::size_t position_start = body.find("<Position");
+            const std::size_t position_start = own_body.find("<Position");
             if (position_start != std::string::npos) {
-                const std::size_t position_end = body.find(">", position_start);
+                const std::size_t position_end = own_body.find(">", position_start);
                 if (position_end != std::string::npos) {
-                    const std::string position_tag = body.substr(position_start, position_end - position_start + 1);
+                    const std::string position_tag = own_body.substr(position_start, position_end - position_start + 1);
                     edit.left = xml_attr_value(position_tag, "left");
                     edit.top = xml_attr_value(position_tag, "top");
                     edit.right = xml_attr_value(position_tag, "right");
@@ -4397,9 +4560,9 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                                         !edit.top.empty() &&
                                         !edit.right.empty() &&
                                         !edit.bottom.empty();
-                    const std::size_t position_close = body.find("</Position>", position_end);
+                    const std::size_t position_close = own_body.find("</Position>", position_end);
                     if (position_close != std::string::npos) {
-                        const std::string position_body = body.substr(position_end + 1, position_close - position_end - 1);
+                        const std::string position_body = own_body.substr(position_end + 1, position_close - position_end - 1);
                         for (const auto& binding_xml : find_xml_elements(position_body, "Binding")) {
                             const std::string coordinate = xml_attr_value(binding_xml.attrs, "coordinate");
                             const std::string value = xml_attr_value(binding_xml.attrs, "value");
@@ -5102,7 +5265,8 @@ bool has_explicit_property_for_xml(
 bool is_public_schema_property_xml(
     const oof::platform::object_model::PlatformObjectProperty& property
 ) {
-    if (property.source.find("managed-application/logform") == std::string::npos) {
+    if (property.source.find("managed-application/logform") == std::string::npos &&
+        property.source.find("cf_form_controls_info8") == std::string::npos) {
         return false;
     }
     if (property.name.empty() || property.name.find('.') != std::string::npos) {
@@ -6018,7 +6182,7 @@ std::vector<std::uint8_t> encode_form_payload_text(
     const std::vector<std::uint8_t>& original_payload,
     const oof::platform::stream::ListValue& payload
 ) {
-    const std::string text = oof::platform::stream::dump_compact(payload);
+    const std::string text = oof::platform::stream::dump_listout(payload);
     std::vector<std::uint8_t> out;
     if (original_payload.size() >= 3 &&
         original_payload[0] == 0xef &&
@@ -7183,7 +7347,7 @@ LV source_writer_form_payload(
 }
 
 std::vector<std::uint8_t> source_writer_form_payload_bytes(const LV& payload) {
-    const std::string text = oof::platform::stream::dump_compact(payload);
+    const std::string text = oof::platform::stream::dump_listout(payload);
     std::vector<std::uint8_t> out{0xef, 0xbb, 0xbf};
     out.insert(out.end(), text.begin(), text.end());
     return out;
@@ -8061,6 +8225,65 @@ bool set_materialized_object_picture_payload(
     return false;
 }
 
+oof::platform::stream::ListValue control_info_slot_value_from_public_xml(
+    std::string_view property_name,
+    std::string_view value
+) {
+    if (property_name == "State1" || property_name == "State2") {
+        std::string payload(value);
+        if (payload.rfind("#base64:", 0) != 0 && payload.find('{') == std::string::npos) {
+            payload = "#base64:" + payload;
+        }
+        if (!payload.empty() && payload.front() == '{') {
+            return oof::platform::stream::parse(payload);
+        }
+        return oof::platform::stream::ListValue::list({
+            oof::platform::stream::ListValue::raw_atom(std::move(payload)),
+        });
+    }
+    if (!value.empty() && value.front() == '{') {
+        return oof::platform::stream::parse(std::string(value));
+    }
+    return oof::platform::stream::ListValue::raw_atom(std::string(value));
+}
+
+bool set_materialized_object_control_info_slot(
+    oof::platform::stream::ListValue& value,
+    std::string_view object_id,
+    std::string_view property_name,
+    std::string_view new_value
+) {
+    if (!value.is_list) {
+        return false;
+    }
+    if (is_materializable_object_candidate(value) &&
+        !value.items[1].is_list &&
+        value.items[1].atom == object_id &&
+        value.items.size() > 2 &&
+        value.items[2].is_list) {
+        const auto* binding = oof::platform::form_descriptor::binding_for_guid(value.items[0].atom);
+        if (binding == nullptr) {
+            return false;
+        }
+        const auto* descriptor = oof::platform::control_info::descriptor_for_control_type(binding->platform_type);
+        if (descriptor == nullptr) {
+            return false;
+        }
+        const auto slot = oof::platform::control_info::slot_index(*descriptor, property_name);
+        if (!slot.has_value() || value.items[2].items.size() <= *slot) {
+            return false;
+        }
+        value.items[2].items[*slot] = control_info_slot_value_from_public_xml(property_name, new_value);
+        return true;
+    }
+    for (auto& item : value.items) {
+        if (set_materialized_object_control_info_slot(item, object_id, property_name, new_value)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool set_materialized_attribute_property(
     oof::platform::stream::ListValue& payload,
     std::string_view object_id,
@@ -8391,6 +8614,9 @@ bool set_property_slot_value(
     if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::picture_record) {
         return set_materialized_object_picture_payload(payload, object_id, new_value);
     }
+    if (descriptor.slot_codec == oof::platform::property_registry::SlotCodec::control_info_slot) {
+        return set_materialized_object_control_info_slot(payload, object_id, descriptor.name, new_value);
+    }
     throw std::runtime_error("slot codec is registered but not implemented for setPropVal yet: " +
                              std::string(oof::platform::property_registry::slot_codec_name(descriptor.slot_codec)));
 }
@@ -8554,6 +8780,7 @@ bool object_model_gate_can_write_codec(std::string_view codec) {
            codec == "scalar-flag" ||
            codec == "position-record" ||
            codec == "binding-record" ||
+           codec == "control-info-slot" ||
            codec == "attribute-record" ||
            codec == "command-record" ||
            codec == "event-action-record";
@@ -10002,6 +10229,14 @@ int main(int argc, char** argv) {
         }
         if (command == "container-extract-inflate" && argc == 4) {
             extract_container_files(argv[2], argv[3], true);
+            return 0;
+        }
+        if (command == "container-replace" && (argc == 6 || argc == 7)) {
+            const bool raw_deflate = argc == 7 && std::string_view(argv[6]) == "--raw-deflate";
+            if (argc == 7 && !raw_deflate) {
+                throw std::runtime_error("unknown container-replace option: " + std::string(argv[6]));
+            }
+            replace_container_file(argv[2], argv[3], argv[4], argv[5], raw_deflate);
             return 0;
         }
         if (command == "platform-form-schema") {
