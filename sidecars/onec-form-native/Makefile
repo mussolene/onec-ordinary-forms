@@ -125,6 +125,10 @@ test: $(BIN)
 	$(BIN) platform-control-info-descriptors | grep -F -q '"name":"AutoMarkIncomplete","index":22'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoDescriptorCount":27'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoWritablePromotions":0'
+	$(BIN) xsd-order-object-gate | grep -F -q '"status":"PASS"'
+	$(BIN) xsd-order-object-gate | grep -F -q '"concept":"platform XSD sequence/choice/attributes -> descriptor slots -> PlatformFormObject"'
+	$(BIN) xsd-order-object-gate | grep -F -q '"publicXmlUsed":false'
+	$(BIN) xsd-order-object-gate | grep -F -q '"payloadPatchUsed":false'
 	$(BIN) object-graph-concept-selftest | grep -F -q '"status":"PASS"'
 	$(BIN) object-graph-concept-selftest | grep -F -q '"concept":"bracket -> PlatformFormObject -> bracket"'
 	$(BIN) object-graph-concept-selftest | grep -F -q '"xmlUsed":false'
@@ -363,6 +367,8 @@ test: $(BIN)
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-renamed.txt | grep -F -q '"name":"ButtonRenamed"'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-renamed.txt | grep -F -q '"payloadRoundtripEqual":true'
 	$(BIN) runtime-form-semantic-diff $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form-renamed.txt | grep -F -q '"semanticDiffs":1'
+	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"status":"PASS"'
+	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"itemObjectsChecked":2'
 	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"knownDescriptorHitsTotal":12'; fi
 	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"nearestName":"GroupsCommandBar"'; fi
 	if [ -f ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd ]; then $(BIN) platform-xsd-inventory ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd | grep -F -q '"targetNamespace":"http://v8.1c.ru/8.1/data/ui"'; fi
@@ -387,6 +393,7 @@ test: $(BIN)
 		if [ -n "$$form_bin" ]; then \
 			total=$$((total + 1)); \
 			$(BIN) formbin-roundtrip "$$form_bin" | grep -F -q '"logicalEqual":true'; \
+			$(BIN) formbin-xsd-order-object-gate "$$form_bin" | grep -F -q '"status":"PASS"'; \
 			ok=$$((ok + 1)); \
 		fi; \
 	done < "$$list_file"; \

@@ -46,11 +46,11 @@ void usage() {
               << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin  # diagnostic base-backed path, not product build\n"
               << "       oof-native formbin-xml-coverage Form.bin\n"
-              << "       oof-native <formbin-platform-object|formbin-platform-object-get> Form.bin [objectId property]\n"
+              << "       oof-native <formbin-platform-object|formbin-platform-object-get|formbin-xsd-order-object-gate> Form.bin [objectId property]\n"
               << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value  # diagnostic base-backed setPropVal check\n"
               << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
               << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt  # diagnostic base-backed path\n"
-              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-platform-object> runtime-form-stream.txt\n"
+              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-node runtime-form-stream.txt node-path\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
@@ -61,7 +61,7 @@ void usage() {
               << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "       oof-native container-replace <1c-container> <file-name> <replacement-file> <out-container> [--raw-deflate]\n"
               << "       oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry|platform-control-info-descriptors>\n"
-              << "       oof-native object-model-gate\n"
+              << "       oof-native <object-model-gate|xsd-order-object-gate>\n"
               << "       oof-native platform-guid-scan dsgnfrm.so\n"
               << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
               << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
@@ -9322,6 +9322,169 @@ void print_object_model_gate() {
     std::cout << "]}\n";
 }
 
+struct XsdOrderObjectGateStats {
+    std::size_t objects_checked = 0;
+    std::size_t form_objects_checked = 0;
+    std::size_t item_objects_checked = 0;
+    std::size_t schema_slots_checked = 0;
+    std::size_t explicit_slots = 0;
+    std::size_t default_slots = 0;
+    std::size_t writable_slots = 0;
+    std::size_t value_object_slots = 0;
+    std::size_t collection_objects_skipped = 0;
+    std::map<std::string, std::size_t> type_frequency;
+    std::map<std::string, std::size_t> slot_codec_frequency;
+    std::vector<std::string> violations;
+};
+
+std::optional<oof::platform::object_schema::PlatformObjectSchema> xsd_order_schema_for_object(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    if (object.platform_type == "Form") {
+        return oof::platform::object_schema::build_schema_for_root_form();
+    }
+    if (const auto* control = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
+        return oof::platform::object_schema::build_schema_for_control(*control);
+    }
+    return std::nullopt;
+}
+
+void xsd_order_gate_check_object(
+    const oof::platform::object_model::PlatformObject& object,
+    XsdOrderObjectGateStats& stats,
+    std::string_view collection_name
+) {
+    auto schema = xsd_order_schema_for_object(object);
+    if (!schema.has_value()) {
+        stats.violations.push_back(
+            "object " + object.object_id + " type " + object.platform_type +
+            " has no platform XSD storage-order schema");
+        return;
+    }
+    ++stats.objects_checked;
+    if (object.platform_type == "Form") {
+        ++stats.form_objects_checked;
+    } else if (collection_name == "Items") {
+        ++stats.item_objects_checked;
+    }
+    ++stats.type_frequency[object.platform_type];
+    if (schema->xsd_members.empty()) {
+        stats.violations.push_back(
+            "object " + object.object_id + " type " + object.platform_type +
+            " has empty XSD storage-order member list");
+        return;
+    }
+    for (const auto& member : schema->xsd_members) {
+        ++stats.schema_slots_checked;
+        if (member.writable) {
+            ++stats.writable_slots;
+        }
+        if (!member.slot_codec.empty()) {
+            ++stats.slot_codec_frequency[member.slot_codec];
+        }
+        if (member.value_type == "ui:Picture" || member.value_type == "ui:Color" || member.value_type == "ui:Font") {
+            ++stats.value_object_slots;
+        }
+        const auto* property = object.property(member.name);
+        if (property == nullptr) {
+            stats.violations.push_back(
+                "object " + object.object_id + " type " + object.platform_type +
+                " missing XSD slot property " + member.name + " streamName=" + member.stream_name);
+            continue;
+        }
+        if (property->value_origin == "schema-default") {
+            ++stats.default_slots;
+        } else {
+            ++stats.explicit_slots;
+        }
+    }
+}
+
+void xsd_order_gate_check_form_object(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    XsdOrderObjectGateStats& stats
+) {
+    xsd_order_gate_check_object(form_object.form, stats, "Form");
+    for (const auto& object : form_object.items.objects()) {
+        xsd_order_gate_check_object(object, stats, "Items");
+    }
+    stats.collection_objects_skipped += form_object.attributes.count();
+    stats.collection_objects_skipped += form_object.commands.count();
+    stats.collection_objects_skipped += form_object.events.count();
+}
+
+void print_xsd_order_object_gate_json(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view source_label
+) {
+    XsdOrderObjectGateStats stats;
+    xsd_order_gate_check_form_object(form_object, stats);
+    std::cout << "{\"operation\":\"xsd-order-object-gate\"";
+    std::cout << ",\"source\":";
+    print_json_string(source_label);
+    std::cout << ",\"concept\":\"platform XSD sequence/choice/attributes -> descriptor slots -> PlatformFormObject\"";
+    std::cout << ",\"publicXmlUsed\":false";
+    std::cout << ",\"payloadPatchUsed\":false";
+    std::cout << ",\"objectsChecked\":" << stats.objects_checked;
+    std::cout << ",\"formObjectsChecked\":" << stats.form_objects_checked;
+    std::cout << ",\"itemObjectsChecked\":" << stats.item_objects_checked;
+    std::cout << ",\"collectionObjectsSkipped\":" << stats.collection_objects_skipped;
+    std::cout << ",\"schemaSlotsChecked\":" << stats.schema_slots_checked;
+    std::cout << ",\"explicitSlots\":" << stats.explicit_slots;
+    std::cout << ",\"defaultSlots\":" << stats.default_slots;
+    std::cout << ",\"writableSlots\":" << stats.writable_slots;
+    std::cout << ",\"valueObjectSlots\":" << stats.value_object_slots;
+    std::cout << ",\"typeFrequency\":[";
+    std::size_t type_index = 0;
+    for (const auto& [type, count] : stats.type_frequency) {
+        if (type_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"type\":";
+        print_json_string(type);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"slotCodecFrequency\":[";
+    std::size_t codec_index = 0;
+    for (const auto& [codec, count] : stats.slot_codec_frequency) {
+        if (codec_index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"codec\":";
+        print_json_string(codec);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "],\"violations\":" << stats.violations.size();
+    std::cout << ",\"status\":";
+    print_json_string(stats.violations.empty() ? "PASS" : "FAIL");
+    std::cout << ",\"details\":[";
+    for (std::size_t index = 0; index < stats.violations.size() && index < 32; ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_json_string(stats.violations[index]);
+    }
+    std::cout << "]}\n";
+}
+
+void print_xsd_order_object_gate_selftest() {
+    constexpr std::string_view fixture =
+        "{\"#\",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,\"Button1\",4294967295,0,0,0},{},{},{}},{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,\"Check1\",4294967295,0,0,0},{},{},{}}}}}";
+    const auto envelope = parse_runtime_form_envelope(std::string(fixture));
+    print_xsd_order_object_gate_json(materialize_platform_form_object(envelope), "selftest:runtime-bracket");
+}
+
+void print_runtime_xsd_order_object_gate(const std::string& input_path) {
+    std::string canonical_text;
+    const auto envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    print_xsd_order_object_gate_json(materialize_platform_form_object(envelope), "RuntimeForm:payload");
+}
+
+void print_formbin_xsd_order_object_gate(const std::string& input_path) {
+    const auto envelope = read_formbin_runtime_envelope(input_path);
+    print_xsd_order_object_gate_json(materialize_platform_form_object(envelope), "Form.bin:form");
+}
+
 void print_object_graph_concept_selftest() {
     constexpr std::string_view fixture =
         "{\"#\",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,\"Button1\",4294967295,0,0,0},{},{},{}},{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,\"Check1\",4294967295,0,0,0},{},{},{}}}}}";
@@ -10547,6 +10710,10 @@ int main(int argc, char** argv) {
             print_object_model_gate();
             return 0;
         }
+        if (command == "xsd-order-object-gate") {
+            print_xsd_order_object_gate_selftest();
+            return 0;
+        }
         if (command == "form-object-graph" && argc == 3) {
             print_form_object_graph(argv[2]);
             return 0;
@@ -10569,6 +10736,10 @@ int main(int argc, char** argv) {
         }
         if (command == "formbin-platform-object" && argc == 3) {
             print_formbin_platform_object(argv[2]);
+            return 0;
+        }
+        if (command == "formbin-xsd-order-object-gate" && argc == 3) {
+            print_formbin_xsd_order_object_gate(argv[2]);
             return 0;
         }
         if (command == "formbin-platform-object-get" && argc == 5) {
@@ -10605,6 +10776,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-platform-object" && argc == 3) {
             print_runtime_platform_object(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-xsd-order-object-gate" && argc == 3) {
+            print_runtime_xsd_order_object_gate(argv[2]);
             return 0;
         }
         if (command == "runtime-platform-object-get" && argc == 5) {
