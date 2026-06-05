@@ -363,6 +363,8 @@ test: $(BIN)
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"xmlUsed":false'
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"objectSignatureStableAfterSecondWrite":true'
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"payloadStableAfterSecondWrite":true'
+	$(BIN) runtime-form-object-roundtrip-diff $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"firstWriteDiff"'
+	$(BIN) runtime-form-object-roundtrip-diff $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"secondWriteDiffCounts":{"missingObjects":0'
 	$(BIN) runtime-form-rebuild $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form-rebuilt.txt | grep -F -q '"schemaBackedItems":2'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-rebuilt.txt | grep -F -q '"canonicalRoundtripEqual":true'
 	$(BIN) runtime-form-semantic-diff $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form-rebuilt.txt | grep -F -q '"normalizedEqual":true'

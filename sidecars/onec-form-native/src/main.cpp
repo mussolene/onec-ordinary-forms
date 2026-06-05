@@ -275,7 +275,7 @@ std::string read_stdin() {
 
 void usage() {
     std::cerr << "Usage: oof-native <compact|listout|stats|mechanism|value-roundtrip|controls-codec|info8-codec|graph-codec|transfer-roundtrip|transfer-sections|formbin-selftest|formbin-source-package-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-payload-structure-selftest|form-object-graph-selftest|form-transfer-linkage-selftest|raw-deflate-selftest> < stream.txt\n"
-              << "       oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
+              << "       oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|formbin-object-roundtrip-diff|form-payload-info|form-payload-structure|form-object-graph|form-transfer-linkage> Form.bin\n"
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
               << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin  # diagnostic base-backed path, not product build\n"
@@ -284,7 +284,7 @@ void usage() {
               << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value  # diagnostic base-backed setPropVal check\n"
               << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
               << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt  # diagnostic base-backed path\n"
-              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-platform-object> runtime-form-stream.txt\n"
+              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-platform-object> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-node runtime-form-stream.txt node-path\n"
               << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
@@ -6708,7 +6708,7 @@ LV source_writer_button_base_info(const oof::platform::object_model::PlatformObj
         raw("0"),
         raw("0"),
         raw("0"),
-        source_writer_empty_picture_value(),
+        source_writer_button_picture_record(object),
         list({raw("0"), raw("0"), raw("0")}),
         raw("0"),
         raw("0"),
@@ -8224,6 +8224,368 @@ void print_formbin_object_roundtrip(const std::string& path) {
     const auto& form_file = find_container_file(container, "form");
     RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
     print_object_bracket_roundtrip_json(envelope, "Form.bin:form", form_file.payload.size());
+}
+
+struct ObjectRoundtripDiffDetail {
+    std::string kind;
+    std::string object_id;
+    std::string object_name;
+    std::string platform_type;
+    std::string property;
+    std::string left;
+    std::string right;
+};
+
+struct ObjectRoundtripDiffSummary {
+    std::size_t missing_objects = 0;
+    std::size_t added_objects = 0;
+    std::size_t changed_identity = 0;
+    std::size_t missing_properties = 0;
+    std::size_t added_properties = 0;
+    std::size_t changed_properties = 0;
+    std::size_t changed_collections = 0;
+    std::size_t changed_children = 0;
+    std::size_t missing_edges = 0;
+    std::size_t added_edges = 0;
+    std::map<std::string, std::size_t> by_kind;
+    std::map<std::string, std::size_t> by_platform_type;
+    std::map<std::string, std::size_t> by_property;
+    std::vector<ObjectRoundtripDiffDetail> details;
+};
+
+std::string property_compare_value(
+    const oof::platform::object_model::PlatformObjectProperty& property
+) {
+    std::ostringstream out;
+    out << property.value
+        << "|type=" << property.value_type
+        << "|default=" << property.default_value
+        << "|origin=" << property.value_origin
+        << "|member=" << property.platform_member
+        << "|slot=" << property.slot_binding
+        << "|codec=" << property.slot_codec
+        << "|valueObject=" << property.value_object_class
+        << "|literal=" << property.value_object_literal
+        << "|schema=" << property.value_object_schema_value
+        << "|stream=" << property.value_object_list_stream;
+    return out.str();
+}
+
+std::string object_identity_compare_value(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    std::ostringstream out;
+    out << "name=" << object.name
+        << "|type=" << object.platform_type
+        << "|parent=" << object.parent_object_id
+        << "|path=" << object.path
+        << "|publicId=" << object.identity.public_id
+        << "|platformObjectId=" << object.identity.platform_object_id
+        << "|compositeId=" << object.identity.composite_id
+        << "|uuid=" << object.identity.uuid
+        << "|classGuid=" << object.identity.class_guid
+        << "|streamElement=" << object.identity.stream_element;
+    return out.str();
+}
+
+std::string object_children_compare_value(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    std::ostringstream out;
+    for (const auto child : object.children) {
+        out << child << ",";
+    }
+    return out.str();
+}
+
+std::map<std::string, std::string> object_property_map(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    std::map<std::string, std::string> values;
+    for (const auto& property : object.properties) {
+        values[property.name.empty() ? property.localized_name : property.name] = property_compare_value(property);
+    }
+    return values;
+}
+
+std::map<std::string, std::string> object_collection_map(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    std::map<std::string, std::string> values;
+    for (const auto& collection : object.collections) {
+        values[collection.name] =
+            collection.localized_name + "|" +
+            collection.value_type + "|" +
+            std::to_string(collection.count) + "|" +
+            collection.slot_binding + "|" +
+            collection.slot_codec;
+    }
+    return values;
+}
+
+void add_object_diff_detail(
+    ObjectRoundtripDiffSummary& summary,
+    std::string kind,
+    const oof::platform::object_model::PlatformObject* object,
+    std::string property,
+    std::string left,
+    std::string right
+) {
+    ++summary.by_kind[kind];
+    if (object != nullptr) {
+        ++summary.by_platform_type[object->platform_type.empty() ? "<none>" : object->platform_type];
+    }
+    if (!property.empty()) {
+        ++summary.by_property[property];
+    }
+    if (summary.details.size() >= 80) {
+        return;
+    }
+    ObjectRoundtripDiffDetail detail;
+    detail.kind = std::move(kind);
+    if (object != nullptr) {
+        detail.object_id = object->object_id;
+        detail.object_name = object->name;
+        detail.platform_type = object->platform_type;
+    }
+    detail.property = std::move(property);
+    detail.left = std::move(left);
+    detail.right = std::move(right);
+    summary.details.push_back(std::move(detail));
+}
+
+std::map<std::string, const oof::platform::object_model::PlatformObject*> platform_object_index(
+    const oof::platform::object_model::PlatformFormObject& form_object
+) {
+    std::map<std::string, const oof::platform::object_model::PlatformObject*> objects;
+    objects["form:0"] = &form_object.form;
+    for (const auto& object : form_object.items.objects()) {
+        objects["item:" + object.object_id] = &object;
+    }
+    for (const auto& object : form_object.attributes.objects()) {
+        objects["attribute:" + object.object_id] = &object;
+    }
+    for (const auto& object : form_object.commands.objects()) {
+        objects["command:" + object.object_id] = &object;
+    }
+    for (const auto& object : form_object.events.objects()) {
+        objects["event:" + object.object_id] = &object;
+    }
+    return objects;
+}
+
+std::set<std::string> platform_edge_set(
+    const oof::platform::object_model::PlatformFormObject& form_object
+) {
+    std::set<std::string> edges;
+    for (const auto& edge : form_object.edges) {
+        edges.insert(edge.kind + "|" + edge.from_object_id + "|" + edge.to_object_id + "|" + edge.role + "|" + edge.name);
+    }
+    return edges;
+}
+
+void compare_named_value_maps(
+    ObjectRoundtripDiffSummary& summary,
+    const oof::platform::object_model::PlatformObject& left_object,
+    const std::map<std::string, std::string>& left,
+    const std::map<std::string, std::string>& right,
+    std::string_view missing_kind,
+    std::string_view added_kind,
+    std::string_view changed_kind,
+    std::size_t& missing_count,
+    std::size_t& added_count,
+    std::size_t& changed_count
+) {
+    for (const auto& [name, left_value] : left) {
+        const auto right_it = right.find(name);
+        if (right_it == right.end()) {
+            ++missing_count;
+            add_object_diff_detail(summary, std::string(missing_kind), &left_object, name, left_value, "");
+            continue;
+        }
+        if (left_value != right_it->second) {
+            ++changed_count;
+            add_object_diff_detail(summary, std::string(changed_kind), &left_object, name, left_value, right_it->second);
+        }
+    }
+    for (const auto& [name, right_value] : right) {
+        if (left.find(name) == left.end()) {
+            ++added_count;
+            add_object_diff_detail(summary, std::string(added_kind), &left_object, name, "", right_value);
+        }
+    }
+}
+
+ObjectRoundtripDiffSummary diff_platform_form_objects(
+    const oof::platform::object_model::PlatformFormObject& left,
+    const oof::platform::object_model::PlatformFormObject& right
+) {
+    ObjectRoundtripDiffSummary summary;
+    const auto left_objects = platform_object_index(left);
+    const auto right_objects = platform_object_index(right);
+    for (const auto& [key, left_object] : left_objects) {
+        const auto right_it = right_objects.find(key);
+        if (right_it == right_objects.end()) {
+            ++summary.missing_objects;
+            add_object_diff_detail(summary, "missing-object", left_object, key, object_identity_compare_value(*left_object), "");
+            continue;
+        }
+        const auto* right_object = right_it->second;
+        const std::string left_identity = object_identity_compare_value(*left_object);
+        const std::string right_identity = object_identity_compare_value(*right_object);
+        if (left_identity != right_identity) {
+            ++summary.changed_identity;
+            add_object_diff_detail(summary, "changed-identity", left_object, "", left_identity, right_identity);
+        }
+        const std::string left_children = object_children_compare_value(*left_object);
+        const std::string right_children = object_children_compare_value(*right_object);
+        if (left_children != right_children) {
+            ++summary.changed_children;
+            add_object_diff_detail(summary, "changed-children", left_object, "ChildItems", left_children, right_children);
+        }
+        compare_named_value_maps(
+            summary,
+            *left_object,
+            object_property_map(*left_object),
+            object_property_map(*right_object),
+            "missing-property",
+            "added-property",
+            "changed-property",
+            summary.missing_properties,
+            summary.added_properties,
+            summary.changed_properties);
+        std::size_t missing_collections = 0;
+        std::size_t added_collections = 0;
+        compare_named_value_maps(
+            summary,
+            *left_object,
+            object_collection_map(*left_object),
+            object_collection_map(*right_object),
+            "missing-collection",
+            "added-collection",
+            "changed-collection",
+            missing_collections,
+            added_collections,
+            summary.changed_collections);
+        summary.changed_collections += missing_collections + added_collections;
+    }
+    for (const auto& [key, right_object] : right_objects) {
+        if (left_objects.find(key) == left_objects.end()) {
+            ++summary.added_objects;
+            add_object_diff_detail(summary, "added-object", right_object, key, "", object_identity_compare_value(*right_object));
+        }
+    }
+    const auto left_edges = platform_edge_set(left);
+    const auto right_edges = platform_edge_set(right);
+    for (const auto& edge : left_edges) {
+        if (right_edges.find(edge) == right_edges.end()) {
+            ++summary.missing_edges;
+            add_object_diff_detail(summary, "missing-edge", nullptr, "Edges", edge, "");
+        }
+    }
+    for (const auto& edge : right_edges) {
+        if (left_edges.find(edge) == left_edges.end()) {
+            ++summary.added_edges;
+            add_object_diff_detail(summary, "added-edge", nullptr, "Edges", "", edge);
+        }
+    }
+    return summary;
+}
+
+void print_frequency_json(const std::map<std::string, std::size_t>& values) {
+    std::cout << "[";
+    std::size_t index = 0;
+    for (const auto& [name, count] : values) {
+        if (index++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"name\":";
+        print_json_string(name);
+        std::cout << ",\"count\":" << count << "}";
+    }
+    std::cout << "]";
+}
+
+void print_object_roundtrip_diff_json(
+    const RuntimeFormEnvelope& envelope,
+    std::string_view source
+) {
+    const auto result = object_bracket_roundtrip(envelope);
+    const auto first_diff = diff_platform_form_objects(result.object1, result.object2);
+    const auto stability_diff = diff_platform_form_objects(result.object2, result.object3);
+    std::cout << "{\"source\":";
+    print_json_string(source);
+    std::cout << ",\"path\":\"bracket -> PlatformFormObject -> bracket -> PlatformFormObject\"";
+    std::cout << ",\"xmlUsed\":false";
+    std::cout << ",\"usesBaseBin\":false";
+    std::cout << ",\"objectSignatureEqualAfterFirstWrite\":"
+              << (result.signature1 == result.signature2 ? "true" : "false");
+    std::cout << ",\"objectSignatureStableAfterSecondWrite\":"
+              << (result.signature2 == result.signature3 ? "true" : "false");
+    std::cout << ",\"payloadStableAfterSecondWrite\":"
+              << (result.payload2_text == result.payload3_text ? "true" : "false");
+    print_source_writer_coverage_json(result.writer_coverage);
+    std::cout << ",\"firstWriteDiff\":{\"missingObjects\":" << first_diff.missing_objects
+              << ",\"addedObjects\":" << first_diff.added_objects
+              << ",\"changedIdentity\":" << first_diff.changed_identity
+              << ",\"missingProperties\":" << first_diff.missing_properties
+              << ",\"addedProperties\":" << first_diff.added_properties
+              << ",\"changedProperties\":" << first_diff.changed_properties
+              << ",\"changedCollections\":" << first_diff.changed_collections
+              << ",\"changedChildren\":" << first_diff.changed_children
+              << ",\"missingEdges\":" << first_diff.missing_edges
+              << ",\"addedEdges\":" << first_diff.added_edges;
+    std::cout << ",\"byKind\":";
+    print_frequency_json(first_diff.by_kind);
+    std::cout << ",\"byPlatformType\":";
+    print_frequency_json(first_diff.by_platform_type);
+    std::cout << ",\"byProperty\":";
+    print_frequency_json(first_diff.by_property);
+    std::cout << ",\"details\":[";
+    for (std::size_t index = 0; index < first_diff.details.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        const auto& detail = first_diff.details[index];
+        std::cout << "{\"kind\":";
+        print_json_string(detail.kind);
+        std::cout << ",\"objectId\":";
+        print_json_string(detail.object_id);
+        std::cout << ",\"objectName\":";
+        print_json_string(detail.object_name);
+        std::cout << ",\"platformType\":";
+        print_json_string(detail.platform_type);
+        std::cout << ",\"property\":";
+        print_json_string(detail.property);
+        std::cout << ",\"left\":";
+        print_json_string(detail.left);
+        std::cout << ",\"right\":";
+        print_json_string(detail.right);
+        std::cout << "}";
+    }
+    std::cout << "]}";
+    std::cout << ",\"secondWriteDiffCounts\":{\"missingObjects\":" << stability_diff.missing_objects
+              << ",\"addedObjects\":" << stability_diff.added_objects
+              << ",\"changedIdentity\":" << stability_diff.changed_identity
+              << ",\"missingProperties\":" << stability_diff.missing_properties
+              << ",\"addedProperties\":" << stability_diff.added_properties
+              << ",\"changedProperties\":" << stability_diff.changed_properties
+              << ",\"changedCollections\":" << stability_diff.changed_collections
+              << ",\"changedChildren\":" << stability_diff.changed_children
+              << ",\"missingEdges\":" << stability_diff.missing_edges
+              << ",\"addedEdges\":" << stability_diff.added_edges << "}";
+    std::cout << "}\n";
+}
+
+void print_runtime_form_object_roundtrip_diff(const std::string& path) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
+    print_object_roundtrip_diff_json(envelope, "RuntimeForm:payload");
+}
+
+void print_formbin_object_roundtrip_diff(const std::string& path) {
+    RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(path);
+    print_object_roundtrip_diff_json(envelope, "Form.bin:form");
 }
 
 void write_runtime_form_rebuild(const std::string& input_path, const std::string& output_path) {
@@ -10742,6 +11104,10 @@ int main(int argc, char** argv) {
             print_formbin_object_roundtrip(argv[2]);
             return 0;
         }
+        if (command == "formbin-object-roundtrip-diff" && argc == 3) {
+            print_formbin_object_roundtrip_diff(argv[2]);
+            return 0;
+        }
         if (command == "container-extract" && argc == 4) {
             extract_container_files(argv[2], argv[3], false);
             return 0;
@@ -10844,6 +11210,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-object-roundtrip" && argc == 3) {
             print_runtime_form_object_roundtrip(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-form-object-roundtrip-diff" && argc == 3) {
+            print_runtime_form_object_roundtrip_diff(argv[2]);
             return 0;
         }
         if (command == "runtime-platform-object" && argc == 3) {
