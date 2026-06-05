@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Build and run a standalone SCOM_Main loader against installed 1C platform .so files.
+set -euo pipefail
+
+if [[ $# -gt 2 ]]; then
+  echo "Usage: $0 [mode] [out-dir]" >&2
+  exit 2
+fi
+if [[ -z "${OOF_PLATFORM_CONTAINER:-}" ]]; then
+  echo "Set OOF_PLATFORM_CONTAINER to a running 1C container" >&2
+  exit 2
+fi
+if [[ "$(docker inspect -f '{{.State.Running}}' "$OOF_PLATFORM_CONTAINER" 2>/dev/null || true)" != "true" ]]; then
+  echo "OOF_PLATFORM_CONTAINER is not running: $OOF_PLATFORM_CONTAINER" >&2
+  exit 2
+fi
+
+mode=${1:-0}
+repo_root=$(pwd)
+out_dir=${2:-scan-output/platform-scom-host-probe}
+case "$out_dir" in
+  /*) out_abs="$out_dir" ;;
+  *) out_abs="$repo_root/$out_dir" ;;
+esac
+case "$out_abs" in
+  "$repo_root"/scan-output/*) ;;
+  *) echo "Output directory must be under scan-output/: $out_abs" >&2; exit 2 ;;
+esac
+
+rm -rf "$out_abs"
+mkdir -p "$out_abs"
+
+base=/tmp/oof-scom-host-probe
+docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "rm -rf '$base' && mkdir -p '$base/out'"
+docker cp "$repo_root/tools/oof_scom_host.c" "$OOF_PLATFORM_CONTAINER:$base/oof_scom_host.c"
+
+set +e
+docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "set -eu
+  platform=/opt/1cv8/x86_64/8.5.1.1343
+  if ! command -v gcc >/dev/null 2>&1; then
+    echo 'gcc is required in the 1C container to build the Linux SCOM host probe' >&2
+    exit 127
+  fi
+  gcc -O2 -ldl '$base/oof_scom_host.c' -o '$base/oof_scom_host'
+  set +e
+  OOF_SCOM_HOST_FAKE_REGISTRAR='${OOF_SCOM_HOST_FAKE_REGISTRAR:-0}' \
+  OOF_SCOM_HOST_LOAD_EXTRA='${OOF_SCOM_HOST_LOAD_EXTRA:-0}' \
+  OOF_SCOM_HOST_ONLY='${OOF_SCOM_HOST_ONLY:-}' \
+  LD_LIBRARY_PATH=\"\$platform\" timeout 60 '$base/oof_scom_host' \"\$platform\" '$mode' \
+    >'$base/out/stdout.log' 2>'$base/out/stderr.log'
+  code=\$?
+  echo \"\$code\" >'$base/out/code.txt'
+  exit 0
+"
+runner_code=$?
+set -e
+
+docker cp "$OOF_PLATFORM_CONTAINER:$base/out/." "$out_abs/" >/dev/null
+exit "$runner_code"
