@@ -772,6 +772,63 @@ std::string public_control_info_slot_value(const oof::platform::stream::ListValu
     return oof::platform::stream::dump_compact(value);
 }
 
+bool find_first_localized_text(const oof::platform::stream::ListValue& value, std::string& text);
+std::string xml_escape(std::string_view value);
+void append_type_domain_pattern_xml(std::string& out, std::string_view type_text, int indent);
+
+const oof::platform::stream::ListValue* first_type_domain_pattern_value(
+    const oof::platform::stream::ListValue& value
+) {
+    if (!value.is_list || value.items.size() < 2) {
+        return nullptr;
+    }
+    if (!value.items[0].is_list && value.items[0].atom == "Pattern" && value.items[1].is_list) {
+        return &value;
+    }
+    for (const auto& item : value.items) {
+        if (const auto* found = first_type_domain_pattern_value(item)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
+std::string table_columns_xml_from_payload(const oof::platform::stream::ListValue& object_value) {
+    if (!object_value.is_list || object_value.items.size() <= 2 || !object_value.items[2].is_list) {
+        return {};
+    }
+    const auto& payload = object_value.items[2];
+    if (payload.items.size() <= 2 || !payload.items[2].is_list || payload.items[2].items.size() <= 1) {
+        return {};
+    }
+    const auto& view = payload.items[2].items[1];
+    if (!view.is_list || view.items.size() <= 23 || !view.items[23].is_list) {
+        return {};
+    }
+    const auto& columns = view.items[23];
+    if (columns.items.size() <= 1) {
+        return {};
+    }
+    std::string xml;
+    xml += "<Columns>\n";
+    for (std::size_t index = 1; index < columns.items.size(); ++index) {
+        const auto& column = columns.items[index];
+        std::string title = "Column" + std::to_string(index);
+        find_first_localized_text(column, title);
+        std::string type = "{\"Pattern\",{\"S\"}}";
+        if (const auto* pattern = first_type_domain_pattern_value(column)) {
+            type = oof::platform::stream::dump_compact(*pattern);
+        }
+        xml += "  <Column title=\"";
+        xml += xml_escape(title);
+        xml += "\">\n";
+        append_type_domain_pattern_xml(xml, type, 4);
+        xml += "  </Column>\n";
+    }
+    xml += "</Columns>";
+    return xml;
+}
+
 std::vector<ControlInfoSlotProperty> control_info_slot_properties(
     const oof::platform::stream::ListValue& object_value,
     std::string_view platform_type
@@ -827,6 +884,7 @@ struct MaterializedFormItem {
     std::string right;
     std::string bottom;
     std::string picture_payload;
+    std::string table_columns_xml;
     std::vector<ControlInfoSlotProperty> control_info_properties;
     std::vector<GeometryBindingRecord> bindings;
     std::vector<GeometryBindingRecord> dimension_bindings;
@@ -957,6 +1015,8 @@ bool is_int_atom(const oof::platform::stream::ListValue& value) {
 bool is_geometry_record(const oof::platform::stream::ListValue& value) {
     return value.is_list &&
            value.items.size() >= 5 &&
+           !value.items[0].is_list &&
+           value.items[0].atom == "8" &&
            is_int_atom(value.items[1]) &&
            is_int_atom(value.items[2]) &&
            is_int_atom(value.items[3]) &&
@@ -1407,8 +1467,12 @@ void collect_materialized_form_items(
                     }
                 }
             }
-            if (item.descriptor_binding->platform_type != "ActiveXControl") {
+            if (item.descriptor_binding->platform_type != "ActiveXControl" &&
+                item.descriptor_binding->platform_type != "TableBox") {
                 item.picture_payload = first_base64_picture_payload(value);
+            }
+            if (item.descriptor_binding->platform_type == "TableBox") {
+                item.table_columns_xml = table_columns_xml_from_payload(value);
             }
             if (value.items.size() > 2 && value.items[2].is_list) {
                 item.events = collect_materialized_form_events(value.items[2], item.object_id, child_path(path, 2));
@@ -2897,6 +2961,22 @@ private:
                     object.properties.push_back(make_described_property("Picture", item.picture_payload));
                 }
             }
+            if (!item.table_columns_xml.empty()) {
+                object.properties.push_back(make_platform_object_property(
+                    "TableColumnsXml",
+                    "Колонки",
+                    item.table_columns_xml,
+                    "TableColumns",
+                    "cf_form_controls_info8:Table:View:Columns",
+                    {},
+                    {},
+                    "stream",
+                    "cf_form_controls_info8:Table:View:Columns",
+                    "table-column-record",
+                    true,
+                    "TableBox::m_columns",
+                    {}));
+            }
             form_object.add_edge(oof::platform::object_model::make_edge(
                 "uses-schema",
                 object.object_id,
@@ -3664,6 +3744,7 @@ struct PublicXmlControlEdit {
     std::string right;
     std::string bottom;
     bool has_position = false;
+    std::string table_columns_xml;
     std::vector<oof::platform::object_model::PlatformObjectPropertyEdit> schema_properties;
     std::vector<GeometryBindingRecord> bindings;
     std::vector<GeometryBindingRecord> dimension_bindings;
@@ -3727,6 +3808,8 @@ struct XmlElementSlice {
     std::string body;
     bool self_closing = false;
 };
+
+XmlElementSlice first_xml_element(std::string_view text, std::string_view tag);
 
 std::vector<XmlElementSlice> find_xml_elements(std::string_view text, std::string_view tag) {
     std::vector<XmlElementSlice> elements;
@@ -3899,7 +3982,7 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
 
     const std::set<std::string> section_tags{
         "Form", "Events", "Event", "ChildItems", "Attributes", "Attribute", "Commands", "Command",
-        "Title", "Position", "Pages"
+        "Title", "Position", "Pages", "Columns", "Column"
     };
     const std::regex start_tag_pattern(R"(<([A-Za-z][A-Za-z0-9]*)\b([^>]*)>)");
     std::vector<PublicXmlControlEdit> edits;
@@ -3965,6 +4048,27 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                         property_name,
                         public_value_object_xml_literal(property_xml.body),
                     });
+                }
+            }
+            if (tag == "Table") {
+                for (const auto& columns_xml : find_xml_elements(own_body, "Columns")) {
+                    std::string columns_value;
+                    columns_value += "<Columns>\n";
+                    for (const auto& column_xml : find_xml_elements(columns_xml.body, "Column")) {
+                        columns_value += "  <Column title=\"";
+                        columns_value += xml_escape(xml_attr_value(column_xml.attrs, "title"));
+                        columns_value += "\">\n";
+                        if (const auto type_xml = first_xml_element(column_xml.body, "Type");
+                            !type_xml.body.empty() || type_xml.self_closing) {
+                            columns_value += "    <Type>";
+                            columns_value += type_xml.body;
+                            columns_value += "</Type>\n";
+                        }
+                        columns_value += "  </Column>\n";
+                    }
+                    columns_value += "</Columns>";
+                    edit.table_columns_xml = std::move(columns_value);
+                    break;
                 }
             }
             const std::size_t position_start = own_body.find("<Position");
@@ -4033,7 +4137,7 @@ const std::set<std::string>& public_xml_section_tags() {
         "Form", "Events", "Event", "ChildItems", "Attributes", "Attribute", "Commands", "Command",
         "Title", "Position", "Pages", "Picture", "PictureValue", "Binding", "Bindings", "DimensionBinding",
         "From", "To", "Extra", "Item", "Type", "TypePattern", "Any", "ObjectType", "TypeValue",
-        "Reference", "List", "String", "Binary", "Date", "Number"
+        "Reference", "List", "String", "Binary", "Date", "Number", "Columns", "Column"
     };
     return tags;
 }
@@ -4584,6 +4688,9 @@ void collect_public_xml_controls(
             for (const auto& property : edit.schema_properties) {
                 set_or_add_described_property(object, property.name, property.value);
             }
+            if (!edit.table_columns_xml.empty()) {
+                set_or_add_described_property(object, "TableColumnsXml", edit.table_columns_xml);
+            }
             break;
         }
 
@@ -4850,6 +4957,9 @@ bool is_public_schema_property_xml(
         return false;
     }
     if (property.name.empty() || property.name.find('.') != std::string::npos) {
+        return false;
+    }
+    if (property.name == "TableColumnsXml") {
         return false;
     }
     static const std::set<std::string> structural_names{
@@ -5432,6 +5542,39 @@ void append_position_xml(
     out += "</Position>\n";
 }
 
+void append_table_columns_xml(
+    std::string& out,
+    const oof::platform::object_model::PlatformObject& object,
+    int indent
+) {
+    const auto* columns = object.property("TableColumnsXml");
+    if (columns == nullptr || columns->value.empty()) {
+        return;
+    }
+    for (const auto& columns_xml : find_xml_elements(columns->value, "Columns")) {
+        append_indent(out, indent);
+        out += "<Columns>\n";
+        for (const auto& column_xml : find_xml_elements(columns_xml.body, "Column")) {
+            append_indent(out, indent + 2);
+            out += "<Column title=\"";
+            out += xml_escape(xml_attr_value(column_xml.attrs, "title"));
+            out += "\">\n";
+            if (const auto type_xml = first_xml_element(column_xml.body, "Type");
+                !type_xml.body.empty() || type_xml.self_closing) {
+                append_indent(out, indent + 4);
+                out += "<Type>";
+                out += type_xml.body;
+                out += "</Type>\n";
+            }
+            append_indent(out, indent + 2);
+            out += "</Column>\n";
+        }
+        append_indent(out, indent);
+        out += "</Columns>\n";
+        return;
+    }
+}
+
 void append_control_xml(
     std::string& out,
     const oof::platform::object_model::PlatformFormObject& form_object,
@@ -5471,6 +5614,7 @@ void append_control_xml(
     append_named_text_property_xml(out, object, "Visible", indent + 2);
     append_named_text_property_xml(out, object, "Enabled", indent + 2);
     append_schema_properties_xml(out, object, indent + 2, package_sink);
+    append_table_columns_xml(out, object, indent + 2);
     append_position_xml(out, form_object, object, indent + 2);
     if (!object_events.empty()) {
         append_events_xml(out, object_events, indent + 2);
@@ -6613,13 +6757,43 @@ bool ordinary_form_listout_top_command_bar(const oof::platform::object_model::Pl
 }
 
 LV ordinary_form_listout_geometry(const oof::platform::object_model::PlatformObject& object) {
+    const bool top_command_bar = ordinary_form_listout_top_command_bar(object);
+    const bool panel = object.platform_type == "Panel";
+    const bool table = object.platform_type == "Table";
+    const bool radio_button = object.platform_type == "RadioButton";
+    const bool list_box = object.platform_type == "ListBox";
+    const bool choice_field = object.platform_type == "ChoiceField";
+    const bool group_box = object.platform_type == "GroupBox";
+    const bool splitter = object.platform_type == "Splitter";
+    const bool spreadsheet = object.platform_type == "SpreadsheetDocumentField";
+    const bool track_bar = object.platform_type == "TrackBar";
+    const bool calendar_field = object.platform_type == "CalendarField";
+    const bool text_document_field = object.platform_type == "TextDocumentField";
+    const bool pivot_chart = object.platform_type == "PivotChart";
+    const bool geographical_schema = object.platform_type == "GeographicalSchemaField";
+    const bool progress_bar = object.platform_type == "ProgressBar";
+    const bool graphical_schema = object.platform_type == "GraphicalSchemaField";
+    const bool chart = object.platform_type == "Chart";
+    const bool gantt_chart = object.platform_type == "GanttChart";
+    const bool dendrogram = object.platform_type == "Dendrogram";
+    bool dimension_bound = false;
+    for (std::string_view name : {
+             "DimensionBinding.height", "DimensionBinding.minHeight",
+             "DimensionBinding.stretch", "DimensionBinding.width",
+         }) {
+        const auto* property = object.property(name);
+        if (property != nullptr && !property->value.empty() && property->value.front() == '{') {
+            dimension_bound = true;
+            break;
+        }
+    }
     std::vector<LV> items;
     items.push_back(raw("8"));
     items.push_back(raw(object_prop_or_default(object, "Left", "0")));
     items.push_back(raw(object_prop_or_default(object, "Top", "0")));
     items.push_back(raw(object_prop_or_default(object, "Right", "0")));
     items.push_back(raw(object_prop_or_default(object, "Bottom", "0")));
-    items.push_back(raw(ordinary_form_listout_top_command_bar(object) ? "1" : "0"));
+    items.push_back(raw((top_command_bar || panel || table || list_box || splitter || spreadsheet || calendar_field || text_document_field || pivot_chart || geographical_schema || progress_bar || graphical_schema || chart || gantt_chart || dendrogram || dimension_bound) ? "1" : "0"));
     for (std::string_view name : {
              "Binding.top", "Binding.bottom", "Binding.left",
              "Binding.right", "Binding.verticalCenter", "Binding.horizontalCenter",
@@ -6629,7 +6803,7 @@ LV ordinary_form_listout_geometry(const oof::platform::object_model::PlatformObj
                             ? raw("0")
                             : oof::platform::stream::parse(property->value));
     }
-    items.push_back(raw(ordinary_form_listout_top_command_bar(object) ? "1" : "0"));
+    items.push_back(raw((top_command_bar || (dimension_bound && !splitter)) ? "1" : "0"));
     for (std::string_view name : {
              "DimensionBinding.height", "DimensionBinding.minHeight",
              "DimensionBinding.stretch", "DimensionBinding.width",
@@ -6639,7 +6813,7 @@ LV ordinary_form_listout_geometry(const oof::platform::object_model::PlatformObj
                             ? raw("0")
                             : oof::platform::stream::parse(property->value));
     }
-    if (ordinary_form_listout_top_command_bar(object)) {
+    if (top_command_bar) {
         items.push_back(raw("0"));
         items.push_back(raw("0"));
         items.push_back(raw("0"));
@@ -6652,7 +6826,98 @@ LV ordinary_form_listout_geometry(const oof::platform::object_model::PlatformObj
         items.push_back(raw(object_prop_or_default(object, "Title", "").empty() ? "0" : "1"));
     } else {
         items.push_back(raw("0"));
-        items.push_back(raw("0"));
+        if (!table && !splitter && !calendar_field && !text_document_field && !pivot_chart && !geographical_schema && !graphical_schema && !chart && !gantt_chart && !dendrogram) {
+            items.push_back(raw("0"));
+        }
+        if (dimension_bound) {
+            if (splitter) {
+                items.push_back(raw("0"));
+                items.push_back(raw("11"));
+                items.push_back(raw("0"));
+                items.push_back(raw("1"));
+                items.push_back(raw("0"));
+                items.push_back(raw("0"));
+            } else {
+                items.push_back(raw("0"));
+                items.push_back(raw(group_box ? "8" : (choice_field ? "7" : (radio_button ? "5" : (track_bar ? "13" : (progress_bar ? "18" : "0"))))));
+                items.push_back(raw(choice_field ? "1" : "0"));
+                items.push_back(raw(choice_field ? "2" : "1"));
+                items.push_back(raw("0"));
+                items.push_back(raw("0"));
+            }
+        }
+        if (panel) {
+            items.push_back(raw("2"));
+            items.push_back(raw("2"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (table) {
+            items.push_back(raw("2"));
+            items.push_back(raw("1"));
+            items.push_back(raw("2"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (list_box) {
+            items.push_back(raw("6"));
+            items.push_back(raw("1"));
+            items.push_back(raw("2"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (spreadsheet) {
+            items.push_back(raw("12"));
+            items.push_back(raw("0"));
+            items.push_back(raw("1"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (calendar_field) {
+            items.push_back(raw("14"));
+            items.push_back(raw("0"));
+            items.push_back(raw("1"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (text_document_field) {
+            items.push_back(raw("15"));
+            items.push_back(raw("0"));
+            items.push_back(raw("1"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (pivot_chart) {
+            items.push_back(raw("16"));
+            items.push_back(raw("0"));
+            items.push_back(raw("1"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (geographical_schema) {
+            items.push_back(raw("17"));
+            items.push_back(raw("0"));
+            items.push_back(raw("1"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (graphical_schema) {
+            items.push_back(raw("19"));
+            items.push_back(raw("0"));
+            items.push_back(raw("1"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (chart) {
+            items.push_back(raw("21"));
+            items.push_back(raw("0"));
+            items.push_back(raw("1"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (gantt_chart) {
+            items.push_back(raw("22"));
+            items.push_back(raw("0"));
+            items.push_back(raw("1"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        } else if (dendrogram) {
+            items.push_back(raw("23"));
+            items.push_back(raw("0"));
+            items.push_back(raw("1"));
+            items.push_back(raw("0"));
+            items.push_back(raw("0"));
+        }
     }
     return list(std::move(items));
 }
@@ -6664,7 +6929,7 @@ LV ordinary_form_listout_metadata(const oof::platform::object_model::PlatformObj
         raw(ordinary_form_listout_top_command_bar(object) ? "0" : "4294967295"),
         raw("0"),
         raw("0"),
-        raw("0"),
+        raw(object.platform_type == "RadioButton" ? "1" : "0"),
     });
 }
 
@@ -6739,6 +7004,21 @@ LV ordinary_form_listout_type_domain_pattern_record(const oof::platform::object_
         return oof::platform::stream::parse(type);
     }
     return list({str_atom("Pattern"), list({str_atom("S")})});
+}
+
+LV ordinary_form_listout_attribute_type_domain_pattern_record(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    for (const auto& attribute : form_object.attributes.objects()) {
+        if (object_property_value(attribute, "Name") == object.name) {
+            const std::string type = object_property_value(attribute, "Type");
+            if (!type.empty() && type.front() == '{') {
+                return oof::platform::stream::parse(type);
+            }
+        }
+    }
+    return ordinary_form_listout_type_domain_pattern_record(object);
 }
 
 LV ordinary_form_listout_button_picture_record(const oof::platform::object_model::PlatformObject& object) {
@@ -6888,6 +7168,42 @@ LV ordinary_form_listout_checkbox_payload(
     });
 }
 
+LV ordinary_form_listout_radiobutton_inner_info(const oof::platform::object_model::PlatformObject& object) {
+    const std::string title = object_prop_or_default(object, "Title", object.name);
+    return list({
+        list({
+            ordinary_form_listout_button_base_info(object).items[0],
+            raw("7"),
+            localized_text_record(title),
+            raw("1"),
+            raw("0"),
+            raw("1"),
+            raw("0"),
+            raw("100"),
+            raw("1"),
+        }),
+        raw("4"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+    });
+}
+
+LV ordinary_form_listout_radiobutton_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    return list({
+        raw("4"),
+        ordinary_form_listout_attribute_type_domain_pattern_record(form_object, object),
+        ordinary_form_listout_radiobutton_inner_info(object),
+        raw("0"),
+        list({str_atom("N"), raw("0")}),
+        ordinary_form_listout_event_table(form_object, object.object_id),
+    });
+}
+
 LV ordinary_form_listout_input_field_info_record(const oof::platform::object_model::PlatformObject& object) {
     auto record = list({
         ordinary_form_listout_extended_base_info(object),
@@ -6939,6 +7255,82 @@ LV ordinary_form_listout_input_field_payload(
         raw("0"),
         list({raw("1"), raw("0")}),
         raw("0"),
+    });
+}
+
+LV ordinary_form_listout_choice_field_info_record(const oof::platform::object_model::PlatformObject& object) {
+    auto base = ordinary_form_listout_root_panel_base_info_record();
+    base.items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+    base.items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "0"));
+    base.items[6] = ordinary_form_listout_color_value("-22");
+    base.items[9] = ordinary_form_listout_color_value("-7");
+    base.items[10] = ordinary_form_listout_color_value("-21");
+    base.items[11] = list({
+        raw("3"),
+        raw("1"),
+        list({raw("-18")}),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+    });
+    return list({
+        base,
+        raw("31"),
+        raw("0"),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        raw("0"),
+        raw("255"),
+        raw("0"),
+        raw("0"),
+        raw("4"),
+        raw("0"),
+        list({str_atom("U")}),
+        list({str_atom("U")}),
+        str_atom(""),
+        raw("0"),
+        raw("1"),
+        raw("1"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        ordinary_form_listout_empty_picture_value(),
+        ordinary_form_listout_empty_picture_value(),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        list({raw("0"), raw("0"), raw("0")}),
+        list({raw("1"), raw("0")}),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("16777215"),
+        raw("2"),
+        raw("0"),
+        raw("0"),
+    });
+}
+
+LV ordinary_form_listout_choice_field_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    return list({
+        raw("2"),
+        ordinary_form_listout_choice_field_info_record(object),
+        ordinary_form_listout_event_table(form_object, object.object_id),
     });
 }
 
@@ -7058,6 +7450,1949 @@ LV ordinary_form_listout_command_bar_payload(const oof::platform::object_model::
     });
 }
 
+LV ordinary_form_listout_table_base_info(const oof::platform::object_model::PlatformObject& object) {
+    auto base = ordinary_form_listout_root_panel_base_info_record();
+    base.items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+    base.items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "0"));
+    base.items[6] = ordinary_form_listout_color_value("-22");
+    base.items[9] = ordinary_form_listout_color_value("-7");
+    base.items[10] = ordinary_form_listout_color_value("-21");
+    base.items[11] = list({
+        raw("3"),
+        raw("1"),
+        list({raw("-18")}),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+    });
+    return base;
+}
+
+std::string ordinary_form_table_column_type_state_blob(std::string_view type_pattern) {
+    const std::string compact(type_pattern);
+    if (compact == "{\"Pattern\",{\"N\",10,0,0}}") {
+        return "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVFLDgIhDDUuTeYIbrouCQVG6CWMGw8w6mxdGHeGk7nwSF5BSmf8TiIQmtfyXl/Dcj6r6369XRibxQU23fncn45QwRqQLJadm0WWjB5iJEEBgwSbMeQpnNAXMhWNkrL6wkswzmX0k5xfrIz4IgwSNGa8ujGUpIu4FUhoFZbu6MRFub8ayFSelPSxaWDWENQ7bCE/I0BVHN9XXTvolpohOVIHyH+qT4UJ72+OVjFGR20Z4u0/6uDcxVXwB2eIezah7Z1Jib1xye72TNx2HNXD9xRiYJQbFGtjUkNqIz8A";
+    }
+    if (compact == "{\"Pattern\",{\"D\",\"D\"}}") {
+        return "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVE7DsIwDEWMSD0Aq2dHipOUxDsHYOEABboyIDaUkzFwJK5AHLeASiWatNbz571ndb1c1Od5f9wYm9UNdt312l/OUMEWsLy5WWWBeomRBAUMEmzGkOdwQo+2tJItKasdXoJxLqOfnfnFOhE/AwMFjRmvbgwlUSmnZgmtwqKOTlyU70RAtvKkQ9o7iXKCWoc95HcEqJRjS6W1A22pGZIrdYD8p/pmmLH+ZWwTY3TUFlnpGn5H3Zu7uAn+5Axxzya0vTMpsTcu2cORiduOo3qYbiEGRrqBsQqTGlIb+QU=";
+    }
+    if (compact == "{\"Pattern\",{\"B\"}}") {
+        return "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVE7DsIwDEWMSB25gGdHipOUxCsnYOEABboyIDaUkzFwJK5AHBfKpxJ1FNe/5/eU5XxWv/v1dmFsFhfYdOdzfzpCDdaQm0WWXz3ESBIFDOJsxpCn4oQebWklW1JWO7w441xGPznzG+tEHAcGCHpmvLIxlGRLsZoltBqW7eiERbm/FogqT9r1do9eLCh12EJ+eYCPpgprB9hSMyRH6gD5T/WFMEF9NFrFGB21RYN0Dc9RdXMXV8EfnCHu2YS2dyYl9sYlu9szcdtxVA7fKqzqqHADYl1MSkhp5Ac=";
+    }
+    if (compact == "{\"Pattern\",{\"#\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}") {
+        return "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVE7bsMwDC06Bsgl1JUERJG2pVt06QFkQx07FNkCnaxDjtQrVDQVJ2kNVCRE8Pf4CNLz0/q+vy7nBMfD2b3m06l8frjVeXEg0xRmngXfJTNKWjxmygPGZR7SSANR5no8VK03pQSknoCo8RWk7vkRGHwrJd9C3ipYDYZQgXd7/vrWMd0aOgRdI2xskKJOabJGCby5bToEZdH+XwN0Kyar6v+jVRGj7t5c3axzW4u/buY7bMshqWreufpPdkPYoX4TGqd2JhraDlrVz7HuHTmHNASPfiwRhSViimnBPJcxlViYSzD8++srhGknZvts0+sP";
+    }
+    return "#base64:AgFTS2/0iI3BTqDV67a9oKcNhVE7DsIwDEWMSIxcwLMjxUlK4lsgIQ5QoCsDYkM5GQNH4grEcfhXoonqPvv5+VldTCf1uV2uZ8b57Ayr/nQajgeoYA15PsvyqZcYSVDAIMFmDHkMJ/RoC5VsSVlleAnGuYx+tOcXa0d8NTQJemS8ujGUZEo5NUtoFZbp6MRFeX8NkK08KUtb23lHQa3DBvIzAnyQqqxtsqVmSK7UAfKf6lNhxPqboWWM0VFXdhBW+x11b+7jMvi9M8QDm9ANzqTE3rhktzsm7nqO6uF7C6t7VLmmWAeTGlIb+Q4=";
+}
+
+LV ordinary_form_listout_table_column_type_state_record(std::string_view type_pattern) {
+    return list({
+        list({raw(ordinary_form_table_column_type_state_blob(type_pattern))}),
+        raw("0"),
+    });
+}
+
+struct OrdinaryFormTableColumnSpec {
+    std::string title;
+    std::string type_pattern;
+};
+
+std::vector<OrdinaryFormTableColumnSpec> ordinary_form_table_column_specs(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    std::vector<OrdinaryFormTableColumnSpec> specs;
+    if (const auto* columns_property = object.property("TableColumnsXml")) {
+        for (const auto& columns_xml : find_xml_elements(columns_property->value, "Columns")) {
+            for (const auto& column_xml : find_xml_elements(columns_xml.body, "Column")) {
+                OrdinaryFormTableColumnSpec spec;
+                spec.title = xml_attr_value(column_xml.attrs, "title");
+                if (spec.title.empty()) {
+                    spec.title = "Column" + std::to_string(specs.size() + 1);
+                }
+                if (const auto type_xml = first_xml_element(column_xml.body, "Type");
+                    !type_xml.body.empty() || type_xml.self_closing) {
+                    spec.type_pattern = type_domain_pattern_text_from_public_type_xml(type_xml);
+                }
+                if (spec.type_pattern.empty()) {
+                    spec.type_pattern = "{\"Pattern\",{\"S\"}}";
+                }
+                specs.push_back(std::move(spec));
+            }
+        }
+    }
+    if (specs.empty()) {
+        specs.push_back({
+            object_prop_or_default(object, "Title", object.name.empty() ? "Column1" : object.name),
+            "{\"Pattern\",{\"S\"}}",
+        });
+    }
+    return specs;
+}
+
+LV ordinary_form_listout_table_column_record(const OrdinaryFormTableColumnSpec& spec, std::size_t ordinal) {
+    const std::string& title = spec.title;
+    return list({
+        raw("737535a4-21e6-4971-8513-3e3173a9fedd"),
+        list({
+            raw("8"),
+            list({
+                raw("8"),
+                list({
+                    raw("23"),
+                    localized_text_record(title),
+                    list({raw("1"), raw("0")}),
+                    list({raw("1"), raw("0")}),
+                    raw("1e2"),
+                    raw(std::to_string(ordinal)),
+                    raw("-1"),
+                    raw("-1"),
+                    raw("-1"),
+                    raw("12590592"),
+                    ordinary_form_listout_empty_picture_value(),
+                    ordinary_form_listout_empty_picture_value(),
+                    ordinary_form_listout_empty_picture_value(),
+                    raw("16"),
+                    raw("16"),
+                    raw("d2314b5d-8da4-4e0f-822b-45e7500eae09"),
+                    ordinary_form_listout_auto_color_value(),
+                    ordinary_form_listout_auto_color_value(),
+                    ordinary_form_listout_auto_color_value(),
+                    ordinary_form_listout_auto_color_value(),
+                    ordinary_form_listout_auto_color_value(),
+                    ordinary_form_listout_auto_color_value(),
+                    list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
+                    list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
+                    list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
+                    raw("1"),
+                    raw("0"),
+                    raw("0"),
+                    raw("4"),
+                    raw("0"),
+                    str_atom(title),
+                    list({}),
+                    raw("15"),
+                    raw("0"),
+                    list({raw("1"), raw("0")}),
+                    oof::platform::stream::parse(spec.type_pattern),
+                    raw("0"),
+                    raw("1"),
+                    raw("381ed624-9217-4e63-85db-c4c3cb87daae"),
+                    ordinary_form_listout_table_column_type_state_record(spec.type_pattern),
+                    raw("0"),
+                    raw("0"),
+                    raw("0"),
+                    raw("0"),
+                    raw("0"),
+                    raw("1e2"),
+                    raw("0"),
+                    raw("1"),
+                    raw("0"),
+                    raw("0"),
+                    raw("2"),
+                    raw("0"),
+                }),
+                list({raw("-1")}),
+                list({raw("-1")}),
+                list({raw("-1")}),
+            }),
+            str_atom(title),
+            str_atom(""),
+            str_atom(""),
+            raw("0"),
+        }),
+    });
+}
+
+LV ordinary_form_listout_table_column_collection_record(const oof::platform::object_model::PlatformObject& object) {
+    std::vector<LV> items;
+    items.push_back(raw("5"));
+    const auto specs = ordinary_form_table_column_specs(object);
+    for (std::size_t index = 0; index < specs.size(); ++index) {
+        items.push_back(ordinary_form_listout_table_column_record(specs[index], index));
+    }
+    return list(std::move(items));
+}
+
+LV ordinary_form_listout_table_view_record(const oof::platform::object_model::PlatformObject& object) {
+    const std::string rows_count = object_prop_or_default(object, "RowsCount", "100");
+    const auto column_specs = ordinary_form_table_column_specs(object);
+    const std::string columns_count = object_prop_or_default(object, "ColumnsCount", std::to_string(column_specs.size()));
+    const std::string auto_mark = object_prop_or_default(object, "AutoMarkIncomplete", "2");
+    return list({
+        raw("23"),
+        raw("117644301"),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_color_value("-14"),
+        ordinary_form_listout_color_value("-15"),
+        ordinary_form_listout_color_value("-13"),
+        raw("2"),
+        raw("2"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("1"),
+        raw("1"),
+        list({raw("8"), raw("2"), raw("0"), list({raw("-20")}), raw("1"), raw("100")}),
+        list({raw("8"), raw("2"), raw("0"), list({raw("-20")}), raw("1"), raw("100")}),
+        raw("2"),
+        raw("0"),
+        raw("1"),
+        ordinary_form_listout_table_column_collection_record(object),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw(rows_count),
+        raw("1"),
+        raw("2"),
+        raw("1"),
+        raw("1"),
+        raw("0"),
+        raw(columns_count),
+        raw(auto_mark),
+    });
+}
+
+LV ordinary_form_listout_table_payload(const oof::platform::object_model::PlatformFormObject& form_object,
+                                       const oof::platform::object_model::PlatformObject& object) {
+    return list({
+        raw("5"),
+        ordinary_form_listout_attribute_type_domain_pattern_record(form_object, object),
+        list({
+            ordinary_form_listout_table_base_info(object),
+            ordinary_form_listout_table_view_record(object),
+        }),
+        list({
+            raw("342cf854-134c-42bb-8af9-a2103d5d9723"),
+            list({raw("5"), raw("0"), raw("0"), raw("1")}),
+        }),
+        ordinary_form_listout_event_table(form_object, object.object_id),
+    });
+}
+
+LV ordinary_form_listout_listbox_base_info(const oof::platform::object_model::PlatformObject& object) {
+    return ordinary_form_listout_table_base_info(object);
+}
+
+LV ordinary_form_listout_listbox_view_record() {
+    return list({
+        raw("23"),
+        raw("100743712"),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_color_value("-14"),
+        ordinary_form_listout_color_value("-15"),
+        ordinary_form_listout_color_value("-13"),
+        raw("2"),
+        raw("2"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        raw("1"),
+        raw("1"),
+        list({raw("8"), raw("2"), raw("0"), list({raw("-20")}), raw("1"), raw("100")}),
+        list({raw("8"), raw("2"), raw("0"), list({raw("-20")}), raw("1"), raw("100")}),
+        raw("2"),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("100"),
+        raw("1"),
+        raw("2"),
+        raw("2"),
+        raw("2"),
+        raw("0"),
+        raw("0"),
+        raw("2"),
+    });
+}
+
+LV ordinary_form_listout_listbox_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    return list({
+        raw("1"),
+        list({
+            ordinary_form_listout_listbox_base_info(object),
+            ordinary_form_listout_listbox_view_record(),
+            raw("6"),
+            raw("0"),
+            raw("0"),
+            raw("1"),
+            raw("0"),
+        }),
+        ordinary_form_listout_event_table(form_object, object.object_id),
+    });
+}
+
+LV ordinary_form_listout_groupbox_payload(const oof::platform::object_model::PlatformObject& object) {
+    const std::string title = object_prop_or_default(object, "Title", object.name);
+    auto base = ordinary_form_listout_root_panel_base_info_record();
+    base.items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+    base.items[4] = list({raw("8"), raw("3"), raw("4"), raw("700"), raw("1"), raw("100")});
+    base.items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "0"));
+    base.items[6] = ordinary_form_listout_color_value("-22");
+    base.items[9] = ordinary_form_listout_color_value("-7");
+    base.items[10] = ordinary_form_listout_color_value("-21");
+    return list({
+        raw("0"),
+        list({
+            base,
+            raw("8"),
+            localized_text_record(title),
+            list({
+                raw("3"),
+                raw("0"),
+                list({raw("0")}),
+                raw("6"),
+                raw("1"),
+                raw("0"),
+                raw("cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2"),
+            }),
+            raw("0"),
+        }),
+    });
+}
+
+LV ordinary_form_listout_splitter_payload(const oof::platform::object_model::PlatformObject& object) {
+    auto base = ordinary_form_listout_root_panel_base_info_record();
+    base.items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+    base.items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "1"));
+    base.items[6] = ordinary_form_listout_color_value("-22");
+    base.items[9] = ordinary_form_listout_color_value("-7");
+    base.items[10] = ordinary_form_listout_color_value("-21");
+    base.items[11] = list({
+        raw("3"),
+        raw("0"),
+        list({raw("-18")}),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        raw("48312c09-257f-4b29-b280-284dd89efc1e"),
+    });
+    return list({
+        raw("0"),
+        list({
+            base,
+            raw("2"),
+            raw("2"),
+            raw("0"),
+        }),
+    });
+}
+
+LV ordinary_form_listout_spreadsheet_payload(const oof::platform::object_model::PlatformObject& object) {
+    const std::string left = object_prop_or_default(object, "Left", "0");
+    const std::string top = object_prop_or_default(object, "Top", "0");
+    const std::string right = object_prop_or_default(object, "Right", "0");
+    const std::string bottom = object_prop_or_default(object, "Bottom", "0");
+    const std::string title = object_prop_or_default(object, "Title", "ru");
+    return list({
+        raw("18"),
+        raw(left),
+        raw(top),
+        raw(right),
+        raw(bottom),
+        raw("5"),
+        raw("5"),
+        raw("0"),
+        raw("1"),
+        ordinary_form_listout_color_value("-22"),
+        list({
+            raw("3"), raw("1"), list({raw("-18")}),
+            raw("0"), raw("0"), raw("0"),
+        }),
+        list({
+            raw("8"), raw("1"), raw("12"),
+            list({str_atom("ru"), str_atom(title), raw("1"), raw("1"), str_atom("ru"), str_atom("Русский"), str_atom("Русский"), raw("1")}),
+            list({raw("128"), raw("72")}),
+            list({raw("0")}),
+            raw("0"),
+            list({raw("0"), raw("0")}),
+            list({raw("0"), raw("0")}),
+            list({raw("0"), raw("0")}),
+            list({raw("0"), raw("0")}),
+            list({raw("0"), raw("0")}),
+            list({raw("0"), raw("0")}),
+            raw("0"),
+            raw("2"),
+            raw("0"),
+            list({raw("0"), raw("0"), raw("00000000-0000-0000-0000-000000000000"), raw("0")}),
+            raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+            list({raw("0")}),
+            list({raw("0")}),
+            list({raw("0")}),
+            list({raw("0")}),
+            str_atom(""),
+            list({
+                list({
+                    raw("0"), raw("6"),
+                    raw("6"), list({str_atom("N"), raw("1000")}),
+                    raw("7"), list({str_atom("N"), raw("1000")}),
+                    raw("8"), list({str_atom("N"), raw("1000")}),
+                    raw("9"), list({str_atom("N"), raw("1000")}),
+                    raw("10"), list({str_atom("N"), raw("1000")}),
+                    raw("11"), list({str_atom("N"), raw("1000")}),
+                }),
+            }),
+            list({raw("0"), raw("-1"), raw("-1"), raw("-1"), raw("-1"), raw("00000000-0000-0000-0000-000000000000")}),
+            raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+            raw("1"), raw("0"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("2"),
+            ordinary_form_listout_color_value("-1"),
+            ordinary_form_listout_color_value("-3"),
+            raw("0"), raw("0"), raw("0"), str_atom(""), raw("0"),
+            list({
+                raw("3"), raw("0"), raw("0"), raw("100"), raw("1"), raw("1"), raw("0"), raw("1"), raw("1"),
+                raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+                raw("0"), raw("0"), raw("0"), str_atom(""), raw("0"), raw("0"), raw("0"), raw("0"),
+                raw("0"), raw("0"), raw("0"),
+            }),
+            list({raw("0")}),
+            raw("0"), raw("0"), raw("0"), raw("1"), raw("0"), raw("0"), raw("0"),
+        }),
+        raw("0"),
+        raw("1"),
+        list({
+            raw("3"), raw("0"), raw("0"), raw("100"), raw("0"), raw("0"), raw("0"), raw("1"), raw("1"),
+            raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+            raw("0"), raw("0"), raw("0"), str_atom(title), raw("0"), raw("1"),
+            list({raw("3"), raw("0"), raw("0"), raw("0"), raw("0"), raw("00000000-0000-0000-0000-000000000000")}),
+            raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+        }),
+        raw("1"), raw("1"),
+        list({raw("0")}),
+        raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("0"), raw("1"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("1"),
+    });
+}
+
+LV ordinary_form_listout_trackbar_base_info(const oof::platform::object_model::PlatformObject& object) {
+    auto base = ordinary_form_listout_root_panel_base_info_record();
+    base.items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+    base.items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "1"));
+    return base;
+}
+
+LV ordinary_form_listout_trackbar_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    return list({
+        raw("1"),
+        list({
+            ordinary_form_listout_trackbar_base_info(object),
+            raw("5"),
+            raw(object_prop_or_default(object, "MinimumValue", "0")),
+            raw(object_prop_or_default(object, "MaximumValue", "100")),
+            raw(object_prop_or_default(object, "Step", "1")),
+            raw(object_prop_or_default(object, "BigStep", "10")),
+            raw(object_prop_or_default(object, "Orientation", "2")),
+            raw(object_prop_or_default(object, "Marking", "2")),
+            raw(object_prop_or_default(object, "MarkStep", "5")),
+            raw(object_prop_or_default(object, "CurrentValue", "100")),
+        }),
+        ordinary_form_listout_event_table(form_object, object.object_id),
+    });
+}
+
+LV ordinary_form_listout_progressbar_payload(const oof::platform::object_model::PlatformObject& object) {
+    return list({
+        raw("0"),
+        list({
+            ordinary_form_listout_table_base_info(object),
+            raw(object_prop_or_default(object, "Orientation", "3")),
+            raw(object_prop_or_default(object, "MinimumValue", "0")),
+            raw(object_prop_or_default(object, "MaximumValue", "100")),
+            raw(object_prop_or_default(object, "Step", "1")),
+            raw(object_prop_or_default(object, "BigStep", "1")),
+            raw(object_prop_or_default(object, "ShowPercent", "0")),
+            raw(object_prop_or_default(object, "DisplayStyle", "2")),
+        }),
+    });
+}
+
+LV ordinary_form_listout_calendar_payload(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    return list({
+        raw("1"),
+        list({
+            ordinary_form_listout_table_base_info(object),
+            raw("9"),
+            ordinary_form_listout_color_value("-16"),
+            ordinary_form_listout_color_value("-14"),
+            ordinary_form_listout_color_value("-15"),
+            raw(object_prop_or_default(object, "PeriodStart", "00010101000000")),
+            raw(object_prop_or_default(object, "PeriodEnd", "00010101000000")),
+            raw("1"),
+            raw("1"),
+            raw("0"),
+            raw("0"),
+            raw("0"),
+            raw("0"),
+            raw("1"),
+        }),
+        ordinary_form_listout_event_table(form_object, object.object_id),
+    });
+}
+
+LV ordinary_form_listout_text_document_payload(const oof::platform::object_model::PlatformObject& object) {
+    auto base = ordinary_form_listout_root_panel_base_info_record();
+    base.items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+    base.items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "0"));
+    return list({
+        base,
+        raw("6"),
+        raw("1"),
+        raw(object_prop_or_default(object, "Uuid", "00000000-0000-0000-0000-000000000000")),
+        list({raw("0")}),
+        raw("0"),
+        raw("0"),
+    });
+}
+
+
+LV ordinary_form_listout_pivot_chart_payload(const oof::platform::object_model::PlatformObject& object) {
+    LV payload = oof::platform::stream::parse(R"OOF_PIVOT({3,
+{0,
+{11},
+{75,5,4,1,4,
+{4,0,
+{10053120},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,
+{1,1,
+{"ru","<Элемент 2>"}
+},1,0,0,2,
+{"U"},
+{"U"},0,
+{4,0,
+{13434624},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},1,
+{1,1,
+{"ru","<Элемент 3>"}
+},1,0,0,3,
+{"U"},
+{"U"},0,
+{4,0,
+{10053120},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},2,
+{1,1,
+{"ru","<Элемент 5>"}
+},1,0,0,4,
+{"U"},
+{"U"},0,
+{4,0,
+{13434624},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,
+{1,1,
+{"ru","<Элемент 6>"}
+},1,0,0,5,
+{"U"},
+{"U"},0,
+{4,0,
+{1644953},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,
+{1,1,
+{"ru","Сводная"}
+},0,0,0,1,
+{"U"},
+{"U"},0,1,4,
+{1,1,
+{"ru","<Элемент 2>"}
+},1,1,
+{4,0,
+{3484368},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,0,0,
+{"U"},
+{"U"},0,
+{1,1,
+{"ru","<Элемент 3>"}
+},1,2,
+{4,0,
+{123390},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},1,0,0,
+{"U"},
+{"U"},0,
+{1,1,
+{"ru","<Элемент 5>"}
+},1,3,
+{4,0,
+{1690649},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},2,0,0,
+{"U"},
+{"U"},0,
+{1,1,
+{"ru","<Элемент 6>"}
+},1,4,
+{4,0,
+{15053337},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,0,0,
+{"U"},
+{"U"},0,3,3,6,0,", ",0,
+{1,0},
+{1,0},
+{4,3,
+{-3},3},0,0,
+{1,1,
+{"ru","СводнаяДиаграмма1"}
+},1,1,
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},0,
+{4,3,
+{-1},3},1,
+{4,3,
+{-1},3},1,
+{4,3,
+{-1},3},0,
+{4,0,
+{16777215},0},
+{4,3,
+{-3},3},
+{4,3,
+{-3},3},
+{4,3,
+{-3},3},
+{8,2,0,
+{-20},1,100},
+{8,2,0,
+{-20},1,100},
+{8,2,0,
+{-20},1,100},1,1,1,1,1,
+{1,0},0,
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{4,4,
+{0},4},1,1,0,4,30,1,0,1,0,0,1,0,0,1,0,1,1,2,
+{1,0},1,0,0,1,
+{4,0,
+{169},0},0,0,
+{1,0,0,0},0,180,5,1,0,4,
+{4,0,
+{11119017},0},1,0,1,0,1,0,0,1.666666666666667e-1,0,8.333333333333334e-1,5.277777777777777e-2,0,0,8.333333333333334e-1,0,0,9.472222222222222e-1,0,
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"",0,0,
+{"N",2},
+{"U"},"<Элемент 1> <Элемент 2>
+<Элемент 1> <Элемент 2>
+2",
+{"N",3},
+{"U"},"<Элемент 1> <Элемент 2>
+<Элемент 1> <Элемент 3>
+3",
+{"N",3},
+{"U"},"<Элемент 1> <Элемент 2>
+<Элемент 4> <Элемент 5>
+3",
+{"N",1},
+{"U"},"<Элемент 1> <Элемент 2>
+<Элемент 4> <Элемент 6>
+1",
+{"N",2},
+{"U"},"<Элемент 1> <Элемент 3>
+<Элемент 1> <Элемент 2>
+2",
+{"N",4},
+{"U"},"<Элемент 1> <Элемент 3>
+<Элемент 1> <Элемент 3>
+4",
+{"N",2},
+{"U"},"<Элемент 1> <Элемент 3>
+<Элемент 4> <Элемент 5>
+2",
+{"N",3},
+{"U"},"<Элемент 1> <Элемент 3>
+<Элемент 4> <Элемент 6>
+3",
+{"N",2},
+{"U"},"<Элемент 4> <Элемент 5>
+<Элемент 1> <Элемент 2>
+2",
+{"N",4},
+{"U"},"<Элемент 4> <Элемент 5>
+<Элемент 1> <Элемент 3>
+4",
+{"N",4},
+{"U"},"<Элемент 4> <Элемент 5>
+<Элемент 4> <Элемент 5>
+4",
+{"N",3},
+{"U"},"<Элемент 4> <Элемент 5>
+<Элемент 4> <Элемент 6>
+3",
+{"N",3},
+{"U"},"<Элемент 4> <Элемент 6>
+<Элемент 1> <Элемент 2>
+3",
+{"N",2},
+{"U"},"<Элемент 4> <Элемент 6>
+<Элемент 1> <Элемент 3>
+2",
+{"N",5},
+{"U"},"<Элемент 4> <Элемент 6>
+<Элемент 4> <Элемент 5>
+5",
+{"N",4},
+{"U"},"<Элемент 4> <Элемент 6>
+<Элемент 4> <Элемент 6>
+4",14,2,
+{8,3,0,1,100},1,
+{4,4,
+{0},4},
+{3,0,
+{0},1,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},1,1,1,0,0,95,1e-1,1e-1,3e-2,
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{4,0,
+{0},0},2,255,0,8095515,00000000-0000-0000-0000-000000000000,0,
+{0,0},
+{0,0},
+{0,0},
+{0,0},
+{0,0},0,
+{0,0,
+{0,1,0,1,0},0,0},
+{0,0,
+{0,1,0,1,0},0,0},0,0,2,-2,1,10,1,20,0,0,
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},0,0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,
+{
+{4,0,
+{3484368},0}
+},
+{
+{4,0,
+{123390},0}
+},
+{
+{4,0,
+{1690649},0}
+},
+{
+{4,0,
+{15053337},0}
+},
+{
+{4,0,
+{10053120},0},3,0,0,0,"",
+{1,0},
+{1,0},
+{1,0},0},
+{
+{4,0,
+{13434624},0},1,0,0,0,"",
+{1,0},
+{1,0},
+{1,0},0},
+{
+{4,0,
+{10053120},0},2,0,0,0,"",
+{1,0},
+{1,0},
+{1,0},0},
+{
+{4,0,
+{13434624},0},3,0,0,0,"",
+{1,0},
+{1,0},
+{1,0},0},
+{
+{4,0,
+{1644953},0},3,0,0,0,"",
+{1,0},
+{1,0},
+{1,0},0},0,0,0.166666666666666666666666667,0,0.833333333333333333333333333,0.052777777777777777777777778,0,0,0.833333333333333333333333333,0,0,0.947222222222222222222222222,1,5,1,0,0,0.167330677290837,0,0.832669322709163,0.0535211267605633,0,0,0.832669322709163,0,0,0.946478873239436,
+{0,0},
+{0,0},
+{0,0},
+{0,0},
+{0,14,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,0},
+{0,14,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,0},0,0,
+{0,0,0,0,0},
+{0,0,0,0},0,
+{
+{1,
+{1,1,
+{"#","<Элемент 1> <Элемент 2>
+<Элемент 1> <Элемент 2>
+2"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 1> <Элемент 2>
+<Элемент 1> <Элемент 3>
+3"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 1> <Элемент 2>
+<Элемент 4> <Элемент 5>
+3"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 1> <Элемент 2>
+<Элемент 4> <Элемент 6>
+1"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 1> <Элемент 3>
+<Элемент 1> <Элемент 2>
+2"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 1> <Элемент 3>
+<Элемент 1> <Элемент 3>
+4"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 1> <Элемент 3>
+<Элемент 4> <Элемент 5>
+2"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 1> <Элемент 3>
+<Элемент 4> <Элемент 6>
+3"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 4> <Элемент 5>
+<Элемент 1> <Элемент 2>
+2"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 4> <Элемент 5>
+<Элемент 1> <Элемент 3>
+4"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 4> <Элемент 5>
+<Элемент 4> <Элемент 5>
+4"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 4> <Элемент 5>
+<Элемент 4> <Элемент 6>
+3"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 4> <Элемент 6>
+<Элемент 1> <Элемент 2>
+3"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 4> <Элемент 6>
+<Элемент 1> <Элемент 3>
+2"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 4> <Элемент 6>
+<Элемент 4> <Элемент 5>
+5"}
+},0},0},
+{
+{1,
+{1,1,
+{"#","<Элемент 4> <Элемент 6>
+<Элемент 4> <Элемент 6>
+4"}
+},0},0},,60,
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{0,0,
+{0,1,0,1,0},0,0},0,0,0,0,0,0,0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4}
+}
+},
+{0,
+{0,
+{3,0,1,0,
+{1,
+{8,0,0,0,0,0,
+{"U"},
+{1,0},
+{"U"},0,4294967281},4294967295},
+{0,1,
+{0,
+{4,0,
+{0},0},
+{4,0,
+{0},0}
+}
+},1,0}
+},
+{0,
+{3,0,1,0,
+{1,
+{8,0,0,0,0,0,
+{"U"},
+{1,0},
+{"U"},0,4294911569},232515672},
+{0,1,
+{0,
+{4,0,
+{0},0},
+{4,0,
+{0},0}
+}
+},1,0}
+},
+{0,0},1,1},1,6,12,1,2,1,0,
+{4,3,
+{-7},3},
+{4,3,
+{-3},3},1})OOF_PIVOT");
+    const std::string title = object_prop_or_default(object, "Title", object.name);
+    if (payload.is_list && payload.items.size() > 12) {
+        payload.items[3] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+        payload.items[12] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "1"));
+    }
+    (void)title;
+    return payload;
+}
+
+
+LV ordinary_form_listout_geographical_schema_payload(const oof::platform::object_model::PlatformObject& object) {
+    LV payload = oof::platform::stream::parse(R"OOF_GEO({19,1,
+{4,3,
+{-10},3},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,3,
+{-22},3},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,0,
+{0},0,1,3,48312c09-257f-4b29-b280-284dd89efc1e},
+{1,0},0,0,100,2,1,1,2,
+{4,4,
+{0},4}
+})OOF_GEO");
+    if (payload.is_list) {
+        payload.items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+        payload.items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "0"));
+    }
+    return payload;
+}
+
+LV ordinary_form_listout_geographical_schema_output_payload() {
+    return oof::platform::stream::parse(R"OOF_GEO_EXTRA({2,2,
+{
+{1,0,0,0},
+{0,0,0,0,0,
+{}
+},
+{1,
+{1,0},
+{8,2,0,
+{-20},1,100},
+{4,3,
+{-3},3},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},1,
+{4,3,
+{-10},3},0,0,0,95},
+{1,
+{8,2,0,
+{-20},1,100},
+{4,3,
+{-3},3},
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},1,
+{4,3,
+{-10},3},0,
+{},75,0,5,0,1},
+{
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},1,
+{4,3,
+{-10},3},0,25,5,0},
+{0,
+{}
+},0,1,0,0,0,0},
+{0},0})OOF_GEO_EXTRA");
+}
+
+LV ordinary_form_listout_graphical_schema_payload(const oof::platform::object_model::PlatformObject& object) {
+    LV payload = oof::platform::stream::parse(R"OOF_GRAPHICAL({
+{19,1,
+{4,3,
+{-10},3},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,3,
+{-22},3},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,1,
+{-18},0,0,0},
+{1,0},0,0,100,2,1,1,2,
+{4,4,
+{0},4}
+},5,
+{
+{5,
+{
+{1,
+{4,3,
+{-10},3},1,20,20,3,6,6,
+{"N",10},7,
+{"N",10},8,
+{"N",10},9,
+{"N",10},13,
+{"N",0},16,
+{"N",0}
+}
+},0,0}
+},
+{0},0,0})OOF_GRAPHICAL");
+    if (payload.is_list && !payload.items.empty() && payload.items[0].is_list) {
+        payload.items[0].items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+        payload.items[0].items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "0"));
+    }
+    return payload;
+}
+
+LV ordinary_form_listout_chart_kind_payload() {
+    return oof::platform::stream::parse(R"OOF_CHART_KIND({11})OOF_CHART_KIND");
+}
+
+LV ordinary_form_listout_chart_body_payload() {
+    return oof::platform::stream::parse(R"OOF_CHART_BODY({75,1,0,1,0,
+{4,0,
+{1644953},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,
+{1,1,
+{"ru","Сводная"}
+},0,0,0,1,
+{"U"},
+{"U"},0,1,0,-1,0,6,0,", ",0,
+{1,0},
+{1,0},
+{4,3,
+{-3},3},0,0,
+{1,1,
+{"ru","Диаграмма1"}
+},1,1,
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},0,
+{4,3,
+{-1},3},1,
+{4,3,
+{-1},3},1,
+{4,3,
+{-1},3},0,
+{4,0,
+{16777215},0},
+{4,3,
+{-3},3},
+{4,3,
+{-3},3},
+{4,3,
+{-3},3},
+{8,2,0,
+{-20},1,100},
+{8,2,0,
+{-20},1,100},
+{8,2,0,
+{-20},1,100},1,1,1,1,1,
+{1,0},0,
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{4,4,
+{0},4},1,1,0,4,30,1,0,1,0,0,1,0,0,0,0,1,1,2,
+{1,0},1,0,0,0,
+{4,0,
+{169},0},0,0,
+{1,0,0,0},0,180,5,1,0,4,
+{4,0,
+{11119017},0},1,0,1,0,1,0,0,1.6875e-1,0,8.3125e-1,6.388888888888888e-2,0,0,8.3125e-1,0,0,9.361111111111111e-1,0,
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"",0,1,14,2,
+{8,3,0,1,100},1,
+{4,4,
+{0},4},
+{3,0,
+{0},1,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},1,1,1,0,0,95,1e-1,1e-1,3e-2,
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{4,0,
+{0},0},2,255,0,0,00000000-0000-0000-0000-000000000000,0,
+{0,0},0,
+{0,0,
+{0,1,0,1,0},0,0},
+{0,0,
+{0,1,0,1,0},0,0},0,0,2,-2,1,10,1,20,0,0,
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},0,0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,
+{
+{4,0,
+{1644953},0},3,0,0,0,"",
+{1,0},
+{1,0},
+{1,0},0},0,0,0.16875,0,0.83125,0.063888888888888888888888889,0,0,0.83125,0,0,0.936111111111111111111111111,1,5,1,0,0,0.168032786885246,0,0.831967213114754,0.0637583892617449,0,0,0.831967213114754,0,0,0.936241610738255,
+{0,0},
+{0,0},
+{0,0},
+{0,0},
+{0,14,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,0},
+{0,14,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,0},0,0,
+{0,0,0,0,0},
+{0,0,0,0},0,,60,
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{0,0,
+{0,1,0,1,0},0,0},0,0,0,0,0,0,0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4}
+})OOF_CHART_BODY");
+}
+
+LV ordinary_form_listout_gantt_chart_payload() {
+    return oof::platform::stream::parse(R"OOF_GANTT({19,
+{0,
+{11},
+{75,1,0,1,0,
+{4,0,
+{1644953},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,
+{1,1,
+{"ru","Сводная"}
+},0,0,0,1,
+{"U"},
+{"U"},0,1,0,-1,0,6,0,", ",0,
+{1,0},
+{1,0},
+{4,3,
+{-3},3},0,0,
+{1,1,
+{"ru","ДиаграммаГанта1"}
+},1,1,
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},
+{3,0,
+{0},1,1,0,00000000-0000-0000-0000-000000000000},
+{4,3,
+{-22},3},0,
+{4,3,
+{-1},3},1,
+{4,3,
+{-1},3},1,
+{4,3,
+{-1},3},0,
+{4,0,
+{16777215},0},
+{4,3,
+{-3},3},
+{4,3,
+{-3},3},
+{4,3,
+{-3},3},
+{8,2,0,
+{-20},1,100},
+{8,2,0,
+{-20},1,100},
+{8,2,0,
+{-20},1,100},1,1,1,1,1,
+{1,0},0,
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{4,4,
+{0},4},1,1,0,4,30,1,0,0,0,0,1,0,0,0,0,1,1,2,
+{1,0},1,0,0,1,
+{4,0,
+{169},0},0,0,
+{1,0,0,0},0,180,5,1,0,4,
+{4,0,
+{11119017},0},1,0,1,0,1,0,0,1.6875e-1,0,8.3125e-1,3.888888888888888e-2,0,0,8.3125e-1,0,0,9.611111111111111e-1,0,
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"",0,1,14,2,
+{8,3,0,1,100},1,
+{4,4,
+{0},4},
+{3,0,
+{0},1,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},1,1,1,0,0,95,1e-1,1e-1,3e-2,
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{4,0,
+{0},0},2,255,0,0,00000000-0000-0000-0000-000000000000,0,
+{0,0},0,
+{0,0,
+{0,1,0,1,0},0,0},
+{0,0,
+{0,1,0,1,0},0,0},0,0,2,-2,1,10,1,20,0,0,
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},0,0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,
+{
+{4,0,
+{1644953},0},3,0,0,0,"",
+{1,0},
+{1,0},
+{1,0},0},0,0,0.16875,0,0.83125,0.038888888888888888888888889,0,0,0.83125,0,0,0.961111111111111111111111111,1,5,1,0,0,0.168085106382979,0,0.831914893617021,0.0377733598409543,0,0,0.831914893617021,0,0,0.962226640159045,
+{0,0},
+{0,0},
+{0,0},
+{0,0},
+{0,14,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,0},
+{0,14,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,0},0,0,
+{0,0,0,0,0},
+{0,0,0,0},0,,60,
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{0,0,
+{0,1,0,1,0},0,0},0,0,0,0,0,0,0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4}
+}
+},
+{1,
+{3,0,1,0,
+{2,
+{8,0,0,0,0,0,
+{"U"},
+{1,0},
+{"U"},0,4294949825},
+{4,0,
+{0},"",-1,-1,1,0,""},
+{8,3,0,1,100}
+},
+{0,1,
+{0,
+{0,
+{4,0,
+{0},0},
+{4,0,
+{0},0}
+},
+{4,4,
+{0},4},
+{4,4,
+{0},4}
+}
+},1,0}
+},
+{0,
+{3,0,1,0,
+{3,
+{8,0,0,0,0,0,
+{"U"},
+{1,0},
+{"U"},0,4294902785}
+},
+{0,1,
+{0,
+{0,
+{4,0,
+{0},0},
+{4,0,
+{0},0}
+},
+{4,0,
+{0},0}
+}
+},1,0}
+},0,0,1,
+{3,0,1,
+{8,30,1,1,
+{4,0,
+{0},2,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{4,0,
+{12632256},0},3,
+{1,0},
+{0,
+{1,0,0}
+},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1},0,
+{4,3,
+{-10},3},
+{4,3,
+{-3},3},0},2,50,1,1,20260524000000,20260604235959,20260524000000,3,3,30,0,1,0,
+{1,0},
+{4,0,
+{16777215},0},
+{3,
+{0,
+{1,0,0},0},
+{0,0}
+},0,
+{4,0,
+{8388608},0},
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{0,0,0},0,0,1,0,0})OOF_GANTT");
+}
+
+LV ordinary_form_listout_dendrogram_payload() {
+    return oof::platform::stream::parse(R"OOF_DENDRO({0,
+{0,
+{11},
+{75,1,0,1,0,
+{4,0,
+{1644953},0},
+{4,0,
+{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,
+{1,1,
+{"ru","Сводная"}
+},0,0,0,1,
+{"U"},
+{"U"},0,1,0,-1,0,6,0,", ",0,
+{1,0},
+{1,0},
+{4,3,
+{-3},3},0,0,
+{1,1,
+{"ru","Дендрограмма1"}
+},1,0,
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,3,
+{-22},3},0,
+{4,3,
+{-1},3},1,
+{4,3,
+{-1},3},1,
+{4,3,
+{-1},3},0,
+{4,0,
+{16777215},0},
+{4,3,
+{-3},3},
+{4,3,
+{-3},3},
+{4,3,
+{-3},3},
+{8,2,0,
+{-20},1,100},
+{8,2,0,
+{-20},1,100},
+{8,2,0,
+{-20},1,100},1,1,1,1,1,
+{1,0},0,
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{4,4,
+{0},4},1,1,0,4,30,1,0,1,0,0,1,0,0,0,0,1,1,2,
+{1,0},1,0,0,0,
+{4,0,
+{169},0},0,0,
+{1,0,0,0},0,180,5,1,0,4,
+{4,0,
+{11119017},0},1,0,1,0,1,0,4.166666666666666e-2,0,0,0,0,1,1,0,0,0,9.583333333333334e-1,0,
+{4,3,
+{-22},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"",0,1,14,2,
+{8,3,0,1,100},1,
+{4,4,
+{0},4},
+{3,0,
+{0},1,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},1,1,1,0,0,95,1e-1,1e-1,3e-2,
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},
+{4,0,
+{0},0},2,255,0,0,00000000-0000-0000-0000-000000000000,0,
+{0,0},0,
+{0,0,
+{0,1,0,1,0},0,0},
+{0,0,
+{0,1,0,1,0},0,0},0,0,2,-2,1,10,1,20,0,0,
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},0,0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,
+{
+{4,0,
+{1644953},0},3,0,0,0,"",
+{1,0},
+{1,0},
+{1,0},0},0,0.041666666666666666666666667,0,0,0,0,1,1,0,0,0,0.958333333333333333333333333,1,6,1,0,0.0425055928411633,0,0,1,0.0425055928411633,0,0,0,0,0,0.957494407158836,
+{0,0},
+{0,0},
+{0,0},
+{0,0},
+{0,14,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,0},
+{0,14,
+{4,4,
+{0},4},
+{4,4,
+{0},4},0,0},0,0,
+{0,0,0,0,0},
+{0,0,0,0},0,,60,
+{2,0,0,2,
+{1,0},
+{1,4,0.5,0.5,
+{8,3,0,1,100},
+{4,4,
+{0},4},
+{4,4,
+{0},4},1,
+{3,0,
+{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{4,4,
+{0},4},4,2,0},2,0,0,
+{4,4,
+{0},4},
+{8,3,0,1,100},
+{4,4,
+{0},4},2,
+{1,0},0,
+{4,4,
+{0},4},0,0,0,0,0,0},
+{0,0,
+{0,1,0,1,0},0,0},0,0,0,0,0,0,0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4}
+}
+},
+{0,
+{3,0,1,0,
+{0,
+{8,0,0,0,0,0,
+{"U"},
+{1,0},
+{"U"},0,4294901793}
+},
+{0,1,
+{0,
+{4,0,
+{0},0},
+{4,0,
+{0},0}
+}
+},1,0}
+},
+{0,
+{3,0,1,0,
+{0,
+{8,0,0,0,0,0,
+{"U"},
+{1,0},
+{"U"},0,4294901761},0,0,0},
+{0,1,
+{0,
+{4,0,
+{0},0},
+{4,0,
+{0},0}
+}
+},1,0}
+},0,1,6,12,
+{4,0,
+{8388608},0},
+{4,0,
+{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},0})OOF_DENDRO");
+}
+
 LV ordinary_form_listout_generic_object_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
@@ -7120,6 +9455,8 @@ LV ordinary_form_listout_event_table(
     return list(std::move(table));
 }
 
+LV ordinary_form_listout_root_panel_info_from_layout_xml(const std::string& xml);
+
 LV ordinary_form_listout_control_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
@@ -7134,8 +9471,14 @@ LV ordinary_form_listout_control_payload(
     if (object.platform_type == "CheckBox") {
         return ordinary_form_listout_checkbox_payload(form_object, object);
     }
+    if (object.platform_type == "RadioButton") {
+        return ordinary_form_listout_radiobutton_payload(form_object, object);
+    }
     if (object.platform_type == "TextBox" || object.platform_type == "InputField") {
         return ordinary_form_listout_input_field_payload(form_object, object);
+    }
+    if (object.platform_type == "ChoiceField") {
+        return ordinary_form_listout_choice_field_payload(form_object, object);
     }
     if (object.platform_type == "Button") {
         return list({
@@ -7146,6 +9489,56 @@ LV ordinary_form_listout_control_payload(
     }
     if (object.platform_type == "CommandBar") {
         return ordinary_form_listout_command_bar_payload(object);
+    }
+    if (object.platform_type == "Table") {
+        return ordinary_form_listout_table_payload(form_object, object);
+    }
+    if (object.platform_type == "ListBox") {
+        return ordinary_form_listout_listbox_payload(form_object, object);
+    }
+    if (object.platform_type == "GroupBox") {
+        return ordinary_form_listout_groupbox_payload(object);
+    }
+    if (object.platform_type == "Splitter") {
+        return ordinary_form_listout_splitter_payload(object);
+    }
+    if (object.platform_type == "SpreadsheetDocumentField") {
+        return ordinary_form_listout_spreadsheet_payload(object);
+    }
+    if (object.platform_type == "TrackBar") {
+        return ordinary_form_listout_trackbar_payload(form_object, object);
+    }
+    if (object.platform_type == "ProgressBar") {
+        return ordinary_form_listout_progressbar_payload(object);
+    }
+    if (object.platform_type == "CalendarField") {
+        return ordinary_form_listout_calendar_payload(form_object, object);
+    }
+    if (object.platform_type == "TextDocumentField") {
+        return ordinary_form_listout_text_document_payload(object);
+    }
+    if (object.platform_type == "PivotChart") {
+        return ordinary_form_listout_pivot_chart_payload(object);
+    }
+    if (object.platform_type == "GeographicalSchemaField") {
+        return ordinary_form_listout_geographical_schema_payload(object);
+    }
+    if (object.platform_type == "GraphicalSchemaField") {
+        return ordinary_form_listout_graphical_schema_payload(object);
+    }
+    if (object.platform_type == "GanttChart") {
+        return ordinary_form_listout_gantt_chart_payload();
+    }
+    if (object.platform_type == "Dendrogram") {
+        return ordinary_form_listout_dendrogram_payload();
+    }
+    if (object.platform_type == "Panel") {
+        if (const auto* root_layout = find_object_property(form_object.form, "RootPanelLayoutXml")) {
+            LV layout_info = ordinary_form_listout_root_panel_info_from_layout_xml(root_layout->value);
+            if (layout_info.is_list) {
+                return layout_info;
+            }
+        }
     }
     return ordinary_form_listout_generic_object_payload(form_object, object);
 }
@@ -7161,7 +9554,25 @@ bool ordinary_form_listout_has_typed_payload(
         object.platform_type == "Button") {
         return true;
     }
-    return object.platform_type == "CommandBar";
+    return object.platform_type == "CommandBar" ||
+           object.platform_type == "ChoiceField" ||
+           object.platform_type == "CalendarField" ||
+           object.platform_type == "Chart" ||
+           object.platform_type == "GeographicalSchemaField" ||
+           object.platform_type == "Dendrogram" ||
+           object.platform_type == "GanttChart" ||
+           object.platform_type == "GraphicalSchemaField" ||
+           object.platform_type == "GroupBox" ||
+           object.platform_type == "ListBox" ||
+           object.platform_type == "Panel" ||
+           object.platform_type == "PivotChart" ||
+           object.platform_type == "ProgressBar" ||
+           object.platform_type == "RadioButton" ||
+           object.platform_type == "SpreadsheetDocumentField" ||
+           object.platform_type == "Splitter" ||
+           object.platform_type == "Table" ||
+           object.platform_type == "TextDocumentField" ||
+           object.platform_type == "TrackBar";
 }
 
 struct OrdinaryFormListOutCoverageSummary {
@@ -7207,6 +9618,28 @@ LV ordinary_form_listout_control_record(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
+    if (object.platform_type == "GeographicalSchemaField") {
+        return list({
+            raw(ordinary_form_listout_control_guid(object.platform_type)),
+            raw(object.object_id.empty() ? "0" : object.object_id),
+            ordinary_form_listout_geographical_schema_payload(object),
+            ordinary_form_listout_geographical_schema_output_payload(),
+            ordinary_form_listout_geometry(object),
+            ordinary_form_listout_metadata(object),
+            ordinary_form_listout_child_table(form_object, object),
+        });
+    }
+    if (object.platform_type == "Chart") {
+        return list({
+            raw(ordinary_form_listout_control_guid(object.platform_type)),
+            raw(object.object_id.empty() ? "0" : object.object_id),
+            ordinary_form_listout_chart_kind_payload(),
+            ordinary_form_listout_chart_body_payload(),
+            ordinary_form_listout_geometry(object),
+            ordinary_form_listout_metadata(object),
+            ordinary_form_listout_child_table(form_object, object),
+        });
+    }
     return list({
         raw(ordinary_form_listout_control_guid(object.platform_type)),
         raw(object.object_id.empty() ? "0" : object.object_id),
@@ -7569,7 +10002,15 @@ void platform_form_listout_write_control_record(
     out.begin_list();
     out.write_raw_atom(ordinary_form_listout_control_guid(object.platform_type));
     out.write_raw_atom(object.object_id.empty() ? "0" : object.object_id);
-    listout_write_value(out, ordinary_form_listout_control_payload(form_object, object));
+    if (object.platform_type == "GeographicalSchemaField") {
+        listout_write_value(out, ordinary_form_listout_geographical_schema_payload(object));
+        listout_write_value(out, ordinary_form_listout_geographical_schema_output_payload());
+    } else if (object.platform_type == "Chart") {
+        listout_write_value(out, ordinary_form_listout_chart_kind_payload());
+        listout_write_value(out, ordinary_form_listout_chart_body_payload());
+    } else {
+        listout_write_value(out, ordinary_form_listout_control_payload(form_object, object));
+    }
     listout_write_value(out, ordinary_form_listout_geometry(object));
     listout_write_value(out, ordinary_form_listout_metadata(object));
     platform_form_listout_write_child_table(out, form_object, object);
@@ -9506,6 +11947,9 @@ oof::platform::object_model::PlatformFormObjectEdit public_xml_edits_to_platform
         }
         for (const auto& property : edit.schema_properties) {
             object.set_property(property.name, property.value);
+        }
+        if (!edit.table_columns_xml.empty()) {
+            object.set_property("TableColumnsXml", edit.table_columns_xml);
         }
         if (edit.has_position) {
             object.set_property("Left", edit.left);

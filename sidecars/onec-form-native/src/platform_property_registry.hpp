@@ -36,7 +36,7 @@ struct PlatformPropertyDescriptor {
     std::string_view source;
 };
 
-inline constexpr std::array<PlatformPropertyDescriptor, 45> descriptors{{
+inline constexpr std::array<PlatformPropertyDescriptor, 46> descriptors{{
     {"ObjectID", "", "CompositeID", SlotCodec::none, "", true, false, "materialized-list-stream"},
     {"Name", "Имя", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record"},
     {"Title", "Заголовок", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record-as-initial-title"},
@@ -82,6 +82,7 @@ inline constexpr std::array<PlatformPropertyDescriptor, 45> descriptors{{
     {"Clsid", "CLSID", "UUID", SlotCodec::control_info_slot, "cf_form_controls_info8:ActiveXControl:Clsid", true, true, "cf_form_controls_info8 ActiveXControl descriptor"},
     {"State1", "Состояние1", "ActiveXStateBlob", SlotCodec::control_info_slot, "cf_form_controls_info8:ActiveXControl:State1", true, true, "cf_form_controls_info8 ActiveXControl descriptor"},
     {"State2", "Состояние2", "ActiveXStateBlob", SlotCodec::control_info_slot, "cf_form_controls_info8:ActiveXControl:State2", true, true, "cf_form_controls_info8 ActiveXControl descriptor"},
+    {"TableColumnsXml", "Колонки", "TableColumns", SlotCodec::none, "cf_form_controls_info8:Table:View:Columns", true, false, "cf_form_controls_info8 Table View Columns"},
 }};
 
 inline constexpr std::string_view slot_codec_name(SlotCodec codec) {
