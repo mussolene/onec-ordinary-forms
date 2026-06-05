@@ -7,10 +7,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <ucontext.h>
 #include <unistd.h>
 
 typedef uintptr_t (*scom_main3_fn)(uintptr_t, uintptr_t, uintptr_t);
 typedef int (*dllmain_fn)(void *, int, void *);
+typedef struct Guid {
+    uint32_t a;
+    uint16_t b;
+    uint16_t c;
+    uint8_t d[8];
+} Guid;
+typedef uintptr_t (*create_instance_fn)(void *, void *, const Guid *, void **);
+typedef uintptr_t (*release_fn)(void *);
+
+static const Guid IID_IUnknown = {0x00000000u, 0x0000u, 0x0000u, {0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
+static const Guid IID_IFormDocument = {0x364f0971u, 0x70a0u, 0x47ddu, {0xaf, 0x6d, 0xb0, 0x94, 0xa7, 0xf6, 0x3a, 0xfb}};
 
 typedef struct Module {
     const char *name;
@@ -57,6 +69,75 @@ static void guid_text(uintptr_t value, char *out, size_t out_size) {
              p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
 }
 
+static int is_formdocument_guid(uintptr_t value) {
+    if (value < 0x10000) {
+        return 0;
+    }
+    const Guid *g = (const Guid *)value;
+    return g->a == 0x0ec7b148u && g->b == 0xcdf9u && g->c == 0x451cu &&
+           g->d[0] == 0x98 && g->d[1] == 0x21 && g->d[2] == 0x02 &&
+           g->d[3] == 0x2b && g->d[4] == 0x95 && g->d[5] == 0xc0 &&
+           g->d[6] == 0xfa && g->d[7] == 0x23;
+}
+
+static const char *obj_name_for(void *ptr) {
+    Dl_info info;
+    if (ptr && dladdr(ptr, &info) != 0 && info.dli_fname && *info.dli_fname) {
+        return info.dli_fname;
+    }
+    return "<unknown>";
+}
+
+static void dump_vtable(const char *label, void *obj, size_t limit) {
+    if (!obj) {
+        return;
+    }
+    void **vtable = *(void ***)obj;
+    fprintf(stderr, "OOF_SCOM_HOST_VTABLE label=%s obj=%p vtable=%p\n", label, obj, vtable);
+    for (size_t i = 0; vtable && i < limit; ++i) {
+        Dl_info info;
+        const char *name = "<unknown>";
+        uintptr_t offset = 0;
+        if (dladdr(vtable[i], &info) != 0 && info.dli_fname) {
+            name = info.dli_sname ? info.dli_sname : info.dli_fname;
+            if (info.dli_fbase) {
+                offset = (uintptr_t)vtable[i] - (uintptr_t)info.dli_fbase;
+            }
+        }
+        fprintf(stderr,
+                "OOF_SCOM_HOST_VTABLE_ENTRY label=%s slot=%zu fn=%p offset=0x%lx symbol=%s\n",
+                label, i, vtable[i], (unsigned long)offset, name);
+    }
+}
+
+static void try_create_formdocument(uintptr_t class_guid, uintptr_t factory_value) {
+    const char *create_env = getenv("OOF_SCOM_HOST_CREATE_FORMDOCUMENT");
+    if (!create_env || strcmp(create_env, "0") == 0 || !is_formdocument_guid(class_guid) ||
+        factory_value < 0x10000) {
+        return;
+    }
+    void *factory = (void *)factory_value;
+    void **vptr = *(void ***)factory;
+    if (!vptr) {
+        fprintf(stderr, "OOF_SCOM_HOST_CREATE_FORMDOCUMENT_NO_VTABLE factory=%p\n", factory);
+        return;
+    }
+    create_instance_fn create = (create_instance_fn)vptr[3];
+    void *obj_unknown = 0;
+    void *obj_form = 0;
+    uintptr_t hr_unknown = create ? create(factory, 0, &IID_IUnknown, &obj_unknown) : 0xffffffffu;
+    uintptr_t hr_form = create ? create(factory, 0, &IID_IFormDocument, &obj_form) : 0xffffffffu;
+    fprintf(stderr,
+            "OOF_SCOM_HOST_CREATE_FORMDOCUMENT factory=%p vtable=%p create=%p hr_unknown=0x%lx obj_unknown=%p obj_unknown_vtable=%p obj_unknown_lib=%s hr_form=0x%lx obj_form=%p obj_form_vtable=%p obj_form_lib=%s\n",
+            factory, vptr, (void *)create, (unsigned long)hr_unknown, obj_unknown,
+            obj_unknown ? *(void **)obj_unknown : 0,
+            obj_unknown ? obj_name_for(*(void **)obj_unknown) : "<null>",
+            (unsigned long)hr_form, obj_form,
+            obj_form ? *(void **)obj_form : 0,
+            obj_form ? obj_name_for(*(void **)obj_form) : "<null>");
+    dump_vtable("IFormDocument", obj_form ? obj_form : obj_unknown, 16);
+}
+
 static uintptr_t fake_registrar_method(const char *slot, void *self, uintptr_t a,
                                        uintptr_t b, uintptr_t c, uintptr_t d,
                                        uintptr_t e) {
@@ -71,6 +152,7 @@ static uintptr_t fake_registrar_method(const char *slot, void *self, uintptr_t a
 
 static uintptr_t fake_registrar_060(void *self, uintptr_t a, uintptr_t b,
                                     uintptr_t c, uintptr_t d, uintptr_t e) {
+    try_create_formdocument(a, b);
     return fake_registrar_method("060", self, a, b, c, d, e);
 }
 
@@ -145,11 +227,16 @@ static uintptr_t fake_process_lookup_method(void *self, uintptr_t a, uintptr_t b
 
 static uintptr_t fake_service_method(void *self, uintptr_t a, uintptr_t b,
                                      uintptr_t c, uintptr_t d, uintptr_t e) {
+    int writes_object = a >= 0x700000000000ULL && b == 0;
+    if (writes_object) {
+        *(uintptr_t *)a = (uintptr_t)fake_service;
+    }
     fprintf(stderr,
-            "OOF_SCOM_HOST_FAKE_SERVICE_METHOD self=%p a=0x%lx b=0x%lx c=0x%lx d=0x%lx e=0x%lx\n",
+            "OOF_SCOM_HOST_FAKE_SERVICE_METHOD self=%p a=0x%lx b=0x%lx c=0x%lx d=0x%lx e=0x%lx out_service=%s\n",
             self, (unsigned long)a, (unsigned long)b, (unsigned long)c,
-            (unsigned long)d, (unsigned long)e);
-    return 0;
+            (unsigned long)d, (unsigned long)e,
+            writes_object ? "true" : "false");
+    return writes_object ? (uintptr_t)fake_service : 0;
 }
 
 static uintptr_t fake_service_acquire_method(void *self, uintptr_t a, uintptr_t b,
@@ -250,12 +337,36 @@ static void load_module(const char *platform_dir, Module *module) {
     }
 }
 
-static void crash_handler(int sig) {
+static void crash_handler(int sig, siginfo_t *info, void *context) {
     void *frames[64];
     int n = backtrace(frames, 64);
-    fprintf(stderr, "OOF_SCOM_HOST_CRASH signal=%d frames=%d\n", sig, n);
+    fprintf(stderr, "OOF_SCOM_HOST_CRASH signal=%d addr=%p frames=%d\n", sig,
+            info ? info->si_addr : 0, n);
+#if defined(__x86_64__) && defined(REG_RIP)
+    ucontext_t *uc = (ucontext_t *)context;
+    uintptr_t rip = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
+    uintptr_t rdi = (uintptr_t)uc->uc_mcontext.gregs[REG_RDI];
+    uintptr_t rsi = (uintptr_t)uc->uc_mcontext.gregs[REG_RSI];
+    uintptr_t rax = (uintptr_t)uc->uc_mcontext.gregs[REG_RAX];
+    uintptr_t rsp = (uintptr_t)uc->uc_mcontext.gregs[REG_RSP];
+    fprintf(stderr,
+            "OOF_SCOM_HOST_CRASH_REGS rip=0x%lx rdi=0x%lx rsi=0x%lx rax=0x%lx rsp=0x%lx active_module=%s\n",
+            (unsigned long)rip, (unsigned long)rdi, (unsigned long)rsi,
+            (unsigned long)rax, (unsigned long)rsp, active_module_name);
+#endif
     backtrace_symbols_fd(frames, n, STDERR_FILENO);
     _exit(128 + sig);
+}
+
+static void install_crash_handlers(void) {
+    struct sigaction action;
+    memset(&action, 0, sizeof(action));
+    action.sa_sigaction = crash_handler;
+    action.sa_flags = SA_SIGINFO;
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGSEGV, &action, 0);
+    sigaction(SIGBUS, &action, 0);
+    sigaction(SIGABRT, &action, 0);
 }
 
 static int module_enabled(const Module *module) {
@@ -273,9 +384,7 @@ static int run_scom_child(Module *module, uintptr_t mode, uintptr_t process, uin
         return 125;
     }
     if (pid == 0) {
-        signal(SIGSEGV, crash_handler);
-        signal(SIGBUS, crash_handler);
-        signal(SIGABRT, crash_handler);
+        install_crash_handlers();
         active_module_name = module->name;
         void *module_object = find_scom_module_object((void *)module->scom_main);
         active_process_identity = "";

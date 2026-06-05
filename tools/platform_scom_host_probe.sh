@@ -47,6 +47,7 @@ docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "set -eu
   OOF_SCOM_HOST_LOAD_EXTRA='${OOF_SCOM_HOST_LOAD_EXTRA:-0}' \
   OOF_SCOM_HOST_ONLY='${OOF_SCOM_HOST_ONLY:-}' \
   OOF_SCOM_HOST_FAKE_PROCESS_NAME='${OOF_SCOM_HOST_FAKE_PROCESS_NAME:-}' \
+  OOF_SCOM_HOST_CREATE_FORMDOCUMENT='${OOF_SCOM_HOST_CREATE_FORMDOCUMENT:-0}' \
   LD_LIBRARY_PATH=\"\$platform\" timeout 60 '$base/oof_scom_host' \"\$platform\" '$mode' \
     >'$base/out/stdout.log' 2>'$base/out/stderr.log'
   code=\$?
