@@ -9343,27 +9343,7 @@ struct XsdOrderObjectGateStats {
 std::optional<oof::platform::object_schema::PlatformObjectSchema> xsd_order_schema_for_object(
     const oof::platform::object_model::PlatformObject& object
 ) {
-    if (object.platform_type == "Form") {
-        return oof::platform::object_schema::build_schema_for_root_form();
-    }
-    if (object.platform_type == "FormAttribute") {
-        return oof::platform::object_schema::build_schema_for_form_attribute();
-    }
-    if (object.platform_type == "FormCommand") {
-        return oof::platform::object_schema::build_schema_for_form_command();
-    }
-    if (object.platform_type == "FormEvent") {
-        return oof::platform::object_schema::build_schema_for_form_event();
-    }
-    if (const auto* binding = oof::ordinary::control_type::binding_for_writer_control_type(object.platform_type)) {
-        if (const auto* control = oof::platform::form_schema::control_by_type_name(binding->platform_type)) {
-            return oof::platform::object_schema::build_schema_for_control(*control);
-        }
-    }
-    if (const auto* control = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
-        return oof::platform::object_schema::build_schema_for_control(*control);
-    }
-    return std::nullopt;
+    return oof::platform::object_schema::schema_for_platform_type(object.platform_type);
 }
 
 void xsd_order_gate_check_object(
@@ -10252,6 +10232,8 @@ void print_platform_object_schema() {
         const auto& schema = schemas[index];
         std::cout << "{\"typeName\":";
         print_json_string(schema.type_name);
+        std::cout << ",\"xsdNamespace\":";
+        print_json_string(schema.xsd_namespace);
         std::cout << ",\"streamElement\":";
         print_json_string(schema.stream_element);
         std::cout << ",\"schemaSource\":";

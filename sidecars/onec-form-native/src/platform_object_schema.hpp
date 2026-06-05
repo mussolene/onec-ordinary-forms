@@ -1,9 +1,11 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "ordinary_control_type_registry.hpp"
 #include "platform_form_schema.hpp"
 #include "platform_runtime_binding.hpp"
 
@@ -26,6 +28,7 @@ struct PlatformObjectSchemaMember {
 
 struct PlatformObjectSchema {
     std::string type_name;
+    std::string xsd_namespace;
     std::string stream_element;
     std::string schema_source;
     std::string root_complex_type;
@@ -46,6 +49,20 @@ struct PlatformObjectSchema {
     std::vector<std::string> api_methods;
     std::vector<std::string> api_events;
 };
+
+inline constexpr std::string_view logform_layouter_namespace =
+    "http://v8.1c.ru/8.2/managed-application/logform/layouter";
+inline constexpr std::string_view logform_namespace =
+    "http://v8.1c.ru/8.2/managed-application/logform";
+
+inline std::string xsd_namespace_from_schema_source(std::string_view schema_source) {
+    const std::string_view marker = "http://";
+    const std::size_t pos = schema_source.rfind(marker);
+    if (pos == std::string_view::npos) {
+        return {};
+    }
+    return std::string(schema_source.substr(pos));
+}
 
 inline std::vector<std::string> split_csv(std::string_view text) {
     std::vector<std::string> result;
@@ -428,6 +445,7 @@ inline const runtime_binding::PlatformApiObject* api_object_by_name(std::string_
 inline PlatformObjectSchema build_schema_for_control(const form_schema::PlatformFormSchemaControl& control) {
     PlatformObjectSchema schema;
     schema.type_name = std::string(control.type_name);
+    schema.xsd_namespace = xsd_namespace_from_schema_source(control.schema_source);
     schema.stream_element = std::string(control.stream_element);
     schema.schema_source = std::string(control.schema_source);
     schema.root_complex_type = std::string(control.root_complex_type);
@@ -507,6 +525,7 @@ inline PlatformObjectSchema build_schema_for_control(const form_schema::Platform
 inline PlatformObjectSchema build_schema_for_root_form() {
     PlatformObjectSchema schema;
     schema.type_name = "Form";
+    schema.xsd_namespace = std::string(logform_layouter_namespace);
     schema.stream_element = "Form";
     schema.schema_source =
         "platform-resource:mngcore_root-170-http_v8.1c.ru_8.2_managed-application_logform_layouter.xsd:"
@@ -546,6 +565,7 @@ inline PlatformObjectSchema build_schema_for_root_form() {
 inline PlatformObjectSchema build_schema_for_form_attribute() {
     PlatformObjectSchema schema;
     schema.type_name = "FormAttribute";
+    schema.xsd_namespace = std::string(logform_namespace);
     schema.stream_element = "Property";
     schema.schema_source =
         "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:"
@@ -591,6 +611,7 @@ inline PlatformObjectSchema build_schema_for_form_attribute() {
 inline PlatformObjectSchema build_schema_for_form_command() {
     PlatformObjectSchema schema;
     schema.type_name = "FormCommand";
+    schema.xsd_namespace = std::string(logform_namespace);
     schema.stream_element = "Command";
     schema.schema_source =
         "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:"
@@ -636,6 +657,7 @@ inline PlatformObjectSchema build_schema_for_form_command() {
 inline PlatformObjectSchema build_schema_for_form_event() {
     PlatformObjectSchema schema;
     schema.type_name = "FormEvent";
+    schema.xsd_namespace = std::string(logform_namespace);
     schema.stream_element = "Event";
     schema.schema_source =
         "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:"
@@ -687,6 +709,41 @@ inline std::vector<PlatformObjectSchema> build_platform_object_schemas() {
         schemas.push_back(build_schema_for_control(*control));
     }
     return schemas;
+}
+
+inline std::optional<PlatformObjectSchema> schema_for_xsd_type(
+    std::string_view xsd_type,
+    std::string_view xsd_namespace = {}
+) {
+    for (const auto& schema : build_platform_object_schemas()) {
+        if (!xsd_namespace.empty() && schema.xsd_namespace != xsd_namespace) {
+            continue;
+        }
+        if (schema.type_name == xsd_type ||
+            schema.root_complex_type == xsd_type ||
+            schema.variant_complex_type == xsd_type ||
+            schema.stream_element == xsd_type) {
+            return schema;
+        }
+    }
+    return std::nullopt;
+}
+
+inline std::optional<PlatformObjectSchema> schema_for_platform_type(std::string_view platform_type) {
+    if (auto schema = schema_for_xsd_type(platform_type)) {
+        return schema;
+    }
+    if (const auto* binding = oof::ordinary::control_type::binding_for_writer_control_type(platform_type)) {
+        if (auto schema = schema_for_xsd_type(binding->platform_type)) {
+            return schema;
+        }
+    }
+    if (const auto* binding = oof::ordinary::control_type::binding_for_public_xml_tag(platform_type)) {
+        if (auto schema = schema_for_xsd_type(binding->platform_type)) {
+            return schema;
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace oof::platform::object_schema
