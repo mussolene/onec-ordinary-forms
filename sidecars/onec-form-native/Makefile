@@ -15,9 +15,6 @@ $(BIN): $(SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $< $(LDLIBS)
 
 test: $(BIN)
-	printf '{1,,{2,"x"}}' | $(BIN) compact | grep -q '{1,,{2,"x"}}'
-	printf '{1,,{2,"x"}}' | $(BIN) listout | grep -q '{2,"x"}'
-	printf '{1,,{2,"x"}}' | $(BIN) stats | grep -q '"lists":2'
 	$(BIN) mechanism | grep -q '"cf_form_controls_info8":40192'
 	$(BIN) mechanism | grep -q '"FormDataObject"'
 	$(BIN) mechanism | grep -q '"TypeDomainPattern"'
@@ -128,6 +125,11 @@ test: $(BIN)
 	$(BIN) platform-control-info-descriptors | grep -F -q '"name":"AutoMarkIncomplete","index":22'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoDescriptorCount":27'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoWritablePromotions":0'
+	$(BIN) object-graph-concept-selftest | grep -F -q '"status":"PASS"'
+	$(BIN) object-graph-concept-selftest | grep -F -q '"concept":"bracket -> PlatformFormObject -> bracket"'
+	$(BIN) object-graph-concept-selftest | grep -F -q '"xmlUsed":false'
+	$(BIN) object-graph-concept-selftest | grep -F -q '"sourcePackageUsed":false'
+	$(BIN) object-graph-concept-selftest | grep -F -q '"platformValidationUsed":false'
 	$(BIN) value-roundtrip | grep -F -q '"serialized":"{1,{1,2,{\"ru\",\"Title\"},{\"en\",\"Caption\"}},1}"'
 	$(BIN) value-roundtrip | grep -q '"itemCount":2'
 	$(BIN) value-roundtrip | grep -F -q '"compositeID":"{42,09ccdc77-ea1a-4a6d-ab1c-3435eada2433}"'
@@ -137,26 +139,6 @@ test: $(BIN)
 	$(BIN) value-roundtrip | grep -F -q '"fontFace":"Arial"'
 	$(BIN) value-roundtrip | grep -F -q '"borderStyle":"Single"'
 	$(BIN) value-roundtrip | grep -F -q '"pictureRef":"ui:Picture"'
-	$(BIN) controls-codec | grep -q '"diagnosticControlsFixtureSize":40'
-	$(BIN) controls-codec | grep -q '"positionSize":32'
-	$(BIN) controls-codec | grep -q '"infoSize":16'
-	$(BIN) controls-codec | grep -q '"transferSetSize":212'
-	$(BIN) controls-codec | grep -q '"enumeratorHex":"030000000055000020000000010000000000000000000000000000000000000000000000000000000000000000250000000000002800000000000000000000000000000000000000000000000000000000000000009d0000100000000100000000000000000000000000000000000000000000000000000000000000"'
-	$(BIN) info8-codec | grep -F -q '"layoutStatus":"record-layout-decoded"'
-	$(BIN) info8-codec | grep -F -q '"semanticsStatus":"object-semantics-pending"'
-	$(BIN) info8-codec | grep -F -q '"words":[40192,5,14,20]'
-	$(BIN) info8-codec | grep -F -q '"objectBindingStatus":"pending binary/runtime correlation between record words and PlatformObjectSchemaMember platformMember values"'
-	$(BIN) graph-codec | grep -q '"controlCount":1'
-	$(BIN) graph-codec | grep -q '"objectId":5'
-	$(BIN) graph-codec | grep -F -q '"title":"{1,{1,1,{\"ru\",\"Button title\"}},0}"'
-	$(BIN) graph-codec | grep -q '"transferSetSize":212'
-	$(BIN) transfer-roundtrip | grep -q '"bytes":212'
-	$(BIN) transfer-roundtrip | grep -q '"controlsBytes":40'
-	$(BIN) transfer-roundtrip | grep -q '"diagnosticControlObjectId":7'
-	$(BIN) transfer-roundtrip | grep -q '"infoObjectId":7'
-	$(BIN) transfer-sections | grep -F -q '"facet":"controls"'
-	$(BIN) transfer-sections | grep -F -q '"recordSize":0'
-	$(BIN) transfer-sections | grep -F -q '"countOrBytes":40'
 	$(BIN) formbin-selftest | grep -q '"byteEqual":true'
 	$(BIN) formbin-selftest | grep -q '"firstName":"form"'
 	$(BIN) formbin-source-package-selftest | grep -F -q '"containerTicksSource":"file-mtime"'
@@ -202,15 +184,6 @@ test: $(BIN)
 	$(BIN) empty-form-object-roundtrip "ПустаяФорма" | grep -F -q '"payloadStableAfterSecondWrite":true'
 	$(BIN) raw-deflate-selftest | grep -q '"byteEqual":true'
 	$(BIN) raw-deflate-selftest | grep -q '"reinflateEqual":true'
-	$(BIN) form-payload-structure-selftest | grep -q '"guidHeadNodes":2'
-	$(BIN) form-payload-structure-selftest | grep -q '"candidateObjectNodes":1'
-	$(BIN) form-payload-structure-selftest | grep -q '"knownDescriptorCandidateNodes":1'
-	$(BIN) form-payload-structure-selftest | grep -F -q '"descriptorStatusFrequency":[{"status":"platform-resource-backed","count":2}]'
-	$(BIN) form-payload-structure-selftest | grep -F -q '"descriptorBinding":{"status":"platform-resource-backed"'
-	$(BIN) form-payload-structure-selftest | grep -F -q '"knownDescriptorPoolMember":true'
-	$(BIN) form-payload-structure-selftest | grep -F -q '"symbol":"cf_form_controls8"'
-	$(BIN) form-payload-structure-selftest | grep -F -q '"symbol":"cf_form_controls_position8"'
-	$(BIN) form-payload-structure-selftest | grep -F -q '"symbol":"cf_form_controls_info8"'
 	$(BIN) form-object-graph-selftest | grep -F -q '"materializedItems":2'
 	$(BIN) form-object-graph-selftest | grep -F -q '"namedItems":2'
 	$(BIN) form-object-graph-selftest | grep -F -q '"schemaBackedItems":2'
@@ -223,7 +196,11 @@ test: $(BIN)
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"materializedItems":2'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<ChildItems>' $(BUILD_DIR)/runtime-form.xml
-	grep -F -q '<Button name="Button1" id="5"/>' $(BUILD_DIR)/runtime-form.xml
+	grep -F -q '<Button name="Button1" id="5">' $(BUILD_DIR)/runtime-form.xml
+	grep -F -q '<CheckBox name="Check1" id="6">' $(BUILD_DIR)/runtime-form.xml
+	grep -F -q '<Visible>true</Visible>' $(BUILD_DIR)/runtime-form.xml
+	grep -F -q '<Enabled>true</Enabled>' $(BUILD_DIR)/runtime-form.xml
+	grep -F -q '<Position left="0" top="0" right="0" bottom="0">' $(BUILD_DIR)/runtime-form.xml
 	! grep -F -q '<Picture>' $(BUILD_DIR)/runtime-form.xml
 	! grep -F -q '<Font>' $(BUILD_DIR)/runtime-form.xml
 	! grep -F -q '<ListStream' $(BUILD_DIR)/runtime-form.xml
@@ -256,7 +233,7 @@ test: $(BIN)
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{"ru","Run"}}},{8,1,2,101,22,0,0,0,0,0,0,{8,1,1,{"ru","Русский"},{128,72}},0,0,0,0,0},{14,"ButtonWithInnerPayload",4294967295,0,0,0},{0}}}}}' > $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt $(BUILD_DIR)/runtime-form-inner-payload.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Binding coordinate="left" value="0"/>' $(BUILD_DIR)/runtime-form-inner-payload.xml
-	! grep -F -q 'horizontalCenter' $(BUILD_DIR)/runtime-form-inner-payload.xml
+	grep -F -q '<Binding coordinate="horizontalCenter" value="0"/>' $(BUILD_DIR)/runtime-form-inner-payload.xml
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-inner-payload-selftest.txt | grep -F -q '"payloadRoundtripEqual":true'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:PlatformObject"'
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"contextContract":{"platformEvidence":"core85 exports IContextDef/GroupContext/IContextExtImplBase getNProps,getPropName,findProp,isPropReadable,isPropWritable,getPropVal,setPropVal,call; mngcore logform.xsd declares Form/elements/command/property'
@@ -366,6 +343,7 @@ test: $(BIN)
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"payloadRoundtripEqual":true'
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"path":"bracket -> PlatformFormObject -> bracket -> PlatformFormObject -> bracket"'
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"xmlUsed":false'
+	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"objectSignatureEqualAfterFirstWrite":true'
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"objectSignatureStableAfterSecondWrite":true'
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"payloadStableAfterSecondWrite":true'
 	$(BIN) runtime-form-object-roundtrip-diff $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"firstWriteDiff"'
@@ -385,20 +363,6 @@ test: $(BIN)
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-renamed.txt | grep -F -q '"name":"ButtonRenamed"'
 	$(BIN) runtime-form-roundtrip $(BUILD_DIR)/runtime-form-renamed.txt | grep -F -q '"payloadRoundtripEqual":true'
 	$(BIN) runtime-form-semantic-diff $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form-renamed.txt | grep -F -q '"semanticDiffs":1'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"objectGraphReady":true'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"transferFormatAtomsEmbedded":true'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"directFacetLinkageRequiredForFormBinRebuild":true'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"controls8SectionDecoded":false'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"symbol":"cf_form_controls8"'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"recordSize":0'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"countSemantics":"payload byte size"'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"symbol":"cf_form_controls_position8"'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"recordSize":32'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"symbol":"cf_form_controls_info8"'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"recordSize":16'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"info8RecordLayoutDecoded":true'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"info8ObjectSemanticsDecoded":false'
-	$(BIN) form-transfer-linkage-selftest | grep -F -q '"facetLinkage":"pending-transfer-section-decode"'
 	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"knownDescriptorHitsTotal":12'; fi
 	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"nearestName":"GroupsCommandBar"'; fi
 	if [ -f ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd ]; then $(BIN) platform-xsd-inventory ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd | grep -F -q '"targetNamespace":"http://v8.1c.ru/8.1/data/ui"'; fi
