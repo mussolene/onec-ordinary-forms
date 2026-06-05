@@ -4,6 +4,11 @@ This file is the project stop sign for ordinary-form work. If an approach
 conflicts with this contract, it is a diagnostic or research path, not the
 product architecture.
 
+See also [`repository-target-state.md`](repository-target-state.md). That file
+records the current migration target: one release path through
+`OrdinaryFormObject`, with no compatibility aliases or release-facing fallback
+builders.
+
 ## Product Object
 
 The product object is `OrdinaryForm`: a platform-like mutable object graph.
@@ -60,7 +65,7 @@ patcher.
 
 Do not make any of these part of the product path:
 
-- `base-Form.bin` as required build input;
+- an existing source `Form.bin` as required build input;
 - baseline diff as source-build logic;
 - patch workers;
 - raw/list-stream preservation fields;
@@ -69,8 +74,10 @@ Do not make any of these part of the product path:
 - synthetic canvas/state surfaces;
 - compatibility profiles whose purpose is to keep an old `Form.bin` shape.
 
-Diagnostic commands may inspect or mutate a baseline `Form.bin`, but their
-output is not release evidence for the source package writer.
+Commands may read an existing `Form.bin` to prove the object path
+`ListInStream -> OrdinaryFormObject -> ListOutStream`, or write a new
+`Form.bin` from that object after `SetPropVal`. They must not use an existing
+`Form.bin` as hidden source state for `Form.xml` rebuild.
 
 ## Required Direction
 

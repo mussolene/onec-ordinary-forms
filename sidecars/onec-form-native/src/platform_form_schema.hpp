@@ -29,8 +29,19 @@ struct PlatformFormSchemaControl {
 constexpr std::string_view logform_layouter_schema =
     "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:http://v8.1c.ru/8.2/managed-application/logform";
 
+constexpr std::string_view logform_spreadsheet_schema =
+    "platform-resource:moxel_root-69-http_v8.1c.ru_8.2_data_spreadsheet.xsd:"
+    "http://v8.1c.ru/8.2/data/spreadsheet + "
+    "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:"
+    "http://v8.1c.ru/8.2/managed-application/logform";
+
 constexpr std::string_view data_chart_schema =
     "platform-resource:chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd:http://v8.1c.ru/8.2/data/chart";
+
+constexpr std::string_view activex_control_schema =
+    "platform-resource:cf_form_controls_info8 + OrdinaryFormPalette.xsd + "
+    "mngcore_root-171-http_v8.1c.ru_8.2_managed-application_core.xsd:"
+    "http://v8.1c.ru/8.2/managed-application/logform/activex";
 
 constexpr std::array<PlatformFormSchemaControl, 27> logform_layouter_controls{{
     {
@@ -302,7 +313,7 @@ constexpr std::array<PlatformFormSchemaControl, 27> logform_layouter_controls{{
     {
         "Spreadsheet",
         "sprdsht",
-        logform_layouter_schema,
+        logform_spreadsheet_schema,
         "Field",
         "prop,propName,tdp,ftProp,ftPropName,ftTdp,headerPic,footerPic,titleTxtClr,titleFnt,titleBkClr,ftrTxtClr,ftrBkClr,ftrFnt,stcut,event,commands,predefined,title,tooltip,brdClr,event",
         "id,name,org,users,kind,visible,userVisible,titleLocation,titleRowsCount,enabled,cellHyper,readOnly,skipOnInput,defItem,warningOnEditRepresentation,warningOnEdit,footerText,showInHeader,showInFooter,hAlign,headerHAlign,footerHAlign,vAlign,groupHAlign,groupVAlign,displayImportance,columnEditMode,autoCellHeight,fixedInTable,tooltipRepres,clearEvents,MSIB,markRequiredComplete,cellMark,autoEditMode,checkBoxKind,multilineSelect,appearanceInCard,showTitleInCard,widthInCard,showInCard,fixInCard,autoWidthInTable,cellHyperlinkRepresentation,cellHyperlinkDisplayVariant,width,height,horStretch,verStretch,autoMaxWidth,maxWidth,minWidth,autoMaxHeight,maxHeight,showGrid,showHdrs,showVerScroll,showHorScroll,blackAndWhite,protection,selectionMode,useOutput,edit,showGroups,startDrag,drag,clearEvents,selShow,viewScalingMode,showCellNames,showRowAndColumnNames,pointerType,drawingSelectionMode,cellActionsButtonShowMode,moxelActionBarShowMode",
@@ -316,7 +327,7 @@ constexpr std::array<PlatformFormSchemaControl, 27> logform_layouter_controls{{
         "width:xs:decimal,height:xs:decimal,horStretch:xs:boolean,verStretch:xs:boolean,autoMaxWidth:xs:boolean,maxWidth:xs:decimal,minWidth:xs:decimal,autoMaxHeight:xs:boolean,maxHeight:xs:decimal,showGrid:xs:boolean,showHdrs:xs:boolean,showVerScroll:tns:SpreadSheetDocumentScrollBarUse,showHorScroll:tns:SpreadSheetDocumentScrollBarUse,blackAndWhite:xs:boolean,protection:xs:boolean,selectionMode:tns:SelectionShowMode,useOutput:ui:UseOutput,edit:xs:boolean,showGroups:xs:boolean,startDrag:xs:boolean,drag:xs:boolean,clearEvents:xs:boolean,selShow:tns:SelectionShowMode,viewScalingMode:tns:ViewScalingMode,showCellNames:xs:boolean,showRowAndColumnNames:xs:boolean,pointerType:spreadsheet:SpreadsheetDocumentPointerType,drawingSelectionMode:tns:DrawingSelectionShowMode,cellActionsButtonShowMode:tns:CellActionsButtonViewMode,moxelActionBarShowMode:tns:SpreadsheetDocumentMultipleSelectionPanelViewMode",
         "prop->m_property,propName->m_propertyName,tdp->m_tdp,ftProp->m_footerProperty,ftPropName->m_footerPropertyName,ftTdp->m_footerTdp,headerPic->m_headerPicture,footerPic->m_footerPicture,titleTxtClr->m_titleTextColor,titleFnt->m_titleFont,titleBkClr->m_headerBackColor,ftrTxtClr->m_footerTextColor,ftrBkClr->m_footerBackColor,ftrFnt->m_footerFont,stcut->m_shortCut,event->m_elementEvents,commands->m_commands,title->m_title,tooltip->m_tooltip,brdClr->m_borderColor,event->m_elementEvents,id->m_id,name->m_name,org->m_origin,users->m_createdByUser,kind->m_kind,visible->m_visible,userVisible->m_pUserVisible,titleLocation->m_titleLocation,titleRowsCount->m_titleRowsCount,enabled->m_enabled,cellHyper->m_cellHyperlink,readOnly->m_readOnly,skipOnInput->m_skipOnInput,defItem->m_defaultElement,warningOnEditRepresentation->m_warningOnEditRepresentation,warningOnEdit->m_warningOnEdit,footerText->m_footerText,showInHeader->m_showInHeader,showInFooter->m_showInFooter,hAlign->m_hAlign,headerHAlign->m_headerHAlign,footerHAlign->m_footerHAlign,vAlign->m_vAlign,groupHAlign->m_groupHAlign,groupVAlign->m_groupVAlign,displayImportance->m_importance,columnEditMode->m_columnEditMode,autoCellHeight->m_autoCellHeight,fixedInTable->m_fixedInTable,tooltipRepres->m_tooltipRepresentation,MSIB->m_mainServerInaccessibilityBehavior,markRequiredComplete->m_markRequiredComplete,cellMark->m_cellMark,autoEditMode->m_columnEditMode,checkBoxKind->m_checkBoxType,multilineSelect->m_multilineSelect,appearanceInCard->m_appearanceInCard,showTitleInCard->m_showTitleInCard,widthInCard->m_widthInCard,showInCard->m_showInCard,fixInCard->m_fixInCard,autoWidthInTable->m_autoWidthInTable,cellHyperlinkRepresentation->m_cellHyperlinkRepresentation,cellHyperlinkDisplayVariant->m_cellHyperlinkDisplayVariant,width->m_width,height->m_height,horStretch->m_horStretchable,verStretch->m_verStretchable,autoMaxWidth->m_autoMaxWidth,maxWidth->m_maxWidth,minWidth->m_minWidth,autoMaxHeight->m_autoMaxHeight,maxHeight->m_maxHeight,showGrid->m_showGrid,showHdrs->m_showHeaders,showVerScroll->m_showVerticalScrollBar,showHorScroll->m_showHorizontalScrollBar,blackAndWhite->m_blackAndWhiteView,protection->m_protection,selectionMode->m_selectionShowMode,useOutput->m_useOutput,edit->m_edit,showGroups->m_showGroups,startDrag->m_enableStartDrag,drag->m_enableDrag,selShow->m_selectionShowMode,viewScalingMode->m_viewScalingMode,showCellNames->m_showCellNames,showRowAndColumnNames->m_showRowAndColumnNames,pointerType->m_cursorTypes,drawingSelectionMode->m_drawingSelectionShowMode,cellActionsButtonShowMode->m_cellActionsButtonShowMode,moxelActionBarShowMode->m_moxelActionBarShowMode",
         "prop=empty();propName=empty();tdp=types().empty();ftProp=empty();ftPropName=empty();ftTdp=types().empty();headerPic=V8Picture();footerPic=V8Picture();titleTxtClr=kLogFormFieldDefTitleTextColor;titleFnt=kLogFormFieldDefTitleFont;titleBkClr=kLogFormFieldDefHeaderBackColor;ftrTxtClr=kLogFormFieldDefFooterTextColor;ftrBkClr=kLogFormFieldDefFooterBackColor;ftrFnt=kLogFormFieldDefFooterFont;stcut=ShortCut();title=пустой брать только строку из языка #;tooltip=пустой брать только строку из языка #;brdClr=kLogFormInputFieldDataDefBorderColor;org=eSource;users=false;visible=true;userVisible=true;titleLocation=Auto;titleRowsCount=0;enabled=true;cellHyper=true;readOnly=false;skipOnInput=auto;defItem=false;warningOnEditRepresentation=Auto;warningOnEdit=пустой;footerText=пустой брать только строку из языка #;showInHeader=true;showInFooter=true;hAlign=Auto;headerHAlign=Left;footerHAlign=Auto;vAlign=Auto;groupHAlign=Auto;groupVAlign=Auto;displayImportance=Auto;columnEditMode=Enter;autoCellHeight=false;fixedInTable=kLogFormFieldDefFixedInTable;tooltipRepres=Auto;clearEvents=- true;MSIB=Auto;markRequiredComplete=auto;cellMark=Auto;checkBoxKind=Auto;multilineSelect=false;appearanceInCard=Auto;showTitleInCard=auto;widthInCard=Auto;showInCard=истина;fixInCard=Auto;autoWidthInTable=Auto;cellHyperlinkRepresentation=Auto;cellHyperlinkDisplayVariant=Auto;width=50;height=10;horStretch=true;verStretch=true;autoMaxWidth=true;maxWidth=0;minWidth=0;autoMaxHeight=true;maxHeight=0;showGrid=false;showHdrs=false;showVerScroll=true;showHorScroll=true;blackAndWhite=false;protection=false;selectionMode=Always;useOutput=Auto;edit=false;showGroups=true;startDrag=false;drag=false;clearEvents=- true;selShow=eSSMAlways;viewScalingMode=Auto;showCellNames=false;showRowAndColumnNames=false;pointerType=Special;drawingSelectionMode=Auto;cellActionsButtonShowMode=Auto;moxelActionBarShowMode=Auto",
-        "Field/spereadsheetData ordinary spreadsheet field; generated from mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd; root=Field variant=spereadsheetData:SpreadsheetFieldData",
+        "Field/spereadsheetData ordinary spreadsheet field; generated from mngcore logform XSD with moxel spreadsheetDocument.xsd import; root=Field variant=spereadsheetData:SpreadsheetFieldData",
     },
     {
         "TextDocument",
@@ -548,7 +559,7 @@ constexpr std::array<PlatformFormSchemaControl, 27> logform_layouter_controls{{
     },
 }};
 
-constexpr std::array<PlatformFormSchemaControl, 1> external_object_controls{{
+constexpr std::array<PlatformFormSchemaControl, 2> external_object_controls{{
     {
         "PivotChart",
         "",
@@ -567,6 +578,25 @@ constexpr std::array<PlatformFormSchemaControl, 1> external_object_controls{{
         "",
         "horizontalScaleKeeping=AllValues;pivotChartType=Auto;pointsValuesShowMode=AllValues;seriesValuesShowMode=AllValues;horizontalScaleLabelsOrientation=Auto;horizontalScaleTopLevelCount=0;fieldAreasTransparent=false;showFields=true",
         "PivotChart ordinary object surface from chart_root data/chart complexType PivotChart; GUID a26da99e-184a-4823-b0d6-62816d38dc4e is platform-ui-guid-table-backed; logform_layouter has no dedicated stream element",
+    },
+    {
+        "ActiveXControl",
+        "ActiveXControl",
+        activex_control_schema,
+        "ExternalControl",
+        "Clsid,State1,State2",
+        "id,name,visible,enabled",
+        "core:UUID,ActiveXStateBlob,ActiveXStateBlob",
+        "ActiveXControl",
+        "",
+        "",
+        "Clsid:core:UUID,State1:ActiveXStateBlob,State2:ActiveXStateBlob",
+        "",
+        "id:xs:decimal,name:xs:string,visible:xs:boolean,enabled:xs:boolean",
+        "",
+        "Clsid->m_clsid,State1->m_state1,State2->m_state2,id->m_id,name->m_name,visible->m_visible,enabled->m_enabled",
+        "visible=true;enabled=true",
+        "ActiveXControl ordinary object surface from cf_form_controls_info8 slots; CLSID type is backed by managed-application_core.xsd UUID and public palette declares CLSID/State for ЭлементУправленияActiveX; GUID 621e95f1-064f-11d4-9400-008048da11f9 has no logform_layouter complexType",
     },
 }};
 

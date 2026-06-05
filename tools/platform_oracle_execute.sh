@@ -171,7 +171,7 @@ cat > "$out_abs/package/Form/Module.bsl" <<'BSL'
 BSL
 
 rebuilt_form_bin="$out_abs/package/rebuilt-Form.bin"
-"$native_bin" formbin-build-package "$form_bin" "$package_xml" "$rebuilt_form_bin" >"$out_abs/logs/build-package.json"
+"$native_bin" formbin-build-source-package "$package_xml" "$rebuilt_form_bin" >"$out_abs/logs/build-package.json"
 mv "$rebuilt_form_bin" "$form_bin"
 
 trace_env_cmd=""

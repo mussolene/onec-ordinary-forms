@@ -44,18 +44,16 @@ void usage() {
               << "       oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|formbin-object-roundtrip-diff|formbin-xsd-order-object-roundtrip|form-object-graph> Form.bin\n"
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
               << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
-              << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin  # diagnostic base-backed path, not product build\n"
               << "       oof-native formbin-dump-platform-xsd-xml Form.bin PlatformForm.xml\n"
               << "       oof-native formbin-xml-coverage Form.bin\n"
               << "       oof-native <formbin-platform-object|formbin-platform-object-get|formbin-xsd-order-object-gate> Form.bin [objectId property]\n"
-              << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value  # diagnostic base-backed setPropVal check\n"
+              << "       oof-native formbin-platform-object-set input-Form.bin rebuilt-Form.bin objectId property value\n"
               << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
               << "       oof-native runtime-form-dump-platform-xsd-xml runtime-form-stream.txt PlatformForm.xml\n"
               << "       oof-native platform-xsd-xml-object PlatformForm.xml\n"
               << "       oof-native platform-xsd-xml-roundtrip PlatformForm.xml rebuilt-PlatformForm.xml\n"
               << "       oof-native platform-xsd-xml-build-runtime PlatformForm.xml runtime-form-stream.txt\n"
               << "       oof-native platform-xsd-xml-build-formbin PlatformForm.xml Form.bin\n"
-              << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt  # diagnostic base-backed path\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-xsd-order-object-roundtrip|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "       oof-native runtime-form-node runtime-form-stream.txt node-path\n"
@@ -695,18 +693,6 @@ const oof::platform::formbin::OneCContainerFile& find_container_file(
     std::string_view name
 ) {
     for (const auto& file : container.files) {
-        if (file.name == name) {
-            return file;
-        }
-    }
-    throw std::runtime_error("Form.bin does not contain required logical file");
-}
-
-oof::platform::formbin::OneCContainerFile& find_container_file_mut(
-    oof::platform::formbin::OneCContainer& container,
-    std::string_view name
-) {
-    for (auto& file : container.files) {
         if (file.name == name) {
             return file;
         }
@@ -3701,19 +3687,6 @@ oof::platform::object_model::PlatformFormObjectEdit public_xml_edits_to_platform
     const std::vector<PublicXmlControlEdit>& edits
 );
 
-oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_collection_edits(
-    const std::string& xml
-);
-
-oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_platform_object_edits(
-    const std::string& xml
-);
-
-oof::platform::object_model::PlatformFormObjectEdit keep_changed_platform_object_edits(
-    const oof::platform::object_model::PlatformFormObjectEdit& requested,
-    const oof::platform::object_model::PlatformFormObject& baseline
-);
-
 PublicXmlApplyResult apply_platform_object_edits(
     RuntimeFormEnvelope& envelope,
     const oof::platform::object_model::PlatformFormObjectEdit& object_edit
@@ -3731,12 +3704,7 @@ bool set_property_slot_value(
     std::string_view new_value
 );
 
-std::set<std::string> requested_public_control_ids(const std::string& xml);
-
-std::size_t delete_controls_missing_from_public_xml(
-    oof::platform::stream::ListValue& payload,
-    const std::set<std::string>& requested_ids
-);
+void append_indent(std::string& out, int indent);
 
 bool string_view_starts_with(std::string_view value, std::string_view prefix);
 
@@ -4064,138 +4032,10 @@ const std::set<std::string>& public_xml_section_tags() {
     static const std::set<std::string> tags{
         "Form", "Events", "Event", "ChildItems", "Attributes", "Attribute", "Commands", "Command",
         "Title", "Position", "Pages", "Picture", "PictureValue", "Binding", "Bindings", "DimensionBinding",
-        "From", "To", "Extra", "Item"
+        "From", "To", "Extra", "Item", "Type", "TypePattern", "Any", "ObjectType", "TypeValue",
+        "Reference", "List", "String", "Binary", "Date", "Number"
     };
     return tags;
-}
-
-std::set<std::string> requested_public_control_ids(const std::string& xml) {
-    std::set<std::string> ids;
-    const std::regex start_tag_pattern(R"(<([A-Za-z][A-Za-z0-9]*)\b([^>]*)>)");
-    for (std::sregex_iterator it(xml.begin(), xml.end(), start_tag_pattern), end; it != end; ++it) {
-        const std::string tag = (*it)[1].str();
-        if (public_xml_section_tags().count(tag) != 0) {
-            continue;
-        }
-        const std::string id = xml_attr_value((*it)[2].str(), "id");
-        if (!id.empty()) {
-            ids.insert(id);
-        }
-    }
-    return ids;
-}
-
-bool has_nested_materializable_object(const oof::platform::stream::ListValue& value) {
-    if (!value.is_list) {
-        return false;
-    }
-    for (const auto& item : value.items) {
-        if (is_materializable_object_candidate(item) || has_nested_materializable_object(item)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool counted_child_container(const oof::platform::stream::ListValue& value) {
-    if (!value.is_list || value.items.empty() || value.items[0].is_list || !is_int_atom(value.items[0])) {
-        return false;
-    }
-    std::size_t materialized_children = 0;
-    for (std::size_t index = 1; index < value.items.size(); ++index) {
-        if (is_materializable_object_candidate(value.items[index])) {
-            ++materialized_children;
-        }
-    }
-    return materialized_children != 0 &&
-           value.items[0].atom == std::to_string(value.items.size() - 1);
-}
-
-std::size_t delete_controls_missing_from_public_xml(
-    oof::platform::stream::ListValue& payload,
-    const std::set<std::string>& requested_ids
-) {
-    if (!payload.is_list) {
-        return 0;
-    }
-
-    std::size_t deleted = 0;
-    if (counted_child_container(payload)) {
-        for (std::size_t index = 1; index < payload.items.size();) {
-            auto& item = payload.items[index];
-            if (is_materializable_object_candidate(item) &&
-                !item.items[1].is_list &&
-                requested_ids.count(item.items[1].atom) == 0) {
-                if (has_nested_materializable_object(item)) {
-                    throw std::runtime_error("cannot delete non-leaf control from public XML yet: object=" +
-                                             item.items[1].atom);
-                }
-                payload.items.erase(payload.items.begin() + static_cast<std::ptrdiff_t>(index));
-                payload.items[0].atom = std::to_string(payload.items.size() - 1);
-                payload.items[0].atom_kind = oof::platform::stream::ListValue::AtomKind::raw;
-                ++deleted;
-                continue;
-            }
-            ++index;
-        }
-    }
-
-    for (auto& item : payload.items) {
-        deleted += delete_controls_missing_from_public_xml(item, requested_ids);
-    }
-    return deleted;
-}
-
-oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_collection_edits(
-    const std::string& xml
-) {
-    oof::platform::object_model::PlatformFormObjectEdit edits;
-
-    for (const auto& attribute_xml : find_xml_elements(xml, "Attribute")) {
-        const std::string object_id = xml_attr_value(attribute_xml.attrs, "objectId");
-        if (object_id.empty()) {
-            continue;
-        }
-        auto& object = edits.object(object_id, "FormAttribute");
-        const std::string name = xml_attr_value(attribute_xml.attrs, "name");
-        if (!name.empty()) {
-            object.set_property("Name", name);
-        }
-    }
-
-    for (const auto& command_xml : find_xml_elements(xml, "Command")) {
-        const std::string object_id = xml_attr_value(command_xml.attrs, "objectId");
-        if (object_id.empty()) {
-            continue;
-        }
-        auto& object = edits.object(object_id, "FormCommand");
-        const std::string name = xml_attr_value(command_xml.attrs, "name");
-        if (!name.empty()) {
-            object.set_property("Name", name);
-        }
-        const std::string handler = xml_attr_value(command_xml.attrs, "handler");
-        if (!handler.empty()) {
-            object.set_property("Handler", handler);
-        }
-        const std::string modifies_data = xml_attr_value(command_xml.attrs, "modifiesData");
-        if (!modifies_data.empty()) {
-            object.set_property("ModifiesData", modifies_data);
-        }
-    }
-
-    for (const auto& event_xml : find_xml_elements(xml, "Event")) {
-        const std::string object_id = xml_attr_value(event_xml.attrs, "objectId");
-        if (object_id.empty()) {
-            continue;
-        }
-        auto& object = edits.object(object_id, "FormEvent");
-        const std::string handler = xml_attr_value(event_xml.attrs, "handler");
-        if (!handler.empty()) {
-            object.set_property("Handler", handler);
-        }
-    }
-
-    return edits;
 }
 
 std::size_t find_matching_xml_close(
@@ -4302,7 +4142,198 @@ void set_or_add_described_property(
     object.properties.push_back(std::move(property));
 }
 
-std::string source_writer_control_guid(std::string_view platform_type);
+std::string bool_xml_attr(bool value) {
+    return value ? "true" : "false";
+}
+
+bool xml_bool_attr_value(std::string_view attrs, std::string_view name, bool default_value) {
+    const std::string value = xml_attr_value(attrs, name);
+    if (value.empty()) {
+        return default_value;
+    }
+    return value == "1" || value == "true" || value == "True";
+}
+
+std::uint32_t xml_uint_attr_value(std::string_view attrs, std::string_view name, std::uint32_t default_value = 0) {
+    const std::string value = xml_attr_value(attrs, name);
+    if (value.empty()) {
+        return default_value;
+    }
+    return static_cast<std::uint32_t>(std::stoul(value));
+}
+
+oof::platform::value::TypeDomainPattern parse_type_domain_pattern_text(std::string_view text) {
+    oof::platform::stream::ListInStream in(text);
+    return oof::platform::value::TypeDomainPattern::deserialize(in);
+}
+
+const char* public_type_domain_entry_tag(oof::platform::value::TypeDomainTerm term, const std::string& type_guid) {
+    using oof::platform::value::TypeDomainTerm;
+    switch (term) {
+        case TypeDomainTerm::list:
+            return "List";
+        case TypeDomainTerm::binary:
+            return "Binary";
+        case TypeDomainTerm::date:
+            return "Date";
+        case TypeDomainTerm::numeric:
+            return "Number";
+        case TypeDomainTerm::reference:
+            return "Reference";
+        case TypeDomainTerm::string:
+            return "String";
+        case TypeDomainTerm::type:
+            return "TypeValue";
+        case TypeDomainTerm::unknown:
+            return type_guid.empty() ? "Any" : "ObjectType";
+    }
+    return "Any";
+}
+
+void append_type_domain_pattern_xml(std::string& out, std::string_view type_text, int indent) {
+    const auto pattern = parse_type_domain_pattern_text(type_text);
+    append_indent(out, indent);
+    out += "<Type>\n";
+    append_indent(out, indent + 2);
+    out += "<TypePattern>\n";
+    for (const auto& entry : pattern.entries) {
+        append_indent(out, indent + 4);
+        const std::string tag = public_type_domain_entry_tag(entry.term, entry.type_guid);
+        out += "<";
+        out += tag;
+        switch (entry.term) {
+            case oof::platform::value::TypeDomainTerm::numeric:
+                if (entry.numeric.length != 0 || entry.numeric.precision != 0 || entry.numeric.non_negative) {
+                    out += " length=\"";
+                    out += std::to_string(entry.numeric.length);
+                    out += "\" precision=\"";
+                    out += std::to_string(entry.numeric.precision);
+                    out += "\" nonNegative=\"";
+                    out += bool_xml_attr(entry.numeric.non_negative);
+                    out += "\"";
+                }
+                break;
+            case oof::platform::value::TypeDomainTerm::string:
+                if (entry.string.length != 0) {
+                    out += " length=\"";
+                    out += std::to_string(entry.string.length);
+                    out += "\" variable=\"";
+                    out += bool_xml_attr(entry.string.variable);
+                    out += "\"";
+                }
+                break;
+            case oof::platform::value::TypeDomainTerm::binary:
+                if (entry.binary.length != 0) {
+                    out += " length=\"";
+                    out += std::to_string(entry.binary.length);
+                    out += "\" variable=\"";
+                    out += bool_xml_attr(entry.binary.variable);
+                    out += "\"";
+                }
+                break;
+            case oof::platform::value::TypeDomainTerm::date:
+                out += " date=\"";
+                out += bool_xml_attr(entry.date.date);
+                out += "\" time=\"";
+                out += bool_xml_attr(entry.date.time);
+                out += "\"";
+                break;
+            case oof::platform::value::TypeDomainTerm::type:
+            case oof::platform::value::TypeDomainTerm::reference:
+            case oof::platform::value::TypeDomainTerm::list:
+            case oof::platform::value::TypeDomainTerm::unknown:
+                if (!entry.type_guid.empty()) {
+                    out += " guid=\"";
+                    out += xml_escape(entry.type_guid);
+                    out += "\"";
+                }
+                break;
+        }
+        out += "/>\n";
+    }
+    append_indent(out, indent + 2);
+    out += "</TypePattern>\n";
+    append_indent(out, indent);
+    out += "</Type>\n";
+}
+
+std::optional<oof::platform::value::TypeDomainEntry> type_domain_entry_from_public_xml(
+    std::string_view tag,
+    const XmlElementSlice& xml
+) {
+    oof::platform::value::TypeDomainEntry entry;
+    if (tag == "Any") {
+        entry.term = oof::platform::value::TypeDomainTerm::unknown;
+    } else if (tag == "ObjectType") {
+        entry.term = oof::platform::value::TypeDomainTerm::unknown;
+        entry.type_guid = xml_attr_value(xml.attrs, "guid");
+    } else if (tag == "TypeValue") {
+        entry.term = oof::platform::value::TypeDomainTerm::type;
+        entry.type_guid = xml_attr_value(xml.attrs, "guid");
+    } else if (tag == "Reference") {
+        entry.term = oof::platform::value::TypeDomainTerm::reference;
+        entry.type_guid = xml_attr_value(xml.attrs, "guid");
+    } else if (tag == "List") {
+        entry.term = oof::platform::value::TypeDomainTerm::list;
+        entry.type_guid = xml_attr_value(xml.attrs, "guid");
+    } else if (tag == "String") {
+        entry.term = oof::platform::value::TypeDomainTerm::string;
+        entry.string.length = xml_uint_attr_value(xml.attrs, "length");
+        entry.string.variable = xml_bool_attr_value(xml.attrs, "variable", true);
+    } else if (tag == "Binary") {
+        entry.term = oof::platform::value::TypeDomainTerm::binary;
+        entry.binary.length = xml_uint_attr_value(xml.attrs, "length");
+        entry.binary.variable = xml_bool_attr_value(xml.attrs, "variable", true);
+    } else if (tag == "Date") {
+        entry.term = oof::platform::value::TypeDomainTerm::date;
+        entry.date.date = xml_bool_attr_value(xml.attrs, "date", true);
+        entry.date.time = xml_bool_attr_value(xml.attrs, "time", true);
+    } else if (tag == "Number") {
+        entry.term = oof::platform::value::TypeDomainTerm::numeric;
+        entry.numeric.length = xml_uint_attr_value(xml.attrs, "length");
+        entry.numeric.precision = xml_uint_attr_value(xml.attrs, "precision");
+        entry.numeric.non_negative = xml_bool_attr_value(xml.attrs, "nonNegative", false);
+    } else {
+        return std::nullopt;
+    }
+    return entry;
+}
+
+std::string type_domain_pattern_text_from_public_type_xml(const XmlElementSlice& type_xml) {
+    const auto pattern_xml = first_xml_element(type_xml.body, "TypePattern");
+    if (pattern_xml.body.empty() && !pattern_xml.self_closing) {
+        return xml_unescape(type_xml.body);
+    }
+    oof::platform::value::TypeDomainPattern pattern;
+    const std::regex entry_tag_pattern(R"(<(Any|ObjectType|TypeValue|Reference|List|String|Binary|Date|Number)\b([^>]*)/>)");
+    for (std::sregex_iterator it(pattern_xml.body.begin(), pattern_xml.body.end(), entry_tag_pattern), end; it != end; ++it) {
+        XmlElementSlice entry_xml;
+        entry_xml.attrs = (*it)[2].str();
+        entry_xml.self_closing = true;
+        auto entry = type_domain_entry_from_public_xml((*it)[1].str(), entry_xml);
+        if (entry.has_value()) {
+            pattern.entries.push_back(std::move(*entry));
+        }
+    }
+    if (pattern.entries.empty()) {
+        const std::regex open_entry_tag_pattern(R"(<(Any|ObjectType|TypeValue|Reference|List|String|Binary|Date|Number)\b([^>]*)>)");
+        for (std::sregex_iterator it(pattern_xml.body.begin(), pattern_xml.body.end(), open_entry_tag_pattern), end; it != end; ++it) {
+            const std::string full_tag = (*it)[0].str();
+            if (full_tag.size() >= 2 && full_tag[full_tag.size() - 2] == '/') {
+                continue;
+            }
+            XmlElementSlice entry_xml;
+            entry_xml.attrs = (*it)[2].str();
+            auto entry = type_domain_entry_from_public_xml((*it)[1].str(), entry_xml);
+            if (entry.has_value()) {
+                pattern.entries.push_back(std::move(*entry));
+            }
+        }
+    }
+    return pattern.serialize_list_stream();
+}
+
+std::string ordinary_form_listout_control_guid(std::string_view platform_type);
 
 void add_public_xml_collection_objects(
     oof::platform::object_model::PlatformFormObject& form_object,
@@ -4335,7 +4366,7 @@ void add_public_xml_collection_objects(
         object.properties.push_back(make_platform_object_property("Main", "Основной", xml_attr_value(attribute_xml.attrs, "main"), "Boolean", "OrdinaryForm.xml Attribute@main", {}, {}, "public-xml"));
         object.properties.push_back(make_platform_object_property("StoredData", "СохраняемыеДанные", xml_attr_value(attribute_xml.attrs, "storedData"), "Boolean", "OrdinaryForm.xml Attribute@storedData", {}, {}, "public-xml"));
         const auto type_xml = first_xml_element(attribute_xml.body, "Type");
-        object.properties.push_back(make_platform_object_property("Type", "Тип", xml_unescape(type_xml.body), "TypeDomainPattern", "OrdinaryForm.xml Attribute/Type", {}, {}, "public-xml"));
+        object.properties.push_back(make_platform_object_property("Type", "Тип", type_domain_pattern_text_from_public_type_xml(type_xml), "TypeDomainPattern", "OrdinaryForm.xml Attribute/Type", {}, {}, "public-xml"));
         add_api_surface(object, api_object_for_type("FormAttribute"));
         form_object.add_edge(oof::platform::object_model::make_edge(
             "collection-member",
@@ -4511,7 +4542,7 @@ void collect_public_xml_controls(
         } else {
             add_api_surface(object, api_object_for_type(object.platform_type));
         }
-        const std::string class_guid = source_writer_control_guid(object.platform_type);
+        const std::string class_guid = ordinary_form_listout_control_guid(object.platform_type);
         object.identity = oof::platform::object_model::make_identity(
             object.object_id,
             object.object_id,
@@ -5172,10 +5203,7 @@ void append_attributes_xml(
             continue;
         }
         out += ">\n";
-        append_indent(out, indent + 4);
-        out += "<Type>";
-        out += xml_escape(type);
-        out += "</Type>\n";
+        append_type_domain_pattern_xml(out, type, indent + 4);
         append_indent(out, indent + 2);
         out += "</Attribute>\n";
     }
@@ -5639,11 +5667,15 @@ PlatformXdtoObject platform_object_to_xdto_object(
         if (property == nullptr) {
             continue;
         }
+        const std::string text = platform_xsd_member_text(object, member, *property);
+        if (text.empty() && !platform_xsd_member_is_attribute(member)) {
+            continue;
+        }
         add_xdto_property(
             xdto,
             member.name,
             member.stream_name,
-            platform_xsd_member_text(object, member, *property),
+            text,
             platform_xsd_member_is_attribute(member));
     }
     return xdto;
@@ -5868,17 +5900,20 @@ void validate_platform_xdto_child_order(
             element_end = close_start + std::string("</" + tag + ">").size();
         }
 
-        if (const auto member_index = platform_xsd_member_child_index(schema, tag)) {
+        const std::string xsd_namespace = xml_attr_value(attrs, "xmlns");
+        const bool explicit_object_child =
+            !xsd_namespace.empty() && schema_for_platform_xsd_element(tag, xsd_namespace).has_value();
+        if (!explicit_object_child && platform_xsd_member_child_index(schema, tag).has_value()) {
+            const auto member_index = platform_xsd_member_child_index(schema, tag).value();
             if (object_child_seen) {
                 throw std::runtime_error("platform XDTO member appears after object child: " + tag);
             }
-            if (have_member && *member_index < last_member_index) {
+            if (have_member && member_index < last_member_index) {
                 throw std::runtime_error("platform XDTO member order violates schema sequence: " + tag);
             }
-            last_member_index = *member_index;
+            last_member_index = member_index;
             have_member = true;
         } else {
-            const std::string xsd_namespace = xml_attr_value(attrs, "xmlns");
             if (!schema_for_platform_xsd_element(tag, xsd_namespace).has_value()) {
                 throw std::runtime_error("platform XDTO child is neither schema member nor known object: " + tag);
             }
@@ -5935,6 +5970,9 @@ PlatformXdtoObject platform_xdto_object_from_xml_element(
             }
             continue;
         }
+        if (member.stream_name == "event") {
+            continue;
+        }
         const auto child = first_xml_element(body, member.stream_name);
         if (!child.self_closing || !child.body.empty()) {
             add_xdto_property(xdto, member.name, member.stream_name, xml_unescape(child.body), false);
@@ -5968,7 +6006,10 @@ PlatformXdtoObject platform_xdto_object_from_xml_element(
             child_body = std::string(body.substr(tag_end + 1, close_start - tag_end - 1));
             element_end = close_start + std::string("</" + child_tag + ">").size();
         }
-        if (!platform_xsd_element_is_member_of_parent(*schema, child_tag)) {
+        const std::string child_namespace = xml_attr_value(child_attrs, "xmlns");
+        const bool explicit_object_child =
+            !child_namespace.empty() && schema_for_platform_xsd_element(child_tag, child_namespace).has_value();
+        if (explicit_object_child || !platform_xsd_element_is_member_of_parent(*schema, child_tag)) {
             xdto.children.push_back(platform_xdto_object_from_xml_element(child_tag, child_attrs, child_body));
         }
         cursor = element_end;
@@ -6018,7 +6059,7 @@ void add_platform_xdto_child_object(
         {},
         object.platform_type == "FormAttribute" || object.platform_type == "FormCommand" || object.platform_type == "FormEvent"
             ? ""
-            : source_writer_control_guid(object.platform_type),
+            : ordinary_form_listout_control_guid(object.platform_type),
         "platform XDTO IObject + ordinary control type registry",
         schema->stream_element,
         schema->schema_source);
@@ -6272,7 +6313,6 @@ void write_platform_xsd_xml_runtime_form(const std::string& input_path, const st
     std::cout << ",\"operation\":\"platform-xsd-xml-build-runtime\"";
     std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> XSD schema-order ListOutStream -> bracket\"";
     std::cout << ",\"schemaOrderWriter\":\"PlatformXdtoObject\"";
-    std::cout << ",\"usesBasePayload\":false";
     std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
     std::cout << ",\"schemaObjects\":" << result.schema_objects;
     std::cout << ",\"schemaMembers\":" << result.schema_members;
@@ -6384,56 +6424,6 @@ std::string inline_picture_package_files_for_build(
     return out;
 }
 
-std::size_t apply_picture_package_file_edits(
-    oof::platform::stream::ListValue& payload,
-    const std::string& xml,
-    const std::filesystem::path& xml_path
-) {
-    const auto package_root = form_package_root_for_xml(xml_path);
-    const std::set<std::string> section_tags{
-        "Form", "Events", "Event", "ChildItems", "Attributes", "Attribute", "Commands", "Command",
-        "Title", "Position", "Pages", "Picture", "PictureValue"
-    };
-    const std::regex start_tag_pattern(R"(<([A-Za-z][A-Za-z0-9]*)\b([^>]*)>)");
-    std::size_t edits = 0;
-    for (std::sregex_iterator it(xml.begin(), xml.end(), start_tag_pattern), end; it != end; ++it) {
-        const std::string tag = (*it)[1].str();
-        if (section_tags.count(tag) != 0) {
-            continue;
-        }
-        const std::string attrs = (*it)[2].str();
-        const std::string object_id = xml_attr_value(attrs, "id");
-        if (object_id.empty()) {
-            continue;
-        }
-        const std::size_t body_start = static_cast<std::size_t>(it->position() + it->length());
-        const std::string close_tag = "</" + tag + ">";
-        const std::size_t body_end = xml.find(close_tag, body_start);
-        if (body_end == std::string::npos) {
-            continue;
-        }
-        std::string body = xml.substr(body_start, body_end - body_start);
-        const std::size_t child_items_pos = body.find("<ChildItems>");
-        if (child_items_pos != std::string::npos) {
-            body.resize(child_items_pos);
-        }
-        for (const auto& picture_xml : find_xml_elements(body, "Picture")) {
-            const std::string file = xml_attr_value(picture_xml.attrs, "file");
-            if (file.empty()) {
-                continue;
-            }
-            const auto picture_bytes = read_file_bytes(checked_package_relative_path(package_root, file).string());
-            const std::string picture_payload = wrap_base64_picture_payload(picture_bytes);
-            if (!set_materialized_object_picture_payload(payload, object_id, picture_payload)) {
-                throw std::runtime_error("cannot apply Picture package file: baseline object has no writable picture payload slot: object=" +
-                                         object_id);
-            }
-            ++edits;
-        }
-    }
-    return edits;
-}
-
 void write_formbin_package(const std::string& input_path, const std::string& output_path) {
     const std::vector<std::uint8_t> data = read_file_bytes(input_path);
     const auto container = oof::platform::formbin::parse_container(data);
@@ -6511,112 +6501,6 @@ std::vector<std::uint8_t> encode_form_payload_text(
     return out;
 }
 
-void write_runtime_form_from_xml(
-    const std::string& input_path,
-    const std::string& xml_path,
-    const std::string& output_path
-) {
-    std::string canonical_text;
-    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
-    const auto baseline = materialize_platform_form_object(envelope);
-    const auto requested_edits = parse_public_xml_platform_object_edits(read_file_text_lossy(xml_path));
-    const auto object_edits = keep_changed_platform_object_edits(requested_edits, baseline);
-    const auto result = apply_platform_object_edits(envelope, object_edits);
-    const std::size_t deleted_controls =
-        delete_controls_missing_from_public_xml(envelope.payload, requested_public_control_ids(read_file_text_lossy(xml_path)));
-    const std::string rebuilt_text = dump_runtime_form_envelope(envelope);
-    write_file_bytes(output_path, std::vector<std::uint8_t>(rebuilt_text.begin(), rebuilt_text.end()));
-    std::cout << "{\"output\":";
-    print_json_string(output_path);
-    std::cout << ",\"operation\":\"runtime-form-build-xml\"";
-    std::cout << ",\"diagnosticOnly\":true";
-    std::cout << ",\"baseBacked\":true";
-    std::cout << ",\"productPath\":false";
-    std::cout << ",\"architecture\":\"diagnostic baseline edit path; release path is Form.xml -> OrdinaryForm -> ListOutStream -> Form.bin\"";
-    std::cout << ",\"bytes\":" << rebuilt_text.size();
-    std::cout << ",\"controls\":" << result.controls;
-    std::cout << ",\"nameEdits\":" << result.name_edits;
-    std::cout << ",\"titleEdits\":" << result.title_edits;
-    std::cout << ",\"scalarFlagEdits\":" << result.scalar_flag_edits;
-    std::cout << ",\"positionEdits\":" << result.position_edits;
-    std::cout << ",\"bindingEdits\":" << result.binding_edits;
-    std::cout << ",\"dimensionBindingEdits\":" << result.dimension_binding_edits;
-    std::cout << ",\"attributeEdits\":" << result.attribute_edits;
-    std::cout << ",\"commandEdits\":" << result.command_edits;
-    std::cout << ",\"eventEdits\":" << result.event_edits;
-    std::cout << ",\"deletedControls\":" << deleted_controls;
-    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
-    std::cout << "}\n";
-}
-
-void write_formbin_from_package(
-    const std::string& input_path,
-    const std::string& xml_path,
-    const std::string& output_path
-) {
-    const std::vector<std::uint8_t> data = read_file_bytes(input_path);
-    auto container = oof::platform::formbin::parse_container(data);
-    auto& form_file = find_container_file_mut(container, "form");
-
-    RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
-    const auto baseline = materialize_platform_form_object(envelope);
-    std::size_t picture_files_read = 0;
-    const auto xml_package_path = std::filesystem::path(xml_path);
-    const std::string source_xml = read_file_text_lossy(xml_path);
-    const std::string package_xml = inline_picture_package_files_for_build(
-        source_xml,
-        xml_package_path,
-        picture_files_read);
-    const auto requested_edits = parse_public_xml_platform_object_edits(package_xml);
-    const auto object_edits = keep_changed_platform_object_edits(requested_edits, baseline);
-    const auto result = apply_platform_object_edits(envelope, object_edits);
-    const std::size_t picture_file_edits =
-        apply_picture_package_file_edits(envelope.payload, source_xml, xml_package_path);
-    const std::size_t deleted_controls =
-        delete_controls_missing_from_public_xml(envelope.payload, requested_public_control_ids(source_xml));
-    form_file.payload = encode_form_payload_text(form_file.payload, envelope.payload);
-
-    const auto module_path = form_package_module_path(xml_package_path);
-    bool module_package_file_used = false;
-    std::size_t module_bytes = 0;
-    if (std::filesystem::is_regular_file(module_path)) {
-        auto& module_file = find_container_file_mut(container, "module");
-        module_file.payload = read_file_bytes(module_path.string());
-        module_package_file_used = true;
-        module_bytes = module_file.payload.size();
-    }
-
-    const auto rebuilt = oof::platform::formbin::serialize_container(container);
-    write_file_bytes(output_path, rebuilt);
-    std::cout << "{\"output\":";
-    print_json_string(output_path);
-    std::cout << ",\"operation\":\"formbin-build-package\"";
-    std::cout << ",\"diagnosticOnly\":true";
-    std::cout << ",\"baseBacked\":true";
-    std::cout << ",\"productPath\":false";
-    std::cout << ",\"architecture\":\"diagnostic baseline edit path; release path is Form.xml -> OrdinaryForm -> ListOutStream -> Form.bin\"";
-    std::cout << ",\"bytes\":" << rebuilt.size();
-    std::cout << ",\"controls\":" << result.controls;
-    std::cout << ",\"nameEdits\":" << result.name_edits;
-    std::cout << ",\"titleEdits\":" << result.title_edits;
-    std::cout << ",\"scalarFlagEdits\":" << result.scalar_flag_edits;
-    std::cout << ",\"positionEdits\":" << result.position_edits;
-    std::cout << ",\"bindingEdits\":" << result.binding_edits;
-    std::cout << ",\"dimensionBindingEdits\":" << result.dimension_binding_edits;
-    std::cout << ",\"attributeEdits\":" << result.attribute_edits;
-    std::cout << ",\"commandEdits\":" << result.command_edits;
-    std::cout << ",\"eventEdits\":" << result.event_edits;
-    std::cout << ",\"deletedControls\":" << deleted_controls;
-    std::cout << ",\"moduleSource\":";
-    print_json_string(module_package_file_used ? "package-file" : "baseline");
-    std::cout << ",\"moduleBytes\":" << module_bytes;
-    std::cout << ",\"picturePackageFilesRead\":" << picture_files_read;
-    std::cout << ",\"picturePackageFileEdits\":" << picture_file_edits;
-    std::cout << ",\"preservedContainerFiles\":" << container.files.size();
-    std::cout << ",\"publicContract\":\"OrdinaryForm\"";
-    std::cout << "}\n";
-}
-
 using LV = oof::platform::stream::ListValue;
 
 LV raw(std::string value) {
@@ -6631,10 +6515,10 @@ LV list(std::vector<LV> value) {
     return LV::list(std::move(value));
 }
 
-LV source_writer_default_color_record();
-LV source_writer_empty_page_style_record();
-LV source_writer_root_panel_base_info_record();
-LV source_writer_event_table(
+LV ordinary_form_listout_default_color_record();
+LV ordinary_form_listout_empty_page_style_record();
+LV ordinary_form_listout_root_panel_base_info_record();
+LV ordinary_form_listout_event_table(
     const oof::platform::object_model::PlatformFormObject& form_object,
     std::string_view parent_object_id
 );
@@ -6671,7 +6555,7 @@ std::string public_form_title_from_xml(const std::string& xml) {
     return text;
 }
 
-std::string source_writer_control_guid(std::string_view platform_type) {
+std::string ordinary_form_listout_control_guid(std::string_view platform_type) {
     if (const auto* binding = oof::ordinary::control_type::binding_for_writer_control_type(platform_type)) {
         return std::string(binding->guid);
     }
@@ -6687,7 +6571,7 @@ std::string source_writer_control_guid(std::string_view platform_type) {
     };
     const auto it = guids.find(platform_type);
     if (it == guids.end()) {
-        throw std::runtime_error("native source writer does not know ordinary control GUID for type: " +
+        throw std::runtime_error("OrdinaryForm ListOut writer does not know ordinary control GUID for type: " +
                                  std::string(platform_type));
     }
     return std::string(it->second);
@@ -6706,7 +6590,7 @@ std::string object_prop_or_default(
     return fallback;
 }
 
-std::string source_writer_bool_prop(
+std::string ordinary_form_listout_bool_prop(
     const oof::platform::object_model::PlatformObject& object,
     std::string_view name,
     std::string fallback
@@ -6724,18 +6608,18 @@ std::string source_writer_bool_prop(
     return value;
 }
 
-bool source_writer_top_command_bar(const oof::platform::object_model::PlatformObject& object) {
+bool ordinary_form_listout_top_command_bar(const oof::platform::object_model::PlatformObject& object) {
     return object.platform_type == "CommandBar" && object.parent_object_id.empty();
 }
 
-LV source_writer_geometry(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_geometry(const oof::platform::object_model::PlatformObject& object) {
     std::vector<LV> items;
     items.push_back(raw("8"));
     items.push_back(raw(object_prop_or_default(object, "Left", "0")));
     items.push_back(raw(object_prop_or_default(object, "Top", "0")));
     items.push_back(raw(object_prop_or_default(object, "Right", "0")));
     items.push_back(raw(object_prop_or_default(object, "Bottom", "0")));
-    items.push_back(raw(source_writer_top_command_bar(object) ? "1" : "0"));
+    items.push_back(raw(ordinary_form_listout_top_command_bar(object) ? "1" : "0"));
     for (std::string_view name : {
              "Binding.top", "Binding.bottom", "Binding.left",
              "Binding.right", "Binding.verticalCenter", "Binding.horizontalCenter",
@@ -6745,7 +6629,7 @@ LV source_writer_geometry(const oof::platform::object_model::PlatformObject& obj
                             ? raw("0")
                             : oof::platform::stream::parse(property->value));
     }
-    items.push_back(raw(source_writer_top_command_bar(object) ? "1" : "0"));
+    items.push_back(raw(ordinary_form_listout_top_command_bar(object) ? "1" : "0"));
     for (std::string_view name : {
              "DimensionBinding.height", "DimensionBinding.minHeight",
              "DimensionBinding.stretch", "DimensionBinding.width",
@@ -6755,7 +6639,7 @@ LV source_writer_geometry(const oof::platform::object_model::PlatformObject& obj
                             ? raw("0")
                             : oof::platform::stream::parse(property->value));
     }
-    if (source_writer_top_command_bar(object)) {
+    if (ordinary_form_listout_top_command_bar(object)) {
         items.push_back(raw("0"));
         items.push_back(raw("0"));
         items.push_back(raw("0"));
@@ -6773,18 +6657,18 @@ LV source_writer_geometry(const oof::platform::object_model::PlatformObject& obj
     return list(std::move(items));
 }
 
-LV source_writer_metadata(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_metadata(const oof::platform::object_model::PlatformObject& object) {
     return list({
         raw("14"),
         str_atom(object.name.empty() ? object.object_id : object.name),
-        raw(source_writer_top_command_bar(object) ? "0" : "4294967295"),
+        raw(ordinary_form_listout_top_command_bar(object) ? "0" : "4294967295"),
         raw("0"),
         raw("0"),
         raw("0"),
     });
 }
 
-LV source_writer_font_placeholder() {
+LV ordinary_form_listout_font_placeholder() {
     return list({
         raw("3"),
         raw("0"),
@@ -6796,7 +6680,7 @@ LV source_writer_font_placeholder() {
     });
 }
 
-LV source_writer_command_bar_font_placeholder() {
+LV ordinary_form_listout_command_bar_font_placeholder() {
     return list({
         raw("3"),
         raw("0"),
@@ -6808,7 +6692,7 @@ LV source_writer_command_bar_font_placeholder() {
     });
 }
 
-LV source_writer_empty_picture_value() {
+LV ordinary_form_listout_empty_picture_value() {
     return list({
         raw("4"),
         raw("0"),
@@ -6822,7 +6706,7 @@ LV source_writer_empty_picture_value() {
     });
 }
 
-LV source_writer_color_value(std::string value) {
+LV ordinary_form_listout_color_value(std::string value) {
     return list({
         raw("4"),
         raw("3"),
@@ -6831,7 +6715,7 @@ LV source_writer_color_value(std::string value) {
     });
 }
 
-LV source_writer_auto_color_value() {
+LV ordinary_form_listout_auto_color_value() {
     return list({
         raw("4"),
         raw("4"),
@@ -6840,16 +6724,16 @@ LV source_writer_auto_color_value() {
     });
 }
 
-LV source_writer_extended_base_info(const oof::platform::object_model::PlatformObject& object) {
-    auto base = source_writer_root_panel_base_info_record();
-    base.items[1] = raw(source_writer_bool_prop(object, "Visible", "1"));
-    base.items[5] = raw(source_writer_bool_prop(object, "Enabled", "1"));
-    base.items[6] = source_writer_default_color_record();
+LV ordinary_form_listout_extended_base_info(const oof::platform::object_model::PlatformObject& object) {
+    auto base = ordinary_form_listout_root_panel_base_info_record();
+    base.items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
+    base.items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "1"));
+    base.items[6] = ordinary_form_listout_default_color_record();
     base.items[17] = raw("1");
     return base;
 }
 
-LV source_writer_type_domain_pattern_record(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_type_domain_pattern_record(const oof::platform::object_model::PlatformObject& object) {
     const std::string type = object_prop_or_default(object, "Type", "");
     if (!type.empty() && type.front() == '{') {
         return oof::platform::stream::parse(type);
@@ -6857,10 +6741,10 @@ LV source_writer_type_domain_pattern_record(const oof::platform::object_model::P
     return list({str_atom("Pattern"), list({str_atom("S")})});
 }
 
-LV source_writer_button_picture_record(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_button_picture_record(const oof::platform::object_model::PlatformObject& object) {
     const std::string picture = object_prop_or_default(object, "Picture", "");
     if (picture.empty() || picture == "V8Picture()") {
-        return source_writer_empty_page_style_record();
+        return ordinary_form_listout_empty_page_style_record();
     }
     return list({
         raw("4"), raw("3"), list({raw("0")}), str_atom(""), raw("-1"), raw("-1"),
@@ -6868,31 +6752,31 @@ LV source_writer_button_picture_record(const oof::platform::object_model::Platfo
     });
 }
 
-LV source_writer_button_base_info(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_button_base_info(const oof::platform::object_model::PlatformObject& object) {
     const std::string title = object_prop_or_default(object, "Title", object.name);
     return list({
         list({
             raw("19"),
-            raw(source_writer_bool_prop(object, "Visible", "1")),
-            source_writer_auto_color_value(),
-            source_writer_auto_color_value(),
+            raw(ordinary_form_listout_bool_prop(object, "Visible", "1")),
+            ordinary_form_listout_auto_color_value(),
+            ordinary_form_listout_auto_color_value(),
             list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
-            raw(source_writer_bool_prop(object, "Enabled", "1")),
-            source_writer_color_value("-22"),
-            source_writer_auto_color_value(),
-            source_writer_auto_color_value(),
-            source_writer_color_value("-7"),
-            source_writer_color_value("-21"),
-            source_writer_font_placeholder(),
+            raw(ordinary_form_listout_bool_prop(object, "Enabled", "1")),
+            ordinary_form_listout_color_value("-22"),
+            ordinary_form_listout_auto_color_value(),
+            ordinary_form_listout_auto_color_value(),
+            ordinary_form_listout_color_value("-7"),
+            ordinary_form_listout_color_value("-21"),
+            ordinary_form_listout_font_placeholder(),
             list({raw("1"), raw("0")}),
             raw("0"),
             raw("0"),
             raw("100"),
             raw("2"),
             raw("1"),
-            raw(source_writer_bool_prop(object, "Enabled", "1")),
+            raw(ordinary_form_listout_bool_prop(object, "Enabled", "1")),
             raw("2"),
-            source_writer_auto_color_value(),
+            ordinary_form_listout_auto_color_value(),
         }),
         raw("14"),
         localized_text_record(title),
@@ -6901,7 +6785,7 @@ LV source_writer_button_base_info(const oof::platform::object_model::PlatformObj
         raw("0"),
         raw("0"),
         raw("0"),
-        source_writer_button_picture_record(object),
+        ordinary_form_listout_button_picture_record(object),
         list({raw("0"), raw("0"), raw("0")}),
         raw("0"),
         raw("0"),
@@ -6912,7 +6796,7 @@ LV source_writer_button_base_info(const oof::platform::object_model::PlatformObj
     });
 }
 
-LV source_writer_label_payload(
+LV ordinary_form_listout_label_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
@@ -6925,20 +6809,20 @@ LV source_writer_label_payload(
     const LV picture_style = list({
         raw("10"),
         raw(picture_position),
-        source_writer_button_picture_record(object),
-        source_writer_empty_page_style_record(),
-        source_writer_empty_page_style_record(),
+        ordinary_form_listout_button_picture_record(object),
+        ordinary_form_listout_empty_page_style_record(),
+        ordinary_form_listout_empty_page_style_record(),
         raw("100"), raw("2"), raw("0"), raw("0"), raw("1"), raw("2"),
     });
     return list({
         raw("3"),
         list({
-            source_writer_extended_base_info(object),
+            ordinary_form_listout_extended_base_info(object),
             raw("11"),
             localized_text_record(title),
             raw(horizontal_align),
             raw(vertical_align),
-            raw(source_writer_bool_prop(object, "Hyperlink", event_objects_for_parent(form_object, object.object_id).empty() ? "0" : "1")),
+            raw(ordinary_form_listout_bool_prop(object, "Hyperlink", event_objects_for_parent(form_object, object.object_id).empty() ? "0" : "1")),
             raw("0"),
             raw("0"),
             list({raw("0"), raw("0"), raw("0")}),
@@ -6949,11 +6833,11 @@ LV source_writer_label_payload(
             raw(text_position),
             raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
         }),
-        source_writer_event_table(form_object, object.object_id),
+        ordinary_form_listout_event_table(form_object, object.object_id),
     });
 }
 
-LV source_writer_image_payload(
+LV ordinary_form_listout_image_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
@@ -6962,15 +6846,15 @@ LV source_writer_image_payload(
     const LV picture_style = list({
         raw("10"),
         raw("0"),
-        source_writer_button_picture_record(object),
-        source_writer_empty_page_style_record(),
-        source_writer_empty_page_style_record(),
+        ordinary_form_listout_button_picture_record(object),
+        ordinary_form_listout_empty_page_style_record(),
+        ordinary_form_listout_empty_page_style_record(),
         raw("100"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
     });
     return list({
         raw("1"),
         list({
-            source_writer_extended_base_info(object),
+            ordinary_form_listout_extended_base_info(object),
             raw("20"),
             raw(display_mode),
             raw(display_state),
@@ -6980,11 +6864,11 @@ LV source_writer_image_payload(
             list({raw("1"), raw("0")}),
             raw("0"), raw("1"), raw("0"), raw("1"),
         }),
-        source_writer_event_table(form_object, object.object_id),
+        ordinary_form_listout_event_table(form_object, object.object_id),
     });
 }
 
-LV source_writer_checkbox_payload(
+LV ordinary_form_listout_checkbox_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
@@ -6993,39 +6877,39 @@ LV source_writer_checkbox_payload(
         raw("1"),
         list({
             list({
-                source_writer_extended_base_info(object),
+                ordinary_form_listout_extended_base_info(object),
                 raw("7"),
                 localized_text_record(title),
                 raw("1"), raw("0"), raw("1"), raw("0"), raw("100"), raw("1"),
             }),
             raw("4"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
         }),
-        source_writer_event_table(form_object, object.object_id),
+        ordinary_form_listout_event_table(form_object, object.object_id),
     });
 }
 
-LV source_writer_input_field_info_record(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_input_field_info_record(const oof::platform::object_model::PlatformObject& object) {
     auto record = list({
-        source_writer_extended_base_info(object),
+        ordinary_form_listout_extended_base_info(object),
         raw("31"),
         raw("0"),
         raw(object_prop_or_default(object, "EditMode", "0")),
         raw(object_prop_or_default(object, "ChoiceMode", "1")),
-        raw(source_writer_bool_prop(object, "PasswordMode", "0")),
+        raw(ordinary_form_listout_bool_prop(object, "PasswordMode", "0")),
         raw("0"),
-        raw(source_writer_bool_prop(object, "ExtendedEdit", "0")),
+        raw(ordinary_form_listout_bool_prop(object, "ExtendedEdit", "0")),
         raw("0"), raw("0"), raw("0"), raw("1"),
-        raw(source_writer_bool_prop(object, "ReadOnly", "0")),
+        raw(ordinary_form_listout_bool_prop(object, "ReadOnly", "0")),
         raw("0"), raw(object_prop_or_default(object, "MaxLength", "0")),
         raw("0"), raw("0"), raw("4"), raw("0"),
         list({str_atom("U")}),
         list({str_atom("U")}),
         str_atom(object_prop_or_default(object, "Mask", "")),
         raw("0"), raw("1"), raw("0"), raw("0"),
-        raw(source_writer_bool_prop(object, "MultiLine", "0")),
+        raw(ordinary_form_listout_bool_prop(object, "MultiLine", "0")),
         raw("0"),
-        source_writer_empty_page_style_record(),
-        source_writer_empty_page_style_record(),
+        ordinary_form_listout_empty_page_style_record(),
+        ordinary_form_listout_empty_page_style_record(),
         raw("0"), raw("0"), raw("0"),
         list({raw("0"), raw("0"), raw("0")}),
         list({raw("1"), raw("0")}),
@@ -7040,16 +6924,16 @@ LV source_writer_input_field_info_record(const oof::platform::object_model::Plat
     return record;
 }
 
-LV source_writer_input_field_payload(
+LV ordinary_form_listout_input_field_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
     return list({
         raw("9"),
-        source_writer_type_domain_pattern_record(object),
-        list({source_writer_input_field_info_record(object)}),
+        ordinary_form_listout_type_domain_pattern_record(object),
+        list({ordinary_form_listout_input_field_info_record(object)}),
         list({raw("0")}),
-        source_writer_event_table(form_object, object.object_id),
+        ordinary_form_listout_event_table(form_object, object.object_id),
         raw("0"),
         raw("1"),
         raw("0"),
@@ -7058,20 +6942,20 @@ LV source_writer_input_field_payload(
     });
 }
 
-LV source_writer_command_bar_base_info(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_command_bar_base_info(const oof::platform::object_model::PlatformObject& object) {
     return list({
         raw("19"),
-        raw(source_writer_bool_prop(object, "Visible", "1")),
-        source_writer_auto_color_value(),
-        source_writer_auto_color_value(),
+        raw(ordinary_form_listout_bool_prop(object, "Visible", "1")),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
         list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
-        raw(source_writer_bool_prop(object, "Enabled", "0")),
-        source_writer_color_value("-22"),
-        source_writer_auto_color_value(),
-        source_writer_auto_color_value(),
-        source_writer_auto_color_value(),
-        source_writer_color_value("-21"),
-        source_writer_command_bar_font_placeholder(),
+        raw(ordinary_form_listout_bool_prop(object, "Enabled", "0")),
+        ordinary_form_listout_color_value("-22"),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
+        ordinary_form_listout_color_value("-21"),
+        ordinary_form_listout_command_bar_font_placeholder(),
         list({raw("1"), raw("0")}),
         raw("0"),
         raw("0"),
@@ -7080,11 +6964,11 @@ LV source_writer_command_bar_base_info(const oof::platform::object_model::Platfo
         raw("1"),
         raw("1"),
         raw("2"),
-        source_writer_auto_color_value(),
+        ordinary_form_listout_auto_color_value(),
     });
 }
 
-LV source_writer_command_bar_title_action_record(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_command_bar_title_action_record(const oof::platform::object_model::PlatformObject& object) {
     const std::string title = object_prop_or_default(object, "Title", object.name);
     const std::string handler = object.name.empty() ? "CommandBarAction" : object.name;
     return list({
@@ -7101,7 +6985,7 @@ LV source_writer_command_bar_title_action_record(const oof::platform::object_mod
                 localized_text_record(title),
                 localized_text_record(title),
                 localized_text_record(title),
-                source_writer_empty_picture_value(),
+                ordinary_form_listout_empty_picture_value(),
                 list({raw("0"), raw("0"), raw("0")}),
             }),
         }),
@@ -7111,7 +6995,7 @@ LV source_writer_command_bar_title_action_record(const oof::platform::object_mod
     });
 }
 
-LV source_writer_command_bar_actions_payload(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_command_bar_actions_payload(const oof::platform::object_model::PlatformObject& object) {
     const std::string title = object_prop_or_default(object, "Title", "");
     if (title.empty()) {
         return list({
@@ -7137,7 +7021,7 @@ LV source_writer_command_bar_actions_payload(const oof::platform::object_model::
         raw("3"),
         raw("1"),
         raw("1"),
-        source_writer_command_bar_title_action_record(object),
+        ordinary_form_listout_command_bar_title_action_record(object),
         raw("1"),
         list({
             raw("5"),
@@ -7150,45 +7034,45 @@ LV source_writer_command_bar_actions_payload(const oof::platform::object_model::
     });
 }
 
-LV source_writer_command_bar_payload(const oof::platform::object_model::PlatformObject& object) {
+LV ordinary_form_listout_command_bar_payload(const oof::platform::object_model::PlatformObject& object) {
     const bool has_title = !object_prop_or_default(object, "Title", "").empty();
     return list({
         raw("2"),
         list({
-            source_writer_command_bar_base_info(object),
+            ordinary_form_listout_command_bar_base_info(object),
             raw("9"),
             raw("2"),
             raw(has_title ? "0" : "1"),
             raw("0"),
             raw("1"),
             raw("1"),
-            source_writer_command_bar_actions_payload(object),
+            ordinary_form_listout_command_bar_actions_payload(object),
             raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79"),
             raw("4"),
             raw(has_title ? "2601b204-97f7-4060-b50c-9b68f10d8acd" : "9d0a2e40-b978-11d4-84b6-008048da06df"),
             raw(has_title ? "1" : "0"),
             raw("0"),
             raw("0"),
-            source_writer_button_picture_record(object),
+            ordinary_form_listout_button_picture_record(object),
         }),
     });
 }
 
-LV source_writer_generic_object_payload(
+LV ordinary_form_listout_generic_object_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
     const std::string title = object_prop_or_default(object, "Title", object.name);
     return list({
         raw("1"),
-        source_writer_extended_base_info(object),
+        ordinary_form_listout_extended_base_info(object),
         localized_text_record(title),
-        source_writer_button_picture_record(object),
-        source_writer_event_table(form_object, object.object_id),
+        ordinary_form_listout_button_picture_record(object),
+        ordinary_form_listout_event_table(form_object, object.object_id),
     });
 }
 
-LV source_writer_event_action_record(const oof::platform::object_model::PlatformObject& event) {
+LV ordinary_form_listout_event_action_record(const oof::platform::object_model::PlatformObject& event) {
     const std::string handler = object_property_value(event, "Handler");
     std::string title = object_property_value(event, "Title");
     if (title.empty()) {
@@ -7203,21 +7087,21 @@ LV source_writer_event_action_record(const oof::platform::object_model::Platform
             localized_text_record(title),
             localized_text_record(title),
             localized_text_record(title),
-            source_writer_empty_picture_value(),
+            ordinary_form_listout_empty_picture_value(),
             list({raw("0"), raw("0"), raw("0")}),
         }),
     });
 }
 
-LV source_writer_event_record(const oof::platform::object_model::PlatformObject& event) {
+LV ordinary_form_listout_event_record(const oof::platform::object_model::PlatformObject& event) {
     return list({
         raw("0"),
         raw(object_property_value(event, "ID")),
-        source_writer_event_action_record(event),
+        ordinary_form_listout_event_action_record(event),
     });
 }
 
-LV source_writer_event_table(
+LV ordinary_form_listout_event_table(
     const oof::platform::object_model::PlatformFormObject& form_object,
     std::string_view parent_object_id
 ) {
@@ -7227,7 +7111,7 @@ LV source_writer_event_table(
         const std::string id = object_property_value(*event, "ID");
         const std::string handler = object_property_value(*event, "Handler");
         if (!id.empty() && !handler.empty()) {
-            items.push_back(source_writer_event_record(*event));
+            items.push_back(ordinary_form_listout_event_record(*event));
         }
     }
     std::vector<LV> table;
@@ -7236,37 +7120,37 @@ LV source_writer_event_table(
     return list(std::move(table));
 }
 
-LV source_writer_control_payload(
+LV ordinary_form_listout_control_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
     const std::string title = object_prop_or_default(object, "Title", object.name);
     if (object.platform_type == "Label") {
-        return source_writer_label_payload(form_object, object);
+        return ordinary_form_listout_label_payload(form_object, object);
     }
     if (object.platform_type == "Image") {
-        return source_writer_image_payload(form_object, object);
+        return ordinary_form_listout_image_payload(form_object, object);
     }
     if (object.platform_type == "CheckBox") {
-        return source_writer_checkbox_payload(form_object, object);
+        return ordinary_form_listout_checkbox_payload(form_object, object);
     }
     if (object.platform_type == "TextBox" || object.platform_type == "InputField") {
-        return source_writer_input_field_payload(form_object, object);
+        return ordinary_form_listout_input_field_payload(form_object, object);
     }
     if (object.platform_type == "Button") {
         return list({
             raw("1"),
-            source_writer_button_base_info(object),
-            source_writer_event_table(form_object, object.object_id),
+            ordinary_form_listout_button_base_info(object),
+            ordinary_form_listout_event_table(form_object, object.object_id),
         });
     }
     if (object.platform_type == "CommandBar") {
-        return source_writer_command_bar_payload(object);
+        return ordinary_form_listout_command_bar_payload(object);
     }
-    return source_writer_generic_object_payload(form_object, object);
+    return ordinary_form_listout_generic_object_payload(form_object, object);
 }
 
-bool source_writer_has_typed_payload(
+bool ordinary_form_listout_has_typed_payload(
     const oof::platform::object_model::PlatformObject& object
 ) {
     if (object.platform_type == "Label" ||
@@ -7280,19 +7164,19 @@ bool source_writer_has_typed_payload(
     return object.platform_type == "CommandBar";
 }
 
-struct SourceWriterCoverageSummary {
+struct OrdinaryFormListOutCoverageSummary {
     std::size_t typed_payload_controls = 0;
     std::size_t minimal_payload_controls = 0;
     std::map<std::string, std::size_t> typed_payload_types;
     std::map<std::string, std::size_t> minimal_payload_types;
 };
 
-SourceWriterCoverageSummary source_writer_coverage_summary(
+OrdinaryFormListOutCoverageSummary ordinary_form_listout_coverage_summary(
     const oof::platform::object_model::PlatformFormObject& form_object
 ) {
-    SourceWriterCoverageSummary summary;
+    OrdinaryFormListOutCoverageSummary summary;
     for (const auto& object : form_object.items.objects()) {
-        if (source_writer_has_typed_payload(object)) {
+        if (ordinary_form_listout_has_typed_payload(object)) {
             ++summary.typed_payload_controls;
             ++summary.typed_payload_types[object.platform_type];
             continue;
@@ -7303,134 +7187,50 @@ SourceWriterCoverageSummary source_writer_coverage_summary(
     return summary;
 }
 
-std::string source_writer_payload_variant_note(std::string_view platform_type, bool typed_payload) {
-    if (!typed_payload) {
-        return "materialized and projected to public XML; source writer still emits minimal title payload until a typed platform payload codec is ported";
-    }
-    if (platform_type == "CommandBar") {
-        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled; source writer emits typed command-bar payload with title action shape";
-    }
-    if (platform_type == "Button") {
-        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled/Position/Events; source writer emits typed button base-info and event table";
-    }
-    if (platform_type == "Label") {
-        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled/Position; source writer emits typed label payload";
-    }
-    if (platform_type == "Image") {
-        return "materialized as PlatformObject; public XML preserves Picture and scalar properties; source writer emits typed image payload";
-    }
-    if (platform_type == "CheckBox") {
-        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled/Position; source writer emits typed checkbox payload";
-    }
-    if (platform_type == "TextBox" || platform_type == "InputField") {
-        return "materialized as PlatformObject; public XML preserves Title/Visible/Enabled/Position/type descriptor surface; source writer emits typed input-field payload";
-    }
-    return "materialized as PlatformObject and projected to public XML; source writer has a typed payload branch";
+void print_ordinary_form_listout_coverage_json(const OrdinaryFormListOutCoverageSummary& summary) {
+    (void)summary;
 }
 
-void print_source_writer_payload_variant_json(
-    std::string_view type,
-    std::size_t count,
-    bool typed_payload
-) {
-    std::cout << "{\"type\":";
-    print_json_string(type);
-    std::cout << ",\"count\":" << count;
-    std::cout << ",\"materializesToObject\":true";
-    std::cout << ",\"dematerializesToPublicXml\":true";
-    std::cout << ",\"sourceWriterPayload\":";
-    print_json_string(typed_payload ? "typed-object-payload" : "minimal-title-payload");
-    std::cout << ",\"status\":";
-    print_json_string(typed_payload ? "supported" : "partial");
-    std::cout << ",\"remark\":";
-    print_json_string(source_writer_payload_variant_note(type, typed_payload));
-    std::cout << "}";
-}
-
-void print_source_writer_coverage_json(const SourceWriterCoverageSummary& summary) {
-    std::cout << ",\"sourceWriterTypedPayloadControls\":" << summary.typed_payload_controls;
-    std::cout << ",\"sourceWriterMinimalPayloadControls\":" << summary.minimal_payload_controls;
-    std::cout << ",\"sourceWriterTypedPayloadTypes\":[";
-    std::size_t typed_index = 0;
-    for (const auto& [type, count] : summary.typed_payload_types) {
-        if (typed_index++ != 0) {
-            std::cout << ",";
-        }
-        std::cout << "{\"type\":";
-        print_json_string(type);
-        std::cout << ",\"count\":" << count << "}";
-    }
-    std::cout << "]";
-    std::cout << ",\"sourceWriterMinimalPayloadTypes\":[";
-    std::size_t index = 0;
-    for (const auto& [type, count] : summary.minimal_payload_types) {
-        if (index++ != 0) {
-            std::cout << ",";
-        }
-        std::cout << "{\"type\":";
-        print_json_string(type);
-        std::cout << ",\"count\":" << count << "}";
-    }
-    std::cout << "]";
-    std::cout << ",\"sourceWriterPayloadVariants\":[";
-    bool first_variant = true;
-    for (const auto& [type, count] : summary.typed_payload_types) {
-        if (!first_variant) {
-            std::cout << ",";
-        }
-        first_variant = false;
-        print_source_writer_payload_variant_json(type, count, true);
-    }
-    for (const auto& [type, count] : summary.minimal_payload_types) {
-        if (!first_variant) {
-            std::cout << ",";
-        }
-        first_variant = false;
-        print_source_writer_payload_variant_json(type, count, false);
-    }
-    std::cout << "]";
-}
-
-std::vector<const oof::platform::object_model::PlatformObject*> source_writer_children(
+std::vector<const oof::platform::object_model::PlatformObject*> ordinary_form_listout_children(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& parent
 ) {
     return child_objects_for_parent(form_object, parent.object_id);
 }
 
-LV source_writer_child_table(
+LV ordinary_form_listout_child_table(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& parent
 );
 
-LV source_writer_control_record(
+LV ordinary_form_listout_control_record(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
     return list({
-        raw(source_writer_control_guid(object.platform_type)),
+        raw(ordinary_form_listout_control_guid(object.platform_type)),
         raw(object.object_id.empty() ? "0" : object.object_id),
-        source_writer_control_payload(form_object, object),
-        source_writer_geometry(object),
-        source_writer_metadata(object),
-        source_writer_child_table(form_object, object),
+        ordinary_form_listout_control_payload(form_object, object),
+        ordinary_form_listout_geometry(object),
+        ordinary_form_listout_metadata(object),
+        ordinary_form_listout_child_table(form_object, object),
     });
 }
 
-LV source_writer_child_table(
+LV ordinary_form_listout_child_table(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& parent
 ) {
     std::vector<LV> items;
-    const auto children = source_writer_children(form_object, parent);
+    const auto children = ordinary_form_listout_children(form_object, parent);
     items.push_back(raw(std::to_string(children.size())));
     for (const auto* child : children) {
-        items.push_back(source_writer_control_record(form_object, *child));
+        items.push_back(ordinary_form_listout_control_record(form_object, *child));
     }
     return list(std::move(items));
 }
 
-std::int64_t source_writer_slot_number(std::string_view composite_id) {
+std::int64_t ordinary_form_listout_slot_number(std::string_view composite_id) {
     std::string digits;
     for (const char ch : composite_id) {
         if (ch >= '0' && ch <= '9') {
@@ -7443,20 +7243,20 @@ std::int64_t source_writer_slot_number(std::string_view composite_id) {
     return std::stoll(digits);
 }
 
-LV source_writer_composite_id_value(const std::string& composite_id) {
+LV ordinary_form_listout_composite_id_value(const std::string& composite_id) {
     if (!composite_id.empty() && composite_id.front() == '{') {
         return oof::platform::stream::parse(composite_id);
     }
     return raw(composite_id.empty() ? "0" : composite_id);
 }
 
-LV source_writer_attribute_record(const oof::platform::object_model::PlatformObject& attribute) {
+LV ordinary_form_listout_attribute_record(const oof::platform::object_model::PlatformObject& attribute) {
     const std::string id = object_prop_or_default(attribute, "ID", "0");
     const std::string name = object_prop_or_default(attribute, "Name", attribute.name);
     const std::string main = object_prop_or_default(attribute, "Main", "1");
     const std::string type = object_prop_or_default(attribute, "Type", "{\"Pattern\"}");
     return list({
-        source_writer_composite_id_value(id),
+        ordinary_form_listout_composite_id_value(id),
         raw(main == "0" || main == "false" ? "0" : "1"),
         raw("0"),
         raw("1"),
@@ -7465,36 +7265,36 @@ LV source_writer_attribute_record(const oof::platform::object_model::PlatformObj
     });
 }
 
-void collect_source_writer_attribute_links(
+void collect_ordinary_form_listout_attribute_links(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& parent,
     const std::map<std::string, std::string>& attribute_slots,
     std::vector<LV>& links
 ) {
-    for (const auto* child : source_writer_children(form_object, parent)) {
+    for (const auto* child : ordinary_form_listout_children(form_object, parent)) {
         const auto found = attribute_slots.find(child->name);
         if (found != attribute_slots.end()) {
             links.push_back(list({
                 raw(child->object_id),
-                list({raw("1"), source_writer_composite_id_value(found->second)}),
+                list({raw("1"), ordinary_form_listout_composite_id_value(found->second)}),
             }));
         }
-        collect_source_writer_attribute_links(form_object, *child, attribute_slots, links);
+        collect_ordinary_form_listout_attribute_links(form_object, *child, attribute_slots, links);
     }
 }
 
-LV source_writer_attributes_table(const oof::platform::object_model::PlatformFormObject& form_object) {
+LV ordinary_form_listout_attributes_table(const oof::platform::object_model::PlatformFormObject& form_object) {
     std::vector<LV> records;
     std::map<std::string, std::string> attribute_slots_by_name;
     std::int64_t max_slot = 0;
     for (const auto& attribute : form_object.attributes.objects()) {
         const std::string id = object_prop_or_default(attribute, "ID", "0");
         const std::string name = object_prop_or_default(attribute, "Name", attribute.name);
-        max_slot = std::max(max_slot, source_writer_slot_number(id));
+        max_slot = std::max(max_slot, ordinary_form_listout_slot_number(id));
         if (!name.empty()) {
             attribute_slots_by_name[name] = id;
         }
-        records.push_back(source_writer_attribute_record(attribute));
+        records.push_back(ordinary_form_listout_attribute_record(attribute));
     }
 
     std::vector<LV> record_table;
@@ -7502,7 +7302,7 @@ LV source_writer_attributes_table(const oof::platform::object_model::PlatformFor
     record_table.insert(record_table.end(), std::make_move_iterator(records.begin()), std::make_move_iterator(records.end()));
 
     std::vector<LV> links;
-    collect_source_writer_attribute_links(form_object, form_object.form, attribute_slots_by_name, links);
+    collect_ordinary_form_listout_attribute_links(form_object, form_object.form, attribute_slots_by_name, links);
     std::vector<LV> link_table;
     link_table.push_back(raw(std::to_string(links.size())));
     link_table.insert(link_table.end(), std::make_move_iterator(links.begin()), std::make_move_iterator(links.end()));
@@ -7515,9 +7315,9 @@ LV source_writer_attributes_table(const oof::platform::object_model::PlatformFor
     });
 }
 
-LV source_writer_root_panel_info_from_layout_xml(const std::string& xml);
+LV ordinary_form_listout_root_panel_info_from_layout_xml(const std::string& xml);
 
-LV source_writer_form_object_info(
+LV ordinary_form_listout_form_object_info(
     const oof::platform::object_model::PlatformFormObject& form_object
 ) {
     const std::string uuid = object_property_value(form_object.form, "FormObjectUuid");
@@ -7544,41 +7344,41 @@ LV source_writer_form_object_info(
     });
 }
 
-LV source_writer_default_color_record() {
+LV ordinary_form_listout_default_color_record() {
     return list({raw("4"), raw("4"), list({raw("0")}), raw("4")});
 }
 
-LV source_writer_empty_page_style_record() {
+LV ordinary_form_listout_empty_page_style_record() {
     return list({raw("4"), raw("0"), list({raw("0")}), str_atom(""), raw("-1"), raw("-1"), raw("1"), raw("0"), str_atom("")});
 }
 
-LV source_writer_page_style_group_record(std::string_view active) {
+LV ordinary_form_listout_page_style_group_record(std::string_view active) {
     return list({
         raw("10"), raw(std::string(active)),
-        source_writer_empty_page_style_record(),
-        source_writer_empty_page_style_record(),
-        source_writer_empty_page_style_record(),
+        ordinary_form_listout_empty_page_style_record(),
+        ordinary_form_listout_empty_page_style_record(),
+        ordinary_form_listout_empty_page_style_record(),
         raw("100"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
     });
 }
 
-LV source_writer_root_page_state_style_group_record(std::string_view style_mode) {
-    auto record = source_writer_page_style_group_record("0");
+LV ordinary_form_listout_root_page_state_style_group_record(std::string_view style_mode) {
+    auto record = ordinary_form_listout_page_style_group_record("0");
     record.items[6] = raw(std::string(style_mode.empty() ? "0" : style_mode));
     return record;
 }
 
-LV source_writer_root_panel_base_info_record() {
+LV ordinary_form_listout_root_panel_base_info_record() {
     return list({
         raw("19"),
         raw("1"),
-        source_writer_default_color_record(),
-        source_writer_default_color_record(),
+        ordinary_form_listout_default_color_record(),
+        ordinary_form_listout_default_color_record(),
         list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
         raw("0"),
         list({raw("4"), raw("3"), list({raw("-22")}), raw("3")}),
-        source_writer_default_color_record(),
-        source_writer_default_color_record(),
+        ordinary_form_listout_default_color_record(),
+        ordinary_form_listout_default_color_record(),
         list({raw("4"), raw("3"), list({raw("-7")}), raw("3")}),
         list({raw("4"), raw("3"), list({raw("-21")}), raw("3")}),
         list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("0"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}),
@@ -7590,11 +7390,11 @@ LV source_writer_root_panel_base_info_record() {
         raw("1"),
         raw("1"),
         raw("2"),
-        source_writer_default_color_record(),
+        ordinary_form_listout_default_color_record(),
     });
 }
 
-LV source_writer_root_page_state_record(const XmlElementSlice& page_state) {
+LV ordinary_form_listout_root_page_state_record(const XmlElementSlice& page_state) {
     const std::string name = xml_attr_value(page_state.attrs, "name").empty()
         ? "Страница1"
         : xml_attr_value(page_state.attrs, "name");
@@ -7608,33 +7408,33 @@ LV source_writer_root_page_state_record(const XmlElementSlice& page_state) {
     return list({
         raw("6"),
         localized_text_record(title_text),
-        source_writer_root_page_state_style_group_record(style_mode),
+        ordinary_form_listout_root_page_state_style_group_record(style_mode),
         raw("-1"),
         raw("1"),
         raw("1"),
         str_atom(name),
         raw("1"),
-        source_writer_default_color_record(),
-        source_writer_default_color_record(),
+        ordinary_form_listout_default_color_record(),
+        ordinary_form_listout_default_color_record(),
         list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}),
         raw("1"),
     });
 }
 
-std::vector<LV> source_writer_root_page_state_records(const XmlElementSlice& layout) {
+std::vector<LV> ordinary_form_listout_root_page_state_records(const XmlElementSlice& layout) {
     std::vector<LV> states;
     for (const auto& page_state : find_xml_elements(layout.body, "PageState")) {
-        states.push_back(source_writer_root_page_state_record(page_state));
+        states.push_back(ordinary_form_listout_root_page_state_record(page_state));
     }
     if (states.empty()) {
         XmlElementSlice fallback;
         fallback.attrs = " name=\"Страница1\"";
-        states.push_back(source_writer_root_page_state_record(fallback));
+        states.push_back(ordinary_form_listout_root_page_state_record(fallback));
     }
     return states;
 }
 
-std::vector<LV> source_writer_layout_dependency_sequence(const XmlElementSlice& layout) {
+std::vector<LV> ordinary_form_listout_layout_dependency_sequence(const XmlElementSlice& layout) {
     std::vector<LV> sequence;
     const auto groups = find_xml_elements(layout.body, "LayoutDependencyGroup");
     if (!groups.empty()) {
@@ -7660,7 +7460,7 @@ std::vector<LV> source_writer_layout_dependency_sequence(const XmlElementSlice& 
     return sequence;
 }
 
-std::vector<LV> source_writer_root_page_layout_records(const XmlElementSlice& layout) {
+std::vector<LV> ordinary_form_listout_root_page_layout_records(const XmlElementSlice& layout) {
     std::vector<LV> records;
     for (const auto& page_layout : find_xml_elements(layout.body, "PageLayout")) {
         const std::string page = xml_attr_value(page_layout.attrs, "page").empty() ? "0" : xml_attr_value(page_layout.attrs, "page");
@@ -7684,25 +7484,25 @@ std::vector<LV> source_writer_root_page_layout_records(const XmlElementSlice& la
     return records;
 }
 
-LV source_writer_root_panel_info_from_layout_xml(const std::string& xml) {
+LV ordinary_form_listout_root_panel_info_from_layout_xml(const std::string& xml) {
     const auto layout_xml = first_xml_element(xml, "RootPanelLayout");
     if (layout_xml.self_closing && layout_xml.body.empty()) {
         return {};
     }
-    std::vector<LV> states = source_writer_root_page_state_records(layout_xml);
+    std::vector<LV> states = ordinary_form_listout_root_page_state_records(layout_xml);
     std::vector<LV> state_table;
     state_table.push_back(raw("1"));
     state_table.push_back(raw(std::to_string(states.size())));
     state_table.insert(state_table.end(), std::make_move_iterator(states.begin()), std::make_move_iterator(states.end()));
 
-    std::vector<LV> position_records = source_writer_root_page_layout_records(layout_xml);
+    std::vector<LV> position_records = ordinary_form_listout_root_page_layout_records(layout_xml);
     std::vector<LV> body{
-        source_writer_root_panel_base_info_record(),
+        ordinary_form_listout_root_panel_base_info_record(),
         raw("26"),
     };
-    auto dependency_sequence = source_writer_layout_dependency_sequence(layout_xml);
+    auto dependency_sequence = ordinary_form_listout_layout_dependency_sequence(layout_xml);
     body.insert(body.end(), std::make_move_iterator(dependency_sequence.begin()), std::make_move_iterator(dependency_sequence.end()));
-    body.push_back(source_writer_page_style_group_record("1"));
+    body.push_back(ordinary_form_listout_page_style_group_record("1"));
     body.push_back(raw(xml_attr_value(layout_xml.attrs, "pageStateFlag").empty() ? "0" : xml_attr_value(layout_xml.attrs, "pageStateFlag")));
     body.push_back(raw(xml_attr_value(layout_xml.attrs, "currentPageIndex").empty() ? "1" : xml_attr_value(layout_xml.attrs, "currentPageIndex")));
     body.push_back(list(std::move(state_table)));
@@ -7716,7 +7516,7 @@ LV source_writer_root_panel_info_from_layout_xml(const std::string& xml) {
     body.push_back(raw("5"));
     body.push_back(raw("64"));
     body.push_back(raw("0"));
-    body.push_back(source_writer_default_color_record());
+    body.push_back(ordinary_form_listout_default_color_record());
     body.push_back(raw("0"));
     body.push_back(raw("0"));
     body.push_back(raw("57"));
@@ -7752,7 +7552,7 @@ void platform_form_listout_write_child_table(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& parent
 ) {
-    const auto children = source_writer_children(form_object, parent);
+    const auto children = ordinary_form_listout_children(form_object, parent);
     out.begin_list();
     out.write_raw_atom(std::to_string(children.size()));
     for (const auto* child : children) {
@@ -7767,11 +7567,11 @@ void platform_form_listout_write_control_record(
     const oof::platform::object_model::PlatformObject& object
 ) {
     out.begin_list();
-    out.write_raw_atom(source_writer_control_guid(object.platform_type));
+    out.write_raw_atom(ordinary_form_listout_control_guid(object.platform_type));
     out.write_raw_atom(object.object_id.empty() ? "0" : object.object_id);
-    listout_write_value(out, source_writer_control_payload(form_object, object));
-    listout_write_value(out, source_writer_geometry(object));
-    listout_write_value(out, source_writer_metadata(object));
+    listout_write_value(out, ordinary_form_listout_control_payload(form_object, object));
+    listout_write_value(out, ordinary_form_listout_geometry(object));
+    listout_write_value(out, ordinary_form_listout_metadata(object));
     platform_form_listout_write_child_table(out, form_object, object);
     out.end_list();
 }
@@ -7780,7 +7580,7 @@ void platform_form_listout_write_root_child_table(
     oof::platform::stream::ListOutStream& out,
     const oof::platform::object_model::PlatformFormObject& form_object
 ) {
-    const auto children = source_writer_children(form_object, form_object.form);
+    const auto children = ordinary_form_listout_children(form_object, form_object.form);
     out.begin_list();
     out.write_raw_atom(std::to_string(children.size()));
     for (const auto* child : children) {
@@ -7796,7 +7596,7 @@ void platform_form_listout_write_root_record(
 ) {
     LV root_panel_info = list({raw("1"), localized_text_record(title)});
     if (const auto* root_layout = find_object_property(form_object.form, "RootPanelLayoutXml")) {
-        LV layout_info = source_writer_root_panel_info_from_layout_xml(root_layout->value);
+        LV layout_info = ordinary_form_listout_root_panel_info_from_layout_xml(root_layout->value);
         if (layout_info.is_list) {
             root_panel_info = std::move(layout_info);
         }
@@ -7811,7 +7611,7 @@ void platform_form_listout_write_root_record(
     out.write_raw_atom(extended_root ? "18" : "16");
     listout_write_value(out, list({localized_text_record(title), raw("42"), raw("3")}));
     out.begin_list();
-    out.write_raw_atom(source_writer_control_guid("Panel"));
+    out.write_raw_atom(ordinary_form_listout_control_guid("Panel"));
     listout_write_value(out, root_panel_info);
     platform_form_listout_write_root_child_table(out, form_object);
     out.end_list();
@@ -7839,8 +7639,8 @@ LV platform_form_listout_payload(
     out.begin_list();
     out.write_raw_atom("27");
     platform_form_listout_write_root_record(out, form_object, title);
-    listout_write_value(out, source_writer_attributes_table(form_object));
-    listout_write_value(out, source_writer_form_object_info(form_object));
+    listout_write_value(out, ordinary_form_listout_attributes_table(form_object));
+    listout_write_value(out, ordinary_form_listout_form_object_info(form_object));
     out.begin_list();
     out.write_raw_atom("0");
     out.end_list();
@@ -7859,9 +7659,9 @@ LV platform_form_listout_payload(
     out.begin_list();
     out.write_raw_atom("10");
     out.write_raw_atom("0");
-    listout_write_value(out, source_writer_empty_page_style_record());
-    listout_write_value(out, source_writer_empty_page_style_record());
-    listout_write_value(out, source_writer_empty_page_style_record());
+    listout_write_value(out, ordinary_form_listout_empty_page_style_record());
+    listout_write_value(out, ordinary_form_listout_empty_page_style_record());
+    listout_write_value(out, ordinary_form_listout_empty_page_style_record());
     out.write_raw_atom("100");
     out.write_raw_atom("0");
     out.write_raw_atom("0");
@@ -7970,7 +7770,7 @@ struct SourcePackageBuildResult {
     bool module_package_file_used = false;
     std::size_t module_bytes = 0;
     std::size_t picture_files_read = 0;
-    SourceWriterCoverageSummary writer_coverage;
+    OrdinaryFormListOutCoverageSummary listout_coverage;
     SourcePackageContainerTimes container_times;
 };
 
@@ -7985,7 +7785,7 @@ SourcePackageBuildResult build_formbin_source_package(const std::string& xml_pat
     const auto form_object = platform_form_object_from_public_xml(package_xml);
     const std::string title = public_form_title_from_xml(package_xml);
     result.control_count = form_object.items.count();
-    result.writer_coverage = source_writer_coverage_summary(form_object);
+    result.listout_coverage = ordinary_form_listout_coverage_summary(form_object);
 
     const auto module_path = form_package_module_path(xml_package_path);
     result.container_times = source_package_container_times(xml_package_path, module_path, source_xml);
@@ -8026,8 +7826,6 @@ void write_formbin_from_source_package(
     std::cout << "{\"output\":";
     print_json_string(output_path);
     std::cout << ",\"operation\":\"formbin-build-source-package\"";
-    std::cout << ",\"diagnosticOnly\":false";
-    std::cout << ",\"baseBacked\":false";
     std::cout << ",\"productPath\":true";
     std::cout << ",\"architecture\":\"Form.xml -> OrdinaryForm -> ListOutStream -> Form.bin\"";
     std::cout << ",\"bytes\":" << result.bytes.size();
@@ -8043,9 +7841,8 @@ void write_formbin_from_source_package(
     std::cout << ",\"formModifiedTicks\":" << result.container_times.form_modified;
     std::cout << ",\"moduleCreatedTicks\":" << result.container_times.module_created;
     std::cout << ",\"moduleModifiedTicks\":" << result.container_times.module_modified;
-    std::cout << ",\"usesBaseBin\":false";
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
-    print_source_writer_coverage_json(result.writer_coverage);
+    print_ordinary_form_listout_coverage_json(result.listout_coverage);
     std::cout << "}\n";
 }
 
@@ -8089,7 +7886,6 @@ void write_formbin_from_platform_xsd_xml(
     std::cout << ",\"operation\":\"platform-xsd-xml-build-formbin\"";
     std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> XSD schema-order ListOutStream -> Form.bin\"";
     std::cout << ",\"schemaOrderWriter\":\"PlatformXdtoObject\"";
-    std::cout << ",\"usesBasePayload\":false";
     std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
     std::cout << ",\"schemaObjects\":" << result.schema_objects;
     std::cout << ",\"schemaMembers\":" << result.schema_members;
@@ -8178,7 +7974,7 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
     const auto summary = summarize_materialized_graph(envelope.payload);
     const auto form_object = materialize_platform_form_object(envelope);
-    const auto writer_coverage = source_writer_coverage_summary(form_object);
+    const auto listout_coverage = ordinary_form_listout_coverage_summary(form_object);
     std::cout << "{\"source\":\"Form.bin:form\"";
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << ",\"objectModel\":\"PlatformFormObject\"";
@@ -8188,7 +7984,7 @@ void print_formbin_xml_coverage(const std::string& input_path) {
     std::cout << ",\"materializedItems\":" << summary.items.size();
     std::cout << ",\"namedItems\":" << summary.named_items;
     std::cout << ",\"schemaBackedItems\":" << summary.schema_backed_items;
-    print_source_writer_coverage_json(writer_coverage);
+    print_ordinary_form_listout_coverage_json(listout_coverage);
     std::cout << ",\"missingCodecs\":[\"cf_form_controls8 color/font/picture/control-specific typed payload fields\"]";
     std::cout << "}\n";
 }
@@ -8487,7 +8283,7 @@ struct ObjectBracketRoundtripResult {
     std::string signature1;
     std::string signature2;
     std::string signature3;
-    SourceWriterCoverageSummary writer_coverage;
+    OrdinaryFormListOutCoverageSummary listout_coverage;
 };
 
 ObjectBracketRoundtripResult object_bracket_roundtrip(const RuntimeFormEnvelope& envelope) {
@@ -8511,7 +8307,7 @@ ObjectBracketRoundtripResult object_bracket_roundtrip(const RuntimeFormEnvelope&
     result.payload3_text = oof::platform::stream::dump_compact(envelope3.payload);
     result.object3 = materialize_platform_form_object(envelope3);
     result.signature3 = platform_form_object_signature(result.object3);
-    result.writer_coverage = source_writer_coverage_summary(result.object1);
+    result.listout_coverage = ordinary_form_listout_coverage_summary(result.object1);
     return result;
 }
 
@@ -8536,7 +8332,7 @@ ObjectBracketRoundtripResult empty_object_bracket_roundtrip(std::string title) {
     result.payload3_text = oof::platform::stream::dump_compact(envelope3.payload);
     result.object3 = materialize_platform_form_object(envelope3);
     result.signature3 = platform_form_object_signature(result.object3);
-    result.writer_coverage = source_writer_coverage_summary(result.object2);
+    result.listout_coverage = ordinary_form_listout_coverage_summary(result.object2);
     return result;
 }
 
@@ -8549,9 +8345,6 @@ void print_empty_form_object_roundtrip(std::string title) {
     std::cout << "{\"source\":\"EmptyOrdinaryFormObject\"";
     std::cout << ",\"publicContract\":\"PlatformFormObject\"";
     std::cout << ",\"path\":\"PlatformFormObject -> bracket -> PlatformFormObject -> bracket\"";
-    std::cout << ",\"xmlUsed\":false";
-    std::cout << ",\"usesBaseBin\":false";
-    std::cout << ",\"usesSourcePayload\":false";
     std::cout << ",\"objectOrigin\":\"empty-default-object\"";
     std::cout << ",\"objectCounts\":{\"items\":" << result.object1.items.count()
               << ",\"attributes\":" << result.object1.attributes.count()
@@ -8571,7 +8364,7 @@ void print_empty_form_object_roundtrip(std::string title) {
               << (object_stable_after_second_write ? "true" : "false");
     std::cout << ",\"payloadStableAfterSecondWrite\":"
               << (payload_stable_after_second_write ? "true" : "false");
-    print_source_writer_coverage_json(result.writer_coverage);
+    print_ordinary_form_listout_coverage_json(result.listout_coverage);
     std::cout << "}\n";
 }
 
@@ -8590,8 +8383,6 @@ void print_object_bracket_roundtrip_json(
     print_json_string(source);
     std::cout << ",\"publicContract\":\"PlatformFormObject\"";
     std::cout << ",\"path\":\"bracket -> PlatformFormObject -> bracket -> PlatformFormObject -> bracket\"";
-    std::cout << ",\"xmlUsed\":false";
-    std::cout << ",\"usesBaseBin\":false";
     std::cout << ",\"inputBytes\":" << input_bytes;
     std::cout << ",\"runtimeUuid\":";
     print_json_string(envelope.runtime_uuid);
@@ -8618,7 +8409,7 @@ void print_object_bracket_roundtrip_json(
               << (object_stable_after_second_write ? "true" : "false");
     std::cout << ",\"payloadStableAfterSecondWrite\":"
               << (payload_stable_after_second_write ? "true" : "false");
-    print_source_writer_coverage_json(result.writer_coverage);
+    print_ordinary_form_listout_coverage_json(result.listout_coverage);
     std::cout << "}\n";
 }
 
@@ -8926,15 +8717,13 @@ void print_object_roundtrip_diff_json(
     std::cout << "{\"source\":";
     print_json_string(source);
     std::cout << ",\"path\":\"bracket -> PlatformFormObject -> bracket -> PlatformFormObject\"";
-    std::cout << ",\"xmlUsed\":false";
-    std::cout << ",\"usesBaseBin\":false";
     std::cout << ",\"objectSignatureEqualAfterFirstWrite\":"
               << (result.signature1 == result.signature2 ? "true" : "false");
     std::cout << ",\"objectSignatureStableAfterSecondWrite\":"
               << (result.signature2 == result.signature3 ? "true" : "false");
     std::cout << ",\"payloadStableAfterSecondWrite\":"
               << (result.payload2_text == result.payload3_text ? "true" : "false");
-    print_source_writer_coverage_json(result.writer_coverage);
+    print_ordinary_form_listout_coverage_json(result.listout_coverage);
     std::cout << ",\"firstWriteDiff\":{\"missingObjects\":" << first_diff.missing_objects
               << ",\"addedObjects\":" << first_diff.added_objects
               << ",\"changedIdentity\":" << first_diff.changed_identity
@@ -9734,45 +9523,6 @@ oof::platform::object_model::PlatformFormObjectEdit public_xml_edits_to_platform
     return object_edit;
 }
 
-void merge_platform_form_object_edits(
-    oof::platform::object_model::PlatformFormObjectEdit& target,
-    const oof::platform::object_model::PlatformFormObjectEdit& source
-) {
-    for (const auto& source_object : source.objects) {
-        auto& target_object = target.object(source_object.object_id, source_object.platform_type);
-        for (const auto& property : source_object.properties) {
-            target_object.set_property(property.name, property.value);
-        }
-    }
-}
-
-oof::platform::object_model::PlatformFormObjectEdit parse_public_xml_platform_object_edits(
-    const std::string& xml
-) {
-    auto edits = public_xml_edits_to_platform_object_edits(parse_public_xml_control_edits(xml));
-    merge_platform_form_object_edits(edits, parse_public_xml_collection_edits(xml));
-    return edits;
-}
-
-oof::platform::object_model::PlatformFormObjectEdit keep_changed_platform_object_edits(
-    const oof::platform::object_model::PlatformFormObjectEdit& requested,
-    const oof::platform::object_model::PlatformFormObject& baseline
-) {
-    oof::platform::object_model::PlatformFormObjectEdit changed;
-    for (const auto& requested_object : requested.objects) {
-        const auto* current_object = baseline.find_object_by_id(requested_object.object_id);
-        auto& changed_object = changed.object(requested_object.object_id, requested_object.platform_type);
-        for (const auto& property : requested_object.properties) {
-            const auto* current_property = current_object != nullptr ? current_object->property(property.name) : nullptr;
-            if (current_property != nullptr && current_property->value == property.value) {
-                continue;
-            }
-            changed_object.set_property(property.name, property.value);
-        }
-    }
-    return changed;
-}
-
 PublicXmlApplyResult apply_platform_object_edits(
     RuntimeFormEnvelope& envelope,
     const oof::platform::object_model::PlatformFormObjectEdit& object_edit
@@ -10345,8 +10095,6 @@ void print_xsd_order_object_gate_json(
     std::cout << ",\"source\":";
     print_json_string(source_label);
     std::cout << ",\"concept\":\"platform XSD sequence/choice/attributes -> descriptor slots -> PlatformFormObject\"";
-    std::cout << ",\"publicXmlUsed\":false";
-    std::cout << ",\"payloadPatchUsed\":false";
     std::cout << ",\"objectsChecked\":" << stats.objects_checked;
     std::cout << ",\"formObjectsChecked\":" << stats.form_objects_checked;
     std::cout << ",\"itemObjectsChecked\":" << stats.item_objects_checked;
@@ -10467,9 +10215,6 @@ void print_xsd_order_object_roundtrip_json(
     std::cout << ",\"source\":";
     print_json_string(source);
     std::cout << ",\"hypothesis\":\"platform XSD order descriptors survive bracket -> PlatformFormObject -> bracket roundtrip\"";
-    std::cout << ",\"publicXmlUsed\":false";
-    std::cout << ",\"payloadPatchUsed\":false";
-    std::cout << ",\"usesBaseBin\":false";
     std::cout << ",\"inputBytes\":" << input_bytes;
     std::cout << ",\"payloadRootVersion\":";
     print_json_string(envelope.payload.items.empty() ? "" : envelope.payload.items[0].atom);
@@ -10499,7 +10244,7 @@ void print_xsd_order_object_roundtrip_json(
     std::cout << ",";
     print_xsd_order_roundtrip_phase_json("afterSecondWrite", after_second_write_stats);
     std::cout << "]";
-    print_source_writer_coverage_json(result.writer_coverage);
+    print_ordinary_form_listout_coverage_json(result.listout_coverage);
     std::cout << ",\"status\":";
     print_json_string(status_pass ? "PASS" : "FAIL");
     std::cout << "}\n";
@@ -10543,7 +10288,6 @@ void print_object_graph_concept_selftest() {
 
     std::cout << "{\"operation\":\"object-graph-concept-selftest\"";
     std::cout << ",\"concept\":\"bracket -> PlatformFormObject -> bracket\"";
-    std::cout << ",\"xmlUsed\":false";
     std::cout << ",\"sourcePackageUsed\":false";
     std::cout << ",\"platformValidationUsed\":false";
     std::cout << ",\"objectCounts\":{\"items\":" << result.object1.items.count()
@@ -11773,10 +11517,6 @@ int main(int argc, char** argv) {
             write_formbin_package(argv[2], argv[3]);
             return 0;
         }
-        if (command == "formbin-build-package" && argc == 5) {
-            write_formbin_from_package(argv[2], argv[3], argv[4]);
-            return 0;
-        }
         if (command == "formbin-build-source-package" && argc == 4) {
             write_formbin_from_source_package(argv[2], argv[3]);
             return 0;
@@ -11827,10 +11567,6 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-dump-platform-xsd-xml" && argc == 4) {
             write_runtime_form_platform_xsd_xml(argv[2], argv[3]);
-            return 0;
-        }
-        if (command == "runtime-form-build-xml" && argc == 5) {
-            write_runtime_form_from_xml(argv[2], argv[3], argv[4]);
             return 0;
         }
         if (command == "runtime-form-object-graph" && argc == 3) {

@@ -3,6 +3,9 @@
 Read [`ordinary-form-target-contract.md`](ordinary-form-target-contract.md)
 first. It is the hard contract for this repository: the product is the
 `OrdinaryForm` object graph, not a `Form.bin` patcher.
+[`repository-target-state.md`](repository-target-state.md) is the active
+migration checkpoint: release-facing commands must converge to the single
+`ListInStream -> OrdinaryFormObject -> ListOutStream` path.
 
 The repository is split by format boundary, not by CLI command.
 
@@ -38,11 +41,11 @@ writer records with platform-derived codec descriptors. The public XML must
 stay object-model-only; list-stream details remain internal.
 
 Behavioral changes should stay separate from these moves. A pure architecture
-cleanup must keep native CLI arguments stable and pass the native round-trip
-checks.
+cleanup may delete legacy-looking CLI commands when they are not on the object
+path, and must pass the native round-trip checks.
 
-Byte identity and base-backed rebuilds are diagnostics, not the public release
-contract. The release contract is semantic equality of the materialized
+Byte identity is diagnostic, not the public release contract. The release
+contract is semantic equality of the materialized
 `OrdinaryForm` graph after `Form.xml -> OrdinaryForm -> Form.bin ->
 OrdinaryForm` plus strict platform validation where the local platform is
 available. Broader corpus work should expand typed descriptor coverage

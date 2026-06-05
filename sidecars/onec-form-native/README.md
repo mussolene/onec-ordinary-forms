@@ -95,12 +95,10 @@ sidecars/onec-form-native/build/oof-native formbin-dump-package Form.bin Form.xm
 sidecars/onec-form-native/build/oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml
 ```
 
-Apply supported public package edits back to a real `Form.bin` container, or
-public XML edits back to a runtime stream:
+Build a real `Form.bin` from the public source package through the object path:
 
 ```bash
-sidecars/onec-form-native/build/oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin
-sidecars/onec-form-native/build/oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt
+sidecars/onec-form-native/build/oof-native formbin-build-source-package Form.xml rebuilt-Form.bin
 ```
 
 The package projection is native C++ and emits `Form`, `ChildItems`,
@@ -119,6 +117,8 @@ scalar `DimensionBinding dimension/value`, and typed dimension binding records
 round-trip through native runtime and Form.bin build commands. Anchor records
 stay platform-shaped internally but are projected as named XML anchors
 (`From`, `To`, `Extra`) with readable `targetName` hints when the target object
-is materialized. Full XML-to-Form.bin writing still requires attributes,
-commands, events, and the remaining `cf_form_controls8` control-specific
-property slots.
+is materialized.
+
+Base-backed XML build commands are no longer public product commands. If a
+test or investigation needs a baseline edit, keep it in ignored `scan-output/`
+or an explicitly diagnostic command; do not document it as a product build path.

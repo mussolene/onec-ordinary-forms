@@ -9,7 +9,7 @@ as the source of truth: `Form.xml`, `Form/Module.bsl`, and
 removed to keep one product surface.
 
 Hard architecture rule: `Form.bin` is only a container for the serialized form
-stream and module stream. It is not the model. Required `base-Form.bin`,
+stream and module stream. It is not the model. Existing `Form.bin` state,
 baseline diff, patch workers, raw/list-stream preservation fields, hidden raw
 object models, and compatibility profiles are not the product path. See
 [`docs/ordinary-form-target-contract.md`](docs/ordinary-form-target-contract.md).
@@ -193,11 +193,10 @@ Passing 1C Designer validation is required, but not sufficient by itself: the
 public XML must also remain a clean object model, not a renamed raw stream.
 
 `build-bin` must rebuild `Form.bin` from public `Form.xml`, `Form/Module.bsl`,
-and `Form/Items/.../Picture.*` through `OrdinaryForm`. The native base-backed
-rebuild path is diagnostic-only for already supported edit codecs. It is not
-the source-package architecture and must not be expanded with raw fallbacks,
-patch workers, baseline diff logic, or baseline-preservation profiles. The
-release target remains `Form.xml -> OrdinaryForm -> ListOutStream -> Form.bin`.
+and `Form/Items/.../Picture.*` through `OrdinaryForm`. The release target is
+`Form.xml -> OrdinaryForm -> ListOutStream -> Form.bin`; missing behavior must
+be implemented as named object descriptors and serializers, not by keeping an
+old `Form.bin` shape.
 
 ## Русский
 
@@ -398,12 +397,10 @@ Current implementation status:
 - validate `Form.xml` against bundled schemas;
 - build ordinary `Form.bin` directly from public `Form.xml`, `Form/Module.bsl`,
   and `Form/Items/.../Picture.*` without requiring a source `Form.bin`;
-- keep base-backed rebuild commands diagnostic-only for supported checks, not
-  as the source-package architecture;
 - read changed `Form/Module.bsl` back into `Form.bin` during direct source
   rebuild;
 - dump existing picture payloads to `Form/Items/.../Picture.*` and apply
-  changed picture properties through the source writer where supported;
+  changed picture properties through the object/ListOut writer where supported;
 - delete leaf form controls by removing the named control node from public
   `ChildItems`;
 - scan local EPF/ERF corpora without committing private artifacts.
@@ -411,8 +408,8 @@ Current implementation status:
 Target implementation status:
 
 - keep the public package as the only editable source form;
-- harden and extend the direct source writer for more ordinary-form controls and
-  properties;
+- harden and extend the direct object/ListOut writer for more ordinary-form
+  controls and properties;
 - keep the implementation in native C++ without reintroducing seed templates,
   raw fallbacks, mandatory base bins, patch workers, or a parallel writer.
 
@@ -424,12 +421,10 @@ Target implementation status:
 - проверка `Form.xml` по встроенным схемам обычных форм;
 - сборка обычного `Form.bin` напрямую из публичного `Form.xml`,
   `Form/Module.bsl` и `Form/Items/.../Picture.*` без исходного `Form.bin`;
-- сохранение base-backed команд только как diagnostic-only пути для проверок,
-  а не как source-package архитектуры;
 - чтение измененного `Form/Module.bsl` обратно в `Form.bin` при прямой сборке
   из source package;
 - выгрузка существующих картинок в `Form/Items/.../Picture.*` и применение
-  измененных картинок как свойств объекта через source writer там, где это
+  измененных картинок как свойств объекта через object/ListOut writer там, где это
   поддержано;
 - удаление leaf-элементов формы через удаление именованного узла из публичного
   `ChildItems`;
@@ -438,8 +433,8 @@ Target implementation status:
 Целевой статус реализации:
 
 - удержание публичного package как единственного редактируемого источника;
-- расширение и укрепление прямого source writer для большего числа контролов и
-  свойств обычных форм;
+- расширение и укрепление прямого object/ListOut writer для большего числа
+  контролов и свойств обычных форм;
 - удержание реализации в native C++ без возврата seed templates, raw fallback,
   обязательного исходного `Form.bin`, patch-worker'ов или параллельного writer.
 
@@ -553,9 +548,9 @@ sidecars/onec-form-native/build/oof-native formbin-build-source-package \
   scan-output/rebuilt/Form.bin
 ```
 
-The old base-backed compatibility path is not the product contract. The
-release-facing path is source package to `OrdinaryForm` to `Form.bin` through
-native C++.
+The release-facing path is source package to `OrdinaryForm` to `Form.bin`
+through native C++. There is no release build path that requires an existing
+source `Form.bin`.
 
 Before platform import, use a copy of the source tree where the public ordinary
 `Ext/Form.xml` and `Ext/Form/` sidecar directory are removed. The platform
