@@ -215,6 +215,21 @@ test: $(BIN)
 	! grep -F -q '<Picture>' $(BUILD_DIR)/runtime-form.xml
 	! grep -F -q '<Font>' $(BUILD_DIR)/runtime-form.xml
 	! grep -F -q '<ListStream' $(BUILD_DIR)/runtime-form.xml
+	$(BIN) runtime-form-dump-platform-xsd-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-platform-xsd.xml | grep -F -q '"xmlVocabulary":"platform-xsd-stream-elements"'
+	grep -F -q '<Form xmlns="http://v8.1c.ru/8.2/managed-application/logform/layouter"' $(BUILD_DIR)/runtime-platform-xsd.xml
+	grep -F -q '<btn xmlns="http://v8.1c.ru/8.2/managed-application/logform" id="5" name="Button1"' $(BUILD_DIR)/runtime-platform-xsd.xml
+	grep -F -q '<chk xmlns="http://v8.1c.ru/8.2/managed-application/logform" id="6" name="Check1"' $(BUILD_DIR)/runtime-platform-xsd.xml
+	! grep -F -q '<Object' $(BUILD_DIR)/runtime-platform-xsd.xml
+	! grep -F -q '<Property name=' $(BUILD_DIR)/runtime-platform-xsd.xml
+	$(BIN) platform-xsd-xml-object $(BUILD_DIR)/runtime-platform-xsd.xml > $(BUILD_DIR)/runtime-platform-xsd-object.json
+	grep -F -q '"source":"platform-XSD-XML"' $(BUILD_DIR)/runtime-platform-xsd-object.json
+	grep -F -q '"typeSource":"platform XDTO IObject + PlatformObjectSchema"' $(BUILD_DIR)/runtime-platform-xsd-object.json
+	grep -F -q '"items":{"count":2' $(BUILD_DIR)/runtime-platform-xsd-object.json
+	grep -F -q '"objectId":"5","name":"Button1","platformType":"Button"' $(BUILD_DIR)/runtime-platform-xsd-object.json
+	grep -F -q '"objectId":"6","name":"Check1","platformType":"CheckBox"' $(BUILD_DIR)/runtime-platform-xsd-object.json
+	! grep -F -q '"commands":{"count":1' $(BUILD_DIR)/runtime-platform-xsd-object.json
+	$(BIN) platform-xsd-xml-roundtrip $(BUILD_DIR)/runtime-platform-xsd.xml $(BUILD_DIR)/runtime-platform-xsd-redump.xml | grep -F -q '"path":"platform-XSD-XML -> PlatformXdtoObject -> PlatformFormObject -> PlatformXdtoObject -> platform-XSD-XML"'
+	cmp $(BUILD_DIR)/runtime-platform-xsd.xml $(BUILD_DIR)/runtime-platform-xsd-redump.xml
 	perl -0pi -e 's/name="Button1"/name="ButtonXmlEdited"/' $(BUILD_DIR)/runtime-form.xml
 	$(BIN) runtime-form-build-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml $(BUILD_DIR)/runtime-form-xml-edited.txt | grep -F -q '"nameEdits":1'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-xml-edited.txt $(BUILD_DIR)/runtime-form-xml-redump.xml | grep -F -q '"publicContract":"OrdinaryForm"'

@@ -45,10 +45,14 @@ void usage() {
               << "       oof-native formbin-dump-package Form.bin Form.xml\n"
               << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
               << "       oof-native formbin-build-package base-Form.bin Form.xml rebuilt-Form.bin  # diagnostic base-backed path, not product build\n"
+              << "       oof-native formbin-dump-platform-xsd-xml Form.bin PlatformForm.xml\n"
               << "       oof-native formbin-xml-coverage Form.bin\n"
               << "       oof-native <formbin-platform-object|formbin-platform-object-get|formbin-xsd-order-object-gate> Form.bin [objectId property]\n"
               << "       oof-native formbin-platform-object-set base-Form.bin rebuilt-Form.bin objectId property value  # diagnostic base-backed setPropVal check\n"
               << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
+              << "       oof-native runtime-form-dump-platform-xsd-xml runtime-form-stream.txt PlatformForm.xml\n"
+              << "       oof-native platform-xsd-xml-object PlatformForm.xml\n"
+              << "       oof-native platform-xsd-xml-roundtrip PlatformForm.xml rebuilt-PlatformForm.xml\n"
               << "       oof-native runtime-form-build-xml base-runtime-stream.txt Form.xml rebuilt-runtime-stream.txt  # diagnostic base-backed path\n"
               << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-xsd-order-object-roundtrip|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
               << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
@@ -1742,6 +1746,8 @@ struct RuntimeFormEnvelope {
     std::string runtime_uuid;
     oof::platform::stream::ListValue payload;
 };
+
+RuntimeFormEnvelope read_formbin_runtime_envelope(const std::string& input_path);
 
 RuntimeFormEnvelope parse_runtime_form_envelope(const std::string& text) {
     auto root = oof::platform::stream::parse(text);
@@ -4235,17 +4241,22 @@ std::size_t find_matching_xml_close(
 
 XmlElementSlice first_xml_element(std::string_view text, std::string_view tag) {
     const std::string open = "<" + std::string(tag);
-    const std::size_t start = text.find(open);
+    std::size_t start = text.find(open);
+    while (start != std::string::npos) {
+        const std::size_t name_end = start + open.size();
+        if (name_end >= text.size()) {
+            return {};
+        }
+        const char after_name = text[name_end];
+        if (!std::isalnum(static_cast<unsigned char>(after_name)) && after_name != '_' && after_name != '-') {
+            break;
+        }
+        start = text.find(open, name_end);
+    }
     if (start == std::string::npos) {
         return {};
     }
     const std::size_t name_end = start + open.size();
-    if (name_end < text.size()) {
-        const char after_name = text[name_end];
-        if (std::isalnum(static_cast<unsigned char>(after_name)) || after_name == '_' || after_name == '-') {
-            return {};
-        }
-    }
     const std::size_t tag_end = text.find('>', start);
     if (tag_end == std::string::npos) {
         return {};
@@ -5492,6 +5503,534 @@ std::string form_object_to_public_xml(
     return out;
 }
 
+std::string platform_xsd_element_name(
+    const oof::platform::object_model::PlatformObject& object,
+    const oof::platform::object_schema::PlatformObjectSchema& schema
+) {
+    if (object.platform_type == "FormAttribute") {
+        return "property";
+    }
+    if (object.platform_type == "FormCommand") {
+        return "command";
+    }
+    if (object.platform_type == "FormEvent") {
+        return "event";
+    }
+    return schema.stream_element.empty() ? schema.type_name : schema.stream_element;
+}
+
+bool platform_xsd_member_is_attribute(
+    const oof::platform::object_schema::PlatformObjectSchemaMember& member
+) {
+    return member.source.find('@') != std::string::npos ||
+        member.slot_binding.find('@') != std::string::npos;
+}
+
+std::string platform_xsd_property_text(
+    const oof::platform::object_model::PlatformObjectProperty& property
+) {
+    if (!property.value_object_schema_value.empty()) {
+        return property.value_object_schema_value;
+    }
+    if (!property.value_object_literal.empty()) {
+        return property.value_object_literal;
+    }
+    return property.value;
+}
+
+std::string platform_xsd_member_text(
+    const oof::platform::object_model::PlatformObject& object,
+    const oof::platform::object_schema::PlatformObjectSchemaMember& member,
+    const oof::platform::object_model::PlatformObjectProperty& property
+) {
+    if (member.stream_name == "id") {
+        return object.identity.public_id.empty() ? object.object_id : object.identity.public_id;
+    }
+    if (member.stream_name == "name") {
+        return object.name;
+    }
+    return platform_xsd_property_text(property);
+}
+
+struct PlatformXdtoProperty {
+    std::string name;
+    std::string stream_name;
+    std::string value;
+    bool attribute = false;
+};
+
+struct PlatformXdtoObject {
+    std::string element_name;
+    std::string xsd_namespace;
+    std::string platform_type;
+    std::string object_id;
+    std::string name;
+    std::string schema_source;
+    std::vector<PlatformXdtoProperty> properties;
+    std::vector<PlatformXdtoObject> children;
+
+    const PlatformXdtoProperty* property(std::string_view property_name) const {
+        for (const auto& property : properties) {
+            if (property.name == property_name || property.stream_name == property_name) {
+                return &property;
+            }
+        }
+        return nullptr;
+    }
+
+    std::string get_prop_val(std::string_view property_name) const {
+        const auto* found = property(property_name);
+        if (found == nullptr) {
+            throw std::runtime_error("XDTO object property is not found: " + std::string(property_name));
+        }
+        return found->value;
+    }
+
+    void set_prop_val(std::string_view property_name, std::string value) {
+        for (auto& property : properties) {
+            if (property.name == property_name || property.stream_name == property_name) {
+                property.value = std::move(value);
+                return;
+            }
+        }
+        throw std::runtime_error("XDTO object property is not found: " + std::string(property_name));
+    }
+};
+
+void add_xdto_property(
+    PlatformXdtoObject& object,
+    std::string name,
+    std::string stream_name,
+    std::string value,
+    bool attribute
+) {
+    object.properties.push_back(PlatformXdtoProperty{
+        std::move(name),
+        std::move(stream_name),
+        std::move(value),
+        attribute});
+}
+
+PlatformXdtoObject platform_object_to_xdto_object(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    const auto schema = oof::platform::object_schema::schema_for_platform_type(object.platform_type);
+    if (!schema.has_value()) {
+        throw std::runtime_error("platform XDTO schema is not found for object type: " + object.platform_type);
+    }
+    PlatformXdtoObject xdto;
+    xdto.element_name = platform_xsd_element_name(object, *schema);
+    xdto.xsd_namespace = schema->xsd_namespace;
+    xdto.platform_type = object.platform_type;
+    xdto.object_id = object.object_id;
+    xdto.name = object.name;
+    xdto.schema_source = schema->schema_source;
+    for (const auto& member : schema->xsd_members) {
+        if (member.stream_name.empty() || member.stream_name.find('|') != std::string::npos) {
+            continue;
+        }
+        const auto* property = object.property(member.name);
+        if (property == nullptr) {
+            continue;
+        }
+        add_xdto_property(
+            xdto,
+            member.name,
+            member.stream_name,
+            platform_xsd_member_text(object, member, *property),
+            platform_xsd_member_is_attribute(member));
+    }
+    return xdto;
+}
+
+void append_platform_xdto_xml_object(std::string& out, const PlatformXdtoObject& object, int indent) {
+    append_indent(out, indent);
+    out += "<";
+    out += object.element_name;
+    if (object.platform_type == "Form") {
+        out += " xmlns=\"";
+        out += xml_escape(object.xsd_namespace);
+        out += "\"";
+        out += " xmlns:lf=\"http://v8.1c.ru/8.2/managed-application/logform\"";
+        out += " xmlns:chart=\"http://v8.1c.ru/8.2/data/chart\"";
+    } else if (!object.xsd_namespace.empty()) {
+        out += " xmlns=\"";
+        out += xml_escape(object.xsd_namespace);
+        out += "\"";
+    }
+    for (const auto& property : object.properties) {
+        if (!property.attribute) {
+            continue;
+        }
+        out += " ";
+        out += property.stream_name;
+        out += "=\"";
+        out += xml_escape(property.value);
+        out += "\"";
+    }
+
+    std::string body;
+    for (const auto& property : object.properties) {
+        if (property.attribute) {
+            continue;
+        }
+        append_indent(body, indent + 2);
+        body += "<";
+        body += property.stream_name;
+        body += ">";
+        body += xml_escape(property.value);
+        body += "</";
+        body += property.stream_name;
+        body += ">\n";
+    }
+    for (const auto& child : object.children) {
+        append_platform_xdto_xml_object(body, child, indent + 2);
+    }
+    if (body.empty()) {
+        out += "/>\n";
+        return;
+    }
+    out += ">\n";
+    out += body;
+    append_indent(out, indent);
+    out += "</";
+    out += object.element_name;
+    out += ">\n";
+}
+
+PlatformXdtoObject platform_form_object_to_xdto_object(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    const oof::platform::object_model::PlatformObject& object
+) {
+    PlatformXdtoObject xdto = platform_object_to_xdto_object(object);
+    if (object.platform_type == "Form") {
+        for (const auto& attribute : form_object.attributes.objects()) {
+            xdto.children.push_back(platform_form_object_to_xdto_object(form_object, attribute));
+        }
+        for (const auto& command : form_object.commands.objects()) {
+            xdto.children.push_back(platform_form_object_to_xdto_object(form_object, command));
+        }
+        for (const auto* event : event_objects_for_parent(form_object, "0")) {
+            xdto.children.push_back(platform_form_object_to_xdto_object(form_object, *event));
+        }
+    } else {
+        for (const auto* event : event_objects_for_parent(form_object, object.object_id)) {
+            xdto.children.push_back(platform_form_object_to_xdto_object(form_object, *event));
+        }
+    }
+    for (const auto* child : child_objects_for_parent(form_object, object.object_id)) {
+        xdto.children.push_back(platform_form_object_to_xdto_object(form_object, *child));
+    }
+    return xdto;
+}
+
+std::string form_object_to_platform_xsd_xml(
+    const oof::platform::object_model::PlatformFormObject& form_object
+) {
+    std::string out;
+    out += "<?xml version='1.0' encoding='utf-8'?>\n";
+    const PlatformXdtoObject xdto = platform_form_object_to_xdto_object(form_object, form_object.form);
+    append_platform_xdto_xml_object(out, xdto, 0);
+    return out;
+}
+
+std::optional<oof::platform::object_schema::PlatformObjectSchema> schema_for_platform_xsd_element(
+    std::string_view tag,
+    std::string_view xsd_namespace
+) {
+    for (const auto& schema : oof::platform::object_schema::build_platform_object_schemas()) {
+        if (!xsd_namespace.empty() && !schema.xsd_namespace.empty() && schema.xsd_namespace != xsd_namespace) {
+            continue;
+        }
+        oof::platform::object_model::PlatformObject schema_object;
+        schema_object.platform_type = schema.type_name;
+        if (tag == platform_xsd_element_name(schema_object, schema)) {
+            return schema;
+        }
+        if (tag == schema.stream_element || tag == schema.type_name) {
+            return schema;
+        }
+    }
+    return std::nullopt;
+}
+
+std::string platform_xsd_object_id_from_attrs(std::string_view attrs, std::string_view tag) {
+    std::string id = xml_attr_value(attrs, "id");
+    if (!id.empty()) {
+        return id;
+    }
+    id = xml_attr_value(attrs, "objectId");
+    if (!id.empty()) {
+        return id;
+    }
+    id = xml_attr_value(attrs, "name");
+    if (!id.empty()) {
+        return id;
+    }
+    return std::string(tag);
+}
+
+void set_or_add_platform_xsd_member_property(
+    oof::platform::object_model::PlatformObject& object,
+    const oof::platform::object_schema::PlatformObjectSchemaMember& member,
+    std::string value
+) {
+    if (auto* property = object.property(member.name)) {
+        property->value = std::move(value);
+        property->value_origin = "platform-xsd-xml";
+        enrich_platform_value_object(*property);
+        if (!property->value.empty() && property->value_object_schema_value.empty()) {
+            property->value_object_literal.clear();
+        }
+        return;
+    }
+    auto property = make_platform_object_property(
+        member.name,
+        localized_property_name(member.name),
+        std::move(value),
+        member.value_type,
+        member.source,
+        member.default_value,
+        member.write_policy,
+        "platform-xsd-xml",
+        member.slot_binding,
+        member.slot_codec,
+        member.writable,
+        member.platform_member,
+        member.platform_default);
+    object.properties.push_back(std::move(property));
+}
+
+bool platform_xsd_element_is_member_of_parent(
+    const oof::platform::object_schema::PlatformObjectSchema& parent_schema,
+    std::string_view tag
+) {
+    for (const auto& member : parent_schema.xsd_members) {
+        if (member.stream_name == tag) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void add_platform_xdto_member_values(
+    oof::platform::object_model::PlatformObject& object,
+    const oof::platform::object_schema::PlatformObjectSchema& schema,
+    const PlatformXdtoObject& xdto
+) {
+    for (const auto& member : schema.xsd_members) {
+        if (member.stream_name.empty() || member.stream_name.find('|') != std::string::npos) {
+            continue;
+        }
+        if (const auto* property = xdto.property(member.stream_name)) {
+            set_or_add_platform_xsd_member_property(object, member, property->value);
+        }
+    }
+}
+
+PlatformXdtoObject platform_xdto_object_from_xml_element(
+    std::string_view tag,
+    std::string_view attrs,
+    std::string_view body
+) {
+    const std::string xsd_namespace = xml_attr_value(attrs, "xmlns");
+    const auto schema = schema_for_platform_xsd_element(tag, xsd_namespace);
+    if (!schema.has_value()) {
+        throw std::runtime_error("platform XDTO schema is not found for element: " + std::string(tag));
+    }
+    PlatformXdtoObject xdto;
+    xdto.element_name = std::string(tag);
+    xdto.xsd_namespace = schema->xsd_namespace;
+    xdto.platform_type = schema->type_name;
+    xdto.object_id = platform_xsd_object_id_from_attrs(attrs, tag);
+    xdto.name = xml_attr_value(attrs, "name");
+    if (xdto.name.empty()) {
+        xdto.name = xdto.object_id;
+    }
+    xdto.schema_source = schema->schema_source;
+    for (const auto& member : schema->xsd_members) {
+        if (member.stream_name.empty() || member.stream_name.find('|') != std::string::npos) {
+            continue;
+        }
+        if (platform_xsd_member_is_attribute(member)) {
+            const std::string value = xml_attr_value(attrs, member.stream_name);
+            if (!value.empty() || member.stream_name == "id" || member.stream_name == "name") {
+                add_xdto_property(xdto, member.name, member.stream_name, value, true);
+            }
+            continue;
+        }
+        const auto child = first_xml_element(body, member.stream_name);
+        if (!child.self_closing || !child.body.empty()) {
+            add_xdto_property(xdto, member.name, member.stream_name, xml_unescape(child.body), false);
+        }
+    }
+
+    const std::regex start_tag_pattern(R"(<([A-Za-z][A-Za-z0-9]*)\b([^>]*)>)");
+    std::size_t cursor = 0;
+    while (cursor < body.size()) {
+        const std::string remaining(body.substr(cursor));
+        std::smatch match;
+        if (!std::regex_search(remaining, match, start_tag_pattern)) {
+            break;
+        }
+        const std::size_t start = cursor + static_cast<std::size_t>(match.position());
+        const std::string child_tag = match[1].str();
+        const std::size_t tag_end = body.find('>', start);
+        if (tag_end == std::string::npos) {
+            break;
+        }
+        const std::string child_attrs = match[2].str();
+        const std::size_t attr_end = child_attrs.find_last_not_of(" \t\r\n");
+        const bool self_closing = attr_end != std::string::npos && child_attrs[attr_end] == '/';
+        std::string child_body;
+        std::size_t element_end = tag_end + 1;
+        if (!self_closing) {
+            const std::size_t close_start = find_matching_xml_close(body, child_tag, tag_end + 1);
+            if (close_start == std::string::npos) {
+                throw std::runtime_error("platform XDTO XML element is not closed: " + child_tag);
+            }
+            child_body = std::string(body.substr(tag_end + 1, close_start - tag_end - 1));
+            element_end = close_start + std::string("</" + child_tag + ">").size();
+        }
+        if (!platform_xsd_element_is_member_of_parent(*schema, child_tag)) {
+            xdto.children.push_back(platform_xdto_object_from_xml_element(child_tag, child_attrs, child_body));
+        }
+        cursor = element_end;
+    }
+    return xdto;
+}
+
+PlatformXdtoObject platform_xdto_object_from_xml(const std::string& xml) {
+    const auto root = first_xml_element(xml, "Form");
+    if (root.self_closing && root.body.empty()) {
+        throw std::runtime_error("platform XDTO XML must contain Form root element");
+    }
+    return platform_xdto_object_from_xml_element("Form", root.attrs, root.body);
+}
+
+void add_platform_xdto_child_object(
+    oof::platform::object_model::PlatformFormObject& form_object,
+    const PlatformXdtoObject& xdto,
+    std::string_view parent_object_id
+) {
+    const auto schema = schema_for_platform_xsd_element(xdto.element_name, xdto.xsd_namespace);
+    if (!schema.has_value()) {
+        throw std::runtime_error("platform XDTO schema is not found for object element: " + xdto.element_name);
+    }
+    oof::platform::object_model::PlatformObject object;
+    object.object_id = xdto.object_id;
+    object.name = xdto.name;
+    object.platform_type = xdto.platform_type;
+    object.type_category = "core::kLogFormTypeInfoCategory";
+    object.type_source = "platform XDTO IObject + PlatformObjectSchema";
+    object.parent_object_id = std::string(parent_object_id);
+    object.path = object.parent_object_id.empty()
+        ? "$/items/" + object.object_id
+        : "$/items/" + object.parent_object_id + "/" + object.object_id;
+    add_platform_object_schema_surface(object, *schema);
+    object.properties.push_back(make_described_property("ObjectID", object.object_id));
+    object.properties.push_back(make_described_property("Name", object.name));
+    object.properties.push_back(make_described_property("Type", object.platform_type));
+    object.properties.push_back(make_described_property("Parent", object.parent_object_id));
+    object.properties.push_back(make_described_property("Path", object.path));
+    add_platform_xdto_member_values(object, *schema, xdto);
+    object.identity = oof::platform::object_model::make_identity(
+        object.object_id,
+        object.object_id,
+        "platform XDTO IObject id/name; schema stream element resolves object type",
+        {},
+        {},
+        object.platform_type == "FormAttribute" || object.platform_type == "FormCommand" || object.platform_type == "FormEvent"
+            ? ""
+            : source_writer_control_guid(object.platform_type),
+        "platform XDTO IObject + ordinary control type registry",
+        schema->stream_element,
+        schema->schema_source);
+
+    if (object.platform_type == "FormAttribute") {
+        form_object.attributes.add(std::move(object));
+    } else if (object.platform_type == "FormCommand") {
+        form_object.commands.add(std::move(object));
+    } else if (object.platform_type == "FormEvent") {
+        form_object.events.add(std::move(object));
+    } else {
+        const std::size_t new_index = form_object.items.count();
+        const std::string object_id = object.object_id;
+        const std::string object_name = object.name;
+        const std::string object_type = object.platform_type;
+        form_object.items.add(std::move(object));
+        if (parent_object_id.empty() || parent_object_id == "0") {
+            form_object.form.children.push_back(new_index);
+        } else if (auto* parent = form_object.find_object_by_id(parent_object_id)) {
+            parent->children.push_back(new_index);
+        }
+        form_object.add_edge(oof::platform::object_model::make_edge(
+            "contains",
+            parent_object_id.empty() ? "0" : std::string(parent_object_id),
+            object_id,
+            "ChildItems",
+            "platform XDTO IObject tree order",
+            schema->schema_source,
+            schema->stream_element,
+            object_type,
+            object_name));
+    }
+    for (const auto& child : xdto.children) {
+        add_platform_xdto_child_object(form_object, child, xdto.object_id);
+    }
+}
+
+oof::platform::object_model::PlatformFormObject platform_form_object_from_xdto_object(
+    const PlatformXdtoObject& xdto
+) {
+    if (xdto.platform_type != "Form") {
+        throw std::runtime_error("root platform XDTO object must be Form");
+    }
+    const auto schema = schema_for_platform_xsd_element(xdto.element_name, xdto.xsd_namespace);
+    if (!schema.has_value()) {
+        throw std::runtime_error("platform XDTO root Form schema is not found");
+    }
+    oof::platform::object_model::PlatformFormObject form_object;
+    form_object.form.object_id = "0";
+    form_object.form.name = "Form";
+    form_object.form.platform_type = "Form";
+    form_object.form.type_category = "core::kLogFormTypeInfoCategory";
+    form_object.form.type_source = "platform XDTO IObject + PlatformObjectSchema";
+    form_object.form.path = "$";
+    form_object.form.identity = oof::platform::object_model::make_identity(
+        "0",
+        "0",
+        "root Form object from platform XDTO IObject",
+        {},
+        {},
+        "5c83cba4-7a20-4102-a5be-add0ee74f6a1",
+        "RTLogFormClass platform mechanism",
+        schema->stream_element,
+        schema->schema_source);
+    add_platform_object_schema_surface(form_object.form, *schema);
+    form_object.form.properties.push_back(make_described_property("Type", "Form"));
+    form_object.form.properties.push_back(make_described_property("RuntimeUUID", ""));
+    add_platform_xdto_member_values(form_object.form, *schema, xdto);
+    for (const auto& child : xdto.children) {
+        add_platform_xdto_child_object(form_object, child, "0");
+    }
+    form_object.form.properties.push_back(make_described_property("Items", std::to_string(form_object.items.count())));
+    form_object.form.properties.push_back(make_described_property("Attributes", std::to_string(form_object.attributes.count())));
+    form_object.form.properties.push_back(make_described_property("Commands", std::to_string(form_object.commands.count())));
+    form_object.form.properties.push_back(make_described_property("Events", std::to_string(form_object.events.count())));
+    form_object.form.collections.push_back(make_described_collection("Items", form_object.items.count()));
+    form_object.form.collections.push_back(make_described_collection("Attributes", form_object.attributes.count()));
+    form_object.form.collections.push_back(make_described_collection("Commands", form_object.commands.count()));
+    form_object.form.collections.push_back(make_described_collection("Events", form_object.events.count()));
+    return form_object;
+}
+
+oof::platform::object_model::PlatformFormObject platform_form_object_from_platform_xsd_xml(
+    const std::string& xml
+) {
+    return platform_form_object_from_xdto_object(platform_xdto_object_from_xml(xml));
+}
+
 void write_runtime_form_xml(const std::string& input_path, const std::string& output_path) {
     std::string canonical_text;
     RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
@@ -5504,6 +6043,70 @@ void write_runtime_form_xml(const std::string& input_path, const std::string& ou
     std::cout << ",\"source\":\"RuntimeForm:PlatformObject\"";
     std::cout << ",\"controlCount\":" << form_object.items.count();
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
+    std::cout << "}\n";
+}
+
+void write_runtime_form_platform_xsd_xml(const std::string& input_path, const std::string& output_path) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    const auto form_object = materialize_platform_form_object(envelope);
+    const std::string xml = form_object_to_platform_xsd_xml(form_object);
+    write_file_bytes(output_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"operation\":\"runtime-form-dump-platform-xsd-xml\"";
+    std::cout << ",\"source\":\"PlatformFormObject\"";
+    std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
+    std::cout << ",\"xmlVocabulary\":\"platform-xsd-stream-elements\"";
+    std::cout << ",\"objects\":{\"items\":" << form_object.items.count()
+              << ",\"attributes\":" << form_object.attributes.count()
+              << ",\"commands\":" << form_object.commands.count()
+              << ",\"events\":" << form_object.events.count()
+              << ",\"edges\":" << form_object.edges.size() << "}";
+    std::cout << ",\"bytes\":" << xml.size();
+    std::cout << "}\n";
+}
+
+void write_formbin_platform_xsd_xml(const std::string& input_path, const std::string& output_path) {
+    RuntimeFormEnvelope envelope = read_formbin_runtime_envelope(input_path);
+    const auto form_object = materialize_platform_form_object(envelope);
+    const std::string xml = form_object_to_platform_xsd_xml(form_object);
+    write_file_bytes(output_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"operation\":\"formbin-dump-platform-xsd-xml\"";
+    std::cout << ",\"source\":\"Form.bin:PlatformFormObject\"";
+    std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
+    std::cout << ",\"xmlVocabulary\":\"platform-xsd-stream-elements\"";
+    std::cout << ",\"objects\":{\"items\":" << form_object.items.count()
+              << ",\"attributes\":" << form_object.attributes.count()
+              << ",\"commands\":" << form_object.commands.count()
+              << ",\"events\":" << form_object.events.count()
+              << ",\"edges\":" << form_object.edges.size() << "}";
+    std::cout << ",\"bytes\":" << xml.size();
+    std::cout << "}\n";
+}
+
+void print_platform_xsd_xml_object(const std::string& input_path) {
+    const auto form_object = platform_form_object_from_platform_xsd_xml(read_file_text_lossy(input_path));
+    print_platform_form_object_document(form_object, "platform-XSD-XML", "");
+}
+
+void write_platform_xsd_xml_roundtrip(const std::string& input_path, const std::string& output_path) {
+    const auto form_object = platform_form_object_from_platform_xsd_xml(read_file_text_lossy(input_path));
+    const std::string xml = form_object_to_platform_xsd_xml(form_object);
+    write_file_bytes(output_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
+    std::cout << "{\"output\":";
+    print_json_string(output_path);
+    std::cout << ",\"operation\":\"platform-xsd-xml-roundtrip\"";
+    std::cout << ",\"path\":\"platform-XSD-XML -> PlatformXdtoObject -> PlatformFormObject -> PlatformXdtoObject -> platform-XSD-XML\"";
+    std::cout << ",\"publicOrdinaryFormXsdUsed\":false";
+    std::cout << ",\"objects\":{\"items\":" << form_object.items.count()
+              << ",\"attributes\":" << form_object.attributes.count()
+              << ",\"commands\":" << form_object.commands.count()
+              << ",\"events\":" << form_object.events.count()
+              << ",\"edges\":" << form_object.edges.size() << "}";
+    std::cout << ",\"bytes\":" << xml.size();
     std::cout << "}\n";
 }
 
@@ -10868,6 +11471,10 @@ int main(int argc, char** argv) {
             write_formbin_from_source_package(argv[2], argv[3]);
             return 0;
         }
+        if (command == "formbin-dump-platform-xsd-xml" && argc == 4) {
+            write_formbin_platform_xsd_xml(argv[2], argv[3]);
+            return 0;
+        }
         if (command == "formbin-xml-coverage" && argc == 3) {
             print_formbin_xml_coverage(argv[2]);
             return 0;
@@ -10888,8 +11495,20 @@ int main(int argc, char** argv) {
             write_formbin_platform_object_set(argv[2], argv[3], argv[4], argv[5], argv[6]);
             return 0;
         }
+        if (command == "platform-xsd-xml-object" && argc == 3) {
+            print_platform_xsd_xml_object(argv[2]);
+            return 0;
+        }
+        if (command == "platform-xsd-xml-roundtrip" && argc == 4) {
+            write_platform_xsd_xml_roundtrip(argv[2], argv[3]);
+            return 0;
+        }
         if (command == "runtime-form-dump-xml" && argc == 4) {
             write_runtime_form_xml(argv[2], argv[3]);
+            return 0;
+        }
+        if (command == "runtime-form-dump-platform-xsd-xml" && argc == 4) {
+            write_runtime_form_platform_xsd_xml(argv[2], argv[3]);
             return 0;
         }
         if (command == "runtime-form-build-xml" && argc == 5) {
