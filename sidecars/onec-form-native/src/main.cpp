@@ -9326,6 +9326,9 @@ struct XsdOrderObjectGateStats {
     std::size_t objects_checked = 0;
     std::size_t form_objects_checked = 0;
     std::size_t item_objects_checked = 0;
+    std::size_t attribute_objects_checked = 0;
+    std::size_t command_objects_checked = 0;
+    std::size_t event_objects_checked = 0;
     std::size_t schema_slots_checked = 0;
     std::size_t explicit_slots = 0;
     std::size_t default_slots = 0;
@@ -9342,6 +9345,20 @@ std::optional<oof::platform::object_schema::PlatformObjectSchema> xsd_order_sche
 ) {
     if (object.platform_type == "Form") {
         return oof::platform::object_schema::build_schema_for_root_form();
+    }
+    if (object.platform_type == "FormAttribute") {
+        return oof::platform::object_schema::build_schema_for_form_attribute();
+    }
+    if (object.platform_type == "FormCommand") {
+        return oof::platform::object_schema::build_schema_for_form_command();
+    }
+    if (object.platform_type == "FormEvent") {
+        return oof::platform::object_schema::build_schema_for_form_event();
+    }
+    if (const auto* binding = oof::ordinary::control_type::binding_for_writer_control_type(object.platform_type)) {
+        if (const auto* control = oof::platform::form_schema::control_by_type_name(binding->platform_type)) {
+            return oof::platform::object_schema::build_schema_for_control(*control);
+        }
     }
     if (const auto* control = oof::platform::form_schema::control_by_type_name(object.platform_type)) {
         return oof::platform::object_schema::build_schema_for_control(*control);
@@ -9366,6 +9383,12 @@ void xsd_order_gate_check_object(
         ++stats.form_objects_checked;
     } else if (collection_name == "Items") {
         ++stats.item_objects_checked;
+    } else if (collection_name == "Attributes") {
+        ++stats.attribute_objects_checked;
+    } else if (collection_name == "Commands") {
+        ++stats.command_objects_checked;
+    } else if (collection_name == "Events") {
+        ++stats.event_objects_checked;
     }
     ++stats.type_frequency[object.platform_type];
     if (schema->xsd_members.empty()) {
@@ -9408,9 +9431,15 @@ void xsd_order_gate_check_form_object(
     for (const auto& object : form_object.items.objects()) {
         xsd_order_gate_check_object(object, stats, "Items");
     }
-    stats.collection_objects_skipped += form_object.attributes.count();
-    stats.collection_objects_skipped += form_object.commands.count();
-    stats.collection_objects_skipped += form_object.events.count();
+    for (const auto& object : form_object.attributes.objects()) {
+        xsd_order_gate_check_object(object, stats, "Attributes");
+    }
+    for (const auto& object : form_object.commands.objects()) {
+        xsd_order_gate_check_object(object, stats, "Commands");
+    }
+    for (const auto& object : form_object.events.objects()) {
+        xsd_order_gate_check_object(object, stats, "Events");
+    }
 }
 
 void print_xsd_order_object_gate_json(
@@ -9428,6 +9457,9 @@ void print_xsd_order_object_gate_json(
     std::cout << ",\"objectsChecked\":" << stats.objects_checked;
     std::cout << ",\"formObjectsChecked\":" << stats.form_objects_checked;
     std::cout << ",\"itemObjectsChecked\":" << stats.item_objects_checked;
+    std::cout << ",\"attributeObjectsChecked\":" << stats.attribute_objects_checked;
+    std::cout << ",\"commandObjectsChecked\":" << stats.command_objects_checked;
+    std::cout << ",\"eventObjectsChecked\":" << stats.event_objects_checked;
     std::cout << ",\"collectionObjectsSkipped\":" << stats.collection_objects_skipped;
     std::cout << ",\"schemaSlotsChecked\":" << stats.schema_slots_checked;
     std::cout << ",\"explicitSlots\":" << stats.explicit_slots;
@@ -9492,6 +9524,9 @@ void print_xsd_order_roundtrip_phase_json(std::string_view phase, const XsdOrder
     print_json_string(stats.violations.empty() ? "PASS" : "FAIL");
     std::cout << ",\"objectsChecked\":" << stats.objects_checked;
     std::cout << ",\"itemObjectsChecked\":" << stats.item_objects_checked;
+    std::cout << ",\"attributeObjectsChecked\":" << stats.attribute_objects_checked;
+    std::cout << ",\"commandObjectsChecked\":" << stats.command_objects_checked;
+    std::cout << ",\"eventObjectsChecked\":" << stats.event_objects_checked;
     std::cout << ",\"collectionObjectsSkipped\":" << stats.collection_objects_skipped;
     std::cout << ",\"schemaSlotsChecked\":" << stats.schema_slots_checked;
     std::cout << ",\"explicitSlots\":" << stats.explicit_slots;

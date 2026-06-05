@@ -543,11 +543,146 @@ inline PlatformObjectSchema build_schema_for_root_form() {
     return schema;
 }
 
+inline PlatformObjectSchema build_schema_for_form_attribute() {
+    PlatformObjectSchema schema;
+    schema.type_name = "FormAttribute";
+    schema.stream_element = "Property";
+    schema.schema_source =
+        "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:"
+        "http://v8.1c.ru/8.2/managed-application/logform";
+    schema.root_complex_type = "Property";
+    schema.root_sequence = "ID:CompositeID,Main:Boolean,StoredData:Boolean,Name:String,Type:TypeDomainPattern";
+    schema.platform_members =
+        "ID->m_id,Main->m_main,StoredData->m_storedData,Name->m_name,Type->m_type";
+    schema.default_contract = "Main=false;StoredData=true";
+    schema.runtime_source = "mngbase LogForm attribute/property object";
+    schema.persistence_source = "ordinary form m_pProperties/property element";
+    schema.localization_source = "shcntx_ru.hbk/mngbase_ru.res member names Реквизит/Основной/СохраняемыеДанные";
+    schema.api_properties = {"ID", "Main", "StoredData"};
+
+    const auto add_member = [&](std::string name,
+                                std::string value_type,
+                                std::string default_value,
+                                std::string slot_binding,
+                                bool writable) {
+        schema.xsd_members.push_back({
+            name,
+            name,
+            value_type,
+            default_value,
+            write_policy_for_schema_default(default_value),
+            lookup_entry_value(schema.platform_members, name, '>'),
+            default_value,
+            slot_binding,
+            "attribute-record",
+            "logform-property-record",
+            writable,
+            schema.schema_source + ":Property/" + name,
+        });
+    };
+    add_member("ID", "CompositeID", {}, "logform.xsd:Property@id", false);
+    add_member("Main", "Boolean", "false", "logform.xsd:Property@main", false);
+    add_member("StoredData", "Boolean", "true", "logform.xsd:Property@storedData", false);
+    add_member("Name", "String", {}, "logform.xsd:Property@name", false);
+    add_member("Type", "TypeDomainPattern", {}, "logform.xsd:Property/type", false);
+    return schema;
+}
+
+inline PlatformObjectSchema build_schema_for_form_command() {
+    PlatformObjectSchema schema;
+    schema.type_name = "FormCommand";
+    schema.stream_element = "Command";
+    schema.schema_source =
+        "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:"
+        "http://v8.1c.ru/8.2/managed-application/logform + "
+        "platform-resource:mngcore_root:cmi.xsd";
+    schema.root_complex_type = "Command";
+    schema.root_sequence = "ID:CompositeID,Name:String,Handler:String,ModifiesData:Boolean";
+    schema.platform_members =
+        "ID->m_id,Name->m_name,Handler->m_handler,ModifiesData->m_modifiesData";
+    schema.default_contract = "ModifiesData=false";
+    schema.runtime_source = "mngbase LogForm command/action object";
+    schema.persistence_source = "ordinary form m_pCommands/command element";
+    schema.localization_source = "shcntx_ru.hbk/mngbase_ru.res member names Команда/Обработчик/ИзменяетДанные";
+    schema.api_properties = {"ID", "Name", "Handler", "ModifiesData"};
+
+    const auto add_member = [&](std::string name,
+                                std::string value_type,
+                                std::string default_value,
+                                std::string slot_binding,
+                                bool writable) {
+        schema.xsd_members.push_back({
+            name,
+            name,
+            value_type,
+            default_value,
+            write_policy_for_schema_default(default_value),
+            lookup_entry_value(schema.platform_members, name, '>'),
+            default_value,
+            slot_binding,
+            "event-action-record",
+            "logform-command-record",
+            writable,
+            schema.schema_source + ":Command/" + name,
+        });
+    };
+    add_member("ID", "CompositeID", {}, "logform.xsd:Command/id", true);
+    add_member("Name", "String", {}, "logform.xsd:Command@name", true);
+    add_member("Handler", "String", {}, "logform.xsd:Command@handler", true);
+    add_member("ModifiesData", "Boolean", "false", "logform.xsd:Command@modifiesData", true);
+    return schema;
+}
+
+inline PlatformObjectSchema build_schema_for_form_event() {
+    PlatformObjectSchema schema;
+    schema.type_name = "FormEvent";
+    schema.stream_element = "Event";
+    schema.schema_source =
+        "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:"
+        "http://v8.1c.ru/8.2/managed-application/logform";
+    schema.root_complex_type = "Event";
+    schema.root_sequence = "ID:UUID,Handler:String,Title:String,Parent:FormItem";
+    schema.platform_members =
+        "ID->m_id,Handler->m_handler,Title->m_title,Parent->m_owner";
+    schema.runtime_source = "mngbase LogForm event object";
+    schema.persistence_source = "ordinary form m_elementEvents/event element";
+    schema.localization_source = "shcntx_ru.hbk/mngbase_ru.res member names Событие/Обработчик";
+    schema.api_properties = {"ID", "Handler"};
+
+    const auto add_member = [&](std::string name,
+                                std::string value_type,
+                                std::string slot_binding,
+                                bool writable) {
+        schema.xsd_members.push_back({
+            name,
+            name,
+            value_type,
+            {},
+            "explicit",
+            lookup_entry_value(schema.platform_members, name, '>'),
+            {},
+            slot_binding,
+            "event-action-record",
+            "logform-event-record",
+            writable,
+            schema.schema_source + ":Event/" + name,
+        });
+    };
+    add_member("ID", "UUID", "logform.xsd:Event/id", true);
+    add_member("Handler", "String", "logform.xsd:Event@handler", true);
+    add_member("Title", "String", "cf_form_controls8:event-action-presentation", true);
+    add_member("Parent", "FormItem", "m_elementEvents owner", false);
+    return schema;
+}
+
 inline std::vector<PlatformObjectSchema> build_platform_object_schemas() {
     std::vector<PlatformObjectSchema> schemas;
     const auto controls = form_schema::all_controls();
-    schemas.reserve(controls.size() + 1);
+    schemas.reserve(controls.size() + 4);
     schemas.push_back(build_schema_for_root_form());
+    schemas.push_back(build_schema_for_form_attribute());
+    schemas.push_back(build_schema_for_form_command());
+    schemas.push_back(build_schema_for_form_event());
     for (const auto* control : controls) {
         schemas.push_back(build_schema_for_control(*control));
     }

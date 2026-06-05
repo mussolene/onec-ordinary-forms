@@ -90,8 +90,8 @@ test: $(BIN)
 	$(BIN) platform-property-registry | grep -F -q '"descriptorCount":404'
 	$(BIN) platform-property-registry | grep -F -q '"baseDescriptorCount":45'
 	$(BIN) platform-property-registry | grep -F -q '"generatedDescriptorCount":359'
-	$(BIN) platform-property-registry | grep -F -q '"generatedSchemaDescriptorCount":334'
-	$(BIN) platform-property-registry | grep -F -q '"generatedApiDescriptorCount":25'
+	$(BIN) platform-property-registry | grep -F -q '"generatedSchemaDescriptorCount":339'
+	$(BIN) platform-property-registry | grep -F -q '"generatedApiDescriptorCount":20'
 	$(BIN) platform-property-registry | grep -F -q '"source":"platform-resource:chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd:http://v8.1c.ru/8.2/data/chart:PivotChart/horizontalScaleKeeping"'
 	$(BIN) platform-property-registry | grep -F -q '"name":"pivotChartType","localizedName":"","valueType":"tns:PivotChartType"'
 	$(BIN) platform-property-registry | grep -F -q '"slotCodec":"name-record"'
@@ -115,7 +115,7 @@ test: $(BIN)
 	$(BIN) platform-property-registry | grep -F -q '"name":"Color","localizedName":"Цвет","valueType":"Color","slotCodec":"color-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"name":"Font","localizedName":"Шрифт","valueType":"Font","slotCodec":"font-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"name":"Picture","localizedName":"Картинка","valueType":"Picture","slotCodec":"picture-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
-	$(BIN) platform-property-registry | grep -F -q '"writableCount":30'
+	$(BIN) platform-property-registry | grep -F -q '"writableCount":32'
 	$(BIN) platform-control-info-descriptors | grep -F -q '"descriptorCount":27'
 	$(BIN) platform-control-info-descriptors | grep -F -q '"writerDescriptorControls":26'
 	$(BIN) platform-control-info-descriptors | grep -F -q '"writablePromotions":0'
@@ -310,6 +310,8 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-attributes-selftest.txt | grep -F -q '"platformType":"FormAttribute"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-attributes-selftest.txt 'attribute:{1}' Name | grep -F -q '"value":"Attr1"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-attributes-selftest.txt 'attribute:{1}' Type | grep -F -q '"value":"{\"Pattern\",{\"#\",7861785a-a6a1-485c-94c1-5f4a4e882abe}}"'
+	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-attributes-selftest.txt | grep -F -q '"attributeObjectsChecked":1'
+	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-attributes-selftest.txt | grep -F -q '"collectionObjectsSkipped":0'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-attributes-selftest.txt $(BUILD_DIR)/runtime-form-attributes.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Attributes>' $(BUILD_DIR)/runtime-form-attributes.xml
 	grep -F -q '<Attribute name="Attr1" id="{1}" objectId="attribute:{1}" main="0" storedData="1">' $(BUILD_DIR)/runtime-form-attributes.xml
@@ -324,6 +326,9 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}:0' Handler | grep -F -q '"value":"RunCommandHandler"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'command:{9}:0' ModifiesData | grep -F -q '"value":"1"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-command-selftest.txt 'attribute:{1}' Name | grep -F -q '"value":"AttrAfterCommand"'
+	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-command-selftest.txt | grep -F -q '"attributeObjectsChecked":1'
+	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-command-selftest.txt | grep -F -q '"commandObjectsChecked":1'
+	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-command-selftest.txt | grep -F -q '"collectionObjectsSkipped":0'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-command-selftest.txt $(BUILD_DIR)/runtime-form-command.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Command id="{9}" name="RunCommand" handler="RunCommandHandler" modifiesData="1" objectId="command:{9}:0"/>' $(BUILD_DIR)/runtime-form-command.xml
 	cp $(BUILD_DIR)/runtime-form-command.xml $(BUILD_DIR)/runtime-form-command-edited.xml
@@ -340,6 +345,8 @@ test: $(BIN)
 	$(BIN) runtime-platform-object $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"source":"mngcore logform.xsd Event"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c:0' Handler | grep -F -q '"value":"ButtonWithEventClick"'
 	$(BIN) runtime-platform-object-get $(BUILD_DIR)/runtime-form-event-selftest.txt 'event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c:0' Parent | grep -F -q '"value":"5"'
+	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"eventObjectsChecked":1'
+	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-event-selftest.txt | grep -F -q '"collectionObjectsSkipped":0'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-event-selftest.txt $(BUILD_DIR)/runtime-form-event.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	grep -F -q '<Events>' $(BUILD_DIR)/runtime-form-event.xml
 	grep -F -q '<Event id="0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c" handler="ButtonWithEventClick" objectId="event:5:0bd8d8ee-83f5-4b6f-bf0f-32cb6cdbcf8c:0" ownerId="5"/>' $(BUILD_DIR)/runtime-form-event.xml
