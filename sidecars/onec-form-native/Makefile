@@ -135,6 +135,8 @@ test: $(BIN)
 	$(BIN) platform-control-info-descriptors | grep -F -q '"name":"AutoMarkIncomplete","index":22'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoDescriptorCount":27'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoWritablePromotions":0'
+	$(BIN) object-model-gate | grep -F -q '"releaseReady":false'
+	$(BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
 	$(BIN) xsd-order-object-gate | grep -F -q '"status":"PASS"'
 	$(BIN) xsd-order-object-gate | grep -F -q '"concept":"platform XSD sequence/choice/attributes -> descriptor slots -> PlatformFormObject"'
 	$(BIN) xsd-order-object-roundtrip | grep -F -q '"status":"PASS"'
@@ -397,6 +399,8 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection-object.txt 5 Имя DualProjectionName | grep -F -q '"operation":"setPropVal"'
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/dual-projection-object.txt | grep -F -q '"objectSignatureStableAfterSecondWrite":true'
 	$(BIN) object-model-gate | grep -F -q '"status":"PASS"'
+	$(BIN) object-model-gate | grep -F -q '"releaseReady":false'
+	$(BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
 	total=0; ok=0; list_file="$(BUILD_DIR)/native-lossless-formbins.txt"; : > "$$list_file"; \
 	for root in ../../work/oracle-runtime/runtime-source/root ../../work/oracle-runtime/blank-source/root; do \
 		if [ -d "$$root" ]; then \

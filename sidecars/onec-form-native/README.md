@@ -18,25 +18,49 @@ make -C sidecars/onec-form-native
 
 The build uses the system C++ compiler and writes the binary to `build/oof-native`.
 
-## Commands
+## Product commands
 
-Parse from stdin and print compact canonical bracket text:
+The release-facing CLI surface is the ordinary-form source package workflow:
+dump a `Form.bin` to public `Form.xml`, build a `Form.bin` back from that
+package, and run product gates/coverage checks.
 
-```bash
-sidecars/onec-form-native/build/oof-native compact < stream.txt
-```
-
-Parse from stdin and print platform-style `ListOutStream` text:
-
-```bash
-sidecars/onec-form-native/build/oof-native listout < stream.txt
-```
-
-Print structural statistics as JSON:
+Dump the current native materialized form graph as a public `OrdinaryForm`
+managed-style package:
 
 ```bash
-sidecars/onec-form-native/build/oof-native stats < stream.txt
+sidecars/onec-form-native/build/oof-native formbin-dump-package Form.bin Form.xml
 ```
+
+Build a real `Form.bin` from the public source package through the object path:
+
+```bash
+sidecars/onec-form-native/build/oof-native formbin-build-source-package Form.xml rebuilt-Form.bin
+```
+
+Check current public XML projection coverage before treating a dump as
+rebuild-complete:
+
+```bash
+sidecars/onec-form-native/build/oof-native formbin-xml-coverage Form.bin
+```
+
+Run the object-model safety gate. This is not release readiness while coverage
+gaps remain:
+
+```bash
+sidecars/onec-form-native/build/oof-native object-model-gate
+```
+
+The package projection is native C++ and emits `Form`, `ChildItems`,
+`Attributes`, `Commands`, `Events`, named control elements, and `Form/Module.bsl`.
+It does not expose raw list-stream, payload, or fallback nodes.
+
+## Diagnostic commands
+
+Diagnostic commands are still dispatched for tests and investigation, but they
+are not product build/dump equivalents. Run `oof-native` with no arguments for
+the product surface, or set `OOF_NATIVE_SHOW_DIAGNOSTICS=1` to include the
+diagnostic command list in usage output.
 
 Print the platform-derived mechanism map embedded in the native sidecar:
 
@@ -61,53 +85,6 @@ Run the native value stream round-trip for `FormattedString` and
 
 ```bash
 sidecars/onec-form-native/build/oof-native value-roundtrip
-```
-
-Run the native ordinary-control transfer record codec check:
-
-```bash
-sidecars/onec-form-native/build/oof-native controls-codec
-```
-
-Run the internal ordinary form graph to transfer-set codec check:
-
-```bash
-sidecars/onec-form-native/build/oof-native graph-codec
-```
-
-Run the transfer-set write/read round-trip:
-
-```bash
-sidecars/onec-form-native/build/oof-native transfer-roundtrip
-```
-
-Print the native transfer sections with proven count/byte semantics:
-
-```bash
-sidecars/onec-form-native/build/oof-native transfer-sections
-```
-
-Dump the current native materialized form graph as a public `OrdinaryForm`
-managed-style package:
-
-```bash
-sidecars/onec-form-native/build/oof-native formbin-dump-package Form.bin Form.xml
-sidecars/onec-form-native/build/oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml
-```
-
-Build a real `Form.bin` from the public source package through the object path:
-
-```bash
-sidecars/onec-form-native/build/oof-native formbin-build-source-package Form.xml rebuilt-Form.bin
-```
-
-The package projection is native C++ and emits `Form`, `ChildItems`,
-`Attributes`, `Commands`, `Events`, named control elements, and `Form/Module.bsl`.
-It does not expose raw list-stream, payload, or fallback nodes. Use the coverage
-command before treating a dump as rebuild-complete:
-
-```bash
-sidecars/onec-form-native/build/oof-native formbin-xml-coverage Form.bin
 ```
 
 Current coverage is intentionally explicit: native XML projection is present,

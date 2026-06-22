@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -39,36 +40,50 @@
 namespace {
 
 void usage() {
-    std::cerr << "Usage: oof-native <mechanism|value-roundtrip|formbin-selftest|formbin-source-package-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-object-graph-selftest|object-graph-concept-selftest|raw-deflate-selftest> < stream.txt\n"
-              << "       oof-native empty-form-object-roundtrip [title]\n"
-              << "       oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|formbin-object-roundtrip-diff|formbin-xsd-order-object-roundtrip|form-object-graph> Form.bin\n"
-              << "       oof-native formbin-dump-package Form.bin Form.xml\n"
-              << "       oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
-              << "       oof-native formbin-dump-platform-xsd-xml Form.bin PlatformForm.xml\n"
-              << "       oof-native formbin-xml-coverage Form.bin\n"
-              << "       oof-native <formbin-platform-object|formbin-platform-object-get|formbin-xsd-order-object-gate> Form.bin [objectId property]\n"
-              << "       oof-native formbin-platform-object-set input-Form.bin rebuilt-Form.bin objectId property value\n"
-              << "       oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
-              << "       oof-native runtime-form-dump-platform-xsd-xml runtime-form-stream.txt PlatformForm.xml\n"
-              << "       oof-native platform-xsd-xml-object PlatformForm.xml\n"
-              << "       oof-native platform-xsd-xml-roundtrip PlatformForm.xml rebuilt-PlatformForm.xml\n"
-              << "       oof-native platform-xsd-xml-build-runtime PlatformForm.xml runtime-form-stream.txt\n"
-              << "       oof-native platform-xsd-xml-build-formbin PlatformForm.xml Form.bin\n"
-              << "       oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-xsd-order-object-roundtrip|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
-              << "       oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
-              << "       oof-native runtime-form-node runtime-form-stream.txt node-path\n"
-              << "       oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
-              << "       oof-native runtime-form-rename runtime-form-stream.txt rebuilt-stream.txt objectId newName\n"
-              << "       oof-native runtime-platform-object-get runtime-form-stream.txt objectId property\n"
-              << "       oof-native runtime-platform-object-set runtime-form-stream.txt rebuilt-stream.txt objectId property value\n"
-              << "       oof-native container-extract <1c-container> <out-dir>\n"
-              << "       oof-native container-extract-inflate <1c-container> <out-dir>\n"
-              << "       oof-native container-replace <1c-container> <file-name> <replacement-file> <out-container> [--raw-deflate]\n"
-              << "       oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry|platform-control-info-descriptors>\n"
-              << "       oof-native <object-model-gate|xsd-order-object-gate|xsd-order-object-roundtrip>\n"
-              << "       oof-native platform-guid-scan dsgnfrm.so\n"
-              << "       oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
-              << "       oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
+    const bool show_diagnostics = std::getenv("OOF_NATIVE_SHOW_DIAGNOSTICS") != nullptr;
+    std::cerr << "Usage: oof-native <product-command> [args]\n"
+              << "\n"
+              << "Product commands:\n"
+              << "  oof-native formbin-dump-package Form.bin Form.xml\n"
+              << "  oof-native formbin-build-source-package Form.xml rebuilt-Form.bin\n"
+              << "  oof-native formbin-xml-coverage Form.bin\n"
+              << "  oof-native object-model-gate\n"
+              << "\n"
+              << "Product XML is the public OrdinaryForm source package surface. Runtime streams,\n"
+              << "platform-XSD XML, container surgery, platform registries, and selftests are\n"
+              << "diagnostic commands, not user-facing build/dump equivalents.\n";
+    if (!show_diagnostics) {
+        std::cerr << "\nSet OOF_NATIVE_SHOW_DIAGNOSTICS=1 to list diagnostic commands.\n";
+        return;
+    }
+    std::cerr << "\nDiagnostic commands:\n"
+              << "  oof-native <mechanism|value-roundtrip|formbin-selftest|formbin-source-package-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-object-graph-selftest|object-graph-concept-selftest|raw-deflate-selftest> < stream.txt\n"
+              << "  oof-native empty-form-object-roundtrip [title]\n"
+              << "  oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|formbin-object-roundtrip-diff|formbin-xsd-order-object-roundtrip|form-object-graph> Form.bin\n"
+              << "  oof-native formbin-dump-platform-xsd-xml Form.bin PlatformForm.xml\n"
+              << "  oof-native <formbin-platform-object|formbin-platform-object-get|formbin-xsd-order-object-gate> Form.bin [objectId property]\n"
+              << "  oof-native formbin-platform-object-set input-Form.bin rebuilt-Form.bin objectId property value\n"
+              << "  oof-native runtime-form-dump-xml runtime-form-stream.txt Form.xml\n"
+              << "  oof-native runtime-form-dump-platform-xsd-xml runtime-form-stream.txt PlatformForm.xml\n"
+              << "  oof-native platform-xsd-xml-object PlatformForm.xml\n"
+              << "  oof-native platform-xsd-xml-roundtrip PlatformForm.xml rebuilt-PlatformForm.xml\n"
+              << "  oof-native platform-xsd-xml-build-runtime PlatformForm.xml runtime-form-stream.txt\n"
+              << "  oof-native platform-xsd-xml-build-formbin PlatformForm.xml Form.bin\n"
+              << "  oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-xsd-order-object-roundtrip|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
+              << "  oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
+              << "  oof-native runtime-form-node runtime-form-stream.txt node-path\n"
+              << "  oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
+              << "  oof-native runtime-form-rename runtime-form-stream.txt rebuilt-stream.txt objectId newName\n"
+              << "  oof-native runtime-platform-object-get runtime-form-stream.txt objectId property\n"
+              << "  oof-native runtime-platform-object-set runtime-form-stream.txt rebuilt-stream.txt objectId property value\n"
+              << "  oof-native container-extract <1c-container> <out-dir>\n"
+              << "  oof-native container-extract-inflate <1c-container> <out-dir>\n"
+              << "  oof-native container-replace <1c-container> <file-name> <replacement-file> <out-container> [--raw-deflate]\n"
+              << "  oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry|platform-control-info-descriptors>\n"
+              << "  oof-native <xsd-order-object-gate|xsd-order-object-roundtrip>\n"
+              << "  oof-native platform-guid-scan dsgnfrm.so\n"
+              << "  oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
+              << "  oof-native platform-xsd-inventory file.xsd [file.xsd ...]\n";
 }
 
 std::vector<std::uint8_t> read_file_bytes(const std::string& path) {
@@ -3971,11 +3986,83 @@ std::vector<oof::platform::stream::ListValue> anchor_children_from_xml_body(std:
     return anchors;
 }
 
-std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::string& xml) {
-    if (xml.find("<ListStream") != std::string::npos || xml.find("<RawBracket") != std::string::npos ||
-        xml.find("<PlatformRecords") != std::string::npos || xml.find("<FormBin") != std::string::npos) {
-        throw std::runtime_error("OrdinaryForm XML must not contain raw/list-stream fallback nodes");
+std::string xml_local_name(std::string_view name) {
+    const std::size_t colon = name.rfind(':');
+    if (colon == std::string_view::npos) {
+        return std::string(name);
     }
+    return std::string(name.substr(colon + 1));
+}
+
+bool public_xml_forbidden_raw_name(std::string_view name) {
+    const std::string local = xml_local_name(name);
+    const std::string lower = ascii_lower(local);
+    static const std::set<std::string> forbidden{
+        "actionprofile",
+        "bracketstream",
+        "datasourceprofile",
+        "dimensionprofile",
+        "formbin",
+        "linkmodeshape",
+        "liststream",
+        "logicalstream",
+        "objectmodel",
+        "pages",
+        "platformrecords",
+        "profileuuid",
+        "rawbracket",
+        "rootrecord",
+        "serializationprofile",
+        "dimensionsegments",
+        "layoutflag1",
+        "layoutflag2",
+        "layoutgroup",
+        "layoutmode",
+        "layoutnextorder",
+        "layoutorder",
+        "secondarydimensionmarker",
+        "stateblob",
+        "toplevel",
+        "unit",
+        "valuedescriptor",
+        "viewprofile",
+    };
+    if (forbidden.count(lower) != 0) {
+        return true;
+    }
+    if (lower.find("profile") != std::string::npos) {
+        return true;
+    }
+    if (lower.find("linkmodeshape") != std::string::npos) {
+        return true;
+    }
+    if (lower.rfind("raw", 0) == 0) {
+        return true;
+    }
+    static const std::regex slotn(R"(^slot[0-9]+$)", std::regex_constants::icase);
+    return std::regex_match(local, slotn);
+}
+
+void validate_public_xml_has_no_raw_vocabulary(const std::string& xml) {
+    const std::regex tag_pattern(R"(<\s*/?\s*([A-Za-z_][A-Za-z0-9_:.-]*)\b([^<>]*)>)");
+    const std::regex attr_pattern(R"(([A-Za-z_][A-Za-z0-9_:.-]*)\s*=)");
+    for (std::sregex_iterator it(xml.begin(), xml.end(), tag_pattern), end; it != end; ++it) {
+        const std::string tag = (*it)[1].str();
+        if (public_xml_forbidden_raw_name(tag)) {
+            throw std::runtime_error("OrdinaryForm XML must not contain raw/profile/indexed public element: " + tag);
+        }
+        const std::string attrs = (*it)[2].str();
+        for (std::sregex_iterator attr_it(attrs.begin(), attrs.end(), attr_pattern), attr_end; attr_it != attr_end; ++attr_it) {
+            const std::string attr = (*attr_it)[1].str();
+            if (public_xml_forbidden_raw_name(attr)) {
+                throw std::runtime_error("OrdinaryForm XML must not contain raw/profile/indexed public attribute: " + attr);
+            }
+        }
+    }
+}
+
+std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::string& xml) {
+    validate_public_xml_has_no_raw_vocabulary(xml);
     if (xml.find("ordinaryFormVersion=\"2.") == std::string::npos) {
         throw std::runtime_error("expected OrdinaryForm XML with ordinaryFormVersion=\"2.*\"");
     }
@@ -12416,6 +12503,8 @@ void print_object_model_gate() {
               << oof::platform::control_info::writable_promotion_count();
     std::cout << ",\"writableValueCodecs\":" << writable_value_codecs;
     std::cout << ",\"readableValueCoverageGaps\":" << readable_value_coverage_gaps;
+    std::cout << ",\"releaseReady\":false";
+    std::cout << ",\"coverageStatus\":\"PARTIAL\"";
     std::cout << ",\"violations\":" << violations.size();
     std::cout << ",\"status\":";
     print_json_string(violations.empty() ? "PASS" : "FAIL");
@@ -13815,6 +13904,46 @@ void print_formbin_source_package_selftest() {
     const bool no_zero_ticks =
         form.created != 0 && form.modified != 0 && module.created != 0 && module.modified != 0;
 
+    const std::vector<std::string> raw_xml_cases{
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+        "<Form ordinaryFormVersion=\"2.0\" profileUuid=\"not-public\">\n"
+        "</Form>\n",
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+        "<Form ordinaryFormVersion=\"2.0\">\n"
+        "  <ChildItems>\n"
+        "    <AnyObjectType name=\"RawCarrier\" id=\"11\" actionProfile=\"1\">\n"
+        "      <SerializationProfile linkModeShape=\"slot-map\">\n"
+        "        <slot1 value=\"x\" />\n"
+        "      </SerializationProfile>\n"
+        "    </AnyObjectType>\n"
+        "  </ChildItems>\n"
+        "</Form>\n",
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+        "<Form ordinaryFormVersion=\"2.0\">\n"
+        "  <ChildItems>\n"
+        "    <AnyObjectType name=\"RawCarrier\" id=\"11\"><RawBlob value=\"x\" /></AnyObjectType>\n"
+        "  </ChildItems>\n"
+        "</Form>\n",
+        "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+        "<Form ordinaryFormVersion=\"2.0\">\n"
+        "  <Pages><Page name=\"Legacy\" /></Pages>\n"
+        "</Form>\n",
+    };
+    std::size_t raw_guard_rejections = 0;
+    std::string raw_guard_error;
+    for (const auto& raw_xml : raw_xml_cases) {
+        write_file_bytes(xml_path, std::vector<std::uint8_t>(raw_xml.begin(), raw_xml.end()));
+        try {
+            (void)build_formbin_source_package(xml_path.string());
+        } catch (const std::exception& ex) {
+            ++raw_guard_rejections;
+            raw_guard_error = ex.what();
+        }
+    }
+    if (raw_guard_rejections != raw_xml_cases.size()) {
+        throw std::runtime_error("source package selftest expected public XML raw guard rejection");
+    }
+
     std::error_code remove_error;
     std::filesystem::remove_all(root, remove_error);
 
@@ -13827,6 +13956,10 @@ void print_formbin_source_package_selftest() {
     std::cout << ",\"moduleTicksMatch\":" << (module_ticks_match ? "true" : "false");
     std::cout << ",\"modulePayloadMatch\":" << (module_payload_match ? "true" : "false");
     std::cout << ",\"noZeroTicks\":" << (no_zero_ticks ? "true" : "false");
+    std::cout << ",\"publicXmlRawGuardRejected\":" << (raw_guard_rejections == raw_xml_cases.size() ? "true" : "false");
+    std::cout << ",\"publicXmlRawGuardRejections\":" << raw_guard_rejections;
+    std::cout << ",\"publicXmlRawGuardError\":";
+    print_json_string(raw_guard_error);
     std::cout << ",\"moduleBytes\":" << module.payload.size();
     std::cout << "}\n";
 }
