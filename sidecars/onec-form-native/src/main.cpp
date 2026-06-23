@@ -895,6 +895,19 @@ std::vector<ControlInfoSlotProperty> control_info_slot_properties(
     if (descriptor == nullptr) {
         return properties;
     }
+    auto push_property = [&properties](std::string_view name, std::string value) {
+        if (!value.empty()) {
+            properties.push_back({std::string(name), std::move(value)});
+        }
+    };
+    if (platform_type == "InputField" || platform_type == "TextBox") {
+        if (!info->items.empty() && info->items[0].is_list && info->items[0].items.size() > 11) {
+            std::string tooltip;
+            if (find_first_localized_text(info->items[0].items[11], tooltip) && !tooltip.empty()) {
+                push_property("ToolTip", tooltip);
+            }
+        }
+    }
     for (std::size_t index = 0; index < descriptor->slot_count; ++index) {
         const auto& slot = descriptor->slots[index];
         const auto* property_descriptor = oof::platform::property_registry::find_descriptor(slot.name);
@@ -905,10 +918,22 @@ std::vector<ControlInfoSlotProperty> control_info_slot_properties(
         if (info->items.size() <= slot.index) {
             continue;
         }
-        const std::string value = public_control_info_slot_value(info->items[slot.index]);
-        if (!value.empty()) {
-            properties.push_back({std::string(slot.name), value});
+        if ((platform_type == "InputField" || platform_type == "TextBox") && slot.name == "ToolTip") {
+            continue;
         }
+        if ((platform_type == "InputField" || platform_type == "TextBox") && slot.name == "TextEditing") {
+            const std::string slot_value = public_control_info_slot_value(info->items[slot.index]);
+            push_property(slot.name, slot_value == "1" ? "0" : "1");
+            continue;
+        }
+        if ((platform_type == "InputField" || platform_type == "TextBox") && slot.name == "Format") {
+            std::string format;
+            if (find_first_localized_text(info->items[slot.index], format)) {
+                push_property(slot.name, format);
+            }
+            continue;
+        }
+        push_property(slot.name, public_control_info_slot_value(info->items[slot.index]));
     }
     return properties;
 }
@@ -1495,7 +1520,7 @@ void collect_materialized_form_items(
             if (find_platform_name_record(value, name)) {
                 item.name = std::move(name);
             }
-            if (value.items.size() > 2 && value.items[2].is_list) {
+            if (binding != nullptr && binding->platform_type == "Button" && value.items.size() > 2 && value.items[2].is_list) {
                 std::string title;
                 if (find_first_localized_text(value.items[2], title)) {
                     item.title = std::move(title);
@@ -4243,12 +4268,19 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
             }
             for (const std::string& input_field_property : {
                      "EditMode",
-                     "ChoiceMode",
                      "PasswordMode",
                      "ExtendedEdit",
-                     "MaxLength",
                      "Mask",
                      "MultiLine",
+                     "WordWrap",
+                     "TextEditing",
+                     "Format",
+                     "ChoiceButton",
+                     "ChoiceListButton",
+                     "ClearButton",
+                     "OpenButton",
+                     "AutoMarkIncomplete",
+                     "ToolTip",
                  }) {
                 const std::string open_tag = "<" + input_field_property + ">";
                 const std::string close_tag = "</" + input_field_property + ">";
@@ -5188,6 +5220,9 @@ bool is_public_schema_property_xml(
     const oof::platform::object_model::PlatformObjectProperty& property
 ) {
     if (property.name == "DataPath") {
+        return true;
+    }
+    if (property.slot_codec == "control-info-slot") {
         return true;
     }
     if (property.source.find("managed-application/logform") == std::string::npos &&
@@ -6935,6 +6970,10 @@ LV localized_text_record(std::string_view text) {
     });
 }
 
+LV empty_localized_text_record() {
+    return list({raw("1"), raw("0")});
+}
+
 std::string public_xml_text_content(std::string_view body) {
     const auto item = first_xml_element(body, "Item");
     if (!item.self_closing && !item.body.empty()) {
@@ -7010,6 +7049,14 @@ std::string ordinary_form_listout_bool_prop(
         return "0";
     }
     return value;
+}
+
+std::string ordinary_form_listout_inverse_bool_prop(
+    const oof::platform::object_model::PlatformObject& object,
+    std::string_view name,
+    std::string fallback
+) {
+    return ordinary_form_listout_bool_prop(object, name, std::move(fallback)) == "1" ? "0" : "1";
 }
 
 bool ordinary_form_listout_top_command_bar(const oof::platform::object_model::PlatformObject& object) {
@@ -7254,6 +7301,10 @@ LV ordinary_form_listout_extended_base_info(const oof::platform::object_model::P
     base.items[1] = raw(ordinary_form_listout_bool_prop(object, "Visible", "1"));
     base.items[5] = raw(ordinary_form_listout_bool_prop(object, "Enabled", "1"));
     base.items[6] = ordinary_form_listout_default_color_record();
+    const std::string tooltip = object_prop_or_default(object, "ToolTip", "");
+    if (!tooltip.empty() && base.items.size() > 11) {
+        base.items[11] = localized_text_record(tooltip);
+    }
     base.items[17] = raw("1");
     return base;
 }
@@ -7466,19 +7517,24 @@ LV ordinary_form_listout_radiobutton_payload(
 }
 
 LV ordinary_form_listout_input_field_info_record(const oof::platform::object_model::PlatformObject& object) {
+    const std::string format = object_prop_or_default(object, "Format", "");
     auto record = list({
         ordinary_form_listout_extended_base_info(object),
         raw("31"),
         raw("0"),
         raw(object_prop_or_default(object, "EditMode", "0")),
-        raw(object_prop_or_default(object, "ChoiceMode", "1")),
+        raw(ordinary_form_listout_bool_prop(object, "WordWrap", "1")),
         raw(ordinary_form_listout_bool_prop(object, "PasswordMode", "0")),
+        raw(ordinary_form_listout_bool_prop(object, "ChoiceListButton", "0")),
+        raw(ordinary_form_listout_bool_prop(object, "ChoiceButton", "0")),
+        raw(ordinary_form_listout_bool_prop(object, "ClearButton", "0")),
         raw("0"),
-        raw(ordinary_form_listout_bool_prop(object, "ExtendedEdit", "0")),
-        raw("0"), raw("0"), raw("0"), raw("1"),
+        raw(ordinary_form_listout_bool_prop(object, "OpenButton", "0")),
+        raw("1"),
+        raw(ordinary_form_listout_inverse_bool_prop(object, "TextEditing", "1")),
         raw(ordinary_form_listout_bool_prop(object, "ReadOnly", "0")),
-        raw("0"), raw(object_prop_or_default(object, "MaxLength", "0")),
-        raw("0"), raw("0"), raw("4"), raw("0"),
+        raw("0"), raw("0"),
+        raw("0"), raw("4"), raw("0"),
         list({str_atom("U")}),
         list({str_atom("U")}),
         str_atom(object_prop_or_default(object, "Mask", "")),
@@ -7489,15 +7545,13 @@ LV ordinary_form_listout_input_field_info_record(const oof::platform::object_mod
         ordinary_form_listout_empty_page_style_record(),
         raw("0"), raw("0"), raw("0"),
         list({raw("0"), raw("0"), raw("0")}),
-        list({raw("1"), raw("0")}),
-        raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+        format.empty() ? empty_localized_text_record() : localized_text_record(format),
+        raw(ordinary_form_listout_bool_prop(object, "AutoMarkIncomplete", "0")),
+        raw("0"), raw("0"),
+        raw(ordinary_form_listout_bool_prop(object, "ExtendedEdit", "0")),
+        raw("0"), raw("0"), raw("0"),
         raw("16777215"), raw("2"), raw("0"), raw("0"),
     });
-    const std::string max_length = object_prop_or_default(object, "MaxLength", "0");
-    if (max_length != "0") {
-        record.items[13] = raw("1");
-        record.items[14] = raw(max_length);
-    }
     return record;
 }
 
@@ -10784,12 +10838,19 @@ void print_formbin_package_selftest() {
         "<Position left=\"8\" top=\"8\" right=\"108\" bottom=\"28\"/>"
         "<DataPath>FieldValue</DataPath>"
         "<EditMode>1</EditMode>"
-        "<ChoiceMode>0</ChoiceMode>"
+        "<WordWrap>false</WordWrap>"
         "<PasswordMode>true</PasswordMode>"
         "<ExtendedEdit>true</ExtendedEdit>"
-        "<MaxLength>10</MaxLength>"
+        "<TextEditing>false</TextEditing>"
         "<Mask>###</Mask>"
         "<MultiLine>true</MultiLine>"
+        "<Format>ЧГ=0</Format>"
+        "<ToolTip>Oracle tooltip</ToolTip>"
+        "<ChoiceButton>true</ChoiceButton>"
+        "<ChoiceListButton>true</ChoiceListButton>"
+        "<ClearButton>true</ClearButton>"
+        "<OpenButton>true</OpenButton>"
+        "<AutoMarkIncomplete>true</AutoMarkIncomplete>"
         "</InputField>"
         "</ChildItems>"
         "</Form>";
@@ -10828,12 +10889,19 @@ void print_formbin_package_selftest() {
               << (data_path_redump_xml.find("<Attribute name=\"FieldValue\"") != std::string::npos ? "true" : "false");
     std::cout << ",\"xmlObjectInputFieldInfoRoundtrip\":"
               << (data_path_redump_xml.find("<EditMode>1</EditMode>") != std::string::npos &&
-                  data_path_redump_xml.find("<ChoiceMode>0</ChoiceMode>") != std::string::npos &&
+                  data_path_redump_xml.find("<WordWrap>0</WordWrap>") != std::string::npos &&
                   data_path_redump_xml.find("<PasswordMode>1</PasswordMode>") != std::string::npos &&
                   data_path_redump_xml.find("<ExtendedEdit>1</ExtendedEdit>") != std::string::npos &&
-                  data_path_redump_xml.find("<MaxLength>10</MaxLength>") != std::string::npos &&
+                  data_path_redump_xml.find("<TextEditing>0</TextEditing>") != std::string::npos &&
                   data_path_redump_xml.find("<Mask>###</Mask>") != std::string::npos &&
-                  data_path_redump_xml.find("<MultiLine>1</MultiLine>") != std::string::npos ? "true" : "false");
+                  data_path_redump_xml.find("<MultiLine>1</MultiLine>") != std::string::npos &&
+                  data_path_redump_xml.find("<Format>ЧГ=0</Format>") != std::string::npos &&
+                  data_path_redump_xml.find("<ToolTip>Oracle tooltip</ToolTip>") != std::string::npos &&
+                  data_path_redump_xml.find("<ChoiceButton>1</ChoiceButton>") != std::string::npos &&
+                  data_path_redump_xml.find("<ChoiceListButton>1</ChoiceListButton>") != std::string::npos &&
+                  data_path_redump_xml.find("<ClearButton>1</ClearButton>") != std::string::npos &&
+                  data_path_redump_xml.find("<OpenButton>1</OpenButton>") != std::string::npos &&
+                  data_path_redump_xml.find("<AutoMarkIncomplete>1</AutoMarkIncomplete>") != std::string::npos ? "true" : "false");
     std::cout << ",\"xmlObjectNoRawXml\":"
               << (object_redump_xml.find("<ListStream") == std::string::npos &&
                   object_redump_xml.find("<RawBracket") == std::string::npos &&
@@ -11961,15 +12029,25 @@ bool set_materialized_object_control_info_slot(
         if (descriptor == nullptr) {
             return false;
         }
-        const auto slot = oof::platform::control_info::slot_index(*descriptor, property_name);
         auto* info = mutable_control_info_slot_body(value);
+        if (property_name == "ToolTip") {
+            if (info == nullptr || info->items.empty() || !info->items[0].is_list || info->items[0].items.size() <= 11) {
+                return false;
+            }
+            info->items[0].items[11] = new_value.empty() ? empty_localized_text_record() : localized_text_record(new_value);
+            return true;
+        }
+        const auto slot = oof::platform::control_info::slot_index(*descriptor, property_name);
         if (info == nullptr || !slot.has_value() || info->items.size() <= *slot) {
             return false;
         }
-        info->items[*slot] = control_info_slot_value_from_public_xml(property_name, new_value);
-        if (property_name == "MaxLength" && info->items.size() > 13) {
-            info->items[13] = oof::platform::stream::ListValue::raw_atom(
-                new_value.empty() || new_value == "0" ? "0" : "1");
+        if (property_name == "TextEditing") {
+            info->items[*slot] = oof::platform::stream::ListValue::raw_atom(
+                platform_bool_atom(new_value) == "1" ? "0" : "1");
+        } else if (property_name == "Format") {
+            info->items[*slot] = new_value.empty() ? empty_localized_text_record() : localized_text_record(new_value);
+        } else {
+            info->items[*slot] = control_info_slot_value_from_public_xml(property_name, new_value);
         }
         return true;
     }

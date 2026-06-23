@@ -36,7 +36,7 @@ struct PlatformPropertyDescriptor {
     std::string_view source;
 };
 
-inline constexpr std::array<PlatformPropertyDescriptor, 55> descriptors{{
+inline constexpr std::array<PlatformPropertyDescriptor, 62> descriptors{{
     {"ObjectID", "", "CompositeID", SlotCodec::none, "", true, false, "materialized-list-stream"},
     {"Name", "Имя", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record"},
     {"Title", "Заголовок", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record-as-initial-title"},
@@ -50,13 +50,20 @@ inline constexpr std::array<PlatformPropertyDescriptor, 55> descriptors{{
     {"Enabled", "Доступность", "Boolean", SlotCodec::scalar_flag, "control-enabled-flag", true, true, "platform-api-catalog"},
     {"DataPath", "Данные", "String", SlotCodec::none, "InputField data path + form attribute link + TypeDomainPattern", true, false, "platform-resource:mngcore_root-168-http_v8.1c.ru_8.2_managed-application_logform.xsd:TextBox/prop + ordinary-form attribute link"},
     {"EditMode", "РежимРедактирования", "Number", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:EditMode", true, true, "InputField cf_form_controls_info8 descriptor slot"},
-    {"ChoiceMode", "РежимВыбора", "Number", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:ChoiceMode", true, true, "InputField cf_form_controls_info8 descriptor slot"},
     {"PasswordMode", "РежимПароля", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:PasswordMode", true, true, "InputField cf_form_controls_info8 descriptor slot"},
     {"ExtendedEdit", "РасширенноеРедактирование", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:ExtendedEdit", true, true, "InputField cf_form_controls_info8 descriptor slot"},
     {"ReadOnly", "ТолькоПросмотр", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:ReadOnly", true, true, "InputField/ChoiceField cf_form_controls_info8 descriptor slot"},
-    {"MaxLength", "Длина", "Number", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:MaxLength", true, true, "InputField cf_form_controls_info8 descriptor slot"},
     {"Mask", "Маска", "String", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:Mask", true, true, "InputField cf_form_controls_info8 descriptor slot"},
     {"MultiLine", "МногострочныйРежим", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:MultiLine", true, true, "InputField cf_form_controls_info8 descriptor slot"},
+    {"WordWrap", "АвтоПереносСтрок", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:WordWrap", true, true, "InputField oracle slot 4"},
+    {"TextEditing", "РедактированиеТекста", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:TextEditing", true, true, "InputField oracle inverted slot 12"},
+    {"Format", "Формат", "String", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:Format", true, true, "InputField oracle localized slot 34"},
+    {"ToolTip", "Подсказка", "String", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:BaseInfo.ToolTip", true, true, "InputField oracle base-info subslot 11"},
+    {"ChoiceButton", "КнопкаВыбора", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:ChoiceButton", true, true, "InputField oracle slot 7"},
+    {"ChoiceListButton", "КнопкаСпискаВыбора", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:ChoiceListButton", true, true, "InputField oracle slot 6"},
+    {"ClearButton", "КнопкаОчистки", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:ClearButton", true, true, "InputField oracle slot 8"},
+    {"OpenButton", "КнопкаОткрытия", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:OpenButton", true, true, "InputField oracle slot 10"},
+    {"AutoMarkIncomplete", "АвтоОтметкаНезаполненного", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:AutoMarkIncomplete", true, true, "InputField oracle slot 35"},
     {"Left", "Лево", "Number", SlotCodec::position_record, "cf_form_controls_position8:left", true, true, "cf_form_controls_position8"},
     {"Top", "Верх", "Number", SlotCodec::position_record, "cf_form_controls_position8:top", true, true, "cf_form_controls_position8"},
     {"Width", "Ширина", "Number", SlotCodec::position_record, "cf_form_controls_position8:width", true, true, "cf_form_controls_position8"},

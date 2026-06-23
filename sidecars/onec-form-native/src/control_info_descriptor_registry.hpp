@@ -16,7 +16,7 @@ struct InfoSlotDescriptor {
 struct ControlInfoDescriptor {
     std::string_view control_type;
     std::string_view info_kind;
-    std::array<InfoSlotDescriptor, 12> slots;
+    std::array<InfoSlotDescriptor, 16> slots;
     std::size_t slot_count;
     std::string_view evidence;
 };
@@ -25,7 +25,7 @@ constexpr std::array<ControlInfoDescriptor, 27> descriptors = {{
     {"FormRootPanel", "1", {{{"BaseInfo", 0}, {"PageStates", 17}, {"PagePositions", 21}}}, 3, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
     {"Panel", "1", {{{"BaseInfo", 0}, {"PageStates", 42}, {"PagePositions", 46}}}, 3, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
     {"CommandBar", "2", {{{"BaseInfo", 0}, {"Autofill", 6}}}, 2, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
-    {"InputField", "9", {{{"BaseInfo", 0}, {"EditMode", 3}, {"ChoiceMode", 4}, {"PasswordMode", 5}, {"ExtendedEdit", 7}, {"ReadOnly", 12}, {"MaxLength", 14}, {"Mask", 21}, {"MultiLine", 26}}}, 9, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS + native input_field_info_record writer slots"},
+    {"InputField", "9", {{{"BaseInfo", 0}, {"EditMode", 3}, {"WordWrap", 4}, {"PasswordMode", 5}, {"ChoiceListButton", 6}, {"ChoiceButton", 7}, {"ClearButton", 8}, {"OpenButton", 10}, {"TextEditing", 12}, {"ReadOnly", 13}, {"Mask", 21}, {"MultiLine", 26}, {"Format", 34}, {"AutoMarkIncomplete", 35}, {"ExtendedEdit", 38}}}, 15, "platform oracle inputfield-property-matrix-20260623-171653 + native input_field_info_record writer slots"},
     {"CheckBox", "1", {{{"InnerInfo", 0}, {"BodyKind", 1}}}, 2, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
     {"ChoiceField", "2", {{{"BaseInfo", 0}, {"ReadOnly", 12}, {"ChoiceButton", 23}, {"ClearButton", 24}, {"OpenButton", 25}, {"ChoiceListOrCreateButton", 26}, {"EditButton", 27}}}, 7, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
     {"RadioButton", "4", {{{"TypeDomainPattern", 1}, {"InnerInfo", 2}, {"DataValue", 4}, {"Actions", 5}}}, 4, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},

@@ -7,10 +7,11 @@ out_dir="scan-output/platform-control-oracle"
 native_bin=${OOF_NATIVE_BIN:-sidecars/onec-form-native/build/oof-native}
 module_target=object
 single_pass=0
+inputfield_matrix=0
 
 usage() {
   cat >&2 <<'TXT'
-Usage: tools/run_control_oracle_batch.sh [--source-root root.xml] [--out-dir scan-output/platform-control-oracle] [--module-target form|object] [--single-pass]
+Usage: tools/run_control_oracle_batch.sh [--source-root root.xml] [--out-dir scan-output/platform-control-oracle] [--module-target form|object] [--single-pass] [--inputfield-matrix]
 
 Requires either OOF_PLATFORM_CONTAINER=<running licensed 1C container> or
 NETHASP_INI_PATH=<readable nethasp.ini>. Outputs stay under scan-output/.
@@ -23,6 +24,7 @@ while [[ $# -gt 0 ]]; do
     --out-dir) out_dir=${2:?}; shift 2 ;;
     --module-target) module_target=${2:?}; shift 2 ;;
     --single-pass) single_pass=1; shift ;;
+    --inputfield-matrix) inputfield_matrix=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -102,6 +104,46 @@ BSL
 BSL
 }
 
+write_inputfield_matrix_case() {
+  local code="$1"
+  local property="$2"
+  local value_expr="$3"
+  local assignment="$4"
+  local name_suffix
+  name_suffix=$(printf '%s' "$code" | tr -c '[:alnum:]_' '_')
+  cat >> "$out_abs/scripts/inputfield-property-matrix.bsl" <<BSL
+Элемент = Неопределено;
+Попытка
+	Элемент = ЭлементыФормы.Добавить(Тип("ПолеВвода"), "OracleInputField$name_suffix", Истина);
+	Элемент.Лево = 8;
+	Элемент.Верх = 33;
+	Элемент.Ширина = 120;
+	Элемент.Высота = 24;
+	Попытка
+		Элемент.Заголовок = "Oracle Input";
+	Исключение
+	КонецПопытки;
+	$assignment
+	ДокФорма = Новый ТекстовыйДокумент;
+	ДокФорма.УстановитьТекст(ЗначениеВСтрокуВнутр(Форма));
+	ДокФорма.Записать(ПутьКаталогВыхода + "/$code-$property.form.txt", КодировкаТекста.UTF8);
+	ДокЭлемент = Новый ТекстовыйДокумент;
+	ДокЭлемент.УстановитьТекст(ЗначениеВСтрокуВнутр(Элемент));
+	ДокЭлемент.Записать(ПутьКаталогВыхода + "/$code-$property.element.txt", КодировкаТекста.UTF8);
+	Сводка = Сводка + "$code" + Символы.Таб + "OK" + Символы.Таб + "$property" + Символы.Таб + Строка($value_expr) + Символы.Таб + "" + Символы.ПС;
+Исключение
+	Сводка = Сводка + "$code" + Символы.Таб + "ERROR" + Символы.Таб + "$property" + Символы.Таб + Строка($value_expr) + Символы.Таб + СтрЗаменить(СтрЗаменить(ОписаниеОшибки(), Символы.Таб, " "), Символы.ПС, " ") + Символы.ПС;
+КонецПопытки;
+Если Элемент <> Неопределено Тогда
+	Попытка
+		ЭлементыФормы.Удалить(Элемент);
+	Исключение
+	КонецПопытки;
+КонецЕсли;
+
+BSL
+}
+
 if [[ "$single_pass" == "1" ]]; then
   cat > "$out_abs/scripts/all-controls-single-pass.bsl" <<'BSL'
 Сводка = "script" + Символы.Таб + "status" + Символы.Таб + "object_name" + Символы.Таб + "error" + Символы.ПС;
@@ -138,6 +180,39 @@ BSL
   write_single_pass_case "25-Label" "Надпись" "OracleLabel" "Oracle Label"
   write_single_pass_case "26-ActiveXControl" "ЭлементУправления" "OracleActiveX" ""
   cat >> "$out_abs/scripts/all-controls-single-pass.bsl" <<'BSL'
+ДокСводка = Новый ТекстовыйДокумент;
+ДокСводка.УстановитьТекст(Сводка);
+ДокСводка.Записать(ПутьКаталогВыхода + "/summary.tsv", КодировкаТекста.UTF8);
+Результат = Форма;
+BSL
+elif [[ "$inputfield_matrix" == "1" ]]; then
+  cat > "$out_abs/scripts/inputfield-property-matrix.bsl" <<'BSL'
+Сводка = "case" + Символы.Таб + "status" + Символы.Таб + "property" + Символы.Таб + "value" + Символы.Таб + "error" + Символы.ПС;
+ДокФорма = Новый ТекстовыйДокумент;
+ДокФорма.УстановитьТекст(ЗначениеВСтрокуВнутр(Форма));
+ДокФорма.Записать(ПутьКаталогВыхода + "/00-Baseline.form.txt", КодировкаТекста.UTF8);
+Сводка = Сводка + "00-Baseline" + Символы.Таб + "OK" + Символы.Таб + "" + Символы.Таб + "" + Символы.Таб + "" + Символы.ПС;
+
+// Keep each case isolated: add one InputField, set one property, write form and element, remove it.
+BSL
+  write_inputfield_matrix_case "00-Default" "Default" '""' ""
+  write_inputfield_matrix_case "01" "ReadOnly" "Истина" "Элемент.ТолькоПросмотр = Истина;"
+  write_inputfield_matrix_case "02" "MaxLength" "17" "Элемент.Длина = 17;"
+  write_inputfield_matrix_case "03" "Mask" '"999999"' 'Элемент.Маска = "999999";'
+  write_inputfield_matrix_case "04" "MultiLine" "Истина" "Элемент.МногострочныйРежим = Истина;"
+  write_inputfield_matrix_case "05" "PasswordMode" "Истина" "Элемент.РежимПароля = Истина;"
+  write_inputfield_matrix_case "06" "ExtendedEdit" "Истина" "Элемент.РасширенноеРедактирование = Истина;"
+  write_inputfield_matrix_case "07" "TextEditing" "Ложь" "Элемент.РедактированиеТекста = Ложь;"
+  write_inputfield_matrix_case "08" "WordWrap" "Ложь" "Элемент.АвтоПереносСтрок = Ложь;"
+  write_inputfield_matrix_case "09" "ToolTip" '"Oracle tooltip"' 'Элемент.Подсказка = "Oracle tooltip";'
+  write_inputfield_matrix_case "10" "Format" '"ЧГ=0"' 'Элемент.Формат = "ЧГ=0";'
+  write_inputfield_matrix_case "11" "ChoiceButton" "Истина" "Элемент.КнопкаВыбора = Истина;"
+  write_inputfield_matrix_case "12" "ChoiceListButton" "Истина" "Элемент.КнопкаСпискаВыбора = Истина;"
+  write_inputfield_matrix_case "13" "ClearButton" "Истина" "Элемент.КнопкаОчистки = Истина;"
+  write_inputfield_matrix_case "14" "OpenButton" "Истина" "Элемент.КнопкаОткрытия = Истина;"
+  write_inputfield_matrix_case "15" "AutoMarkIncomplete" "Истина" "Элемент.АвтоОтметкаНезаполненного = Истина;"
+  write_inputfield_matrix_case "16" "TypeChoice" "Истина" "Элемент.ВыбиратьТип = Истина;"
+  cat >> "$out_abs/scripts/inputfield-property-matrix.bsl" <<'BSL'
 ДокСводка = Новый ТекстовыйДокумент;
 ДокСводка.УстановитьТекст(Сводка);
 ДокСводка.Записать(ПутьКаталогВыхода + "/summary.tsv", КодировкаТекста.UTF8);
@@ -326,8 +401,12 @@ with open(tsv_path, "w", encoding="utf-8") as f:
 PY
 }
 
-if [[ "$single_pass" == "1" ]]; then
-  script="$out_abs/scripts/all-controls-single-pass.bsl"
+if [[ "$single_pass" == "1" || "$inputfield_matrix" == "1" ]]; then
+  if [[ "$inputfield_matrix" == "1" ]]; then
+    script="$out_abs/scripts/inputfield-property-matrix.bsl"
+  else
+    script="$out_abs/scripts/all-controls-single-pass.bsl"
+  fi
   set +e
   tools/platform_oracle_execute.sh --module-target "$module_target" --output-dir "$out_abs/streams" "$source_root" - "$script" "$out_abs/final.txt" "$out_abs/oracle/single-pass" \
     >"$out_abs/logs/single-pass.stdout" 2>"$out_abs/logs/single-pass.stderr"
