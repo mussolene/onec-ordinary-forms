@@ -1,44 +1,100 @@
-# Ordinary Form Target Contract
+# Ordinary Form Contract
 
-This file is the project stop sign for ordinary-form work. If an approach
-conflicts with this contract, it is a diagnostic or research path, not the
-product architecture.
+This repository has no external consumers to protect. Breaking old command
+surfaces, XML shapes, helper scripts, compatibility aliases, and fallback paths
+is allowed when it makes the product architecture cleaner.
 
-See also [`repository-target-state.md`](repository-target-state.md). That file
-records the current migration target: one release path through
-`OrdinaryFormObject`, with no compatibility aliases or release-facing fallback
-builders.
+There is one product: a platform-like `OrdinaryForm` object graph.
 
-## Product Object
-
-The product object is `OrdinaryForm`: a platform-like mutable object graph.
-
-`OrdinaryForm` owns:
-
-- `Form` properties;
-- `Attributes`;
-- `Commands`;
-- `Events`;
-- `ChildItems`;
-- ordinary controls and nested controls;
-- typed values such as positions, bindings, pictures, colors, fonts,
-  `CompositeID`, type descriptors, and platform defaults;
-- `GetPropVal` and `SetPropVal` behavior for default and explicit values.
-
-The object graph can be materialized from platform bracket/list-stream and from
-public XML. It can be dematerialized back to both surfaces:
+There is one release path:
 
 ```text
-bracket/list-stream -> OrdinaryForm -> Form.xml
-Form.xml            -> OrdinaryForm -> bracket/list-stream
+Form.bin -> ListInStream -> OrdinaryForm -> Form.xml + Module.bsl + Items/*
+Form.xml + Module.bsl + Items/* -> OrdinaryForm -> ListOutStream -> Form.bin
 ```
 
-`Form.bin` is not the object. It is only a container for the serialized form
+Everything outside that path is research, diagnostics, or temporary scaffolding.
+
+## Product Model
+
+`OrdinaryForm` owns the form, controls, nested controls, attributes, commands,
+events, positions, bindings, identities, typed values, defaults, module text,
+picture references, and platform-like `GetPropVal` / `SetPropVal` behavior.
+
+`Form.bin` is not the model. It is only a container for the serialized form
 stream and module stream.
 
-## Public Source Package
+Public `Form.xml` is not a dump format. It is the editable projection of
+`OrdinaryForm`.
 
-The public editable source package is:
+## Concept Registry
+
+The only owner of public ordinary-form model decisions is the executable
+`OrdinaryFormConceptRegistry`.
+
+Platform schemas, help/API extracts, runtime bindings, descriptor joins, oracle
+streams, corpus checks, and Designer validation are evidence adapters. They do
+not decide public XML concepts on their own and they do not form a trust
+hierarchy.
+
+Storage names are evidence, not public names. API names are evidence, not
+storage slots. Runtime types are evidence, not public object names. Negative
+search results in a help index are evidence about that index only.
+
+Every accepted public concept must have one registry row:
+
+```text
+API/help name -> public XML name -> runtime identity -> storage member/codec -> proof
+```
+
+Example:
+
+```text
+ПолеВвода / Поле ввода -> InputField
+-> 381ed624-9217-4e63-85db-c4c3cb87daae
+-> TextBox / txt
+-> oracle/corpus proof
+```
+
+`TextBox` cannot be mapped by type alone because `InputField`, `ChoiceField`,
+and `ListBox` share that storage shape. The registry row, not the storage type,
+owns that distinction.
+
+## Add Concepts This Way
+
+When XML cannot rebuild a value, add the missing named object-model concept.
+Do not patch old payloads.
+
+A new concept is accepted only after the registry declares:
+
+- API/help name and type, or why it is storage-only;
+- public XML name and schema owner;
+- runtime identity: GUID, collection identity, event/command identity, or
+  value-object identity;
+- storage member, descriptor family, slot/default/write rule, or value codec;
+- proof command or corpus/oracle validation.
+
+If this row is incomplete, the concept stays diagnostic.
+
+## Delete These, Do Not Preserve Them
+
+Remove release-facing code or docs that require:
+
+- source `Form.bin` as build input;
+- baseline diffs;
+- payload patching;
+- raw/list-stream preservation;
+- hidden raw object models;
+- fallback binary blobs;
+- compatibility profiles;
+- old command aliases whose only purpose is not breaking old behavior.
+
+Temporary diagnostics are fine under `scan-output/`, but they must not become
+release inputs or public XML.
+
+## Public Package
+
+The editable package is:
 
 ```text
 Forms/<FormName>/Ext/Form.xml
@@ -46,55 +102,6 @@ Forms/<FormName>/Ext/Form/Module.bsl
 Forms/<FormName>/Ext/Form/Items/<ElementName>/Picture.*
 ```
 
-`Form.xml` is the only editable form model. `Module.bsl` and `Items/...`
-picture files are object properties stored as files because that is the
-managed-form-style source layout. They are not a separate patch protocol.
-
-## Serializer Layers
-
-There are only two serializer layers:
-
-- object serializer: `OrdinaryForm <-> Form.xml`;
-- platform serializer: `OrdinaryForm <-> bracket/list-stream`;
-- container packer: `form stream + module stream -> Form.bin` and the reverse.
-
-Container pack/unpack must stay a thin boundary. It must not become a form
-patcher.
-
-## Hard No
-
-Do not make any of these part of the product path:
-
-- an existing source `Form.bin` as required build input;
-- baseline diff as source-build logic;
-- patch workers;
-- raw/list-stream preservation fields;
-- hidden raw object models in public XML;
-- fallback binary blobs;
-- synthetic canvas/state surfaces;
-- compatibility profiles whose purpose is to keep an old `Form.bin` shape.
-
-Commands may read an existing `Form.bin` to prove the object path
-`ListInStream -> OrdinaryFormObject -> ListOutStream`, or write a new
-`Form.bin` from that object after `SetPropVal`. They must not use an existing
-`Form.bin` as hidden source state for `Form.xml` rebuild.
-
-## Required Direction
-
-When something cannot be rebuilt from XML, add the missing named concept to
-`OrdinaryForm` and its descriptor-backed serializer. Do not patch the old
-payload. The right fix is always one of:
-
-- a named control;
-- a named property;
-- a named event or command;
-- a typed value object;
-- a default-value rule;
-- a descriptor-backed slot codec.
-
-The release path is:
-
-```text
-Form.bin -> OrdinaryForm -> Form.xml + Module.bsl + Items/*
-Form.xml + Module.bsl + Items/* -> OrdinaryForm -> bracket/list-stream -> Form.bin
-```
+Everything in this package must describe named `OrdinaryForm` concepts. If a
+low-level platform value is needed for rebuild, promote it into a named concept
+with a descriptor-backed serializer.

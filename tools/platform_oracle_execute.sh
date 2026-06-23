@@ -7,8 +7,47 @@
 # ЗначениеВСтрокуВнутр(Результат) to the requested output file.
 set -euo pipefail
 
+module_target=form
+output_dir=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --module-target)
+      module_target=${2:?}
+      shift 2
+      ;;
+    --module-target=*)
+      module_target=${1#*=}
+      shift
+      ;;
+    --output-dir)
+      output_dir=${2:?}
+      shift 2
+      ;;
+    --output-dir=*)
+      output_dir=${1#*=}
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      exit 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
+case "$module_target" in
+  form|object) ;;
+  *) echo "Unsupported --module-target: $module_target" >&2; exit 2 ;;
+esac
+
 if [[ $# -lt 4 || $# -gt 5 ]]; then
-  echo "Usage: $0 <source-root.xml> <input-stream.txt|-> <script.bsl> <output-stream.txt> [out-dir]" >&2
+  echo "Usage: $0 [--module-target form|object] [--output-dir scan-output/dir] <source-root.xml> <input-stream.txt|-> <script.bsl> <output-stream.txt> [out-dir]" >&2
   exit 2
 fi
 
@@ -51,11 +90,25 @@ case "$out_dir" in
   /*) out_abs="$out_dir" ;;
   *) out_abs="$repo_root/$out_dir" ;;
 esac
+if [[ -n "$output_dir" ]]; then
+  case "$output_dir" in
+    /*) output_dir_abs="$output_dir" ;;
+    *) output_dir_abs="$repo_root/$output_dir" ;;
+  esac
+else
+  output_dir_abs=""
+fi
 
 case "$out_abs" in
   "$repo_root"/scan-output/*) ;;
   *) echo "Output directory must be under scan-output/: $out_abs" >&2; exit 2 ;;
 esac
+if [[ -n "$output_dir_abs" ]]; then
+  case "$output_dir_abs" in
+    "$repo_root"/scan-output/*) ;;
+    *) echo "Output directory must be under scan-output/: $output_dir_abs" >&2; exit 2 ;;
+  esac
+fi
 
 if [[ ! -f "$source_root" ]]; then
   echo "Source root.xml does not exist: $source_root" >&2
@@ -119,10 +172,11 @@ if [[ -z "$form_bin" ]]; then
   exit 2
 fi
 
-package_xml="$out_abs/package/Form.xml"
-"$native_bin" formbin-dump-package "$form_bin" "$package_xml" >"$out_abs/logs/dump-package.json"
+if [[ "$module_target" == "form" ]]; then
+  package_xml="$out_abs/package/Form.xml"
+  "$native_bin" formbin-dump-package "$form_bin" "$package_xml" >"$out_abs/logs/dump-package.json"
 
-cat > "$out_abs/package/Form/Module.bsl" <<'BSL'
+  cat > "$out_abs/package/Form/Module.bsl" <<'BSL'
 Функция OOF_ПараметрыЗапуска()
 	Результат = Новый Соответствие;
 	Для Каждого Часть Из СтрРазделить(ПараметрЗапуска, ";") Цикл
@@ -170,9 +224,58 @@ cat > "$out_abs/package/Form/Module.bsl" <<'BSL'
 КонецПроцедуры
 BSL
 
-rebuilt_form_bin="$out_abs/package/rebuilt-Form.bin"
-"$native_bin" formbin-build-source-package "$package_xml" "$rebuilt_form_bin" >"$out_abs/logs/build-package.json"
-mv "$rebuilt_form_bin" "$form_bin"
+  rebuilt_form_bin="$out_abs/package/rebuilt-Form.bin"
+  "$native_bin" formbin-build-source-package "$package_xml" "$rebuilt_form_bin" >"$out_abs/logs/build-package.json"
+  mv "$rebuilt_form_bin" "$form_bin"
+else
+  mkdir -p "$out_abs/source/root/Ext"
+  cat > "$out_abs/source/root/Ext/ObjectModule.bsl" <<'BSL'
+Функция OOF_ПараметрыЗапуска()
+	Результат = Новый Соответствие;
+	Для Каждого Часть Из СтрРазделить(ПараметрЗапуска, ";") Цикл
+		ПозицияРавно = СтрНайти(Часть, "=");
+		Если ПозицияРавно = 0 Тогда Продолжить; КонецЕсли;
+		Имя = СокрЛП(Лев(Часть, ПозицияРавно - 1));
+		Значение = Сред(Часть, ПозицияРавно + 1);
+		Результат.Вставить(Имя, Значение);
+	КонецЦикла;
+	Возврат Результат;
+КонецФункции
+
+Параметры = OOF_ПараметрыЗапуска();
+ПутьВход = Параметры.Получить("InputFile");
+ПутьВыход = Параметры.Получить("OutputFile");
+ПутьКаталогВыхода = Параметры.Получить("OutputDir");
+Если ПутьВход = Неопределено Тогда ПутьВход = ""; КонецЕсли;
+Если ПутьВыход = Неопределено Тогда ПутьВыход = ""; КонецЕсли;
+Если ПутьКаталогВыхода = Неопределено Тогда ПутьКаталогВыхода = ""; КонецЕсли;
+
+Вход = "";
+Если ПутьВход <> "" Тогда
+	ДокВход = Новый ТекстовыйДокумент;
+	ДокВход.Прочитать(ПутьВход);
+	Вход = ДокВход.ПолучитьТекст();
+КонецЕсли;
+
+Форма = ЭтотОбъект.ПолучитьФорму("Форма");
+ЭтаФорма = Форма;
+ЭлементыФормы = Форма.ЭлементыФормы;
+Объект = Неопределено;
+Результат = Форма;
+BSL
+  cat "$script_path" >> "$out_abs/source/root/Ext/ObjectModule.bsl"
+  cat >> "$out_abs/source/root/Ext/ObjectModule.bsl" <<'BSL'
+
+Если ПутьВыход <> "" Тогда
+	ДокВыход = Новый ТекстовыйДокумент;
+	ДокВыход.УстановитьТекст(ЗначениеВСтрокуВнутр(Результат));
+	ДокВыход.Записать(ПутьВыход, КодировкаТекста.UTF8);
+КонецЕсли;
+
+Сообщить("OOF_ORACLE_OK");
+ЗавершитьРаботуСистемы(Ложь);
+BSL
+fi
 
 trace_env_cmd=""
 if [[ -n "${PLATFORM_ORACLE_LD_DEBUG:-}" ]]; then
@@ -195,7 +298,11 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
     exit 2
   fi
   container_base="/tmp/oof-platform-oracle"
-  docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "rm -rf '$container_base' && mkdir -p '$container_base/source' '$container_base/logs' '$container_base/dbroot'"
+  container_output_dir=""
+  if [[ -n "$output_dir_abs" ]]; then
+    container_output_dir="$container_base/output-dir"
+  fi
+  docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "rm -rf '$container_base' && mkdir -p '$container_base/source' '$container_base/logs' '$container_base/dbroot' '$container_base/output-dir'"
   copy_host_dir_to_container "$out_abs/source" "$container_base/source"
   copy_host_file_to_container "$script_path" "$container_base/script.bsl"
   if [[ "$input_stream" != "-" ]]; then
@@ -218,7 +325,7 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
     xvfb-run -a timeout 300 $trace_env_cmd /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
       /F \"\$base/\$db\" /RunModeOrdinaryApplication \
       /Execute '$container_base/oracle.epf' \
-      /C 'InputFile=$container_base/input.txt;OutputFile=$container_base/output.txt;ScriptFile=$container_base/script.bsl' \
+      /C 'InputFile=$container_base/input.txt;OutputFile=$container_base/output.txt;OutputDir=$container_output_dir;ScriptFile=$container_base/script.bsl' \
       /Out '$container_base/logs/enterprise.log' -NoTruncate /DisableStartupDialogs \
       >'$container_base/logs/enterprise-stdout.log' 2>'$container_base/logs/enterprise-stderr.log'
     code=\$?
@@ -230,6 +337,10 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
   copy_container_dir_to_host "$container_base/logs" "$out_abs/logs"
   if docker exec "$OOF_PLATFORM_CONTAINER" test -f "$container_base/output.txt"; then
     copy_container_file_to_host "$container_base/output.txt" "$output_stream"
+  fi
+  if [[ -n "$output_dir_abs" ]] && docker exec "$OOF_PLATFORM_CONTAINER" test -d "$container_output_dir"; then
+    rm -rf "$output_dir_abs"
+    copy_container_dir_to_host "$container_output_dir" "$output_dir_abs"
   fi
   if [[ -f "$out_abs/logs/code.txt" ]]; then
     exit "$(cat "$out_abs/logs/code.txt")"
@@ -244,6 +355,11 @@ if [[ "$input_stream" != "-" ]]; then
 fi
 output_container=$(container_path "$output_stream")
 script_container=$(container_path "$script_path")
+output_dir_container=""
+if [[ -n "$output_dir_abs" ]]; then
+  mkdir -p "$output_dir_abs"
+  output_dir_container=$(container_path "$output_dir_abs")
+fi
 
 docker run --rm --platform linux/amd64 --entrypoint sh \
   -v "$repo_root:/workspace" \
@@ -268,7 +384,7 @@ docker run --rm --platform linux/amd64 --entrypoint sh \
     xvfb-run -a timeout 300 $trace_env_cmd /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
       /F \"\$base/\$db\" /RunModeOrdinaryApplication \
       /Execute \"/workspace/$out_rel/oracle.epf\" \
-      /C \"InputFile=$input_container;OutputFile=$output_container;ScriptFile=$script_container\" \
+      /C \"InputFile=$input_container;OutputFile=$output_container;OutputDir=$output_dir_container;ScriptFile=$script_container\" \
       /Out \"/workspace/$out_rel/logs/enterprise.log\" -NoTruncate /DisableStartupDialogs \
       >\"/workspace/$out_rel/logs/enterprise-stdout.log\" 2>\"/workspace/$out_rel/logs/enterprise-stderr.log\"
     code=\$?

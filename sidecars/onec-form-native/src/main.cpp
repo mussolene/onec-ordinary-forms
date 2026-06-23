@@ -25,7 +25,9 @@
 #include "form_bin_container.hpp"
 #include "ordinary_control_type_registry.hpp"
 #include "ordinary_controls.hpp"
+#include "ordinary_form_concept_registry.hpp"
 #include "ordinary_form_graph.hpp"
+#include "ordinary_form_object.hpp"
 #include "platform_descriptor_registry.hpp"
 #include "platform_form_descriptor_join.hpp"
 #include "platform_form_schema.hpp"
@@ -58,6 +60,7 @@ void usage() {
     }
     std::cerr << "\nDiagnostic commands:\n"
               << "  oof-native <mechanism|value-roundtrip|formbin-selftest|formbin-source-package-selftest|formbin-package-selftest|formbin-platform-object-selftest|form-object-graph-selftest|object-graph-concept-selftest|raw-deflate-selftest> < stream.txt\n"
+              << "  oof-native ordinary-form-object-selftest\n"
               << "  oof-native empty-form-object-roundtrip [title]\n"
               << "  oof-native <formbin-info|formbin-roundtrip|formbin-object-roundtrip|formbin-object-roundtrip-diff|formbin-xsd-order-object-roundtrip|form-object-graph> Form.bin\n"
               << "  oof-native formbin-dump-platform-xsd-xml Form.bin PlatformForm.xml\n"
@@ -80,6 +83,7 @@ void usage() {
               << "  oof-native container-extract-inflate <1c-container> <out-dir>\n"
               << "  oof-native container-replace <1c-container> <file-name> <replacement-file> <out-container> [--raw-deflate]\n"
               << "  oof-native <platform-form-schema|platform-object-schema|platform-descriptor-join|platform-runtime-bindings|platform-property-registry|platform-control-info-descriptors>\n"
+              << "  oof-native ordinary-form-concepts\n"
               << "  oof-native <xsd-order-object-gate|xsd-order-object-roundtrip>\n"
               << "  oof-native platform-guid-scan dsgnfrm.so\n"
               << "  oof-native platform-resource-descriptor-scan file.res [file.res ...]\n"
@@ -1817,6 +1821,10 @@ struct RuntimeFormEnvelope {
 RuntimeFormEnvelope read_formbin_runtime_envelope(const std::string& input_path);
 oof::platform::stream::ListValue platform_form_listout_payload(
     const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view title
+);
+oof::platform::stream::ListValue platform_form_listout_payload(
+    const oof::ordinary::object::OrdinaryForm& form,
     std::string_view title
 );
 
@@ -5768,6 +5776,13 @@ std::string form_object_to_public_xml(
     return out;
 }
 
+std::string form_object_to_public_xml(
+    const oof::ordinary::object::OrdinaryForm& form,
+    PublicXmlPackageFileSink* package_sink = nullptr
+) {
+    return form_object_to_public_xml(form.platform_object(), package_sink);
+}
+
 std::string platform_xsd_element_name(
     const oof::platform::object_model::PlatformObject& object,
     const oof::platform::object_schema::PlatformObjectSchema& schema
@@ -6452,14 +6467,14 @@ PlatformXdtoListStreamWriteResult platform_xdto_schema_order_list_stream_payload
 void write_runtime_form_xml(const std::string& input_path, const std::string& output_path) {
     std::string canonical_text;
     RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
-    const auto form_object = materialize_platform_form_object(envelope);
-    const std::string xml = form_object_to_public_xml(form_object);
+    const oof::ordinary::object::OrdinaryForm form(materialize_platform_form_object(envelope));
+    const std::string xml = form_object_to_public_xml(form);
     write_file_bytes(output_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
     std::cout << "{\"output\":";
     print_json_string(output_path);
     std::cout << ",\"bytes\":" << xml.size();
-    std::cout << ",\"source\":\"RuntimeForm:PlatformObject\"";
-    std::cout << ",\"controlCount\":" << form_object.items.count();
+    std::cout << ",\"source\":\"RuntimeForm:OrdinaryForm\"";
+    std::cout << ",\"controlCount\":" << form.items().count();
     std::cout << ",\"publicContract\":\"OrdinaryForm\"";
     std::cout << "}\n";
 }
@@ -6660,10 +6675,10 @@ void write_formbin_package(const std::string& input_path, const std::string& out
     const auto container = oof::platform::formbin::parse_container(data);
     const auto& form_file = find_container_file(container, "form");
     const RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(form_file.payload);
-    const auto form_object = materialize_platform_form_object(envelope);
+    const oof::ordinary::object::OrdinaryForm form(materialize_platform_form_object(envelope));
     const std::filesystem::path xml_path(output_path);
     PublicXmlPackageFileSink package_sink{form_package_root_for_xml(xml_path)};
-    const std::string xml = form_object_to_public_xml(form_object, &package_sink);
+    const std::string xml = form_object_to_public_xml(form, &package_sink);
     write_file_bytes(xml_path, std::vector<std::uint8_t>(xml.begin(), xml.end()));
 
     bool module_written = false;
@@ -6684,8 +6699,8 @@ void write_formbin_package(const std::string& input_path, const std::string& out
     print_json_string(form_package_root_for_xml(xml_path).string());
     std::cout << ",\"operation\":\"formbin-dump-package\"";
     std::cout << ",\"bytes\":" << xml.size();
-    std::cout << ",\"source\":\"Form.bin\"";
-    std::cout << ",\"controlCount\":" << form_object.items.count();
+    std::cout << ",\"source\":\"Form.bin:OrdinaryForm\"";
+    std::cout << ",\"controlCount\":" << form.items().count();
     std::cout << ",\"moduleWritten\":" << (module_written ? "true" : "false");
     std::cout << ",\"moduleBytes\":" << module_bytes;
     std::cout << ",\"picturePackageFiles\":" << package_sink.picture_count;
@@ -6744,6 +6759,21 @@ LV str_atom(std::string value) {
 
 LV list(std::vector<LV> value) {
     return LV::list(std::move(value));
+}
+
+void replace_panel_page_title_atoms(LV& value, std::string_view title) {
+    if (title.empty()) {
+        return;
+    }
+    if (!value.is_list) {
+        if (value.atom_kind == LV::AtomKind::string && value.atom == "Страница1") {
+            value.atom = std::string(title);
+        }
+        return;
+    }
+    for (auto& item : value.items) {
+        replace_panel_page_title_atoms(item, title);
+    }
 }
 
 LV ordinary_form_listout_default_color_record();
@@ -9623,6 +9653,7 @@ LV ordinary_form_listout_control_payload(
         if (const auto* root_layout = find_object_property(form_object.form, "RootPanelLayoutXml")) {
             LV layout_info = ordinary_form_listout_root_panel_info_from_layout_xml(root_layout->value);
             if (layout_info.is_list) {
+                replace_panel_page_title_atoms(layout_info, title);
                 return layout_info;
             }
         }
@@ -10207,6 +10238,13 @@ LV platform_form_listout_payload(
     return out.root();
 }
 
+LV platform_form_listout_payload(
+    const oof::ordinary::object::OrdinaryForm& form,
+    std::string_view title
+) {
+    return platform_form_listout_payload(form.platform_object(), title);
+}
+
 std::vector<std::uint8_t> platform_form_listout_payload_bytes(const LV& payload) {
     const std::string text = oof::platform::stream::dump_listout(payload);
     std::vector<std::uint8_t> out{0xef, 0xbb, 0xbf};
@@ -10310,10 +10348,10 @@ SourcePackageBuildResult build_formbin_source_package(const std::string& xml_pat
         source_xml,
         xml_package_path,
         result.picture_files_read);
-    const auto form_object = platform_form_object_from_public_xml(package_xml);
+    const oof::ordinary::object::OrdinaryForm form(platform_form_object_from_public_xml(package_xml));
     const std::string title = public_form_title_from_xml(package_xml);
-    result.control_count = form_object.items.count();
-    result.listout_coverage = ordinary_form_listout_coverage_summary(form_object);
+    result.control_count = form.items().count();
+    result.listout_coverage = ordinary_form_listout_coverage_summary(form.platform_object());
 
     const auto module_path = form_package_module_path(xml_package_path);
     result.container_times = source_package_container_times(xml_package_path, module_path, source_xml);
@@ -10324,7 +10362,7 @@ SourcePackageBuildResult build_formbin_source_package(const std::string& xml_pat
         "form",
         result.container_times.form_created,
         result.container_times.form_modified,
-        platform_form_listout_payload_bytes(platform_form_listout_payload(form_object, title)),
+        platform_form_listout_payload_bytes(platform_form_listout_payload(form, title)),
     });
 
     std::vector<std::uint8_t> module_payload;
@@ -10461,6 +10499,8 @@ void write_formbin_platform_object_set(
     }
 
     RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(file_it->payload);
+    oof::ordinary::object::OrdinaryForm ordinary_form(materialize_platform_form_object(envelope));
+    ordinary_form.set_prop_val(object_id, descriptor.name, std::string(new_value));
     oof::platform::object_model::PlatformFormObjectEdit object_edit;
     object_edit.object(std::string(object_id)).set_property(std::string(descriptor.name), std::string(new_value));
     apply_platform_object_edits(envelope, object_edit);
@@ -12263,6 +12303,8 @@ void write_runtime_platform_object_set(
 
     std::string canonical_text;
     RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(input_path, canonical_text);
+    oof::ordinary::object::OrdinaryForm ordinary_form(materialize_platform_form_object(envelope));
+    ordinary_form.set_prop_val(object_id, descriptor.name, std::string(new_value));
     oof::platform::object_model::PlatformFormObjectEdit object_edit;
     object_edit.object(std::string(object_id)).set_property(std::string(descriptor.name), std::string(new_value));
     apply_platform_object_edits(envelope, object_edit);
@@ -12368,6 +12410,48 @@ void print_platform_property_registry() {
     std::cout << "]}\n";
 }
 
+void print_ordinary_form_concepts() {
+    const auto concepts = oof::ordinary::concept_registry::build_concepts();
+    const auto stats = oof::ordinary::concept_registry::stats_for(concepts);
+    std::cout << "{\"source\":\"OrdinaryFormConceptRegistry\"";
+    std::cout << ",\"owner\":\"OrdinaryForm object model\"";
+    std::cout << ",\"decisionBoundary\":\"sources are evidence adapters; accepted concepts own public XML and serializer admission\"";
+    std::cout << ",\"conceptCount\":" << stats.total;
+    std::cout << ",\"controlConceptCount\":" << stats.controls;
+    std::cout << ",\"propertyConceptCount\":" << stats.properties;
+    std::cout << ",\"acceptedCount\":" << stats.accepted;
+    std::cout << ",\"proposedCount\":" << stats.proposed;
+    std::cout << ",\"diagnosticCount\":" << stats.diagnostic;
+    std::cout << ",\"rejectedCount\":" << stats.rejected;
+    std::cout << ",\"concepts\":[";
+    for (std::size_t index = 0; index < concepts.size(); ++index) {
+        const auto& concept = concepts[index];
+        if (index != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"kind\":";
+        print_json_string(oof::ordinary::concept_registry::concept_kind_name(concept.kind));
+        std::cout << ",\"status\":";
+        print_json_string(oof::ordinary::concept_registry::concept_status_name(concept.status));
+        std::cout << ",\"publicName\":";
+        print_json_string(concept.public_name);
+        std::cout << ",\"apiName\":";
+        print_json_string(concept.api_name);
+        std::cout << ",\"runtimeIdentity\":";
+        print_json_string(concept.runtime_identity);
+        std::cout << ",\"storageBinding\":";
+        print_json_string(concept.storage_binding);
+        std::cout << ",\"codec\":";
+        print_json_string(concept.codec);
+        std::cout << ",\"readable\":" << (concept.readable ? "true" : "false");
+        std::cout << ",\"writable\":" << (concept.writable ? "true" : "false");
+        std::cout << ",\"proof\":";
+        print_json_string(concept.proof);
+        std::cout << "}";
+    }
+    std::cout << "]}\n";
+}
+
 bool object_model_gate_is_unproven_value_codec(std::string_view codec) {
     return codec == "color-record" ||
            codec == "font-record" ||
@@ -12445,12 +12529,80 @@ void object_model_gate_check_member(
     }
 }
 
+std::size_t count_substring(std::string_view text, std::string_view needle) {
+    if (needle.empty()) {
+        return 0;
+    }
+    std::size_t count = 0;
+    std::size_t pos = 0;
+    while ((pos = text.find(needle, pos)) != std::string_view::npos) {
+        ++count;
+        pos += needle.size();
+    }
+    return count;
+}
+
+struct PublicSchemaEscapeGate {
+    bool inspected = false;
+    std::size_t any_object_type = 0;
+    std::size_t xs_any = 0;
+    std::size_t xs_any_attribute = 0;
+
+    std::size_t total() const {
+        return any_object_type + xs_any + xs_any_attribute;
+    }
+};
+
+PublicSchemaEscapeGate inspect_public_schema_escape_gate() {
+    PublicSchemaEscapeGate gate;
+    const std::array<std::filesystem::path, 3> candidates{{
+        "schemas/OrdinaryForm.xsd",
+        "../../schemas/OrdinaryForm.xsd",
+        "../../../schemas/OrdinaryForm.xsd",
+    }};
+    for (const auto& path : candidates) {
+        if (!std::filesystem::is_regular_file(path)) {
+            continue;
+        }
+        const std::string text = read_file_text_lossy(path.string());
+        gate.inspected = true;
+        gate.any_object_type = count_substring(text, "AnyObjectType");
+        gate.xs_any = count_substring(text, "<xs:any ");
+        gate.xs_any_attribute = count_substring(text, "<xs:anyAttribute");
+        return gate;
+    }
+    return gate;
+}
+
 void print_object_model_gate() {
     std::vector<std::string> violations;
     std::size_t schema_members_checked = 0;
     std::size_t registry_descriptors_checked = 0;
     std::size_t writable_value_codecs = 0;
     std::size_t readable_value_coverage_gaps = 0;
+    std::size_t accepted_concept_incomplete_rows = 0;
+
+    const auto concepts = oof::ordinary::concept_registry::build_concepts();
+    const auto concept_stats = oof::ordinary::concept_registry::stats_for(concepts);
+    for (const auto& concept : concepts) {
+        if (concept.status != oof::ordinary::concept_registry::ConceptStatus::accepted) {
+            continue;
+        }
+        const bool complete =
+            !concept.public_name.empty() &&
+            !concept.runtime_identity.empty() &&
+            !concept.storage_binding.empty() &&
+            !concept.codec.empty() &&
+            !concept.proof.empty();
+        if (!complete) {
+            ++accepted_concept_incomplete_rows;
+            object_model_gate_add_violation(
+                violations,
+                "concept",
+                concept.public_name,
+                "accepted concept has incomplete admission passport");
+        }
+    }
 
     const auto schemas = oof::platform::object_schema::build_platform_object_schemas();
     for (const auto& schema : schemas) {
@@ -12492,7 +12644,23 @@ void print_object_model_gate() {
         check_descriptor(descriptor);
     }
 
+    const auto public_schema_gate = inspect_public_schema_escape_gate();
+
     std::cout << "{\"operation\":\"object-model-gate\"";
+    std::cout << ",\"conceptOwner\":\"OrdinaryFormConceptRegistry\"";
+    std::cout << ",\"conceptCount\":" << concept_stats.total;
+    std::cout << ",\"acceptedConcepts\":" << concept_stats.accepted;
+    std::cout << ",\"proposedConcepts\":" << concept_stats.proposed;
+    std::cout << ",\"diagnosticConcepts\":" << concept_stats.diagnostic;
+    std::cout << ",\"rejectedConcepts\":" << concept_stats.rejected;
+    std::cout << ",\"acceptedConceptIncompleteRows\":" << accepted_concept_incomplete_rows;
+    std::cout << ",\"publicSchemaInspected\":" << (public_schema_gate.inspected ? "true" : "false");
+    std::cout << ",\"publicSchemaEscapeHatches\":" << public_schema_gate.total();
+    std::cout << ",\"publicSchemaAnyObjectTypeRefs\":" << public_schema_gate.any_object_type;
+    std::cout << ",\"publicSchemaXsAnyRefs\":" << public_schema_gate.xs_any;
+    std::cout << ",\"publicSchemaXsAnyAttributeRefs\":" << public_schema_gate.xs_any_attribute;
+    std::cout << ",\"publicSchemaEscapeStatus\":";
+    print_json_string(public_schema_gate.total() == 0 ? "PASS" : "FAIL");
     std::cout << ",\"schemaMembersChecked\":" << schema_members_checked;
     std::cout << ",\"registryDescriptorsChecked\":" << registry_descriptors_checked;
     std::cout << ",\"controlInfoDescriptorCount\":"
@@ -13107,6 +13275,51 @@ void print_runtime_form_node(const std::string& input_path, std::string_view pat
     print_json_string(runtime_diff_node_summary(*node));
     std::cout << ",\"node\":";
     print_json_string(oof::platform::stream::dump_compact(*node));
+    std::cout << "}\n";
+}
+
+void print_ordinary_form_object_selftest() {
+    const std::string form_text =
+        "{{\"MainCaption\",1,1,{\"ru\",\"Main\"}},"
+        "{6ff79819-710e-4145-97cd-1618da79e3e2,5,{1,{1,1,{\"ru\",\"Run\"}}},"
+        "{8,1,2,101,22,0,0,0,0,0,0,0,0,0,0,0,0},{14,\"Button1\",4294967295,0,0,0},{0}}}";
+    RuntimeFormEnvelope envelope = runtime_envelope_from_form_payload(
+        std::vector<std::uint8_t>(form_text.begin(), form_text.end()));
+
+    oof::ordinary::object::OrdinaryForm form(materialize_platform_form_object(envelope));
+    const std::string before_name = form.get_prop_val("5", "Name");
+    const std::string before_title = form.get_prop_val("5", "Title");
+    form.set_prop_val("5", "Title", "ButtonViaOrdinaryForm");
+    form.set_prop_val("5", "Visible", "false");
+    const auto* button = form.find_object("5");
+    const auto* found_by_collection = form.items().find("Button1");
+
+    bool rejected_diagnostic_property = false;
+    try {
+        form.set_prop_val("5", "TextColor", "#123456");
+    } catch (const std::exception&) {
+        rejected_diagnostic_property = true;
+    }
+
+    std::cout << "{\"operation\":\"ordinary-form-object-selftest\"";
+    std::cout << ",\"object\":\"OrdinaryForm\"";
+    std::cout << ",\"backing\":\"PlatformFormObject\"";
+    std::cout << ",\"conceptOwner\":\"OrdinaryFormConceptRegistry\"";
+    std::cout << ",\"itemsCount\":" << form.items().count();
+    std::cout << ",\"attributesCount\":" << form.attributes().count();
+    std::cout << ",\"commandsCount\":" << form.commands().count();
+    std::cout << ",\"eventsCount\":" << form.events().count();
+    std::cout << ",\"beforeName\":";
+    print_json_string(before_name);
+    std::cout << ",\"beforeTitle\":";
+    print_json_string(before_title);
+    std::cout << ",\"afterTitle\":";
+    print_json_string(form.get_prop_val("5", "Title"));
+    std::cout << ",\"afterVisible\":";
+    print_json_string(form.get_prop_val("5", "Visible"));
+    std::cout << ",\"buttonFound\":" << (button != nullptr ? "true" : "false");
+    std::cout << ",\"collectionFindByName\":" << (found_by_collection != nullptr ? "true" : "false");
+    std::cout << ",\"diagnosticPropertyRejected\":" << (rejected_diagnostic_property ? "true" : "false");
     std::cout << "}\n";
 }
 
@@ -13998,6 +14211,10 @@ int main(int argc, char** argv) {
             print_formbin_platform_object_selftest();
             return 0;
         }
+        if (command == "ordinary-form-object-selftest") {
+            print_ordinary_form_object_selftest();
+            return 0;
+        }
         if (command == "form-object-graph-selftest") {
             print_form_object_graph_selftest();
             return 0;
@@ -14068,6 +14285,10 @@ int main(int argc, char** argv) {
         }
         if (command == "platform-property-registry") {
             print_platform_property_registry();
+            return 0;
+        }
+        if (command == "ordinary-form-concepts") {
+            print_ordinary_form_concepts();
             return 0;
         }
         if (command == "platform-control-info-descriptors") {

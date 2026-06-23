@@ -17,7 +17,7 @@
 
   <xs:complexType name="FormType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="Title" type="AnyObjectType" minOccurs="0"/>
+      <xs:element name="Title" type="SimplePropertyType" minOccurs="0"/>
       <xs:element name="Width" type="xs:string" minOccurs="0"/>
       <xs:element name="Height" type="xs:string" minOccurs="0"/>
       <xs:element name="AutoTitle" type="xs:string" minOccurs="0"/>
@@ -25,9 +25,9 @@
       <xs:element name="CommandBarLocation" type="xs:string" minOccurs="0"/>
       <xs:element name="VerticalScroll" type="xs:string" minOccurs="0"/>
       <xs:element name="ShowCommandBar" type="xs:string" minOccurs="0"/>
-      <xs:element name="AutoCommandBar" type="AnyObjectType" minOccurs="0"/>
+      <xs:element name="AutoCommandBar" type="SimplePropertyType" minOccurs="0"/>
       <xs:element name="SerializationCounter" type="xs:string" minOccurs="0"/>
-      <xs:element name="RootPanelLayout" type="AnyObjectType" minOccurs="0"/>
+      <xs:element name="RootPanelLayout" type="SimplePropertyType" minOccurs="0"/>
       <xs:element name="Events" type="EventsType" minOccurs="0"/>
       <xs:element name="Attributes" type="AttributesType" minOccurs="0"/>
       <xs:element name="ChildItems" type="ChildItemsType" minOccurs="0"/>
@@ -36,7 +36,11 @@
     <xs:attribute name="ordinaryFormVersion" type="xs:string" use="required"/>
     <xs:attribute name="containerCreatedTicks" type="xs:string" use="optional"/>
     <xs:attribute name="containerModifiedTicks" type="xs:string" use="optional"/>
-    <xs:anyAttribute processContents="lax"/>
+    <xs:attribute name="formObjectUuid" type="xs:string" use="optional"/>
+    <xs:attribute name="formObjectKind" type="xs:string" use="optional"/>
+    <xs:attribute name="formObjectStateKind" type="xs:string" use="optional"/>
+    <xs:attribute name="formObjectStateMode" type="xs:string" use="optional"/>
+    <xs:attribute name="formObjectStateFlag" type="xs:string" use="optional"/>
   </xs:complexType>
 
   <xs:complexType name="ChildItemsType">
@@ -77,292 +81,340 @@
 
   <xs:complexType name="PageType">
     <xs:sequence>
-      <xs:element name="Title" type="AnyObjectType" minOccurs="0"/>
+      <xs:element name="Title" type="SimplePropertyType" minOccurs="0"/>
       <xs:element name="ChildItems" type="ChildItemsType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="optional"/>
     <xs:attribute name="id" type="xs:string" use="optional"/>
-    <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
 
   <xs:complexType name="ControlType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="Action" type="AnyObjectType"/>
-      <xs:element name="ActivePoint" type="AnyObjectType"/>
-      <xs:element name="ActiveSeries" type="AnyObjectType"/>
-      <xs:element name="AllowChangeColumnOrder" type="AnyObjectType"/>
-      <xs:element name="AllowChangeRows" type="AnyObjectType"/>
-      <xs:element name="AllowColumnSetup" type="AnyObjectType"/>
-      <xs:element name="AllowDrag" type="AnyObjectType"/>
-      <xs:element name="AllowDragStart" type="AnyObjectType"/>
-      <xs:element name="AlternateRowColors" type="AnyObjectType"/>
-      <xs:element name="AlternatingRowBackColor" type="AnyObjectType"/>
-      <xs:element name="AutoContextMenu" type="AnyObjectType"/>
-      <xs:element name="AutoInsertNewRow" type="AnyObjectType"/>
-      <xs:element name="AutoMarkIncomplete" type="AnyObjectType"/>
-      <xs:element name="AutoMaxHeight" type="AnyObjectType"/>
-      <xs:element name="AutoMaxWidth" type="AnyObjectType"/>
-      <xs:element name="AutoMaximumValue" type="AnyObjectType"/>
-      <xs:element name="AutoMinimumValue" type="AnyObjectType"/>
-      <xs:element name="AutoPointText" type="AnyObjectType"/>
-      <xs:element name="AutoSelectIncomplete" type="AnyObjectType"/>
-      <xs:element name="AutoSeriesSpread" type="AnyObjectType"/>
-      <xs:element name="AutoSeriesText" type="AnyObjectType"/>
-      <xs:element name="AutoTranspose" type="AnyObjectType"/>
-      <xs:element name="AutoTraversalOrder" type="AnyObjectType"/>
-      <xs:element name="Autofill" type="AnyObjectType"/>
-      <xs:element name="Auxiliary" type="AnyObjectType"/>
-      <xs:element name="BackColor" type="AnyObjectType"/>
-      <xs:element name="BaseValue" type="AnyObjectType"/>
-      <xs:element name="BigStep" type="AnyObjectType"/>
-      <xs:element name="Border" type="AnyObjectType"/>
-      <xs:element name="BorderColor" type="AnyObjectType"/>
-      <xs:element name="ButtonAlignment" type="AnyObjectType"/>
-      <xs:element name="ButtonBackColor" type="AnyObjectType"/>
-      <xs:element name="ButtonTextColor" type="AnyObjectType"/>
-      <xs:element name="ButtonType" type="AnyObjectType"/>
-      <xs:element name="Buttons" type="AnyObjectType"/>
-      <xs:element name="CalendarNavigation" type="AnyObjectType"/>
-      <xs:element name="CancelButton" type="AnyObjectType"/>
-      <xs:element name="ChartKind" type="AnyObjectType"/>
+      <xs:element name="Action" type="SimplePropertyType"/>
+      <xs:element name="ActivePoint" type="SimplePropertyType"/>
+      <xs:element name="ActiveSeries" type="SimplePropertyType"/>
+      <xs:element name="AllowChangeColumnOrder" type="SimplePropertyType"/>
+      <xs:element name="AllowChangeRows" type="SimplePropertyType"/>
+      <xs:element name="AllowColumnSetup" type="SimplePropertyType"/>
+      <xs:element name="AllowDrag" type="SimplePropertyType"/>
+      <xs:element name="AllowDragStart" type="SimplePropertyType"/>
+      <xs:element name="AlternateRowColors" type="SimplePropertyType"/>
+      <xs:element name="AlternatingRowBackColor" type="SimplePropertyType"/>
+      <xs:element name="AutoContextMenu" type="SimplePropertyType"/>
+      <xs:element name="AutoInsertNewRow" type="SimplePropertyType"/>
+      <xs:element name="AutoMarkIncomplete" type="SimplePropertyType"/>
+      <xs:element name="AutoMaxHeight" type="SimplePropertyType"/>
+      <xs:element name="AutoMaxWidth" type="SimplePropertyType"/>
+      <xs:element name="AutoMaximumValue" type="SimplePropertyType"/>
+      <xs:element name="AutoMinimumValue" type="SimplePropertyType"/>
+      <xs:element name="AutoPointText" type="SimplePropertyType"/>
+      <xs:element name="AutoSelectIncomplete" type="SimplePropertyType"/>
+      <xs:element name="AutoSeriesSpread" type="SimplePropertyType"/>
+      <xs:element name="AutoSeriesText" type="SimplePropertyType"/>
+      <xs:element name="AutoTranspose" type="SimplePropertyType"/>
+      <xs:element name="AutoTraversalOrder" type="SimplePropertyType"/>
+      <xs:element name="Autofill" type="SimplePropertyType"/>
+      <xs:element name="Auxiliary" type="SimplePropertyType"/>
+      <xs:element name="BackColor" type="SimplePropertyType"/>
+      <xs:element name="BaseValue" type="SimplePropertyType"/>
+      <xs:element name="BigStep" type="SimplePropertyType"/>
+      <xs:element name="Border" type="SimplePropertyType"/>
+      <xs:element name="BorderColor" type="SimplePropertyType"/>
+      <xs:element name="ButtonAlignment" type="SimplePropertyType"/>
+      <xs:element name="ButtonBackColor" type="SimplePropertyType"/>
+      <xs:element name="ButtonTextColor" type="SimplePropertyType"/>
+      <xs:element name="ButtonType" type="SimplePropertyType"/>
+      <xs:element name="Buttons" type="SimplePropertyType"/>
+      <xs:element name="CalendarNavigation" type="SimplePropertyType"/>
+      <xs:element name="CancelButton" type="SimplePropertyType"/>
+      <xs:element name="ChartKind" type="SimplePropertyType"/>
       <xs:element name="ChildItems" type="ChildItemsType"/>
-      <xs:element name="ChoiceButton" type="AnyObjectType"/>
-      <xs:element name="ChoiceButtonPicture" type="AnyObjectType"/>
-      <xs:element name="ChoiceList" type="AnyObjectType"/>
-      <xs:element name="ChoiceListButton" type="AnyObjectType"/>
-      <xs:element name="ChoiceListHeight" type="AnyObjectType"/>
-      <xs:element name="ChoiceListMode" type="AnyObjectType"/>
-      <xs:element name="ChoiceListWidth" type="AnyObjectType"/>
-      <xs:element name="ChoiceMode" type="AnyObjectType"/>
-      <xs:element name="ClearButton" type="AnyObjectType"/>
-      <xs:element name="Clsid" type="AnyObjectType"/>
-      <xs:element name="ColorPalette" type="AnyObjectType"/>
-      <xs:element name="Columns" type="AnyObjectType"/>
-      <xs:element name="ColumnsCount" type="AnyObjectType"/>
-      <xs:element name="CommandName" type="AnyObjectType"/>
-      <xs:element name="CommandSource" type="AnyObjectType"/>
-      <xs:element name="ContextMenu" type="AnyObjectType"/>
-      <xs:element name="CreateButton" type="AnyObjectType"/>
-      <xs:element name="CurrentColumn" type="AnyObjectType"/>
-      <xs:element name="CurrentData" type="AnyObjectType"/>
-      <xs:element name="CurrentDate" type="AnyObjectType"/>
-      <xs:element name="CurrentItem" type="AnyObjectType"/>
-      <xs:element name="CurrentPage" type="AnyObjectType"/>
-      <xs:element name="CurrentParent" type="AnyObjectType"/>
-      <xs:element name="CurrentRow" type="AnyObjectType"/>
-      <xs:element name="DataBindingFlag" type="AnyObjectType"/>
-      <xs:element name="DataBindingMode" type="AnyObjectType"/>
-      <xs:element name="DataPath" type="AnyObjectType"/>
-      <xs:element name="DataValue" type="AnyObjectType"/>
-      <xs:element name="DefaultAction" type="AnyObjectType"/>
-      <xs:element name="DefaultButton" type="AnyObjectType"/>
-      <xs:element name="DisplayStyle" type="AnyObjectType"/>
-      <xs:element name="DisplayedArea" type="AnyObjectType"/>
-      <xs:element name="DistributeByPages" type="AnyObjectType"/>
-      <xs:element name="Document" type="AnyObjectType"/>
-      <xs:element name="EditButton" type="AnyObjectType"/>
-      <xs:element name="EditMode" type="AnyObjectType"/>
-      <xs:element name="Editing" type="AnyObjectType"/>
-      <xs:element name="Enabled" type="AnyObjectType"/>
-      <xs:element name="Events" type="AnyObjectType"/>
-      <xs:element name="ExtendedEdit" type="AnyObjectType"/>
-      <xs:element name="ExtendedTooltip" type="AnyObjectType"/>
-      <xs:element name="FieldBackColor" type="AnyObjectType"/>
-      <xs:element name="FieldTextColor" type="AnyObjectType"/>
-      <xs:element name="Fields" type="AnyObjectType"/>
-      <xs:element name="FirstInGroup" type="AnyObjectType"/>
-      <xs:element name="Font" type="AnyObjectType"/>
-      <xs:element name="Footer" type="AnyObjectType"/>
-      <xs:element name="FooterBackColor" type="AnyObjectType"/>
-      <xs:element name="FooterFont" type="AnyObjectType"/>
-      <xs:element name="FooterHeight" type="AnyObjectType"/>
-      <xs:element name="FooterTextColor" type="AnyObjectType"/>
-      <xs:element name="Format" type="AnyObjectType"/>
-      <xs:element name="GaugeBands" type="AnyObjectType"/>
-      <xs:element name="GaugeEndAngle" type="AnyObjectType"/>
-      <xs:element name="GaugeHubColor" type="AnyObjectType"/>
-      <xs:element name="GaugeHubThickness" type="AnyObjectType"/>
-      <xs:element name="GaugeScaleLabelsAlongScale" type="AnyObjectType"/>
-      <xs:element name="GaugeScaleLabelsPosition" type="AnyObjectType"/>
-      <xs:element name="GaugeScaleThickness" type="AnyObjectType"/>
-      <xs:element name="GaugeStartAngle" type="AnyObjectType"/>
-      <xs:element name="GaugeValueDisplay" type="AnyObjectType"/>
-      <xs:element name="Gradient" type="AnyObjectType"/>
-      <xs:element name="Header" type="AnyObjectType"/>
-      <xs:element name="HeaderBackColor" type="AnyObjectType"/>
-      <xs:element name="HeaderFont" type="AnyObjectType"/>
-      <xs:element name="HeaderHeight" type="AnyObjectType"/>
-      <xs:element name="HeaderTextColor" type="AnyObjectType"/>
-      <xs:element name="Height" type="AnyObjectType"/>
-      <xs:element name="HighlightNegative" type="AnyObjectType"/>
-      <xs:element name="HorizontalAlign" type="AnyObjectType"/>
-      <xs:element name="HorizontalLines" type="AnyObjectType"/>
-      <xs:element name="HorizontalScrollBar" type="AnyObjectType"/>
-      <xs:element name="HorizontalStretch" type="AnyObjectType"/>
-      <xs:element name="Hyperlink" type="AnyObjectType"/>
-      <xs:element name="IncompleteChoice" type="AnyObjectType"/>
-      <xs:element name="IncompleteChoiceMode" type="AnyObjectType"/>
-      <xs:element name="IncompleteMark" type="AnyObjectType"/>
-      <xs:element name="InitialListView" type="AnyObjectType"/>
-      <xs:element name="InitialTreeView" type="AnyObjectType"/>
-      <xs:element name="InputRowsMode" type="AnyObjectType"/>
-      <xs:element name="Items" type="AnyObjectType"/>
-      <xs:element name="LabelPercentFormat" type="AnyObjectType"/>
-      <xs:element name="LabelValueFormat" type="AnyObjectType"/>
-      <xs:element name="LabelsBackColor" type="AnyObjectType"/>
-      <xs:element name="LabelsBorder" type="AnyObjectType"/>
-      <xs:element name="LabelsBorderColor" type="AnyObjectType"/>
-      <xs:element name="LabelsFont" type="AnyObjectType"/>
-      <xs:element name="LabelsPosition" type="AnyObjectType"/>
-      <xs:element name="LabelsSeparator" type="AnyObjectType"/>
-      <xs:element name="LabelsTextColor" type="AnyObjectType"/>
-      <xs:element name="LabelsView" type="AnyObjectType"/>
-      <xs:element name="LeftFixedColumns" type="AnyObjectType"/>
-      <xs:element name="LegendArea" type="AnyObjectType"/>
-      <xs:element name="Light" type="AnyObjectType"/>
-      <xs:element name="MarkStep" type="AnyObjectType"/>
-      <xs:element name="Marquee" type="AnyObjectType"/>
-      <xs:element name="Mask" type="AnyObjectType"/>
-      <xs:element name="MaxHeight" type="AnyObjectType"/>
-      <xs:element name="MaxLength" type="AnyObjectType"/>
-      <xs:element name="MaxSeries" type="AnyObjectType"/>
-      <xs:element name="MaxSeriesCount" type="AnyObjectType"/>
-      <xs:element name="MaxSeriesPercent" type="AnyObjectType"/>
-      <xs:element name="MaxValue" type="AnyObjectType"/>
-      <xs:element name="MaxWidth" type="AnyObjectType"/>
-      <xs:element name="MaximumValue" type="AnyObjectType"/>
-      <xs:element name="MenuMode" type="AnyObjectType"/>
-      <xs:element name="MinValue" type="AnyObjectType"/>
-      <xs:element name="MinWidth" type="AnyObjectType"/>
-      <xs:element name="MinimumValue" type="AnyObjectType"/>
-      <xs:element name="MultiLine" type="AnyObjectType"/>
-      <xs:element name="OpenButton" type="AnyObjectType"/>
-      <xs:element name="Orientation" type="AnyObjectType"/>
-      <xs:element name="Outline" type="AnyObjectType"/>
-      <xs:element name="Output" type="AnyObjectType"/>
-      <xs:element name="PagesRepresentation" type="AnyObjectType"/>
-      <xs:element name="PanelLayout" type="AnyObjectType"/>
-      <xs:element name="PanelPicturePosition" type="AnyObjectType"/>
-      <xs:element name="PasswordMode" type="AnyObjectType"/>
-      <xs:element name="PeriodEnd" type="AnyObjectType"/>
-      <xs:element name="PeriodStart" type="AnyObjectType"/>
-      <xs:element name="PeriodicVariantMultiplicity" type="AnyObjectType"/>
-      <xs:element name="PeriodicVariantUnit" type="AnyObjectType"/>
-      <xs:element name="Picture" type="AnyObjectType"/>
-      <xs:element name="PicturePosition" type="AnyObjectType"/>
-      <xs:element name="PictureRendering" type="AnyObjectType"/>
-      <xs:element name="PictureSize" type="AnyObjectType"/>
-      <xs:element name="PictureStyle" type="AnyObjectType"/>
-      <xs:element name="PivotChartKind" type="AnyObjectType"/>
-      <xs:element name="PivotSeries" type="AnyObjectType"/>
-      <xs:element name="PlotArea" type="AnyObjectType"/>
-      <xs:element name="Points" type="AnyObjectType"/>
-      <xs:element name="PointsCount" type="AnyObjectType"/>
-      <xs:element name="Position" type="AnyObjectType"/>
-      <xs:element name="ReadOnly" type="AnyObjectType"/>
-      <xs:element name="Refresh" type="AnyObjectType"/>
-      <xs:element name="RegulationButton" type="AnyObjectType"/>
-      <xs:element name="Representation" type="AnyObjectType"/>
-      <xs:element name="RightFixedColumns" type="AnyObjectType"/>
-      <xs:element name="RowSelectionMode" type="AnyObjectType"/>
-      <xs:element name="Rows" type="AnyObjectType"/>
-      <xs:element name="RowsCount" type="AnyObjectType"/>
-      <xs:element name="Scale" type="AnyObjectType"/>
-      <xs:element name="ScalePicture" type="AnyObjectType"/>
-      <xs:element name="ScaleSupport" type="AnyObjectType"/>
-      <xs:element name="ScrollablePagesMode" type="AnyObjectType"/>
-      <xs:element name="SelectedDates" type="AnyObjectType"/>
-      <xs:element name="SelectedRows" type="AnyObjectType"/>
-      <xs:element name="SelectedText" type="AnyObjectType"/>
-      <xs:element name="SelectionBackColor" type="AnyObjectType"/>
-      <xs:element name="SelectionMode" type="AnyObjectType"/>
-      <xs:element name="SelectionTextColor" type="AnyObjectType"/>
-      <xs:element name="Series" type="AnyObjectType"/>
-      <xs:element name="SeriesCount" type="AnyObjectType"/>
-      <xs:element name="SeriesInRows" type="AnyObjectType"/>
-      <xs:element name="Shortcut" type="AnyObjectType"/>
-      <xs:element name="ShowCurrentDate" type="AnyObjectType"/>
-      <xs:element name="ShowLegend" type="AnyObjectType"/>
-      <xs:element name="ShowMark" type="AnyObjectType"/>
-      <xs:element name="ShowPercent" type="AnyObjectType"/>
-      <xs:element name="ShowPicture" type="AnyObjectType"/>
-      <xs:element name="ShowSelection" type="AnyObjectType"/>
-      <xs:element name="ShowTitle" type="AnyObjectType"/>
-      <xs:element name="SkipBaseValue" type="AnyObjectType"/>
-      <xs:element name="SkipOnInput" type="AnyObjectType"/>
-      <xs:element name="SourceData" type="AnyObjectType"/>
-      <xs:element name="SpaceMode" type="AnyObjectType"/>
-      <xs:element name="State" type="AnyObjectType"/>
-      <xs:element name="Step" type="AnyObjectType"/>
-      <xs:element name="TextColor" type="AnyObjectType"/>
-      <xs:element name="TextEditing" type="AnyObjectType"/>
-      <xs:element name="TextPosition" type="AnyObjectType"/>
-      <xs:element name="ThreeState" type="AnyObjectType"/>
-      <xs:element name="Title" type="AnyObjectType"/>
-      <xs:element name="TitleArea" type="AnyObjectType"/>
-      <xs:element name="ToolTip" type="AnyObjectType"/>
-      <xs:element name="TransparentBackColor" type="AnyObjectType"/>
-      <xs:element name="TransparentLabelsBackColor" type="AnyObjectType"/>
-      <xs:element name="TraversalOrder" type="AnyObjectType"/>
-      <xs:element name="Type" type="AnyObjectType"/>
-      <xs:element name="TypeChoice" type="AnyObjectType"/>
-      <xs:element name="TypeLinkElement" type="AnyObjectType"/>
-      <xs:element name="TypeRestriction" type="AnyObjectType"/>
-      <xs:element name="UnselectedPictureText" type="AnyObjectType"/>
-      <xs:element name="ValueType" type="AnyObjectType"/>
-      <xs:element name="VerticalAlign" type="AnyObjectType"/>
-      <xs:element name="VerticalLines" type="AnyObjectType"/>
-      <xs:element name="VerticalScrollBar" type="AnyObjectType"/>
-      <xs:element name="VerticalStretch" type="AnyObjectType"/>
-      <xs:element name="ViewSetupMode" type="AnyObjectType"/>
-      <xs:element name="Visible" type="AnyObjectType"/>
-      <xs:element name="WeekendTextColor" type="AnyObjectType"/>
-      <xs:element name="Width" type="AnyObjectType"/>
-      <xs:element name="WordWrap" type="AnyObjectType"/>
+      <xs:element name="ChoiceButton" type="SimplePropertyType"/>
+      <xs:element name="ChoiceButtonPicture" type="SimplePropertyType"/>
+      <xs:element name="ChoiceList" type="SimplePropertyType"/>
+      <xs:element name="ChoiceListButton" type="SimplePropertyType"/>
+      <xs:element name="ChoiceListHeight" type="SimplePropertyType"/>
+      <xs:element name="ChoiceListMode" type="SimplePropertyType"/>
+      <xs:element name="ChoiceListWidth" type="SimplePropertyType"/>
+      <xs:element name="ChoiceMode" type="SimplePropertyType"/>
+      <xs:element name="ClearButton" type="SimplePropertyType"/>
+      <xs:element name="Clsid" type="SimplePropertyType"/>
+      <xs:element name="ColorPalette" type="SimplePropertyType"/>
+      <xs:element name="Columns" type="SimplePropertyType"/>
+      <xs:element name="ColumnsCount" type="SimplePropertyType"/>
+      <xs:element name="CommandName" type="SimplePropertyType"/>
+      <xs:element name="CommandSource" type="SimplePropertyType"/>
+      <xs:element name="ContextMenu" type="SimplePropertyType"/>
+      <xs:element name="CreateButton" type="SimplePropertyType"/>
+      <xs:element name="CurrentColumn" type="SimplePropertyType"/>
+      <xs:element name="CurrentData" type="SimplePropertyType"/>
+      <xs:element name="CurrentDate" type="SimplePropertyType"/>
+      <xs:element name="CurrentItem" type="SimplePropertyType"/>
+      <xs:element name="CurrentPage" type="SimplePropertyType"/>
+      <xs:element name="CurrentParent" type="SimplePropertyType"/>
+      <xs:element name="CurrentRow" type="SimplePropertyType"/>
+      <xs:element name="DataBindingFlag" type="SimplePropertyType"/>
+      <xs:element name="DataBindingMode" type="SimplePropertyType"/>
+      <xs:element name="DataPath" type="SimplePropertyType"/>
+      <xs:element name="DataValue" type="SimplePropertyType"/>
+      <xs:element name="DefaultAction" type="SimplePropertyType"/>
+      <xs:element name="DefaultButton" type="SimplePropertyType"/>
+      <xs:element name="DisplayStyle" type="SimplePropertyType"/>
+      <xs:element name="DisplayedArea" type="SimplePropertyType"/>
+      <xs:element name="DistributeByPages" type="SimplePropertyType"/>
+      <xs:element name="Document" type="SimplePropertyType"/>
+      <xs:element name="EditButton" type="SimplePropertyType"/>
+      <xs:element name="EditMode" type="SimplePropertyType"/>
+      <xs:element name="Editing" type="SimplePropertyType"/>
+      <xs:element name="Enabled" type="SimplePropertyType"/>
+      <xs:element name="Events" type="EventsType"/>
+      <xs:element name="ExtendedEdit" type="SimplePropertyType"/>
+      <xs:element name="ExtendedTooltip" type="SimplePropertyType"/>
+      <xs:element name="FieldBackColor" type="SimplePropertyType"/>
+      <xs:element name="FieldTextColor" type="SimplePropertyType"/>
+      <xs:element name="Fields" type="SimplePropertyType"/>
+      <xs:element name="FirstInGroup" type="SimplePropertyType"/>
+      <xs:element name="Font" type="SimplePropertyType"/>
+      <xs:element name="Footer" type="SimplePropertyType"/>
+      <xs:element name="FooterBackColor" type="SimplePropertyType"/>
+      <xs:element name="FooterFont" type="SimplePropertyType"/>
+      <xs:element name="FooterHeight" type="SimplePropertyType"/>
+      <xs:element name="FooterTextColor" type="SimplePropertyType"/>
+      <xs:element name="Format" type="SimplePropertyType"/>
+      <xs:element name="GaugeBands" type="SimplePropertyType"/>
+      <xs:element name="GaugeEndAngle" type="SimplePropertyType"/>
+      <xs:element name="GaugeHubColor" type="SimplePropertyType"/>
+      <xs:element name="GaugeHubThickness" type="SimplePropertyType"/>
+      <xs:element name="GaugeScaleLabelsAlongScale" type="SimplePropertyType"/>
+      <xs:element name="GaugeScaleLabelsPosition" type="SimplePropertyType"/>
+      <xs:element name="GaugeScaleThickness" type="SimplePropertyType"/>
+      <xs:element name="GaugeStartAngle" type="SimplePropertyType"/>
+      <xs:element name="GaugeValueDisplay" type="SimplePropertyType"/>
+      <xs:element name="Gradient" type="SimplePropertyType"/>
+      <xs:element name="Header" type="SimplePropertyType"/>
+      <xs:element name="HeaderBackColor" type="SimplePropertyType"/>
+      <xs:element name="HeaderFont" type="SimplePropertyType"/>
+      <xs:element name="HeaderHeight" type="SimplePropertyType"/>
+      <xs:element name="HeaderTextColor" type="SimplePropertyType"/>
+      <xs:element name="Height" type="SimplePropertyType"/>
+      <xs:element name="HighlightNegative" type="SimplePropertyType"/>
+      <xs:element name="HorizontalAlign" type="SimplePropertyType"/>
+      <xs:element name="HorizontalLines" type="SimplePropertyType"/>
+      <xs:element name="HorizontalScrollBar" type="SimplePropertyType"/>
+      <xs:element name="HorizontalStretch" type="SimplePropertyType"/>
+      <xs:element name="Hyperlink" type="SimplePropertyType"/>
+      <xs:element name="IncompleteChoice" type="SimplePropertyType"/>
+      <xs:element name="IncompleteChoiceMode" type="SimplePropertyType"/>
+      <xs:element name="IncompleteMark" type="SimplePropertyType"/>
+      <xs:element name="InitialListView" type="SimplePropertyType"/>
+      <xs:element name="InitialTreeView" type="SimplePropertyType"/>
+      <xs:element name="InputRowsMode" type="SimplePropertyType"/>
+      <xs:element name="Items" type="SimplePropertyType"/>
+      <xs:element name="LabelPercentFormat" type="SimplePropertyType"/>
+      <xs:element name="LabelValueFormat" type="SimplePropertyType"/>
+      <xs:element name="LabelsBackColor" type="SimplePropertyType"/>
+      <xs:element name="LabelsBorder" type="SimplePropertyType"/>
+      <xs:element name="LabelsBorderColor" type="SimplePropertyType"/>
+      <xs:element name="LabelsFont" type="SimplePropertyType"/>
+      <xs:element name="LabelsPosition" type="SimplePropertyType"/>
+      <xs:element name="LabelsSeparator" type="SimplePropertyType"/>
+      <xs:element name="LabelsTextColor" type="SimplePropertyType"/>
+      <xs:element name="LabelsView" type="SimplePropertyType"/>
+      <xs:element name="LeftFixedColumns" type="SimplePropertyType"/>
+      <xs:element name="LegendArea" type="SimplePropertyType"/>
+      <xs:element name="Light" type="SimplePropertyType"/>
+      <xs:element name="MarkStep" type="SimplePropertyType"/>
+      <xs:element name="Marquee" type="SimplePropertyType"/>
+      <xs:element name="Mask" type="SimplePropertyType"/>
+      <xs:element name="MaxHeight" type="SimplePropertyType"/>
+      <xs:element name="MaxLength" type="SimplePropertyType"/>
+      <xs:element name="MaxSeries" type="SimplePropertyType"/>
+      <xs:element name="MaxSeriesCount" type="SimplePropertyType"/>
+      <xs:element name="MaxSeriesPercent" type="SimplePropertyType"/>
+      <xs:element name="MaxValue" type="SimplePropertyType"/>
+      <xs:element name="MaxWidth" type="SimplePropertyType"/>
+      <xs:element name="MaximumValue" type="SimplePropertyType"/>
+      <xs:element name="MenuMode" type="SimplePropertyType"/>
+      <xs:element name="MinValue" type="SimplePropertyType"/>
+      <xs:element name="MinWidth" type="SimplePropertyType"/>
+      <xs:element name="MinimumValue" type="SimplePropertyType"/>
+      <xs:element name="MultiLine" type="SimplePropertyType"/>
+      <xs:element name="OpenButton" type="SimplePropertyType"/>
+      <xs:element name="Orientation" type="SimplePropertyType"/>
+      <xs:element name="Outline" type="SimplePropertyType"/>
+      <xs:element name="Output" type="SimplePropertyType"/>
+      <xs:element name="PagesRepresentation" type="SimplePropertyType"/>
+      <xs:element name="PanelLayout" type="SimplePropertyType"/>
+      <xs:element name="PanelPicturePosition" type="SimplePropertyType"/>
+      <xs:element name="PasswordMode" type="SimplePropertyType"/>
+      <xs:element name="PeriodEnd" type="SimplePropertyType"/>
+      <xs:element name="PeriodStart" type="SimplePropertyType"/>
+      <xs:element name="PeriodicVariantMultiplicity" type="SimplePropertyType"/>
+      <xs:element name="PeriodicVariantUnit" type="SimplePropertyType"/>
+      <xs:element name="Picture" type="SimplePropertyType"/>
+      <xs:element name="PicturePosition" type="SimplePropertyType"/>
+      <xs:element name="PictureRendering" type="SimplePropertyType"/>
+      <xs:element name="PictureSize" type="SimplePropertyType"/>
+      <xs:element name="PictureStyle" type="SimplePropertyType"/>
+      <xs:element name="PivotChartKind" type="SimplePropertyType"/>
+      <xs:element name="PivotSeries" type="SimplePropertyType"/>
+      <xs:element name="PlotArea" type="SimplePropertyType"/>
+      <xs:element name="Points" type="SimplePropertyType"/>
+      <xs:element name="PointsCount" type="SimplePropertyType"/>
+      <xs:element name="Position" type="SimplePropertyType"/>
+      <xs:element name="ReadOnly" type="SimplePropertyType"/>
+      <xs:element name="Refresh" type="SimplePropertyType"/>
+      <xs:element name="RegulationButton" type="SimplePropertyType"/>
+      <xs:element name="Representation" type="SimplePropertyType"/>
+      <xs:element name="RightFixedColumns" type="SimplePropertyType"/>
+      <xs:element name="RowSelectionMode" type="SimplePropertyType"/>
+      <xs:element name="Rows" type="SimplePropertyType"/>
+      <xs:element name="RowsCount" type="SimplePropertyType"/>
+      <xs:element name="Scale" type="SimplePropertyType"/>
+      <xs:element name="ScalePicture" type="SimplePropertyType"/>
+      <xs:element name="ScaleSupport" type="SimplePropertyType"/>
+      <xs:element name="ScrollablePagesMode" type="SimplePropertyType"/>
+      <xs:element name="SelectedDates" type="SimplePropertyType"/>
+      <xs:element name="SelectedRows" type="SimplePropertyType"/>
+      <xs:element name="SelectedText" type="SimplePropertyType"/>
+      <xs:element name="SelectionBackColor" type="SimplePropertyType"/>
+      <xs:element name="SelectionMode" type="SimplePropertyType"/>
+      <xs:element name="SelectionTextColor" type="SimplePropertyType"/>
+      <xs:element name="Series" type="SimplePropertyType"/>
+      <xs:element name="SeriesCount" type="SimplePropertyType"/>
+      <xs:element name="SeriesInRows" type="SimplePropertyType"/>
+      <xs:element name="Shortcut" type="SimplePropertyType"/>
+      <xs:element name="ShowCurrentDate" type="SimplePropertyType"/>
+      <xs:element name="ShowLegend" type="SimplePropertyType"/>
+      <xs:element name="ShowMark" type="SimplePropertyType"/>
+      <xs:element name="ShowPercent" type="SimplePropertyType"/>
+      <xs:element name="ShowPicture" type="SimplePropertyType"/>
+      <xs:element name="ShowSelection" type="SimplePropertyType"/>
+      <xs:element name="ShowTitle" type="SimplePropertyType"/>
+      <xs:element name="SkipBaseValue" type="SimplePropertyType"/>
+      <xs:element name="SkipOnInput" type="SimplePropertyType"/>
+      <xs:element name="SourceData" type="SimplePropertyType"/>
+      <xs:element name="SpaceMode" type="SimplePropertyType"/>
+      <xs:element name="State" type="SimplePropertyType"/>
+      <xs:element name="Step" type="SimplePropertyType"/>
+      <xs:element name="TextColor" type="SimplePropertyType"/>
+      <xs:element name="TextEditing" type="SimplePropertyType"/>
+      <xs:element name="TextPosition" type="SimplePropertyType"/>
+      <xs:element name="ThreeState" type="SimplePropertyType"/>
+      <xs:element name="Title" type="SimplePropertyType"/>
+      <xs:element name="TitleArea" type="SimplePropertyType"/>
+      <xs:element name="ToolTip" type="SimplePropertyType"/>
+      <xs:element name="TransparentBackColor" type="SimplePropertyType"/>
+      <xs:element name="TransparentLabelsBackColor" type="SimplePropertyType"/>
+      <xs:element name="TraversalOrder" type="SimplePropertyType"/>
+      <xs:element name="Type" type="SimplePropertyType"/>
+      <xs:element name="TypeChoice" type="SimplePropertyType"/>
+      <xs:element name="TypeLinkElement" type="SimplePropertyType"/>
+      <xs:element name="TypeRestriction" type="SimplePropertyType"/>
+      <xs:element name="UnselectedPictureText" type="SimplePropertyType"/>
+      <xs:element name="ValueType" type="SimplePropertyType"/>
+      <xs:element name="VerticalAlign" type="SimplePropertyType"/>
+      <xs:element name="VerticalLines" type="SimplePropertyType"/>
+      <xs:element name="VerticalScrollBar" type="SimplePropertyType"/>
+      <xs:element name="VerticalStretch" type="SimplePropertyType"/>
+      <xs:element name="ViewSetupMode" type="SimplePropertyType"/>
+      <xs:element name="Visible" type="SimplePropertyType"/>
+      <xs:element name="WeekendTextColor" type="SimplePropertyType"/>
+      <xs:element name="Width" type="SimplePropertyType"/>
+      <xs:element name="WordWrap" type="SimplePropertyType"/>
     </xs:choice>
     <xs:attribute name="name" type="xs:string" use="optional"/>
     <xs:attribute name="id" type="xs:string" use="optional"/>
     <xs:attribute name="uuid" type="xs:string" use="optional"/>
-    <xs:anyAttribute processContents="lax"/>
+    <xs:attribute name="objectId" type="xs:string" use="optional"/>
+    <xs:attribute name="ownerId" type="xs:string" use="optional"/>
   </xs:complexType>
 
   <xs:complexType name="EventsType">
     <xs:sequence>
       <xs:element name="Event" type="EventType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
-    <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
 
   <xs:complexType name="EventType">
     <xs:simpleContent>
       <xs:extension base="xs:string">
-        <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="name" type="xs:string" use="optional"/>
         <xs:attribute name="id" type="xs:string" use="optional"/>
         <xs:attribute name="uuid" type="xs:string" use="optional"/>
         <xs:attribute name="title" type="xs:string" use="optional"/>
-        <xs:anyAttribute processContents="lax"/>
+        <xs:attribute name="handler" type="xs:string" use="optional"/>
+        <xs:attribute name="objectId" type="xs:string" use="optional"/>
+        <xs:attribute name="ownerId" type="xs:string" use="optional"/>
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>
 
   <xs:complexType name="AttributesType">
     <xs:sequence>
-      <xs:element name="Attribute" type="AnyObjectType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Attribute" type="SimplePropertyType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
-    <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
 
   <xs:complexType name="CommandsType">
     <xs:sequence>
-      <xs:element name="Command" type="AnyObjectType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Command" type="SimplePropertyType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
-    <xs:anyAttribute processContents="lax"/>
   </xs:complexType>
 
-  <xs:complexType name="AnyObjectType" mixed="true">
-    <xs:sequence>
-      <xs:any minOccurs="0" maxOccurs="unbounded" processContents="lax"/>
-    </xs:sequence>
-    <xs:anyAttribute processContents="lax"/>
+  <xs:complexType name="SimplePropertyType" mixed="true">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="Binding" type="SimplePropertyType"/>
+      <xs:element name="Bindings" type="SimplePropertyType"/>
+      <xs:element name="DimensionBinding" type="SimplePropertyType"/>
+      <xs:element name="Type" type="SimplePropertyType"/>
+      <xs:element name="TypePattern" type="SimplePropertyType"/>
+      <xs:element name="Types" type="SimplePropertyType"/>
+      <xs:element name="ObjectType" type="SimplePropertyType"/>
+      <xs:element name="ColorValue" type="SimplePropertyType"/>
+      <xs:element name="FontValue" type="SimplePropertyType"/>
+      <xs:element name="BorderValue" type="SimplePropertyType"/>
+      <xs:element name="PictureValue" type="SimplePropertyType"/>
+      <xs:element name="Column" type="SimplePropertyType"/>
+      <xs:element name="Row" type="SimplePropertyType"/>
+      <xs:element name="Item" type="SimplePropertyType"/>
+      <xs:element name="Value" type="SimplePropertyType"/>
+      <xs:element name="Pattern" type="SimplePropertyType"/>
+      <xs:element name="String" type="SimplePropertyType"/>
+      <xs:element name="Number" type="SimplePropertyType"/>
+      <xs:element name="Boolean" type="SimplePropertyType"/>
+      <xs:element name="Date" type="SimplePropertyType"/>
+      <xs:element name="UUID" type="SimplePropertyType"/>
+    </xs:choice>
+    <xs:attribute name="name" type="xs:string" use="optional"/>
+    <xs:attribute name="id" type="xs:string" use="optional"/>
+    <xs:attribute name="uuid" type="xs:string" use="optional"/>
+    <xs:attribute name="guid" type="xs:string" use="optional"/>
+    <xs:attribute name="title" type="xs:string" use="optional"/>
+    <xs:attribute name="value" type="xs:string" use="optional"/>
+    <xs:attribute name="type" type="xs:string" use="optional"/>
+    <xs:attribute name="kind" type="xs:string" use="optional"/>
+    <xs:attribute name="handler" type="xs:string" use="optional"/>
+    <xs:attribute name="objectId" type="xs:string" use="optional"/>
+    <xs:attribute name="ownerId" type="xs:string" use="optional"/>
+    <xs:attribute name="main" type="xs:string" use="optional"/>
+    <xs:attribute name="storedData" type="xs:string" use="optional"/>
+    <xs:attribute name="modifiesData" type="xs:string" use="optional"/>
+    <xs:attribute name="targetId" type="xs:string" use="optional"/>
+    <xs:attribute name="targetName" type="xs:string" use="optional"/>
+    <xs:attribute name="side" type="xs:string" use="optional"/>
+    <xs:attribute name="left" type="xs:string" use="optional"/>
+    <xs:attribute name="top" type="xs:string" use="optional"/>
+    <xs:attribute name="right" type="xs:string" use="optional"/>
+    <xs:attribute name="bottom" type="xs:string" use="optional"/>
+    <xs:attribute name="width" type="xs:string" use="optional"/>
+    <xs:attribute name="height" type="xs:string" use="optional"/>
+    <xs:attribute name="coordinate" type="xs:string" use="optional"/>
+    <xs:attribute name="dimension" type="xs:string" use="optional"/>
+    <xs:attribute name="offset" type="xs:string" use="optional"/>
+    <xs:attribute name="storage" type="xs:string" use="optional"/>
+    <xs:attribute name="href" type="xs:string" use="optional"/>
+    <xs:attribute name="file" type="xs:string" use="optional"/>
+    <xs:attribute name="format" type="xs:string" use="optional"/>
   </xs:complexType>
 </xs:schema>

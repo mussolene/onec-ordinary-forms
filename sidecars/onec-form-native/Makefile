@@ -4,7 +4,7 @@ LDLIBS ?= -lz
 
 BUILD_DIR := build
 BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/control_info_descriptor_registry.hpp src/ordinary_control_type_registry.hpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_object_schema.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+SRC := src/main.cpp src/control_info_descriptor_registry.hpp src/ordinary_control_type_registry.hpp src/ordinary_form_concept_registry.hpp src/ordinary_form_object.hpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_object_schema.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
 
 .PHONY: all clean test
 
@@ -126,6 +126,11 @@ test: $(BIN)
 	$(BIN) platform-property-registry | grep -F -q '"name":"Font","localizedName":"Шрифт","valueType":"Font","slotCodec":"font-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"name":"Picture","localizedName":"Картинка","valueType":"Picture","slotCodec":"picture-record","slotBinding":"PlatformObjectSchemaMember.slotBinding","readable":true,"writable":false'
 	$(BIN) platform-property-registry | grep -F -q '"writableCount":32'
+	$(BIN) ordinary-form-concepts | grep -F -q '"source":"OrdinaryFormConceptRegistry"'
+	$(BIN) ordinary-form-concepts | grep -F -q '"owner":"OrdinaryForm object model"'
+	$(BIN) ordinary-form-concepts | grep -F -q '"decisionBoundary":"sources are evidence adapters; accepted concepts own public XML and serializer admission"'
+	$(BIN) ordinary-form-concepts | grep -F -q '"controlConceptCount":26'
+	$(BIN) ordinary-form-concepts | grep -F -q '"publicName":"InputField","apiName":"TextBox","runtimeIdentity":"381ed624-9217-4e63-85db-c4c3cb87daae","storageBinding":"txt"'
 	$(BIN) platform-control-info-descriptors | grep -F -q '"descriptorCount":27'
 	$(BIN) platform-control-info-descriptors | grep -F -q '"writerDescriptorControls":26'
 	$(BIN) platform-control-info-descriptors | grep -F -q '"writablePromotions":0'
@@ -134,6 +139,9 @@ test: $(BIN)
 	$(BIN) platform-control-info-descriptors | grep -F -q '"controlType":"Table","infoKind":"5"'
 	$(BIN) platform-control-info-descriptors | grep -F -q '"name":"AutoMarkIncomplete","index":22'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoDescriptorCount":27'
+	$(BIN) object-model-gate | grep -F -q '"conceptOwner":"OrdinaryFormConceptRegistry"'
+	$(BIN) object-model-gate | grep -F -q '"acceptedConceptIncompleteRows":0'
+	$(BIN) object-model-gate | grep -F -q '"publicSchemaEscapeStatus":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoWritablePromotions":0'
 	$(BIN) object-model-gate | grep -F -q '"releaseReady":false'
 	$(BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
@@ -193,6 +201,12 @@ test: $(BIN)
 	$(BIN) formbin-platform-object-selftest | grep -F -q '"explicitFontXml":true'
 	$(BIN) formbin-platform-object-selftest | grep -F -q '"titleRoundtrip":true'
 	$(BIN) formbin-platform-object-selftest | grep -F -q '"modulePreserved":true'
+	$(BIN) ordinary-form-object-selftest | grep -F -q '"object":"OrdinaryForm"'
+	$(BIN) ordinary-form-object-selftest | grep -F -q '"conceptOwner":"OrdinaryFormConceptRegistry"'
+	$(BIN) ordinary-form-object-selftest | grep -F -q '"itemsCount":1'
+	$(BIN) ordinary-form-object-selftest | grep -F -q '"afterTitle":"ButtonViaOrdinaryForm"'
+	$(BIN) ordinary-form-object-selftest | grep -F -q '"afterVisible":"false"'
+	$(BIN) ordinary-form-object-selftest | grep -F -q '"diagnosticPropertyRejected":true'
 	$(BIN) empty-form-object-roundtrip "ПустаяФорма" | grep -F -q '"path":"PlatformFormObject -> bracket -> PlatformFormObject -> bracket"'
 	$(BIN) empty-form-object-roundtrip "ПустаяФорма" | grep -F -q '"writtenObjectCounts":{"items":0,"attributes":0,"commands":0,"events":0,"edges":0}'
 	$(BIN) empty-form-object-roundtrip "ПустаяФорма" | grep -F -q '"objectSignatureStableAfterSecondWrite":true'
@@ -210,6 +224,7 @@ test: $(BIN)
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:payload"'
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"materializedItems":2'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"publicContract":"OrdinaryForm"'
+	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"source":"RuntimeForm:OrdinaryForm"'
 	grep -F -q '<ChildItems>' $(BUILD_DIR)/runtime-form.xml
 	grep -F -q '<Button name="Button1" id="5">' $(BUILD_DIR)/runtime-form.xml
 	grep -F -q '<CheckBox name="Check1" id="6">' $(BUILD_DIR)/runtime-form.xml
@@ -399,6 +414,7 @@ test: $(BIN)
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection-object.txt 5 Имя DualProjectionName | grep -F -q '"operation":"setPropVal"'
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/dual-projection-object.txt | grep -F -q '"objectSignatureStableAfterSecondWrite":true'
 	$(BIN) object-model-gate | grep -F -q '"status":"PASS"'
+	$(BIN) object-model-gate | grep -F -q '"publicSchemaEscapeStatus":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"releaseReady":false'
 	$(BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
 	total=0; ok=0; list_file="$(BUILD_DIR)/native-lossless-formbins.txt"; : > "$$list_file"; \
