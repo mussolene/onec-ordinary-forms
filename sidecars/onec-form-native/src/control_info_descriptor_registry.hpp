@@ -114,7 +114,15 @@ struct PublicXmlOrderDescriptor {
     std::string_view evidence;
 };
 
-constexpr std::array<PublicXmlOrderDescriptor, 1> public_xml_order_descriptors = {{
+constexpr std::array<PublicXmlOrderDescriptor, 2> public_xml_order_descriptors = {{
+    {
+        "Button",
+        {{
+            "Picture",
+        }},
+        1,
+        "OrdinaryForm public XML projection order for descriptor-backed Button properties; Title/Visible/Enabled are structural, DefaultButton pending property promotion",
+    },
     {
         "InputField",
         {{

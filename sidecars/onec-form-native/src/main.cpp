@@ -14211,7 +14211,10 @@ void print_platform_control_info_descriptors() {
             const auto& slot = descriptor.slots[slot_index];
             std::cout << "{\"name\":";
             print_json_string(slot.name);
-            std::cout << ",\"index\":" << slot.index << "}";
+            std::cout << ",\"index\":" << slot.index;
+            std::cout << ",\"publicPropertyDescriptor\":"
+                      << (oof::platform::property_registry::find_descriptor(slot.name) != nullptr ? "true" : "false");
+            std::cout << "}";
         }
         std::cout << "],\"publicXmlOrder\":[";
         if (const auto* public_order = oof::platform::control_info::public_xml_order_for_control_type(descriptor.control_type)) {
