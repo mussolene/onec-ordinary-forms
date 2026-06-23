@@ -58,8 +58,11 @@ fi
 
 repo_root=$(pwd)
 native_bin=${OOF_NATIVE_BIN:-sidecars/onec-form-native/build/oof-native}
-if [[ ! -x "$native_bin" ]]; then
+if [[ -z "${OOF_NATIVE_BIN:-}" ]]; then
   make -C sidecars/onec-form-native >/dev/null
+elif [[ ! -x "$native_bin" ]]; then
+  echo "OOF_NATIVE_BIN is not executable: $native_bin" >&2
+  exit 2
 fi
 
 abs_path() {

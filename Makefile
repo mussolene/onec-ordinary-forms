@@ -1,9 +1,9 @@
-.PHONY: test smoke native-smoke-gate release-gate clean
+.PHONY: test smoke native-smoke-gate release-gate clean FORCE
 
 NATIVE_DIR := sidecars/onec-form-native
 NATIVE_BIN := $(NATIVE_DIR)/build/oof-native
 
-$(NATIVE_BIN):
+$(NATIVE_BIN): FORCE
 	$(MAKE) -C $(NATIVE_DIR)
 
 test:

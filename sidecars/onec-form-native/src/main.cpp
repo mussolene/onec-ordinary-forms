@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <initializer_list>
 #include <iostream>
 #include <iterator>
 #include <map>
@@ -7106,6 +7107,49 @@ std::string ordinary_form_listout_bool_prop(
     return value;
 }
 
+LV ordinary_form_listout_control_info_property_value(
+    const oof::platform::object_model::PlatformObject& object,
+    const oof::platform::property_registry::PlatformPropertyDescriptor& property
+) {
+    const std::string value = object_prop_or_default(object, property.name, "");
+    if (property.value_type == "Boolean") {
+        return raw(ordinary_form_listout_bool_prop(object, property.name, "0"));
+    }
+    return raw(value);
+}
+
+void ordinary_form_listout_apply_control_info_slot_properties(
+    LV& info,
+    const oof::platform::object_model::PlatformObject& object,
+    std::string_view control_type,
+    std::initializer_list<std::string_view> property_names
+) {
+    if (!info.is_list) {
+        return;
+    }
+    const auto* descriptor = oof::platform::control_info::descriptor_for_control_type(control_type);
+    if (descriptor == nullptr) {
+        return;
+    }
+    for (const auto property_name : property_names) {
+        const auto* property = object.property(property_name);
+        if (property == nullptr || property->value.empty()) {
+            continue;
+        }
+        const auto* property_descriptor = oof::platform::property_registry::find_descriptor(property_name);
+        if (property_descriptor == nullptr ||
+            property_descriptor->slot_codec != oof::platform::property_registry::SlotCodec::control_info_slot) {
+            continue;
+        }
+        const auto slot = oof::platform::control_info::slot_index(*descriptor, property_name);
+        if (!slot.has_value() || info.items.size() <= *slot) {
+            throw std::runtime_error("control-info descriptor slot is outside writer payload: control=" +
+                                     std::string(control_type) + " property=" + std::string(property_name));
+        }
+        info.items[*slot] = ordinary_form_listout_control_info_property_value(object, *property_descriptor);
+    }
+}
+
 std::string ordinary_form_listout_inverse_bool_prop(
     const oof::platform::object_model::PlatformObject& object,
     std::string_view name,
@@ -7401,7 +7445,7 @@ LV ordinary_form_listout_button_picture_record(const oof::platform::object_model
 
 LV ordinary_form_listout_button_base_info(const oof::platform::object_model::PlatformObject& object) {
     const std::string title = object_prop_or_default(object, "Title", object.name);
-    return list({
+    LV info = list({
         list({
             raw("19"),
             raw(ordinary_form_listout_bool_prop(object, "Visible", "1")),
@@ -7429,7 +7473,7 @@ LV ordinary_form_listout_button_base_info(const oof::platform::object_model::Pla
         localized_text_record(title),
         raw("1"),
         raw("1"),
-        raw(ordinary_form_listout_bool_prop(object, "DefaultButton", "0")),
+        raw("0"),
         raw("0"),
         raw("0"),
         ordinary_form_listout_button_picture_record(object),
@@ -7441,6 +7485,8 @@ LV ordinary_form_listout_button_base_info(const oof::platform::object_model::Pla
         raw("0"),
         raw("2"),
     });
+    ordinary_form_listout_apply_control_info_slot_properties(info, object, "Button", {"DefaultButton"});
+    return info;
 }
 
 LV ordinary_form_listout_label_payload(

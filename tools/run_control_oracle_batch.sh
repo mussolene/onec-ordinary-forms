@@ -55,8 +55,11 @@ if [[ -z "${OOF_PLATFORM_CONTAINER:-}" && ( -z "${NETHASP_INI_PATH:-}" || ! -r "
   echo "Set OOF_PLATFORM_CONTAINER to a licensed 1C container, or set NETHASP_INI_PATH for docker fallback" >&2
   exit 2
 fi
-if [[ ! -x "$native_bin" ]]; then
+if [[ -z "${OOF_NATIVE_BIN:-}" ]]; then
   make -C sidecars/onec-form-native >/dev/null
+elif [[ ! -x "$native_bin" ]]; then
+  echo "OOF_NATIVE_BIN is not executable: $native_bin" >&2
+  exit 2
 fi
 
 rm -rf "$out_abs"
