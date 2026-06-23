@@ -4241,6 +4241,30 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                     edit.has_data_path = true;
                 }
             }
+            for (const std::string& input_field_property : {
+                     "EditMode",
+                     "ChoiceMode",
+                     "PasswordMode",
+                     "ExtendedEdit",
+                     "MaxLength",
+                     "Mask",
+                     "MultiLine",
+                 }) {
+                const std::string open_tag = "<" + input_field_property + ">";
+                const std::string close_tag = "</" + input_field_property + ">";
+                const std::size_t property_start = own_body.find(open_tag);
+                if (property_start == std::string::npos) {
+                    continue;
+                }
+                const std::size_t property_value_start = property_start + open_tag.size();
+                const std::size_t property_end = own_body.find(close_tag, property_value_start);
+                if (property_end != std::string::npos) {
+                    edit.schema_properties.push_back({
+                        input_field_property,
+                        xml_unescape(own_body.substr(property_value_start, property_end - property_value_start)),
+                    });
+                }
+            }
             for (const auto& property_name : public_schema_property_names()) {
                 for (const auto& property_xml : find_xml_elements(own_body, property_name)) {
                     if (property_xml.self_closing) {
@@ -10759,6 +10783,13 @@ void print_formbin_package_selftest() {
         "<InputField id=\"4\" name=\"Input\">"
         "<Position left=\"8\" top=\"8\" right=\"108\" bottom=\"28\"/>"
         "<DataPath>FieldValue</DataPath>"
+        "<EditMode>1</EditMode>"
+        "<ChoiceMode>0</ChoiceMode>"
+        "<PasswordMode>true</PasswordMode>"
+        "<ExtendedEdit>true</ExtendedEdit>"
+        "<MaxLength>10</MaxLength>"
+        "<Mask>###</Mask>"
+        "<MultiLine>true</MultiLine>"
         "</InputField>"
         "</ChildItems>"
         "</Form>";
@@ -10795,6 +10826,14 @@ void print_formbin_package_selftest() {
               << (data_path_redump_xml.find("<DataPath>FieldValue</DataPath>") != std::string::npos ? "true" : "false");
     std::cout << ",\"xmlObjectAttributeRoundtrip\":"
               << (data_path_redump_xml.find("<Attribute name=\"FieldValue\"") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectInputFieldInfoRoundtrip\":"
+              << (data_path_redump_xml.find("<EditMode>1</EditMode>") != std::string::npos &&
+                  data_path_redump_xml.find("<ChoiceMode>0</ChoiceMode>") != std::string::npos &&
+                  data_path_redump_xml.find("<PasswordMode>1</PasswordMode>") != std::string::npos &&
+                  data_path_redump_xml.find("<ExtendedEdit>1</ExtendedEdit>") != std::string::npos &&
+                  data_path_redump_xml.find("<MaxLength>10</MaxLength>") != std::string::npos &&
+                  data_path_redump_xml.find("<Mask>###</Mask>") != std::string::npos &&
+                  data_path_redump_xml.find("<MultiLine>1</MultiLine>") != std::string::npos ? "true" : "false");
     std::cout << ",\"xmlObjectNoRawXml\":"
               << (object_redump_xml.find("<ListStream") == std::string::npos &&
                   object_redump_xml.find("<RawBracket") == std::string::npos &&
@@ -11928,6 +11967,10 @@ bool set_materialized_object_control_info_slot(
             return false;
         }
         info->items[*slot] = control_info_slot_value_from_public_xml(property_name, new_value);
+        if (property_name == "MaxLength" && info->items.size() > 13) {
+            info->items[13] = oof::platform::stream::ListValue::raw_atom(
+                new_value.empty() || new_value == "0" ? "0" : "1");
+        }
         return true;
     }
     for (auto& item : value.items) {
