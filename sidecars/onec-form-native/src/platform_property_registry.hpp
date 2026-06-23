@@ -36,7 +36,7 @@ struct PlatformPropertyDescriptor {
     std::string_view source;
 };
 
-inline constexpr std::array<PlatformPropertyDescriptor, 46> descriptors{{
+inline constexpr std::array<PlatformPropertyDescriptor, 47> descriptors{{
     {"ObjectID", "", "CompositeID", SlotCodec::none, "", true, false, "materialized-list-stream"},
     {"Name", "Имя", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record"},
     {"Title", "Заголовок", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record-as-initial-title"},
@@ -48,6 +48,7 @@ inline constexpr std::array<PlatformPropertyDescriptor, 46> descriptors{{
     {"RuntimeUUID", "", "UUID", SlotCodec::none, "", true, false, "runtime-form-envelope"},
     {"Visible", "Видимость", "Boolean", SlotCodec::scalar_flag, "control-visible-flag", true, true, "platform-api-catalog"},
     {"Enabled", "Доступность", "Boolean", SlotCodec::scalar_flag, "control-enabled-flag", true, true, "platform-api-catalog"},
+    {"ReadOnly", "ТолькоПросмотр", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:ReadOnly", true, true, "InputField/ChoiceField cf_form_controls_info8 descriptor slot"},
     {"Left", "Лево", "Number", SlotCodec::position_record, "cf_form_controls_position8:left", true, true, "cf_form_controls_position8"},
     {"Top", "Верх", "Number", SlotCodec::position_record, "cf_form_controls_position8:top", true, true, "cf_form_controls_position8"},
     {"Width", "Ширина", "Number", SlotCodec::position_record, "cf_form_controls_position8:width", true, true, "cf_form_controls_position8"},

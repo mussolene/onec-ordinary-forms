@@ -744,6 +744,40 @@ struct ControlInfoSlotProperty {
     std::string value;
 };
 
+const oof::platform::stream::ListValue* control_info_slot_body(
+    const oof::platform::stream::ListValue& object_value
+) {
+    if (!object_value.is_list || object_value.items.size() <= 2 || !object_value.items[2].is_list) {
+        return nullptr;
+    }
+    const auto& info_record = object_value.items[2];
+    if (info_record.items.size() > 2 && info_record.items[2].is_list) {
+        const auto& nested = info_record.items[2];
+        if (nested.items.size() == 1 && nested.items[0].is_list) {
+            return &nested.items[0];
+        }
+        return &nested;
+    }
+    return &info_record;
+}
+
+oof::platform::stream::ListValue* mutable_control_info_slot_body(
+    oof::platform::stream::ListValue& object_value
+) {
+    if (!object_value.is_list || object_value.items.size() <= 2 || !object_value.items[2].is_list) {
+        return nullptr;
+    }
+    auto& info_record = object_value.items[2];
+    if (info_record.items.size() > 2 && info_record.items[2].is_list) {
+        auto& nested = info_record.items[2];
+        if (nested.items.size() == 1 && nested.items[0].is_list) {
+            return &nested.items[0];
+        }
+        return &nested;
+    }
+    return &info_record;
+}
+
 std::string first_base64_picture_payload(const oof::platform::stream::ListValue& value) {
     if (!value.is_list) {
         if (value.atom.rfind("#base64:", 0) == 0) {
@@ -853,14 +887,14 @@ std::vector<ControlInfoSlotProperty> control_info_slot_properties(
     std::string_view platform_type
 ) {
     std::vector<ControlInfoSlotProperty> properties;
-    if (!object_value.is_list || object_value.items.size() <= 2 || !object_value.items[2].is_list) {
+    const auto* info = control_info_slot_body(object_value);
+    if (info == nullptr) {
         return properties;
     }
     const auto* descriptor = oof::platform::control_info::descriptor_for_control_type(platform_type);
     if (descriptor == nullptr) {
         return properties;
     }
-    const auto& info = object_value.items[2];
     for (std::size_t index = 0; index < descriptor->slot_count; ++index) {
         const auto& slot = descriptor->slots[index];
         const auto* property_descriptor = oof::platform::property_registry::find_descriptor(slot.name);
@@ -868,10 +902,10 @@ std::vector<ControlInfoSlotProperty> control_info_slot_properties(
             property_descriptor->slot_codec != oof::platform::property_registry::SlotCodec::control_info_slot) {
             continue;
         }
-        if (info.items.size() <= slot.index) {
+        if (info->items.size() <= slot.index) {
             continue;
         }
-        const std::string value = public_control_info_slot_value(info.items[slot.index]);
+        const std::string value = public_control_info_slot_value(info->items[slot.index]);
         if (!value.empty()) {
             properties.push_back({std::string(slot.name), value});
         }
@@ -1504,7 +1538,12 @@ void collect_materialized_form_items(
                     std::make_move_iterator(legacy_events.end()));
             }
             assign_materialized_event_object_ids(item.events);
-            item.control_info_properties = control_info_slot_properties(value, item.descriptor_binding->platform_type);
+            const auto* public_control_binding = oof::ordinary::control_type::binding_for_guid(item.guid);
+            item.control_info_properties = control_info_slot_properties(
+                value,
+                public_control_binding != nullptr
+                    ? public_control_binding->writer_control_type
+                    : item.descriptor_binding->platform_type);
             next_parent = item.object_id;
             items.push_back(std::move(item));
         } else if (binding == nullptr) {
@@ -11747,6 +11786,10 @@ oof::platform::stream::ListValue control_info_slot_value_from_public_xml(
     if (!value.empty() && value.front() == '{') {
         return oof::platform::stream::parse(std::string(value));
     }
+    const auto* property_descriptor = oof::platform::property_registry::find_descriptor(property_name);
+    if (property_descriptor != nullptr && property_descriptor->value_type == "Boolean") {
+        return oof::platform::stream::ListValue::raw_atom(platform_bool_atom(value));
+    }
     return oof::platform::stream::ListValue::raw_atom(std::string(value));
 }
 
@@ -11764,19 +11807,20 @@ bool set_materialized_object_control_info_slot(
         value.items[1].atom == object_id &&
         value.items.size() > 2 &&
         value.items[2].is_list) {
-        const auto* binding = oof::platform::form_descriptor::binding_for_guid(value.items[0].atom);
+        const auto* binding = oof::ordinary::control_type::binding_for_guid(value.items[0].atom);
         if (binding == nullptr) {
             return false;
         }
-        const auto* descriptor = oof::platform::control_info::descriptor_for_control_type(binding->platform_type);
+        const auto* descriptor = oof::platform::control_info::descriptor_for_control_type(binding->writer_control_type);
         if (descriptor == nullptr) {
             return false;
         }
         const auto slot = oof::platform::control_info::slot_index(*descriptor, property_name);
-        if (!slot.has_value() || value.items[2].items.size() <= *slot) {
+        auto* info = mutable_control_info_slot_body(value);
+        if (info == nullptr || !slot.has_value() || info->items.size() <= *slot) {
             return false;
         }
-        value.items[2].items[*slot] = control_info_slot_value_from_public_xml(property_name, new_value);
+        info->items[*slot] = control_info_slot_value_from_public_xml(property_name, new_value);
         return true;
     }
     for (auto& item : value.items) {
