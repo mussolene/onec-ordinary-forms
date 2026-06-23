@@ -245,6 +245,10 @@ test: $(BIN)
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,"Button1",4294967295,0,0,0},{},{},{}},{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,"Check1",4294967295,0,0,0},{},{},{}}}}}' > $(BUILD_DIR)/runtime-form-selftest.txt
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"source":"RuntimeForm:payload"'
 	$(BIN) runtime-form-object-graph $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"materializedItems":2'
+	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"operation":"runtime-form-traversal-dump"'
+	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"sameMaterializedAndTreePreorder":true'
+	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"sameMaterializedAndGuidSorted":false'
+	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"order":"guid-platform-object-id-sort"'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"publicContract":"OrdinaryForm"'
 	$(BIN) runtime-form-dump-xml $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/runtime-form.xml | grep -F -q '"source":"RuntimeForm:OrdinaryForm"'
 	grep -F -q '<ChildItems>' $(BUILD_DIR)/runtime-form.xml

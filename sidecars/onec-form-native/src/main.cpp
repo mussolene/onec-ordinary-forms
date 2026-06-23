@@ -17,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <optional>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -73,7 +74,7 @@ void usage() {
               << "  oof-native platform-xsd-xml-roundtrip PlatformForm.xml rebuilt-PlatformForm.xml\n"
               << "  oof-native platform-xsd-xml-build-runtime PlatformForm.xml runtime-form-stream.txt\n"
               << "  oof-native platform-xsd-xml-build-formbin PlatformForm.xml Form.bin\n"
-              << "  oof-native <runtime-form-object-graph|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-xsd-order-object-roundtrip|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
+              << "  oof-native <runtime-form-object-graph|runtime-form-traversal-dump|runtime-form-roundtrip|runtime-form-object-roundtrip|runtime-form-object-roundtrip-diff|runtime-xsd-order-object-roundtrip|runtime-platform-object|runtime-xsd-order-object-gate> runtime-form-stream.txt\n"
               << "  oof-native runtime-form-semantic-diff left-runtime-stream.txt right-runtime-stream.txt\n"
               << "  oof-native runtime-form-node runtime-form-stream.txt node-path\n"
               << "  oof-native runtime-form-rebuild runtime-form-stream.txt rebuilt-stream.txt\n"
@@ -11216,6 +11217,206 @@ void print_runtime_form_object_graph(const std::string& path) {
     std::cout << "}\n";
 }
 
+struct RuntimeTraversalRow {
+    std::size_t ordinal = 0;
+    std::string object_id;
+    std::string parent_object_id;
+    std::string name;
+    std::string platform_type;
+    std::string guid;
+    std::string path;
+    std::vector<std::string> child_object_ids;
+};
+
+RuntimeTraversalRow traversal_row_from_materialized_item(
+    const MaterializedFormItem& item,
+    std::size_t ordinal
+) {
+    RuntimeTraversalRow row;
+    row.ordinal = ordinal;
+    row.object_id = item.object_id;
+    row.parent_object_id = item.parent_object_id;
+    row.name = item.name;
+    row.platform_type = item.descriptor_binding != nullptr
+        ? std::string(item.descriptor_binding->platform_type)
+        : std::string();
+    row.guid = item.guid;
+    row.path = item.path;
+    return row;
+}
+
+RuntimeTraversalRow traversal_row_from_platform_object(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::size_t object_index,
+    std::size_t ordinal
+) {
+    const auto& object = form_object.items.get(object_index);
+    RuntimeTraversalRow row;
+    row.ordinal = ordinal;
+    row.object_id = object.object_id;
+    row.parent_object_id = object.parent_object_id;
+    row.name = object.name;
+    row.platform_type = object.platform_type;
+    row.guid = object.identity.class_guid;
+    row.path = object.path;
+    for (const auto child_index : object.children) {
+        row.child_object_ids.push_back(form_object.items.get(child_index).object_id);
+    }
+    return row;
+}
+
+void collect_platform_object_tree_preorder(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::size_t object_index,
+    std::vector<std::size_t>& preorder
+) {
+    preorder.push_back(object_index);
+    const auto& object = form_object.items.get(object_index);
+    for (const auto child_index : object.children) {
+        collect_platform_object_tree_preorder(form_object, child_index, preorder);
+    }
+}
+
+void print_traversal_row_json(const RuntimeTraversalRow& row) {
+    std::cout << "{\"ordinal\":" << row.ordinal;
+    std::cout << ",\"objectId\":";
+    print_json_string(row.object_id);
+    std::cout << ",\"parentObjectId\":";
+    print_json_string(row.parent_object_id);
+    std::cout << ",\"name\":";
+    print_json_string(row.name);
+    std::cout << ",\"platformType\":";
+    print_json_string(row.platform_type);
+    std::cout << ",\"guid\":";
+    print_json_string(row.guid);
+    std::cout << ",\"path\":";
+    print_json_string(row.path);
+    std::cout << ",\"childObjectIds\":[";
+    for (std::size_t index = 0; index < row.child_object_ids.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_json_string(row.child_object_ids[index]);
+    }
+    std::cout << "]}";
+}
+
+void print_traversal_rows_json(
+    std::string_view order_name,
+    const std::vector<RuntimeTraversalRow>& rows
+) {
+    std::cout << "{\"order\":";
+    print_json_string(order_name);
+    std::cout << ",\"items\":[";
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_traversal_row_json(rows[index]);
+    }
+    std::cout << "]}";
+}
+
+std::vector<std::string> traversal_object_ids(const std::vector<RuntimeTraversalRow>& rows) {
+    std::vector<std::string> ids;
+    ids.reserve(rows.size());
+    for (const auto& row : rows) {
+        ids.push_back(row.object_id);
+    }
+    return ids;
+}
+
+void print_runtime_form_traversal_dump(const std::string& path) {
+    std::string canonical_text;
+    RuntimeFormEnvelope envelope = read_runtime_form_envelope_file(path, canonical_text);
+    const auto summary = summarize_materialized_graph(envelope.payload);
+    const auto form_object = materialize_platform_form_object(envelope);
+
+    std::vector<RuntimeTraversalRow> materialized_rows;
+    materialized_rows.reserve(summary.items.size());
+    for (std::size_t index = 0; index < summary.items.size(); ++index) {
+        materialized_rows.push_back(traversal_row_from_materialized_item(summary.items[index], index));
+    }
+
+    std::vector<std::size_t> preorder_indices;
+    for (const auto child_index : form_object.form.children) {
+        collect_platform_object_tree_preorder(form_object, child_index, preorder_indices);
+    }
+    std::vector<RuntimeTraversalRow> tree_rows;
+    tree_rows.reserve(preorder_indices.size());
+    for (std::size_t index = 0; index < preorder_indices.size(); ++index) {
+        tree_rows.push_back(traversal_row_from_platform_object(form_object, preorder_indices[index], index));
+    }
+
+    std::vector<RuntimeTraversalRow> guid_rows = materialized_rows;
+    std::sort(guid_rows.begin(), guid_rows.end(), [](const auto& left, const auto& right) {
+        return std::tie(left.guid, left.platform_type, left.object_id, left.path) <
+               std::tie(right.guid, right.platform_type, right.object_id, right.path);
+    });
+    for (std::size_t index = 0; index < guid_rows.size(); ++index) {
+        guid_rows[index].ordinal = index;
+    }
+
+    std::cout << "{\"operation\":\"runtime-form-traversal-dump\"";
+    std::cout << ",\"source\":\"RuntimeForm:payload\"";
+    std::cout << ",\"runtimeEnvelope\":{\"marker\":";
+    print_json_string(envelope.marker);
+    std::cout << ",\"runtimeUuid\":";
+    print_json_string(envelope.runtime_uuid);
+    std::cout << ",\"canonicalBytes\":" << canonical_text.size() << "}";
+    std::cout << ",\"materializedItems\":" << materialized_rows.size();
+    std::cout << ",\"rootChildObjectIds\":[";
+    for (std::size_t index = 0; index < form_object.form.children.size(); ++index) {
+        if (index != 0) {
+            std::cout << ",";
+        }
+        print_json_string(form_object.items.get(form_object.form.children[index]).object_id);
+    }
+    std::cout << "]";
+    std::cout << ",\"sameMaterializedAndTreePreorder\":"
+              << (traversal_object_ids(materialized_rows) == traversal_object_ids(tree_rows) ? "true" : "false");
+    std::cout << ",\"sameMaterializedAndGuidSorted\":"
+              << (traversal_object_ids(materialized_rows) == traversal_object_ids(guid_rows) ? "true" : "false");
+    std::cout << ",\"orders\":[";
+    print_traversal_rows_json("materialized-stream-dfs", materialized_rows);
+    std::cout << ",";
+    print_traversal_rows_json("tree-preorder", tree_rows);
+    std::cout << ",";
+    print_traversal_rows_json("guid-platform-object-id-sort", guid_rows);
+    std::cout << "],\"descriptorSlots\":[";
+    std::set<std::string> printed_control_types;
+    std::size_t printed_count = 0;
+    for (const auto& row : materialized_rows) {
+        if (row.platform_type.empty() || printed_control_types.count(row.platform_type) != 0) {
+            continue;
+        }
+        printed_control_types.insert(row.platform_type);
+        const auto* descriptor = oof::platform::control_info::descriptor_for_control_type(row.platform_type);
+        if (descriptor == nullptr) {
+            continue;
+        }
+        if (printed_count++ != 0) {
+            std::cout << ",";
+        }
+        std::cout << "{\"platformType\":";
+        print_json_string(row.platform_type);
+        std::cout << ",\"infoKind\":";
+        print_json_string(descriptor->info_kind);
+        std::cout << ",\"slots\":[";
+        for (std::size_t slot_index = 0; slot_index < descriptor->slot_count; ++slot_index) {
+            if (slot_index != 0) {
+                std::cout << ",";
+            }
+            const auto& slot = descriptor->slots[slot_index];
+            std::cout << "{\"name\":";
+            print_json_string(slot.name);
+            std::cout << ",\"index\":" << slot.index << "}";
+        }
+        std::cout << "]}";
+    }
+    std::cout << "]}\n";
+}
+
 void print_runtime_form_roundtrip(const std::string& path) {
     const auto input_bytes = read_file_bytes(path);
     const std::string input_text = decode_text_file_bytes(input_bytes);
@@ -14857,6 +15058,10 @@ int main(int argc, char** argv) {
         }
         if (command == "runtime-form-object-graph" && argc == 3) {
             print_runtime_form_object_graph(argv[2]);
+            return 0;
+        }
+        if (command == "runtime-form-traversal-dump" && argc == 3) {
+            print_runtime_form_traversal_dump(argv[2]);
             return 0;
         }
         if (command == "runtime-form-roundtrip" && argc == 3) {
