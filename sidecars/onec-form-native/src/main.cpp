@@ -5308,61 +5308,88 @@ std::string package_item_name(const oof::platform::object_model::PlatformObject&
     return "Item";
 }
 
+void append_schema_property_xml(
+    std::string& out,
+    const oof::platform::object_model::PlatformObject& object,
+    const oof::platform::object_model::PlatformObjectProperty& property,
+    int indent,
+    PublicXmlPackageFileSink* package_sink
+) {
+    if (package_sink != nullptr &&
+        property.name == "Picture" &&
+        property.value_object_storage == "inline-base64") {
+        const auto picture_bytes = decode_picture_payload(property.value);
+        const std::string relative_path =
+            "Items/" + package_item_name(object) + "/Picture." + picture_extension_for_bytes(picture_bytes);
+        write_file_bytes(package_sink->package_root / relative_path, picture_bytes);
+        ++package_sink->picture_count;
+        append_indent(out, indent);
+        out += "<Picture file=\"";
+        out += xml_escape(relative_path);
+        out += "\"/>\n";
+        return;
+    }
+    append_indent(out, indent);
+    out += "<";
+    out += property.name;
+    if (!property.value_object_class.empty()) {
+        out += ">\n";
+        append_indent(out, indent + 2);
+        const std::string value_text = property.value_object_schema_value.empty()
+            ? property.value_object_literal
+            : property.value_object_schema_value;
+        out += "<";
+        out += property.value_object_class;
+        out += "Value constructor=\"";
+        out += xml_escape(property.value_object_constructor);
+        out += "\" storage=\"";
+        out += xml_escape(property.value_object_storage);
+        out += "\">";
+        out += xml_escape(value_text);
+        out += "</";
+        out += property.value_object_class;
+        out += "Value>\n";
+        append_indent(out, indent);
+        out += "</";
+        out += property.name;
+        out += ">\n";
+    } else {
+        out += ">";
+        out += xml_escape(property.value);
+        out += "</";
+        out += property.name;
+        out += ">\n";
+    }
+}
+
 void append_schema_properties_xml(
     std::string& out,
     const oof::platform::object_model::PlatformObject& object,
     int indent,
     PublicXmlPackageFileSink* package_sink = nullptr
 ) {
+    std::set<std::string> emitted;
+    const auto* public_order = oof::platform::control_info::public_xml_order_for_control_type(object.platform_type);
+    if (public_order != nullptr) {
+        for (std::size_t index = 0; index < public_order->property_count; ++index) {
+            const auto* property = find_object_property(object, public_order->properties[index]);
+            if (property == nullptr ||
+                !is_public_schema_property_xml(*property) ||
+                !property_is_explicit_for_xml(*property)) {
+                continue;
+            }
+            append_schema_property_xml(out, object, *property, indent, package_sink);
+            emitted.insert(property->name);
+        }
+    }
     for (const auto& property : object.properties) {
         if (!is_public_schema_property_xml(property) || !property_is_explicit_for_xml(property)) {
             continue;
         }
-        if (package_sink != nullptr &&
-            property.name == "Picture" &&
-            property.value_object_storage == "inline-base64") {
-            const auto picture_bytes = decode_picture_payload(property.value);
-            const std::string relative_path =
-                "Items/" + package_item_name(object) + "/Picture." + picture_extension_for_bytes(picture_bytes);
-            write_file_bytes(package_sink->package_root / relative_path, picture_bytes);
-            ++package_sink->picture_count;
-            append_indent(out, indent);
-            out += "<Picture file=\"";
-            out += xml_escape(relative_path);
-            out += "\"/>\n";
+        if (emitted.count(property.name) != 0) {
             continue;
         }
-        append_indent(out, indent);
-        out += "<";
-        out += property.name;
-        if (!property.value_object_class.empty()) {
-            out += ">\n";
-            append_indent(out, indent + 2);
-            const std::string value_text = property.value_object_schema_value.empty()
-                ? property.value_object_literal
-                : property.value_object_schema_value;
-            out += "<";
-            out += property.value_object_class;
-            out += "Value constructor=\"";
-            out += xml_escape(property.value_object_constructor);
-            out += "\" storage=\"";
-            out += xml_escape(property.value_object_storage);
-            out += "\">";
-            out += xml_escape(value_text);
-            out += "</";
-            out += property.value_object_class;
-            out += "Value>\n";
-            append_indent(out, indent);
-            out += "</";
-            out += property.name;
-            out += ">\n";
-        } else {
-            out += ">";
-            out += xml_escape(property.value);
-            out += "</";
-            out += property.name;
-            out += ">\n";
-        }
+        append_schema_property_xml(out, object, property, indent, package_sink);
     }
 }
 
@@ -10858,6 +10885,35 @@ void print_formbin_package_selftest() {
     const auto data_path_payload = platform_form_listout_payload(data_path_form_object, "DataPath Shape");
     const std::string data_path_redump_xml = form_object_to_public_xml(
         materialize_platform_form_object(RuntimeFormEnvelope{"#", "5c83cba4-7a20-4102-a5be-add0ee74f6a1", data_path_payload}));
+    const auto input_field_public_order = [&data_path_redump_xml]() {
+        std::size_t cursor = 0;
+        for (std::string_view tag : {
+                 "DataPath",
+                 "ToolTip",
+                 "EditMode",
+                 "WordWrap",
+                 "PasswordMode",
+                 "ChoiceListButton",
+                 "ChoiceButton",
+                 "ClearButton",
+                 "OpenButton",
+                 "TextEditing",
+                 "ReadOnly",
+                 "Mask",
+                 "MultiLine",
+                 "Format",
+                 "AutoMarkIncomplete",
+                 "ExtendedEdit",
+             }) {
+            const std::string open_tag = "<" + std::string(tag) + ">";
+            const std::size_t found = data_path_redump_xml.find(open_tag, cursor);
+            if (found == std::string::npos) {
+                return false;
+            }
+            cursor = found + open_tag.size();
+        }
+        return true;
+    }();
 
     std::cout << "{\"operation\":\"formbin-package-selftest\"";
     std::cout << ",\"nameEdits\":" << result.name_edits;
@@ -10902,6 +10958,8 @@ void print_formbin_package_selftest() {
                   data_path_redump_xml.find("<ClearButton>1</ClearButton>") != std::string::npos &&
                   data_path_redump_xml.find("<OpenButton>1</OpenButton>") != std::string::npos &&
                   data_path_redump_xml.find("<AutoMarkIncomplete>1</AutoMarkIncomplete>") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectInputFieldPublicOrder\":"
+              << (input_field_public_order ? "true" : "false");
     std::cout << ",\"xmlObjectNoRawXml\":"
               << (object_redump_xml.find("<ListStream") == std::string::npos &&
                   object_redump_xml.find("<RawBracket") == std::string::npos &&
@@ -14154,6 +14212,15 @@ void print_platform_control_info_descriptors() {
             std::cout << "{\"name\":";
             print_json_string(slot.name);
             std::cout << ",\"index\":" << slot.index << "}";
+        }
+        std::cout << "],\"publicXmlOrder\":[";
+        if (const auto* public_order = oof::platform::control_info::public_xml_order_for_control_type(descriptor.control_type)) {
+            for (std::size_t order_index = 0; order_index < public_order->property_count; ++order_index) {
+                if (order_index != 0) {
+                    std::cout << ",";
+                }
+                print_json_string(public_order->properties[order_index]);
+            }
         }
         std::cout << "],\"evidence\":";
         print_json_string(descriptor.evidence);

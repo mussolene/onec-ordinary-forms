@@ -107,6 +107,48 @@ constexpr std::optional<std::uint16_t> slot_index(const ControlInfoDescriptor& d
     return std::nullopt;
 }
 
+struct PublicXmlOrderDescriptor {
+    std::string_view control_type;
+    std::array<std::string_view, 24> properties;
+    std::size_t property_count;
+    std::string_view evidence;
+};
+
+constexpr std::array<PublicXmlOrderDescriptor, 1> public_xml_order_descriptors = {{
+    {
+        "InputField",
+        {{
+            "DataPath",
+            "ToolTip",
+            "EditMode",
+            "WordWrap",
+            "PasswordMode",
+            "ChoiceListButton",
+            "ChoiceButton",
+            "ClearButton",
+            "OpenButton",
+            "TextEditing",
+            "ReadOnly",
+            "Mask",
+            "MultiLine",
+            "Format",
+            "AutoMarkIncomplete",
+            "ExtendedEdit",
+        }},
+        16,
+        "OrdinaryForm public XML projection order for InputField; storage order remains cf_form_controls_info8 slots",
+    },
+}};
+
+constexpr const PublicXmlOrderDescriptor* public_xml_order_for_control_type(std::string_view control_type) {
+    for (const auto& descriptor : public_xml_order_descriptors) {
+        if (descriptor.control_type == control_type) {
+            return &descriptor;
+        }
+    }
+    return nullptr;
+}
+
 constexpr std::size_t descriptor_count() {
     return descriptors.size();
 }
