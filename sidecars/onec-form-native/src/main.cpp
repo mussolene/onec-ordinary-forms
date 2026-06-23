@@ -12549,6 +12549,8 @@ struct PublicSchemaEscapeGate {
     std::size_t xs_any_attribute = 0;
     std::size_t stable_object_types = 0;
     std::size_t stable_object_type_requirements = 0;
+    std::size_t input_field_property_types = 0;
+    std::size_t input_field_property_type_requirements = 0;
 
     std::size_t total() const {
         return any_object_type + xs_any + xs_any_attribute;
@@ -12585,6 +12587,20 @@ PublicSchemaEscapeGate inspect_public_schema_escape_gate() {
         for (const auto anchor : stable_object_type_anchors) {
             if (text.find(anchor) != std::string::npos) {
                 ++gate.stable_object_types;
+            }
+        }
+        const std::array<std::string_view, 6> input_field_property_type_anchors{{
+            "<xs:element name=\"DataPath\" type=\"StringPropertyType\"",
+            "<xs:element name=\"Enabled\" type=\"BooleanPropertyType\"",
+            "<xs:element name=\"Position\" type=\"PositionType\"",
+            "<xs:element name=\"ReadOnly\" type=\"BooleanPropertyType\"",
+            "<xs:element name=\"Title\" type=\"StringPropertyType\"",
+            "<xs:element name=\"Visible\" type=\"BooleanPropertyType\"",
+        }};
+        gate.input_field_property_type_requirements = input_field_property_type_anchors.size();
+        for (const auto anchor : input_field_property_type_anchors) {
+            if (text.find(anchor) != std::string::npos) {
+                ++gate.input_field_property_types;
             }
         }
         return gate;
@@ -12686,6 +12702,17 @@ void print_object_model_gate() {
     print_json_string(
         public_schema_gate.inspected &&
                 public_schema_gate.stable_object_types == public_schema_gate.stable_object_type_requirements
+            ? "PASS"
+            : "FAIL");
+    std::cout << ",\"publicSchemaInputFieldPropertyTypes\":"
+              << public_schema_gate.input_field_property_types;
+    std::cout << ",\"publicSchemaInputFieldPropertyTypeRequirements\":"
+              << public_schema_gate.input_field_property_type_requirements;
+    std::cout << ",\"publicSchemaInputFieldPropertyTypesStatus\":";
+    print_json_string(
+        public_schema_gate.inspected &&
+                public_schema_gate.input_field_property_types ==
+                    public_schema_gate.input_field_property_type_requirements
             ? "PASS"
             : "FAIL");
     std::cout << ",\"schemaMembersChecked\":" << schema_members_checked;

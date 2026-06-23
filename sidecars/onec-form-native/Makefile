@@ -143,6 +143,7 @@ test: $(BIN)
 	$(BIN) object-model-gate | grep -F -q '"acceptedConceptIncompleteRows":0'
 	$(BIN) object-model-gate | grep -F -q '"publicSchemaEscapeStatus":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"publicSchemaStableObjectTypesStatus":"PASS"'
+	$(BIN) object-model-gate | grep -F -q '"publicSchemaInputFieldPropertyTypesStatus":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoWritablePromotions":0'
 	$(BIN) object-model-gate | grep -F -q '"releaseReady":false'
 	$(BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
@@ -417,6 +418,7 @@ test: $(BIN)
 	$(BIN) object-model-gate | grep -F -q '"status":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"publicSchemaEscapeStatus":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"publicSchemaStableObjectTypesStatus":"PASS"'
+	$(BIN) object-model-gate | grep -F -q '"publicSchemaInputFieldPropertyTypesStatus":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"releaseReady":false'
 	$(BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
 	total=0; ok=0; list_file="$(BUILD_DIR)/native-lossless-formbins.txt"; : > "$$list_file"; \

@@ -17,7 +17,7 @@
 
   <xs:complexType name="FormType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="Title" type="SimplePropertyType" minOccurs="0"/>
+      <xs:element name="Title" type="StringPropertyType" minOccurs="0"/>
       <xs:element name="Width" type="xs:string" minOccurs="0"/>
       <xs:element name="Height" type="xs:string" minOccurs="0"/>
       <xs:element name="AutoTitle" type="xs:string" minOccurs="0"/>
@@ -81,7 +81,7 @@
 
   <xs:complexType name="PageType">
     <xs:sequence>
-      <xs:element name="Title" type="SimplePropertyType" minOccurs="0"/>
+      <xs:element name="Title" type="StringPropertyType" minOccurs="0"/>
       <xs:element name="ChildItems" type="ChildItemsType" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="optional"/>
@@ -155,7 +155,7 @@
       <xs:element name="CurrentRow" type="SimplePropertyType"/>
       <xs:element name="DataBindingFlag" type="SimplePropertyType"/>
       <xs:element name="DataBindingMode" type="SimplePropertyType"/>
-      <xs:element name="DataPath" type="SimplePropertyType"/>
+      <xs:element name="DataPath" type="StringPropertyType"/>
       <xs:element name="DataValue" type="SimplePropertyType"/>
       <xs:element name="DefaultAction" type="SimplePropertyType"/>
       <xs:element name="DefaultButton" type="SimplePropertyType"/>
@@ -166,7 +166,7 @@
       <xs:element name="EditButton" type="SimplePropertyType"/>
       <xs:element name="EditMode" type="SimplePropertyType"/>
       <xs:element name="Editing" type="SimplePropertyType"/>
-      <xs:element name="Enabled" type="SimplePropertyType"/>
+      <xs:element name="Enabled" type="BooleanPropertyType"/>
       <xs:element name="Events" type="EventsType"/>
       <xs:element name="ExtendedEdit" type="SimplePropertyType"/>
       <xs:element name="ExtendedTooltip" type="SimplePropertyType"/>
@@ -262,7 +262,7 @@
       <xs:element name="Points" type="SimplePropertyType"/>
       <xs:element name="PointsCount" type="SimplePropertyType"/>
       <xs:element name="Position" type="PositionType"/>
-      <xs:element name="ReadOnly" type="SimplePropertyType"/>
+      <xs:element name="ReadOnly" type="BooleanPropertyType"/>
       <xs:element name="Refresh" type="SimplePropertyType"/>
       <xs:element name="RegulationButton" type="SimplePropertyType"/>
       <xs:element name="Representation" type="SimplePropertyType"/>
@@ -301,7 +301,7 @@
       <xs:element name="TextEditing" type="SimplePropertyType"/>
       <xs:element name="TextPosition" type="SimplePropertyType"/>
       <xs:element name="ThreeState" type="SimplePropertyType"/>
-      <xs:element name="Title" type="SimplePropertyType"/>
+      <xs:element name="Title" type="StringPropertyType"/>
       <xs:element name="TitleArea" type="SimplePropertyType"/>
       <xs:element name="ToolTip" type="SimplePropertyType"/>
       <xs:element name="TransparentBackColor" type="SimplePropertyType"/>
@@ -318,7 +318,7 @@
       <xs:element name="VerticalScrollBar" type="SimplePropertyType"/>
       <xs:element name="VerticalStretch" type="SimplePropertyType"/>
       <xs:element name="ViewSetupMode" type="SimplePropertyType"/>
-      <xs:element name="Visible" type="SimplePropertyType"/>
+      <xs:element name="Visible" type="BooleanPropertyType"/>
       <xs:element name="WeekendTextColor" type="SimplePropertyType"/>
       <xs:element name="Width" type="SimplePropertyType"/>
       <xs:element name="WordWrap" type="SimplePropertyType"/>
@@ -360,6 +360,32 @@
     <xs:sequence>
       <xs:element name="Command" type="CommandType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
+  </xs:complexType>
+
+  <xs:simpleType name="BooleanLiteralType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="true"/>
+      <xs:enumeration value="false"/>
+      <xs:enumeration value="1"/>
+      <xs:enumeration value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="BooleanPropertyType">
+    <xs:simpleContent>
+      <xs:extension base="BooleanLiteralType">
+        <xs:attribute name="value" type="BooleanLiteralType" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name="StringPropertyType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="value" type="xs:string" use="optional"/>
+        <xs:attribute name="lang" type="xs:string" use="optional"/>
+      </xs:extension>
+    </xs:simpleContent>
   </xs:complexType>
 
   <xs:complexType name="PositionType">
