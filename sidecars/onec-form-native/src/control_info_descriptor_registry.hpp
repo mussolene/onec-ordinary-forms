@@ -45,7 +45,7 @@ constexpr std::array<ControlInfoDescriptor, 27> descriptors = {{
     {"PivotChart", "3", {{{"Body", 1}, {"Secondary", 2}}}, 2, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
     {"GanttChart", "19", {{{"Body", 1}}}, 1, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
     {"Dendrogram", "0", {{{"Body", 1}}}, 1, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
-    {"Button", "1", {{{"BaseInfo", 0}, {"Title", 2}, {"Picture", 8}, {"DefaultButton", 15}}}, 4, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
+    {"Button", "1", {{{"BaseInfo", 0}, {"Title", 2}, {"DefaultButton", 5}, {"Picture", 8}}}, 4, "platform oracle button-property-matrix-20260623-221624 + OrdinaryFormPalette.xsd Button.DefaultButton"},
     {"Label", "3", {{{"BaseInfo", 0}, {"Title", 2}, {"Hyperlink", 5}, {"PictureSize", 11}, {"PictureStyleGroup", 12}, {"TextPosition", 13}}}, 6, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
     {"Image", "1", {{{"BaseInfo", 0}, {"DisplayMode", 2}, {"DisplayState", 3}, {"PictureStyleGroup", 4}, {"RenderingProfileFlag", 13}}}, 5, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
     {"Table", "5", {{{"BaseInfo", 0}, {"View", 1}, {"RowsCount", 20}, {"ColumnsCount", 21}, {"AutoMarkIncomplete", 22}}}, 5, "git:15583d8 ordinary_stream.py CONTROL_INFO_SLOT_DESCRIPTORS"},
@@ -119,9 +119,10 @@ constexpr std::array<PublicXmlOrderDescriptor, 2> public_xml_order_descriptors =
         "Button",
         {{
             "Picture",
+            "DefaultButton",
         }},
-        1,
-        "OrdinaryForm public XML projection order for descriptor-backed Button properties; Title/Visible/Enabled are structural, DefaultButton pending property promotion",
+        2,
+        "OrdinaryForm public XML projection order for descriptor-backed Button properties; Title/Visible/Enabled are structural",
     },
     {
         "InputField",

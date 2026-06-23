@@ -745,12 +745,19 @@ struct ControlInfoSlotProperty {
 };
 
 const oof::platform::stream::ListValue* control_info_slot_body(
-    const oof::platform::stream::ListValue& object_value
+    const oof::platform::stream::ListValue& object_value,
+    std::string_view platform_type = {}
 ) {
     if (!object_value.is_list || object_value.items.size() <= 2 || !object_value.items[2].is_list) {
         return nullptr;
     }
     const auto& info_record = object_value.items[2];
+    if (platform_type == "Button" &&
+        info_record.items.size() > 1 &&
+        !info_record.items[0].is_list &&
+        info_record.items[1].is_list) {
+        return &info_record.items[1];
+    }
     if (info_record.items.size() > 2 && info_record.items[2].is_list) {
         const auto& nested = info_record.items[2];
         if (nested.items.size() == 1 && nested.items[0].is_list) {
@@ -762,12 +769,19 @@ const oof::platform::stream::ListValue* control_info_slot_body(
 }
 
 oof::platform::stream::ListValue* mutable_control_info_slot_body(
-    oof::platform::stream::ListValue& object_value
+    oof::platform::stream::ListValue& object_value,
+    std::string_view platform_type = {}
 ) {
     if (!object_value.is_list || object_value.items.size() <= 2 || !object_value.items[2].is_list) {
         return nullptr;
     }
     auto& info_record = object_value.items[2];
+    if (platform_type == "Button" &&
+        info_record.items.size() > 1 &&
+        !info_record.items[0].is_list &&
+        info_record.items[1].is_list) {
+        return &info_record.items[1];
+    }
     if (info_record.items.size() > 2 && info_record.items[2].is_list) {
         auto& nested = info_record.items[2];
         if (nested.items.size() == 1 && nested.items[0].is_list) {
@@ -887,7 +901,7 @@ std::vector<ControlInfoSlotProperty> control_info_slot_properties(
     std::string_view platform_type
 ) {
     std::vector<ControlInfoSlotProperty> properties;
-    const auto* info = control_info_slot_body(object_value);
+    const auto* info = control_info_slot_body(object_value, platform_type);
     if (info == nullptr) {
         return properties;
     }
@@ -4266,6 +4280,12 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                     edit.has_data_path = true;
                 }
             }
+            std::set<std::string> parsed_schema_properties;
+            auto push_schema_property = [&](std::string property_name, std::string value) {
+                if (parsed_schema_properties.insert(property_name).second) {
+                    edit.schema_properties.push_back({std::move(property_name), std::move(value)});
+                }
+            };
             for (const std::string& input_field_property : {
                      "EditMode",
                      "PasswordMode",
@@ -4291,10 +4311,21 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                 const std::size_t property_value_start = property_start + open_tag.size();
                 const std::size_t property_end = own_body.find(close_tag, property_value_start);
                 if (property_end != std::string::npos) {
-                    edit.schema_properties.push_back({
+                    push_schema_property(
                         input_field_property,
-                        xml_unescape(own_body.substr(property_value_start, property_end - property_value_start)),
-                    });
+                        xml_unescape(own_body.substr(property_value_start, property_end - property_value_start)));
+                }
+            }
+            const std::string platform_type = platform_type_for_public_xml_tag(tag);
+            if (const auto* public_order = oof::platform::control_info::public_xml_order_for_control_type(platform_type)) {
+                for (std::size_t order_index = 0; order_index < public_order->property_count; ++order_index) {
+                    const std::string property_name(public_order->properties[order_index]);
+                    for (const auto& property_xml : find_xml_elements(own_body, property_name)) {
+                        if (property_xml.self_closing) {
+                            continue;
+                        }
+                        push_schema_property(property_name, public_value_object_xml_literal(property_xml.body));
+                    }
                 }
             }
             for (const auto& property_name : public_schema_property_names()) {
@@ -4302,10 +4333,7 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                     if (property_xml.self_closing) {
                         continue;
                     }
-                    edit.schema_properties.push_back({
-                        property_name,
-                        public_value_object_xml_literal(property_xml.body),
-                    });
+                    push_schema_property(property_name, public_value_object_xml_literal(property_xml.body));
                 }
             }
             if (tag == "Table") {
@@ -7401,7 +7429,7 @@ LV ordinary_form_listout_button_base_info(const oof::platform::object_model::Pla
         localized_text_record(title),
         raw("1"),
         raw("1"),
-        raw("0"),
+        raw(ordinary_form_listout_bool_prop(object, "DefaultButton", "0")),
         raw("0"),
         raw("0"),
         ordinary_form_listout_button_picture_record(object),
@@ -10914,6 +10942,22 @@ void print_formbin_package_selftest() {
         }
         return true;
     }();
+    const std::string button_default_xml =
+        "<Form ordinaryFormVersion=\"2.0\" title=\"Button Shape\">"
+        "<Attributes/>"
+        "<Commands/>"
+        "<Events/>"
+        "<ChildItems>"
+        "<Button id=\"4\" name=\"DefaultAction\">"
+        "<Title>Run</Title>"
+        "<DefaultButton>true</DefaultButton>"
+        "</Button>"
+        "</ChildItems>"
+        "</Form>";
+    const auto button_default_form_object = platform_form_object_from_public_xml(button_default_xml);
+    const auto button_default_payload = platform_form_listout_payload(button_default_form_object, "Button Shape");
+    const std::string button_default_redump_xml = form_object_to_public_xml(
+        materialize_platform_form_object(RuntimeFormEnvelope{"#", "5c83cba4-7a20-4102-a5be-add0ee74f6a1", button_default_payload}));
 
     std::cout << "{\"operation\":\"formbin-package-selftest\"";
     std::cout << ",\"nameEdits\":" << result.name_edits;
@@ -10960,6 +11004,8 @@ void print_formbin_package_selftest() {
                   data_path_redump_xml.find("<AutoMarkIncomplete>1</AutoMarkIncomplete>") != std::string::npos ? "true" : "false");
     std::cout << ",\"xmlObjectInputFieldPublicOrder\":"
               << (input_field_public_order ? "true" : "false");
+    std::cout << ",\"xmlObjectButtonDefaultRoundtrip\":"
+              << (button_default_redump_xml.find("<DefaultButton>1</DefaultButton>") != std::string::npos ? "true" : "false");
     std::cout << ",\"xmlObjectNoRawXml\":"
               << (object_redump_xml.find("<ListStream") == std::string::npos &&
                   object_redump_xml.find("<RawBracket") == std::string::npos &&
@@ -12087,7 +12133,7 @@ bool set_materialized_object_control_info_slot(
         if (descriptor == nullptr) {
             return false;
         }
-        auto* info = mutable_control_info_slot_body(value);
+        auto* info = mutable_control_info_slot_body(value, binding->writer_control_type);
         if (property_name == "ToolTip") {
             if (info == nullptr || info->items.empty() || !info->items[0].is_list || info->items[0].items.size() <= 11) {
                 return false;

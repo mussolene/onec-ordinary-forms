@@ -36,7 +36,7 @@ struct PlatformPropertyDescriptor {
     std::string_view source;
 };
 
-inline constexpr std::array<PlatformPropertyDescriptor, 62> descriptors{{
+inline constexpr std::array<PlatformPropertyDescriptor, 63> descriptors{{
     {"ObjectID", "", "CompositeID", SlotCodec::none, "", true, false, "materialized-list-stream"},
     {"Name", "Имя", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record"},
     {"Title", "Заголовок", "String", SlotCodec::name_record, "platform-name-record:{14,name,...}", true, true, "platform-name-record-as-initial-title"},
@@ -64,6 +64,7 @@ inline constexpr std::array<PlatformPropertyDescriptor, 62> descriptors{{
     {"ClearButton", "КнопкаОчистки", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:ClearButton", true, true, "InputField oracle slot 8"},
     {"OpenButton", "КнопкаОткрытия", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:OpenButton", true, true, "InputField oracle slot 10"},
     {"AutoMarkIncomplete", "АвтоОтметкаНезаполненного", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:InputField:AutoMarkIncomplete", true, true, "InputField oracle slot 35"},
+    {"DefaultButton", "КнопкаПоУмолчанию", "Boolean", SlotCodec::control_info_slot, "cf_form_controls_info8:Button:DefaultButton", true, true, "Button oracle button-property-matrix-20260623-221624 slot 5 + OrdinaryFormPalette.xsd"},
     {"Left", "Лево", "Number", SlotCodec::position_record, "cf_form_controls_position8:left", true, true, "cf_form_controls_position8"},
     {"Top", "Верх", "Number", SlotCodec::position_record, "cf_form_controls_position8:top", true, true, "cf_form_controls_position8"},
     {"Width", "Ширина", "Number", SlotCodec::position_record, "cf_form_controls_position8:width", true, true, "cf_form_controls_position8"},

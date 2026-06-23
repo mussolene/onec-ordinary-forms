@@ -8,10 +8,11 @@ native_bin=${OOF_NATIVE_BIN:-sidecars/onec-form-native/build/oof-native}
 module_target=object
 single_pass=0
 inputfield_matrix=0
+button_matrix=0
 
 usage() {
   cat >&2 <<'TXT'
-Usage: tools/run_control_oracle_batch.sh [--source-root root.xml] [--out-dir scan-output/platform-control-oracle] [--module-target form|object] [--single-pass] [--inputfield-matrix]
+Usage: tools/run_control_oracle_batch.sh [--source-root root.xml] [--out-dir scan-output/platform-control-oracle] [--module-target form|object] [--single-pass] [--inputfield-matrix] [--button-matrix]
 
 Requires either OOF_PLATFORM_CONTAINER=<running licensed 1C container> or
 NETHASP_INI_PATH=<readable nethasp.ini>. Outputs stay under scan-output/.
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --module-target) module_target=${2:?}; shift 2 ;;
     --single-pass) single_pass=1; shift ;;
     --inputfield-matrix) inputfield_matrix=1; shift ;;
+    --button-matrix) button_matrix=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -144,6 +146,46 @@ write_inputfield_matrix_case() {
 BSL
 }
 
+write_button_matrix_case() {
+  local code="$1"
+  local property="$2"
+  local value_expr="$3"
+  local assignment="$4"
+  local name_suffix
+  name_suffix=$(printf '%s' "$code" | tr -c '[:alnum:]_' '_')
+  cat >> "$out_abs/scripts/button-property-matrix.bsl" <<BSL
+Элемент = Неопределено;
+Попытка
+	Элемент = ЭлементыФормы.Добавить(Тип("Кнопка"), "OracleButton$name_suffix", Истина);
+	Элемент.Лево = 8;
+	Элемент.Верх = 33;
+	Элемент.Ширина = 120;
+	Элемент.Высота = 24;
+	Попытка
+		Элемент.Заголовок = "Oracle Button";
+	Исключение
+	КонецПопытки;
+	$assignment
+	ДокФорма = Новый ТекстовыйДокумент;
+	ДокФорма.УстановитьТекст(ЗначениеВСтрокуВнутр(Форма));
+	ДокФорма.Записать(ПутьКаталогВыхода + "/$code-$property.form.txt", КодировкаТекста.UTF8);
+	ДокЭлемент = Новый ТекстовыйДокумент;
+	ДокЭлемент.УстановитьТекст(ЗначениеВСтрокуВнутр(Элемент));
+	ДокЭлемент.Записать(ПутьКаталогВыхода + "/$code-$property.element.txt", КодировкаТекста.UTF8);
+	Сводка = Сводка + "$code" + Символы.Таб + "OK" + Символы.Таб + "$property" + Символы.Таб + Строка($value_expr) + Символы.Таб + "" + Символы.ПС;
+Исключение
+	Сводка = Сводка + "$code" + Символы.Таб + "ERROR" + Символы.Таб + "$property" + Символы.Таб + Строка($value_expr) + Символы.Таб + СтрЗаменить(СтрЗаменить(ОписаниеОшибки(), Символы.Таб, " "), Символы.ПС, " ") + Символы.ПС;
+КонецПопытки;
+Если Элемент <> Неопределено Тогда
+	Попытка
+		ЭлементыФормы.Удалить(Элемент);
+	Исключение
+	КонецПопытки;
+КонецЕсли;
+
+BSL
+}
+
 if [[ "$single_pass" == "1" ]]; then
   cat > "$out_abs/scripts/all-controls-single-pass.bsl" <<'BSL'
 Сводка = "script" + Символы.Таб + "status" + Символы.Таб + "object_name" + Символы.Таб + "error" + Символы.ПС;
@@ -213,6 +255,24 @@ BSL
   write_inputfield_matrix_case "15" "AutoMarkIncomplete" "Истина" "Элемент.АвтоОтметкаНезаполненного = Истина;"
   write_inputfield_matrix_case "16" "TypeChoice" "Истина" "Элемент.ВыбиратьТип = Истина;"
   cat >> "$out_abs/scripts/inputfield-property-matrix.bsl" <<'BSL'
+ДокСводка = Новый ТекстовыйДокумент;
+ДокСводка.УстановитьТекст(Сводка);
+ДокСводка.Записать(ПутьКаталогВыхода + "/summary.tsv", КодировкаТекста.UTF8);
+Результат = Форма;
+BSL
+elif [[ "$button_matrix" == "1" ]]; then
+  cat > "$out_abs/scripts/button-property-matrix.bsl" <<'BSL'
+Сводка = "case" + Символы.Таб + "status" + Символы.Таб + "property" + Символы.Таб + "value" + Символы.Таб + "error" + Символы.ПС;
+ДокФорма = Новый ТекстовыйДокумент;
+ДокФорма.УстановитьТекст(ЗначениеВСтрокуВнутр(Форма));
+ДокФорма.Записать(ПутьКаталогВыхода + "/00-Baseline.form.txt", КодировкаТекста.UTF8);
+Сводка = Сводка + "00-Baseline" + Символы.Таб + "OK" + Символы.Таб + "" + Символы.Таб + "" + Символы.Таб + "" + Символы.ПС;
+
+// Keep each case isolated: add one Button, set one property, write form and element, remove it.
+BSL
+  write_button_matrix_case "00-Default" "Default" '""' ""
+  write_button_matrix_case "01" "DefaultButton" "Истина" "Элемент.КнопкаПоУмолчанию = Истина;"
+  cat >> "$out_abs/scripts/button-property-matrix.bsl" <<'BSL'
 ДокСводка = Новый ТекстовыйДокумент;
 ДокСводка.УстановитьТекст(Сводка);
 ДокСводка.Записать(ПутьКаталогВыхода + "/summary.tsv", КодировкаТекста.UTF8);
@@ -401,9 +461,11 @@ with open(tsv_path, "w", encoding="utf-8") as f:
 PY
 }
 
-if [[ "$single_pass" == "1" || "$inputfield_matrix" == "1" ]]; then
+if [[ "$single_pass" == "1" || "$inputfield_matrix" == "1" || "$button_matrix" == "1" ]]; then
   if [[ "$inputfield_matrix" == "1" ]]; then
     script="$out_abs/scripts/inputfield-property-matrix.bsl"
+  elif [[ "$button_matrix" == "1" ]]; then
+    script="$out_abs/scripts/button-property-matrix.bsl"
   else
     script="$out_abs/scripts/all-controls-single-pass.bsl"
   fi
