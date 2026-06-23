@@ -3801,6 +3801,8 @@ struct PublicXmlControlEdit {
     bool has_visible = false;
     std::string enabled;
     bool has_enabled = false;
+    std::string read_only;
+    bool has_read_only = false;
     std::string left;
     std::string top;
     std::string right;
@@ -4171,6 +4173,15 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                 if (enabled_end != std::string::npos) {
                     edit.enabled = xml_unescape(own_body.substr(enabled_value_start, enabled_end - enabled_value_start));
                     edit.has_enabled = true;
+                }
+            }
+            const std::size_t read_only_start = own_body.find("<ReadOnly>");
+            if (read_only_start != std::string::npos) {
+                const std::size_t read_only_value_start = read_only_start + std::string("<ReadOnly>").size();
+                const std::size_t read_only_end = own_body.find("</ReadOnly>", read_only_value_start);
+                if (read_only_end != std::string::npos) {
+                    edit.read_only = xml_unescape(own_body.substr(read_only_value_start, read_only_end - read_only_value_start));
+                    edit.has_read_only = true;
                 }
             }
             for (const auto& property_name : public_schema_property_names()) {
@@ -4804,6 +4815,9 @@ void collect_public_xml_controls(
             }
             if (edit.has_enabled) {
                 set_or_add_described_property(object, "Enabled", edit.enabled);
+            }
+            if (edit.has_read_only) {
+                set_or_add_described_property(object, "ReadOnly", edit.read_only);
             }
             if (edit.has_position) {
                 set_or_add_described_property(object, "Left", edit.left);
