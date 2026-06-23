@@ -3022,6 +3022,7 @@ private:
             object.path = item.parent_object_id.empty()
                 ? "$/Items/" + item.object_id
                 : "$/Items/" + item.parent_object_id + "/" + item.object_id;
+            object.runtime_path = item.path;
             object.parent_object_id = item.parent_object_id;
             const auto* schema = oof::platform::form_schema::control_by_type_name(platform_schema_type);
             object.identity = oof::platform::object_model::make_identity(
@@ -3941,6 +3942,8 @@ bool set_property_slot_value(
 void append_indent(std::string& out, int indent);
 
 bool string_view_starts_with(std::string_view value, std::string_view prefix);
+
+bool is_verified_control_child_table_path(std::string_view parent_path, std::string_view child_path);
 
 const oof::platform::property_registry::PlatformPropertyDescriptor& require_property_descriptor(
     std::string_view property_name
@@ -5492,26 +5495,61 @@ std::vector<const oof::platform::object_model::PlatformObject*> event_objects_fo
     return events;
 }
 
+bool platform_object_originates_from_public_xml(
+    const oof::platform::object_model::PlatformObject& object
+) {
+    return string_view_starts_with(object.type_source, "PublicOrdinaryFormXml");
+}
+
+bool child_index_admitted_for_public_xml(
+    const oof::platform::object_model::PlatformFormObject& form_object,
+    std::string_view parent_object_id,
+    std::size_t child_index
+) {
+    if (parent_object_id == "0" || parent_object_id.empty()) {
+        return true;
+    }
+    if (child_index >= form_object.items.count()) {
+        return false;
+    }
+    const auto* parent = form_object.find_object_by_id(parent_object_id);
+    if (parent == nullptr) {
+        return false;
+    }
+    const auto& child = form_object.items.get(child_index);
+    if (platform_object_originates_from_public_xml(*parent) ||
+        platform_object_originates_from_public_xml(child)) {
+        return true;
+    }
+    return is_verified_control_child_table_path(parent->runtime_path, child.runtime_path);
+}
+
 std::vector<std::size_t> child_indices_for_parent(
     const oof::platform::object_model::PlatformFormObject& form_object,
     std::string_view parent_object_id
 ) {
     std::vector<std::size_t> children;
+    bool saw_contains_edge = false;
     for (const auto& edge : form_object.edges) {
         if (edge.kind != "contains" || edge.from_object_id != parent_object_id) {
             continue;
         }
+        saw_contains_edge = true;
         const auto index = form_object.items.index_of(edge.to_object_id);
         if (index >= 0) {
-            children.push_back(static_cast<std::size_t>(index));
+            const auto child_index = static_cast<std::size_t>(index);
+            if (child_index_admitted_for_public_xml(form_object, parent_object_id, child_index)) {
+                children.push_back(child_index);
+            }
         }
     }
-    if (!children.empty()) {
+    if (saw_contains_edge || !children.empty()) {
         return children;
     }
     if (parent_object_id == "0" || parent_object_id.empty()) {
         for (const auto index : form_object.form.children) {
-            if (index < form_object.items.count()) {
+            if (index < form_object.items.count() &&
+                child_index_admitted_for_public_xml(form_object, parent_object_id, index)) {
                 children.push_back(index);
             }
         }
@@ -5519,7 +5557,8 @@ std::vector<std::size_t> child_indices_for_parent(
     }
     if (const auto* parent = form_object.find_object_by_id(parent_object_id)) {
         for (const auto index : parent->children) {
-            if (index < form_object.items.count()) {
+            if (index < form_object.items.count() &&
+                child_index_admitted_for_public_xml(form_object, parent_object_id, index)) {
                 children.push_back(index);
             }
         }

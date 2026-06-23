@@ -101,6 +101,7 @@ struct PlatformObject {
     std::string type_category;
     std::string type_source;
     std::string path;
+    std::string runtime_path;
     std::string parent_object_id;
     PlatformObjectIdentity identity;
     std::vector<PlatformObjectProperty> properties;
