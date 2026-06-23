@@ -956,6 +956,11 @@ struct MaterializedFormAttribute {
     std::string path;
 };
 
+struct MaterializedAttributeLink {
+    std::string control_object_id;
+    std::string attribute_id;
+};
+
 struct MaterializedFormCommand {
     std::string object_id;
     std::string id;
@@ -1575,6 +1580,9 @@ bool is_materialized_form_property_block(const oof::platform::stream::ListValue&
     }
     for (std::size_t index = 1; index < counted_properties.items.size(); ++index) {
         const auto& record = counted_properties.items[index];
+        if (record.is_list && record.items.size() >= 5 && !record.items[0].is_list) {
+            return true;
+        }
         if (record.is_list && record.items.size() >= 5 && record.items[0].is_list) {
             return true;
         }
@@ -1632,7 +1640,7 @@ std::vector<MaterializedFormAttribute> collect_materialized_form_attributes(
     const auto& counted_properties = property_block->items[2];
     for (std::size_t index = 1; index < counted_properties.items.size(); ++index) {
         const auto& record = counted_properties.items[index];
-        if (!record.is_list || record.items.size() < 5 || !record.items[0].is_list) {
+        if (!record.is_list || record.items.size() < 5) {
             continue;
         }
 
@@ -1649,6 +1657,30 @@ std::vector<MaterializedFormAttribute> collect_materialized_form_attributes(
         attributes.push_back(std::move(attribute));
     }
     return attributes;
+}
+
+std::vector<MaterializedAttributeLink> collect_materialized_form_attribute_links(
+    const oof::platform::stream::ListValue& payload
+) {
+    std::vector<MaterializedAttributeLink> links;
+    const auto* property_block = find_materialized_form_property_block(payload);
+    if (property_block == nullptr || property_block->items.size() < 4 || !property_block->items[3].is_list) {
+        return links;
+    }
+    const auto& counted_links = property_block->items[3];
+    for (std::size_t index = 1; index < counted_links.items.size(); ++index) {
+        const auto& record = counted_links.items[index];
+        if (!record.is_list || record.items.size() < 2 ||
+            record.items[0].is_list || !record.items[1].is_list ||
+            record.items[1].items.size() < 2) {
+            continue;
+        }
+        links.push_back({
+            record.items[0].atom,
+            oof::platform::stream::dump_compact(record.items[1].items[1]),
+        });
+    }
+    return links;
 }
 
 bool looks_like_materialized_form_command_record(const oof::platform::stream::ListValue& value) {
@@ -1918,6 +1950,7 @@ std::string dump_runtime_form_envelope(const RuntimeFormEnvelope& envelope) {
 struct MaterializedGraphSummary {
     std::vector<MaterializedFormItem> items;
     std::vector<MaterializedFormAttribute> attributes;
+    std::vector<MaterializedAttributeLink> attribute_links;
     std::vector<MaterializedFormCommand> commands;
     std::vector<MaterializedFormEvent> events;
     std::size_t guid_head_nodes = 0;
@@ -1940,6 +1973,7 @@ MaterializedGraphSummary summarize_materialized_graph(const oof::platform::strea
         summary.guid_head_nodes,
         summary.nested_unbound_guid_nodes);
     summary.attributes = collect_materialized_form_attributes(payload);
+    summary.attribute_links = collect_materialized_form_attribute_links(payload);
     summary.commands = collect_materialized_form_commands(payload);
 
     for (const auto& item : summary.items) {
@@ -2969,6 +3003,18 @@ private:
             object.properties.push_back(make_described_property("Enabled", item.enabled.empty() ? "true" : item.enabled));
             object.properties.push_back(make_described_property("Events", std::to_string(item.events.size())));
             object.collections.push_back(make_described_collection("Events", item.events.size()));
+            for (const auto& link : summary.attribute_links) {
+                if (link.control_object_id != item.object_id) {
+                    continue;
+                }
+                for (const auto& attribute : summary.attributes) {
+                    if (attribute.id == link.attribute_id && !attribute.name.empty()) {
+                        object.properties.push_back(make_described_property("DataPath", attribute.name));
+                        break;
+                    }
+                }
+                break;
+            }
             const std::string left = item.left.empty() ? "0" : item.left;
             const std::string top = item.top.empty() ? "0" : item.top;
             const std::string right = item.right.empty() ? "0" : item.right;
@@ -3801,6 +3847,8 @@ struct PublicXmlControlEdit {
     bool has_visible = false;
     std::string enabled;
     bool has_enabled = false;
+    std::string data_path;
+    bool has_data_path = false;
     std::string read_only;
     bool has_read_only = false;
     std::string left;
@@ -4182,6 +4230,15 @@ std::vector<PublicXmlControlEdit> parse_public_xml_control_edits(const std::stri
                 if (read_only_end != std::string::npos) {
                     edit.read_only = xml_unescape(own_body.substr(read_only_value_start, read_only_end - read_only_value_start));
                     edit.has_read_only = true;
+                }
+            }
+            const std::size_t data_path_start = own_body.find("<DataPath>");
+            if (data_path_start != std::string::npos) {
+                const std::size_t data_path_value_start = data_path_start + std::string("<DataPath>").size();
+                const std::size_t data_path_end = own_body.find("</DataPath>", data_path_value_start);
+                if (data_path_end != std::string::npos) {
+                    edit.data_path = xml_unescape(own_body.substr(data_path_value_start, data_path_end - data_path_value_start));
+                    edit.has_data_path = true;
                 }
             }
             for (const auto& property_name : public_schema_property_names()) {
@@ -4589,7 +4646,10 @@ void add_public_xml_collection_objects(
     const std::string& xml
 ) {
     for (const auto& attribute_xml : find_xml_elements(xml, "Attribute")) {
-        const std::string object_id = xml_attr_value(attribute_xml.attrs, "objectId");
+        std::string object_id = xml_attr_value(attribute_xml.attrs, "objectId");
+        if (object_id.empty()) {
+            object_id = xml_attr_value(attribute_xml.attrs, "id");
+        }
         if (object_id.empty()) {
             continue;
         }
@@ -4815,6 +4875,9 @@ void collect_public_xml_controls(
             }
             if (edit.has_enabled) {
                 set_or_add_described_property(object, "Enabled", edit.enabled);
+            }
+            if (edit.has_data_path) {
+                set_or_add_described_property(object, "DataPath", edit.data_path);
             }
             if (edit.has_read_only) {
                 set_or_add_described_property(object, "ReadOnly", edit.read_only);
@@ -5100,6 +5163,9 @@ bool has_explicit_property_for_xml(
 bool is_public_schema_property_xml(
     const oof::platform::object_model::PlatformObjectProperty& property
 ) {
+    if (property.name == "DataPath") {
+        return true;
+    }
     if (property.source.find("managed-application/logform") == std::string::npos &&
         property.source.find("cf_form_controls_info8") == std::string::npos) {
         return false;
@@ -7180,8 +7246,9 @@ LV ordinary_form_listout_attribute_type_domain_pattern_record(
     const oof::platform::object_model::PlatformFormObject& form_object,
     const oof::platform::object_model::PlatformObject& object
 ) {
+    const std::string data_path = object_prop_or_default(object, "DataPath", object.name);
     for (const auto& attribute : form_object.attributes.objects()) {
-        if (object_property_value(attribute, "Name") == object.name) {
+        if (object_property_value(attribute, "Name") == data_path) {
             const std::string type = object_property_value(attribute, "Type");
             if (!type.empty() && type.front() == '{') {
                 return oof::platform::stream::parse(type);
@@ -9876,7 +9943,8 @@ void collect_ordinary_form_listout_attribute_links(
     std::vector<LV>& links
 ) {
     for (const auto* child : ordinary_form_listout_children(form_object, parent)) {
-        const auto found = attribute_slots.find(child->name);
+        const std::string data_path = object_prop_or_default(*child, "DataPath", child->name);
+        const auto found = attribute_slots.find(data_path);
         if (found != attribute_slots.end()) {
             links.push_back(list({
                 raw(child->object_id),
@@ -10678,6 +10746,27 @@ void print_formbin_package_selftest() {
         object_property_value(anchor_edited_form_object.form, "Title"));
     const std::string anchor_redump_xml = form_object_to_public_xml(materialize_platform_form_object(anchor_envelope));
 
+    const std::string data_path_xml =
+        "<Form ordinaryFormVersion=\"2.0\" title=\"DataPath Shape\">"
+        "<Attributes>"
+        "<Attribute id=\"1\" name=\"FieldValue\" main=\"false\" storedData=\"true\">"
+        "<Type><TypePattern><String/></TypePattern></Type>"
+        "</Attribute>"
+        "</Attributes>"
+        "<Commands/>"
+        "<Events/>"
+        "<ChildItems>"
+        "<InputField id=\"4\" name=\"Input\">"
+        "<Position left=\"8\" top=\"8\" right=\"108\" bottom=\"28\"/>"
+        "<DataPath>FieldValue</DataPath>"
+        "</InputField>"
+        "</ChildItems>"
+        "</Form>";
+    const auto data_path_form_object = platform_form_object_from_public_xml(data_path_xml);
+    const auto data_path_payload = platform_form_listout_payload(data_path_form_object, "DataPath Shape");
+    const std::string data_path_redump_xml = form_object_to_public_xml(
+        materialize_platform_form_object(RuntimeFormEnvelope{"#", "5c83cba4-7a20-4102-a5be-add0ee74f6a1", data_path_payload}));
+
     std::cout << "{\"operation\":\"formbin-package-selftest\"";
     std::cout << ",\"nameEdits\":" << result.name_edits;
     std::cout << ",\"titleEdits\":" << result.title_edits;
@@ -10702,6 +10791,10 @@ void print_formbin_package_selftest() {
     std::cout << ",\"xmlObjectChildItemsRoundtrip\":"
               << (anchor_object_redump_xml.find("name=\"PanelHost\" id=\"4\"") != std::string::npos &&
                   anchor_object_redump_xml.find("name=\"Button1\" id=\"5\"") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectDataPathRoundtrip\":"
+              << (data_path_redump_xml.find("<DataPath>FieldValue</DataPath>") != std::string::npos ? "true" : "false");
+    std::cout << ",\"xmlObjectAttributeRoundtrip\":"
+              << (data_path_redump_xml.find("<Attribute name=\"FieldValue\"") != std::string::npos ? "true" : "false");
     std::cout << ",\"xmlObjectNoRawXml\":"
               << (object_redump_xml.find("<ListStream") == std::string::npos &&
                   object_redump_xml.find("<RawBracket") == std::string::npos &&
