@@ -11239,6 +11239,15 @@ bool is_top_level_runtime_control_path(std::string_view path) {
     return string_view_starts_with(path, "$/1/") && traversal_path_depth(path) == 2;
 }
 
+bool is_verified_control_child_table_path(std::string_view parent_path, std::string_view child_path) {
+    if (parent_path.empty()) {
+        return false;
+    }
+    const std::string child_table_prefix = std::string(parent_path) + "/5/";
+    return string_view_starts_with(child_path, child_table_prefix) &&
+           traversal_path_depth(child_path) == traversal_path_depth(parent_path) + 2;
+}
+
 RuntimeTraversalRow traversal_row_from_materialized_item(
     const MaterializedFormItem& item,
     std::size_t ordinal,
@@ -11264,6 +11273,9 @@ RuntimeTraversalRow traversal_row_from_materialized_item(
     } else if (item.parent_object_id.empty()) {
         row.containment_status = "inferred-root";
         row.containment_source = "dfs-without-parent";
+    } else if (is_verified_control_child_table_path(row.parent_path, item.path)) {
+        row.containment_status = "verified-child-table";
+        row.containment_source = "runtime-control-slot-5-child-table";
     } else {
         row.containment_status = "unproven-dfs-descendant";
         row.containment_source = "current collector propagates parent through every nested list; child-table slot is not verified";
@@ -11412,6 +11424,8 @@ void print_runtime_form_traversal_dump(const std::string& path) {
     std::cout << ",\"materializedItems\":" << materialized_rows.size();
     std::cout << ",\"containmentSummary\":{\"provenRootEdges\":"
               << count_containment_status(materialized_rows, "proven");
+    std::cout << ",\"verifiedNestedEdges\":"
+              << count_containment_status(materialized_rows, "verified-child-table");
     std::cout << ",\"inferredRootEdges\":"
               << count_containment_status(materialized_rows, "inferred-root");
     std::cout << ",\"unprovenContainmentEdges\":"

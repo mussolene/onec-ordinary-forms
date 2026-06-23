@@ -250,6 +250,10 @@ test: $(BIN)
 	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"sameMaterializedAndGuidSorted":false'
 	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"unprovenContainmentEdges":0'
 	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"order":"guid-platform-object-id-sort"'
+	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,"Button1",4294967295,0,0,0},{},{},{1,{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,"Check1",4294967295,0,0,0},{},{},{}}}}}}}' > $(BUILD_DIR)/runtime-form-verified-childtable-selftest.txt
+	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-verified-childtable-selftest.txt | grep -F -q '"verifiedNestedEdges":1'
+	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-verified-childtable-selftest.txt | grep -F -q '"unprovenContainmentEdges":0'
+	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-verified-childtable-selftest.txt | grep -F -q '"containmentStatus":"verified-child-table"'
 	printf '{"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,{27,{18,{6ff79819-710e-4145-97cd-1618da79e3e2,5,{14,"Button1",4294967295,0,0,0},{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,6,{14,"Check1",4294967295,0,0,0},{},{},{}},{},{}}}}}' > $(BUILD_DIR)/runtime-form-nested-inference-selftest.txt
 	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-nested-inference-selftest.txt | grep -F -q '"unprovenContainmentEdges":1'
 	$(BIN) runtime-form-traversal-dump $(BUILD_DIR)/runtime-form-nested-inference-selftest.txt | grep -F -q '"containmentStatus":"unproven-dfs-descendant"'
