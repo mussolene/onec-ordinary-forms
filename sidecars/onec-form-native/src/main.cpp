@@ -11221,27 +11221,53 @@ struct RuntimeTraversalRow {
     std::size_t ordinal = 0;
     std::string object_id;
     std::string parent_object_id;
+    std::string parent_path;
     std::string name;
     std::string platform_type;
     std::string guid;
     std::string path;
+    std::string containment_status;
+    std::string containment_source;
     std::vector<std::string> child_object_ids;
 };
 
+std::size_t traversal_path_depth(std::string_view path) {
+    return static_cast<std::size_t>(std::count(path.begin(), path.end(), '/'));
+}
+
+bool is_top_level_runtime_control_path(std::string_view path) {
+    return string_view_starts_with(path, "$/1/") && traversal_path_depth(path) == 2;
+}
+
 RuntimeTraversalRow traversal_row_from_materialized_item(
     const MaterializedFormItem& item,
-    std::size_t ordinal
+    std::size_t ordinal,
+    const std::map<std::string, std::string>& materialized_paths_by_id
 ) {
     RuntimeTraversalRow row;
     row.ordinal = ordinal;
     row.object_id = item.object_id;
     row.parent_object_id = item.parent_object_id;
+    const auto parent_path_it = materialized_paths_by_id.find(item.parent_object_id);
+    if (parent_path_it != materialized_paths_by_id.end()) {
+        row.parent_path = parent_path_it->second;
+    }
     row.name = item.name;
     row.platform_type = item.descriptor_binding != nullptr
         ? std::string(item.descriptor_binding->platform_type)
         : std::string();
     row.guid = item.guid;
     row.path = item.path;
+    if (item.parent_object_id.empty() && is_top_level_runtime_control_path(item.path)) {
+        row.containment_status = "proven";
+        row.containment_source = "runtime-root-controls-list";
+    } else if (item.parent_object_id.empty()) {
+        row.containment_status = "inferred-root";
+        row.containment_source = "dfs-without-parent";
+    } else {
+        row.containment_status = "unproven-dfs-descendant";
+        row.containment_source = "current collector propagates parent through every nested list; child-table slot is not verified";
+    }
     return row;
 }
 
@@ -11283,6 +11309,8 @@ void print_traversal_row_json(const RuntimeTraversalRow& row) {
     print_json_string(row.object_id);
     std::cout << ",\"parentObjectId\":";
     print_json_string(row.parent_object_id);
+    std::cout << ",\"parentPath\":";
+    print_json_string(row.parent_path);
     std::cout << ",\"name\":";
     print_json_string(row.name);
     std::cout << ",\"platformType\":";
@@ -11291,6 +11319,10 @@ void print_traversal_row_json(const RuntimeTraversalRow& row) {
     print_json_string(row.guid);
     std::cout << ",\"path\":";
     print_json_string(row.path);
+    std::cout << ",\"containmentStatus\":";
+    print_json_string(row.containment_status);
+    std::cout << ",\"containmentSource\":";
+    print_json_string(row.containment_source);
     std::cout << ",\"childObjectIds\":[";
     for (std::size_t index = 0; index < row.child_object_ids.size(); ++index) {
         if (index != 0) {
@@ -11332,10 +11364,18 @@ void print_runtime_form_traversal_dump(const std::string& path) {
     const auto summary = summarize_materialized_graph(envelope.payload);
     const auto form_object = materialize_platform_form_object(envelope);
 
+    std::map<std::string, std::string> materialized_paths_by_id;
+    for (const auto& item : summary.items) {
+        materialized_paths_by_id[item.object_id] = item.path;
+    }
+
     std::vector<RuntimeTraversalRow> materialized_rows;
     materialized_rows.reserve(summary.items.size());
     for (std::size_t index = 0; index < summary.items.size(); ++index) {
-        materialized_rows.push_back(traversal_row_from_materialized_item(summary.items[index], index));
+        materialized_rows.push_back(traversal_row_from_materialized_item(
+            summary.items[index],
+            index,
+            materialized_paths_by_id));
     }
 
     std::vector<std::size_t> preorder_indices;
@@ -11356,6 +11396,11 @@ void print_runtime_form_traversal_dump(const std::string& path) {
     for (std::size_t index = 0; index < guid_rows.size(); ++index) {
         guid_rows[index].ordinal = index;
     }
+    const auto count_containment_status = [](const std::vector<RuntimeTraversalRow>& rows, std::string_view status) {
+        return static_cast<std::size_t>(std::count_if(rows.begin(), rows.end(), [status](const auto& row) {
+            return row.containment_status == status;
+        }));
+    };
 
     std::cout << "{\"operation\":\"runtime-form-traversal-dump\"";
     std::cout << ",\"source\":\"RuntimeForm:payload\"";
@@ -11365,6 +11410,13 @@ void print_runtime_form_traversal_dump(const std::string& path) {
     print_json_string(envelope.runtime_uuid);
     std::cout << ",\"canonicalBytes\":" << canonical_text.size() << "}";
     std::cout << ",\"materializedItems\":" << materialized_rows.size();
+    std::cout << ",\"containmentSummary\":{\"provenRootEdges\":"
+              << count_containment_status(materialized_rows, "proven");
+    std::cout << ",\"inferredRootEdges\":"
+              << count_containment_status(materialized_rows, "inferred-root");
+    std::cout << ",\"unprovenContainmentEdges\":"
+              << count_containment_status(materialized_rows, "unproven-dfs-descendant");
+    std::cout << ",\"policy\":\"nested contains edges need child-table/descriptor-slot proof before they are product-safe\"}";
     std::cout << ",\"rootChildObjectIds\":[";
     for (std::size_t index = 0; index < form_object.form.children.size(); ++index) {
         if (index != 0) {
