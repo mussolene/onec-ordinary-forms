@@ -261,7 +261,7 @@
       <xs:element name="PlotArea" type="SimplePropertyType"/>
       <xs:element name="Points" type="SimplePropertyType"/>
       <xs:element name="PointsCount" type="SimplePropertyType"/>
-      <xs:element name="Position" type="SimplePropertyType"/>
+      <xs:element name="Position" type="PositionType"/>
       <xs:element name="ReadOnly" type="SimplePropertyType"/>
       <xs:element name="Refresh" type="SimplePropertyType"/>
       <xs:element name="RegulationButton" type="SimplePropertyType"/>
@@ -352,25 +352,114 @@
 
   <xs:complexType name="AttributesType">
     <xs:sequence>
-      <xs:element name="Attribute" type="SimplePropertyType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Attribute" type="AttributeType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
 
   <xs:complexType name="CommandsType">
     <xs:sequence>
-      <xs:element name="Command" type="SimplePropertyType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Command" type="CommandType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="PositionType">
+    <xs:sequence>
+      <xs:element name="Bindings" type="BindingsType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="left" type="xs:string" use="optional"/>
+    <xs:attribute name="top" type="xs:string" use="optional"/>
+    <xs:attribute name="right" type="xs:string" use="optional"/>
+    <xs:attribute name="bottom" type="xs:string" use="optional"/>
+    <xs:attribute name="width" type="xs:string" use="optional"/>
+    <xs:attribute name="height" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="BindingsType">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="Binding" type="BindingType"/>
+      <xs:element name="DimensionBinding" type="DimensionBindingType"/>
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="BindingType">
+    <xs:attribute name="coordinate" type="xs:string" use="required"/>
+    <xs:attribute name="value" type="xs:string" use="required"/>
+    <xs:attribute name="targetId" type="xs:string" use="optional"/>
+    <xs:attribute name="targetName" type="xs:string" use="optional"/>
+    <xs:attribute name="side" type="xs:string" use="optional"/>
+    <xs:attribute name="offset" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="DimensionBindingType">
+    <xs:attribute name="dimension" type="xs:string" use="required"/>
+    <xs:attribute name="value" type="xs:string" use="required"/>
+    <xs:attribute name="targetId" type="xs:string" use="optional"/>
+    <xs:attribute name="targetName" type="xs:string" use="optional"/>
+    <xs:attribute name="side" type="xs:string" use="optional"/>
+    <xs:attribute name="offset" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="AttributeType">
+    <xs:sequence>
+      <xs:element name="Type" type="TypeDescriptorType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="xs:string" use="optional"/>
+    <xs:attribute name="objectId" type="xs:string" use="optional"/>
+    <xs:attribute name="main" type="xs:string" use="optional"/>
+    <xs:attribute name="storedData" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="CommandType">
+    <xs:attribute name="id" type="xs:string" use="optional"/>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="handler" type="xs:string" use="optional"/>
+    <xs:attribute name="modifiesData" type="xs:string" use="optional"/>
+    <xs:attribute name="objectId" type="xs:string" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="TypeDescriptorType">
+    <xs:sequence>
+      <xs:element name="TypePattern" type="TypePatternType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="TypePatternType">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element name="Any" type="EmptyTypeRefType"/>
+      <xs:element name="ObjectType" type="GuidTypeRefType"/>
+      <xs:element name="TypeValue" type="GuidTypeRefType"/>
+      <xs:element name="Reference" type="GuidTypeRefType"/>
+      <xs:element name="List" type="GuidTypeRefType"/>
+      <xs:element name="String" type="ScalarTypeRefType"/>
+      <xs:element name="Binary" type="ScalarTypeRefType"/>
+      <xs:element name="Date" type="ScalarTypeRefType"/>
+      <xs:element name="Number" type="ScalarTypeRefType"/>
+    </xs:choice>
+  </xs:complexType>
+
+  <xs:complexType name="EmptyTypeRefType"/>
+
+  <xs:complexType name="GuidTypeRefType">
+    <xs:attribute name="guid" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="ScalarTypeRefType">
+    <xs:attribute name="value" type="xs:string" use="optional"/>
+    <xs:attribute name="length" type="xs:string" use="optional"/>
+    <xs:attribute name="precision" type="xs:string" use="optional"/>
+    <xs:attribute name="scale" type="xs:string" use="optional"/>
   </xs:complexType>
 
   <xs:complexType name="SimplePropertyType" mixed="true">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="Binding" type="SimplePropertyType"/>
-      <xs:element name="Bindings" type="SimplePropertyType"/>
-      <xs:element name="DimensionBinding" type="SimplePropertyType"/>
-      <xs:element name="Type" type="SimplePropertyType"/>
-      <xs:element name="TypePattern" type="SimplePropertyType"/>
+      <xs:element name="Binding" type="BindingType"/>
+      <xs:element name="Bindings" type="BindingsType"/>
+      <xs:element name="DimensionBinding" type="DimensionBindingType"/>
+      <xs:element name="Type" type="TypeDescriptorType"/>
+      <xs:element name="TypePattern" type="TypePatternType"/>
       <xs:element name="Types" type="SimplePropertyType"/>
-      <xs:element name="ObjectType" type="SimplePropertyType"/>
+      <xs:element name="ObjectType" type="GuidTypeRefType"/>
       <xs:element name="ColorValue" type="SimplePropertyType"/>
       <xs:element name="FontValue" type="SimplePropertyType"/>
       <xs:element name="BorderValue" type="SimplePropertyType"/>
