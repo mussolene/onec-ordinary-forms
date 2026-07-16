@@ -8,6 +8,7 @@
 set -euo pipefail
 
 module_target=form
+form_name=Форма
 output_dir=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -17,6 +18,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --module-target=*)
       module_target=${1#*=}
+      shift
+      ;;
+    --form-name)
+      form_name=${2:?}
+      shift 2
+      ;;
+    --form-name=*)
+      form_name=${1#*=}
       shift
       ;;
     --output-dir)
@@ -46,8 +55,13 @@ case "$module_target" in
   *) echo "Unsupported --module-target: $module_target" >&2; exit 2 ;;
 esac
 
+if [[ ! "$form_name" =~ ^[[:alpha:]_][[:alnum:]_]*$ ]]; then
+  echo "Unsupported --form-name: $form_name" >&2
+  exit 2
+fi
+
 if [[ $# -lt 4 || $# -gt 5 ]]; then
-  echo "Usage: $0 [--module-target form|object] [--output-dir scan-output/dir] <source-root.xml> <input-stream.txt|-> <script.bsl> <output-stream.txt> [out-dir]" >&2
+  echo "Usage: $0 [--module-target form|object] [--form-name name] [--output-dir scan-output/dir] <source-root.xml> <input-stream.txt|-> <script.bsl> <output-stream.txt> [out-dir]" >&2
   exit 2
 fi
 
@@ -182,8 +196,10 @@ if [[ "$module_target" == "form" ]]; then
   cat > "$out_abs/package/Form/Module.bsl" <<'BSL'
 Функция OOF_ПараметрыЗапуска()
 	Результат = Новый Соответствие;
-	Для Каждого Часть Из СтрРазделить(ПараметрЗапуска, ";") Цикл
-		ПозицияРавно = СтрНайти(Часть, "=");
+	СтрокиПараметров = СтрЗаменить(ПараметрЗапуска, ";", Символы.ПС);
+	Для НомерСтроки = 1 По СтрЧислоСтрок(СтрокиПараметров) Цикл
+		Часть = СтрПолучитьСтроку(СтрокиПараметров, НомерСтроки);
+		ПозицияРавно = Найти(Часть, "=");
 		Если ПозицияРавно = 0 Тогда Продолжить; КонецЕсли;
 		Имя = СокрЛП(Лев(Часть, ПозицияРавно - 1));
 		Значение = Сред(Часть, ПозицияРавно + 1);
@@ -235,8 +251,10 @@ else
   cat > "$out_abs/source/root/Ext/ObjectModule.bsl" <<'BSL'
 Функция OOF_ПараметрыЗапуска()
 	Результат = Новый Соответствие;
-	Для Каждого Часть Из СтрРазделить(ПараметрЗапуска, ";") Цикл
-		ПозицияРавно = СтрНайти(Часть, "=");
+	СтрокиПараметров = СтрЗаменить(ПараметрЗапуска, ";", Символы.ПС);
+	Для НомерСтроки = 1 По СтрЧислоСтрок(СтрокиПараметров) Цикл
+		Часть = СтрПолучитьСтроку(СтрокиПараметров, НомерСтроки);
+		ПозицияРавно = Найти(Часть, "=");
 		Если ПозицияРавно = 0 Тогда Продолжить; КонецЕсли;
 		Имя = СокрЛП(Лев(Часть, ПозицияРавно - 1));
 		Значение = Сред(Часть, ПозицияРавно + 1);
@@ -260,7 +278,9 @@ else
 	Вход = ДокВход.ПолучитьТекст();
 КонецЕсли;
 
-Форма = ЭтотОбъект.ПолучитьФорму("Форма");
+ИмяФормы = Параметры.Получить("FormName");
+Если ИмяФормы = Неопределено Или ИмяФормы = "" Тогда ИмяФормы = "Форма"; КонецЕсли;
+Форма = ЭтотОбъект.ПолучитьФорму(ИмяФормы);
 ЭтаФорма = Форма;
 ЭлементыФормы = Форма.ЭлементыФормы;
 Объект = Неопределено;
@@ -328,7 +348,7 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
     xvfb-run -a timeout 300 $trace_env_cmd /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
       /F \"\$base/\$db\" /RunModeOrdinaryApplication \
       /Execute '$container_base/oracle.epf' \
-      /C 'InputFile=$container_base/input.txt;OutputFile=$container_base/output.txt;OutputDir=$container_output_dir;ScriptFile=$container_base/script.bsl' \
+      /C 'InputFile=$container_base/input.txt;OutputFile=$container_base/output.txt;OutputDir=$container_output_dir;ScriptFile=$container_base/script.bsl;FormName=$form_name' \
       /Out '$container_base/logs/enterprise.log' -NoTruncate /DisableStartupDialogs \
       >'$container_base/logs/enterprise-stdout.log' 2>'$container_base/logs/enterprise-stderr.log'
     code=\$?
@@ -387,7 +407,7 @@ docker run --rm --platform linux/amd64 --entrypoint sh \
     xvfb-run -a timeout 300 $trace_env_cmd /opt/1cv8/x86_64/8.5.1.1343/1cv8 ENTERPRISE \
       /F \"\$base/\$db\" /RunModeOrdinaryApplication \
       /Execute \"/workspace/$out_rel/oracle.epf\" \
-      /C \"InputFile=$input_container;OutputFile=$output_container;OutputDir=$output_dir_container;ScriptFile=$script_container\" \
+      /C \"InputFile=$input_container;OutputFile=$output_container;OutputDir=$output_dir_container;ScriptFile=$script_container;FormName=$form_name\" \
       /Out \"/workspace/$out_rel/logs/enterprise.log\" -NoTruncate /DisableStartupDialogs \
       >\"/workspace/$out_rel/logs/enterprise-stdout.log\" 2>\"/workspace/$out_rel/logs/enterprise-stderr.log\"
     code=\$?
