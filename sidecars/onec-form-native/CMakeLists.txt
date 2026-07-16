@@ -1,5 +1,48 @@
 find_package(ZLIB REQUIRED)
 
+function(oof_enable_project_warnings target_name)
+  if(MSVC)
+    target_compile_options(${target_name} PRIVATE /W4 /permissive-)
+  else()
+    target_compile_options(${target_name} PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+endfunction()
+
+add_library(
+  liboof
+  STATIC
+    src/model/metamodel.cpp
+    src/model/ordinary_form.cpp
+)
+add_library(oof::liboof ALIAS liboof)
+
+set_target_properties(
+  liboof
+  PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+    OUTPUT_NAME oof
+)
+
+target_include_directories(
+  liboof
+  PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+)
+oof_enable_project_warnings(liboof)
+
+add_executable(oof src/cli/main.cpp)
+set_target_properties(
+  oof
+  PROPERTIES
+    CXX_EXTENSIONS OFF
+    CXX_STANDARD 20
+    CXX_STANDARD_REQUIRED ON
+)
+target_link_libraries(oof PRIVATE oof::liboof)
+oof_enable_project_warnings(oof)
+
 add_executable(oof-native src/main.cpp)
 
 set_target_properties(
@@ -88,6 +131,40 @@ endif()
 
 if(BUILD_TESTING)
   find_program(OOF_MAKE_EXECUTABLE NAMES gmake make REQUIRED)
+
+  add_executable(oof-model-test tests/model_test.cpp)
+  set_target_properties(
+    oof-model-test
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+  )
+  target_link_libraries(oof-model-test PRIVATE oof::liboof)
+  oof_enable_project_warnings(oof-model-test)
+  add_test(NAME product.model COMMAND oof-model-test)
+  set_tests_properties(product.model PROPERTIES LABELS unit)
+
+  add_executable(oof-result-test tests/result_test.cpp)
+  set_target_properties(
+    oof-result-test
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+  )
+  target_link_libraries(oof-result-test PRIVATE oof::liboof)
+  oof_enable_project_warnings(oof-result-test)
+  add_test(NAME product.result COMMAND oof-result-test)
+  set_tests_properties(product.result PROPERTIES LABELS unit)
+
+  add_test(NAME product.cli.version COMMAND oof --version)
+  set_tests_properties(
+    product.cli.version
+    PROPERTIES
+      LABELS smoke
+      PASS_REGULAR_EXPRESSION "oof 1.0.0-dev"
+  )
 
   add_test(
     NAME native.regression
