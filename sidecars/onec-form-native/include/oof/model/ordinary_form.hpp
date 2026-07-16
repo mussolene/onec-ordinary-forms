@@ -7,10 +7,11 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
-#include <unordered_map>
 
 namespace oof::model {
 
@@ -35,6 +36,41 @@ private:
 
 struct ObjectIdHash {
     [[nodiscard]] std::size_t operator()(ObjectId id) const noexcept {
+        return std::hash<std::uint64_t>{}(id.value());
+    }
+};
+
+class PropertyId {
+public:
+    constexpr PropertyId() noexcept = default;
+
+    [[nodiscard]] static constexpr PropertyId from_name(std::string_view name) noexcept {
+        std::uint64_t hash = 14695981039346656037ULL;
+        for (const unsigned char byte : name) {
+            hash ^= byte;
+            hash *= 1099511628211ULL;
+        }
+        return PropertyId(hash == 0 ? 1 : hash);
+    }
+
+    [[nodiscard]] constexpr std::uint64_t value() const noexcept {
+        return value_;
+    }
+
+    [[nodiscard]] constexpr explicit operator bool() const noexcept {
+        return value_ != 0;
+    }
+
+    friend constexpr auto operator<=>(PropertyId, PropertyId) noexcept = default;
+
+private:
+    explicit constexpr PropertyId(std::uint64_t value) noexcept : value_(value) {}
+
+    std::uint64_t value_ = 0;
+};
+
+struct PropertyIdHash {
+    [[nodiscard]] std::size_t operator()(PropertyId id) const noexcept {
         return std::hash<std::uint64_t>{}(id.value());
     }
 };
@@ -98,6 +134,7 @@ private:
 
 struct Form;
 struct ControlNode;
+struct Page;
 struct Attribute;
 struct Command;
 struct Event;
@@ -125,16 +162,242 @@ private:
 
 using FormRef = Reference<Form>;
 using ControlRef = Reference<ControlNode>;
+using PageRef = Reference<Page>;
 using AttributeRef = Reference<Attribute>;
 using CommandRef = Reference<Command>;
 using EventRef = Reference<Event>;
 using PictureAssetRef = Reference<PictureAsset>;
+using ChildItemRef = std::variant<ControlRef, PageRef>;
 
-struct LocalizedText {
-    std::string locale = "ru";
+struct UndefinedValue {
+    friend bool operator==(UndefinedValue, UndefinedValue) = default;
+};
+
+struct UuidValue {
+    std::string canonical = "00000000-0000-0000-0000-000000000000";
+
+    friend bool operator==(const UuidValue&, const UuidValue&) = default;
+};
+
+struct LocalizedStringItem {
+    std::string language;
     std::string text;
 
-    friend bool operator==(const LocalizedText&, const LocalizedText&) = default;
+    friend bool operator==(const LocalizedStringItem&, const LocalizedStringItem&) = default;
+};
+
+struct LocalizedStringValue {
+    std::vector<LocalizedStringItem> items;
+
+    friend bool operator==(const LocalizedStringValue&, const LocalizedStringValue&) = default;
+};
+
+struct FormattedStringValue {
+    LocalizedStringValue value;
+    bool formatted = false;
+
+    friend bool operator==(const FormattedStringValue&, const FormattedStringValue&) = default;
+};
+
+struct DecimalValue {
+    std::string canonical;
+
+    friend bool operator==(const DecimalValue&, const DecimalValue&) = default;
+};
+
+struct DateValue {
+    std::string canonical;
+
+    friend bool operator==(const DateValue&, const DateValue&) = default;
+};
+
+struct EnumerationValue {
+    std::string type_name;
+    std::string member;
+
+    friend bool operator==(const EnumerationValue&, const EnumerationValue&) = default;
+};
+
+struct CompositeIdValue {
+    std::int64_t object_id = 0;
+    UuidValue uuid;
+    bool is_null = true;
+
+    friend bool operator==(const CompositeIdValue&, const CompositeIdValue&) = default;
+};
+
+enum class TypeDomainTerm : std::uint8_t {
+    unknown,
+    list,
+    binary,
+    date,
+    numeric,
+    reference,
+    string,
+    type,
+};
+
+struct NumericQualifiers {
+    std::uint32_t length = 0;
+    std::uint32_t precision = 0;
+    bool non_negative = false;
+
+    friend bool operator==(const NumericQualifiers&, const NumericQualifiers&) = default;
+};
+
+struct LengthQualifiers {
+    std::uint32_t length = 0;
+    bool variable = true;
+
+    friend bool operator==(const LengthQualifiers&, const LengthQualifiers&) = default;
+};
+
+struct DateQualifiers {
+    bool date = true;
+    bool time = true;
+
+    friend bool operator==(const DateQualifiers&, const DateQualifiers&) = default;
+};
+
+struct TypeDomainEntry {
+    TypeDomainTerm term = TypeDomainTerm::unknown;
+    UuidValue type_uuid;
+    NumericQualifiers numeric;
+    LengthQualifiers string;
+    LengthQualifiers binary;
+    DateQualifiers date;
+
+    friend bool operator==(const TypeDomainEntry&, const TypeDomainEntry&) = default;
+};
+
+struct TypeDomainPatternValue {
+    std::vector<TypeDomainEntry> entries;
+
+    friend bool operator==(const TypeDomainPatternValue&, const TypeDomainPatternValue&) = default;
+};
+
+struct QualifiedName {
+    std::string value;
+
+    friend bool operator==(const QualifiedName&, const QualifiedName&) = default;
+};
+
+using StyleReference = std::variant<std::monostate, CompositeIdValue, QualifiedName>;
+
+enum class ColorKind : std::uint8_t {
+    absolute,
+    automatic,
+    style_reference,
+};
+
+struct ColorValue {
+    ColorKind kind = ColorKind::automatic;
+    std::uint8_t red = 0;
+    std::uint8_t green = 0;
+    std::uint8_t blue = 0;
+    std::uint8_t alpha = 255;
+    StyleReference style;
+
+    friend bool operator==(const ColorValue&, const ColorValue&) = default;
+};
+
+enum class FontKind : std::uint8_t {
+    absolute,
+    windows_font,
+    style_reference,
+    automatic,
+};
+
+struct FontValue {
+    FontKind kind = FontKind::automatic;
+    std::uint32_t mask = 0;
+    StyleReference style;
+    std::string face_name;
+    double height = 0.0;
+    bool bold = false;
+    bool italic = false;
+    bool underline = false;
+    bool strikeout = false;
+
+    friend bool operator==(const FontValue&, const FontValue&) = default;
+};
+
+struct DataPath {
+    AttributeRef attribute;
+    std::vector<std::string> members;
+
+    friend bool operator==(const DataPath&, const DataPath&) = default;
+};
+
+enum class PictureFormat : std::uint8_t {
+    gif,
+    png,
+    jpeg,
+    bmp,
+};
+
+struct PictureAsset {
+    ObjectId id{};
+    std::string relative_path;
+    PictureFormat format = PictureFormat::gif;
+};
+
+struct PictureRef {
+    PictureAssetRef asset;
+
+    friend bool operator==(const PictureRef&, const PictureRef&) = default;
+};
+
+using PropertyValue = std::variant<
+    UndefinedValue,
+    bool,
+    std::int64_t,
+    DecimalValue,
+    std::string,
+    LocalizedStringValue,
+    FormattedStringValue,
+    DateValue,
+    UuidValue,
+    CompositeIdValue,
+    TypeDomainPatternValue,
+    EnumerationValue,
+    ColorValue,
+    FontValue,
+    PictureRef,
+    ControlRef,
+    AttributeRef,
+    CommandRef>;
+
+struct PropertyEntry {
+    PropertyId id{};
+    PropertyState state = PropertyState::explicit_value;
+    PropertyValue value{false};
+
+    friend bool operator==(const PropertyEntry&, const PropertyEntry&) = default;
+};
+
+class PropertySet {
+public:
+    [[nodiscard]] const PropertyEntry* find(PropertyId id) const noexcept;
+    [[nodiscard]] PropertyEntry* find(PropertyId id) noexcept;
+    [[nodiscard]] bool contains(PropertyId id) const noexcept;
+    [[nodiscard]] std::size_t size() const noexcept;
+    [[nodiscard]] bool empty() const noexcept;
+
+    void set_explicit(PropertyId id, PropertyValue value);
+    bool unset(PropertyId id);
+    void clear() noexcept;
+
+    template <typename Visitor>
+    void for_each_explicit(Visitor&& visitor) const {
+        for (const auto& [id, entry] : entries_) {
+            static_cast<void>(id);
+            std::invoke(visitor, entry);
+        }
+    }
+
+private:
+    std::unordered_map<PropertyId, PropertyEntry, PropertyIdHash> entries_;
 };
 
 enum class BindingCoordinate : std::uint8_t {
@@ -171,30 +434,16 @@ struct Bindings {
 };
 
 struct Position {
+    Property<std::optional<bool>> default_control{std::nullopt};
     Property<std::int32_t> left{0};
     Property<std::int32_t> top{0};
-    Property<std::int32_t> right{0};
-    Property<std::int32_t> bottom{0};
+    Property<std::int32_t> width{0};
+    Property<std::int32_t> height{0};
+    Property<bool> visible{true};
+    Property<std::optional<std::int32_t>> tab_order{std::nullopt};
+    Property<std::optional<std::int32_t>> z_order{std::nullopt};
+    Property<std::optional<EnumerationValue>> collapse{std::nullopt};
     Bindings bindings;
-};
-
-enum class PictureFormat : std::uint8_t {
-    gif,
-    png,
-    jpeg,
-    bmp,
-};
-
-struct PictureAsset {
-    ObjectId id{};
-    std::string relative_path;
-    PictureFormat format = PictureFormat::gif;
-};
-
-struct PictureRef {
-    PictureAssetRef asset;
-
-    friend bool operator==(const PictureRef&, const PictureRef&) = default;
 };
 
 enum class AttributeType : std::uint8_t {
@@ -209,14 +458,16 @@ enum class AttributeType : std::uint8_t {
 struct Attribute {
     ObjectId id{};
     std::string name;
-    AttributeType type = AttributeType::string;
+    TypeDomainPatternValue type;
     Property<bool> main{false};
+    Property<bool> stored_data{false};
 };
 
 struct Command {
     ObjectId id{};
     std::string name;
-    Property<LocalizedText> title{LocalizedText{}};
+    std::string handler;
+    Property<LocalizedStringValue> title{LocalizedStringValue{}};
     Property<bool> changes_data{false};
     Property<std::optional<PictureRef>> picture{std::nullopt};
 };
@@ -263,183 +514,46 @@ enum class ControlKind : std::uint8_t {
 inline constexpr std::size_t control_kind_count =
     static_cast<std::size_t>(ControlKind::count);
 
-enum class Orientation : std::uint8_t {
-    horizontal,
-    vertical,
+template <ControlKind Kind>
+struct TypedControlPayload {
+    static constexpr ControlKind kind = Kind;
+    PropertySet properties;
 };
 
-enum class PictureScaleMode : std::uint8_t {
-    actual_size,
-    fit,
-    fill,
-};
-
-enum class ChartPresentation : std::uint8_t {
-    cartesian,
-    pie,
-    gauge,
-};
-
-struct PanelPayload {
-    static constexpr ControlKind kind = ControlKind::panel;
-    Property<Orientation> orientation{Orientation::horizontal};
-    Property<bool> show_tabs{false};
-};
-
-struct CommandBarPayload {
-    static constexpr ControlKind kind = ControlKind::command_bar;
-    Property<bool> auto_fill{true};
-    Property<bool> auxiliary{false};
-};
-
-struct ButtonPayload {
-    static constexpr ControlKind kind = ControlKind::button;
-    Property<std::optional<CommandRef>> command{std::nullopt};
-    Property<std::optional<PictureRef>> picture{std::nullopt};
-    Property<bool> default_button{false};
-};
-
-struct PictureDecorationPayload {
-    static constexpr ControlKind kind = ControlKind::picture_decoration;
-    Property<std::optional<PictureRef>> picture{std::nullopt};
-    Property<PictureScaleMode> scale_mode{PictureScaleMode::actual_size};
-};
-
-struct CheckBoxPayload {
-    static constexpr ControlKind kind = ControlKind::check_box;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> three_state{false};
-};
-
-struct ChoiceFieldPayload {
-    static constexpr ControlKind kind = ControlKind::choice_field;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<std::int32_t> list_height{0};
-    Property<bool> read_only{false};
-};
-
-struct RadioButtonPayload {
-    static constexpr ControlKind kind = ControlKind::radio_button;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<std::int32_t> columns{1};
-};
-
-struct InputFieldPayload {
-    static constexpr ControlKind kind = ControlKind::input_field;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> read_only{false};
-    Property<bool> multiline{false};
-    Property<bool> password_mode{false};
-};
-
-struct UsualGroupPayload {
-    static constexpr ControlKind kind = ControlKind::usual_group;
-    Property<bool> show_border{true};
-};
-
-struct SplitterPayload {
-    static constexpr ControlKind kind = ControlKind::splitter;
-    Property<Orientation> orientation{Orientation::vertical};
-    Property<std::int32_t> thickness{1};
-};
-
-struct ChartPayload {
-    static constexpr ControlKind kind = ControlKind::chart;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<ChartPresentation> presentation{ChartPresentation::cartesian};
-};
-
-struct PivotChartPayload {
-    static constexpr ControlKind kind = ControlKind::pivot_chart;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> show_totals{true};
-};
-
-struct GanttChartPayload {
-    static constexpr ControlKind kind = ControlKind::gantt_chart;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> show_time_scale{true};
-};
-
-struct DendrogramPayload {
-    static constexpr ControlKind kind = ControlKind::dendrogram;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<Orientation> orientation{Orientation::horizontal};
-};
-
-struct HtmlDocumentFieldPayload {
-    static constexpr ControlKind kind = ControlKind::html_document_field;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> allow_scripts{false};
-};
-
-struct ListBoxPayload {
-    static constexpr ControlKind kind = ControlKind::list_box;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> multiple_selection{false};
-};
-
-struct ProgressBarPayload {
-    static constexpr ControlKind kind = ControlKind::progress_bar;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<double> minimum{0.0};
-    Property<double> maximum{100.0};
-};
-
-struct TrackBarPayload {
-    static constexpr ControlKind kind = ControlKind::track_bar;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<double> minimum{0.0};
-    Property<double> maximum{100.0};
-    Property<double> step{1.0};
-};
-
-struct CalendarFieldPayload {
-    static constexpr ControlKind kind = ControlKind::calendar_field;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> show_current_date{true};
-};
-
-struct TextDocumentFieldPayload {
-    static constexpr ControlKind kind = ControlKind::text_document_field;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> read_only{false};
-};
-
-struct GeographicalSchemaFieldPayload {
-    static constexpr ControlKind kind = ControlKind::geographical_schema_field;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> show_legend{true};
-};
-
-struct GraphicalSchemaFieldPayload {
-    static constexpr ControlKind kind = ControlKind::graphical_schema_field;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> read_only{false};
-};
-
-struct TablePayload {
-    static constexpr ControlKind kind = ControlKind::table;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> allow_row_changes{true};
-};
-
-struct SpreadsheetDocumentFieldPayload {
-    static constexpr ControlKind kind = ControlKind::spreadsheet_document_field;
-    Property<std::optional<AttributeRef>> data_attribute{std::nullopt};
-    Property<bool> read_only{false};
-};
-
-struct LabelDecorationPayload {
-    static constexpr ControlKind kind = ControlKind::label_decoration;
-    Property<std::optional<PictureRef>> picture{std::nullopt};
-    Property<bool> hyperlink{false};
-};
-
-struct ActiveXControlPayload {
-    static constexpr ControlKind kind = ControlKind::active_x_control;
-    Property<std::string> class_id{std::string{}};
-};
+struct PanelPayload final : TypedControlPayload<ControlKind::panel> {};
+struct CommandBarPayload final : TypedControlPayload<ControlKind::command_bar> {};
+struct ButtonPayload final : TypedControlPayload<ControlKind::button> {};
+struct PictureDecorationPayload final
+    : TypedControlPayload<ControlKind::picture_decoration> {};
+struct CheckBoxPayload final : TypedControlPayload<ControlKind::check_box> {};
+struct ChoiceFieldPayload final : TypedControlPayload<ControlKind::choice_field> {};
+struct RadioButtonPayload final : TypedControlPayload<ControlKind::radio_button> {};
+struct InputFieldPayload final : TypedControlPayload<ControlKind::input_field> {};
+struct UsualGroupPayload final : TypedControlPayload<ControlKind::usual_group> {};
+struct SplitterPayload final : TypedControlPayload<ControlKind::splitter> {};
+struct ChartPayload final : TypedControlPayload<ControlKind::chart> {};
+struct PivotChartPayload final : TypedControlPayload<ControlKind::pivot_chart> {};
+struct GanttChartPayload final : TypedControlPayload<ControlKind::gantt_chart> {};
+struct DendrogramPayload final : TypedControlPayload<ControlKind::dendrogram> {};
+struct HtmlDocumentFieldPayload final
+    : TypedControlPayload<ControlKind::html_document_field> {};
+struct ListBoxPayload final : TypedControlPayload<ControlKind::list_box> {};
+struct ProgressBarPayload final : TypedControlPayload<ControlKind::progress_bar> {};
+struct TrackBarPayload final : TypedControlPayload<ControlKind::track_bar> {};
+struct CalendarFieldPayload final : TypedControlPayload<ControlKind::calendar_field> {};
+struct TextDocumentFieldPayload final
+    : TypedControlPayload<ControlKind::text_document_field> {};
+struct GeographicalSchemaFieldPayload final
+    : TypedControlPayload<ControlKind::geographical_schema_field> {};
+struct GraphicalSchemaFieldPayload final
+    : TypedControlPayload<ControlKind::graphical_schema_field> {};
+struct TablePayload final : TypedControlPayload<ControlKind::table> {};
+struct SpreadsheetDocumentFieldPayload final
+    : TypedControlPayload<ControlKind::spreadsheet_document_field> {};
+struct LabelDecorationPayload final
+    : TypedControlPayload<ControlKind::label_decoration> {};
+struct ActiveXControlPayload final
+    : TypedControlPayload<ControlKind::active_x_control> {};
 
 using ControlPayload = std::variant<
     PanelPayload,
@@ -472,32 +586,40 @@ using ControlPayload = std::variant<
 static_assert(std::variant_size_v<ControlPayload> == control_kind_count);
 
 [[nodiscard]] ControlKind payload_kind(const ControlPayload& payload) noexcept;
+[[nodiscard]] PropertySet& payload_properties(ControlPayload& payload) noexcept;
+[[nodiscard]] const PropertySet& payload_properties(const ControlPayload& payload) noexcept;
 
 struct ControlNode {
     ControlNode() = default;
     ControlNode(ObjectId object_id, std::string object_name, ControlPayload control_payload);
 
     [[nodiscard]] ControlKind kind() const noexcept;
+    [[nodiscard]] PropertySet& properties() noexcept;
+    [[nodiscard]] const PropertySet& properties() const noexcept;
 
     ObjectId id{};
     std::string name;
-    Property<LocalizedText> title{LocalizedText{}};
-    Property<bool> visible{true};
-    Property<bool> enabled{true};
+    std::optional<DataPath> data_path;
+    PropertySet extension_properties;
     Position position;
     std::vector<EventRef> events;
-    std::vector<ControlRef> children;
+    std::vector<ChildItemRef> children;
     ControlPayload payload{PanelPayload{}};
+};
+
+struct Page {
+    ObjectId id{};
+    std::string name;
+    Property<LocalizedStringValue> title{LocalizedStringValue{}};
+    std::vector<ChildItemRef> children;
 };
 
 struct Form {
     ObjectId id{};
     std::string name;
-    Property<LocalizedText> title{LocalizedText{}};
-    Property<std::int32_t> width{0};
-    Property<std::int32_t> height{0};
+    PropertySet properties;
     std::vector<EventRef> events;
-    std::vector<ControlRef> children;
+    std::vector<ChildItemRef> children;
 };
 
 struct FormModule {
@@ -506,6 +628,7 @@ struct FormModule {
 
 struct ObjectCollections {
     std::vector<ControlNode> controls;
+    std::vector<Page> pages;
     std::vector<Attribute> attributes;
     std::vector<Command> commands;
     std::vector<Event> events;
@@ -514,6 +637,7 @@ struct ObjectCollections {
 enum class ObjectCategory : std::uint8_t {
     form,
     control,
+    page,
     attribute,
     command,
     event,
@@ -527,6 +651,8 @@ enum class InvariantCode : std::uint8_t {
     cycle,
     illegal_children,
     multiple_parents,
+    orphan,
+    invalid_property,
 };
 
 struct InvariantViolation {
@@ -563,6 +689,7 @@ public:
     using ObjectView = std::variant<
         std::reference_wrapper<const Form>,
         std::reference_wrapper<const ControlNode>,
+        std::reference_wrapper<const Page>,
         std::reference_wrapper<const Attribute>,
         std::reference_wrapper<const Command>,
         std::reference_wrapper<const Event>,
@@ -591,12 +718,14 @@ public:
     void set_module(FormModule module);
     void add_asset(PictureAsset asset);
     void add_control(ControlNode control);
+    void add_page(Page page);
     void add_attribute(Attribute attribute);
     void add_command(Command command);
     void add_event(Event event);
 
     [[nodiscard]] std::optional<ObjectView> find(ObjectId id) const;
     [[nodiscard]] const ControlNode* find_control(ObjectId id) const noexcept;
+    [[nodiscard]] const Page* find_page(ObjectId id) const noexcept;
     [[nodiscard]] const Attribute* find_attribute(ObjectId id) const noexcept;
     [[nodiscard]] const Command* find_command(ObjectId id) const noexcept;
     [[nodiscard]] const Event* find_event(ObjectId id) const noexcept;

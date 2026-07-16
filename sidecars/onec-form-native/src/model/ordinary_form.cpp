@@ -19,7 +19,99 @@ void add_violation(
     report.violations.push_back({code, source, target, std::move(message)});
 }
 
+bool property_value_matches(
+    metamodel::ValueKind expected,
+    const PropertyValue& value
+) noexcept {
+    return std::visit(
+        [expected](const auto& typed_value) {
+            using Value = std::remove_cvref_t<decltype(typed_value)>;
+            if (expected == metamodel::ValueKind::variant) {
+                return true;
+            }
+            if constexpr (std::is_same_v<Value, UndefinedValue>) {
+                return expected == metamodel::ValueKind::date_time ||
+                       expected == metamodel::ValueKind::object;
+            } else if constexpr (std::is_same_v<Value, bool>) {
+                return expected == metamodel::ValueKind::boolean;
+            } else if constexpr (
+                std::is_same_v<Value, std::int64_t> ||
+                std::is_same_v<Value, DecimalValue>) {
+                return expected == metamodel::ValueKind::number;
+            } else if constexpr (
+                std::is_same_v<Value, std::string> ||
+                std::is_same_v<Value, LocalizedStringValue> ||
+                std::is_same_v<Value, FormattedStringValue>) {
+                return expected == metamodel::ValueKind::string;
+            } else if constexpr (std::is_same_v<Value, DateValue>) {
+                return expected == metamodel::ValueKind::date_time;
+            } else if constexpr (std::is_same_v<Value, UuidValue>) {
+                return expected == metamodel::ValueKind::identifier;
+            } else if constexpr (std::is_same_v<Value, CompositeIdValue>) {
+                return expected == metamodel::ValueKind::identifier ||
+                       expected == metamodel::ValueKind::object;
+            } else if constexpr (std::is_same_v<Value, TypeDomainPatternValue>) {
+                return expected == metamodel::ValueKind::object;
+            } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
+                return expected == metamodel::ValueKind::enumeration;
+            } else if constexpr (std::is_same_v<Value, ColorValue>) {
+                return expected == metamodel::ValueKind::color;
+            } else if constexpr (std::is_same_v<Value, FontValue>) {
+                return expected == metamodel::ValueKind::font;
+            } else if constexpr (std::is_same_v<Value, PictureRef>) {
+                return expected == metamodel::ValueKind::picture;
+            } else if constexpr (
+                std::is_same_v<Value, ControlRef> ||
+                std::is_same_v<Value, AttributeRef> ||
+                std::is_same_v<Value, CommandRef>) {
+                return expected == metamodel::ValueKind::identifier ||
+                       expected == metamodel::ValueKind::object;
+            }
+            return false;
+        },
+        value);
+}
+
 }  // namespace
+
+const PropertyEntry* PropertySet::find(PropertyId id) const noexcept {
+    const auto found = entries_.find(id);
+    return found == entries_.end() ? nullptr : &found->second;
+}
+
+PropertyEntry* PropertySet::find(PropertyId id) noexcept {
+    const auto found = entries_.find(id);
+    return found == entries_.end() ? nullptr : &found->second;
+}
+
+bool PropertySet::contains(PropertyId id) const noexcept {
+    return entries_.contains(id);
+}
+
+std::size_t PropertySet::size() const noexcept {
+    return entries_.size();
+}
+
+bool PropertySet::empty() const noexcept {
+    return entries_.empty();
+}
+
+void PropertySet::set_explicit(PropertyId id, PropertyValue value) {
+    if (!id) {
+        throw std::invalid_argument("ordinary-form property ID must be nonzero");
+    }
+    entries_.insert_or_assign(
+        id,
+        PropertyEntry{id, PropertyState::explicit_value, std::move(value)});
+}
+
+bool PropertySet::unset(PropertyId id) {
+    return entries_.erase(id) != 0;
+}
+
+void PropertySet::clear() noexcept {
+    entries_.clear();
+}
 
 ControlKind payload_kind(const ControlPayload& payload) noexcept {
     return std::visit(
@@ -27,6 +119,16 @@ ControlKind payload_kind(const ControlPayload& payload) noexcept {
             using Payload = std::remove_cvref_t<decltype(value)>;
             return Payload::kind;
         },
+        payload);
+}
+
+PropertySet& payload_properties(ControlPayload& payload) noexcept {
+    return std::visit([](auto& value) -> PropertySet& { return value.properties; }, payload);
+}
+
+const PropertySet& payload_properties(const ControlPayload& payload) noexcept {
+    return std::visit(
+        [](const auto& value) -> const PropertySet& { return value.properties; },
         payload);
 }
 
@@ -39,6 +141,14 @@ ControlNode::ControlNode(
 
 ControlKind ControlNode::kind() const noexcept {
     return payload_kind(payload);
+}
+
+PropertySet& ControlNode::properties() noexcept {
+    return payload_properties(payload);
+}
+
+const PropertySet& ControlNode::properties() const noexcept {
+    return payload_properties(payload);
 }
 
 bool ValidationReport::has(InvariantCode code) const noexcept {
@@ -85,6 +195,12 @@ void OrdinaryFormDocument::add_control(ControlNode control) {
     index_first(collections_.controls.back().id, ObjectCategory::control, index);
 }
 
+void OrdinaryFormDocument::add_page(Page page) {
+    const std::size_t index = collections_.pages.size();
+    collections_.pages.push_back(std::move(page));
+    index_first(collections_.pages.back().id, ObjectCategory::page, index);
+}
+
 void OrdinaryFormDocument::add_attribute(Attribute attribute) {
     const std::size_t index = collections_.attributes.size();
     collections_.attributes.push_back(std::move(attribute));
@@ -115,6 +231,8 @@ std::optional<OrdinaryFormDocument::ObjectView> OrdinaryFormDocument::find(Objec
             return ObjectView{std::cref(form_)};
         case ObjectCategory::control:
             return ObjectView{std::cref(collections_.controls.at(location.index))};
+        case ObjectCategory::page:
+            return ObjectView{std::cref(collections_.pages.at(location.index))};
         case ObjectCategory::attribute:
             return ObjectView{std::cref(collections_.attributes.at(location.index))};
         case ObjectCategory::command:
@@ -133,6 +251,14 @@ const ControlNode* OrdinaryFormDocument::find_control(ObjectId id) const noexcep
         return nullptr;
     }
     return &collections_.controls[found->second.index];
+}
+
+const Page* OrdinaryFormDocument::find_page(ObjectId id) const noexcept {
+    const auto found = index_.find(id);
+    if (found == index_.end() || found->second.category != ObjectCategory::page) {
+        return nullptr;
+    }
+    return &collections_.pages[found->second.index];
 }
 
 const Attribute* OrdinaryFormDocument::find_attribute(ObjectId id) const noexcept {
@@ -199,6 +325,9 @@ ValidationReport OrdinaryFormDocument::validate() const {
     for (const auto& control : collections_.controls) {
         record_id(control.id, ObjectCategory::control);
     }
+    for (const auto& page : collections_.pages) {
+        record_id(page.id, ObjectCategory::page);
+    }
     for (const auto& attribute : collections_.attributes) {
         record_id(attribute.id, ObjectCategory::attribute);
     }
@@ -220,6 +349,16 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 source,
                 reference.id(),
                 "control reference does not resolve to a control");
+        }
+    };
+    const auto require_page = [&](ObjectId source, PageRef reference) {
+        if (find_page(reference.id()) == nullptr) {
+            add_violation(
+                report,
+                InvariantCode::dangling_reference,
+                source,
+                reference.id(),
+                "page reference does not resolve to a page");
         }
     };
     const auto require_attribute = [&](ObjectId source, AttributeRef reference) {
@@ -263,12 +402,94 @@ ValidationReport OrdinaryFormDocument::validate() const {
         }
     };
 
-    for (const ControlRef child : form_.children) {
-        require_control(form_.id, child);
+    const auto validate_property_value = [&](ObjectId source, const PropertyValue& value) {
+        std::visit(
+            [&](const auto& typed_value) {
+                using Value = std::remove_cvref_t<decltype(typed_value)>;
+                if constexpr (std::is_same_v<Value, ControlRef>) {
+                    require_control(source, typed_value);
+                } else if constexpr (std::is_same_v<Value, AttributeRef>) {
+                    require_attribute(source, typed_value);
+                } else if constexpr (std::is_same_v<Value, CommandRef>) {
+                    require_command(source, typed_value);
+                } else if constexpr (std::is_same_v<Value, PictureRef>) {
+                    require_picture(source, typed_value);
+                }
+            },
+            value);
+    };
+
+    const auto validate_property_set = [&]<typename Resolve>(
+                                           ObjectId source,
+                                           const PropertySet& properties,
+                                           Resolve&& resolve,
+                                           auto surface_is_allowed) {
+        properties.for_each_explicit([&](const PropertyEntry& property) {
+            if (!property.id || property.state != PropertyState::explicit_value) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    source,
+                    {},
+                    "stored property entries must have an ID and explicit state");
+            }
+            const metamodel::PropertyDescriptor* descriptor = resolve(property.id);
+            if (descriptor == nullptr || !surface_is_allowed(*descriptor)) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    source,
+                    {},
+                    "property is not declared for this ordinary-form object surface");
+            } else if (!property_value_matches(descriptor->value_kind, property.value)) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    source,
+                    {},
+                    "property value does not match its metamodel value kind");
+            }
+            validate_property_value(source, property.value);
+        });
+    };
+
+    const auto child_id = [](const ChildItemRef& child) {
+        return std::visit([](const auto& reference) { return reference.id(); }, child);
+    };
+    const auto require_child = [&](ObjectId source, const ChildItemRef& child) {
+        std::visit(
+            [&](const auto& reference) {
+                using ReferenceType = std::remove_cvref_t<decltype(reference)>;
+                if constexpr (std::is_same_v<ReferenceType, ControlRef>) {
+                    require_control(source, reference);
+                } else {
+                    require_page(source, reference);
+                }
+            },
+            child);
+    };
+
+    for (const ChildItemRef& child : form_.children) {
+        require_child(form_.id, child);
+        if (std::holds_alternative<PageRef>(child)) {
+            add_violation(
+                report,
+                InvariantCode::illegal_children,
+                form_.id,
+                child_id(child),
+                "form root accepts controls, not panel pages");
+        }
     }
     for (const EventRef event : form_.events) {
         require_event(form_.id, event);
     }
+    validate_property_set(
+        form_.id,
+        form_.properties,
+        [](PropertyId id) { return metamodel::find_form_property(id); },
+        [](const metamodel::PropertyDescriptor& descriptor) {
+            return descriptor.surface == metamodel::PropertySurface::form;
+        });
 
     for (const auto& command : collections_.commands) {
         if (const auto& picture = command.picture.value(); picture.has_value()) {
@@ -297,38 +518,57 @@ ValidationReport OrdinaryFormDocument::validate() const {
     }
 
     std::unordered_map<ObjectId, std::size_t, ObjectIdHash> parent_counts;
-    const auto register_parent = [&](ObjectId source, ControlRef child) {
-        if (find_control(child.id()) == nullptr) {
+    const auto register_parent = [&](ObjectId source, const ChildItemRef& child) {
+        const ObjectId id = child_id(child);
+        const bool resolves = std::visit(
+            [&](const auto& reference) {
+                using ReferenceType = std::remove_cvref_t<decltype(reference)>;
+                if constexpr (std::is_same_v<ReferenceType, ControlRef>) {
+                    return find_control(reference.id()) != nullptr;
+                } else {
+                    return find_page(reference.id()) != nullptr;
+                }
+            },
+            child);
+        if (!resolves) {
             return;
         }
-        const std::size_t count = ++parent_counts[child.id()];
+        const std::size_t count = ++parent_counts[id];
         if (count > 1) {
             add_violation(
                 report,
                 InvariantCode::multiple_parents,
                 source,
-                child.id(),
-                "control appears in more than one authoritative child sequence");
+                id,
+                "child item appears in more than one authoritative child sequence");
         }
     };
-    for (const ControlRef child : form_.children) {
+    for (const ChildItemRef& child : form_.children) {
         register_parent(form_.id, child);
     }
 
     for (const auto& control : collections_.controls) {
         const auto& descriptor = metamodel::descriptor_for(control.kind());
-        if (!control.children.empty() &&
-            descriptor.child_policy == metamodel::ChildPolicy::forbidden) {
+        if (!control.children.empty() && descriptor.child_policy == metamodel::ChildPolicy::forbidden) {
             add_violation(
                 report,
                 InvariantCode::illegal_children,
                 control.id,
-                control.children.front().id(),
+                child_id(control.children.front()),
                 "control kind does not permit child controls");
         }
 
-        for (const ControlRef child : control.children) {
-            require_control(control.id, child);
+        for (const ChildItemRef& child : control.children) {
+            require_child(control.id, child);
+            if (descriptor.child_policy == metamodel::ChildPolicy::ordered_controls &&
+                std::holds_alternative<PageRef>(child)) {
+                add_violation(
+                    report,
+                    InvariantCode::illegal_children,
+                    control.id,
+                    child_id(child),
+                    "control kind accepts controls but not panel pages");
+            }
             register_parent(control.id, child);
         }
         for (const EventRef event : control.events) {
@@ -339,27 +579,60 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 require_control(control.id, *binding.target);
             }
         }
+        if (control.data_path.has_value()) {
+            require_attribute(control.id, control.data_path->attribute);
+        }
+        validate_property_set(
+            control.id,
+            control.extension_properties,
+            [&](PropertyId id) { return metamodel::find_property(control.kind(), id); },
+            [](const metamodel::PropertyDescriptor& descriptor) {
+                return descriptor.surface == metamodel::PropertySurface::control_extension &&
+                       descriptor.api_name != "Name" && descriptor.api_name != "Data";
+            });
+        validate_property_set(
+            control.id,
+            control.properties(),
+            [&](PropertyId id) { return metamodel::find_property(control.kind(), id); },
+            [](const metamodel::PropertyDescriptor& descriptor) {
+                return descriptor.surface == metamodel::PropertySurface::control_payload;
+            });
+    }
 
-        std::visit(
-            [&](const auto& payload) {
-                if constexpr (requires { payload.data_attribute; }) {
-                    if (const auto& attribute = payload.data_attribute.value();
-                        attribute.has_value()) {
-                        require_attribute(control.id, *attribute);
-                    }
-                }
-                if constexpr (requires { payload.command; }) {
-                    if (const auto& command = payload.command.value(); command.has_value()) {
-                        require_command(control.id, *command);
-                    }
-                }
-                if constexpr (requires { payload.picture; }) {
-                    if (const auto& picture = payload.picture.value(); picture.has_value()) {
-                        require_picture(control.id, *picture);
-                    }
-                }
-            },
-            control.payload);
+    for (const auto& page : collections_.pages) {
+        for (const ChildItemRef& child : page.children) {
+            require_child(page.id, child);
+            if (std::holds_alternative<PageRef>(child)) {
+                add_violation(
+                    report,
+                    InvariantCode::illegal_children,
+                    page.id,
+                    child_id(child),
+                    "panel page accepts controls but not nested pages");
+            }
+            register_parent(page.id, child);
+        }
+    }
+
+    for (const auto& control : collections_.controls) {
+        if (!parent_counts.contains(control.id)) {
+            add_violation(
+                report,
+                InvariantCode::orphan,
+                form_.id,
+                control.id,
+                "control is not present in the authoritative child tree");
+        }
+    }
+    for (const auto& page : collections_.pages) {
+        if (!parent_counts.contains(page.id)) {
+            add_violation(
+                report,
+                InvariantCode::orphan,
+                form_.id,
+                page.id,
+                "panel page is not present in the authoritative child tree");
+        }
     }
 
     enum class VisitState : std::uint8_t {
@@ -367,33 +640,47 @@ ValidationReport OrdinaryFormDocument::validate() const {
         complete,
     };
     std::unordered_map<ObjectId, VisitState, ObjectIdHash> visit_states;
-    std::function<void(const ControlNode&)> visit = [&](const ControlNode& control) {
-        visit_states[control.id] = VisitState::visiting;
-        for (const ControlRef child_ref : control.children) {
-            const ControlNode* child = find_control(child_ref.id());
-            if (child == nullptr) {
-                continue;
-            }
-            const auto state = visit_states.find(child->id);
+    std::function<void(ObjectId, const std::vector<ChildItemRef>&)> visit =
+        [&](ObjectId source, const std::vector<ChildItemRef>& children) {
+        visit_states[source] = VisitState::visiting;
+        for (const ChildItemRef& child_ref : children) {
+            const ObjectId id = child_id(child_ref);
+            const auto state = visit_states.find(id);
             if (state != visit_states.end() && state->second == VisitState::visiting) {
                 add_violation(
                     report,
                     InvariantCode::cycle,
-                    control.id,
-                    child->id,
-                    "control child graph contains a cycle");
+                    source,
+                    id,
+                    "form child graph contains a cycle");
                 continue;
             }
             if (state == visit_states.end()) {
-                visit(*child);
+                std::visit(
+                    [&](const auto& reference) {
+                        using ReferenceType = std::remove_cvref_t<decltype(reference)>;
+                        if constexpr (std::is_same_v<ReferenceType, ControlRef>) {
+                            if (const ControlNode* child = find_control(reference.id())) {
+                                visit(child->id, child->children);
+                            }
+                        } else if (const Page* child = find_page(reference.id())) {
+                            visit(child->id, child->children);
+                        }
+                    },
+                    child_ref);
             }
         }
-        visit_states[control.id] = VisitState::complete;
+        visit_states[source] = VisitState::complete;
     };
 
     for (const auto& control : collections_.controls) {
         if (!visit_states.contains(control.id)) {
-            visit(control);
+            visit(control.id, control.children);
+        }
+    }
+    for (const auto& page : collections_.pages) {
+        if (!visit_states.contains(page.id)) {
+            visit(page.id, page.children);
         }
     }
 
@@ -412,6 +699,9 @@ void OrdinaryFormDocument::rebuild_index() {
     index_first(form_.id, ObjectCategory::form, 0);
     for (std::size_t index = 0; index < collections_.controls.size(); ++index) {
         index_first(collections_.controls[index].id, ObjectCategory::control, index);
+    }
+    for (std::size_t index = 0; index < collections_.pages.size(); ++index) {
+        index_first(collections_.pages[index].id, ObjectCategory::page, index);
     }
     for (std::size_t index = 0; index < collections_.attributes.size(); ++index) {
         index_first(collections_.attributes[index].id, ObjectCategory::attribute, index);

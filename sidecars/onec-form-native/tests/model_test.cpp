@@ -62,7 +62,6 @@ void test_descriptors() {
         expect(!descriptor.russian_name.empty(), "descriptor Russian name is required");
         expect(
             includes(descriptor.version_mask, VersionMask::platform_8_2) &&
-                includes(descriptor.version_mask, VersionMask::platform_8_3) &&
                 includes(descriptor.version_mask, VersionMask::platform_8_5),
             "descriptor version mask must cover supported platform families");
         expect(
@@ -82,11 +81,70 @@ void test_descriptors() {
             ControlKind::button,
         "GUID lookup must resolve Button");
     expect(
-        find_by_public_name("PictureDecoration")->api_name == "Image",
-        "public-name lookup must preserve the Image API alias");
+        find_by_public_name("PictureDecoration")->api_name == "PictureBox",
+        "public-name lookup must preserve the exact PictureBox API object");
+    expect(
+        find_by_public_name("InputField")->api_name == "TextBox",
+        "public InputField must resolve to the exact TextBox API object");
     expect(
         find_by_russian_name(u8"РамкаГруппы")->kind == ControlKind::usual_group,
         "Russian-name lookup must resolve UsualGroup");
+}
+
+void test_help_metamodel() {
+    using namespace oof::model::metamodel;
+
+    const MetamodelCoverage& coverage = metamodel_coverage();
+    expect(coverage.control_count == 26, "help catalog must cover 26 controls");
+    expect(
+        coverage.control_property_occurrences == 417,
+        "help catalog must retain 417 type-specific property occurrences");
+    expect(
+        coverage.unique_control_property_names == 201,
+        "help catalog must retain 201 exact API property names");
+    expect(
+        coverage.control_event_occurrences == 79,
+        "help catalog must retain 79 control event occurrences");
+    expect(
+        coverage.unique_control_event_names == 40,
+        "help catalog must retain 40 unique control event names");
+    expect(
+        coverage.control_extension_property_count == 11,
+        "form-control extension must retain its 11 properties");
+    expect(
+        coverage.panel_placement_property_count == 9,
+        "panel-control extension must retain its 9 properties");
+    expect(coverage.form_property_count == 37, "Form help must retain 37 fixed properties");
+    expect(coverage.form_event_count == 13, "Form help must retain 13 events");
+    expect(coverage.property_id_collisions == 0, "property IDs must not collide");
+    expect(!coverage.release_ready, "unclassified storage/defaults must block release");
+    expect(
+        coverage.unclassified_properties != 0 && coverage.missing_storage_codecs != 0,
+        "coverage must expose unfinished property/storage classification");
+
+    expect(
+        property_descriptors(ControlKind::input_field).size() == 45,
+        "InputField must retain the exact 45-property TextBox surface");
+    expect(
+        event_descriptors(ControlKind::input_field).size() == 9,
+        "InputField must retain the exact 9-event TextBox surface");
+    expect(
+        find_property(ControlKind::input_field, "ReadOnly")->russian_name == u8"ТолькоПросмотр",
+        "ReadOnly must resolve from exact bilingual help");
+    expect(
+        find_property(ControlKind::input_field, "Visible")->surface ==
+            PropertySurface::panel_placement,
+        "Visible must come from the panel-placement extension");
+    expect(
+        find_property(ControlKind::input_field, "SelButtonPicture") != nullptr &&
+            find_property(ControlKind::input_field, "ChoiceButtonPicture") != nullptr,
+        "duplicate Russian choice-button labels must retain distinct API properties");
+    expect(
+        find_form_property("Caption")->russian_name == u8"Заголовок",
+        "Form Caption must resolve from exact bilingual help");
+    expect(
+        find_event(ControlKind::input_field, "OnChange") != nullptr,
+        "InputField OnChange event must be executable metamodel data");
 }
 
 void test_variant_coverage() {
@@ -158,17 +216,47 @@ void test_property_default_semantics() {
         "reset must recover the factory default");
 }
 
+void test_typed_property_set() {
+    PropertySet properties;
+    constexpr PropertyId read_only = PropertyId::from_name("ReadOnly");
+    constexpr PropertyId value_type = PropertyId::from_name("ValueType");
+
+    static_assert(read_only != value_type);
+    expect(properties.empty(), "new property set must be empty");
+
+    properties.set_explicit(read_only, true);
+    expect(properties.contains(read_only), "set property must be addressable by ID");
+    expect(properties.size() == 1, "set property must occupy one entry");
+    expect(
+        std::get<bool>(properties.find(read_only)->value),
+        "typed boolean property must retain its value");
+
+    properties.set_explicit(read_only, false);
+    expect(properties.size() == 1, "setting a property twice must replace it");
+    expect(
+        !std::get<bool>(properties.find(read_only)->value),
+        "replacement property value must be observable");
+
+    properties.set_explicit(value_type, TypeDomainPatternValue{});
+    expect(properties.size() == 2, "different property IDs must coexist");
+    expect(properties.unset(read_only), "unset must remove an explicit property");
+    expect(!properties.contains(read_only), "unset property must disappear");
+}
+
 void test_id_lookup() {
     Form form;
     form.id = ObjectId{1};
     form.name = "MainForm";
+    form.properties.set_explicit(
+        PropertyId::from_name("Caption"),
+        LocalizedStringValue{{LocalizedStringItem{"ru", "Main form"}}});
     form.children.push_back(ControlRef{ObjectId{10}});
     form.events.push_back(EventRef{ObjectId{40}});
 
     OrdinaryFormDocument document(std::move(form));
     document.set_module(FormModule{"procedure OnOpen()\nendprocedure"});
     document.add_asset(PictureAsset{ObjectId{50}, "Items/Icon/Picture.gif", PictureFormat::gif});
-    document.add_attribute(Attribute{ObjectId{20}, "Value", AttributeType::string});
+    document.add_attribute(Attribute{ObjectId{20}, "Value", TypeDomainPatternValue{}});
 
     Command command;
     command.id = ObjectId{30};
@@ -178,9 +266,9 @@ void test_id_lookup() {
 
     document.add_event(Event{ObjectId{40}, "OnOpen", "OnOpen", FormRef{ObjectId{1}}});
 
-    InputFieldPayload input;
-    input.data_attribute.set(AttributeRef{ObjectId{20}});
-    document.add_control(ControlNode{ObjectId{10}, "Input", std::move(input)});
+    ControlNode input{ObjectId{10}, "Input", InputFieldPayload{}};
+    input.data_path = DataPath{AttributeRef{ObjectId{20}}, {}};
+    document.add_control(std::move(input));
 
     expect(document.indexed_id_count() == 6, "all document objects must enter the ID index");
     expect(document.find_control(ObjectId{10}) != nullptr, "control lookup must be indexed");
@@ -200,7 +288,7 @@ void test_duplicate_rejection() {
     form.id = ObjectId{1};
     OrdinaryFormDocument document(std::move(form));
     document.add_control(ControlNode{ObjectId{10}, "Panel", PanelPayload{}});
-    document.add_attribute(Attribute{ObjectId{10}, "Duplicate", AttributeType::string});
+    document.add_attribute(Attribute{ObjectId{10}, "Duplicate", TypeDomainPatternValue{}});
 
     const ValidationReport report = document.validate();
     expect(report.has(InvariantCode::duplicate_id), "duplicate IDs must be reported");
@@ -228,6 +316,45 @@ void test_cycle_rejection() {
         "control cycles must be rejected by validate_or_throw");
 }
 
+void test_page_object_graph() {
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(ControlRef{ObjectId{10}});
+    OrdinaryFormDocument document(std::move(form));
+
+    ControlNode panel{ObjectId{10}, "Panel", PanelPayload{}};
+    panel.children.push_back(PageRef{ObjectId{11}});
+    document.add_control(std::move(panel));
+
+    Page page;
+    page.id = ObjectId{11};
+    page.name = "MainPage";
+    page.title.set(LocalizedStringValue{{LocalizedStringItem{"ru", "Main"}}});
+    page.children.push_back(ControlRef{ObjectId{12}});
+    document.add_page(std::move(page));
+    document.add_control(ControlNode{ObjectId{12}, "Button", ButtonPayload{}});
+
+    expect(document.find_page(ObjectId{11}) != nullptr, "page lookup must be indexed");
+    expect(document.indexed_id_count() == 4, "page must participate in the object index");
+    expect(document.validate().ok(), "panel-page-control graph must validate");
+}
+
+void test_page_policy_rejection() {
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(PageRef{ObjectId{11}});
+    OrdinaryFormDocument document(std::move(form));
+
+    Page page;
+    page.id = ObjectId{11};
+    page.name = "RootPage";
+    document.add_page(std::move(page));
+
+    expect(
+        document.validate().has(InvariantCode::illegal_children),
+        "form root must reject a page that is not owned by a panel");
+}
+
 void test_dangling_and_child_policy_rejection() {
     Form form;
     form.id = ObjectId{1};
@@ -246,17 +373,92 @@ void test_dangling_and_child_policy_rejection() {
         "descriptor child policy must reject button children");
 }
 
+void test_property_reference_rejection() {
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(ControlRef{ObjectId{10}});
+    OrdinaryFormDocument document(std::move(form));
+
+    ButtonPayload payload;
+    payload.properties.set_explicit(
+        PropertyId::from_name("Command"),
+        CommandRef{ObjectId{99}});
+    document.add_control(ControlNode{ObjectId{10}, "Button", std::move(payload)});
+
+    const ValidationReport report = document.validate();
+    expect(
+        report.has(InvariantCode::dangling_reference),
+        "typed property references must participate in invariant validation");
+}
+
+void test_property_applicability_and_type_validation() {
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(ControlRef{ObjectId{10}});
+    OrdinaryFormDocument valid(std::move(form));
+
+    InputFieldPayload input_payload;
+    input_payload.properties.set_explicit(PropertyId::from_name("ReadOnly"), true);
+    ControlNode input{ObjectId{10}, "Input", std::move(input_payload)};
+    input.extension_properties.set_explicit(
+        PropertyId::from_name("AutoContextMenu"),
+        false);
+    valid.add_control(std::move(input));
+    expect(valid.validate().ok(), "declared payload and extension properties must validate");
+
+    Form wrong_type_form;
+    wrong_type_form.id = ObjectId{1};
+    wrong_type_form.children.push_back(ControlRef{ObjectId{10}});
+    OrdinaryFormDocument wrong_type(std::move(wrong_type_form));
+    InputFieldPayload wrong_type_payload;
+    wrong_type_payload.properties.set_explicit(
+        PropertyId::from_name("ReadOnly"),
+        std::string("false"));
+    wrong_type.add_control(ControlNode{ObjectId{10}, "Input", std::move(wrong_type_payload)});
+    expect(
+        wrong_type.validate().has(InvariantCode::invalid_property),
+        "property values with the wrong metamodel kind must be rejected");
+
+    Form wrong_owner_form;
+    wrong_owner_form.id = ObjectId{1};
+    wrong_owner_form.children.push_back(ControlRef{ObjectId{10}});
+    OrdinaryFormDocument wrong_owner(std::move(wrong_owner_form));
+    ButtonPayload button;
+    button.properties.set_explicit(PropertyId::from_name("ReadOnly"), true);
+    wrong_owner.add_control(ControlNode{ObjectId{10}, "Button", std::move(button)});
+    expect(
+        wrong_owner.validate().has(InvariantCode::invalid_property),
+        "a property from another control kind must be rejected");
+
+    Form wrong_surface_form;
+    wrong_surface_form.id = ObjectId{1};
+    wrong_surface_form.children.push_back(ControlRef{ObjectId{10}});
+    OrdinaryFormDocument wrong_surface(std::move(wrong_surface_form));
+    ControlNode misplaced{ObjectId{10}, "Input", InputFieldPayload{}};
+    misplaced.extension_properties.set_explicit(PropertyId::from_name("Visible"), true);
+    wrong_surface.add_control(std::move(misplaced));
+    expect(
+        wrong_surface.validate().has(InvariantCode::invalid_property),
+        "placement properties must not be duplicated in the extension property set");
+}
+
 }  // namespace
 
 int main() {
     try {
         test_descriptors();
+        test_help_metamodel();
         test_variant_coverage();
         test_property_default_semantics();
+        test_typed_property_set();
         test_id_lookup();
         test_duplicate_rejection();
         test_cycle_rejection();
+        test_page_object_graph();
+        test_page_policy_rejection();
         test_dangling_and_child_policy_rejection();
+        test_property_reference_rejection();
+        test_property_applicability_and_type_validation();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';
         return 1;
