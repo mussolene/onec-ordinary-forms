@@ -146,6 +146,92 @@ void test_type_domain() {
         "duplicate date flags must be rejected");
 }
 
+void test_style_reference() {
+    const model::StyleReference none;
+    expect(codec::encode_style_reference(none) == "{\"none\"}", "empty style ref must encode");
+    expect(codec::decode_style_reference("{\"none\"}") == none, "empty style ref must decode");
+
+    const model::StyleReference qualified = model::QualifiedName{"ui:Picture"};
+    expect(
+        codec::encode_style_reference(qualified) == "{\"QName\",\"ui:Picture\"}",
+        "qualified style ref must match the platform fixture");
+    expect(
+        codec::decode_style_reference(codec::encode_style_reference(qualified)) == qualified,
+        "qualified style ref must round-trip");
+
+    const model::StyleReference composite = model::CompositeIdValue{
+        42,
+        model::UuidValue{"01234567-89ab-cdef-0123-456789abcdef"},
+        false,
+    };
+    expect(
+        codec::decode_style_reference(codec::encode_style_reference(composite)) == composite,
+        "CompositeID style ref must round-trip");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_style_reference("{\"Other\"}")); },
+        "unknown style ref kind must be rejected");
+}
+
+void test_color() {
+    model::ColorValue absolute;
+    absolute.kind = model::ColorKind::absolute;
+    absolute.red = 0x12;
+    absolute.green = 0x34;
+    absolute.blue = 0x56;
+    expect(
+        codec::encode_color(absolute) == "{3,0,{18,52,86,255},{\"none\"}}",
+        "absolute color must match the proven platform fixture");
+    expect(
+        codec::decode_color(codec::encode_color(absolute)) == absolute,
+        "absolute color must round-trip");
+
+    model::ColorValue style;
+    style.kind = model::ColorKind::style_reference;
+    style.style = model::QualifiedName{"ui:TextColor"};
+    expect(codec::decode_color(codec::encode_color(style)) == style, "style color must round-trip");
+
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_color("{2,0,{0,0,0,255},{\"none\"}}")); },
+        "unknown color field count must be rejected");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_color("{3,0,{256,0,0,255},{\"none\"}}")); },
+        "out-of-range color channel must be rejected");
+    expect_rejected(
+        [] {
+            static_cast<void>(
+                codec::decode_color("{3,2,{0,0,0,255},{\"none\"}}"));
+        },
+        "style color without a reference must be rejected");
+}
+
+void test_font() {
+    model::FontValue font;
+    font.kind = model::FontKind::absolute;
+    font.mask = 15;
+    font.face_name = "Arial";
+    font.height = 10.0;
+    font.bold = true;
+    expect(
+        codec::encode_font(font) == "{6,0,15,{\"none\"},\"Arial\",10,{1,0,0,0}}",
+        "absolute font must match the proven platform fixture");
+    expect(codec::decode_font(codec::encode_font(font)) == font, "font must round-trip");
+
+    model::FontValue style;
+    style.kind = model::FontKind::style_reference;
+    style.style = model::QualifiedName{"ui:TextFont"};
+    expect(codec::decode_font(codec::encode_font(style)) == style, "style font must round-trip");
+
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_font("{5,3,0,{\"none\"},\"\",0,{0,0,0,0}}")); },
+        "unknown font field count must be rejected");
+    expect_rejected(
+        [] {
+            static_cast<void>(
+                codec::decode_font("{6,2,0,{\"none\"},\"\",0,{0,0,0,0}}"));
+        },
+        "style font without a reference must be rejected");
+}
+
 }  // namespace
 
 int main() {
@@ -154,6 +240,9 @@ int main() {
         test_formatted_string();
         test_composite_id();
         test_type_domain();
+        test_style_reference();
+        test_color();
+        test_font();
     } catch (const std::exception& error) {
         std::cerr << "value codec tests: FAIL: " << error.what() << '\n';
         return 1;

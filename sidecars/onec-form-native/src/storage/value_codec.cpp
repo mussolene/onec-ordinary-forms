@@ -3,13 +3,17 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
+#include <variant>
 
 namespace oof::storage::value_codec {
 namespace {
 
 constexpr std::uint32_t localized_string_version = 1;
 constexpr std::uint32_t formatted_string_version = 1;
+constexpr std::uint32_t color_field_count = 3;
+constexpr std::uint32_t font_field_count = 6;
 constexpr std::string_view type_domain_root = "Pattern";
 constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
 
@@ -65,6 +69,79 @@ model::TypeDomainTerm parse_term(std::string_view token) {
 
 bool is_null_uuid(const model::UuidValue& value) noexcept {
     return value.canonical == null_uuid;
+}
+
+std::uint32_t color_kind_code(model::ColorKind kind) {
+    switch (kind) {
+        case model::ColorKind::absolute:
+            return 0;
+        case model::ColorKind::automatic:
+            return 1;
+        case model::ColorKind::style_reference:
+            return 2;
+    }
+    throw std::runtime_error("unsupported color kind");
+}
+
+model::ColorKind parse_color_kind(std::uint32_t code) {
+    switch (code) {
+        case 0:
+            return model::ColorKind::absolute;
+        case 1:
+            return model::ColorKind::automatic;
+        case 2:
+            return model::ColorKind::style_reference;
+        default:
+            throw std::runtime_error("unsupported color kind " + std::to_string(code));
+    }
+}
+
+std::uint32_t font_kind_code(model::FontKind kind) {
+    switch (kind) {
+        case model::FontKind::absolute:
+            return 0;
+        case model::FontKind::windows_font:
+            return 1;
+        case model::FontKind::style_reference:
+            return 2;
+        case model::FontKind::automatic:
+            return 3;
+    }
+    throw std::runtime_error("unsupported font kind");
+}
+
+model::FontKind parse_font_kind(std::uint32_t code) {
+    switch (code) {
+        case 0:
+            return model::FontKind::absolute;
+        case 1:
+            return model::FontKind::windows_font;
+        case 2:
+            return model::FontKind::style_reference;
+        case 3:
+            return model::FontKind::automatic;
+        default:
+            throw std::runtime_error("unsupported font kind " + std::to_string(code));
+    }
+}
+
+std::uint8_t checked_channel(std::uint32_t value) {
+    if (value > 255) {
+        throw std::runtime_error("color channel is outside 0..255");
+    }
+    return static_cast<std::uint8_t>(value);
+}
+
+void require_style_reference_consistency(
+    bool expects_reference,
+    const model::StyleReference& reference,
+    std::string_view value_name) {
+    const bool has_reference = !std::holds_alternative<std::monostate>(reference);
+    if (expects_reference != has_reference) {
+        throw std::runtime_error(
+            std::string(value_name) +
+            (expects_reference ? " requires a style reference" : " cannot carry a style reference"));
+    }
 }
 
 template <typename Value, typename Write>
@@ -277,6 +354,132 @@ model::TypeDomainPatternValue read_type_domain(list_stream::ListInStream& in) {
     return value;
 }
 
+void write_style_reference(
+    list_stream::ListOutStream& out,
+    const model::StyleReference& value) {
+    out.begin_list();
+    std::visit(
+        [&out](const auto& reference) {
+            using Reference = std::remove_cvref_t<decltype(reference)>;
+            if constexpr (std::is_same_v<Reference, std::monostate>) {
+                out.write_string("none");
+            } else if constexpr (std::is_same_v<Reference, model::CompositeIdValue>) {
+                out.write_string("CompositeID");
+                write_composite_id(out, reference);
+            } else if constexpr (std::is_same_v<Reference, model::QualifiedName>) {
+                out.write_string("QName");
+                out.write_string(reference.value);
+            }
+        },
+        value);
+    out.end_list();
+}
+
+model::StyleReference read_style_reference(list_stream::ListInStream& in) {
+    in.begin_list();
+    const std::string kind = in.read_string();
+    model::StyleReference value;
+    if (kind == "none") {
+        value = std::monostate{};
+    } else if (kind == "CompositeID") {
+        value = read_composite_id(in);
+    } else if (kind == "QName") {
+        value = model::QualifiedName{in.read_string()};
+    } else {
+        throw std::runtime_error("unsupported style reference kind " + kind);
+    }
+    in.end_list();
+    return value;
+}
+
+void write_color(list_stream::ListOutStream& out, const model::ColorValue& value) {
+    require_style_reference_consistency(
+        value.kind == model::ColorKind::style_reference,
+        value.style,
+        "Color");
+    out.begin_list();
+    out.write_uint32(color_field_count);
+    out.write_uint32(color_kind_code(value.kind));
+    out.begin_list();
+    out.write_uint32(value.red);
+    out.write_uint32(value.green);
+    out.write_uint32(value.blue);
+    out.write_uint32(value.alpha);
+    out.end_list();
+    write_style_reference(out, value.style);
+    out.end_list();
+}
+
+model::ColorValue read_color(list_stream::ListInStream& in) {
+    in.begin_list();
+    const std::uint32_t fields = in.read_uint32();
+    if (fields != color_field_count) {
+        throw std::runtime_error("Color unsupported field count " + std::to_string(fields));
+    }
+    model::ColorValue value;
+    value.kind = parse_color_kind(in.read_uint32());
+    in.begin_list();
+    value.red = checked_channel(in.read_uint32());
+    value.green = checked_channel(in.read_uint32());
+    value.blue = checked_channel(in.read_uint32());
+    value.alpha = checked_channel(in.read_uint32());
+    in.end_list();
+    value.style = read_style_reference(in);
+    in.end_list();
+    require_style_reference_consistency(
+        value.kind == model::ColorKind::style_reference,
+        value.style,
+        "Color");
+    return value;
+}
+
+void write_font(list_stream::ListOutStream& out, const model::FontValue& value) {
+    require_style_reference_consistency(
+        value.kind == model::FontKind::style_reference,
+        value.style,
+        "Font");
+    out.begin_list();
+    out.write_uint32(font_field_count);
+    out.write_uint32(font_kind_code(value.kind));
+    out.write_uint32(value.mask);
+    write_style_reference(out, value.style);
+    out.write_string(value.face_name);
+    out.write_double(value.height);
+    out.begin_list();
+    out.write_bool(value.bold);
+    out.write_bool(value.italic);
+    out.write_bool(value.underline);
+    out.write_bool(value.strikeout);
+    out.end_list();
+    out.end_list();
+}
+
+model::FontValue read_font(list_stream::ListInStream& in) {
+    in.begin_list();
+    const std::uint32_t fields = in.read_uint32();
+    if (fields != font_field_count) {
+        throw std::runtime_error("Font unsupported field count " + std::to_string(fields));
+    }
+    model::FontValue value;
+    value.kind = parse_font_kind(in.read_uint32());
+    value.mask = in.read_uint32();
+    value.style = read_style_reference(in);
+    value.face_name = in.read_string();
+    value.height = in.read_double();
+    in.begin_list();
+    value.bold = in.read_bool();
+    value.italic = in.read_bool();
+    value.underline = in.read_bool();
+    value.strikeout = in.read_bool();
+    in.end_list();
+    in.end_list();
+    require_style_reference_consistency(
+        value.kind == model::FontKind::style_reference,
+        value.style,
+        "Font");
+    return value;
+}
+
 std::string encode_localized_string(const model::LocalizedStringValue& value) {
     return encode_value(value, write_localized_string);
 }
@@ -311,6 +514,33 @@ std::string encode_type_domain(const model::TypeDomainPatternValue& value) {
 model::TypeDomainPatternValue decode_type_domain(std::string_view text) {
     list_stream::ListInStream in(text);
     return read_type_domain(in);
+}
+
+std::string encode_style_reference(const model::StyleReference& value) {
+    return encode_value(value, write_style_reference);
+}
+
+model::StyleReference decode_style_reference(std::string_view text) {
+    list_stream::ListInStream in(text);
+    return read_style_reference(in);
+}
+
+std::string encode_color(const model::ColorValue& value) {
+    return encode_value(value, write_color);
+}
+
+model::ColorValue decode_color(std::string_view text) {
+    list_stream::ListInStream in(text);
+    return read_color(in);
+}
+
+std::string encode_font(const model::FontValue& value) {
+    return encode_value(value, write_font);
+}
+
+model::FontValue decode_font(std::string_view text) {
+    list_stream::ListInStream in(text);
+    return read_font(in);
 }
 
 }  // namespace oof::storage::value_codec
