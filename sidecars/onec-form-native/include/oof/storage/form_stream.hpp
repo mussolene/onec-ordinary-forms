@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -11,9 +12,26 @@
 
 namespace oof::storage::form_stream {
 
-enum class Format : std::uint8_t {
+enum class OuterFormat : std::uint8_t {
     v26 = 26,
     v27 = 27,
+};
+
+enum class LayoutKind : std::uint8_t {
+    form_section_16 = 16,
+    form_section_18 = 18,
+};
+
+struct StorageLayout {
+    OuterFormat outer_format = OuterFormat::v27;
+    LayoutKind kind = LayoutKind::form_section_18;
+    std::size_t root_arity = 0;
+    std::uint32_t form_section_version = 0;
+    std::size_t form_section_arity = 0;
+    std::uint32_t page_style_section_version = 0;
+    std::size_t page_style_section_arity = 0;
+
+    friend bool operator==(const StorageLayout&, const StorageLayout&) = default;
 };
 
 struct RuntimeEnvelope {
@@ -49,7 +67,12 @@ struct AttributesRecord {
 [[nodiscard]] Result<RuntimeEnvelope> decode_runtime_envelope(std::string_view text);
 [[nodiscard]] Result<std::string> encode_runtime_envelope(const RuntimeEnvelope& envelope);
 
-[[nodiscard]] Result<Format> probe_format(const list_stream::ListValue& payload);
+[[nodiscard]] Result<OuterFormat> probe_outer_format(
+    const list_stream::ListValue& payload,
+    std::string_view path = "$");
+[[nodiscard]] Result<StorageLayout> probe_layout(
+    const list_stream::ListValue& payload,
+    std::string_view path = "$");
 
 [[nodiscard]] Result<AttributesRecord> decode_attributes(
     const list_stream::ListValue& record,

@@ -29,6 +29,11 @@ std::string child_path(std::string_view parent, std::size_t index) {
     return std::string(parent) + "/" + std::to_string(index);
 }
 
+std::string_view without_utf8_bom(std::string_view text) noexcept {
+    constexpr std::string_view bom{"\xef\xbb\xbf", 3};
+    return text.starts_with(bom) ? text.substr(bom.size()) : text;
+}
+
 std::string describe(const list_stream::ListValue& value) {
     std::string actual = list_stream::dump_compact(value);
     constexpr std::size_t limit = 120;
@@ -271,7 +276,7 @@ Result<RuntimeEnvelope> decode_runtime_envelope(std::string_view text) {
     return capture_decode_failure<RuntimeEnvelope>([text] {
         list_stream::ListValue root;
         try {
-            root = list_stream::parse(text);
+            root = list_stream::parse(without_utf8_bom(text));
         } catch (const std::exception& error) {
             fail(
                 "OOF1100",
@@ -294,9 +299,9 @@ Result<RuntimeEnvelope> decode_runtime_envelope(std::string_view text) {
         envelope.runtime_uuid = uuid_atom(at(root, 1, "$"), "$/1");
         envelope.payload = at(root, 2, "$" );
         require_list(envelope.payload, "$/2");
-        const auto format = probe_format(envelope.payload);
-        if (!format) {
-            throw DecodeFailure(format.diagnostics().front());
+        const auto layout = probe_layout(envelope.payload, "$/2");
+        if (!layout) {
+            throw DecodeFailure(layout.diagnostics().front());
         }
         return envelope;
     });
@@ -307,9 +312,9 @@ Result<std::string> encode_runtime_envelope(const RuntimeEnvelope& envelope) {
         static_cast<void>(uuid_atom(
             list_stream::ListValue::raw_atom(envelope.runtime_uuid.canonical),
             "$/1"));
-        const auto format = probe_format(envelope.payload);
-        if (!format) {
-            throw DecodeFailure(format.diagnostics().front());
+        const auto layout = probe_layout(envelope.payload, "$/2");
+        if (!layout) {
+            throw DecodeFailure(layout.diagnostics().front());
         }
         return list_stream::dump_compact(list_stream::ListValue::list({
             list_stream::ListValue::string_atom("#"),
@@ -319,30 +324,106 @@ Result<std::string> encode_runtime_envelope(const RuntimeEnvelope& envelope) {
     });
 }
 
-Result<Format> probe_format(const list_stream::ListValue& payload) {
-    return capture_decode_failure<Format>([&payload] {
-        require_list(payload, "$");
+Result<OuterFormat> probe_outer_format(
+    const list_stream::ListValue& payload,
+    std::string_view path) {
+    return capture_decode_failure<OuterFormat>([&payload, path] {
+        require_list(payload, path);
         if (payload.items.empty()) {
             fail(
                 "OOF1110",
-                "$/0",
+                child_path(path, 0),
                 "format marker 26 or 27",
                 "missing",
                 "Form stream has no format marker");
         }
-        const std::uint32_t marker = integer_atom<std::uint32_t>(payload.items[0], "$/0");
+        const std::string marker_path = child_path(path, 0);
+        const std::uint32_t marker = integer_atom<std::uint32_t>(payload.items[0], marker_path);
         if (marker == 26) {
-            return Format::v26;
+            return OuterFormat::v26;
         }
         if (marker == 27) {
-            return Format::v27;
+            return OuterFormat::v27;
         }
         fail(
             "OOF1111",
-            "$/0",
+            marker_path,
             "supported format marker 26 or 27",
             std::to_string(marker),
             "Ordinary-form stream format is unsupported");
+    });
+}
+
+Result<StorageLayout> probe_layout(
+    const list_stream::ListValue& payload,
+    std::string_view path) {
+    return capture_decode_failure<StorageLayout>([&payload, path] {
+        // 8.2 and 8.5 both emit outer 27; the paired nested records select the layout.
+        const auto outer = probe_outer_format(payload, path);
+        if (!outer) {
+            throw DecodeFailure(outer.diagnostics().front());
+        }
+        if (outer.value() != OuterFormat::v27) {
+            fail(
+                "OOF1112",
+                child_path(path, 0),
+                "outer format 27 with a proven nested layout",
+                "26",
+                "Ordinary-form outer format has no proven storage layout");
+        }
+
+        require_arity(payload, 20, path);
+        const std::string form_path = child_path(path, 1);
+        const auto& form_section = at(payload, 1, path);
+        require_list(form_section, form_path);
+        const std::uint32_t form_version = integer_atom<std::uint32_t>(
+            at(form_section, 0, form_path),
+            child_path(form_path, 0));
+
+        const std::string page_style_path = child_path(path, 13);
+        const auto& page_style_section = at(payload, 13, path);
+        require_list(page_style_section, page_style_path);
+
+        if (form_version == 16) {
+            require_arity(form_section, 11, form_path);
+            require_arity(page_style_section, 3, page_style_path);
+            require_raw_constant(
+                page_style_section.items[0],
+                "3",
+                child_path(page_style_path, 0));
+            return StorageLayout{
+                OuterFormat::v27,
+                LayoutKind::form_section_16,
+                20,
+                16,
+                11,
+                3,
+                3,
+            };
+        }
+        if (form_version == 18) {
+            require_arity(form_section, 14, form_path);
+            require_arity(page_style_section, 11, page_style_path);
+            require_raw_constant(
+                page_style_section.items[0],
+                "10",
+                child_path(page_style_path, 0));
+            return StorageLayout{
+                OuterFormat::v27,
+                LayoutKind::form_section_18,
+                20,
+                18,
+                14,
+                10,
+                11,
+            };
+        }
+        fail(
+            "OOF1113",
+            child_path(form_path, 0),
+            "supported form section version 16 or 18",
+            std::to_string(form_version),
+            "Ordinary-form nested storage layout is unsupported");
     });
 }
 
