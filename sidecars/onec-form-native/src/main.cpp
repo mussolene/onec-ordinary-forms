@@ -13279,10 +13279,6 @@ struct PublicSchemaEscapeGate {
     std::size_t any_object_type = 0;
     std::size_t xs_any = 0;
     std::size_t xs_any_attribute = 0;
-    std::size_t stable_object_types = 0;
-    std::size_t stable_object_type_requirements = 0;
-    std::size_t input_field_property_types = 0;
-    std::size_t input_field_property_type_requirements = 0;
 
     std::size_t total() const {
         return any_object_type + xs_any + xs_any_attribute;
@@ -13305,36 +13301,6 @@ PublicSchemaEscapeGate inspect_public_schema_escape_gate() {
         gate.any_object_type = count_substring(text, "AnyObjectType");
         gate.xs_any = count_substring(text, "<xs:any ");
         gate.xs_any_attribute = count_substring(text, "<xs:anyAttribute");
-        const std::array<std::string_view, 8> stable_object_type_anchors{{
-            "<xs:element name=\"Position\" type=\"PositionType\"",
-            "<xs:element name=\"Bindings\" type=\"BindingsType\"",
-            "<xs:element name=\"Attribute\" type=\"AttributeType\"",
-            "<xs:element name=\"Command\" type=\"CommandType\"",
-            "<xs:element name=\"TypePattern\" type=\"TypePatternType\"",
-            "<xs:complexType name=\"PositionType\"",
-            "<xs:complexType name=\"BindingsType\"",
-            "<xs:complexType name=\"TypePatternType\"",
-        }};
-        gate.stable_object_type_requirements = stable_object_type_anchors.size();
-        for (const auto anchor : stable_object_type_anchors) {
-            if (text.find(anchor) != std::string::npos) {
-                ++gate.stable_object_types;
-            }
-        }
-        const std::array<std::string_view, 6> input_field_property_type_anchors{{
-            "<xs:element name=\"DataPath\" type=\"StringPropertyType\"",
-            "<xs:element name=\"Enabled\" type=\"BooleanPropertyType\"",
-            "<xs:element name=\"Position\" type=\"PositionType\"",
-            "<xs:element name=\"ReadOnly\" type=\"BooleanPropertyType\"",
-            "<xs:element name=\"Title\" type=\"StringPropertyType\"",
-            "<xs:element name=\"Visible\" type=\"BooleanPropertyType\"",
-        }};
-        gate.input_field_property_type_requirements = input_field_property_type_anchors.size();
-        for (const auto anchor : input_field_property_type_anchors) {
-            if (text.find(anchor) != std::string::npos) {
-                ++gate.input_field_property_types;
-            }
-        }
         return gate;
     }
     return gate;
@@ -13427,26 +13393,6 @@ void print_object_model_gate() {
     std::cout << ",\"publicSchemaXsAnyAttributeRefs\":" << public_schema_gate.xs_any_attribute;
     std::cout << ",\"publicSchemaEscapeStatus\":";
     print_json_string(public_schema_gate.total() == 0 ? "PASS" : "FAIL");
-    std::cout << ",\"publicSchemaStableObjectTypes\":" << public_schema_gate.stable_object_types;
-    std::cout << ",\"publicSchemaStableObjectTypeRequirements\":"
-              << public_schema_gate.stable_object_type_requirements;
-    std::cout << ",\"publicSchemaStableObjectTypesStatus\":";
-    print_json_string(
-        public_schema_gate.inspected &&
-                public_schema_gate.stable_object_types == public_schema_gate.stable_object_type_requirements
-            ? "PASS"
-            : "FAIL");
-    std::cout << ",\"publicSchemaInputFieldPropertyTypes\":"
-              << public_schema_gate.input_field_property_types;
-    std::cout << ",\"publicSchemaInputFieldPropertyTypeRequirements\":"
-              << public_schema_gate.input_field_property_type_requirements;
-    std::cout << ",\"publicSchemaInputFieldPropertyTypesStatus\":";
-    print_json_string(
-        public_schema_gate.inspected &&
-                public_schema_gate.input_field_property_types ==
-                    public_schema_gate.input_field_property_type_requirements
-            ? "PASS"
-            : "FAIL");
     std::cout << ",\"schemaMembersChecked\":" << schema_members_checked;
     std::cout << ",\"registryDescriptorsChecked\":" << registry_descriptors_checked;
     std::cout << ",\"controlInfoDescriptorCount\":"

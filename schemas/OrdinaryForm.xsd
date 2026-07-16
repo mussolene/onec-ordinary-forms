@@ -1,353 +1,217 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
   <xs:annotation>
-    <xs:documentation>Ordinary Form.xml public object model. The shape follows managed form XML: Form root, Events, ChildItems, Attributes, Commands, named controls, and nested ChildItems. Platform list-stream/bracket internals are implementation details and must not be exposed in this XML.</xs:documentation>
-    <xs:appinfo>
-      <PublicContract version="2.0" styleReference="http://v8.1c.ru/8.3/xcf/logform">
-        <NoRawElements>ObjectModel ListStream BracketStream FormBin LogicalStream RawBracket PlatformRecords</NoRawElements>
-        <PlatformEvidence>
-          <LogForm source="mngcore_root-03-http_v8.1c.ru_8.2_managed-application_logform.xsd" root="Form/elements/command/property" elementCollections="event commands autoCommandBar"/>
-          <CommandInterface source="mngcore_root-149-http_v8.1c.ru_8.2_managed-application_cmi.xsd" objects="CommandInfo CommandsInfo Command HandlerInfo"/>
-        </PlatformEvidence>
-      </PublicContract>
-    </xs:appinfo>
+    <xs:documentation>Generated from the executable ordinary-form metamodel.</xs:documentation>
   </xs:annotation>
 
-  <xs:element name="Form" type="FormType"/>
+  <xs:simpleType name="UnclassifiedValueType">
+    <xs:restriction base="xs:string">
+      <xs:whiteSpace value="collapse"/>
+      <xs:length value="0"/>
+      <xs:pattern value="\s"/>
+    </xs:restriction>
+  </xs:simpleType>
 
-  <xs:complexType name="FormType">
-    <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="Title" type="StringPropertyType" minOccurs="0"/>
-      <xs:element name="Width" type="xs:string" minOccurs="0"/>
-      <xs:element name="Height" type="xs:string" minOccurs="0"/>
-      <xs:element name="AutoTitle" type="xs:string" minOccurs="0"/>
-      <xs:element name="Group" type="xs:string" minOccurs="0"/>
-      <xs:element name="CommandBarLocation" type="xs:string" minOccurs="0"/>
-      <xs:element name="VerticalScroll" type="xs:string" minOccurs="0"/>
-      <xs:element name="ShowCommandBar" type="xs:string" minOccurs="0"/>
-      <xs:element name="AutoCommandBar" type="SimplePropertyType" minOccurs="0"/>
-      <xs:element name="SerializationCounter" type="xs:string" minOccurs="0"/>
-      <xs:element name="RootPanelLayout" type="SimplePropertyType" minOccurs="0"/>
-      <xs:element name="Events" type="EventsType" minOccurs="0"/>
-      <xs:element name="Attributes" type="AttributesType" minOccurs="0"/>
-      <xs:element name="ChildItems" type="ChildItemsType" minOccurs="0"/>
-      <xs:element name="Commands" type="CommandsType" minOccurs="0"/>
-    </xs:choice>
-    <xs:attribute name="ordinaryFormVersion" type="xs:string" use="required"/>
-    <xs:attribute name="containerCreatedTicks" type="xs:string" use="optional"/>
-    <xs:attribute name="containerModifiedTicks" type="xs:string" use="optional"/>
-    <xs:attribute name="formObjectUuid" type="xs:string" use="optional"/>
-    <xs:attribute name="formObjectKind" type="xs:string" use="optional"/>
-    <xs:attribute name="formObjectStateKind" type="xs:string" use="optional"/>
-    <xs:attribute name="formObjectStateMode" type="xs:string" use="optional"/>
-    <xs:attribute name="formObjectStateFlag" type="xs:string" use="optional"/>
-  </xs:complexType>
+  <xs:simpleType name="ObjectIdType">
+    <xs:restriction base="xs:unsignedLong">
+      <xs:minInclusive value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
 
-  <xs:complexType name="ChildItemsType">
-    <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="ActiveXControl" type="ControlType"/>
-      <xs:element name="Button" type="ControlType"/>
-      <xs:element name="CalendarField" type="ControlType"/>
-      <xs:element name="Chart" type="ControlType"/>
-      <xs:element name="CheckBox" type="ControlType"/>
-      <xs:element name="ChoiceField" type="ControlType"/>
-      <xs:element name="CommandBar" type="ControlType"/>
-      <xs:element name="Dendrogram" type="ControlType"/>
-      <xs:element name="DocumentField" type="ControlType"/>
-      <xs:element name="FormattedDocumentField" type="ControlType"/>
-      <xs:element name="GanttChart" type="ControlType"/>
-      <xs:element name="GeographicalSchema" type="ControlType"/>
-      <xs:element name="GeographicalSchemaField" type="ControlType"/>
-      <xs:element name="GraphicalSchemaField" type="ControlType"/>
-      <xs:element name="GroupBox" type="ControlType"/>
-      <xs:element name="HTMLDocumentField" type="ControlType"/>
-      <xs:element name="InputField" type="ControlType"/>
-      <xs:element name="LabelDecoration" type="ControlType"/>
-      <xs:element name="ListBox" type="ControlType"/>
-      <xs:element name="Panel" type="ControlType"/>
-      <xs:element name="Page" type="PageType"/>
-      <xs:element name="PictureDecoration" type="ControlType"/>
-      <xs:element name="PivotChart" type="ControlType"/>
-      <xs:element name="ProgressBar" type="ControlType"/>
-      <xs:element name="RadioButton" type="ControlType"/>
-      <xs:element name="SpreadsheetDocumentField" type="ControlType"/>
-      <xs:element name="Splitter" type="ControlType"/>
-      <xs:element name="Table" type="ControlType"/>
-      <xs:element name="TextDocumentField" type="ControlType"/>
-      <xs:element name="TrackBar" type="ControlType"/>
-      <xs:element name="UsualGroup" type="ControlType"/>
-    </xs:choice>
-  </xs:complexType>
+  <xs:simpleType name="UuidValueType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"/>
+    </xs:restriction>
+  </xs:simpleType>
 
-  <xs:complexType name="PageType">
-    <xs:sequence>
-      <xs:element name="Title" type="StringPropertyType" minOccurs="0"/>
-      <xs:element name="ChildItems" type="ChildItemsType" minOccurs="0"/>
-    </xs:sequence>
-    <xs:attribute name="name" type="xs:string" use="optional"/>
-    <xs:attribute name="id" type="xs:string" use="optional"/>
-  </xs:complexType>
+  <xs:simpleType name="NonEmptyTokenType">
+    <xs:restriction base="xs:token">
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
 
-  <xs:complexType name="ControlType">
-    <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="Action" type="SimplePropertyType"/>
-      <xs:element name="ActivePoint" type="SimplePropertyType"/>
-      <xs:element name="ActiveSeries" type="SimplePropertyType"/>
-      <xs:element name="AllowChangeColumnOrder" type="SimplePropertyType"/>
-      <xs:element name="AllowChangeRows" type="SimplePropertyType"/>
-      <xs:element name="AllowColumnSetup" type="SimplePropertyType"/>
-      <xs:element name="AllowDrag" type="SimplePropertyType"/>
-      <xs:element name="AllowDragStart" type="SimplePropertyType"/>
-      <xs:element name="AlternateRowColors" type="SimplePropertyType"/>
-      <xs:element name="AlternatingRowBackColor" type="SimplePropertyType"/>
-      <xs:element name="AutoContextMenu" type="SimplePropertyType"/>
-      <xs:element name="AutoInsertNewRow" type="SimplePropertyType"/>
-      <xs:element name="AutoMarkIncomplete" type="SimplePropertyType"/>
-      <xs:element name="AutoMaxHeight" type="SimplePropertyType"/>
-      <xs:element name="AutoMaxWidth" type="SimplePropertyType"/>
-      <xs:element name="AutoMaximumValue" type="SimplePropertyType"/>
-      <xs:element name="AutoMinimumValue" type="SimplePropertyType"/>
-      <xs:element name="AutoPointText" type="SimplePropertyType"/>
-      <xs:element name="AutoSelectIncomplete" type="SimplePropertyType"/>
-      <xs:element name="AutoSeriesSpread" type="SimplePropertyType"/>
-      <xs:element name="AutoSeriesText" type="SimplePropertyType"/>
-      <xs:element name="AutoTranspose" type="SimplePropertyType"/>
-      <xs:element name="AutoTraversalOrder" type="SimplePropertyType"/>
-      <xs:element name="Autofill" type="SimplePropertyType"/>
-      <xs:element name="Auxiliary" type="SimplePropertyType"/>
-      <xs:element name="BackColor" type="SimplePropertyType"/>
-      <xs:element name="BaseValue" type="SimplePropertyType"/>
-      <xs:element name="BigStep" type="SimplePropertyType"/>
-      <xs:element name="Border" type="SimplePropertyType"/>
-      <xs:element name="BorderColor" type="SimplePropertyType"/>
-      <xs:element name="ButtonAlignment" type="SimplePropertyType"/>
-      <xs:element name="ButtonBackColor" type="SimplePropertyType"/>
-      <xs:element name="ButtonTextColor" type="SimplePropertyType"/>
-      <xs:element name="ButtonType" type="SimplePropertyType"/>
-      <xs:element name="Buttons" type="SimplePropertyType"/>
-      <xs:element name="CalendarNavigation" type="SimplePropertyType"/>
-      <xs:element name="CancelButton" type="SimplePropertyType"/>
-      <xs:element name="ChartKind" type="SimplePropertyType"/>
-      <xs:element name="ChildItems" type="ChildItemsType"/>
-      <xs:element name="ChoiceButton" type="SimplePropertyType"/>
-      <xs:element name="ChoiceButtonPicture" type="SimplePropertyType"/>
-      <xs:element name="ChoiceList" type="SimplePropertyType"/>
-      <xs:element name="ChoiceListButton" type="SimplePropertyType"/>
-      <xs:element name="ChoiceListHeight" type="SimplePropertyType"/>
-      <xs:element name="ChoiceListMode" type="SimplePropertyType"/>
-      <xs:element name="ChoiceListWidth" type="SimplePropertyType"/>
-      <xs:element name="ChoiceMode" type="SimplePropertyType"/>
-      <xs:element name="ClearButton" type="SimplePropertyType"/>
-      <xs:element name="Clsid" type="SimplePropertyType"/>
-      <xs:element name="ColorPalette" type="SimplePropertyType"/>
-      <xs:element name="Columns" type="SimplePropertyType"/>
-      <xs:element name="ColumnsCount" type="SimplePropertyType"/>
-      <xs:element name="CommandName" type="SimplePropertyType"/>
-      <xs:element name="CommandSource" type="SimplePropertyType"/>
-      <xs:element name="ContextMenu" type="SimplePropertyType"/>
-      <xs:element name="CreateButton" type="SimplePropertyType"/>
-      <xs:element name="CurrentColumn" type="SimplePropertyType"/>
-      <xs:element name="CurrentData" type="SimplePropertyType"/>
-      <xs:element name="CurrentDate" type="SimplePropertyType"/>
-      <xs:element name="CurrentItem" type="SimplePropertyType"/>
-      <xs:element name="CurrentPage" type="SimplePropertyType"/>
-      <xs:element name="CurrentParent" type="SimplePropertyType"/>
-      <xs:element name="CurrentRow" type="SimplePropertyType"/>
-      <xs:element name="DataBindingFlag" type="SimplePropertyType"/>
-      <xs:element name="DataBindingMode" type="SimplePropertyType"/>
-      <xs:element name="DataPath" type="StringPropertyType"/>
-      <xs:element name="DataValue" type="SimplePropertyType"/>
-      <xs:element name="DefaultAction" type="SimplePropertyType"/>
-      <xs:element name="DefaultButton" type="SimplePropertyType"/>
-      <xs:element name="DisplayStyle" type="SimplePropertyType"/>
-      <xs:element name="DisplayedArea" type="SimplePropertyType"/>
-      <xs:element name="DistributeByPages" type="SimplePropertyType"/>
-      <xs:element name="Document" type="SimplePropertyType"/>
-      <xs:element name="EditButton" type="SimplePropertyType"/>
-      <xs:element name="EditMode" type="SimplePropertyType"/>
-      <xs:element name="Editing" type="SimplePropertyType"/>
-      <xs:element name="Enabled" type="BooleanPropertyType"/>
-      <xs:element name="Events" type="EventsType"/>
-      <xs:element name="ExtendedEdit" type="SimplePropertyType"/>
-      <xs:element name="ExtendedTooltip" type="SimplePropertyType"/>
-      <xs:element name="FieldBackColor" type="SimplePropertyType"/>
-      <xs:element name="FieldTextColor" type="SimplePropertyType"/>
-      <xs:element name="Fields" type="SimplePropertyType"/>
-      <xs:element name="FirstInGroup" type="SimplePropertyType"/>
-      <xs:element name="Font" type="SimplePropertyType"/>
-      <xs:element name="Footer" type="SimplePropertyType"/>
-      <xs:element name="FooterBackColor" type="SimplePropertyType"/>
-      <xs:element name="FooterFont" type="SimplePropertyType"/>
-      <xs:element name="FooterHeight" type="SimplePropertyType"/>
-      <xs:element name="FooterTextColor" type="SimplePropertyType"/>
-      <xs:element name="Format" type="SimplePropertyType"/>
-      <xs:element name="GaugeBands" type="SimplePropertyType"/>
-      <xs:element name="GaugeEndAngle" type="SimplePropertyType"/>
-      <xs:element name="GaugeHubColor" type="SimplePropertyType"/>
-      <xs:element name="GaugeHubThickness" type="SimplePropertyType"/>
-      <xs:element name="GaugeScaleLabelsAlongScale" type="SimplePropertyType"/>
-      <xs:element name="GaugeScaleLabelsPosition" type="SimplePropertyType"/>
-      <xs:element name="GaugeScaleThickness" type="SimplePropertyType"/>
-      <xs:element name="GaugeStartAngle" type="SimplePropertyType"/>
-      <xs:element name="GaugeValueDisplay" type="SimplePropertyType"/>
-      <xs:element name="Gradient" type="SimplePropertyType"/>
-      <xs:element name="Header" type="SimplePropertyType"/>
-      <xs:element name="HeaderBackColor" type="SimplePropertyType"/>
-      <xs:element name="HeaderFont" type="SimplePropertyType"/>
-      <xs:element name="HeaderHeight" type="SimplePropertyType"/>
-      <xs:element name="HeaderTextColor" type="SimplePropertyType"/>
-      <xs:element name="Height" type="SimplePropertyType"/>
-      <xs:element name="HighlightNegative" type="SimplePropertyType"/>
-      <xs:element name="HorizontalAlign" type="SimplePropertyType"/>
-      <xs:element name="HorizontalLines" type="SimplePropertyType"/>
-      <xs:element name="HorizontalScrollBar" type="SimplePropertyType"/>
-      <xs:element name="HorizontalStretch" type="SimplePropertyType"/>
-      <xs:element name="Hyperlink" type="SimplePropertyType"/>
-      <xs:element name="IncompleteChoice" type="SimplePropertyType"/>
-      <xs:element name="IncompleteChoiceMode" type="SimplePropertyType"/>
-      <xs:element name="IncompleteMark" type="SimplePropertyType"/>
-      <xs:element name="InitialListView" type="SimplePropertyType"/>
-      <xs:element name="InitialTreeView" type="SimplePropertyType"/>
-      <xs:element name="InputRowsMode" type="SimplePropertyType"/>
-      <xs:element name="Items" type="SimplePropertyType"/>
-      <xs:element name="LabelPercentFormat" type="SimplePropertyType"/>
-      <xs:element name="LabelValueFormat" type="SimplePropertyType"/>
-      <xs:element name="LabelsBackColor" type="SimplePropertyType"/>
-      <xs:element name="LabelsBorder" type="SimplePropertyType"/>
-      <xs:element name="LabelsBorderColor" type="SimplePropertyType"/>
-      <xs:element name="LabelsFont" type="SimplePropertyType"/>
-      <xs:element name="LabelsPosition" type="SimplePropertyType"/>
-      <xs:element name="LabelsSeparator" type="SimplePropertyType"/>
-      <xs:element name="LabelsTextColor" type="SimplePropertyType"/>
-      <xs:element name="LabelsView" type="SimplePropertyType"/>
-      <xs:element name="LeftFixedColumns" type="SimplePropertyType"/>
-      <xs:element name="LegendArea" type="SimplePropertyType"/>
-      <xs:element name="Light" type="SimplePropertyType"/>
-      <xs:element name="MarkStep" type="SimplePropertyType"/>
-      <xs:element name="Marquee" type="SimplePropertyType"/>
-      <xs:element name="Mask" type="SimplePropertyType"/>
-      <xs:element name="MaxHeight" type="SimplePropertyType"/>
-      <xs:element name="MaxLength" type="SimplePropertyType"/>
-      <xs:element name="MaxSeries" type="SimplePropertyType"/>
-      <xs:element name="MaxSeriesCount" type="SimplePropertyType"/>
-      <xs:element name="MaxSeriesPercent" type="SimplePropertyType"/>
-      <xs:element name="MaxValue" type="SimplePropertyType"/>
-      <xs:element name="MaxWidth" type="SimplePropertyType"/>
-      <xs:element name="MaximumValue" type="SimplePropertyType"/>
-      <xs:element name="MenuMode" type="SimplePropertyType"/>
-      <xs:element name="MinValue" type="SimplePropertyType"/>
-      <xs:element name="MinWidth" type="SimplePropertyType"/>
-      <xs:element name="MinimumValue" type="SimplePropertyType"/>
-      <xs:element name="MultiLine" type="SimplePropertyType"/>
-      <xs:element name="OpenButton" type="SimplePropertyType"/>
-      <xs:element name="Orientation" type="SimplePropertyType"/>
-      <xs:element name="Outline" type="SimplePropertyType"/>
-      <xs:element name="Output" type="SimplePropertyType"/>
-      <xs:element name="PagesRepresentation" type="SimplePropertyType"/>
-      <xs:element name="PanelLayout" type="SimplePropertyType"/>
-      <xs:element name="PanelPicturePosition" type="SimplePropertyType"/>
-      <xs:element name="PasswordMode" type="SimplePropertyType"/>
-      <xs:element name="PeriodEnd" type="SimplePropertyType"/>
-      <xs:element name="PeriodStart" type="SimplePropertyType"/>
-      <xs:element name="PeriodicVariantMultiplicity" type="SimplePropertyType"/>
-      <xs:element name="PeriodicVariantUnit" type="SimplePropertyType"/>
-      <xs:element name="Picture" type="SimplePropertyType"/>
-      <xs:element name="PicturePosition" type="SimplePropertyType"/>
-      <xs:element name="PictureRendering" type="SimplePropertyType"/>
-      <xs:element name="PictureSize" type="SimplePropertyType"/>
-      <xs:element name="PictureStyle" type="SimplePropertyType"/>
-      <xs:element name="PivotChartKind" type="SimplePropertyType"/>
-      <xs:element name="PivotSeries" type="SimplePropertyType"/>
-      <xs:element name="PlotArea" type="SimplePropertyType"/>
-      <xs:element name="Points" type="SimplePropertyType"/>
-      <xs:element name="PointsCount" type="SimplePropertyType"/>
-      <xs:element name="Position" type="PositionType"/>
-      <xs:element name="ReadOnly" type="BooleanPropertyType"/>
-      <xs:element name="Refresh" type="SimplePropertyType"/>
-      <xs:element name="RegulationButton" type="SimplePropertyType"/>
-      <xs:element name="Representation" type="SimplePropertyType"/>
-      <xs:element name="RightFixedColumns" type="SimplePropertyType"/>
-      <xs:element name="RowSelectionMode" type="SimplePropertyType"/>
-      <xs:element name="Rows" type="SimplePropertyType"/>
-      <xs:element name="RowsCount" type="SimplePropertyType"/>
-      <xs:element name="Scale" type="SimplePropertyType"/>
-      <xs:element name="ScalePicture" type="SimplePropertyType"/>
-      <xs:element name="ScaleSupport" type="SimplePropertyType"/>
-      <xs:element name="ScrollablePagesMode" type="SimplePropertyType"/>
-      <xs:element name="SelectedDates" type="SimplePropertyType"/>
-      <xs:element name="SelectedRows" type="SimplePropertyType"/>
-      <xs:element name="SelectedText" type="SimplePropertyType"/>
-      <xs:element name="SelectionBackColor" type="SimplePropertyType"/>
-      <xs:element name="SelectionMode" type="SimplePropertyType"/>
-      <xs:element name="SelectionTextColor" type="SimplePropertyType"/>
-      <xs:element name="Series" type="SimplePropertyType"/>
-      <xs:element name="SeriesCount" type="SimplePropertyType"/>
-      <xs:element name="SeriesInRows" type="SimplePropertyType"/>
-      <xs:element name="Shortcut" type="SimplePropertyType"/>
-      <xs:element name="ShowCurrentDate" type="SimplePropertyType"/>
-      <xs:element name="ShowLegend" type="SimplePropertyType"/>
-      <xs:element name="ShowMark" type="SimplePropertyType"/>
-      <xs:element name="ShowPercent" type="SimplePropertyType"/>
-      <xs:element name="ShowPicture" type="SimplePropertyType"/>
-      <xs:element name="ShowSelection" type="SimplePropertyType"/>
-      <xs:element name="ShowTitle" type="SimplePropertyType"/>
-      <xs:element name="SkipBaseValue" type="SimplePropertyType"/>
-      <xs:element name="SkipOnInput" type="SimplePropertyType"/>
-      <xs:element name="SourceData" type="SimplePropertyType"/>
-      <xs:element name="SpaceMode" type="SimplePropertyType"/>
-      <xs:element name="State" type="SimplePropertyType"/>
-      <xs:element name="Step" type="SimplePropertyType"/>
-      <xs:element name="TextColor" type="SimplePropertyType"/>
-      <xs:element name="TextEditing" type="SimplePropertyType"/>
-      <xs:element name="TextPosition" type="SimplePropertyType"/>
-      <xs:element name="ThreeState" type="SimplePropertyType"/>
-      <xs:element name="Title" type="StringPropertyType"/>
-      <xs:element name="TitleArea" type="SimplePropertyType"/>
-      <xs:element name="ToolTip" type="SimplePropertyType"/>
-      <xs:element name="TransparentBackColor" type="SimplePropertyType"/>
-      <xs:element name="TransparentLabelsBackColor" type="SimplePropertyType"/>
-      <xs:element name="TraversalOrder" type="SimplePropertyType"/>
-      <xs:element name="Type" type="SimplePropertyType"/>
-      <xs:element name="TypeChoice" type="SimplePropertyType"/>
-      <xs:element name="TypeLinkElement" type="SimplePropertyType"/>
-      <xs:element name="TypeRestriction" type="SimplePropertyType"/>
-      <xs:element name="UnselectedPictureText" type="SimplePropertyType"/>
-      <xs:element name="ValueType" type="SimplePropertyType"/>
-      <xs:element name="VerticalAlign" type="SimplePropertyType"/>
-      <xs:element name="VerticalLines" type="SimplePropertyType"/>
-      <xs:element name="VerticalScrollBar" type="SimplePropertyType"/>
-      <xs:element name="VerticalStretch" type="SimplePropertyType"/>
-      <xs:element name="ViewSetupMode" type="SimplePropertyType"/>
-      <xs:element name="Visible" type="BooleanPropertyType"/>
-      <xs:element name="WeekendTextColor" type="SimplePropertyType"/>
-      <xs:element name="Width" type="SimplePropertyType"/>
-      <xs:element name="WordWrap" type="SimplePropertyType"/>
-    </xs:choice>
-    <xs:attribute name="name" type="xs:string" use="optional"/>
-    <xs:attribute name="id" type="xs:string" use="optional"/>
-    <xs:attribute name="uuid" type="xs:string" use="optional"/>
-    <xs:attribute name="objectId" type="xs:string" use="optional"/>
-    <xs:attribute name="ownerId" type="xs:string" use="optional"/>
-  </xs:complexType>
-
-  <xs:complexType name="EventsType">
-    <xs:sequence>
-      <xs:element name="Event" type="EventType" minOccurs="0" maxOccurs="unbounded"/>
-    </xs:sequence>
-  </xs:complexType>
-
-  <xs:complexType name="EventType">
+  <xs:complexType name="LocalizedStringItemType">
     <xs:simpleContent>
       <xs:extension base="xs:string">
-        <xs:attribute name="name" type="xs:string" use="optional"/>
-        <xs:attribute name="id" type="xs:string" use="optional"/>
-        <xs:attribute name="uuid" type="xs:string" use="optional"/>
-        <xs:attribute name="title" type="xs:string" use="optional"/>
-        <xs:attribute name="handler" type="xs:string" use="optional"/>
-        <xs:attribute name="objectId" type="xs:string" use="optional"/>
-        <xs:attribute name="ownerId" type="xs:string" use="optional"/>
+        <xs:attribute name="language" type="xs:language" use="required"/>
       </xs:extension>
     </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name="LocalizedStringValueType">
+    <xs:sequence>
+      <xs:element name="Item" type="LocalizedStringItemType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="FormattedStringValueType">
+    <xs:sequence>
+      <xs:element name="Value" type="LocalizedStringValueType" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="formatted" type="xs:boolean" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="CompositeIdValueType">
+    <xs:attribute name="objectId" type="xs:long" use="required"/>
+    <xs:attribute name="uuid" type="UuidValueType" use="required"/>
+    <xs:attribute name="isNull" type="xs:boolean" use="required"/>
+  </xs:complexType>
+
+  <xs:simpleType name="TypeDomainTermType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="unknown"/>
+      <xs:enumeration value="list"/>
+      <xs:enumeration value="binary"/>
+      <xs:enumeration value="date"/>
+      <xs:enumeration value="numeric"/>
+      <xs:enumeration value="reference"/>
+      <xs:enumeration value="string"/>
+      <xs:enumeration value="type"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="TypeDomainEntryType">
+    <xs:attribute name="term" type="TypeDomainTermType" use="required"/>
+    <xs:attribute name="typeUuid" type="UuidValueType" use="optional"/>
+    <xs:attribute name="length" type="xs:nonNegativeInteger" use="optional"/>
+    <xs:attribute name="precision" type="xs:nonNegativeInteger" use="optional"/>
+    <xs:attribute name="nonNegative" type="xs:boolean" use="optional"/>
+    <xs:attribute name="variable" type="xs:boolean" use="optional"/>
+    <xs:attribute name="date" type="xs:boolean" use="optional"/>
+    <xs:attribute name="time" type="xs:boolean" use="optional"/>
+  </xs:complexType>
+
+  <xs:complexType name="TypeDomainValueType">
+    <xs:sequence>
+      <xs:element name="Entry" type="TypeDomainEntryType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="EnumerationValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required"/>
+    <xs:attribute name="member" type="NonEmptyTokenType" use="required"/>
+  </xs:complexType>
+
+  <xs:simpleType name="ColorKindType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="absolute"/>
+      <xs:enumeration value="automatic"/>
+      <xs:enumeration value="styleReference"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="ColorValueType">
+    <xs:attribute name="kind" type="ColorKindType" use="required"/>
+    <xs:attribute name="red" type="xs:unsignedByte" use="optional"/>
+    <xs:attribute name="green" type="xs:unsignedByte" use="optional"/>
+    <xs:attribute name="blue" type="xs:unsignedByte" use="optional"/>
+    <xs:attribute name="alpha" type="xs:unsignedByte" use="optional"/>
+    <xs:attribute name="styleName" type="xs:QName" use="optional"/>
+    <xs:attribute name="styleObjectId" type="xs:long" use="optional"/>
+    <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
+  </xs:complexType>
+
+  <xs:simpleType name="FontKindType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="absolute"/>
+      <xs:enumeration value="windowsFont"/>
+      <xs:enumeration value="styleReference"/>
+      <xs:enumeration value="automatic"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="FontValueType">
+    <xs:attribute name="kind" type="FontKindType" use="required"/>
+    <xs:attribute name="mask" type="xs:unsignedInt" use="required"/>
+    <xs:attribute name="faceName" type="xs:string" use="optional"/>
+    <xs:attribute name="height" type="xs:double" use="optional"/>
+    <xs:attribute name="bold" type="xs:boolean" use="optional"/>
+    <xs:attribute name="italic" type="xs:boolean" use="optional"/>
+    <xs:attribute name="underline" type="xs:boolean" use="optional"/>
+    <xs:attribute name="strikeout" type="xs:boolean" use="optional"/>
+    <xs:attribute name="styleName" type="xs:QName" use="optional"/>
+    <xs:attribute name="styleObjectId" type="xs:long" use="optional"/>
+    <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
+  </xs:complexType>
+
+  <xs:simpleType name="PictureReferenceValueType">
+    <xs:restriction base="ObjectIdType"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="ControlReferenceValueType">
+    <xs:restriction base="ObjectIdType"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="AttributeReferenceValueType">
+    <xs:restriction base="ObjectIdType"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="CommandReferenceValueType">
+    <xs:restriction base="ObjectIdType"/>
+  </xs:simpleType>
+
+  <xs:complexType name="EventHandlerType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="id" type="ObjectIdType" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <xs:complexType name="DataPathType">
+    <xs:sequence>
+      <xs:element name="Member" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="attributeId" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+
+  <xs:simpleType name="BindingCoordinateType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="left"/>
+      <xs:enumeration value="top"/>
+      <xs:enumeration value="right"/>
+      <xs:enumeration value="bottom"/>
+      <xs:enumeration value="verticalCenter"/>
+      <xs:enumeration value="horizontalCenter"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="BindingDimensionType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="width"/>
+      <xs:enumeration value="height"/>
+      <xs:enumeration value="minimumWidth"/>
+      <xs:enumeration value="minimumHeight"/>
+      <xs:enumeration value="stretch"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="AnchorBindingType">
+    <xs:attribute name="coordinate" type="BindingCoordinateType" use="required"/>
+    <xs:attribute name="targetId" type="ObjectIdType" use="optional"/>
+    <xs:attribute name="offset" type="xs:int" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="DimensionBindingType">
+    <xs:attribute name="dimension" type="BindingDimensionType" use="required"/>
+    <xs:attribute name="value" type="xs:int" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="BindingsType">
+    <xs:sequence>
+      <xs:element name="AnchorBinding" type="AnchorBindingType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="DimensionBinding" type="DimensionBindingType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="AttributeType">
+    <xs:sequence>
+      <xs:element name="TypeDomain" type="TypeDomainValueType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Main" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="StoredData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+    <xs:attribute name="name" type="xs:string" use="required"/>
   </xs:complexType>
 
   <xs:complexType name="AttributesType">
@@ -356,180 +220,1346 @@
     </xs:sequence>
   </xs:complexType>
 
+  <xs:complexType name="CommandType">
+    <xs:sequence>
+      <xs:element name="Title" type="LocalizedStringValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChangesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="handler" type="xs:string" use="required"/>
+  </xs:complexType>
+
   <xs:complexType name="CommandsType">
     <xs:sequence>
       <xs:element name="Command" type="CommandType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
   </xs:complexType>
 
-  <xs:simpleType name="BooleanLiteralType">
+  <xs:simpleType name="PictureFormatType">
     <xs:restriction base="xs:string">
-      <xs:enumeration value="true"/>
-      <xs:enumeration value="false"/>
-      <xs:enumeration value="1"/>
-      <xs:enumeration value="0"/>
+      <xs:enumeration value="gif"/>
+      <xs:enumeration value="png"/>
+      <xs:enumeration value="jpeg"/>
+      <xs:enumeration value="bmp"/>
     </xs:restriction>
   </xs:simpleType>
 
-  <xs:complexType name="BooleanPropertyType">
-    <xs:simpleContent>
-      <xs:extension base="BooleanLiteralType">
-        <xs:attribute name="value" type="BooleanLiteralType" use="optional"/>
-      </xs:extension>
-    </xs:simpleContent>
+  <xs:complexType name="PictureAssetType">
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+    <xs:attribute name="relativePath" type="xs:string" use="required"/>
+    <xs:attribute name="format" type="PictureFormatType" use="required"/>
   </xs:complexType>
 
-  <xs:complexType name="StringPropertyType">
-    <xs:simpleContent>
-      <xs:extension base="xs:string">
-        <xs:attribute name="value" type="xs:string" use="optional"/>
-        <xs:attribute name="lang" type="xs:string" use="optional"/>
-      </xs:extension>
-    </xs:simpleContent>
+  <xs:complexType name="PictureAssetsType">
+    <xs:sequence>
+      <xs:element name="PictureAsset" type="PictureAssetType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
   </xs:complexType>
-
   <xs:complexType name="PositionType">
     <xs:sequence>
-      <xs:element name="Bindings" type="BindingsType" minOccurs="0"/>
+      <xs:element name="DefaultControl" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Top" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Visible" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Height" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Left" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TabOrder" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ZOrder" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Collapse" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Bindings" type="BindingsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
-    <xs:attribute name="left" type="xs:string" use="optional"/>
-    <xs:attribute name="top" type="xs:string" use="optional"/>
-    <xs:attribute name="right" type="xs:string" use="optional"/>
-    <xs:attribute name="bottom" type="xs:string" use="optional"/>
-    <xs:attribute name="width" type="xs:string" use="optional"/>
-    <xs:attribute name="height" type="xs:string" use="optional"/>
   </xs:complexType>
 
-  <xs:complexType name="BindingsType">
+  <xs:complexType name="ControlChildItemsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="Binding" type="BindingType"/>
-      <xs:element name="DimensionBinding" type="DimensionBindingType"/>
+      <xs:element ref="Panel"/>
+      <xs:element ref="CommandBar"/>
+      <xs:element ref="Button"/>
+      <xs:element ref="PictureDecoration"/>
+      <xs:element ref="CheckBox"/>
+      <xs:element ref="ChoiceField"/>
+      <xs:element ref="RadioButton"/>
+      <xs:element ref="InputField"/>
+      <xs:element ref="UsualGroup"/>
+      <xs:element ref="Splitter"/>
+      <xs:element ref="Chart"/>
+      <xs:element ref="PivotChart"/>
+      <xs:element ref="GanttChart"/>
+      <xs:element ref="Dendrogram"/>
+      <xs:element ref="HTMLDocumentField"/>
+      <xs:element ref="ListBox"/>
+      <xs:element ref="ProgressBar"/>
+      <xs:element ref="TrackBar"/>
+      <xs:element ref="CalendarField"/>
+      <xs:element ref="TextDocumentField"/>
+      <xs:element ref="GeographicalSchemaField"/>
+      <xs:element ref="GraphicalSchemaField"/>
+      <xs:element ref="Table"/>
+      <xs:element ref="SpreadsheetDocumentField"/>
+      <xs:element ref="LabelDecoration"/>
+      <xs:element ref="ActiveXControl"/>
     </xs:choice>
   </xs:complexType>
 
-  <xs:complexType name="BindingType">
-    <xs:attribute name="coordinate" type="xs:string" use="required"/>
-    <xs:attribute name="value" type="xs:string" use="required"/>
-    <xs:attribute name="targetId" type="xs:string" use="optional"/>
-    <xs:attribute name="targetName" type="xs:string" use="optional"/>
-    <xs:attribute name="side" type="xs:string" use="optional"/>
-    <xs:attribute name="offset" type="xs:string" use="optional"/>
+  <xs:complexType name="PanelChildItemsType">
+    <xs:choice minOccurs="0" maxOccurs="unbounded">
+      <xs:element ref="Panel"/>
+      <xs:element ref="CommandBar"/>
+      <xs:element ref="Button"/>
+      <xs:element ref="PictureDecoration"/>
+      <xs:element ref="CheckBox"/>
+      <xs:element ref="ChoiceField"/>
+      <xs:element ref="RadioButton"/>
+      <xs:element ref="InputField"/>
+      <xs:element ref="UsualGroup"/>
+      <xs:element ref="Splitter"/>
+      <xs:element ref="Chart"/>
+      <xs:element ref="PivotChart"/>
+      <xs:element ref="GanttChart"/>
+      <xs:element ref="Dendrogram"/>
+      <xs:element ref="HTMLDocumentField"/>
+      <xs:element ref="ListBox"/>
+      <xs:element ref="ProgressBar"/>
+      <xs:element ref="TrackBar"/>
+      <xs:element ref="CalendarField"/>
+      <xs:element ref="TextDocumentField"/>
+      <xs:element ref="GeographicalSchemaField"/>
+      <xs:element ref="GraphicalSchemaField"/>
+      <xs:element ref="Table"/>
+      <xs:element ref="SpreadsheetDocumentField"/>
+      <xs:element ref="LabelDecoration"/>
+      <xs:element ref="ActiveXControl"/>
+      <xs:element ref="Page"/>
+    </xs:choice>
   </xs:complexType>
 
-  <xs:complexType name="DimensionBindingType">
-    <xs:attribute name="dimension" type="xs:string" use="required"/>
-    <xs:attribute name="value" type="xs:string" use="required"/>
-    <xs:attribute name="targetId" type="xs:string" use="optional"/>
-    <xs:attribute name="targetName" type="xs:string" use="optional"/>
-    <xs:attribute name="side" type="xs:string" use="optional"/>
-    <xs:attribute name="offset" type="xs:string" use="optional"/>
-  </xs:complexType>
-
-  <xs:complexType name="AttributeType">
+  <xs:complexType name="PageType">
     <xs:sequence>
-      <xs:element name="Type" type="TypeDescriptorType" minOccurs="0"/>
+      <xs:element name="Title" type="LocalizedStringValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChildItems" type="ControlChildItemsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="id" type="xs:string" use="optional"/>
-    <xs:attribute name="objectId" type="xs:string" use="optional"/>
-    <xs:attribute name="main" type="xs:string" use="optional"/>
-    <xs:attribute name="storedData" type="xs:string" use="optional"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
   </xs:complexType>
+  <xs:element name="Page" type="PageType"/>
 
-  <xs:complexType name="CommandType">
-    <xs:attribute name="id" type="xs:string" use="optional"/>
-    <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="handler" type="xs:string" use="optional"/>
-    <xs:attribute name="modifiesData" type="xs:string" use="optional"/>
-    <xs:attribute name="objectId" type="xs:string" use="optional"/>
-  </xs:complexType>
-
-  <xs:complexType name="TypeDescriptorType">
+  <xs:complexType name="FormEventsType">
     <xs:sequence>
-      <xs:element name="TypePattern" type="TypePatternType" minOccurs="0"/>
+      <xs:element name="ExternalEvent" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="RefreshDisplay" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ObjectActivationProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="NewObjectWriteProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="NotificationProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FillCheckProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AddInDetachmentOnError" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeClose" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeOpen" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnClose" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnOpen" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnReopen" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
   </xs:complexType>
 
-  <xs:complexType name="TypePatternType">
-    <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="Any" type="EmptyTypeRefType"/>
-      <xs:element name="ObjectType" type="GuidTypeRefType"/>
-      <xs:element name="TypeValue" type="GuidTypeRefType"/>
-      <xs:element name="Reference" type="GuidTypeRefType"/>
-      <xs:element name="List" type="GuidTypeRefType"/>
-      <xs:element name="String" type="ScalarTypeRefType"/>
-      <xs:element name="Binary" type="ScalarTypeRefType"/>
-      <xs:element name="Date" type="ScalarTypeRefType"/>
-      <xs:element name="Number" type="ScalarTypeRefType"/>
-    </xs:choice>
+  <xs:complexType name="PanelEventsType">
+    <xs:sequence>
+      <xs:element name="OnCurrentPageChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
   </xs:complexType>
 
-  <xs:complexType name="EmptyTypeRefType"/>
-
-  <xs:complexType name="GuidTypeRefType">
-    <xs:attribute name="guid" type="xs:string" use="required"/>
+  <xs:complexType name="CommandBarEventsType">
+    <xs:sequence>
+    </xs:sequence>
   </xs:complexType>
 
-  <xs:complexType name="ScalarTypeRefType">
-    <xs:attribute name="value" type="xs:string" use="optional"/>
-    <xs:attribute name="length" type="xs:string" use="optional"/>
-    <xs:attribute name="precision" type="xs:string" use="optional"/>
-    <xs:attribute name="scale" type="xs:string" use="optional"/>
+  <xs:complexType name="ButtonEventsType">
+    <xs:sequence>
+      <xs:element name="Click" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
   </xs:complexType>
 
-  <xs:complexType name="SimplePropertyType" mixed="true">
-    <xs:choice minOccurs="0" maxOccurs="unbounded">
-      <xs:element name="Binding" type="BindingType"/>
-      <xs:element name="Bindings" type="BindingsType"/>
-      <xs:element name="DimensionBinding" type="DimensionBindingType"/>
-      <xs:element name="Type" type="TypeDescriptorType"/>
-      <xs:element name="TypePattern" type="TypePatternType"/>
-      <xs:element name="Types" type="SimplePropertyType"/>
-      <xs:element name="ObjectType" type="GuidTypeRefType"/>
-      <xs:element name="ColorValue" type="SimplePropertyType"/>
-      <xs:element name="FontValue" type="SimplePropertyType"/>
-      <xs:element name="BorderValue" type="SimplePropertyType"/>
-      <xs:element name="PictureValue" type="SimplePropertyType"/>
-      <xs:element name="Column" type="SimplePropertyType"/>
-      <xs:element name="Row" type="SimplePropertyType"/>
-      <xs:element name="Item" type="SimplePropertyType"/>
-      <xs:element name="Value" type="SimplePropertyType"/>
-      <xs:element name="Pattern" type="SimplePropertyType"/>
-      <xs:element name="String" type="SimplePropertyType"/>
-      <xs:element name="Number" type="SimplePropertyType"/>
-      <xs:element name="Boolean" type="SimplePropertyType"/>
-      <xs:element name="Date" type="SimplePropertyType"/>
-      <xs:element name="UUID" type="SimplePropertyType"/>
-    </xs:choice>
-    <xs:attribute name="name" type="xs:string" use="optional"/>
-    <xs:attribute name="id" type="xs:string" use="optional"/>
-    <xs:attribute name="uuid" type="xs:string" use="optional"/>
-    <xs:attribute name="guid" type="xs:string" use="optional"/>
-    <xs:attribute name="title" type="xs:string" use="optional"/>
-    <xs:attribute name="value" type="xs:string" use="optional"/>
-    <xs:attribute name="type" type="xs:string" use="optional"/>
-    <xs:attribute name="kind" type="xs:string" use="optional"/>
-    <xs:attribute name="handler" type="xs:string" use="optional"/>
-    <xs:attribute name="objectId" type="xs:string" use="optional"/>
-    <xs:attribute name="ownerId" type="xs:string" use="optional"/>
-    <xs:attribute name="main" type="xs:string" use="optional"/>
-    <xs:attribute name="storedData" type="xs:string" use="optional"/>
-    <xs:attribute name="modifiesData" type="xs:string" use="optional"/>
-    <xs:attribute name="targetId" type="xs:string" use="optional"/>
-    <xs:attribute name="targetName" type="xs:string" use="optional"/>
-    <xs:attribute name="side" type="xs:string" use="optional"/>
-    <xs:attribute name="left" type="xs:string" use="optional"/>
-    <xs:attribute name="top" type="xs:string" use="optional"/>
-    <xs:attribute name="right" type="xs:string" use="optional"/>
-    <xs:attribute name="bottom" type="xs:string" use="optional"/>
-    <xs:attribute name="width" type="xs:string" use="optional"/>
-    <xs:attribute name="height" type="xs:string" use="optional"/>
-    <xs:attribute name="coordinate" type="xs:string" use="optional"/>
-    <xs:attribute name="dimension" type="xs:string" use="optional"/>
-    <xs:attribute name="offset" type="xs:string" use="optional"/>
-    <xs:attribute name="storage" type="xs:string" use="optional"/>
-    <xs:attribute name="href" type="xs:string" use="optional"/>
-    <xs:attribute name="file" type="xs:string" use="optional"/>
-    <xs:attribute name="format" type="xs:string" use="optional"/>
+  <xs:complexType name="PictureDecorationEventsType">
+    <xs:sequence>
+      <xs:element name="Click" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragStart" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragEnd" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Drag" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragCheck" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
   </xs:complexType>
+
+  <xs:complexType name="CheckBoxEventsType">
+    <xs:sequence>
+      <xs:element name="OnChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ChoiceFieldEventsType">
+    <xs:sequence>
+      <xs:element name="StartChoice" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="StartListChoice" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Opening" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Clearing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Tuning" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="RadioButtonEventsType">
+    <xs:sequence>
+      <xs:element name="OnChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="InputFieldEventsType">
+    <xs:sequence>
+      <xs:element name="AutoCompleteText" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="StartChoice" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="StartListChoice" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextEditEnd" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Opening" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Clearing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Tuning" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="UsualGroupEventsType">
+    <xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="SplitterEventsType">
+    <xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ChartEventsType">
+    <xs:sequence>
+      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DetailProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="PivotChartEventsType">
+    <xs:sequence>
+      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DetailProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="GanttChartEventsType">
+    <xs:sequence>
+      <xs:element name="OnIntervalEditEnd" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="DendrogramEventsType">
+    <xs:sequence>
+      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DetailProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="HTMLDocumentFieldEventsType">
+    <xs:sequence>
+      <xs:element name="DocumentComplete" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ListBoxEventsType">
+    <xs:sequence>
+      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnActivateRow" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnCheckChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ProgressBarEventsType">
+    <xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="TrackBarEventsType">
+    <xs:sequence>
+      <xs:element name="OnChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="CalendarFieldEventsType">
+    <xs:sequence>
+      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragStart" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragEnd" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Drag" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnActivateDate" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnPeriodOutput" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragCheck" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="TextDocumentFieldEventsType">
+    <xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="GeographicalSchemaFieldEventsType">
+    <xs:sequence>
+      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="GraphicalSchemaFieldEventsType">
+    <xs:sequence>
+      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnActivate" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="TableEventsType">
+    <xs:sequence>
+      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueChoice" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragStart" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="NewObjectWriteProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragEnd" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeAddRow" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeRowChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeEditEnd" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeforeDeleteRow" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Drag" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AfterDeleteLine" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnActivateColumn" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnActivateRow" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnActivateCell" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnRowOutput" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnCheckChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnStartEdit" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnEditEnd" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnDataGet" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnCurrentParentChange" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragCheck" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="SpreadsheetDocumentFieldEventsType">
+    <xs:sequence>
+      <xs:element name="Selection" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragStart" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DetailProcessing" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragEnd" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Drag" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnActivateArea" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OnChangeAreaContent" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DragCheck" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="LabelDecorationEventsType">
+    <xs:sequence>
+      <xs:element name="Click" type="EventHandlerType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ActiveXControlEventsType">
+    <xs:sequence>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="FormType">
+    <xs:sequence>
+      <xs:element name="AutoTitle" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FormOwner" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Height" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CloseOnChoice" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CloseOnOwnerClose" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SizeChange" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChangeWindowAppearanceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="WindowOptionsName" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CaptionPicture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="WindowOptionsKey" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="UniqueKey" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MultipleChoice" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModalMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Modified" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceInitialValue" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Panel" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnterKeyBehavior" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="WindowLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="WindowDockLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AllowClose" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AllowJoinWindow" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AllowNormalState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AllowDockedState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AllowAutohideState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AllowFloatState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DesktopMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ConnectableWindow" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="WindowState" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="WindowAppearanceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Style" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CurrentControl" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Controls" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ThisForm" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="FormEventsType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Attributes" type="AttributesType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Commands" type="CommandsType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PictureAssets" type="PictureAssetsType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChildItems" type="ControlChildItemsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="ordinaryFormVersion" type="xs:string" use="required" fixed="2.1"/>
+  </xs:complexType>
+  <xs:element name="Form" type="FormType"/>
+
+  <xs:complexType name="PanelType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="AutoTabOrder" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowTabs" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PanelPictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TabOrder" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SeparateByPage" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ScrollPageMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Pages" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CurrentPage" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="PanelEventsType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChildItems" type="PanelChildItemsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="Panel" type="PanelType"/>
+
+  <xs:complexType name="CommandBarType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="AutoFill" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Secondary" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonsAlignment" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Buttons" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="CommandBarEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="CommandBar" type="CommandBarType"/>
+
+  <xs:complexType name="ButtonType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="VerticalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Buttons" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MultiLine" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MenuMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Shortcut" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="ButtonEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="Button" type="ButtonType"/>
+
+  <xs:complexType name="PictureDecorationType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Hyperlink" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="UseContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Zoomable" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Shortcut" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="NonselectedPictureText" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="PictureDecorationEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="PictureDecoration" type="PictureDecorationType"/>
+
+  <xs:complexType name="CheckBoxType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="VerticalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TitleLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ThreeState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="CheckBoxEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="CheckBox" type="CheckBoxType"/>
+
+  <xs:complexType name="ChoiceFieldType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="ChoiceListHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelButtonPicture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceButtonPicture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OpenButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ClearButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SpinButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceList" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceListWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="ChoiceFieldEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="ChoiceField" type="ChoiceFieldType"/>
+
+  <xs:complexType name="RadioButtonType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="VerticalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelectionValue" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TitleLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="RadioButtonEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="RadioButton" type="RadioButtonType"/>
+
+  <xs:complexType name="InputFieldType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="AutoChoiceIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoMarkIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Wrap" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="VerticalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChooseType" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelectedText" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MarkNegatives" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceListHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelButtonPicture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceButtonPicture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="OpenButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ClearButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SpinButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceListButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxValue" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Mask" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MinValue" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MultiLine" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TypeRestriction" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MarkIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ExtendedEdit" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextEdit" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ListChoiceMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="IncompleteChoiceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PasswordMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Shortcut" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceList" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Format" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceListWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TypeLinkItem" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="InputFieldEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="InputField" type="InputFieldType"/>
+
+  <xs:complexType name="UsualGroupType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="UsualGroupEventsType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChildItems" type="ControlChildItemsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="UsualGroup" type="UsualGroupType"/>
+
+  <xs:complexType name="SplitterType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="SplitterEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="Splitter" type="SplitterType"/>
+
+  <xs:complexType name="ChartType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="AutoMaxValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoMinValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoSeriesSeparation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoTransposition" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoSeriesText" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoPointText" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActiveSeries" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActivePoint" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BaseValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Gradient" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DataSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SeriesCount" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PointCount" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EndGaugeAngle" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxSeries" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxSeriesCount" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxSeriesPercent" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MinValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeginGaugeAngle" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TitleArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LegendArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PlotArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="RefreshEnabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Outline" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowTitle" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowLegend" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeChartValueRepresentation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ColorPalette" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeChartValuesScaleLabelsArcDirection" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeChartValuesScaleLabelsLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeChartQualityBands" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TransparentLabel" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HideBaseValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelDelimiter" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelBorder" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SpaceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Light" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SummarySeries" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Series" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SeriesInRows" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChartType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeBushThickness" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeThickness" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Points" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueLabelFormat" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PercentLabelFormat" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="GaugeBushColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelBorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="ChartEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="Chart" type="ChartType"/>
+
+  <xs:complexType name="PivotChartType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="DataSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Fields" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PivotChartType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="PivotChartEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="PivotChart" type="PivotChartType"/>
+
+  <xs:complexType name="GanttChartType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="AutoMaxWidth" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PeriodicVariantUnit" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PeriodicVariantRepetition" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="GanttChartEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="GanttChart" type="GanttChartType"/>
+
+  <xs:complexType name="DendrogramType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="AutoMaxHeight" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoMaxWidth" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Height" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="VerticalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="DendrogramEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="Dendrogram" type="DendrogramType"/>
+
+  <xs:complexType name="HTMLDocumentFieldType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Document" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="HTMLDocumentFieldEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="HTMLDocumentField" type="HTMLDocumentFieldType"/>
+
+  <xs:complexType name="ListBoxType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowPicture" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowCheckBox" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CurrentRow" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="ListBoxEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="ListBox" type="ListBoxType"/>
+
+  <xs:complexType name="ProgressBarType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MinValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowPercent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowStyle" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Step" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="ProgressBarEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="ProgressBar" type="ProgressBarType"/>
+
+  <xs:complexType name="TrackBarType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="LargeStep" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MinValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MarkingAppearance" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Step" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MarkingStep" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="TrackBarEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="TrackBar" type="TrackBarType"/>
+
+  <xs:complexType name="CalendarFieldType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="SelectedDates" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EndOfDisplayPeriod" type="xs:dateTime" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeginOfDisplayPeriod" type="xs:dateTime" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowCurrentDate" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CalendarNavigation" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CurrentDate" type="xs:dateTime" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HolidayColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelectionTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelectionBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="CalendarFieldEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="CalendarField" type="CalendarFieldType"/>
+
+  <xs:complexType name="TextDocumentFieldType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="SelectedText" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="TextDocumentFieldEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="TextDocumentField" type="TextDocumentFieldType"/>
+
+  <xs:complexType name="GeographicalSchemaFieldType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="AutoMaxHeight" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoMaxWidth" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Height" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Scale" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowedArea" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ScaleKeeping" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="VerticalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="GeographicalSchemaFieldEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="GeographicalSchemaField" type="GeographicalSchemaFieldType"/>
+
+  <xs:complexType name="GraphicalSchemaFieldType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Height" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Edit" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="VerticalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalStretch" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CurrentItem" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="GraphicalSchemaFieldEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="GraphicalSchemaField" type="GraphicalSchemaFieldType"/>
+
+  <xs:complexType name="TableType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="AutoInsertNewRow" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="VerticalScrollBar" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="VerticalLines" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelectedRows" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FooterHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HeaderHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalScrollBar" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalLines" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChangeSettingOfColumns" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChangePositionOfColumns" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChangeRowSet" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Columns" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="InitialTreeView" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="InitialListView" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Footer" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="RowInputMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="RowSelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CurrentColumn" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CurrentRow" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CurrentData" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="CurrentParent" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FixedLeft" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FixedRight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelectionTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FooterTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HeaderTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SelectionBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FooterBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FieldBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AlternationRowBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HeaderBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="UseAlternationRowColor" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Header" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FooterFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HeaderFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="TableEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="Table" type="TableType"/>
+
+  <xs:complexType name="SpreadsheetDocumentFieldType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="VerticalScrollBar" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalScrollBar" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ShowSelection" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="SpreadsheetDocumentFieldEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="SpreadsheetDocumentField" type="SpreadsheetDocumentFieldType"/>
+
+  <xs:complexType name="LabelDecorationType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="ScrollingText" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="VerticalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MarkNegatives" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Hyperlink" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="HorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelPictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Shortcut" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Format" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="LabelDecorationEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="LabelDecoration" type="LabelDecorationType"/>
+
+  <xs:complexType name="ActiveXControlType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoContextMenu" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Value" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ModifiesData" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ActionSource" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ContextMenu" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FirstInGroup" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="CLSID" type="UuidValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="State" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Events" type="ActiveXControlEventsType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+    <xs:attribute name="id" type="ObjectIdType" use="required"/>
+  </xs:complexType>
+  <xs:element name="ActiveXControl" type="ActiveXControlType"/>
+
 </xs:schema>

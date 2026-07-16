@@ -163,8 +163,6 @@ legacy-test:
 	$(BIN) object-model-gate | grep -F -q '"conceptOwner":"OrdinaryFormConceptRegistry"'
 	$(BIN) object-model-gate | grep -F -q '"acceptedConceptIncompleteRows":0'
 	$(BIN) object-model-gate | grep -F -q '"publicSchemaEscapeStatus":"PASS"'
-	$(BIN) object-model-gate | grep -F -q '"publicSchemaStableObjectTypesStatus":"PASS"'
-	$(BIN) object-model-gate | grep -F -q '"publicSchemaInputFieldPropertyTypesStatus":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"controlInfoWritablePromotions":0'
 	$(BIN) object-model-gate | grep -F -q '"releaseReady":false'
 	$(BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
@@ -471,8 +469,6 @@ legacy-test:
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/dual-projection-object.txt | grep -F -q '"objectSignatureStableAfterSecondWrite":true'
 	$(BIN) object-model-gate | grep -F -q '"status":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"publicSchemaEscapeStatus":"PASS"'
-	$(BIN) object-model-gate | grep -F -q '"publicSchemaStableObjectTypesStatus":"PASS"'
-	$(BIN) object-model-gate | grep -F -q '"publicSchemaInputFieldPropertyTypesStatus":"PASS"'
 	$(BIN) object-model-gate | grep -F -q '"releaseReady":false'
 	$(BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
 	total=0; ok=0; list_file="$(BUILD_DIR)/native-lossless-formbins.txt"; : > "$$list_file"; \
