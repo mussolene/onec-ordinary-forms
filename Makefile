@@ -1,20 +1,26 @@
-.PHONY: test smoke native-smoke-gate release-gate clean FORCE
+CMAKE ?= cmake
+CTEST ?= ctest
+CMAKE_BUILD_TYPE ?= Release
+BUILD_DIR ?= build
+CMAKE_CONFIGURE_ARGS ?=
+CMAKE_BUILD_ARGS ?=
+CTEST_ARGS ?=
 
-NATIVE_DIR := sidecars/onec-form-native
-NATIVE_BIN := $(NATIVE_DIR)/build/oof-native
+.PHONY: all configure build test smoke native-smoke-gate release-gate clean
 
-$(NATIVE_BIN): FORCE
-	$(MAKE) -C $(NATIVE_DIR)
+all: build
 
-test:
-	$(MAKE) -C $(NATIVE_DIR) test
+configure:
+	$(CMAKE) -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) $(CMAKE_CONFIGURE_ARGS)
 
-smoke: $(NATIVE_BIN)
-	$(NATIVE_BIN) mechanism >/dev/null
-	$(NATIVE_BIN) platform-object-schema >/dev/null
-	$(NATIVE_BIN) object-model-gate | grep -F -q '"status":"PASS"'
-	$(NATIVE_BIN) object-model-gate | grep -F -q '"releaseReady":false'
-	$(NATIVE_BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
+build: configure
+	$(CMAKE) --build $(BUILD_DIR) --config $(CMAKE_BUILD_TYPE) $(CMAKE_BUILD_ARGS)
+
+test: build
+	$(CTEST) --test-dir $(BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure -L regression $(CTEST_ARGS)
+
+smoke: build
+	$(CTEST) --test-dir $(BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure -L smoke $(CTEST_ARGS)
 
 native-smoke-gate: test smoke
 
@@ -23,5 +29,4 @@ release-gate:
 	@exit 1
 
 clean:
-	$(MAKE) -C $(NATIVE_DIR) clean
-	rm -rf build dist
+	rm -rf $(BUILD_DIR) sidecars/onec-form-native/build dist

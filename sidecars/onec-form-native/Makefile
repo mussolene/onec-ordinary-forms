@@ -1,20 +1,26 @@
-CXX ?= c++
-CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
-LDLIBS ?= -lz
+ROOT_DIR := ../..
+CMAKE ?= cmake
+CTEST ?= ctest
+CMAKE_BUILD_TYPE ?= Release
+CMAKE_BUILD_DIR ?= $(ROOT_DIR)/build
+BUILD_DIR ?= build
+BIN ?= $(BUILD_DIR)/oof-native
+LOCAL_PLATFORM_WORK ?= $(ROOT_DIR)/work
 
-BUILD_DIR := build
-BIN := $(BUILD_DIR)/oof-native
-SRC := src/main.cpp src/control_info_descriptor_registry.hpp src/ordinary_control_type_registry.hpp src/ordinary_form_concept_registry.hpp src/ordinary_form_object.hpp src/platform_mechanism.hpp src/platform_list_stream.hpp src/platform_value.hpp src/platform_value_metadata.hpp src/platform_descriptor_registry.hpp src/platform_form_descriptor_join.hpp src/platform_form_schema.hpp src/platform_object_model.hpp src/platform_object_schema.hpp src/platform_property_registry.hpp src/platform_runtime_binding.hpp src/ordinary_controls.hpp src/ordinary_form_graph.hpp src/form_bin_container.hpp src/platform_guid_registry.hpp
+.PHONY: all configure clean legacy-test test
 
-.PHONY: all clean test
+all: configure
+	$(CMAKE) --build $(CMAKE_BUILD_DIR) --config $(CMAKE_BUILD_TYPE)
 
-all: $(BIN)
+configure:
+	$(CMAKE) -S $(ROOT_DIR) -B $(CMAKE_BUILD_DIR) -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE)
 
-$(BIN): $(SRC)
+test: all
+	$(CTEST) --test-dir $(CMAKE_BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure -L regression
+
+legacy-test:
+	test -x $(BIN)
 	mkdir -p $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) -o $@ $< $(LDLIBS)
-
-test: $(BIN)
 	$(BIN) mechanism | grep -q '"cf_form_controls_info8":40192'
 	$(BIN) mechanism | grep -q '"FormDataObject"'
 	$(BIN) mechanism | grep -q '"TypeDomainPattern"'
@@ -454,13 +460,13 @@ test: $(BIN)
 	$(BIN) runtime-xsd-order-object-gate $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"itemObjectsChecked":2'
 	$(BIN) runtime-xsd-order-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"status":"PASS"'
 	$(BIN) runtime-xsd-order-object-roundtrip $(BUILD_DIR)/runtime-form-selftest.txt | grep -F -q '"xsdOrderPass":true'
-	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"knownDescriptorHitsTotal":12'; fi
-	if [ -f ../../work/platform82-container-libs/mngui_root.res ]; then $(BIN) platform-resource-descriptor-scan ../../work/platform82-container-libs/mngui_root.res | grep -F -q '"nearestName":"GroupsCommandBar"'; fi
-	if [ -f ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd ]; then $(BIN) platform-xsd-inventory ../../work/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd | grep -F -q '"targetNamespace":"http://v8.1c.ru/8.1/data/ui"'; fi
-	if [ -f ../../work/platform82-xml-resources/mngcore_root-03-http_v8.1c.ru_8.2_managed-application_logform.xsd ]; then $(BIN) platform-xsd-inventory ../../work/platform82-xml-resources/mngcore_root-03-http_v8.1c.ru_8.2_managed-application_logform.xsd | grep -F -q '"formRelatedTypes"'; fi
-	if [ -f ../../work/platform85-xml-resources/chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd ]; then grep -F -q 'complexType name="PivotChart"' ../../work/platform85-xml-resources/chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd; fi
-	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -q '"09ccdc77-ea1a-4a6d-ab1c-3435eada2433"'; fi
-	if [ -f ../../work/platform85-container-libs/dsgnfrm.so ]; then $(BIN) platform-guid-scan ../../work/platform85-container-libs/dsgnfrm.so | grep -F -q '"repeatedGuidBlocks":["0x42370"'; fi
+	if [ -f "$(LOCAL_PLATFORM_WORK)/platform82-container-libs/mngui_root.res" ]; then $(BIN) platform-resource-descriptor-scan "$(LOCAL_PLATFORM_WORK)/platform82-container-libs/mngui_root.res" | grep -F -q '"knownDescriptorHitsTotal":12'; fi
+	if [ -f "$(LOCAL_PLATFORM_WORK)/platform82-container-libs/mngui_root.res" ]; then $(BIN) platform-resource-descriptor-scan "$(LOCAL_PLATFORM_WORK)/platform82-container-libs/mngui_root.res" | grep -F -q '"nearestName":"GroupsCommandBar"'; fi
+	if [ -f "$(LOCAL_PLATFORM_WORK)/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd" ]; then $(BIN) platform-xsd-inventory "$(LOCAL_PLATFORM_WORK)/platform82-xml-resources/xdto_root-04-http_v8.1c.ru_8.1_data_ui.xsd" | grep -F -q '"targetNamespace":"http://v8.1c.ru/8.1/data/ui"'; fi
+	if [ -f "$(LOCAL_PLATFORM_WORK)/platform82-xml-resources/mngcore_root-03-http_v8.1c.ru_8.2_managed-application_logform.xsd" ]; then $(BIN) platform-xsd-inventory "$(LOCAL_PLATFORM_WORK)/platform82-xml-resources/mngcore_root-03-http_v8.1c.ru_8.2_managed-application_logform.xsd" | grep -F -q '"formRelatedTypes"'; fi
+	if [ -f "$(LOCAL_PLATFORM_WORK)/platform85-xml-resources/chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd" ]; then grep -F -q 'complexType name="PivotChart"' "$(LOCAL_PLATFORM_WORK)/platform85-xml-resources/chart_root-01-http_v8.1c.ru_8.2_data_chart.xsd"; fi
+	if [ -f "$(LOCAL_PLATFORM_WORK)/platform85-container-libs/dsgnfrm.so" ]; then $(BIN) platform-guid-scan "$(LOCAL_PLATFORM_WORK)/platform85-container-libs/dsgnfrm.so" | grep -q '"09ccdc77-ea1a-4a6d-ab1c-3435eada2433"'; fi
+	if [ -f "$(LOCAL_PLATFORM_WORK)/platform85-container-libs/dsgnfrm.so" ]; then $(BIN) platform-guid-scan "$(LOCAL_PLATFORM_WORK)/platform85-container-libs/dsgnfrm.so" | grep -F -q '"repeatedGuidBlocks":["0x42370"'; fi
 	$(BIN) runtime-platform-object-set $(BUILD_DIR)/runtime-form-selftest.txt $(BUILD_DIR)/dual-projection-object.txt 5 Имя DualProjectionName | grep -F -q '"operation":"setPropVal"'
 	$(BIN) runtime-form-object-roundtrip $(BUILD_DIR)/dual-projection-object.txt | grep -F -q '"objectSignatureStableAfterSecondWrite":true'
 	$(BIN) object-model-gate | grep -F -q '"status":"PASS"'
@@ -470,7 +476,7 @@ test: $(BIN)
 	$(BIN) object-model-gate | grep -F -q '"releaseReady":false'
 	$(BIN) object-model-gate | grep -F -q '"coverageStatus":"PARTIAL"'
 	total=0; ok=0; list_file="$(BUILD_DIR)/native-lossless-formbins.txt"; : > "$$list_file"; \
-	for root in ../../work/oracle-runtime/runtime-source/root ../../work/oracle-runtime/blank-source/root; do \
+	for root in "$(LOCAL_PLATFORM_WORK)/oracle-runtime/runtime-source/root" "$(LOCAL_PLATFORM_WORK)/oracle-runtime/blank-source/root"; do \
 		if [ -d "$$root" ]; then \
 			find "$$root" -path '*/Forms/*/Ext/Form.bin' -type f >> "$$list_file"; \
 		fi; \
@@ -488,4 +494,4 @@ test: $(BIN)
 	printf 'native-lossless-roundtrip-gate: PASS (%s/%s payload-lossless)\n' "$$ok" "$$total"
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(CMAKE_BUILD_DIR)
