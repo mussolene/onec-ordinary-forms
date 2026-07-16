@@ -74,6 +74,7 @@ enum class ValueCodec : std::uint8_t {
     unclassified,
     boolean,
     integer,
+    integer32,
     decimal,
     string,
     localized_string,

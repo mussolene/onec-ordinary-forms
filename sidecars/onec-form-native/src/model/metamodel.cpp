@@ -64,6 +64,14 @@ ValueCodec initial_value_codec(ValueKind kind, std::u8string_view platform_type)
     return ValueCodec::unclassified;
 }
 
+ValueCodec panel_placement_value_codec(
+    ValueKind kind,
+    std::u8string_view platform_type
+) noexcept {
+    return kind == ValueKind::number ? ValueCodec::integer32
+                                     : initial_value_codec(kind, platform_type);
+}
+
 constexpr std::array<ControlIdentity, control_kind_count> control_identities{{
     {ControlKind::panel, "09ccdc77-ea1a-4a6d-ab1c-3435eada2433", "pnl", all_versions, ClassificationStatus::platform_resource_backed, ChildPolicy::ordered_controls_and_pages},
     {ControlKind::command_bar, "e69bf21d-97b2-4f37-86db-675aea9ec2cb", "cmdb", all_versions, ClassificationStatus::platform_resource_backed, ChildPolicy::forbidden},
@@ -230,7 +238,7 @@ std::vector<PropertyDescriptor> make_panel_placement_property_descriptors() {
 #define OOF_HELP_FORM_EVENT(...)
 #define OOF_HELP_FORM_CONTROL_EXTENSION_PROPERTY(...)
 #define OOF_HELP_PANEL_CONTROL_EXTENSION_PROPERTY(order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, value_kind_token, api_access_token, version_token) \
-        {PropertyId::from_name(api_name_value), DescriptorOwner::control, PropertySurface::panel_placement, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, initial_value_codec(ValueKind::value_kind_token, platform_type_value), ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
+        {PropertyId::from_name(api_name_value), DescriptorOwner::control, PropertySurface::panel_placement, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, panel_placement_value_codec(ValueKind::value_kind_token, platform_type_value), ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
 #include "generated_help_catalog.inc"
 #undef OOF_HELP_PANEL_CONTROL_EXTENSION_PROPERTY
 #undef OOF_HELP_FORM_CONTROL_EXTENSION_PROPERTY
@@ -330,6 +338,31 @@ struct Metamodel::Impl {
         panel_placement_properties = make_panel_placement_property_descriptors();
         form_properties = make_form_property_descriptors();
         form_events = make_form_event_descriptors();
+
+        // Help may repeat an inherited extension property on one concrete control.
+        // The executable model keeps the shared extension as the single owner.
+        for (auto& control_properties : properties) {
+            for (const auto& shared : control_extension_properties) {
+                const auto duplicate = std::ranges::find(
+                    control_properties,
+                    shared.api_name,
+                    &PropertyDescriptor::api_name);
+                if (duplicate == control_properties.end()) {
+                    continue;
+                }
+                if (duplicate->xml_name != shared.xml_name ||
+                    duplicate->russian_name != shared.russian_name ||
+                    duplicate->platform_type != shared.platform_type ||
+                    duplicate->value_kind != shared.value_kind ||
+                    duplicate->value_codec != shared.value_codec ||
+                    duplicate->api_access != shared.api_access ||
+                    duplicate->version_mask != shared.version_mask) {
+                    throw std::logic_error(
+                        "conflicting inherited ordinary-form control property");
+                }
+                control_properties.erase(duplicate);
+            }
+        }
 
         for (std::size_t index = 0; index < control_kind_count; ++index) {
             sort_and_validate_order(properties[index], controls[index].public_name);
@@ -783,6 +816,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "boolean";
         case ValueCodec::integer:
             return "integer";
+        case ValueCodec::integer32:
+            return "integer32";
         case ValueCodec::decimal:
             return "decimal";
         case ValueCodec::string:

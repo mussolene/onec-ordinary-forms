@@ -97,11 +97,11 @@ void test_help_metamodel() {
     const MetamodelCoverage& coverage = metamodel_coverage();
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 417,
-        "help catalog must retain 417 type-specific property occurrences");
+        coverage.control_property_occurrences == 416,
+        "executable metamodel must collapse one inherited property duplicate");
     expect(
-        coverage.unique_control_property_names == 201,
-        "help catalog must retain 201 exact API property names");
+        coverage.unique_control_property_names == 200,
+        "type-specific metamodel must exclude the inherited property duplicate");
     expect(
         coverage.control_event_occurrences == 79,
         "help catalog must retain 79 control event occurrences");
@@ -148,6 +148,13 @@ void test_help_metamodel() {
         find_property(ControlKind::input_field, "Visible")->surface ==
             PropertySurface::panel_placement,
         "Visible must come from the panel-placement extension");
+    expect(
+        find_property(ControlKind::input_field, "Top")->value_codec == ValueCodec::integer32,
+        "typed Position coordinates must be 32-bit integer codecs in the metamodel");
+    expect(
+        find_property(ControlKind::radio_button, "FirstInGroup")->surface ==
+            PropertySurface::control_extension,
+        "inherited RadioButton FirstInGroup must have one shared extension owner");
     expect(
         find_property(ControlKind::input_field, "SelButtonPicture") != nullptr &&
             find_property(ControlKind::input_field, "ChoiceButtonPicture") != nullptr,
@@ -455,6 +462,64 @@ void test_property_applicability_and_type_validation() {
         "placement properties must not be duplicated in the extension property set");
 }
 
+void test_event_sequence_invariants() {
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(ControlRef{ObjectId{10}});
+    form.events.push_back(EventRef{ObjectId{40}});
+    OrdinaryFormDocument wrong_owner(std::move(form));
+    wrong_owner.add_control(ControlNode{ObjectId{10}, "Button", ButtonPayload{}});
+    wrong_owner.add_event(Event{
+        ObjectId{40},
+        "Click",
+        "Click",
+        ControlRef{ObjectId{10}},
+    });
+    expect(
+        wrong_owner.validate().has(InvariantCode::invalid_property),
+        "event sequence owner must match Event.owner");
+
+    Form orphan_form;
+    orphan_form.id = ObjectId{1};
+    OrdinaryFormDocument orphan(std::move(orphan_form));
+    orphan.add_event(Event{
+        ObjectId{40},
+        "OnOpen",
+        "OnOpen",
+        FormRef{ObjectId{1}},
+    });
+    expect(
+        orphan.validate().has(InvariantCode::orphan),
+        "event missing from its owner's sequence must be rejected");
+
+    Form duplicate_form;
+    duplicate_form.id = ObjectId{1};
+    duplicate_form.events.push_back(EventRef{ObjectId{40}});
+    duplicate_form.events.push_back(EventRef{ObjectId{41}});
+    OrdinaryFormDocument duplicate(std::move(duplicate_form));
+    duplicate.add_event(Event{ObjectId{40}, "OnOpen", "First", FormRef{ObjectId{1}}});
+    duplicate.add_event(Event{ObjectId{41}, "OnOpen", "Second", FormRef{ObjectId{1}}});
+    expect(
+        duplicate.validate().has(InvariantCode::invalid_property),
+        "one event name may occur only once for an owner");
+}
+
+void test_duplicate_bindings_rejected() {
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(ControlRef{ObjectId{10}});
+    OrdinaryFormDocument document(std::move(form));
+    ControlNode input{ObjectId{10}, "Input", InputFieldPayload{}};
+    input.position.bindings.anchors.push_back(
+        AnchorBinding{BindingCoordinate::left, std::nullopt, Property<std::int32_t>{0}});
+    input.position.bindings.anchors.push_back(
+        AnchorBinding{BindingCoordinate::left, std::nullopt, Property<std::int32_t>{0}});
+    document.add_control(std::move(input));
+    expect(
+        document.validate().has(InvariantCode::invalid_property),
+        "duplicate binding coordinates must be rejected");
+}
+
 }  // namespace
 
 int main() {
@@ -472,6 +537,8 @@ int main() {
         test_dangling_and_child_policy_rejection();
         test_property_reference_rejection();
         test_property_applicability_and_type_validation();
+        test_event_sequence_invariants();
+        test_duplicate_bindings_rejected();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';
         return 1;

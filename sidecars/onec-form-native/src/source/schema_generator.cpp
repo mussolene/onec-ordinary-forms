@@ -8,6 +8,8 @@
 #include <string>
 #include <string_view>
 
+#include "oof/source/form_xml.hpp"
+
 namespace oof::source {
 namespace {
 
@@ -20,8 +22,6 @@ using model::metamodel::Metamodel;
 using model::metamodel::PropertyDescriptor;
 using model::metamodel::PropertySurface;
 using model::metamodel::ValueCodec;
-
-constexpr std::string_view schema_version = "2.1";
 
 void append_xml_escaped(std::string& output, std::string_view value) {
     for (const char character : value) {
@@ -75,6 +75,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "xs:boolean";
         case ValueCodec::integer:
             return "xs:long";
+        case ValueCodec::integer32:
+            return "xs:int";
         case ValueCodec::decimal:
             return "xs:decimal";
         case ValueCodec::string:
@@ -84,7 +86,7 @@ std::string_view xsd_type(ValueCodec codec) {
         case ValueCodec::formatted_string:
             return "FormattedStringValueType";
         case ValueCodec::date:
-            return "xs:dateTime";
+            return "DateValueType";
         case ValueCodec::uuid:
             return "UuidValueType";
         case ValueCodec::composite_id:
@@ -270,6 +272,16 @@ void append_value_types(std::string& output) {
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="UndefinedValueType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="undefined"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="DateValueType">
+    <xs:union memberTypes="xs:dateTime UndefinedValueType"/>
+  </xs:simpleType>
+
   <xs:simpleType name="NonEmptyTokenType">
     <xs:restriction base="xs:token">
       <xs:minLength value="1"/>
@@ -352,7 +364,7 @@ void append_value_types(std::string& output) {
     <xs:attribute name="green" type="xs:unsignedByte" use="optional"/>
     <xs:attribute name="blue" type="xs:unsignedByte" use="optional"/>
     <xs:attribute name="alpha" type="xs:unsignedByte" use="optional"/>
-    <xs:attribute name="styleName" type="xs:QName" use="optional"/>
+    <xs:attribute name="styleName" type="NonEmptyTokenType" use="optional"/>
     <xs:attribute name="styleObjectId" type="xs:long" use="optional"/>
     <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
   </xs:complexType>
@@ -375,7 +387,7 @@ void append_value_types(std::string& output) {
     <xs:attribute name="italic" type="xs:boolean" use="optional"/>
     <xs:attribute name="underline" type="xs:boolean" use="optional"/>
     <xs:attribute name="strikeout" type="xs:boolean" use="optional"/>
-    <xs:attribute name="styleName" type="xs:QName" use="optional"/>
+    <xs:attribute name="styleName" type="NonEmptyTokenType" use="optional"/>
     <xs:attribute name="styleObjectId" type="xs:long" use="optional"/>
     <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
   </xs:complexType>
@@ -642,7 +654,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "    <xs:attribute name=\"id\" type=\"ObjectIdType\" use=\"required\"/>\n"
         "    <xs:attribute name=\"name\" type=\"xs:string\" use=\"required\"/>\n"
         "    <xs:attribute name=\"ordinaryFormVersion\" type=\"xs:string\" use=\"required\" fixed=\"";
-    append_xml_escaped(output, schema_version);
+    append_xml_escaped(output, ordinary_form_xml_version);
     output +=
         "\"/>\n"
         "  </xs:complexType>\n"
@@ -738,7 +750,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "    <xs:documentation>Generated bilingual annotations for the ordinary-form metamodel.</xs:documentation>\n"
         "    <xs:appinfo>\n"
         "      <Palette ordinaryFormVersion=\"";
-    append_xml_escaped(output, schema_version);
+    append_xml_escaped(output, ordinary_form_xml_version);
     output +=
         "\">\n"
         "        <Form>\n"

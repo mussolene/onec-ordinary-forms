@@ -75,14 +75,14 @@
         </SharedProperties>
         <SharedProperties surface="panelPlacement">
           <Property name="DefaultControl" apiName="DefaultControl" russianName="АктивизироватьПоУмолчанию" russianType="Булево" valueCodec="boolean"/>
-          <Property name="Top" apiName="Top" russianName="Верх" russianType="Число" valueCodec="decimal"/>
+          <Property name="Top" apiName="Top" russianName="Верх" russianType="Число" valueCodec="integer32"/>
           <Property name="Visible" apiName="Visible" russianName="Видимость" russianType="Булево" valueCodec="boolean"/>
-          <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="decimal"/>
-          <Property name="Left" apiName="Left" russianName="Лево" russianType="Число" valueCodec="decimal"/>
-          <Property name="TabOrder" apiName="TabOrder" russianName="ПорядокОбхода" russianType="Число" valueCodec="decimal"/>
-          <Property name="ZOrder" apiName="ZOrder" russianName="ПорядокОтображения" russianType="Число" valueCodec="decimal"/>
+          <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="integer32"/>
+          <Property name="Left" apiName="Left" russianName="Лево" russianType="Число" valueCodec="integer32"/>
+          <Property name="TabOrder" apiName="TabOrder" russianName="ПорядокОбхода" russianType="Число" valueCodec="integer32"/>
+          <Property name="ZOrder" apiName="ZOrder" russianName="ПорядокОтображения" russianType="Число" valueCodec="integer32"/>
           <Property name="Collapse" apiName="Collapse" russianName="Свертка" russianType="РежимСверткиЭлементаУправления" valueCodec="enumeration"/>
-          <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
+          <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="integer32"/>
         </SharedProperties>
         <Controls>
           <Control name="Panel" apiName="Panel" russianName="Панель" children="controlsAndPages">
@@ -245,7 +245,6 @@
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
-              <Property name="FirstInGroup" apiName="FirstInGroup" russianName="ПервыйВГруппе" russianType="Булево" valueCodec="boolean"/>
               <Property name="TitleLocation" apiName="TitleLocation" russianName="ПоложениеЗаголовка" russianType="ПоложениеЗаголовка" valueCodec="enumeration"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
               <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>

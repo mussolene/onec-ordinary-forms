@@ -1,6 +1,9 @@
 #include "oof/model/ordinary_form.hpp"
 
+#include <array>
 #include <functional>
+#include <limits>
+#include <set>
 #include <type_traits>
 #include <unordered_map>
 
@@ -32,6 +35,9 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::boolean;
             } else if constexpr (std::is_same_v<Value, std::int64_t>) {
                 return expected == metamodel::ValueCodec::integer ||
+                       (expected == metamodel::ValueCodec::integer32 &&
+                        typed_value >= std::numeric_limits<std::int32_t>::min() &&
+                        typed_value <= std::numeric_limits<std::int32_t>::max()) ||
                        expected == metamodel::ValueCodec::decimal;
             } else if constexpr (std::is_same_v<Value, DecimalValue>) {
                 return expected == metamodel::ValueCodec::decimal;
@@ -388,6 +394,37 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 "event reference does not resolve to an event");
         }
     };
+
+    std::unordered_map<ObjectId, std::size_t, ObjectIdHash> event_reference_counts;
+    const auto require_owned_event = [&]<typename OwnerRef>(
+                                         ObjectId source,
+                                         EventRef reference,
+                                         OwnerRef expected_owner,
+                                         auto&& descriptor_lookup) {
+        require_event(source, reference);
+        const Event* event = find_event(reference.id());
+        if (event == nullptr) {
+            return;
+        }
+        ++event_reference_counts[event->id];
+        const OwnerRef* actual_owner = std::get_if<OwnerRef>(&event->owner);
+        if (actual_owner == nullptr || actual_owner->id() != expected_owner.id()) {
+            add_violation(
+                report,
+                InvariantCode::invalid_property,
+                source,
+                event->id,
+                "event is listed by an owner different from Event.owner");
+        }
+        if (descriptor_lookup(event->name) == nullptr) {
+            add_violation(
+                report,
+                InvariantCode::invalid_property,
+                source,
+                event->id,
+                "event name is not declared for its ordinary-form owner");
+        }
+    };
     const auto require_picture = [&](ObjectId source, const PictureRef& reference) {
         if (find_asset(reference.asset.id()) == nullptr) {
             add_violation(
@@ -477,8 +514,22 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 "form root accepts controls, not panel pages");
         }
     }
+    std::set<std::string_view> form_event_names;
     for (const EventRef event : form_.events) {
-        require_event(form_.id, event);
+        require_owned_event(
+            form_.id,
+            event,
+            FormRef{form_.id},
+            [](std::string_view name) { return metamodel::find_form_event(name); });
+        if (const Event* resolved = find_event(event.id());
+            resolved != nullptr && !form_event_names.insert(resolved->name).second) {
+            add_violation(
+                report,
+                InvariantCode::invalid_property,
+                form_.id,
+                resolved->id,
+                "event name occurs more than once for the same owner");
+        }
     }
     validate_property_set(
         form_.id,
@@ -568,12 +619,54 @@ ValidationReport OrdinaryFormDocument::validate() const {
             }
             register_parent(control.id, child);
         }
+        std::set<std::string_view> control_event_names;
         for (const EventRef event : control.events) {
-            require_event(control.id, event);
+            require_owned_event(
+                control.id,
+                event,
+                ControlRef{control.id},
+                [&](std::string_view name) {
+                    return metamodel::find_event(control.kind(), name);
+                });
+            if (const Event* resolved = find_event(event.id());
+                resolved != nullptr && !control_event_names.insert(resolved->name).second) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    control.id,
+                    resolved->id,
+                    "event name occurs more than once for the same owner");
+            }
         }
+        std::array<bool, 6> anchor_coordinates{};
         for (const auto& binding : control.position.bindings.anchors) {
+            const auto coordinate = static_cast<std::size_t>(binding.coordinate);
+            if (coordinate >= anchor_coordinates.size() || anchor_coordinates[coordinate]) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    control.id,
+                    {},
+                    "Position contains a duplicate binding coordinate");
+            } else {
+                anchor_coordinates[coordinate] = true;
+            }
             if (binding.target.has_value()) {
                 require_control(control.id, *binding.target);
+            }
+        }
+        std::array<bool, 5> binding_dimensions{};
+        for (const auto& binding : control.position.bindings.dimensions) {
+            const auto dimension = static_cast<std::size_t>(binding.dimension);
+            if (dimension >= binding_dimensions.size() || binding_dimensions[dimension]) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    control.id,
+                    {},
+                    "Position contains a duplicate dimension binding");
+            } else {
+                binding_dimensions[dimension] = true;
             }
         }
         if (control.data_path.has_value()) {
@@ -608,6 +701,25 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     "panel page accepts controls but not nested pages");
             }
             register_parent(page.id, child);
+        }
+    }
+
+    for (const auto& event : collections_.events) {
+        const std::size_t count = event_reference_counts[event.id];
+        if (count == 0) {
+            add_violation(
+                report,
+                InvariantCode::orphan,
+                form_.id,
+                event.id,
+                "event is not present in its owner's authoritative event sequence");
+        } else if (count > 1) {
+            add_violation(
+                report,
+                InvariantCode::multiple_parents,
+                form_.id,
+                event.id,
+                "event appears more than once in authoritative event sequences");
         }
     }
 

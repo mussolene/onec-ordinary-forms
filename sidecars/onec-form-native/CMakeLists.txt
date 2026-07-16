@@ -1,4 +1,5 @@
 find_package(ZLIB REQUIRED)
+find_package(LibXml2 REQUIRED)
 
 function(oof_enable_project_warnings target_name)
   if(MSVC)
@@ -13,6 +14,7 @@ add_library(
   STATIC
     src/model/metamodel.cpp
     src/model/ordinary_form.cpp
+    src/source/form_xml.cpp
     src/source/schema_generator.cpp
     src/storage/form_stream.cpp
     src/storage/value_codec.cpp
@@ -34,6 +36,7 @@ target_include_directories(
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
 )
 oof_enable_project_warnings(liboof)
+target_link_libraries(liboof PRIVATE LibXml2::LibXml2)
 
 add_executable(oof src/cli/main.cpp)
 set_target_properties(
@@ -139,7 +142,6 @@ if(OOF_NATIVE_MIGRATION_COMPAT)
 endif()
 
 if(BUILD_TESTING)
-  find_package(LibXml2 REQUIRED)
   find_program(OOF_MAKE_EXECUTABLE NAMES gmake make REQUIRED)
 
   add_executable(oof-model-test tests/model_test.cpp)
@@ -237,6 +239,19 @@ if(BUILD_TESTING)
   oof_enable_project_warnings(oof-schema-generator-test)
   add_test(NAME product.schema-generator COMMAND oof-schema-generator-test)
   set_tests_properties(product.schema-generator PROPERTIES LABELS unit)
+
+  add_executable(oof-form-xml-test tests/form_xml_test.cpp)
+  set_target_properties(
+    oof-form-xml-test
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+  )
+  target_link_libraries(oof-form-xml-test PRIVATE oof::liboof)
+  oof_enable_project_warnings(oof-form-xml-test)
+  add_test(NAME product.form-xml COMMAND oof-form-xml-test)
+  set_tests_properties(product.form-xml PROPERTIES LABELS unit)
 
   add_test(NAME product.cli.version COMMAND oof --version)
   set_tests_properties(
