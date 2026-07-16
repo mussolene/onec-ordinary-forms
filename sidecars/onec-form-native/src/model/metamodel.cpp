@@ -30,6 +30,40 @@ struct HelpControlName {
 
 constexpr auto all_versions = VersionMask::all_supported;
 
+ValueCodec initial_value_codec(ValueKind kind, std::u8string_view platform_type) noexcept {
+    switch (kind) {
+        case ValueKind::boolean:
+            return ValueCodec::boolean;
+        case ValueKind::number:
+            return ValueCodec::decimal;
+        case ValueKind::string:
+            return ValueCodec::string;
+        case ValueKind::date_time:
+            return ValueCodec::date;
+        case ValueKind::picture:
+            return ValueCodec::picture;
+        case ValueKind::color:
+            return ValueCodec::color;
+        case ValueKind::font:
+            return ValueCodec::font;
+        case ValueKind::identifier:
+            return ValueCodec::uuid;
+        case ValueKind::enumeration:
+            return ValueCodec::enumeration;
+        case ValueKind::object:
+            return platform_type == u8"ОписаниеТипов" ? ValueCodec::type_domain
+                                                       : ValueCodec::unclassified;
+        case ValueKind::unknown:
+        case ValueKind::border:
+        case ValueKind::shortcut:
+        case ValueKind::binary:
+        case ValueKind::collection:
+        case ValueKind::variant:
+            return ValueCodec::unclassified;
+    }
+    return ValueCodec::unclassified;
+}
+
 constexpr std::array<ControlIdentity, control_kind_count> control_identities{{
     {ControlKind::panel, "09ccdc77-ea1a-4a6d-ab1c-3435eada2433", "pnl", all_versions, ClassificationStatus::platform_resource_backed, ChildPolicy::ordered_controls_and_pages},
     {ControlKind::command_bar, "e69bf21d-97b2-4f37-86db-675aea9ec2cb", "cmdb", all_versions, ClassificationStatus::platform_resource_backed, ChildPolicy::forbidden},
@@ -86,7 +120,7 @@ std::vector<PropertyDescriptor> make_control_property_descriptors() {
     return {
 #define OOF_HELP_CONTROL(...)
 #define OOF_HELP_PROPERTY(kind_token, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, value_kind_token, api_access_token, version_token) \
-        {PropertyId::from_name(api_name_value), DescriptorOwner::control, PropertySurface::control_payload, ControlKind::kind_token, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
+        {PropertyId::from_name(api_name_value), DescriptorOwner::control, PropertySurface::control_payload, ControlKind::kind_token, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, initial_value_codec(ValueKind::value_kind_token, platform_type_value), ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
 #define OOF_HELP_EVENT(...)
 #define OOF_HELP_FORM_PROPERTY(...)
 #define OOF_HELP_FORM_EVENT(...)
@@ -130,7 +164,7 @@ std::vector<PropertyDescriptor> make_form_property_descriptors() {
 #define OOF_HELP_PROPERTY(...)
 #define OOF_HELP_EVENT(...)
 #define OOF_HELP_FORM_PROPERTY(order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, value_kind_token, api_access_token, version_token) \
-        {PropertyId::from_name(api_name_value), DescriptorOwner::form, PropertySurface::form, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
+        {PropertyId::from_name(api_name_value), DescriptorOwner::form, PropertySurface::form, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, initial_value_codec(ValueKind::value_kind_token, platform_type_value), ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
 #define OOF_HELP_FORM_EVENT(...)
 #define OOF_HELP_FORM_CONTROL_EXTENSION_PROPERTY(...)
 #define OOF_HELP_PANEL_CONTROL_EXTENSION_PROPERTY(...)
@@ -174,7 +208,7 @@ std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
 #define OOF_HELP_FORM_PROPERTY(...)
 #define OOF_HELP_FORM_EVENT(...)
 #define OOF_HELP_FORM_CONTROL_EXTENSION_PROPERTY(order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, value_kind_token, api_access_token, version_token) \
-        {PropertyId::from_name(api_name_value), DescriptorOwner::control, PropertySurface::control_extension, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
+        {PropertyId::from_name(api_name_value), DescriptorOwner::control, PropertySurface::control_extension, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, initial_value_codec(ValueKind::value_kind_token, platform_type_value), ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
 #define OOF_HELP_PANEL_CONTROL_EXTENSION_PROPERTY(...)
 #include "generated_help_catalog.inc"
 #undef OOF_HELP_PANEL_CONTROL_EXTENSION_PROPERTY
@@ -196,7 +230,7 @@ std::vector<PropertyDescriptor> make_panel_placement_property_descriptors() {
 #define OOF_HELP_FORM_EVENT(...)
 #define OOF_HELP_FORM_CONTROL_EXTENSION_PROPERTY(...)
 #define OOF_HELP_PANEL_CONTROL_EXTENSION_PROPERTY(order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, value_kind_token, api_access_token, version_token) \
-        {PropertyId::from_name(api_name_value), DescriptorOwner::control, PropertySurface::panel_placement, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
+        {PropertyId::from_name(api_name_value), DescriptorOwner::control, PropertySurface::panel_placement, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, platform_type_value, ValueKind::value_kind_token, initial_value_codec(ValueKind::value_kind_token, platform_type_value), ApiAccess::api_access_token, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
 #include "generated_help_catalog.inc"
 #undef OOF_HELP_PANEL_CONTROL_EXTENSION_PROPERTY
 #undef OOF_HELP_FORM_CONTROL_EXTENSION_PROPERTY
@@ -354,6 +388,9 @@ struct Metamodel::Impl {
             if (descriptor.value_kind == ValueKind::unknown) {
                 ++coverage.unknown_value_kinds;
             }
+            if (descriptor.value_codec == ValueCodec::unclassified) {
+                ++coverage.unclassified_value_codecs;
+            }
             if (requires_default(descriptor) &&
                 descriptor.default_value.kind == DefaultKind::unknown) {
                 ++coverage.unknown_defaults;
@@ -433,6 +470,7 @@ struct Metamodel::Impl {
                                  coverage.unclassified_properties == 0 &&
                                  coverage.unclassified_events == 0 &&
                                  coverage.unknown_value_kinds == 0 &&
+                                 coverage.unclassified_value_codecs == 0 &&
                                  coverage.unknown_defaults == 0 &&
                                  coverage.missing_storage_codecs == 0;
     }
@@ -735,6 +773,48 @@ std::string_view value_kind_name(ValueKind kind) noexcept {
             return "variant";
     }
     return "unknown";
+}
+
+std::string_view value_codec_name(ValueCodec codec) noexcept {
+    switch (codec) {
+        case ValueCodec::unclassified:
+            return "unclassified";
+        case ValueCodec::boolean:
+            return "boolean";
+        case ValueCodec::integer:
+            return "integer";
+        case ValueCodec::decimal:
+            return "decimal";
+        case ValueCodec::string:
+            return "string";
+        case ValueCodec::localized_string:
+            return "localized-string";
+        case ValueCodec::formatted_string:
+            return "formatted-string";
+        case ValueCodec::date:
+            return "date";
+        case ValueCodec::uuid:
+            return "uuid";
+        case ValueCodec::composite_id:
+            return "composite-id";
+        case ValueCodec::type_domain:
+            return "type-domain";
+        case ValueCodec::enumeration:
+            return "enumeration";
+        case ValueCodec::color:
+            return "color";
+        case ValueCodec::font:
+            return "font";
+        case ValueCodec::picture:
+            return "picture";
+        case ValueCodec::control_reference:
+            return "control-reference";
+        case ValueCodec::attribute_reference:
+            return "attribute-reference";
+        case ValueCodec::command_reference:
+            return "command-reference";
+    }
+    return "unclassified";
 }
 
 }  // namespace oof::model::metamodel

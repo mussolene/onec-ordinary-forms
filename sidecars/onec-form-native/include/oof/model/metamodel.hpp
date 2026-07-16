@@ -70,6 +70,27 @@ enum class ValueKind : std::uint8_t {
     variant,
 };
 
+enum class ValueCodec : std::uint8_t {
+    unclassified,
+    boolean,
+    integer,
+    decimal,
+    string,
+    localized_string,
+    formatted_string,
+    date,
+    uuid,
+    composite_id,
+    type_domain,
+    enumeration,
+    color,
+    font,
+    picture,
+    control_reference,
+    attribute_reference,
+    command_reference,
+};
+
 enum class PersistenceClass : std::uint8_t {
     unclassified,
     persisted_editable,
@@ -144,6 +165,7 @@ struct PropertyDescriptor {
     std::u8string_view russian_name;
     std::u8string_view platform_type;
     ValueKind value_kind = ValueKind::unknown;
+    ValueCodec value_codec = ValueCodec::unclassified;
     ApiAccess api_access = ApiAccess::unknown;
     VersionMask version_mask = VersionMask::none;
     PersistenceClass persistence = PersistenceClass::unclassified;
@@ -176,6 +198,7 @@ struct MetamodelCoverage {
     std::size_t unclassified_properties = 0;
     std::size_t unclassified_events = 0;
     std::size_t unknown_value_kinds = 0;
+    std::size_t unclassified_value_codecs = 0;
     std::size_t unknown_defaults = 0;
     std::size_t missing_storage_codecs = 0;
     std::size_t property_id_collisions = 0;
@@ -261,5 +284,6 @@ private:
 [[nodiscard]] std::string_view persistence_name(PersistenceClass classification) noexcept;
 [[nodiscard]] std::string_view storage_codec_name(StorageCodec codec) noexcept;
 [[nodiscard]] std::string_view value_kind_name(ValueKind kind) noexcept;
+[[nodiscard]] std::string_view value_codec_name(ValueCodec codec) noexcept;
 
 }  // namespace oof::model::metamodel

@@ -119,7 +119,9 @@ void test_help_metamodel() {
     expect(coverage.property_id_collisions == 0, "property IDs must not collide");
     expect(!coverage.release_ready, "unclassified storage/defaults must block release");
     expect(
-        coverage.unclassified_properties != 0 && coverage.missing_storage_codecs != 0,
+        coverage.unclassified_properties != 0 &&
+            coverage.unclassified_value_codecs != 0 &&
+            coverage.missing_storage_codecs != 0,
         "coverage must expose unfinished property/storage classification");
 
     expect(
@@ -131,6 +133,17 @@ void test_help_metamodel() {
     expect(
         find_property(ControlKind::input_field, "ReadOnly")->russian_name == u8"ТолькоПросмотр",
         "ReadOnly must resolve from exact bilingual help");
+    expect(
+        find_property(ControlKind::input_field, "ReadOnly")->value_codec == ValueCodec::boolean,
+        "safe Boolean help types must receive the Boolean domain codec");
+    expect(
+        find_property(ControlKind::input_field, "Border")->value_codec ==
+            ValueCodec::unclassified,
+        "incomplete Border skeletons must not become product value codecs");
+    expect(
+        find_property(ControlKind::input_field, "ValueType")->value_codec ==
+            ValueCodec::type_domain,
+        "DescriptionOfTypes must use the proven type-domain value model");
     expect(
         find_property(ControlKind::input_field, "Visible")->surface ==
             PropertySurface::panel_placement,
@@ -249,7 +262,7 @@ void test_id_lookup() {
     form.name = "MainForm";
     form.properties.set_explicit(
         PropertyId::from_name("Caption"),
-        LocalizedStringValue{{LocalizedStringItem{"ru", "Main form"}}});
+        std::string("Main form"));
     form.children.push_back(ControlRef{ObjectId{10}});
     form.events.push_back(EventRef{ObjectId{40}});
 

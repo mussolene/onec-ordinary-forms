@@ -20,52 +20,49 @@ void add_violation(
 }
 
 bool property_value_matches(
-    metamodel::ValueKind expected,
+    metamodel::ValueCodec expected,
     const PropertyValue& value
 ) noexcept {
     return std::visit(
         [expected](const auto& typed_value) {
             using Value = std::remove_cvref_t<decltype(typed_value)>;
-            if (expected == metamodel::ValueKind::variant) {
-                return true;
-            }
             if constexpr (std::is_same_v<Value, UndefinedValue>) {
-                return expected == metamodel::ValueKind::date_time ||
-                       expected == metamodel::ValueKind::object;
+                return expected == metamodel::ValueCodec::date;
             } else if constexpr (std::is_same_v<Value, bool>) {
-                return expected == metamodel::ValueKind::boolean;
-            } else if constexpr (
-                std::is_same_v<Value, std::int64_t> ||
-                std::is_same_v<Value, DecimalValue>) {
-                return expected == metamodel::ValueKind::number;
-            } else if constexpr (
-                std::is_same_v<Value, std::string> ||
-                std::is_same_v<Value, LocalizedStringValue> ||
-                std::is_same_v<Value, FormattedStringValue>) {
-                return expected == metamodel::ValueKind::string;
+                return expected == metamodel::ValueCodec::boolean;
+            } else if constexpr (std::is_same_v<Value, std::int64_t>) {
+                return expected == metamodel::ValueCodec::integer ||
+                       expected == metamodel::ValueCodec::decimal;
+            } else if constexpr (std::is_same_v<Value, DecimalValue>) {
+                return expected == metamodel::ValueCodec::decimal;
+            } else if constexpr (std::is_same_v<Value, std::string>) {
+                return expected == metamodel::ValueCodec::string;
+            } else if constexpr (std::is_same_v<Value, LocalizedStringValue>) {
+                return expected == metamodel::ValueCodec::localized_string;
+            } else if constexpr (std::is_same_v<Value, FormattedStringValue>) {
+                return expected == metamodel::ValueCodec::formatted_string;
             } else if constexpr (std::is_same_v<Value, DateValue>) {
-                return expected == metamodel::ValueKind::date_time;
+                return expected == metamodel::ValueCodec::date;
             } else if constexpr (std::is_same_v<Value, UuidValue>) {
-                return expected == metamodel::ValueKind::identifier;
+                return expected == metamodel::ValueCodec::uuid;
             } else if constexpr (std::is_same_v<Value, CompositeIdValue>) {
-                return expected == metamodel::ValueKind::identifier ||
-                       expected == metamodel::ValueKind::object;
+                return expected == metamodel::ValueCodec::composite_id;
             } else if constexpr (std::is_same_v<Value, TypeDomainPatternValue>) {
-                return expected == metamodel::ValueKind::object;
+                return expected == metamodel::ValueCodec::type_domain;
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
-                return expected == metamodel::ValueKind::enumeration;
+                return expected == metamodel::ValueCodec::enumeration;
             } else if constexpr (std::is_same_v<Value, ColorValue>) {
-                return expected == metamodel::ValueKind::color;
+                return expected == metamodel::ValueCodec::color;
             } else if constexpr (std::is_same_v<Value, FontValue>) {
-                return expected == metamodel::ValueKind::font;
+                return expected == metamodel::ValueCodec::font;
             } else if constexpr (std::is_same_v<Value, PictureRef>) {
-                return expected == metamodel::ValueKind::picture;
-            } else if constexpr (
-                std::is_same_v<Value, ControlRef> ||
-                std::is_same_v<Value, AttributeRef> ||
-                std::is_same_v<Value, CommandRef>) {
-                return expected == metamodel::ValueKind::identifier ||
-                       expected == metamodel::ValueKind::object;
+                return expected == metamodel::ValueCodec::picture;
+            } else if constexpr (std::is_same_v<Value, ControlRef>) {
+                return expected == metamodel::ValueCodec::control_reference;
+            } else if constexpr (std::is_same_v<Value, AttributeRef>) {
+                return expected == metamodel::ValueCodec::attribute_reference;
+            } else if constexpr (std::is_same_v<Value, CommandRef>) {
+                return expected == metamodel::ValueCodec::command_reference;
             }
             return false;
         },
@@ -441,7 +438,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     source,
                     {},
                     "property is not declared for this ordinary-form object surface");
-            } else if (!property_value_matches(descriptor->value_kind, property.value)) {
+            } else if (!property_value_matches(descriptor->value_codec, property.value)) {
                 add_violation(
                     report,
                     InvariantCode::invalid_property,

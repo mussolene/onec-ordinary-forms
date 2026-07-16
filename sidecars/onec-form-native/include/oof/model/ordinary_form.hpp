@@ -261,7 +261,7 @@ struct DateQualifiers {
 
 struct TypeDomainEntry {
     TypeDomainTerm term = TypeDomainTerm::unknown;
-    UuidValue type_uuid;
+    std::optional<UuidValue> type_uuid;
     NumericQualifiers numeric;
     LengthQualifiers string;
     LengthQualifiers binary;

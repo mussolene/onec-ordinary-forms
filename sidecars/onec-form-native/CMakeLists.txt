@@ -13,6 +13,7 @@ add_library(
   STATIC
     src/model/metamodel.cpp
     src/model/ordinary_form.cpp
+    src/storage/value_codec.cpp
 )
 add_library(oof::liboof ALIAS liboof)
 
@@ -189,6 +190,19 @@ if(BUILD_TESTING)
   oof_enable_project_warnings(oof-list-stream-test)
   add_test(NAME product.list-stream COMMAND oof-list-stream-test)
   set_tests_properties(product.list-stream PROPERTIES LABELS unit)
+
+  add_executable(oof-value-codec-test tests/value_codec_test.cpp)
+  set_target_properties(
+    oof-value-codec-test
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+  )
+  target_link_libraries(oof-value-codec-test PRIVATE oof::liboof)
+  oof_enable_project_warnings(oof-value-codec-test)
+  add_test(NAME product.value-codec COMMAND oof-value-codec-test)
+  set_tests_properties(product.value-codec PROPERTIES LABELS unit)
 
   add_test(NAME product.cli.version COMMAND oof --version)
   set_tests_properties(
