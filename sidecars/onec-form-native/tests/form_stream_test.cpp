@@ -220,12 +220,14 @@ void test_runtime_envelope() {
 }
 
 void test_attributes() {
-    const auto empty = form_stream::decode_attributes(list_stream::parse("{{1},0,{0},{0}}"));
+    const auto empty = form_stream::decode_attributes(list_stream::parse("{{-1},3,{0},{0}}"));
     expect(empty.ok(), "empty attribute record must decode");
-    expect(empty.value() == form_stream::AttributesRecord{}, "empty attribute DTO mismatch");
+    expect(empty.value().slot_count == 3, "empty attribute slot count mismatch");
+    expect(empty.value().attributes.empty(), "empty attribute table mismatch");
+    expect(empty.value().links.empty(), "empty attribute-link table mismatch");
 
     constexpr std::string_view fixture =
-        "{{1},2,{1,{{1,01234567-89ab-cdef-0123-456789abcdef},1,0,1,\"Value\","
+        "{{-1},2,{1,{{1,01234567-89ab-cdef-0123-456789abcdef},1,0,1,\"Value\","
         "{\"Pattern\",{\"T\",d47d59f8-73f0-481c-8b5e-f6384c0a4804}}}},"
         "{1,{42,{1,{1,01234567-89ab-cdef-0123-456789abcdef}}}}}";
     const auto decoded = form_stream::decode_attributes(list_stream::parse(fixture));
@@ -243,26 +245,42 @@ void test_attributes() {
     const auto rebuilt = form_stream::decode_attributes(encoded.value());
     expect(rebuilt && rebuilt.value() == decoded.value(), "attribute DTO must round-trip");
 
+    constexpr std::string_view one_component_fixture =
+        "{{-1},4,{1,{{3},1,0,1,\"Value\",{\"Pattern\",{\"S\",10,1}}}},"
+        "{1,{3,{1,{3}}}}}";
+    const auto one_component = form_stream::decode_attributes(
+        list_stream::parse(one_component_fixture));
+    expect(one_component.ok(), "platform one-component attribute ID must decode");
+    expect(
+        one_component.value().attributes.front().id.object_id == 3 &&
+            one_component.value().attributes.front().id.is_null,
+        "one-component attribute ID semantics mismatch");
+    const auto one_component_encoded = form_stream::encode_attributes(one_component.value());
+    expect(one_component_encoded.ok(), "one-component attribute ID must encode");
+    expect(
+        list_stream::dump_compact(one_component_encoded.value()) == one_component_fixture,
+        "one-component attribute record must remain canonical");
+
     expect_failure(
-        form_stream::decode_attributes(list_stream::parse("{{1},0,{1},{0}}")),
+        form_stream::decode_attributes(list_stream::parse("{{-1},0,{1},{0}}")),
         "OOF1102",
         "$/2/2",
         "attribute count mismatch must be rejected");
     expect_failure(
-        form_stream::decode_attributes(list_stream::parse("{{2},0,{0},{0}}")),
+        form_stream::decode_attributes(list_stream::parse("{{1},0,{0},{0}}")),
         "OOF1106",
         "$/2/0/0",
         "attribute version mismatch must be rejected");
     expect_failure(
         form_stream::decode_attributes(list_stream::parse(
-            "{{1},2,{1,{{1,01234567-89ab-cdef-0123-456789abcdef},1,0,1,\"Value\","
+            "{{-1},2,{1,{{1,01234567-89ab-cdef-0123-456789abcdef},1,0,1,\"Value\","
             "{\"Other\"}}},{0}}")),
         "OOF1108",
         "$/2/2/1/5",
         "malformed attribute type must be rejected");
     expect_failure(
         form_stream::decode_attributes(list_stream::parse(
-            "{{1},0,{0},{1,{-1,{1,{0}}}}}")),
+            "{{-1},0,{0},{1,{-1,{1,{0}}}}}")),
         "OOF1105",
         "$/2/3/1/0",
         "negative control ID must be rejected");
@@ -284,6 +302,27 @@ void test_attribute_encode_validation() {
         "encoder must reject malformed CompositeID UUID");
 }
 
+void test_platform_empty_document_fixture() {
+    constexpr std::string_view fixture = R"OOF(
+{27,{18,{{1,1,{"ru","Form"}},1,4294967295},{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}},{0}},400,300,1,0,1,4,4,3,400,300,96},{{-1},3,{0},{0}},{00000000-0000-0000-0000-000000000000,0},{0},1,4,1,0,0,0,{0},{0},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
+)OOF";
+    const auto payload = list_stream::parse(fixture);
+    const auto decoded = form_stream::decode_document(payload, "Empty");
+    expect(decoded.ok(), "platform empty-form fixture must decode into the product model");
+    expect(decoded.value().form().name == "Empty", "external form name must be retained");
+    expect(decoded.value().collections().controls.empty(), "empty fixture must have no controls");
+    const auto* caption = decoded.value().form().properties.find(
+        model::PropertyId::from_name("Caption"));
+    expect(caption != nullptr, "platform form caption must materialize");
+    expect(std::get<std::string>(caption->value) == "Form", "platform form caption mismatch");
+
+    const auto encoded = form_stream::encode_document(decoded.value());
+    expect(encoded.ok(), "decoded platform empty form must encode");
+    expect(
+        list_stream::dump_compact(encoded.value()) == list_stream::dump_compact(payload),
+        "platform empty-form storage must canonicalize without semantic drift");
+}
+
 }  // namespace
 
 int main() {
@@ -293,6 +332,7 @@ int main() {
         test_runtime_envelope();
         test_attributes();
         test_attribute_encode_validation();
+        test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';
         return 1;

@@ -184,6 +184,7 @@ struct EventDescriptor {
     VersionMask version_mask = VersionMask::none;
     PersistenceClass persistence = PersistenceClass::unclassified;
     StorageCodec storage_codec = StorageCodec::unclassified;
+    std::string_view storage_tag;
 };
 
 struct MetamodelCoverage {

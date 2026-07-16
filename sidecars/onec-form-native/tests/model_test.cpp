@@ -165,6 +165,12 @@ void test_help_metamodel() {
     expect(
         find_event(ControlKind::input_field, "OnChange") != nullptr,
         "InputField OnChange event must be executable metamodel data");
+    const auto* button_click = find_event(ControlKind::button, "Click");
+    expect(
+        button_click != nullptr &&
+            button_click->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c" &&
+            button_click->storage_codec == StorageCodec::event_record,
+        "Button.Click must retain its proven storage identity and codec");
 }
 
 void test_variant_coverage() {

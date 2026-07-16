@@ -150,7 +150,7 @@ std::vector<EventDescriptor> make_control_event_descriptors() {
 #define OOF_HELP_CONTROL(...)
 #define OOF_HELP_PROPERTY(...)
 #define OOF_HELP_EVENT(kind_token, order_value, xml_name_value, api_name_value, russian_name_value, version_token) \
-        {DescriptorOwner::control, ControlKind::kind_token, order_value, xml_name_value, api_name_value, russian_name_value, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified},
+        {DescriptorOwner::control, ControlKind::kind_token, order_value, xml_name_value, api_name_value, russian_name_value, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
 #define OOF_HELP_FORM_PROPERTY(...)
 #define OOF_HELP_FORM_EVENT(...)
 #define OOF_HELP_FORM_CONTROL_EXTENSION_PROPERTY(...)
@@ -194,7 +194,7 @@ std::vector<EventDescriptor> make_form_event_descriptors() {
 #define OOF_HELP_EVENT(...)
 #define OOF_HELP_FORM_PROPERTY(...)
 #define OOF_HELP_FORM_EVENT(order_value, xml_name_value, api_name_value, russian_name_value, version_token) \
-        {DescriptorOwner::form, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified},
+        {DescriptorOwner::form, ControlKind::panel, order_value, xml_name_value, api_name_value, russian_name_value, VersionMask::version_token, PersistenceClass::unclassified, StorageCodec::unclassified, {}},
 #define OOF_HELP_FORM_CONTROL_EXTENSION_PROPERTY(...)
 #define OOF_HELP_PANEL_CONTROL_EXTENSION_PROPERTY(...)
 #include "generated_help_catalog.inc"
@@ -273,6 +273,106 @@ bool requires_default(const PropertyDescriptor& descriptor) noexcept {
            descriptor.api_access != ApiAccess::read_only;
 }
 
+void classify_property(
+    std::vector<PropertyDescriptor>& descriptors,
+    std::string_view name,
+    StorageCodec storage_codec,
+    DefaultKind default_kind,
+    std::string_view default_value) {
+    const auto descriptor = std::ranges::find(
+        descriptors,
+        name,
+        &PropertyDescriptor::api_name);
+    if (descriptor == descriptors.end()) {
+        throw std::logic_error("missing property for proven storage override: " + std::string(name));
+    }
+    descriptor->persistence = PersistenceClass::persisted_editable;
+    descriptor->storage_codec = storage_codec;
+    descriptor->default_value = {default_kind, default_value};
+}
+
+void apply_proven_storage_overrides(
+    std::array<std::vector<PropertyDescriptor>, control_kind_count>& properties,
+    std::vector<PropertyDescriptor>& panel_placement_properties,
+    std::vector<PropertyDescriptor>& form_properties,
+    std::array<std::vector<EventDescriptor>, control_kind_count>& events) {
+    auto& button = properties[static_cast<std::size_t>(ControlKind::button)];
+    classify_property(
+        button,
+        "Enabled",
+        StorageCodec::control_base,
+        DefaultKind::boolean,
+        "true");
+    classify_property(
+        button,
+        "Caption",
+        StorageCodec::control_info,
+        DefaultKind::string,
+        "");
+
+    classify_property(
+        panel_placement_properties,
+        "Left",
+        StorageCodec::position_record,
+        DefaultKind::integer,
+        "0");
+    classify_property(
+        panel_placement_properties,
+        "Top",
+        StorageCodec::position_record,
+        DefaultKind::integer,
+        "0");
+    classify_property(
+        panel_placement_properties,
+        "Width",
+        StorageCodec::position_record,
+        DefaultKind::integer,
+        "0");
+    classify_property(
+        panel_placement_properties,
+        "Height",
+        StorageCodec::position_record,
+        DefaultKind::integer,
+        "0");
+    classify_property(
+        panel_placement_properties,
+        "Visible",
+        StorageCodec::position_record,
+        DefaultKind::boolean,
+        "true");
+
+    classify_property(
+        form_properties,
+        "Caption",
+        StorageCodec::root_record,
+        DefaultKind::string,
+        "");
+    classify_property(
+        form_properties,
+        "Width",
+        StorageCodec::root_record,
+        DefaultKind::integer,
+        "400");
+    classify_property(
+        form_properties,
+        "Height",
+        StorageCodec::root_record,
+        DefaultKind::integer,
+        "300");
+
+    auto& button_events = events[static_cast<std::size_t>(ControlKind::button)];
+    const auto click = std::ranges::find(
+        button_events,
+        std::string_view{"Click"},
+        &EventDescriptor::api_name);
+    if (click == button_events.end()) {
+        throw std::logic_error("missing Button.Click event for proven storage override");
+    }
+    click->persistence = PersistenceClass::persisted_editable;
+    click->storage_codec = StorageCodec::event_record;
+    click->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+}
+
 }  // namespace
 
 struct Metamodel::Impl {
@@ -338,6 +438,12 @@ struct Metamodel::Impl {
         panel_placement_properties = make_panel_placement_property_descriptors();
         form_properties = make_form_property_descriptors();
         form_events = make_form_event_descriptors();
+
+        apply_proven_storage_overrides(
+            properties,
+            panel_placement_properties,
+            form_properties,
+            events);
 
         // Help may repeat an inherited extension property on one concrete control.
         // The executable model keeps the shared extension as the single owner.

@@ -80,4 +80,13 @@ struct AttributesRecord {
 [[nodiscard]] Result<list_stream::ListValue> encode_attributes(
     const AttributesRecord& record);
 
+// Product storage boundary. The current executable slice accepts the proven
+// 8.5 section-18 layout and fails closed on storage concepts not represented
+// by OrdinaryFormDocument.
+[[nodiscard]] Result<model::OrdinaryFormDocument> decode_document(
+    const list_stream::ListValue& payload,
+    std::string_view form_name = "Form");
+[[nodiscard]] Result<list_stream::ListValue> encode_document(
+    const model::OrdinaryFormDocument& document);
+
 }  // namespace oof::storage::form_stream

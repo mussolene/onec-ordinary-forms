@@ -12,6 +12,7 @@ endfunction()
 add_library(
   liboof
   STATIC
+    src/form_bin.cpp
     src/model/metamodel.cpp
     src/model/ordinary_form.cpp
     src/source/form_xml.cpp
@@ -221,6 +222,19 @@ if(BUILD_TESTING)
   oof_enable_project_warnings(oof-form-stream-test)
   add_test(NAME product.form-stream COMMAND oof-form-stream-test)
   set_tests_properties(product.form-stream PROPERTIES LABELS unit)
+
+  add_executable(oof-form-bin-test tests/form_bin_test.cpp)
+  set_target_properties(
+    oof-form-bin-test
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+  )
+  target_link_libraries(oof-form-bin-test PRIVATE oof::liboof)
+  oof_enable_project_warnings(oof-form-bin-test)
+  add_test(NAME product.form-bin COMMAND oof-form-bin-test)
+  set_tests_properties(product.form-bin PROPERTIES LABELS "unit;integration")
 
   add_executable(oof-schema-generator-test tests/schema_generator_test.cpp)
   set_target_properties(
