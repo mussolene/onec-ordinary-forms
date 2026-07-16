@@ -177,6 +177,19 @@ if(BUILD_TESTING)
   add_test(NAME product.container COMMAND oof-container-test)
   set_tests_properties(product.container PROPERTIES LABELS unit)
 
+  add_executable(oof-list-stream-test tests/list_stream_test.cpp)
+  set_target_properties(
+    oof-list-stream-test
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+  )
+  target_link_libraries(oof-list-stream-test PRIVATE oof::liboof)
+  oof_enable_project_warnings(oof-list-stream-test)
+  add_test(NAME product.list-stream COMMAND oof-list-stream-test)
+  set_tests_properties(product.list-stream PROPERTIES LABELS unit)
+
   add_test(NAME product.cli.version COMMAND oof --version)
   set_tests_properties(
     product.cli.version

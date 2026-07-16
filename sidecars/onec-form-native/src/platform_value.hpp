@@ -10,8 +10,12 @@
 #include <utility>
 #include <vector>
 
-#include "platform_list_stream.hpp"
+#include "oof/storage/list_stream.hpp"
 #include "platform_value_metadata.hpp"
+
+namespace oof::platform {
+namespace stream = ::oof::storage::list_stream;
+}
 
 namespace oof::platform::value {
 
