@@ -24,7 +24,7 @@
 #include <zlib.h>
 
 #include "control_info_descriptor_registry.hpp"
-#include "form_bin_container.hpp"
+#include "oof/storage/form_bin_container.hpp"
 #include "ordinary_control_type_registry.hpp"
 #include "ordinary_controls.hpp"
 #include "ordinary_form_concept_registry.hpp"
@@ -40,6 +40,10 @@
 #include "platform_property_registry.hpp"
 #include "platform_runtime_binding.hpp"
 #include "platform_value.hpp"
+
+namespace oof::platform {
+namespace formbin = ::oof::storage::formbin;
+}
 
 namespace {
 

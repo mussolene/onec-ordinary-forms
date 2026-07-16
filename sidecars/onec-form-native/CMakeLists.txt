@@ -45,6 +45,12 @@ oof_enable_project_warnings(oof)
 
 add_executable(oof-native src/main.cpp)
 
+target_include_directories(
+  oof-native
+  PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
 set_target_properties(
   oof-native
   PROPERTIES
@@ -157,6 +163,19 @@ if(BUILD_TESTING)
   oof_enable_project_warnings(oof-result-test)
   add_test(NAME product.result COMMAND oof-result-test)
   set_tests_properties(product.result PROPERTIES LABELS unit)
+
+  add_executable(oof-container-test tests/container_test.cpp)
+  set_target_properties(
+    oof-container-test
+    PROPERTIES
+      CXX_EXTENSIONS OFF
+      CXX_STANDARD 20
+      CXX_STANDARD_REQUIRED ON
+  )
+  target_link_libraries(oof-container-test PRIVATE oof::liboof)
+  oof_enable_project_warnings(oof-container-test)
+  add_test(NAME product.container COMMAND oof-container-test)
+  set_tests_properties(product.container PROPERTIES LABELS unit)
 
   add_test(NAME product.cli.version COMMAND oof --version)
   set_tests_properties(
