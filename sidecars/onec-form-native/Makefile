@@ -487,7 +487,11 @@ legacy-test:
 			ok=$$((ok + 1)); \
 		fi; \
 	done < "$$list_file"; \
-	printf 'native-lossless-roundtrip-gate: PASS (%s/%s payload-lossless)\n' "$$ok" "$$total"
+	if [ "$$total" -eq 0 ]; then \
+		printf 'native-lossless-roundtrip-gate: SKIP (no local corpus inputs)\n'; \
+	else \
+		printf 'native-lossless-roundtrip-gate: PASS (%s/%s payload-lossless)\n' "$$ok" "$$total"; \
+	fi
 
 clean:
 	rm -rf $(BUILD_DIR) $(CMAKE_BUILD_DIR)

@@ -35,7 +35,7 @@ jobs:
           ref: ${{ steps.release.outputs.tag }}
 
       - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential zlib1g-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake zlib1g-dev libxml2-dev
 
       - name: Run release gate
         run: make release-gate

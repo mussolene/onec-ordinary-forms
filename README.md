@@ -1,5 +1,37 @@
 # onec-ordinary-forms
 
+## Проверенный статус на 2026-09-05
+
+Проект пока не готов как универсальная утилита обычных форм.
+Ветка `matvienko/product-model-rebuild` содержит новую библиотеку `liboof`
+и CLI `oof`. Старый `oof-native` остается исследовательской реализацией.
+Описания старой линии ниже не являются гарантией возможностей нового CLI.
+
+Новый двоичный кодек поддерживает ограниченный вариант формата 27/18:
+форма, реквизиты без связей, максимум одна кнопка, Caption, Enabled,
+Position/Visible, Button.Click и модуль. Конкретные неподдержанные варианты
+отклоняются с диагностикой. Однокнопочный сценарий проверен строгой выгрузкой
+Designer 8.5.1.1343; 59 локальных входных форм новый CLI пока отклоняет.
+Команды `validate`, `diff`, `edit` пока не реализованы.
+
+Сборка требует CMake 3.20+, компилятор C++20, zlib и libxml2 с заголовками:
+
+```bash
+make test
+build/sidecars/onec-form-native/oof --help
+build/sidecars/onec-form-native/oof dump input/Form.bin output/Form.xml --json
+build/sidecars/onec-form-native/oof build output/Form.xml rebuilt/Form.bin --json
+```
+
+`make test` выполняет все зарегистрированные CTest проверки, включая новую
+библиотеку. Их успех не заменяет проверку формы платформой. `make release-gate`
+намеренно завершается ошибкой до выполнения условий выпуска.
+
+Причины неудач, текущие доказательства и минимальный порядок доведения:
+[аудит проекта](docs/ordinary-form-pattern-audit.md).
+
+## Историческое описание и целевой контракт
+
 Tools for converting 1C ordinary forms into a Git-friendly source package and
 building them back. The current release line uses a platform-like
 `OrdinaryForm` object graph as the product object and a public source package

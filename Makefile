@@ -17,7 +17,7 @@ build: configure
 	$(CMAKE) --build $(BUILD_DIR) --config $(CMAKE_BUILD_TYPE) $(CMAKE_BUILD_ARGS)
 
 test: build
-	$(CTEST) --test-dir $(BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure -L regression $(CTEST_ARGS)
+	$(CTEST) --test-dir $(BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure $(CTEST_ARGS)
 
 smoke: build
 	$(CTEST) --test-dir $(BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure -L smoke $(CTEST_ARGS)
