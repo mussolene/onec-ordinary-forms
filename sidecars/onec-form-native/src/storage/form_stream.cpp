@@ -1331,9 +1331,17 @@ Result<model::OrdinaryFormDocument> decode_document(
                 std::to_string(actual_max_id),
                 "Attribute slot count cannot represent the decoded object IDs");
         }
-        const std::uint64_t expected_slots = std::max<std::uint64_t>(3, actual_max_id + 1);
         const bool empty_attributes =
             attributes.attributes.empty() && attributes.links.empty();
+        std::uint64_t attribute_max_id = 0;
+        for (const auto& stored : attributes.attributes) {
+            attribute_max_id = std::max(
+                attribute_max_id,
+                static_cast<std::uint64_t>(stored.id.object_id));
+        }
+        const std::uint64_t expected_slots = std::max<std::uint64_t>(
+            3,
+            (empty_attributes ? actual_max_id : attribute_max_id) + 1);
         // Пустой заголовок выделения реквизитов не связан с ID контролов;
         // допускаются значение свежего Designer (1) и значение текущего сборщика.
         const std::string expected_slot_count = empty_attributes
@@ -1462,6 +1470,7 @@ Result<list_stream::ListValue> encode_document(
         }
 
         AttributesRecord attributes;
+        std::uint64_t max_attribute_id = 0;
         for (const auto& attribute : document.collections().attributes) {
             if (attribute.id.value() == 0 ||
                 attribute.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
@@ -1478,12 +1487,16 @@ Result<list_stream::ListValue> encode_document(
                 attribute.name,
                 attribute.type,
             });
+            max_attribute_id = std::max(max_attribute_id, attribute.id.value());
             max_id = std::max(max_id, attribute.id.value());
         }
         if (max_id >= std::numeric_limits<std::uint32_t>::max()) {
             fail("OOF1120", "$/Attributes", "object IDs below uint32 max", std::to_string(max_id), "Attribute slot count overflows");
         }
-        attributes.slot_count = static_cast<std::uint32_t>(std::max<std::uint64_t>(3, max_id + 1));
+        const bool empty_attributes = attributes.attributes.empty() && attributes.links.empty();
+        attributes.slot_count = static_cast<std::uint32_t>(std::max<std::uint64_t>(
+            3,
+            (empty_attributes ? max_id : max_attribute_id) + 1));
         const auto encoded_attributes_result = encode_attributes(attributes);
         if (!encoded_attributes_result) {
             throw DecodeFailure(encoded_attributes_result.diagnostics().front());

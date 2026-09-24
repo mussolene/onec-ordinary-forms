@@ -343,6 +343,42 @@ void test_empty_attributes_allocator_header() {
         "unsupported empty attribute allocation header must be rejected");
 }
 
+void test_attribute_allocator_is_separate_from_control_ids() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children.push_back(model::ControlRef{model::ObjectId{4}});
+    model::OrdinaryFormDocument document(std::move(form));
+    document.add_attribute(model::Attribute{
+        model::ObjectId{1},
+        "Value",
+        {},
+    });
+    document.add_control(model::ControlNode{
+        model::ObjectId{4},
+        "Run",
+        model::ButtonPayload{},
+    });
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "attribute and control ID spaces must encode independently");
+    expect(encoded.value().items[1].items[1].items[1].atom == "4",
+        "form header max ID must include control ID 4");
+    expect(encoded.value().items[2].items[1].atom == "3",
+        "attribute slot count must use attribute ID 1, not control ID 4");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), "attribute ID 1 and control ID 4 must decode with slot count 3");
+
+    auto wrong_attribute_slots = encoded.value();
+    wrong_attribute_slots.items[2].items[1] = list_stream::ListValue::raw_atom("5");
+    expect_failure(
+        form_stream::decode_document(wrong_attribute_slots, "Main"),
+        "OOF1114",
+        "$/2/1",
+        "nonempty attribute slot count must be checked in its own ID space");
+}
+
 void test_multiple_top_level_buttons_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -487,6 +523,7 @@ int main() {
         test_attributes();
         test_attribute_encode_validation();
         test_empty_attributes_allocator_header();
+        test_attribute_allocator_is_separate_from_control_ids();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_platform_empty_document_fixture();
