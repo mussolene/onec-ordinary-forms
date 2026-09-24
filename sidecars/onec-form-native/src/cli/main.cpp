@@ -20,8 +20,7 @@ constexpr std::string_view version = "1.0.0-dev";
 void print_usage(std::ostream& output) {
     output
         << "Usage: oof dump <Form.bin> <Form.xml> [--json]\n"
-        << "       oof build <Form.xml> <Form.bin> [--json]\n"
-        << "       oof <validate|diff|edit> [options]\n"
+        << "       oof build <Form.xml> <Form.bin> [--json] (requires <XML-stem>/Module.bsl)\n"
         << "       oof --version\n";
 }
 
@@ -165,18 +164,6 @@ std::filesystem::path module_path_for(const std::filesystem::path& xml_path) {
     return root / "Module.bsl";
 }
 
-int unavailable_command(std::string_view command, bool json) {
-    print_diagnostics(
-        cli_failure(
-            "OOF0001",
-            {},
-            "implemented product adapter",
-            "migration build",
-            "Command " + std::string(command) + " is not connected to the product adapters yet"),
-        json);
-    return 78;
-}
-
 int dump_form(
     const std::filesystem::path& input,
     const std::filesystem::path& output,
@@ -211,9 +198,18 @@ int build_form(
         return 1;
     }
     const auto module_path = module_path_for(input);
-    parsed.value().set_module(oof::model::FormModule{
-        std::filesystem::exists(module_path) ? read_text(module_path) : std::string{},
-    });
+    if (!std::filesystem::exists(module_path)) {
+        print_diagnostics(
+            cli_failure(
+                "OOF0005",
+                module_path.string(),
+                "existing Module.bsl sidecar (an empty file is allowed)",
+                "missing file",
+                "Build requires the module sidecar to avoid silently dropping module code"),
+            json);
+        return 1;
+    }
+    parsed.value().set_module(oof::model::FormModule{read_text(module_path)});
     const auto encoded = oof::save_form_bin(parsed.value());
     if (!encoded) {
         print_diagnostics(encoded.diagnostics(), json);
@@ -265,14 +261,11 @@ int main(int argc, char** argv) {
         if (command == "build") {
             return build_form(arguments[1], arguments[2], json);
         }
-        if (command == "validate" || command == "diff" || command == "edit") {
-            return unavailable_command(command, json);
-        }
         print_diagnostics(
             cli_failure(
                 "OOF0002",
                 {},
-                "dump|build|validate|diff|edit",
+                "dump|build",
                 std::string(command),
                 "Unknown command"),
             json);

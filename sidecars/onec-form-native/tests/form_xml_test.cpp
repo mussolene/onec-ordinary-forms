@@ -108,6 +108,28 @@ void test_all_control_variants() {
     auto reparsed = source::parse_form_xml(serialized.value());
     expect(reparsed.ok(), "all-control canonical XML must reparse");
     expect(reparsed.value().collections().controls.size() == 26, "all control kinds must survive source roundtrip");
+
+    std::string edited_xml = serialized.value();
+    for (const auto& control : reparsed.value().collections().controls) {
+        const std::string old_name = "name=\"" + control.name + "\"";
+        const auto offset = edited_xml.find(old_name);
+        expect(offset != std::string::npos, "editable control name must appear in XML");
+        edited_xml.replace(offset, old_name.size(), "name=\"Edited" + control.name + "\"");
+    }
+    auto edited = source::parse_form_xml(edited_xml);
+    expect(edited.ok(), "renamed controls must parse without changing their IDs");
+    expect(edited.value().form().children == reparsed.value().form().children,
+           "XML rename must preserve ordered child references");
+    for (const auto& original : reparsed.value().collections().controls) {
+        const auto* renamed = edited.value().find_control(original.id);
+        expect(renamed != nullptr && renamed->kind() == original.kind(),
+               "XML rename must preserve control identity and type");
+        expect(renamed->name == "Edited" + original.name,
+               "edited XML name must reach the typed model");
+    }
+    auto edited_source = source::serialize_form_xml(edited.value());
+    expect(edited_source.ok() && edited_source.value() == edited_xml,
+           "renamed XML must remain canonical without losing the edits");
 }
 
 void test_typed_values_and_canonicalization() {

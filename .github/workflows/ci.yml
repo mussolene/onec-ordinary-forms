@@ -11,19 +11,19 @@ permissions:
   contents: read
 
 jobs:
-  native-test:
-    name: Native C++ tests
+  product-test:
+    name: Product C++ tests
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Install native dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake zlib1g-dev libxml2-dev
+      - name: Install product dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libxml2-dev
 
-      - name: Run native tests
+      - name: Run product tests
         run: make test
 
-      - name: Run native smoke
+      - name: Run product smoke
         run: make smoke

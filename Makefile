@@ -6,7 +6,7 @@ CMAKE_CONFIGURE_ARGS ?=
 CMAKE_BUILD_ARGS ?=
 CTEST_ARGS ?=
 
-.PHONY: all configure build test smoke native-smoke-gate release-gate clean
+.PHONY: all configure build test smoke release-gate clean
 
 all: build
 
@@ -22,11 +22,9 @@ test: build
 smoke: build
 	$(CTEST) --test-dir $(BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure -L smoke $(CTEST_ARGS)
 
-native-smoke-gate: test smoke
-
 release-gate:
-	@echo "release-gate is not implemented: native smoke is PASS/PARTIAL only; strict Designer and corpus validation are not run by this target." >&2
+	@echo "release-gate is not implemented: product tests do not replace strict Designer and corpus validation." >&2
 	@exit 1
 
 clean:
-	rm -rf $(BUILD_DIR) sidecars/onec-form-native/build dist
+	rm -rf $(BUILD_DIR) dist

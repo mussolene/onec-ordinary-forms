@@ -1,114 +1,26 @@
-# Architecture Notes
+# Архитектура
 
-Read [`ordinary-form-target-contract.md`](ordinary-form-target-contract.md)
-first. It is the hard contract for this repository: the product is the
-`OrdinaryForm` object graph, not a `Form.bin` patcher.
-[`repository-target-state.md`](repository-target-state.md) is the active
-migration checkpoint: release-facing commands must converge to the single
-`ListInStream -> OrdinaryFormObject -> ListOutStream` path.
+Публичный продуктовый источник обычной формы представляет собой именованный XML версии 2.1 и соседний `Form/Module.bsl`. Его словарь разработан для обычных форм и только стремится к удобству чтения XML управляемых форм. Он не совместим с форматом их выгрузки. Жёсткий контракт объектной модели и запрет на публикацию сырых бинарных записей задаёт [`ordinary-form-target-contract.md`](ordinary-form-target-contract.md).
 
-The repository is split by format boundary, not by CLI command.
+## Владельцы кода
 
-## Layers
+| Область | Владелец | Ответственность |
+| --- | --- | --- |
+| Объектная модель | `include/oof/model/ordinary_form.hpp`, `src/model/ordinary_form.cpp` | Объекты формы, свойства, коллекции, модуль и инварианты |
+| Метамодель | `include/oof/model/metamodel.hpp`, `src/model/metamodel.cpp` | Типы контролов, свойства, события и дескрипторы их классификации |
+| Источник XML | `include/oof/source/form_xml.hpp`, `src/source/form_xml.cpp` | Разбор и каноническая сериализация XML 2.1 в/из объектной модели |
+| Описания схемы | `include/oof/source/schema_generator.hpp`, `src/source/schema_generator.cpp` | Генерация проверочных описаний на основе метамодели; извлечённые XSD платформы не являются кодеком обычной формы |
+| Значения и потоки | `include/oof/storage`, `src/storage` | Кодирование значений и внутреннего потока формы |
+| Контейнер | `include/oof/form_bin.hpp`, `src/form_bin.cpp` | Загрузка и сохранение контейнера `Form.bin` |
+| CLI | `src/cli/main.cpp` | Команды `dump` и `build`, файловый ввод/вывод и диагностика |
+| Проверки | `tests` и CTest-конфигурация в `CMakeLists.txt` | Тесты модели/XML/storage и интеграционный smoke CLI |
 
-- `ordinary_form_object` is the product layer. It owns `Form`, properties,
-  attributes, commands, events, controls, nested controls, typed values,
-  defaults, `GetPropVal`, and `SetPropVal` behavior.
-- `platform_list_stream` owns the bracket/list-stream reader and writer. This
-  is the native analogue of the platform `ListInStream`/`ListOutStream` layer
-  and serializes/deserializes `OrdinaryForm`.
-- `form_bin` owns the ordinary `Form.bin` section container in native C++.
-  It parses, unpacks, and packs the platform section container. It must remain
-  a thin container boundary and must not become the form model or a patcher.
-- `platform_value` owns typed value fragments used inside the ordinary form
-  graph: `CompositeID`, `TypeDomainPattern`, localized/formatted strings,
-  colors, fonts, borders, pictures, and generic scalar values.
-- `ordinary_controls` owns the internal ordinary-control codecs identified by
-  `cf_form_controls8`, `cf_form_controls_position8`, and
-  `cf_form_controls_info8`.
-- `object_model_bridge` maps `OrdinaryForm` to public `Form.xml` concepts:
-  form, attributes, commands, events, controls, positions, bindings, typed
-  properties, module text, and picture files.
-- `main.cpp` is the current native CLI host. It should stay a thin command
-  wrapper around the native layers as code moves out into dedicated headers.
+Пути относительно `sidecars/onec-form-native`. Реализация не должна сливать эти обязанности в новый парсер или дублирующий CLI. `Form.bin` остаётся границей сериализованного хранения, а не публичной моделью.
 
-## Current Direction
+## Границы доказательств
 
-The next cleanup target is to move `OrdinaryForm` materialization,
-`GetPropVal`/`SetPropVal`, XML writing, and list-stream writing out of the CLI
-body into dedicated native modules. Replace remaining hand-built control payload
-writer records with platform-derived codec descriptors. The public XML must
-stay object-model-only; list-stream details remain internal.
+XML-адаптер может разобрать и сериализовать 26 типов контролов и типизированные значения. Это подтверждает владение схемным словарём, преобразование XML и объектной модели. Поддержка отдельного контроля двоичным сериализатором подтверждается только теми тестами и платформенными проверками, которые проходят через `OrdinaryForm` и `Form.bin`. Не выводите покрытие бинарного кодека из числа XML-типов или извлечённых схем управляемых форм.
 
-Behavioral changes should stay separate from these moves. A pure architecture
-cleanup may delete legacy-looking CLI commands when they are not on the object
-path, and must pass the native round-trip checks.
+Текущий XML-адаптер получает XSD от `generate_schemas(Metamodel::instance())` и проверяет XML через libxml2 в памяти. Отслеживаемые `schemas/OrdinaryForm.xsd` и `schemas/OrdinaryFormPalette.xsd` генерируются тем же кодом и тестом защищены от расхождения с генератором; редакторы могут использовать их для публичного XML 2.1. Изменение публичного словаря проходит через метамодель и генератор, не через параллельную ручную схему. `schemas/platform/8.5` остаётся сравнительным исследовательским материалом, а наличие типов в любой XML-схеме не доказывает поддержку их бинарного кодека.
 
-Byte identity is diagnostic, not the public release contract. The release
-contract is semantic equality of the materialized
-`OrdinaryForm` graph after `Form.xml -> OrdinaryForm -> Form.bin ->
-OrdinaryForm` plus strict platform validation where the local platform is
-available. Broader corpus work should expand typed descriptor coverage
-incrementally and record the next missing object/property class in OACS.
-
-## Platform Codec Formula
-
-The current platform evidence points to one generic persistence path, not to a
-separate public raw-stream format:
-
-```text
-Form.bin -> form stream -> ListInStream -> OrdinaryForm -> Form.xml
-Form.xml -> OrdinaryForm -> ListOutStream -> form stream -> Form.bin
-```
-
-`ValueToStringInternal` and `ValueFromStringInternal` are still useful, but only
-for typed value fragments that appear inside that graph: scalar values,
-`TypeDomainPattern`, `CompositeID`, colors, fonts, and similar properties. They
-are not, by themselves, evidence of a callable whole-form XML serializer. The
-ordinary form graph is still identified by the platform `cf_form_controls8`,
-`cf_form_controls_position8`, and `cf_form_controls_info8` payload families.
-
-The implementation consequence is concrete: new fixes should not add ad hoc
-per-control writer branches unless they are adapters around descriptor rows.
-A durable fix should add or update a platform-derived descriptor:
-
-- public XML control/property/event name from `OrdinaryForm.xsd`;
-- platform palette name/type from schema `appinfo`;
-- internal record family (`controls`, `position`, `info`, value fragment);
-- slot/default/write-condition evidence;
-- dump path and build path;
-- platform validation or bracket/list diff evidence.
-
-This gives us the same shape as the platform: read many old stream/profile
-shapes into one `OrdinaryForm` graph, write one consistent current graph, and
-keep platform details either as named schema-backed properties or as private
-codec defaults, never as raw public XML or patch state.
-
-Use native gates before and after serializer work:
-`make -C sidecars/onec-form-native test` and
-`sidecars/onec-form-native/build/oof-native object-model-gate`. The writer
-dispatch is registry-based for all supported ordinary controls. Controls found
-only in managed-form documentation, such as `ПолеПериода`, are not part of the
-public ordinary-form schema until platform evidence gives an ordinary-control
-class id and record shape.
-
-## Schema Boundary
-
-The public schema boundary is intentionally narrow:
-
-- `OrdinaryForm.xsd` is the public managed-style ordinary-form object model:
-  `ChildItems`, controls, `Attributes`, `Commands`, and `Events`.
-- `OrdinaryFormPalette.xsd` is the platform palette and typed property
-  descriptor schema used by codec/coverage tooling.
-- `PlatformConfigStructure.xsd` is codec evidence for configuration metadata,
-  type-domain patterns, `CompositeID`, and platform serializer concepts.
-- `schemas/platform/8.5` vendors the full extracted 1C 8.5 platform XSD
-  resource layer. The manifest `schemas/platform/8.5/schemas.json` records
-  resource module names, namespaces, sizes, and hashes. Generated native
-  headers such as `platform_form_schema.hpp` are compact indexes over this
-  evidence, not replacements for the full schemas.
-
-Public `Form.xml` element and attribute names use the English vocabulary from
-`OrdinaryForm.xsd`. Russian platform names are schema annotations used by tools
-and documentation. They are not separate mapping files and not alternate public
-XML tag names.
+Целевой путь остаётся один: `Form.bin -> объектная модель -> Form.xml + Module.bsl`, либо `Form.xml + Module.bsl -> объектная модель -> Form.bin`. Внутренние list/bracket записи не должны появляться в публичном XML.

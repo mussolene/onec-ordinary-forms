@@ -1,44 +1,37 @@
-# Repository Target State
+# Целевое состояние репозитория
 
-This is the current target state for the repository.
+Цель проекта: простая утилита для чтения, редактирования и сборки обычной формы как объектной модели с именованным XML 2.1 и отдельным `Module.bsl`. Словарь XML проекта вдохновлён читаемостью управляемых форм, но не совместим с форматом их выгрузки. Утилита не считается универсальной, пока фактическое покрытие бинарного кодека не подтверждено.
 
-The product path is exactly one object path:
+## Единственный продуктовый путь
 
 ```text
-Form.bin/bracket -> ListInStream -> OrdinaryFormObject -> ListOutStream -> Form.bin/bracket
-Form.bin/bracket -> OrdinaryFormObject -> Form.xml
-Form.xml -> OrdinaryFormObject -> Form.bin/bracket
+Form.bin -> OrdinaryForm -> Form.xml + Form/Module.bsl
+Form.xml + Form/Module.bsl -> OrdinaryForm -> Form.bin
 ```
 
-`OrdinaryFormObject` is the product. It owns the form graph, object identity,
-properties, defaults, collections, events, bindings, positions, typed values,
-module text, and picture references.
+`OrdinaryForm` владеет объектами, идентификаторами, свойствами, значениями, событиями, элементами и модулем. `Form.bin` является форматом хранения. Если значение ещё нельзя собрать, добавьте именованное свойство или тип и его кодек в обычный путь, после чего зафиксируйте проверку. Не публикуйте низкоуровневые записи, сырые потоки или сохранённый бинарный профиль в XML.
 
-## No Release Fallbacks
+## Порядок расширения
 
-Do not keep release-facing compatibility surfaces for:
+Расширяйте контролы и свойства небольшими проверяемыми шагами:
 
-- build paths that require an existing source `Form.bin`;
-- payload patching;
-- sidecars used to preserve unknown stream state;
-- public raw/list-stream XML;
-- hidden object dumps in public XML;
-- baseline diff workers;
-- old command aliases whose only purpose is compatibility.
+1. Найдите обычный платформенный тип, его XML-имя, свойства, события и типизированные значения в метамодели (`src/model/metamodel.cpp`) и XML-адаптере (`src/source/form_xml.cpp`).
+2. Проверьте, что XML 2.1 читает, сериализует и повторно читает новое именованное представление; добавьте XML-тесты в существующий `tests/form_xml_test.cpp`.
+3. Отдельно исследуйте бинарное представление и добавьте кодек с дескрипторами для `OrdinaryForm` и слоя хранения. Не считать наличие типа в XSD управляемых форм доказательством поддержки записи обычной формы.
+4. Добавьте тесты сериализации `Form.bin`, затем проверьте результат строгой выгрузкой Designer при доступности платформы. Если платформа недоступна, запишите ограничение, не объявляя покрытие завершённым.
+5. Отразите достигнутое покрытие и оставшиеся случаи в проверках и документации; сохраняйте XML именованной объектной моделью.
 
-If a value cannot round-trip through `OrdinaryFormObject`, the missing named
-object/property/value descriptor must be added to the object model and its
-descriptor-backed serializer.
+Тест `test_all_control_variants` покрывает цикл XML-разбора и сериализации для 26 типов. Каждый такой тип требует отдельного бинарного свидетельства перед заявлением о поддержке сборки.
 
-## Allowed Diagnostics
+## Ближайшие этапы
 
-Platform GUI, `LD_PRELOAD`, `LD_AUDIT`, strict Designer dump, corpus reports,
-and local `scan-output/` files are oracle/evidence tools only. They are not
-product architecture and must not appear as release build inputs.
+1. Одна реальная форма: корневая идентичность, несколько Button, LabelDecoration, InputField, реквизиты и обработчики. Критерий: изменение именованного XML, сборка без исходного Form.bin и строгая повторная выгрузка Designer с проверкой измененных значений.
+2. Panel/Page, вложенность и привязки размеров/реквизитов; затем CommandBar и Table на реальных примерах. Каждый новый вариант получает тест чтения, изменения и записи.
+3. Остальные стандартные элементы, картинки и сложные документы. Покрытие учитывать по типам и свойствам, а не по числу записей в XSD. Платформенные ограничения, включая Windows для ActiveX, фиксировать отдельно.
+4. Только после подтверждения согласованного набора форм завершать установку, упаковку и выпуск. Общая цель остается поддержкой всех элементов, первый этап служит проверкой механизма и не заменяет ее.
 
-## Current Migration Rule
+## Единственный способ сборки и проверки
 
-When editing the codebase, prefer deleting or disabling legacy release-looking
-commands over preserving compatibility. There are no external consumers to
-protect. A command may remain only if it is on the object path above or is
-clearly named and documented as diagnostic evidence.
+Из корня репозитория выполняйте `make build`, `make test` и `make smoke`. Все три команды работают с единственной утилитой `oof`. Не добавляйте вторую реализацию, отдельный сборочный режим или альтернативный путь редактирования.
+
+Текущие команды CLI и границы валидации описаны в [README](../README.md), ответственность модулей в [архитектуре](architecture.md), цикл правки в [разработке](development.md). Продуктовый контракт остаётся в [ordinary-form-target-contract.md](ordinary-form-target-contract.md).
