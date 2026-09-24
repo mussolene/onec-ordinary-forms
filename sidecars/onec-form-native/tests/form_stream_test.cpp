@@ -302,6 +302,47 @@ void test_attribute_encode_validation() {
         "encoder must reject malformed CompositeID UUID");
 }
 
+void test_empty_attributes_allocator_header() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children.push_back(model::ControlRef{model::ObjectId{10}});
+    model::OrdinaryFormDocument document(std::move(form));
+    document.add_control(model::ControlNode{
+        model::ObjectId{10},
+        "Run",
+        model::ButtonPayload{},
+    });
+
+    auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "high-ID Button must encode using the current writer allocation count");
+    expect(
+        encoded.value().items[2].items[1].atom == "11",
+        "current writer allocation count must be derived from the high object ID");
+
+    auto fresh_designer = encoded.value();
+    fresh_designer.items[2].items[1] = list_stream::ListValue::raw_atom("1");
+    const auto decoded = form_stream::decode_document(fresh_designer, "Main");
+    expect(decoded.ok(), "empty attribute allocation header from fresh Designer must decode");
+    expect(
+        decoded.value().collections().controls.front().id == model::ObjectId{10},
+        "empty attribute allocation header must not constrain Button IDs");
+
+    const auto normalized = form_stream::encode_document(decoded.value());
+    expect(normalized.ok(), "decoded fresh-Designer form must encode");
+    expect(
+        normalized.value().items[2].items[1].atom == "11",
+        "empty attribute allocation header must normalize to the current writer value");
+
+    auto unknown_slot_count = encoded.value();
+    unknown_slot_count.items[2].items[1] = list_stream::ListValue::raw_atom("2");
+    expect_failure(
+        form_stream::decode_document(unknown_slot_count, "Main"),
+        "OOF1114",
+        "$/2/1",
+        "unsupported empty attribute allocation header must be rejected");
+}
+
 void test_platform_empty_document_fixture() {
     constexpr std::string_view fixture = R"OOF(
 {27,{18,{{1,1,{"ru","Form"}},1,4294967295},{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}},{0}},400,300,1,0,1,4,4,3,400,300,96},{{-1},3,{0},{0}},{00000000-0000-0000-0000-000000000000,0},{0},1,4,1,0,0,0,{0},{0},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
@@ -332,6 +373,7 @@ int main() {
         test_runtime_envelope();
         test_attributes();
         test_attribute_encode_validation();
+        test_empty_attributes_allocator_header();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

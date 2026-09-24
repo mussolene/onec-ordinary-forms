@@ -389,7 +389,7 @@ LV canonical_button_base(bool enabled) {
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
         "{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
-        "{1,0},0,0,100,2,1,1,2,{4,4,{0},4}}");
+        "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
     value.items[1] = raw(enabled ? "1" : "0");
     return value;
 }
@@ -579,18 +579,34 @@ DecodedButton decode_button(const LV& record, std::string_view path) {
     const std::string properties_path = child_path(info_path, 1);
     require_arity(properties, 16, properties_path);
     const auto& base = properties.items[0];
-    require_arity(base, 21, child_path(properties_path, 0));
-    const bool enabled = bool_atom(base.items[1], child_path(child_path(properties_path, 0), 1));
+    const std::string base_path = child_path(properties_path, 0);
+    require_arity(base, 21, base_path);
+    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
+    const std::string observed_state = raw_atom(base.items[17], child_path(base_path, 17));
+    if (observed_state != "1" && observed_state != "2") {
+        fail(
+            "OOF1114",
+            child_path(base_path, 17),
+            "observed internal state 1 or 2",
+            observed_state,
+            "Button base record contains an unsupported property variation");
+    }
+    // Наблюдались 1 у нетронутой записи и 2 после изменения Button в Designer.
+    // Это внутреннее состояние, его общая семантика не установлена.
+    auto normalized_base = base;
+    normalized_base.items[17] = raw("2");
     require_exact(
-        base,
+        normalized_base,
         canonical_button_base(enabled),
-        child_path(properties_path, 0),
+        base_path,
         "Button base record contains an unsupported property variation");
     const std::string caption = decoded_single_language_text(
         properties.items[2],
         child_path(properties_path, 2));
+    auto normalized_properties = properties;
+    normalized_properties.items[0] = std::move(normalized_base);
     require_exact(
-        properties,
+        normalized_properties,
         canonical_button_properties(enabled, caption),
         properties_path,
         "Button payload contains an unsupported property variation");
@@ -1319,12 +1335,20 @@ Result<model::OrdinaryFormDocument> decode_document(
                 "Attribute slot count cannot represent the decoded object IDs");
         }
         const std::uint64_t expected_slots = std::max<std::uint64_t>(3, actual_max_id + 1);
+        const bool empty_attributes =
+            attributes.attributes.empty() && attributes.links.empty();
+        // Пустой заголовок выделения реквизитов не связан с ID контролов;
+        // допускаются значение свежего Designer (1) и значение текущего сборщика.
+        const std::string expected_slot_count = empty_attributes
+            ? "1 or " + std::to_string(expected_slots)
+            : std::to_string(expected_slots);
         if (expected_slots > std::numeric_limits<std::uint32_t>::max() ||
-            attributes.slot_count != expected_slots) {
+            (attributes.slot_count != expected_slots &&
+             !(empty_attributes && attributes.slot_count == 1))) {
             fail(
                 "OOF1114",
                 "$/2/1",
-                std::to_string(expected_slots),
+                expected_slot_count,
                 std::to_string(attributes.slot_count),
                 "Attribute slot count disagrees with the platform object-ID allocator");
         }
