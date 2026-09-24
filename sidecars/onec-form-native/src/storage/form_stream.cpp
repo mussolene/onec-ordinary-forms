@@ -509,6 +509,49 @@ LV canonical_label_geometry(
     return value;
 }
 
+LV canonical_input_field_info(
+    const model::TypeDomainPatternValue& type,
+    bool enabled) {
+    auto value = parse_constant(R"OOF(
+{9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{1,{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{"U"},{"U"},0,"",0,0}}},{0},0,1,0,{1,0},0}
+)OOF");
+    if (value.items.size() != 10 || value.items[2].items.size() != 1 ||
+        value.items[2].items[0].items.size() != 46 ||
+        value.items[2].items[0].items[0].items.size() != 21) {
+        throw std::logic_error("canonical InputField profile is malformed");
+    }
+    value.items[1] = encoded_type_domain(type, "$/InputField/TypeDomain");
+    value.items[2].items[0].items[0].items[1] = raw(enabled ? "1" : "0");
+    return value;
+}
+
+LV canonical_input_field_geometry(
+    std::int32_t left,
+    std::int32_t top,
+    std::int32_t width,
+    std::int32_t height,
+    bool visible) {
+    if (width < 0 || height < 0 ||
+        left > std::numeric_limits<std::int32_t>::max() - width ||
+        top > std::numeric_limits<std::int32_t>::max() - height) {
+        fail("OOF1120", "$/1/2", "non-negative InputField geometry without int32 overflow", "invalid geometry", "InputField geometry cannot be represented");
+    }
+    auto value = parse_constant(
+        "{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},"
+        "{0,{2,4,0,30},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},"
+        "{0,{2,4,2,70},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},"
+        "{0,{2,-1,6,0},{2,-1,6,0}},1,{0,4,1},0,1,{0,4,3},"
+        "0,0,0,0,2,3,0,0}");
+    value.items[1] = raw(std::to_string(left));
+    value.items[2] = raw(std::to_string(top));
+    value.items[3] = raw(std::to_string(left + width));
+    value.items[4] = raw(std::to_string(top + height));
+    value.items[5] = raw(visible ? "1" : "0");
+    value.items[7].items[1].items[3] = raw(std::to_string(height));
+    value.items[9].items[1].items[3] = raw(std::to_string(width));
+    return value;
+}
+
 LV canonical_event_table(std::optional<std::string_view> handler) {
     if (!handler) {
         return list({raw("0")});
@@ -832,6 +875,100 @@ model::ControlNode decode_label(const LV& record, std::string_view path) {
     return control;
 }
 
+model::ControlNode decode_input_field(
+    const LV& record,
+    std::string_view path,
+    const AttributeRecord& linked_attribute) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id != 4) {
+        fail("OOF1122", child_path(path, 1), "InputField ID 4 for the observed geometry profile", std::to_string(raw_id), "InputField ID is outside the supported profile");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 10, info_path);
+    require_raw_constant(info.items[0], "9", child_path(info_path, 0));
+    const auto control_type = type_domain(info.items[1], child_path(info_path, 1));
+    model::TypeDomainPatternValue expected_type;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{10, true};
+    expected_type.entries.push_back(string_entry);
+    if (control_type != linked_attribute.type || control_type != expected_type) {
+        fail(
+            "OOF1122",
+            child_path(info_path, 1),
+            "InputField TypeDomainPattern matching linked String(10) Attribute",
+            describe(info.items[1]),
+            "InputField type must match its linked attribute");
+    }
+    const auto& control_info = info.items[2];
+    const auto control_info_path = child_path(info_path, 2);
+    require_arity(control_info, 1, control_info_path);
+    const auto& payload = at(control_info, 0, control_info_path);
+    const auto payload_path = child_path(control_info_path, 0);
+    require_arity(payload, 46, payload_path);
+    const auto& base_info = at(payload, 0, payload_path);
+    const auto base_info_path = child_path(payload_path, 0);
+    require_arity(base_info, 21, base_info_path);
+    const bool enabled = bool_atom(base_info.items[1], child_path(base_info_path, 1));
+    require_exact(
+        info,
+        canonical_input_field_info(control_type, enabled),
+        info_path,
+        "InputField uses an unsupported property, event, or storage variation");
+
+    const auto& geometry = record.items[3];
+    const auto geometry_path = child_path(path, 3);
+    require_arity(geometry, 25, geometry_path);
+    require_raw_constant(geometry.items[0], "8", child_path(geometry_path, 0));
+    const auto left = integer_atom<std::int32_t>(geometry.items[1], child_path(geometry_path, 1));
+    const auto top = integer_atom<std::int32_t>(geometry.items[2], child_path(geometry_path, 2));
+    const auto right = integer_atom<std::int32_t>(geometry.items[3], child_path(geometry_path, 3));
+    const auto bottom = integer_atom<std::int32_t>(geometry.items[4], child_path(geometry_path, 4));
+    const bool visible = bool_atom(geometry.items[5], child_path(geometry_path, 5));
+    if (right < left || bottom < top) {
+        fail("OOF1120", geometry_path, "non-negative InputField geometry", describe(geometry), "InputField geometry has negative dimensions");
+    }
+    const auto width64 = static_cast<std::int64_t>(right) - left;
+    const auto height64 = static_cast<std::int64_t>(bottom) - top;
+    if (width64 > std::numeric_limits<std::int32_t>::max() || height64 > std::numeric_limits<std::int32_t>::max()) {
+        fail("OOF1120", geometry_path, "int32 InputField dimensions", describe(geometry), "InputField geometry overflows int32");
+    }
+    require_exact(
+        geometry,
+        canonical_input_field_geometry(left, top, static_cast<std::int32_t>(width64), static_cast<std::int32_t>(height64), visible),
+        geometry_path,
+        "InputField Position contains an unsupported storage leaf");
+
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
+    }
+    require_exact(
+        metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path,
+        "InputField metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "InputField cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (left != 0) control.position.left.set(left);
+    if (top != 0) control.position.top.set(top);
+    if (width64 != 0) control.position.width.set(static_cast<std::int32_t>(width64));
+    if (height64 != 0) control.position.height.set(static_cast<std::int32_t>(height64));
+    if (!visible) control.position.visible.set(false);
+    return control;
+}
+
 bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value) {
     const auto* value = properties.find(model::PropertyId::from_name(name));
     if (value == nullptr) {
@@ -996,6 +1133,51 @@ LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
         raw(std::to_string(control.id.value())),
         list({raw("3"), canonical_label_properties(caption), list({raw("0")})}),
         canonical_label_geometry(left, top, width, height, visible),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
+LV encode_input_field(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    std::size_t sibling_index) {
+    if (sibling_index != 2 || control.kind() != model::ControlKind::input_field ||
+        control.id.value() != 4) {
+        fail("OOF1122", "$/Form/ChildItems", "InputField ID 4 at sibling index 2", control.name, "InputField is outside the supported Button-Label-InputField profile");
+    }
+    if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
+        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/InputField", "named InputField with direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Enabled"}, "$/InputField");
+    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    if (attribute == nullptr) {
+        fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
+    }
+    model::TypeDomainPatternValue supported_type;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{10, true};
+    supported_type.entries.push_back(string_entry);
+    if (attribute->type != supported_type) {
+        fail("OOF1122", "$/InputField/DataPath", "linked String(10) Attribute", attribute->name, "InputField type is outside the supported profile");
+    }
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
+    const auto left = control.position.left.value();
+    const auto top = control.position.top.value();
+    const auto width = control.position.width.value();
+    const auto height = control.position.height.value();
+    const bool visible = control.position.visible.value();
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_input_field_info(attribute->type, enabled),
+        canonical_input_field_geometry(left, top, width, height, visible),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
@@ -1416,14 +1598,6 @@ Result<model::OrdinaryFormDocument> decode_document(
             throw DecodeFailure(attributes_result.diagnostics().front());
         }
         const auto& attributes = attributes_result.value();
-        if (!attributes.links.empty()) {
-            fail(
-                "OOF1122",
-                "$/2/3",
-                "empty attribute-link table for the Button slice",
-                std::to_string(attributes.links.size()),
-                "DataPath storage is not part of this executable slice");
-        }
 
         model::Form form;
         form.id = model::ObjectId{1};
@@ -1486,6 +1660,8 @@ Result<model::OrdinaryFormDocument> decode_document(
         std::vector<DecodedButton> decoded_buttons;
         decoded_buttons.reserve(control_count);
         std::optional<model::ControlNode> decoded_label;
+        std::optional<model::ControlNode> decoded_input_field;
+        const auto& input_descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
         for (std::uint32_t index = 0; index < control_count; ++index) {
             const auto path = child_path("$/1/2/2", static_cast<std::size_t>(index) + 1);
             const auto& child_record = children.items[index + 1];
@@ -1499,9 +1675,26 @@ Result<model::OrdinaryFormDocument> decode_document(
                 decoded_buttons.push_back(decode_button(child_record, path, index));
                 actual_max_id = std::max(actual_max_id, decoded_buttons.back().control.id.value());
             } else if (child_guid == label_descriptor.guid && !decoded_label &&
-                       index == 1 && decoded_buttons.size() == 1 && control_count == 2) {
+                       index == 1 && decoded_buttons.size() == 1 &&
+                       (control_count == 2 || control_count == 3)) {
                 decoded_label = decode_label(child_record, path);
                 actual_max_id = std::max(actual_max_id, decoded_label->id.value());
+            } else if (child_guid == input_descriptor.guid && !decoded_input_field &&
+                       index == 2 && decoded_buttons.size() == 1 && decoded_label &&
+                       control_count == 3 && attributes.attributes.size() == 1 &&
+                       attributes.links.size() == 1) {
+                const auto& attribute = attributes.attributes.front();
+                const auto& link = attributes.links.front();
+                const auto attribute_id = static_cast<std::uint64_t>(attribute.id.object_id);
+                const auto candidate_id = integer_atom<std::uint64_t>(child_record.items[1], child_path(path, 1));
+                if (link.control_id != static_cast<std::int64_t>(candidate_id) ||
+                    !link.attribute_id.is_null || link.attribute_id.object_id != attribute.id.object_id ||
+                    link.attribute_id.uuid.canonical != null_uuid) {
+                    fail("OOF1122", "$/2/3", "single Control-to-Attribute link matching InputField and Attribute ID", "mismatched link", "DataPath link is outside the supported profile");
+                }
+                decoded_input_field = decode_input_field(child_record, path, attribute);
+                decoded_input_field->data_path = model::DataPath{model::AttributeRef{model::ObjectId{attribute_id}}, {}};
+                actual_max_id = std::max(actual_max_id, decoded_input_field->id.value());
             } else {
                 fail("OOF1122", path, "top-level Buttons, optionally followed by one LabelDecoration at index 1", child_guid, "Control ordering is outside the supported storage slice");
             }
@@ -1572,6 +1765,12 @@ Result<model::OrdinaryFormDocument> decode_document(
         if (decoded_label) {
             form.children.push_back(model::ControlRef{decoded_label->id});
             document.add_control(std::move(*decoded_label));
+        }
+        if (decoded_input_field) {
+            form.children.push_back(model::ControlRef{decoded_input_field->id});
+            document.add_control(std::move(*decoded_input_field));
+        } else if (!attributes.links.empty()) {
+            fail("OOF1122", "$/2/3", "one attribute link for the supported InputField profile", std::to_string(attributes.links.size()), "DataPath link has no supported InputField");
         }
         document.set_form(std::move(form));
 
@@ -1657,9 +1856,12 @@ Result<list_stream::ListValue> encode_document(
             if (control->kind() == model::ControlKind::button && !has_label) {
                 child_records.push_back(encode_button(document, *control, sibling_index));
             } else if (control->kind() == model::ControlKind::label_decoration &&
-                       !has_label && sibling_index == 1 && sibling_index == document.form().children.size() - 1) {
+                       !has_label && sibling_index == 1 &&
+                       (document.form().children.size() == 2 || document.form().children.size() == 3)) {
                 child_records.push_back(encode_label(*control, sibling_index));
                 has_label = true;
+            } else if (control->kind() == model::ControlKind::input_field && has_label && sibling_index == 2 && document.form().children.size() == 3) {
+                child_records.push_back(encode_input_field(document, *control, sibling_index));
             } else {
                 fail("OOF1122", "$/Form/ChildItems", "top-level Buttons, optionally followed by one LabelDecoration at index 1", control->name, "Control ordering is outside the supported storage slice");
             }
@@ -1686,6 +1888,18 @@ Result<list_stream::ListValue> encode_document(
             });
             max_attribute_id = std::max(max_attribute_id, attribute.id.value());
             max_id = std::max(max_id, attribute.id.value());
+        }
+        std::size_t input_count = 0;
+        for (const auto& control : document.collections().controls) {
+            if (control.kind() != model::ControlKind::input_field) continue;
+            ++input_count;
+            if (input_count != 1 || document.form().children.size() != 3 || max_attribute_id == 0) {
+                fail("OOF1122", "$/Form/ChildItems", "one InputField with one Attribute in Button-Label-InputField order", control.name, "InputField is outside the supported document profile");
+            }
+            attributes.links.push_back(form_stream::AttributeLink{
+                static_cast<std::int64_t>(control.id.value()),
+                model::CompositeIdValue{static_cast<std::int64_t>(control.data_path->attribute.id().value()), model::UuidValue{std::string(null_uuid)}, true},
+            });
         }
         if (max_id >= std::numeric_limits<std::uint32_t>::max()) {
             fail("OOF1120", "$/Attributes", "object IDs below uint32 max", std::to_string(max_id), "Attribute slot count overflows");

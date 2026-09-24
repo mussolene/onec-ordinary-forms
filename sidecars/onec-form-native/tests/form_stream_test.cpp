@@ -521,6 +521,65 @@ void test_button_then_label_decoration_round_trip() {
         "unsupported LabelDecoration storage leaves must fail closed");
 }
 
+void test_button_label_input_field_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {
+        model::ControlRef{model::ObjectId{2}},
+        model::ControlRef{model::ObjectId{3}},
+        model::ControlRef{model::ObjectId{4}},
+    };
+    model::OrdinaryFormDocument document(std::move(form));
+    model::TypeDomainPatternValue string10;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{10, true};
+    string10.entries.push_back(string_entry);
+    document.add_attribute(model::Attribute{model::ObjectId{1}, "SyntheticValue", string10});
+    document.add_control(model::ControlNode{model::ObjectId{2}, "Run", model::ButtonPayload{}});
+    document.add_control(model::ControlNode{model::ObjectId{3}, "Label", model::LabelDecorationPayload{}});
+    model::ControlNode input{model::ObjectId{4}, "InputSynthetic", model::InputFieldPayload{}};
+    input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+    input.position.left.set(231);
+    input.position.top.set(135);
+    input.position.width.set(70);
+    input.position.height.set(30);
+    input.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    document.add_control(std::move(input));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "Button-Label-InputField profile must encode" :
+        encoded.diagnostics().front().code + ":" + encoded.diagnostics().front().path + ":" + encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    const auto* decoded_input = decoded.value().find_control(model::ObjectId{4});
+    expect(decoded_input && decoded_input->kind() == model::ControlKind::input_field,
+        "InputField identity must survive round-trip");
+    expect(decoded_input->name == "InputSynthetic" && decoded_input->data_path &&
+               decoded_input->data_path->attribute.id() == model::ObjectId{1},
+        "InputField name and named DataPath link must survive round-trip");
+    expect(decoded_input->position.left.value() == 231 && decoded_input->position.top.value() == 135 &&
+               decoded_input->position.width.value() == 70 && decoded_input->position.height.value() == 30,
+        "InputField Position must survive round-trip");
+    expect(decoded_input->properties().find(model::PropertyId::from_name("Enabled")) != nullptr &&
+               !std::get<bool>(decoded_input->properties().find(model::PropertyId::from_name("Enabled"))->value),
+        "InputField Enabled must survive round-trip");
+    expect(decoded.value().find_attribute(model::ObjectId{1})->type == string10,
+        "linked Attribute String(10) type must survive round-trip");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok(), "decoded InputField document must re-encode");
+    const auto redecode = form_stream::decode_document(reencoded.value(), "Main");
+    expect(redecode.ok() && redecode.value().find_control(model::ObjectId{4})->data_path->attribute.id() == model::ObjectId{1},
+        "InputField DataPath must survive a second decode");
+
+    auto unsupported_leaf = encoded.value();
+    auto& input_record = unsupported_leaf.items[1].items[2].items[2].items[3];
+    input_record.items[2].items[2].items[0].items[45] = list_stream::ListValue::raw_atom("9");
+    expect_failure(form_stream::decode_document(unsupported_leaf, "Main"), "OOF1114", "$/1/2/2/3/2",
+        "unknown InputField info leaf must fail closed");
+}
+
 void test_two_button_sibling_index() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -584,6 +643,7 @@ int main() {
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_button_then_label_decoration_round_trip();
+        test_button_label_input_field_round_trip();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';
