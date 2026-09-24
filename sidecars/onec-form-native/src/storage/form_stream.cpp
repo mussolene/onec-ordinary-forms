@@ -453,6 +453,62 @@ LV canonical_button_geometry(
     return value;
 }
 
+LV canonical_label_properties(std::string_view caption) {
+    return list({
+        parse_constant(
+            "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
+            "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
+            "{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
+            "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}"),
+        raw("11"),
+        encoded_localized(caption),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        raw("0"),
+        raw("0"),
+        parse_constant("{0,0,0}"),
+        raw("0"),
+        parse_constant("{1,0}"),
+        raw("1"),
+        parse_constant(
+            "{10,0,{4,0,{0},\"\",-1,-1,1,0,\"\"},"
+            "{4,0,{0},\"\",-1,-1,1,0,\"\"},"
+            "{4,0,{0},\"\",-1,-1,1,0,\"\"},100,2,0,0,1,2}"),
+        raw("4"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"),
+    });
+}
+
+LV canonical_label_geometry(
+    std::int32_t left,
+    std::int32_t top,
+    std::int32_t width,
+    std::int32_t height,
+    bool visible) {
+    if (width < 0 || height < 0 ||
+        left > std::numeric_limits<std::int32_t>::max() - width ||
+        top > std::numeric_limits<std::int32_t>::max() - height) {
+        fail("OOF1120", "$/1/2", "non-negative geometry without int32 overflow", "invalid LabelDecoration geometry", "LabelDecoration geometry cannot be represented");
+    }
+    auto value = parse_constant(
+        "{8,0,0,0,0,1,"
+        "{0,{2,-1,6,0},{2,-1,6,0}},"
+        "{0,{2,3,0,20},{2,-1,6,0}},"
+        "{0,{2,-1,6,0},{2,-1,6,0}},"
+        "{0,{2,3,2,75},{2,-1,6,0}},"
+        "{0,{2,-1,6,0},{2,-1,6,0}},"
+        "{0,{2,-1,6,0},{2,-1,6,0}},"
+        "1,{0,3,1},0,1,{0,3,3},0,0,0,0,1,2,0,0}");
+    value.items[1] = raw(std::to_string(left));
+    value.items[2] = raw(std::to_string(top));
+    value.items[3] = raw(std::to_string(left + width));
+    value.items[4] = raw(std::to_string(top + height));
+    value.items[5] = raw(visible ? "1" : "0");
+    value.items[7].items[1].items[3] = raw(std::to_string(height));
+    value.items[9].items[1].items[3] = raw(std::to_string(width));
+    return value;
+}
+
 LV canonical_event_table(std::optional<std::string_view> handler) {
     if (!handler) {
         return list({raw("0")});
@@ -694,6 +750,88 @@ DecodedButton decode_button(const LV& record, std::string_view path, std::size_t
     return {std::move(control), click_handler};
 }
 
+model::ControlNode decode_label(const LV& record, std::string_view path) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const std::uint64_t raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0) {
+        fail("OOF1105", child_path(path, 1), "positive object ID", "0", "Control ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const std::string info_path = child_path(path, 2);
+    require_arity(info, 3, info_path);
+    require_raw_constant(info.items[0], "3", child_path(info_path, 0));
+    const auto& properties = info.items[1];
+    const std::string properties_path = child_path(info_path, 1);
+    require_arity(properties, 21, properties_path);
+    const std::string caption = decoded_single_language_text(
+        properties.items[2], child_path(properties_path, 2));
+    auto normalized_properties = properties;
+    normalized_properties.items[2] = encoded_localized(caption);
+    require_exact(
+        normalized_properties,
+        canonical_label_properties(caption),
+        properties_path,
+        "LabelDecoration properties differ from the supported default profile");
+    require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2), "LabelDecoration events are unsupported");
+
+    const auto& geometry = record.items[3];
+    const std::string geometry_path = child_path(path, 3);
+    require_arity(geometry, 25, geometry_path);
+    require_raw_constant(geometry.items[0], "8", child_path(geometry_path, 0));
+    const std::int32_t left = integer_atom<std::int32_t>(geometry.items[1], child_path(geometry_path, 1));
+    const std::int32_t top = integer_atom<std::int32_t>(geometry.items[2], child_path(geometry_path, 2));
+    const std::int32_t right = integer_atom<std::int32_t>(geometry.items[3], child_path(geometry_path, 3));
+    const std::int32_t bottom = integer_atom<std::int32_t>(geometry.items[4], child_path(geometry_path, 4));
+    const bool visible = bool_atom(geometry.items[5], child_path(geometry_path, 5));
+    if (right < left || bottom < top) {
+        fail("OOF1120", geometry_path, "right >= left and bottom >= top", describe(geometry), "LabelDecoration geometry has negative dimensions");
+    }
+    const std::int64_t width64 = static_cast<std::int64_t>(right) - left;
+    const std::int64_t height64 = static_cast<std::int64_t>(bottom) - top;
+    if (width64 > std::numeric_limits<std::int32_t>::max() ||
+        height64 > std::numeric_limits<std::int32_t>::max()) {
+        fail("OOF1120", geometry_path, "int32 dimensions", describe(geometry), "LabelDecoration geometry overflows int32");
+    }
+    require_exact(
+        geometry,
+        canonical_label_geometry(left, top, static_cast<std::int32_t>(width64), static_cast<std::int32_t>(height64), visible),
+        geometry_path,
+        "LabelDecoration geometry differs from the supported Button-then-Label profile");
+
+    const auto& metadata = record.items[4];
+    const std::string metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
+    }
+    require_exact(
+        metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path,
+        "LabelDecoration metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "LabelDecoration cannot contain storage children");
+
+    model::ControlNode control{
+        model::ObjectId{raw_id},
+        name,
+        model::LabelDecorationPayload{},
+    };
+    if (!caption.empty()) {
+        control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    }
+    if (left != 0) control.position.left.set(left);
+    if (top != 0) control.position.top.set(top);
+    if (width64 != 0) control.position.width.set(static_cast<std::int32_t>(width64));
+    if (height64 != 0) control.position.height.set(static_cast<std::int32_t>(height64));
+    if (!visible) control.position.visible.set(false);
+    return control;
+}
+
 bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value) {
     const auto* value = properties.find(model::PropertyId::from_name(name));
     if (value == nullptr) {
@@ -829,6 +967,36 @@ LV encode_button(
             raw("0"),
             raw("0"),
         }),
+        list({raw("0")}),
+    });
+}
+
+LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
+    if (sibling_index != 1 || control.kind() != model::ControlKind::label_decoration ||
+        control.id.value() == 0 || control.id.value() > std::numeric_limits<std::int64_t>::max()) {
+        fail("OOF1122", "$/Form/ChildItems", "LabelDecoration at sibling index 1 with positive int64 ID", control.name, "LabelDecoration is outside the supported Button-then-Label profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/LabelDecoration", "plain top-level LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
+    }
+    require_allowed_properties(control.properties(), {"Caption"}, "$/LabelDecoration");
+    const std::string caption = explicit_string(control.properties(), "Caption");
+    const std::int32_t left = control.position.left.value();
+    const std::int32_t top = control.position.top.value();
+    const std::int32_t width = control.position.width.value();
+    const std::int32_t height = control.position.height.value();
+    const bool visible = control.position.visible.value();
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        list({raw("3"), canonical_label_properties(caption), list({raw("0")})}),
+        canonical_label_geometry(left, top, width, height, visible),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
 }
@@ -1317,10 +1485,26 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
         std::vector<DecodedButton> decoded_buttons;
         decoded_buttons.reserve(control_count);
+        std::optional<model::ControlNode> decoded_label;
         for (std::uint32_t index = 0; index < control_count; ++index) {
             const auto path = child_path("$/1/2/2", static_cast<std::size_t>(index) + 1);
-            decoded_buttons.push_back(decode_button(children.items[index + 1], path, index));
-            actual_max_id = std::max(actual_max_id, decoded_buttons.back().control.id.value());
+            const auto& child_record = children.items[index + 1];
+            if (!child_record.is_list || child_record.items.empty()) {
+                require_arity(child_record, 1, path);
+            }
+            const std::string child_guid = raw_atom(child_record.items[0], child_path(path, 0));
+            const auto& button_descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
+            const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
+            if (child_guid == button_descriptor.guid && !decoded_label) {
+                decoded_buttons.push_back(decode_button(child_record, path, index));
+                actual_max_id = std::max(actual_max_id, decoded_buttons.back().control.id.value());
+            } else if (child_guid == label_descriptor.guid && !decoded_label &&
+                       index == 1 && decoded_buttons.size() == 1 && control_count == 2) {
+                decoded_label = decode_label(child_record, path);
+                actual_max_id = std::max(actual_max_id, decoded_label->id.value());
+            } else {
+                fail("OOF1122", path, "top-level Buttons, optionally followed by one LabelDecoration at index 1", child_guid, "Control ordering is outside the supported storage slice");
+            }
         }
 
         if (actual_max_id >= std::numeric_limits<std::uint32_t>::max()) {
@@ -1384,6 +1568,10 @@ Result<model::OrdinaryFormDocument> decode_document(
             }
             form.children.push_back(model::ControlRef{decoded_button.control.id});
             document.add_control(std::move(decoded_button.control));
+        }
+        if (decoded_label) {
+            form.children.push_back(model::ControlRef{decoded_label->id});
+            document.add_control(std::move(*decoded_label));
         }
         document.set_form(std::move(form));
 
@@ -1455,6 +1643,7 @@ Result<list_stream::ListValue> encode_document(
         std::vector<LV> child_records;
         child_records.push_back(raw(std::to_string(document.form().children.size())));
         std::uint64_t max_id = document.form().id.value();
+        bool has_label = false;
         for (std::size_t sibling_index = 0; sibling_index < document.form().children.size(); ++sibling_index) {
             const auto& child = document.form().children[sibling_index];
             if (!std::holds_alternative<model::ControlRef>(child)) {
@@ -1465,7 +1654,15 @@ Result<list_stream::ListValue> encode_document(
             if (control == nullptr) {
                 fail("OOF1123", "$/Form/ChildItems", "existing control", std::to_string(control_id.value()), "Child reference is dangling");
             }
-            child_records.push_back(encode_button(document, *control, sibling_index));
+            if (control->kind() == model::ControlKind::button && !has_label) {
+                child_records.push_back(encode_button(document, *control, sibling_index));
+            } else if (control->kind() == model::ControlKind::label_decoration &&
+                       !has_label && sibling_index == 1 && sibling_index == document.form().children.size() - 1) {
+                child_records.push_back(encode_label(*control, sibling_index));
+                has_label = true;
+            } else {
+                fail("OOF1122", "$/Form/ChildItems", "top-level Buttons, optionally followed by one LabelDecoration at index 1", control->name, "Control ordering is outside the supported storage slice");
+            }
             max_id = std::max(max_id, control_id.value());
         }
 

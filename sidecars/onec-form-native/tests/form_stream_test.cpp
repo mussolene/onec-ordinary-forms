@@ -464,6 +464,63 @@ void test_multiple_top_level_buttons_round_trip() {
         "Button geometry with an incorrect sibling index must be rejected");
 }
 
+void test_button_then_label_decoration_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {
+        model::ControlRef{model::ObjectId{2}},
+        model::ControlRef{model::ObjectId{3}},
+    };
+    model::OrdinaryFormDocument document(std::move(form));
+    document.add_control(model::ControlNode{
+        model::ObjectId{2},
+        "Run",
+        model::ButtonPayload{},
+    });
+    model::ControlNode label{
+        model::ObjectId{3},
+        "Label",
+        model::LabelDecorationPayload{},
+    };
+    label.properties().set_explicit(
+        model::PropertyId::from_name("Caption"),
+        std::string("Updated caption"));
+    label.position.left.set(151);
+    label.position.top.set(135);
+    label.position.width.set(75);
+    label.position.height.set(20);
+    label.position.visible.set(false);
+    document.add_control(std::move(label));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "Button followed by LabelDecoration must encode" :
+        encoded.diagnostics().front().code + ":" + encoded.diagnostics().front().path + ":" + encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), "Button followed by LabelDecoration must decode");
+    expect(decoded.value().form().children.size() == 2, "Button and LabelDecoration order must survive");
+    const auto* decoded_label = decoded.value().find_control(model::ObjectId{3});
+    expect(decoded_label != nullptr && decoded_label->kind() == model::ControlKind::label_decoration,
+        "LabelDecoration identity must survive round-trip");
+    expect(decoded_label->name == "Label", "LabelDecoration name must survive round-trip");
+    expect(decoded_label->properties().find(model::PropertyId::from_name("Caption")) != nullptr &&
+               std::get<std::string>(decoded_label->properties().find(model::PropertyId::from_name("Caption"))->value) == "Updated caption",
+        "named LabelDecoration Caption must survive round-trip");
+    expect(decoded_label->position.left.value() == 151 && decoded_label->position.top.value() == 135 &&
+               decoded_label->position.width.value() == 75 && decoded_label->position.height.value() == 20,
+        "LabelDecoration Position must survive round-trip");
+    expect(!decoded_label->position.visible.value(), "LabelDecoration Visible must survive round-trip");
+
+    auto unsupported_leaf = encoded.value();
+    auto& label_record = unsupported_leaf.items[1].items[2].items[2].items[2];
+    label_record.items[3].items[24] = list_stream::ListValue::raw_atom("7");
+    expect_failure(
+        form_stream::decode_document(unsupported_leaf, "Main"),
+        "OOF1114",
+        "$/1/2/2/2/3",
+        "unsupported LabelDecoration storage leaves must fail closed");
+}
+
 void test_two_button_sibling_index() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -526,6 +583,7 @@ int main() {
         test_attribute_allocator_is_separate_from_control_ids();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
+        test_button_then_label_decoration_round_trip();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';
