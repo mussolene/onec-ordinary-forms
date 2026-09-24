@@ -736,6 +736,22 @@ public:
     void validate_or_throw() const;
 
 private:
+    struct ObjectKey {
+        ObjectCategory category = ObjectCategory::form;
+        ObjectId id{};
+
+        friend bool operator==(const ObjectKey&, const ObjectKey&) = default;
+    };
+
+    struct ObjectKeyHash {
+        [[nodiscard]] std::size_t operator()(const ObjectKey& key) const noexcept {
+            const std::size_t category_hash = std::hash<std::uint8_t>{}(
+                static_cast<std::uint8_t>(key.category));
+            const std::size_t id_hash = ObjectIdHash{}(key.id);
+            return category_hash ^ (id_hash + 0x9e3779b9U + (category_hash << 6U) + (category_hash >> 2U));
+        }
+    };
+
     struct ObjectLocation {
         ObjectCategory category = ObjectCategory::form;
         std::size_t index = 0;
@@ -743,12 +759,15 @@ private:
 
     void rebuild_index();
     void index_first(ObjectId id, ObjectCategory category, std::size_t index);
+    [[nodiscard]] std::optional<ObjectLocation> find_location(
+        ObjectCategory category,
+        ObjectId id) const noexcept;
 
     Form form_{};
     FormModule module_{};
     std::vector<PictureAsset> assets_;
     ObjectCollections collections_;
-    std::unordered_map<ObjectId, ObjectLocation, ObjectIdHash> index_;
+    std::unordered_map<ObjectKey, ObjectLocation, ObjectKeyHash> index_;
 };
 
 }  // namespace oof::model

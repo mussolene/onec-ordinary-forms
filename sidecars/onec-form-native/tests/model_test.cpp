@@ -314,13 +314,39 @@ void test_duplicate_rejection() {
     form.id = ObjectId{1};
     OrdinaryFormDocument document(std::move(form));
     document.add_control(ControlNode{ObjectId{10}, "Panel", PanelPayload{}});
-    document.add_attribute(Attribute{ObjectId{10}, "Duplicate", TypeDomainPatternValue{}});
+    document.add_control(ControlNode{ObjectId{10}, "OtherPanel", PanelPayload{}});
 
     const ValidationReport report = document.validate();
     expect(report.has(InvariantCode::duplicate_id), "duplicate IDs must be reported");
     expect_invariant_error(
         [&] { document.validate_or_throw(); },
         "duplicate IDs must be rejected by validate_or_throw");
+}
+
+void test_category_scoped_object_ids() {
+    Form form;
+    form.id = ObjectId{1};
+    form.name = "Main";
+    form.children.push_back(ControlRef{ObjectId{4}});
+    form.events.push_back(EventRef{ObjectId{5}});
+    OrdinaryFormDocument document(std::move(form));
+
+    document.add_attribute(Attribute{ObjectId{1}, "SyntheticValue", TypeDomainPatternValue{}});
+    ControlNode input{ObjectId{4}, "InputSynthetic", InputFieldPayload{}};
+    input.data_path = DataPath{AttributeRef{ObjectId{1}}, {}};
+    document.add_control(std::move(input));
+    document.add_event(Event{ObjectId{5}, "OnOpen", "OnOpen", FormRef{ObjectId{1}}});
+
+    expect(document.find_attribute(ObjectId{1}) != nullptr,
+        "AttributeRef ID 1 must resolve when FormRef also has ID 1");
+    expect(document.find_control(ObjectId{4}) != nullptr,
+        "control ID 4 must resolve independently");
+    expect(document.find(ObjectId{1}) == std::nullopt,
+        "untyped lookup must report ambiguity for Form ID 1 and Attribute ID 1");
+    expect(document.indexed_id_count() == 4,
+        "index count must include each category-scoped object identity");
+    expect(document.validate().ok(),
+        "Form 1, Attribute 1, and DataPath from Control 4 must validate");
 }
 
 void test_cycle_rejection() {
@@ -349,18 +375,19 @@ void test_page_object_graph() {
     OrdinaryFormDocument document(std::move(form));
 
     ControlNode panel{ObjectId{10}, "Panel", PanelPayload{}};
-    panel.children.push_back(PageRef{ObjectId{11}});
+    panel.children.push_back(PageRef{ObjectId{10}});
     document.add_control(std::move(panel));
 
     Page page;
-    page.id = ObjectId{11};
+    page.id = ObjectId{10};
     page.name = "MainPage";
     page.title.set(LocalizedStringValue{{LocalizedStringItem{"ru", "Main"}}});
     page.children.push_back(ControlRef{ObjectId{12}});
     document.add_page(std::move(page));
     document.add_control(ControlNode{ObjectId{12}, "Button", ButtonPayload{}});
 
-    expect(document.find_page(ObjectId{11}) != nullptr, "page lookup must be indexed");
+    expect(document.find_page(ObjectId{10}) != nullptr && document.find_control(ObjectId{10}) != nullptr,
+        "control and page with the same numeric ID must both resolve by category");
     expect(document.indexed_id_count() == 4, "page must participate in the object index");
     expect(document.validate().ok(), "panel-page-control graph must validate");
 }
@@ -537,6 +564,7 @@ int main() {
         test_typed_property_set();
         test_id_lookup();
         test_duplicate_rejection();
+        test_category_scoped_object_ids();
         test_cycle_rejection();
         test_page_object_graph();
         test_page_policy_rejection();

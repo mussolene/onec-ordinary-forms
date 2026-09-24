@@ -6,6 +6,7 @@
 #include <set>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "oof/model/metamodel.hpp"
 
@@ -223,77 +224,102 @@ void OrdinaryFormDocument::add_event(Event event) {
 }
 
 std::optional<OrdinaryFormDocument::ObjectView> OrdinaryFormDocument::find(ObjectId id) const {
-    const auto found = index_.find(id);
-    if (found == index_.end()) {
+    constexpr std::array categories{
+        ObjectCategory::form,
+        ObjectCategory::control,
+        ObjectCategory::page,
+        ObjectCategory::attribute,
+        ObjectCategory::command,
+        ObjectCategory::event,
+        ObjectCategory::picture_asset,
+    };
+    std::optional<ObjectLocation> location;
+    for (const ObjectCategory category : categories) {
+        const auto candidate = find_location(category, id);
+        if (!candidate) {
+            continue;
+        }
+        if (location) {
+            return std::nullopt;
+        }
+        location = candidate;
+    }
+    if (!location) {
         return std::nullopt;
     }
 
-    const ObjectLocation location = found->second;
-    switch (location.category) {
+    switch (location->category) {
         case ObjectCategory::form:
             return ObjectView{std::cref(form_)};
         case ObjectCategory::control:
-            return ObjectView{std::cref(collections_.controls.at(location.index))};
+            return ObjectView{std::cref(collections_.controls.at(location->index))};
         case ObjectCategory::page:
-            return ObjectView{std::cref(collections_.pages.at(location.index))};
+            return ObjectView{std::cref(collections_.pages.at(location->index))};
         case ObjectCategory::attribute:
-            return ObjectView{std::cref(collections_.attributes.at(location.index))};
+            return ObjectView{std::cref(collections_.attributes.at(location->index))};
         case ObjectCategory::command:
-            return ObjectView{std::cref(collections_.commands.at(location.index))};
+            return ObjectView{std::cref(collections_.commands.at(location->index))};
         case ObjectCategory::event:
-            return ObjectView{std::cref(collections_.events.at(location.index))};
+            return ObjectView{std::cref(collections_.events.at(location->index))};
         case ObjectCategory::picture_asset:
-            return ObjectView{std::cref(assets_.at(location.index))};
+            return ObjectView{std::cref(assets_.at(location->index))};
     }
     return std::nullopt;
 }
 
 const ControlNode* OrdinaryFormDocument::find_control(ObjectId id) const noexcept {
-    const auto found = index_.find(id);
-    if (found == index_.end() || found->second.category != ObjectCategory::control) {
+    const auto found = find_location(ObjectCategory::control, id);
+    if (!found) {
         return nullptr;
     }
-    return &collections_.controls[found->second.index];
+    return &collections_.controls[found->index];
 }
 
 const Page* OrdinaryFormDocument::find_page(ObjectId id) const noexcept {
-    const auto found = index_.find(id);
-    if (found == index_.end() || found->second.category != ObjectCategory::page) {
+    const auto found = find_location(ObjectCategory::page, id);
+    if (!found) {
         return nullptr;
     }
-    return &collections_.pages[found->second.index];
+    return &collections_.pages[found->index];
 }
 
 const Attribute* OrdinaryFormDocument::find_attribute(ObjectId id) const noexcept {
-    const auto found = index_.find(id);
-    if (found == index_.end() || found->second.category != ObjectCategory::attribute) {
+    const auto found = find_location(ObjectCategory::attribute, id);
+    if (!found) {
         return nullptr;
     }
-    return &collections_.attributes[found->second.index];
+    return &collections_.attributes[found->index];
 }
 
 const Command* OrdinaryFormDocument::find_command(ObjectId id) const noexcept {
-    const auto found = index_.find(id);
-    if (found == index_.end() || found->second.category != ObjectCategory::command) {
+    const auto found = find_location(ObjectCategory::command, id);
+    if (!found) {
         return nullptr;
     }
-    return &collections_.commands[found->second.index];
+    return &collections_.commands[found->index];
 }
 
 const Event* OrdinaryFormDocument::find_event(ObjectId id) const noexcept {
-    const auto found = index_.find(id);
-    if (found == index_.end() || found->second.category != ObjectCategory::event) {
+    const auto found = find_location(ObjectCategory::event, id);
+    if (!found) {
         return nullptr;
     }
-    return &collections_.events[found->second.index];
+    return &collections_.events[found->index];
 }
 
 const PictureAsset* OrdinaryFormDocument::find_asset(ObjectId id) const noexcept {
-    const auto found = index_.find(id);
-    if (found == index_.end() || found->second.category != ObjectCategory::picture_asset) {
+    const auto found = find_location(ObjectCategory::picture_asset, id);
+    if (!found) {
         return nullptr;
     }
-    return &assets_[found->second.index];
+    return &assets_[found->index];
+}
+
+std::optional<OrdinaryFormDocument::ObjectLocation> OrdinaryFormDocument::find_location(
+    ObjectCategory category,
+    ObjectId id) const noexcept {
+    const auto found = index_.find(ObjectKey{category, id});
+    return found == index_.end() ? std::nullopt : std::optional<ObjectLocation>{found->second};
 }
 
 std::size_t OrdinaryFormDocument::indexed_id_count() const noexcept {
@@ -302,7 +328,7 @@ std::size_t OrdinaryFormDocument::indexed_id_count() const noexcept {
 
 ValidationReport OrdinaryFormDocument::validate() const {
     ValidationReport report;
-    std::unordered_map<ObjectId, ObjectCategory, ObjectIdHash> seen;
+    std::unordered_set<ObjectKey, ObjectKeyHash> seen;
 
     const auto record_id = [&](ObjectId id, ObjectCategory category) {
         if (!id) {
@@ -313,8 +339,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 id,
                 "ordinary-form object IDs must be nonzero");
         }
-        const auto [position, inserted] = seen.try_emplace(id, category);
-        if (!inserted) {
+        if (!seen.insert(ObjectKey{category, id}).second) {
             add_violation(
                 report,
                 InvariantCode::duplicate_id,
@@ -490,6 +515,18 @@ ValidationReport OrdinaryFormDocument::validate() const {
     const auto child_id = [](const ChildItemRef& child) {
         return std::visit([](const auto& reference) { return reference.id(); }, child);
     };
+    const auto child_key = [](const ChildItemRef& child) {
+        return std::visit(
+            [](const auto& reference) {
+                using ReferenceType = std::remove_cvref_t<decltype(reference)>;
+                if constexpr (std::is_same_v<ReferenceType, ControlRef>) {
+                    return ObjectKey{ObjectCategory::control, reference.id()};
+                } else {
+                    return ObjectKey{ObjectCategory::page, reference.id()};
+                }
+            },
+            child);
+    };
     const auto require_child = [&](ObjectId source, const ChildItemRef& child) {
         std::visit(
             [&](const auto& reference) {
@@ -565,9 +602,10 @@ ValidationReport OrdinaryFormDocument::validate() const {
             event.owner);
     }
 
-    std::unordered_map<ObjectId, std::size_t, ObjectIdHash> parent_counts;
+    std::unordered_map<ObjectKey, std::size_t, ObjectKeyHash> parent_counts;
     const auto register_parent = [&](ObjectId source, const ChildItemRef& child) {
         const ObjectId id = child_id(child);
+        const ObjectKey key = child_key(child);
         const bool resolves = std::visit(
             [&](const auto& reference) {
                 using ReferenceType = std::remove_cvref_t<decltype(reference)>;
@@ -581,7 +619,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
         if (!resolves) {
             return;
         }
-        const std::size_t count = ++parent_counts[id];
+        const std::size_t count = ++parent_counts[key];
         if (count > 1) {
             add_violation(
                 report,
@@ -724,7 +762,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
     }
 
     for (const auto& control : collections_.controls) {
-        if (!parent_counts.contains(control.id)) {
+        if (!parent_counts.contains(ObjectKey{ObjectCategory::control, control.id})) {
             add_violation(
                 report,
                 InvariantCode::orphan,
@@ -734,7 +772,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
         }
     }
     for (const auto& page : collections_.pages) {
-        if (!parent_counts.contains(page.id)) {
+        if (!parent_counts.contains(ObjectKey{ObjectCategory::page, page.id})) {
             add_violation(
                 report,
                 InvariantCode::orphan,
@@ -748,18 +786,19 @@ ValidationReport OrdinaryFormDocument::validate() const {
         visiting,
         complete,
     };
-    std::unordered_map<ObjectId, VisitState, ObjectIdHash> visit_states;
-    std::function<void(ObjectId, const std::vector<ChildItemRef>&)> visit =
-        [&](ObjectId source, const std::vector<ChildItemRef>& children) {
+    std::unordered_map<ObjectKey, VisitState, ObjectKeyHash> visit_states;
+    std::function<void(ObjectKey, const std::vector<ChildItemRef>&)> visit =
+        [&](ObjectKey source, const std::vector<ChildItemRef>& children) {
         visit_states[source] = VisitState::visiting;
         for (const ChildItemRef& child_ref : children) {
             const ObjectId id = child_id(child_ref);
-            const auto state = visit_states.find(id);
+            const ObjectKey key = child_key(child_ref);
+            const auto state = visit_states.find(key);
             if (state != visit_states.end() && state->second == VisitState::visiting) {
                 add_violation(
                     report,
                     InvariantCode::cycle,
-                    source,
+                    source.id,
                     id,
                     "form child graph contains a cycle");
                 continue;
@@ -770,10 +809,10 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         using ReferenceType = std::remove_cvref_t<decltype(reference)>;
                         if constexpr (std::is_same_v<ReferenceType, ControlRef>) {
                             if (const ControlNode* child = find_control(reference.id())) {
-                                visit(child->id, child->children);
+                                visit(key, child->children);
                             }
                         } else if (const Page* child = find_page(reference.id())) {
-                            visit(child->id, child->children);
+                            visit(key, child->children);
                         }
                     },
                     child_ref);
@@ -783,13 +822,13 @@ ValidationReport OrdinaryFormDocument::validate() const {
     };
 
     for (const auto& control : collections_.controls) {
-        if (!visit_states.contains(control.id)) {
-            visit(control.id, control.children);
+        if (!visit_states.contains(ObjectKey{ObjectCategory::control, control.id})) {
+            visit(ObjectKey{ObjectCategory::control, control.id}, control.children);
         }
     }
     for (const auto& page : collections_.pages) {
-        if (!visit_states.contains(page.id)) {
-            visit(page.id, page.children);
+        if (!visit_states.contains(ObjectKey{ObjectCategory::page, page.id})) {
+            visit(ObjectKey{ObjectCategory::page, page.id}, page.children);
         }
     }
 
@@ -831,7 +870,7 @@ void OrdinaryFormDocument::index_first(
     ObjectCategory category,
     std::size_t index
 ) {
-    index_.try_emplace(id, ObjectLocation{category, index});
+    index_.try_emplace(ObjectKey{category, id}, ObjectLocation{category, index});
 }
 
 }  // namespace oof::model
