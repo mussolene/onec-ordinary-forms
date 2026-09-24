@@ -343,6 +343,119 @@ void test_empty_attributes_allocator_header() {
         "unsupported empty attribute allocation header must be rejected");
 }
 
+void test_multiple_top_level_buttons_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {
+        model::ControlRef{model::ObjectId{2}},
+        model::ControlRef{model::ObjectId{7}},
+        model::ControlRef{model::ObjectId{12}},
+    };
+    model::OrdinaryFormDocument document(std::move(form));
+
+    model::ControlNode first{model::ObjectId{2}, "Run", model::ButtonPayload{}};
+    first.properties().set_explicit(model::PropertyId::from_name("Caption"), std::string("Запуск"));
+    first.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    first.position.left.set(11);
+    first.position.top.set(12);
+    first.position.width.set(120);
+    first.position.height.set(24);
+    first.events.push_back(model::EventRef{model::ObjectId{20}});
+    document.add_event(model::Event{model::ObjectId{20}, "Click", "RunHandler", model::ControlRef{model::ObjectId{2}}});
+    document.add_control(std::move(first));
+
+    model::ControlNode second{model::ObjectId{7}, "Cancel", model::ButtonPayload{}};
+    second.properties().set_explicit(model::PropertyId::from_name("Caption"), std::string("Отмена"));
+    second.position.left.set(145);
+    second.position.top.set(12);
+    second.position.width.set(90);
+    second.position.height.set(24);
+    second.events.push_back(model::EventRef{model::ObjectId{21}});
+    document.add_event(model::Event{model::ObjectId{21}, "Click", "CancelHandler", model::ControlRef{model::ObjectId{7}}});
+    document.add_control(std::move(second));
+
+    model::ControlNode third{model::ObjectId{12}, "Help", model::ButtonPayload{}};
+    third.properties().set_explicit(model::PropertyId::from_name("Caption"), std::string("Справка"));
+    third.position.left.set(250);
+    third.position.top.set(12);
+    third.position.width.set(90);
+    third.position.height.set(24);
+    document.add_control(std::move(third));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "two named top-level Buttons must encode");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), "three top-level Buttons must decode");
+    const auto& controls = decoded.value().collections().controls;
+    expect(controls.size() == 3, "all Buttons must materialize as named controls");
+    expect(controls[0].id == model::ObjectId{2} && controls[0].name == "Run",
+        "first Button identity and order must survive");
+    expect(controls[1].id == model::ObjectId{7} && controls[1].name == "Cancel",
+        "second Button identity and order must survive");
+    expect(controls[2].id == model::ObjectId{12} && controls[2].name == "Help",
+        "third Button identity and order must survive");
+    expect(std::get<std::string>(controls[0].properties().find(model::PropertyId::from_name("Caption"))->value) == "Запуск",
+        "first Button Caption must survive");
+    expect(std::get<bool>(controls[0].properties().find(model::PropertyId::from_name("Enabled"))->value) == false,
+        "first Button Enabled=false must survive");
+    expect(std::get<std::string>(controls[1].properties().find(model::PropertyId::from_name("Caption"))->value) == "Отмена",
+        "second Button Caption must survive");
+    expect(std::get<std::string>(controls[2].properties().find(model::PropertyId::from_name("Caption"))->value) == "Справка",
+        "third Button Caption must survive");
+    expect(controls[0].position.left.value() == 11 && controls[1].position.left.value() == 145 &&
+        controls[2].position.left.value() == 250,
+        "each Button Position must survive independently");
+    expect(controls[0].events.front().id() != controls[1].events.front().id() &&
+        controls[0].events.front().id() > model::ObjectId{12} && controls[1].events.front().id() > model::ObjectId{12},
+        "synthetic event IDs must be unique and above stored object IDs");
+    expect(decoded.value().find_event(controls[0].events.front().id())->handler == "RunHandler" &&
+        decoded.value().find_event(controls[1].events.front().id())->handler == "CancelHandler",
+        "each Button Click handler must remain attached to its owner");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok(), "decoded two-Button model must re-encode");
+    expect(list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "three-Button storage must round-trip in order without drift");
+
+    auto wrong_sibling_index = encoded.value();
+    wrong_sibling_index.items[1].items[2].items[2].items[2].items[3].items[21] =
+        list_stream::ListValue::raw_atom("0");
+    expect_failure(
+        form_stream::decode_document(wrong_sibling_index, "Main"),
+        "OOF1114",
+        "$/1/2/2/2/3",
+        "Button geometry with an incorrect sibling index must be rejected");
+}
+
+void test_two_button_sibling_index() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {
+        model::ControlRef{model::ObjectId{2}},
+        model::ControlRef{model::ObjectId{4}},
+    };
+    model::OrdinaryFormDocument document(std::move(form));
+    document.add_control(model::ControlNode{model::ObjectId{2}, "First", model::ButtonPayload{}});
+    document.add_control(model::ControlNode{model::ObjectId{4}, "Second", model::ButtonPayload{}});
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "two Buttons must encode with derived sibling indexes");
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok() && decoded.value().collections().controls.size() == 2,
+        "two Buttons must decode with matching sibling indexes");
+
+    auto wrong_sibling_index = encoded.value();
+    wrong_sibling_index.items[1].items[2].items[2].items[2].items[3].items[21] =
+        list_stream::ListValue::raw_atom("0");
+    expect_failure(
+        form_stream::decode_document(wrong_sibling_index, "Main"),
+        "OOF1114",
+        "$/1/2/2/2/3",
+        "second Button must reject a sibling index of zero");
+}
+
 void test_platform_empty_document_fixture() {
     constexpr std::string_view fixture = R"OOF(
 {27,{18,{{1,1,{"ru","Form"}},1,4294967295},{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}},{0}},400,300,1,0,1,4,4,3,400,300,96},{{-1},3,{0},{0}},{00000000-0000-0000-0000-000000000000,0},{0},1,4,1,0,0,0,{0},{0},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
@@ -374,6 +487,8 @@ int main() {
         test_attributes();
         test_attribute_encode_validation();
         test_empty_attributes_allocator_header();
+        test_two_button_sibling_index();
+        test_multiple_top_level_buttons_round_trip();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

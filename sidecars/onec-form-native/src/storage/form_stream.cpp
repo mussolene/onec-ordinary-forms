@@ -420,7 +420,8 @@ LV canonical_button_geometry(
     std::int32_t top,
     std::int32_t width,
     std::int32_t height,
-    bool visible) {
+    bool visible,
+    std::size_t sibling_index) {
     if (width < 0 || height < 0 ||
         left > std::numeric_limits<std::int32_t>::max() - width ||
         top > std::numeric_limits<std::int32_t>::max() - height) {
@@ -446,6 +447,7 @@ LV canonical_button_geometry(
     value.items[3] = raw(std::to_string(left + width));
     value.items[4] = raw(std::to_string(top + height));
     value.items[5] = raw(visible ? "1" : "0");
+    value.items[21] = raw(std::to_string(sibling_index));
     value.items[7].items[1].items[3] = raw(std::to_string(height));
     value.items[9].items[1].items[3] = raw(std::to_string(width));
     return value;
@@ -562,7 +564,7 @@ struct DecodedButton {
     std::optional<std::string> click_handler;
 };
 
-DecodedButton decode_button(const LV& record, std::string_view path) {
+DecodedButton decode_button(const LV& record, std::string_view path, std::size_t sibling_index) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -640,7 +642,7 @@ DecodedButton decode_button(const LV& record, std::string_view path) {
     const auto height = static_cast<std::int32_t>(height64);
     require_exact(
         geometry,
-        canonical_button_geometry(left, top, width, height, visible),
+        canonical_button_geometry(left, top, width, height, visible, sibling_index),
         geometry_path,
         "Button geometry contains unsupported bindings or flags");
 
@@ -786,7 +788,8 @@ std::optional<std::string_view> button_click_handler(
 
 LV encode_button(
     const model::OrdinaryFormDocument& document,
-    const model::ControlNode& control) {
+    const model::ControlNode& control,
+    std::size_t sibling_index) {
     if (control.kind() != model::ControlKind::button || control.id.value() == 0 ||
         control.id.value() > std::numeric_limits<std::int64_t>::max()) {
         fail("OOF1122", "$", "Button with positive int64 ID", std::to_string(control.id.value()), "Unsupported control record");
@@ -816,7 +819,8 @@ LV encode_button(
             control.position.top.value(),
             control.position.width.value(),
             control.position.height.value(),
-            control.position.visible.value()),
+            control.position.visible.value(),
+            sibling_index),
         list({
             raw("14"),
             string_value(control.name),
@@ -1311,19 +1315,12 @@ Result<model::OrdinaryFormDocument> decode_document(
                 "list arity " + std::to_string(children.items.size()),
                 "Root control table count does not match its records");
         }
-        if (control_count > 1) {
-            fail(
-                "OOF1122",
-                "$/1/2/2",
-                "zero or one top-level Button",
-                std::to_string(control_count),
-                "The first vertical storage slice intentionally fails closed beyond one Button");
-        }
-
-        std::optional<DecodedButton> decoded_button;
-        if (control_count == 1) {
-            decoded_button = decode_button(children.items[1], "$/1/2/2/1");
-            actual_max_id = std::max(actual_max_id, decoded_button->control.id.value());
+        std::vector<DecodedButton> decoded_buttons;
+        decoded_buttons.reserve(control_count);
+        for (std::uint32_t index = 0; index < control_count; ++index) {
+            const auto path = child_path("$/1/2/2", static_cast<std::size_t>(index) + 1);
+            decoded_buttons.push_back(decode_button(children.items[index + 1], path, index));
+            actual_max_id = std::max(actual_max_id, decoded_buttons.back().control.id.value());
         }
 
         if (actual_max_id >= std::numeric_limits<std::uint32_t>::max()) {
@@ -1361,22 +1358,24 @@ Result<model::OrdinaryFormDocument> decode_document(
                 "Form header max object ID disagrees with decoded objects");
         }
 
-        if (decoded_button) {
-            if (decoded_button->click_handler) {
-                if (stored_max_id == std::numeric_limits<std::uint64_t>::max()) {
+        std::uint64_t synthetic_event_offset = 0;
+        for (auto& decoded_button : decoded_buttons) {
+            if (decoded_button.click_handler) {
+                if (synthetic_event_offset >=
+                    std::numeric_limits<std::uint64_t>::max() - stored_max_id) {
                     fail("OOF1120", "$/1/1/1", "allocatable event ID", "uint64 max", "Synthetic event ID overflows");
                 }
-                const model::ObjectId event_id{stored_max_id + 1};
-                decoded_button->control.events.push_back(model::EventRef{event_id});
+                const model::ObjectId event_id{stored_max_id + ++synthetic_event_offset};
+                decoded_button.control.events.push_back(model::EventRef{event_id});
                 document.add_event(model::Event{
                     event_id,
                     "Click",
-                    *decoded_button->click_handler,
-                    model::ControlRef{decoded_button->control.id},
+                    *decoded_button.click_handler,
+                    model::ControlRef{decoded_button.control.id},
                 });
             }
-            form.children.push_back(model::ControlRef{decoded_button->control.id});
-            document.add_control(std::move(decoded_button->control));
+            form.children.push_back(model::ControlRef{decoded_button.control.id});
+            document.add_control(std::move(decoded_button.control));
         }
         document.set_form(std::move(form));
 
@@ -1445,19 +1444,11 @@ Result<list_stream::ListValue> encode_document(
                 "Form dimensions cannot produce a platform root panel");
         }
 
-        if (document.form().children.size() > 1) {
-            fail(
-                "OOF1122",
-                "$/Form/ChildItems",
-                "zero or one top-level Button",
-                std::to_string(document.form().children.size()),
-                "The first vertical storage slice intentionally fails closed beyond one Button");
-        }
-
         std::vector<LV> child_records;
         child_records.push_back(raw(std::to_string(document.form().children.size())));
         std::uint64_t max_id = document.form().id.value();
-        for (const auto& child : document.form().children) {
+        for (std::size_t sibling_index = 0; sibling_index < document.form().children.size(); ++sibling_index) {
+            const auto& child = document.form().children[sibling_index];
             if (!std::holds_alternative<model::ControlRef>(child)) {
                 fail("OOF1122", "$/Form/ChildItems", "Button reference", "Page reference", "Page storage is not implemented");
             }
@@ -1466,7 +1457,7 @@ Result<list_stream::ListValue> encode_document(
             if (control == nullptr) {
                 fail("OOF1123", "$/Form/ChildItems", "existing control", std::to_string(control_id.value()), "Child reference is dangling");
             }
-            child_records.push_back(encode_button(document, *control));
+            child_records.push_back(encode_button(document, *control, sibling_index));
             max_id = std::max(max_id, control_id.value());
         }
 
