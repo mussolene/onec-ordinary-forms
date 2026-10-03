@@ -1367,6 +1367,172 @@ void test_six_reordered_controls_use_logical_geometry_ordinals() {
         "geometry next index must equal logical ordinal plus one");
 }
 
+void test_root_pages_round_trip_with_page_local_control_order() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Paged";
+    form.children = {model::PageRef{model::ObjectId{30}}, model::PageRef{model::ObjectId{31}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::Page first;
+    const auto page_position = [](std::int32_t left, std::int32_t top, std::int32_t width,
+                                  std::int32_t height, std::int32_t right_margin,
+                                  std::int32_t bottom_margin) {
+        model::Position position;
+        position.left.set(left);
+        position.top.set(top);
+        position.width.set(width);
+        position.height.set(height);
+        for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+            model::AnchorBinding binding;
+            binding.coordinate = edge;
+            binding.target_coordinate = edge;
+            binding.offset.set(edge == model::BindingCoordinate::right ? -right_margin : -bottom_margin);
+            position.bindings.anchors.push_back(std::move(binding));
+        }
+        return position;
+    };
+    first.id = model::ObjectId{30};
+    first.name = "Overview";
+    first.title.set(model::LocalizedStringValue{{{"ru", "Обзор"}}});
+    first.visible.set(false);
+    first.position.set(page_position(0, 0, 400, 300, 12, 14));
+    first.children = {model::ControlRef{model::ObjectId{20}}, model::ControlRef{model::ObjectId{9}}};
+    model::Page second;
+    second.id = model::ObjectId{31};
+    second.name = "Details";
+    second.title.set(model::LocalizedStringValue{{{"en", "Details"}, {"ru", "Подробности"}}});
+    second.position.set(page_position(4, 5, 350, 260, 8, 9));
+    second.children = {model::ControlRef{model::ObjectId{4}}, model::ControlRef{model::ObjectId{5}}};
+    document.add_page(first);
+    document.add_page(second);
+
+    model::ControlNode input{model::ObjectId{4}, "Value", model::InputFieldPayload{}};
+    input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {}};
+    input.position.left.set(24);
+    model::AnchorBinding input_binding;
+    input_binding.coordinate = model::BindingCoordinate::left;
+    input_binding.target_coordinate = model::BindingCoordinate::right;
+    input_binding.target = model::ControlRef{model::ObjectId{20}};
+    input_binding.offset.set(3);
+    input.position.bindings.anchors.push_back(input_binding);
+    document.add_control(std::move(input));
+    model::ControlNode detail_button{model::ObjectId{5}, "Apply", model::ButtonPayload{}};
+    detail_button.events.push_back(model::EventRef{model::ObjectId{40}});
+    document.add_event(model::Event{model::ObjectId{40}, "Click", "ApplyHandler", model::ControlRef{model::ObjectId{5}}});
+    document.add_control(std::move(detail_button));
+    model::ControlNode label{model::ObjectId{9}, "Summary", model::LabelDecorationPayload{}};
+    document.add_control(std::move(label));
+    model::ControlNode overview_button{model::ObjectId{20}, "Open", model::ButtonPayload{}};
+    model::AnchorBinding form_binding;
+    form_binding.coordinate = model::BindingCoordinate::right;
+    form_binding.target_coordinate = model::BindingCoordinate::right;
+    form_binding.offset.set(5);
+    overview_button.position.bindings.anchors.push_back(form_binding);
+    overview_button.events.push_back(model::EventRef{model::ObjectId{41}});
+    document.add_event(model::Event{model::ObjectId{41}, "Click", "OpenHandler", model::ControlRef{model::ObjectId{20}}});
+    document.add_control(std::move(overview_button));
+    model::TypeDomainPatternValue string_type;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{32, false};
+    string_type.entries.push_back(string_entry);
+    document.add_attribute(model::Attribute{model::ObjectId{2}, "Value", string_type});
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "named root Pages must encode" : encoded.diagnostics().front().message);
+    auto payload = encoded.value().items[1].items[2].items[1].items[1];
+    std::size_t incoming_end = 2;
+    for (std::size_t edge = 0; edge < 6; ++edge) {
+        const auto count = static_cast<std::size_t>(std::stoul(payload.items[incoming_end].atom));
+        incoming_end += 1 + count;
+    }
+    payload.items.erase(payload.items.begin() + 2,
+        payload.items.begin() + static_cast<std::ptrdiff_t>(incoming_end));
+    expect(payload.items[3].atom == "1" && payload.items[9].atom == "8",
+        "multi-page root payload must select its confirmed page-table and boundary-count variant");
+    const auto& physical = encoded.value().items[1].items[2].items[2].items;
+    expect(physical[1].items[1].atom == "4" && physical[2].items[1].atom == "5" &&
+           physical[3].items[1].atom == "9" && physical[4].items[1].atom == "20",
+        "records inside root Pages must remain physically sorted by control ID");
+    const auto first_tail = geometry_tail_start(physical[1].items[3]);
+    const auto second_tail = geometry_tail_start(physical[2].items[3]);
+    const auto third_tail = geometry_tail_start(physical[3].items[3]);
+    const auto fourth_tail = geometry_tail_start(physical[4].items[3]);
+    expect(physical[1].items[3].items[first_tail].atom == "1" && physical[1].items[3].items[first_tail + 1].atom == "0" &&
+           physical[2].items[3].items[second_tail].atom == "1" && physical[2].items[3].items[second_tail + 1].atom == "1" &&
+           physical[3].items[3].items[third_tail].atom == "0" && physical[3].items[3].items[third_tail + 1].atom == "1" &&
+           physical[4].items[3].items[fourth_tail].atom == "0" && physical[4].items[3].items[fourth_tail + 1].atom == "0",
+        "geometry page indexes and ordinals must follow each Page ChildItems order");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "Paged");
+    expect(decoded.ok(), decoded ? "multi-page root stream must decode" : decoded.diagnostics().front().message);
+    expect(decoded.value().collections().pages.size() == 2 && decoded.value().form().children.size() == 2,
+        "decoded root Page table and Form order must remain named");
+    const auto* decoded_first = decoded.value().find_page(model::ObjectId{21});
+    const auto* decoded_second = decoded.value().find_page(model::ObjectId{22});
+    expect(decoded_first && decoded_second && decoded_first->name == "Overview" && decoded_second->name == "Details",
+        "decoded Page metadata must follow table order and receive fresh nonconflicting IDs");
+    expect(!decoded_first->visible.value() && decoded_second->enabled.value() &&
+           decoded_second->title.value() == second.title.value(),
+        "Page visibility, enabled state, and multilingual title must survive");
+    expect(decoded_first->position.value().left.value() == 0 && decoded_first->position.value().width.value() == 400 &&
+           decoded_second->position.value().left.value() == 4 && decoded_second->position.value().width.value() == 350,
+        "each Page Position must survive independently");
+    expect(decoded_first->children.size() == 2 &&
+           std::get<model::ControlRef>(decoded_first->children[0]).id() == model::ObjectId{20} &&
+           std::get<model::ControlRef>(decoded_first->children[1]).id() == model::ObjectId{9} &&
+           std::get<model::ControlRef>(decoded_second->children[0]).id() == model::ObjectId{4} &&
+           std::get<model::ControlRef>(decoded_second->children[1]).id() == model::ObjectId{5},
+        "page-local logical control order must survive physical ID sorting");
+    expect(decoded.value().find_control(model::ObjectId{4})->data_path->attribute.id() == model::ObjectId{2} &&
+           decoded.value().find_event(decoded.value().find_control(model::ObjectId{5})->events.front().id())->handler == "ApplyHandler" &&
+           decoded.value().find_event(decoded.value().find_control(model::ObjectId{20})->events.front().id())->handler == "OpenHandler",
+        "DataPath and Button event links must remain attached across root Pages");
+    const auto& input_anchors = decoded.value().find_control(model::ObjectId{4})->position.bindings.anchors;
+    const auto& form_anchors = decoded.value().find_control(model::ObjectId{20})->position.bindings.anchors;
+    expect(input_anchors.size() == 1 && input_anchors.front().target == model::ControlRef{model::ObjectId{20}} &&
+           form_anchors.size() == 1 && !form_anchors.front().target,
+        "incoming geometry must resolve both cross-page control targets and Form target zero");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "multi-page root document must encode-decode-encode without storage drift");
+
+    auto bad_page = encoded.value();
+    auto& bad_page_geometry = bad_page.items[1].items[2].items[2].items[1].items[3];
+    bad_page_geometry.items[geometry_tail_start(bad_page_geometry)] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(bad_page, "Paged"), "out-of-range root Page indexes must fail");
+    auto bad_ordinal = encoded.value();
+    auto& bad_ordinal_geometry = bad_ordinal.items[1].items[2].items[2].items[1].items[3];
+    const auto tail = geometry_tail_start(bad_ordinal_geometry);
+    bad_ordinal_geometry.items[tail + 1] = list_stream::ListValue::raw_atom("2");
+    bad_ordinal_geometry.items[tail + 2] = list_stream::ListValue::raw_atom("3");
+    expect(!form_stream::decode_document(bad_ordinal, "Paged"), "out-of-range page-local ordinals must fail");
+
+    model::Form single_form;
+    single_form.id = model::ObjectId{1};
+    single_form.name = "SingleNamedPage";
+    single_form.children = {model::PageRef{model::ObjectId{30}}};
+    model::OrdinaryFormDocument single(std::move(single_form));
+    model::Page customized;
+    customized.id = model::ObjectId{30};
+    customized.name = "Custom";
+    customized.title.set(model::LocalizedStringValue{{{"ru", "Своя страница"}}});
+    customized.enabled.set(false);
+    customized.position.set(page_position(7, 9, 320, 210, 6, 8));
+    customized.children = {model::ControlRef{model::ObjectId{8}}};
+    single.add_page(customized);
+    single.add_control(model::ControlNode{model::ObjectId{8}, "Only", model::ButtonPayload{}});
+    const auto single_encoded = form_stream::encode_document(single);
+    expect(single_encoded.ok(), "custom single root Page must encode");
+    const auto single_decoded = form_stream::decode_document(single_encoded.value(), "SingleNamedPage");
+    expect(single_decoded.ok() && single_decoded.value().collections().pages.size() == 1,
+        "custom single root Page must remain explicitly represented");
+    const auto* retained = single_decoded.value().find_page(model::ObjectId{9});
+    expect(retained && retained->name == "Custom" && !retained->enabled.value() &&
+           retained->title.value() == customized.title.value() && retained->position.value().left.value() == 7,
+        "single Page metadata and changed geometry must not collapse into the implicit default");
+}
+
 void test_manual_bindings_are_not_silently_discarded() {
     for (const auto kind : {model::ControlKind::button, model::ControlKind::label_decoration,
                            model::ControlKind::input_field, model::ControlKind::check_box}) {
@@ -2018,6 +2184,7 @@ int main() {
         test_single_input_field_round_trip();
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
+        test_root_pages_round_trip_with_page_local_control_order();
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();
         test_center_target_coordinates();

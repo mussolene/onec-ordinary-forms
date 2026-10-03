@@ -163,3 +163,21 @@ constraints for all three pages, without changing saved rectangles or child
 geometry. The complete descriptor is not implemented; such pages fail
 explicitly. Evidence: `ev_1c4a7ce42e2d453e9479eaafa15bdad8`.
 Whole recursive Panel/Page document serialization remains incomplete.
+
+
+Primary document serialization now supports explicit root Pages with named
+metadata, localized titles, explicit positions and the existing four leaf
+control codecs. Logical order is local to each Page; physical records are
+sorted by control ID. Incoming dependency checks cover the root page graph,
+including Form and cross-page control targets. DataPath and control events
+remain attached by object identity. A single canonical default page has an
+implicit representation, while any changed metadata or geometry remains an
+explicit named Page. Unsupported styles, pictures and nested Panel controls
+still fail explicitly through this same primary codec.
+
+Current proof builds a new two-page XML and module without a source Form.bin,
+loads it in Designer and performs a strict dump. Canonical XML and module match
+exactly before and after the platform; rebuilding that XML produces an identical
+Form.bin. macOS and fresh Linux tests pass 11/11. Evidence: `ev_5c2f6193f49143a5bb3332a79358e659`.
+This establishes root-page integration, not complete recursive Panel support
+or complete support for all properties of the four leaf control types.
