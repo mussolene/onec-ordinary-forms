@@ -447,6 +447,16 @@ void test_typed_values_and_canonicalization() {
     const auto* height = input->properties().find(model::PropertyId::from_name("ChoiceListHeight"));
     expect(height != nullptr, "decimal property must materialize");
     expect(std::get<model::DecimalValue>(height->value).canonical == "12.34", "decimal lexical form must canonicalize");
+    expect(input->properties().find(model::PropertyId::from_name("AutoChoiceIncomplete")) == nullptr,
+        "omitted AutoChoiceIncomplete must retain the false default");
+    std::string auto_choice_true_source(xml);
+    const auto input_position = auto_choice_true_source.find("<Position/>");
+    auto_choice_true_source.insert(input_position + std::string_view{"<Position/>"}.size(),
+        "<AutoChoiceIncomplete>true</AutoChoiceIncomplete>");
+    parsed = source::parse_form_xml(auto_choice_true_source);
+    expect(parsed.ok(), parsed.ok() ? "named AutoChoiceIncomplete=true must parse" :
+        parsed.diagnostics().front().code + ":" + parsed.diagnostics().front().message);
+    input = parsed.value().find_control(model::ObjectId{4});
     const model::ControlNode* calendar = parsed.value().find_control(model::ObjectId{5});
     const auto* date = calendar->properties().find(model::PropertyId::from_name("EndOfDisplayPeriod"));
     expect(date != nullptr && std::holds_alternative<model::UndefinedValue>(date->value), "Date|Undefined union must retain Undefined");
@@ -454,6 +464,33 @@ void test_typed_values_and_canonicalization() {
     auto serialized = source::serialize_form_xml(parsed.value());
     expect(serialized.ok(), "typed values must serialize");
     expect(serialized.value().find(">12.34</ChoiceListHeight>") != std::string::npos, "decimal output must be canonical");
+    expect(serialized.value().find("<AutoChoiceIncomplete>true</AutoChoiceIncomplete>") != std::string::npos,
+        "named AutoChoiceIncomplete=true must serialize");
+    auto reparsed_input = source::parse_form_xml(serialized.value());
+    expect(reparsed_input.ok(), "AutoChoiceIncomplete XML must parse after serialization");
+    const auto* reparsed_input_control = reparsed_input.value().find_control(model::ObjectId{4});
+    expect(reparsed_input_control != nullptr &&
+        std::get<bool>(reparsed_input_control->properties().find(
+            model::PropertyId::from_name("AutoChoiceIncomplete"))->value),
+        "named AutoChoiceIncomplete=true must survive XML round-trip");
+    std::string auto_choice_false_source(xml);
+    const auto false_input_position = auto_choice_false_source.find("<Position/>");
+    auto_choice_false_source.insert(false_input_position + std::string_view{"<Position/>"}.size(),
+        "<AutoChoiceIncomplete>false</AutoChoiceIncomplete>");
+    auto explicit_false_document = source::parse_form_xml(auto_choice_false_source);
+    expect(explicit_false_document.ok(), "named AutoChoiceIncomplete=false must parse");
+    auto explicit_false_xml = source::serialize_form_xml(explicit_false_document.value());
+    expect(explicit_false_xml.ok() &&
+        explicit_false_xml.value().find("<AutoChoiceIncomplete>") == std::string::npos,
+        "default AutoChoiceIncomplete=false must serialize as omitted");
+    auto reparsed_false = source::parse_form_xml(explicit_false_xml.value());
+    expect(reparsed_false.ok(), "AutoChoiceIncomplete=false XML must parse");
+    const auto* reparsed_false_control = reparsed_false.value().find_control(model::ObjectId{4});
+    expect(reparsed_false_control != nullptr &&
+        reparsed_false_control->properties().find(model::PropertyId::from_name("AutoChoiceIncomplete")) == nullptr,
+        "named AutoChoiceIncomplete=false must survive XML round-trip");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Bad" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="I"><Position/><AutoChoiceIncomplete>maybe</AutoChoiceIncomplete></InputField></ChildItems></Form>)XML").ok(),
+        "invalid AutoChoiceIncomplete Boolean must be rejected");
     expect(serialized.value().find("01234567-89ab-cdef-0123-456789abcdef") != std::string::npos, "UUID output must be lowercase canonical");
     expect(serialized.value().find("styleName=\"StyleFonts.TextFont\"") != std::string::npos &&
                serialized.value().find("mask=") == std::string::npos,

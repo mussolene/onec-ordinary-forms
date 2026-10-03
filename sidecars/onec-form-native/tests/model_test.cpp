@@ -295,6 +295,12 @@ void test_help_metamodel() {
         find_property(ControlKind::input_field, "ReadOnly")->value_codec == ValueCodec::boolean,
         "safe Boolean help types must receive the Boolean domain codec");
     expect(
+        find_property(ControlKind::input_field, "AutoChoiceIncomplete")->persistence == PersistenceClass::persisted_editable &&
+            find_property(ControlKind::input_field, "AutoChoiceIncomplete")->storage_codec == StorageCodec::control_info &&
+            find_property(ControlKind::input_field, "AutoChoiceIncomplete")->default_value.kind == DefaultKind::boolean &&
+            find_property(ControlKind::input_field, "AutoChoiceIncomplete")->default_value.canonical == "false",
+        "AutoChoiceIncomplete must have proven Boolean persistence and false default");
+    expect(
         find_property(ControlKind::input_field, "Border")->value_codec ==
             ValueCodec::unclassified,
         "incomplete Border skeletons must not become product value codecs");

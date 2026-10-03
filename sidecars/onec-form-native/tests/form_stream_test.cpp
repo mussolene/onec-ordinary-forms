@@ -1563,7 +1563,7 @@ void test_button_label_input_field_round_trip() {
     expect(read_only_payload.atom == "1", "InputField ReadOnly must encode at the proven payload slot");
 
     const auto make_input_document = [](std::uint32_t length, bool variable, bool non_string = false, bool mixed = false,
-        bool explicit_read_only_false = false) {
+        bool explicit_read_only_false = false, bool auto_choice_incomplete = false) {
         model::Form form;
         form.id = model::ObjectId{1};
         form.name = "Main";
@@ -1590,6 +1590,9 @@ void test_button_label_input_field_round_trip() {
         input_field.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
         if (explicit_read_only_false) {
             input_field.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+        }
+        if (auto_choice_incomplete) {
+            input_field.properties().set_explicit(model::PropertyId::from_name("AutoChoiceIncomplete"), true);
         }
         input_document.add_control(std::move(input_field));
         return input_document;
@@ -1635,6 +1638,31 @@ void test_button_label_input_field_round_trip() {
     const auto& explicit_false_payload = explicit_false.value().items[1].items[2].items[2].items[3]
         .items[2].items[2].items[0].items[13];
     expect(explicit_false_payload.atom == "0", "explicit InputField ReadOnly=false must encode as false");
+
+    auto auto_choice_document = make_input_document(10, true, false, false, false, true);
+    const auto auto_choice_encoded = form_stream::encode_document(auto_choice_document);
+    expect(auto_choice_encoded.ok(), "InputField AutoChoiceIncomplete=true must encode");
+    const auto& auto_choice_payload = auto_choice_encoded.value().items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0];
+    expect(auto_choice_payload.items[36].atom == "1", "AutoChoiceIncomplete must encode at payload slot 36");
+    const auto auto_choice_decoded = form_stream::decode_document(auto_choice_encoded.value(), "Main");
+    expect(auto_choice_decoded.ok(), "InputField AutoChoiceIncomplete=true must decode");
+    const auto* decoded_auto_choice = auto_choice_decoded.value().find_control(model::ObjectId{9});
+    const auto* auto_choice_property = decoded_auto_choice == nullptr ? nullptr :
+        decoded_auto_choice->properties().find(model::PropertyId::from_name("AutoChoiceIncomplete"));
+    expect(auto_choice_property != nullptr && std::get<bool>(auto_choice_property->value),
+        "InputField AutoChoiceIncomplete=true must survive round-trip");
+    const auto auto_choice_reencoded = form_stream::encode_document(auto_choice_decoded.value());
+    expect(auto_choice_reencoded.ok(), "decoded AutoChoiceIncomplete document must re-encode");
+    expect(auto_choice_reencoded.value().items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0].items[36].atom == "1",
+        "AutoChoiceIncomplete=true must remain stable after re-encoding");
+
+    auto unknown_auto_choice_flag = auto_choice_encoded.value();
+    unknown_auto_choice_flag.items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0].items[36] = list_stream::ListValue::raw_atom("2");
+    expect_failure(form_stream::decode_document(unknown_auto_choice_flag, "Main"), "OOF1105",
+        "$/1/2/2/3/2/2/0/36", "unknown AutoChoiceIncomplete flag value must be rejected");
 
     auto mismatch = encoded.value();
     auto& mismatch_info = mismatch.items[1].items[2].items[2].items[3].items[2];

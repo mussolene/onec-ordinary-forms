@@ -728,6 +728,14 @@ void apply_proven_storage_overrides(
         DefaultKind::string,
         "");
 
+    auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
+    classify_property(
+        input_field,
+        "AutoChoiceIncomplete",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "false");
+
     classify_property(
         panel_placement_properties,
         "Left",

@@ -856,7 +856,8 @@ LV canonical_check_box_info(bool enabled, std::string_view caption) {
 LV canonical_input_field_info(
     const model::TypeDomainPatternValue& type,
     bool enabled,
-    bool read_only) {
+    bool read_only,
+    bool auto_choice_incomplete) {
     auto value = parse_constant(R"OOF(
 {9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{1,{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{"U"},{"U"},0,"",0,0}}},{0},0,1,0,{1,0},0}
 )OOF");
@@ -868,6 +869,7 @@ LV canonical_input_field_info(
     value.items[1] = encoded_type_domain(type, "$/InputField/TypeDomain");
     value.items[2].items[0].items[0].items[1] = raw(enabled ? "1" : "0");
     value.items[2].items[0].items[13] = raw(read_only ? "1" : "0");
+    value.items[2].items[0].items[36] = raw(auto_choice_incomplete ? "1" : "0");
     value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().string.length));
     return value;
 }
@@ -2343,9 +2345,10 @@ DecodedControl decode_input_field(
     require_arity(base_info, 21, base_info_path);
     const bool enabled = bool_atom(base_info.items[1], child_path(base_info_path, 1));
     const bool read_only = bool_atom(payload.items[13], child_path(payload_path, 13));
+    const bool auto_choice_incomplete = bool_atom(payload.items[36], child_path(payload_path, 36));
     require_exact(
         info,
-        canonical_input_field_info(control_type, enabled, read_only),
+        canonical_input_field_info(control_type, enabled, read_only, auto_choice_incomplete),
         info_path,
         "InputField uses an unsupported property, event, or storage variation");
 
@@ -2369,6 +2372,8 @@ DecodedControl decode_input_field(
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+    if (auto_choice_incomplete) control.properties().set_explicit(
+        model::PropertyId::from_name("AutoChoiceIncomplete"), true);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2676,7 +2681,7 @@ LV encode_input_field(
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/InputField", "named InputField with direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "ReadOnly"}, "$/InputField");
+    require_allowed_properties(control.properties(), {"Enabled", "ReadOnly", "AutoChoiceIncomplete"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -2686,11 +2691,12 @@ LV encode_input_field(
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", false);
+    const bool auto_choice_incomplete = explicit_bool(control.properties(), "AutoChoiceIncomplete", false);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_input_field_info(attribute->type, enabled, read_only),
+        canonical_input_field_info(attribute->type, enabled, read_only, auto_choice_incomplete),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
