@@ -184,6 +184,42 @@ void test_unknown_logical_file_is_rejected() {
     expect(decoded.diagnostics().front().code == "OOF1202", "unknown logical file diagnostic mismatch");
 }
 
+void test_module_newlines_are_canonical_at_container_boundary() {
+    const auto with_module = [](std::string text) {
+        auto document = button_document();
+        document.set_module(model::FormModule{std::move(text)});
+        return document;
+    };
+    const std::string lf = "first\nsecond\nlast";
+    const std::string crlf = "first\r\nsecond\r\nlast";
+    const std::string mixed = "first\r\nsecond\nlast";
+    const auto lf_bytes = oof::save_form_bin(with_module(lf));
+    const auto crlf_bytes = oof::save_form_bin(with_module(crlf));
+    const auto mixed_bytes = oof::save_form_bin(with_module(mixed));
+    expect(lf_bytes.ok() && crlf_bytes.ok() && mixed_bytes.ok(), "module newline variants must encode");
+    expect(lf_bytes.value() == crlf_bytes.value() && lf_bytes.value() == mixed_bytes.value(),
+        "LF, CRLF, and mixed module input must produce identical Form.bin bytes");
+
+    const auto container = formbin::parse_container(lf_bytes.value());
+    const auto module = std::find_if(container.files.begin(), container.files.end(),
+        [](const auto& file) { return file.name == "module"; });
+    expect(module != container.files.end(), "module stream must exist");
+    const std::string stored(module->payload.begin() + 3, module->payload.end());
+    expect(stored == crlf, "Form.bin module stream must use canonical CRLF");
+
+    const auto decoded = oof::load_form_bin(lf_bytes.value(), "Main");
+    expect(decoded.ok() && decoded.value().module().text == lf,
+        "module load must expose LF while preserving a final unterminated line");
+    const auto repeated = oof::save_form_bin(decoded.value());
+    expect(repeated.ok() && repeated.value() == lf_bytes.value(), "module save/load/save must be idempotent");
+
+    auto empty_document = with_module("");
+    const auto empty_bytes = oof::save_form_bin(empty_document);
+    expect(empty_bytes.ok(), "empty module must encode");
+    const auto empty_decoded = oof::load_form_bin(empty_bytes.value(), "Main");
+    expect(empty_decoded.ok() && empty_decoded.value().module().text.empty(), "empty module must remain empty");
+}
+
 }  // namespace
 
 int main() {
@@ -191,6 +227,7 @@ int main() {
         test_product_composition_roundtrip();
         test_button_base_state_normalization();
         test_unknown_logical_file_is_rejected();
+        test_module_newlines_are_canonical_at_container_boundary();
     } catch (const std::exception& error) {
         std::cerr << "form bin tests: FAIL: " << error.what() << '\n';
         return 1;

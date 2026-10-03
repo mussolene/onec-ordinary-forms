@@ -56,6 +56,23 @@ std::vector<std::uint8_t> bom_payload(std::string_view text) {
     return bytes;
 }
 
+std::string canonical_module_newlines(std::string_view text, bool platform_crlf) {
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        const char character = text[index];
+        if (character == '\r' && index + 1 < text.size() && text[index + 1] == '\n') {
+            normalized.append(platform_crlf ? "\r\n" : "\n");
+            ++index;
+        } else if (character == '\n') {
+            normalized.append(platform_crlf ? "\r\n" : "\n");
+        } else {
+            normalized.push_back(character);
+        }
+    }
+    return normalized;
+}
+
 }  // namespace
 
 Result<model::OrdinaryFormDocument> load_form_bin(
@@ -113,7 +130,8 @@ Result<model::OrdinaryFormDocument> load_form_bin(
             return Result<model::OrdinaryFormDocument>::failure(decoded.diagnostics());
         }
         auto document = decoded.take_value();
-        document.set_module(model::FormModule{utf8_payload(module_file->payload)});
+        document.set_module(model::FormModule{
+            canonical_module_newlines(utf8_payload(module_file->payload), false)});
         return Result<model::OrdinaryFormDocument>::success(std::move(document));
     } catch (const std::exception& error) {
         return Result<model::OrdinaryFormDocument>::failure({diagnostic(
@@ -136,7 +154,8 @@ Result<std::vector<std::uint8_t>> save_form_bin(
         storage::formbin::OneCContainer container;
         container.block_size = storage::formbin::container_block_size;
         container.files.push_back({"form", 0, 0, bom_payload(form_text)});
-        container.files.push_back({"module", 0, 0, bom_payload(document.module().text)});
+        const std::string module_text = canonical_module_newlines(document.module().text, true);
+        container.files.push_back({"module", 0, 0, bom_payload(module_text)});
         auto bytes = storage::formbin::serialize_container(container);
 
         const auto verified = load_form_bin(bytes, document.form().name);

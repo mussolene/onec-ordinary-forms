@@ -103,8 +103,8 @@ accepted through a compatibility branch. Current XML identity verification:
 Page `Visible` and `Enabled` are independent Boolean properties with default
 `true`. XML omits default values and writes `false` explicitly. The schema
 permits each property once, between `Title` and `ChildItems`. Verification:
-`ev_df9462158f2a4c42a53b31741b9c99fb`. These XML properties do not imply that
-the Panel/Page binary codec is implemented.
+`ev_df9462158f2a4c42a53b31741b9c99fb`. These properties are supported by the current recursive Panel/Page codec
+within the limits described below.
 
 Page has an optional named `Position`, using the existing rectangle and
 `Bindings` vocabulary. Absence remains implicit; an explicit position survives
@@ -124,15 +124,17 @@ now uses this named boundary encoder. Verification:
 `ev_d8864750203a47bfa4413ae13c294c97`,
 `ev_d1df9f1b84274f029da48a13d8776302`,
 `ev_e2fddecde6c9498c8f119fd3d812cc7b`.
-Whole recursive Panel/Page document serialization remains incomplete.
+Recursive Panel/Page document serialization now supports the default Panel
+style, named position and explicit child pages. Unsupported Panel properties,
+page pictures and direct children without a Page are rejected.
 
 The ordinary-control geometry codec uses an explicit owner, page index and
 local sibling ordinal. Within a Panel, platform target zero resolves to that
 Panel in named bindings, including proportional targets. At root it resolves
 to Form. A nested binding to Form is rejected until its separate storage
 representation is established. Page and ordinal mismatches, invalid owners,
-incoming IDs and source edges fail explicitly. This codec does not by itself
-implement the recursive Panel/Page tables. Runtime Bottom evidence:
+incoming IDs and source edges fail explicitly. The document codec now uses this same geometry codec for recursive
+Panel/Page tables. Runtime Bottom evidence:
 `ev_7efcc3e0e5ae4378b70db7f71010f4fc`.
 
 The editable package is:
@@ -162,7 +164,9 @@ Page metadata. Clearing a standard picture removes its UUID and changes Bottom
 constraints for all three pages, without changing saved rectangles or child
 geometry. The complete descriptor is not implemented; such pages fail
 explicitly. Evidence: `ev_1c4a7ce42e2d453e9479eaafa15bdad8`.
-Whole recursive Panel/Page document serialization remains incomplete.
+Recursive Panel/Page document serialization now supports the default Panel
+style, named position and explicit child pages. Unsupported Panel properties,
+page pictures and direct children without a Page are rejected.
 
 
 Primary document serialization now supports explicit root Pages with named
@@ -181,3 +185,27 @@ exactly before and after the platform; rebuilding that XML produces an identical
 Form.bin. macOS and fresh Linux tests pass 11/11. Evidence: `ev_5c2f6193f49143a5bb3332a79358e659`.
 This establishes root-page integration, not complete recursive Panel support
 or complete support for all properties of the four leaf control types.
+
+## Проверенный рекурсивный кодек Panel, 2026-10-03
+
+Основной путь читает и собирает вложенные Panel с явными Page. Поддержаны
+Name и Position панели; Name, локализованный Title, Visible, Enabled и
+Position страниц. Дочерние Button, LabelDecoration, строковый InputField и
+Boolean CheckBox используют те же кодеки, что корневые элементы. Порядок
+задается отдельно для каждой страницы; физические записи сортируются по ID.
+Реквизиты, DataPath и события учитываются по всему дереву. Зависимости
+проверяются в пределах владельца; ссылка на содержащую панель имеет
+именованный targetId. Неподтвержденные варианты явно отвергаются.
+
+Синтетический XML с двумя уровнями панелей собран без исходного Form.bin,
+принят строгой выгрузкой Designer и повторно разобран. Канонические XML и
+Module.bsl совпадают; повторная сборка дает идентичный новый Form.bin.
+Независимый образец Designer с тремя страницами также прошел сборку из XML
+и строгую выгрузку с неизменным каноническим XML. В публичном Module.bsl
+используется LF, в потоке контейнера CRLF. Проверки macOS и Linux amd64:
+11/11; независимая проверка границы модуля: 1/1. Доказательства:
+`ev_2f5eb63c5307437cbb7a2ddc9a05909a`, `ev_0c8313118a2340f7ab9f1ac1804a974a`.
+
+Покрытие типов: 5/25 частично (20%), 0 полностью. Это не процент готовности
+продукта. Следующая серия исследует Button: одно измененное свойство на опыт
+относительно исходного элемента, затем InputField и остальные типы.

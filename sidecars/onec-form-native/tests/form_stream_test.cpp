@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -343,6 +344,14 @@ void test_empty_attributes_allocator_header() {
     expect(
         decoded.value().collections().controls.front().id == model::ObjectId{10},
         "empty attribute allocation header must not constrain Button IDs");
+
+    auto designer_three_slots = encoded.value();
+    designer_three_slots.items[2].items[1] = list_stream::ListValue::raw_atom("3");
+    const auto decoded_three_slots = form_stream::decode_document(designer_three_slots, "Main");
+    expect(decoded_three_slots.ok(),
+        "empty attribute allocation header with three Designer slots must decode above control ID 2");
+    expect(form_stream::encode_document(decoded_three_slots.value()).value().items[2].items[1].atom == "11",
+        "empty three-slot header must normalize to the writer allocation count");
 
     const auto normalized = form_stream::encode_document(decoded.value());
     expect(normalized.ok(), "decoded fresh-Designer form must encode");
@@ -1533,6 +1542,202 @@ void test_root_pages_round_trip_with_page_local_control_order() {
         "single Page metadata and changed geometry must not collapse into the implicit default");
 }
 
+void test_recursive_panel_pages_keep_owner_geometry_separate() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "NestedPanels";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{30}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    const auto make_page_position = [](std::int32_t left, std::int32_t top, std::int32_t width,
+                                       std::int32_t height, model::ControlRef owner) {
+        model::Position position;
+        position.left.set(left);
+        position.top.set(top);
+        position.width.set(width);
+        position.height.set(height);
+        for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+            model::AnchorBinding binding;
+            binding.coordinate = edge;
+            binding.target_coordinate = edge;
+            binding.target = owner;
+            position.bindings.anchors.push_back(std::move(binding));
+        }
+        return position;
+    };
+    const auto add_anchor = [](model::ControlNode& control, model::BindingCoordinate source,
+                               model::BindingCoordinate target_edge,
+                               std::optional<model::ControlRef> target, std::int32_t offset) {
+        model::AnchorBinding binding;
+        binding.coordinate = source;
+        binding.target_coordinate = target_edge;
+        binding.target = target;
+        binding.offset.set(offset);
+        control.position.bindings.anchors.push_back(std::move(binding));
+    };
+
+    model::ControlNode outer_panel{model::ObjectId{2}, "Outer", model::PanelPayload{}};
+    outer_panel.children = {model::PageRef{model::ObjectId{40}}};
+    model::Page outer_page;
+    outer_page.id = model::ObjectId{40};
+    outer_page.name = "OuterPage";
+    outer_page.title.set(model::LocalizedStringValue{{{"en", "Outer page"}}});
+    outer_page.position.set(make_page_position(0, 0, 500, 400, model::ControlRef{model::ObjectId{2}}));
+    outer_page.children = {model::ControlRef{model::ObjectId{3}}, model::ControlRef{model::ObjectId{6}}};
+    document.add_page(outer_page);
+
+    model::ControlNode inner_panel{model::ObjectId{3}, "Inner", model::PanelPayload{}};
+    inner_panel.children = {model::PageRef{model::ObjectId{41}}};
+    model::Page inner_page;
+    inner_page.id = model::ObjectId{41};
+    inner_page.name = "InnerPage";
+    inner_page.title.set(model::LocalizedStringValue{{{"ru", "Внутренняя"}}});
+    inner_page.position.set(make_page_position(5, 7, 300, 200, model::ControlRef{model::ObjectId{3}}));
+    inner_page.children = {model::ControlRef{model::ObjectId{4}}, model::ControlRef{model::ObjectId{5}}};
+    document.add_page(inner_page);
+
+    model::ControlNode input{model::ObjectId{4}, "Value", model::InputFieldPayload{}};
+    input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{7}}, {}};
+    add_anchor(input, model::BindingCoordinate::right, model::BindingCoordinate::right,
+        model::ControlRef{model::ObjectId{3}}, 2);
+    document.add_control(std::move(input));
+    model::ControlNode inner_button{model::ObjectId{5}, "InnerRun", model::ButtonPayload{}};
+    add_anchor(inner_button, model::BindingCoordinate::left, model::BindingCoordinate::right,
+        model::ControlRef{model::ObjectId{4}}, 3);
+    inner_button.events.push_back(model::EventRef{model::ObjectId{60}});
+    document.add_event(model::Event{model::ObjectId{60}, "Click", "InnerHandler", model::ControlRef{model::ObjectId{5}}});
+    document.add_control(std::move(inner_button));
+    model::ControlNode outer_button{model::ObjectId{6}, "OuterRun", model::ButtonPayload{}};
+    add_anchor(outer_button, model::BindingCoordinate::left, model::BindingCoordinate::right,
+        model::ControlRef{model::ObjectId{3}}, 4);
+    add_anchor(outer_button, model::BindingCoordinate::top, model::BindingCoordinate::top,
+        model::ControlRef{model::ObjectId{2}}, 1);
+    document.add_control(std::move(outer_button));
+    model::ControlNode root_button{model::ObjectId{30}, "RootRun", model::ButtonPayload{}};
+    add_anchor(root_button, model::BindingCoordinate::left, model::BindingCoordinate::right,
+        model::ControlRef{model::ObjectId{2}}, 5);
+    add_anchor(root_button, model::BindingCoordinate::top, model::BindingCoordinate::top, std::nullopt, 6);
+    document.add_control(std::move(outer_panel));
+    document.add_control(std::move(inner_panel));
+    document.add_control(std::move(root_button));
+    model::TypeDomainPatternValue string_type;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{32, false};
+    string_type.entries.push_back(string_entry);
+    document.add_attribute(model::Attribute{model::ObjectId{7}, "Value", string_type});
+
+    const auto preflight = document.validate();
+    expect(preflight.ok(), "recursive Panel fixture must satisfy model invariants");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "recursive Panel graph must encode" : encoded.diagnostics().front().message);
+    auto find_record = [](auto&& self, list_stream::ListValue& table, std::uint64_t id) -> list_stream::ListValue* {
+        if (!table.is_list || table.items.empty()) return nullptr;
+        for (std::size_t index = 1; index < table.items.size(); ++index) {
+            auto& record = table.items[index];
+            if (!record.is_list || record.items.size() < 2 || record.items[1].is_list) continue;
+            if (std::stoull(record.items[1].atom) == id) return &record;
+            if (record.items.size() == 6 && record.items[5].is_list) {
+                if (auto* found = self(self, record.items[5], id)) return found;
+            }
+        }
+        return nullptr;
+    };
+    auto storage = encoded.value();
+    auto& root_children = storage.items[1].items[2].items[2];
+    auto* outer_record = find_record(find_record, root_children, 2);
+    auto* inner_record = find_record(find_record, root_children, 3);
+    expect(outer_record && inner_record, "both nested Panel records must be present");
+
+    const auto has_source = [](const list_stream::ListValue& node, std::uint64_t source_id, std::size_t cursor) {
+        if (node.items.size() < cursor) return false;
+        for (std::size_t edge = 0; edge < 6; ++edge) {
+            if (cursor >= node.items.size() || node.items[cursor].is_list) return false;
+            const auto count = static_cast<std::size_t>(std::stoul(node.items[cursor].atom));
+            for (std::size_t index = 0; index < count; ++index) {
+                const auto& tuple = node.items.at(cursor + index + 1);
+                if (tuple.is_list && tuple.items.size() == 3 && tuple.items[1].atom == std::to_string(source_id)) return true;
+            }
+            cursor += count + 1;
+        }
+        return false;
+    };
+    const auto& outer_payload = outer_record->items[2].items[1];
+    const auto& inner_payload = inner_record->items[2].items[1];
+    expect(has_source(outer_payload, 6, 2) && has_source(outer_record->items[3], 30, 12) &&
+           has_source(inner_payload, 4, 2) && has_source(inner_record->items[3], 6, 12),
+        "Panel owner fanout must live in Panel properties while sibling fanout stays in outer geometry");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "NestedPanels");
+    expect(decoded.ok(), decoded ? "two-level Panel graph must decode" : decoded.diagnostics().front().message);
+    const auto* decoded_outer = decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_inner = decoded.value().find_control(model::ObjectId{3});
+    const auto* decoded_input = decoded.value().find_control(model::ObjectId{4});
+    expect(decoded_outer && decoded_inner && decoded_input && decoded_outer->kind() == model::ControlKind::panel &&
+           decoded_inner->kind() == model::ControlKind::panel && decoded_outer->children.size() == 1 &&
+           decoded_inner->children.size() == 1,
+        "two Panel levels and their named Page references must materialize");
+    expect(decoded_input->data_path->attribute.id() == model::ObjectId{7} &&
+           decoded.value().collections().events.size() == 1 &&
+           decoded.value().collections().events.front().handler == "InnerHandler",
+        "global DataPath and nested Click links must survive");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "two-level Panel graph must round-trip without storage drift");
+
+    auto moved_incoming = encoded.value();
+    auto& moved_root_children = moved_incoming.items[1].items[2].items[2];
+    auto* moved_outer = find_record(find_record, moved_root_children, 2);
+    auto& panel_payload = moved_outer->items[2].items[1];
+    std::size_t cursor = 2;
+    bool removed = false;
+    for (std::size_t edge = 0; edge < 6 && !removed; ++edge) {
+        const auto count = static_cast<std::size_t>(std::stoul(panel_payload.items[cursor].atom));
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto tuple_index = cursor + index + 1;
+            if (panel_payload.items[tuple_index].items[1].atom == "6") {
+                panel_payload.items[cursor] = list_stream::ListValue::raw_atom(std::to_string(count - 1));
+                panel_payload.items.erase(panel_payload.items.begin() + static_cast<std::ptrdiff_t>(tuple_index));
+                auto& outer_geometry = moved_outer->items[3];
+                std::size_t geometry_cursor = 12;
+                for (std::size_t group = 0; group < edge; ++group) {
+                    geometry_cursor += 1 + static_cast<std::size_t>(std::stoul(outer_geometry.items[geometry_cursor].atom));
+                }
+                const auto geometry_count = static_cast<std::size_t>(std::stoul(outer_geometry.items[geometry_cursor].atom));
+                outer_geometry.items[geometry_cursor] = list_stream::ListValue::raw_atom(std::to_string(geometry_count + 1));
+                outer_geometry.items.insert(outer_geometry.items.begin() + static_cast<std::ptrdiff_t>(geometry_cursor + geometry_count + 1),
+                    list_stream::ListValue::list({list_stream::ListValue::raw_atom("0"),
+                        list_stream::ListValue::raw_atom("6"), list_stream::ListValue::raw_atom("3")}));
+                removed = true;
+                break;
+            }
+        }
+        cursor += count + 1;
+    }
+    expect(removed, "Panel owner incoming tuple must be locatable for the forged-transfer negative case");
+    expect(!form_stream::decode_document(moved_incoming, "NestedPanels"),
+        "moving a Panel owner tuple into outer geometry must be rejected");
+
+    auto unknown_property = encoded.value();
+    auto& unknown_root_children = unknown_property.items[1].items[2].items[2];
+    auto* unknown_panel = find_record(find_record, unknown_root_children, 2);
+    unknown_panel->items[4].items[3].atom = "1";
+    expect(!form_stream::decode_document(unknown_property, "NestedPanels"),
+        "unknown explicit Panel property variation must fail closed");
+
+    model::OrdinaryFormDocument changed_panel_property{document.form()};
+    for (const auto& page : document.collections().pages) changed_panel_property.add_page(page);
+    for (const auto& attribute : document.collections().attributes) changed_panel_property.add_attribute(attribute);
+    for (const auto& event : document.collections().events) changed_panel_property.add_event(event);
+    for (auto control : document.collections().controls) {
+        if (control.id == model::ObjectId{2}) {
+            control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        }
+        changed_panel_property.add_control(std::move(control));
+    }
+    expect(!form_stream::encode_document(changed_panel_property),
+        "unsupported explicit Panel Enabled variation must fail closed");
+}
+
 void test_manual_bindings_are_not_silently_discarded() {
     for (const auto kind : {model::ControlKind::button, model::ControlKind::label_decoration,
                            model::ControlKind::input_field, model::ControlKind::check_box}) {
@@ -2185,6 +2390,7 @@ int main() {
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
         test_root_pages_round_trip_with_page_local_control_order();
+        test_recursive_panel_pages_keep_owner_geometry_separate();
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();
         test_center_target_coordinates();

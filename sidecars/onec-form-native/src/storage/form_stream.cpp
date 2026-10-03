@@ -5,6 +5,7 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -467,7 +468,8 @@ model::Page canonical_default_page() {
 LV canonical_root_panel_payload(
     std::int32_t width,
     std::int32_t height,
-    const std::vector<model::Page>& pages = {}) {
+    const std::vector<model::Page>& pages = {},
+    std::optional<model::ControlRef> page_owner = std::nullopt) {
     if (width < 8 || height < 8) {
         fail(
             "OOF1120",
@@ -506,7 +508,7 @@ LV canonical_root_panel_payload(
             position = effective_pages[index].position.value();
         }
         const auto page_index = static_cast<std::uint32_t>(index);
-        auto boundaries = encode_page_position(position, page_index);
+        auto boundaries = encode_page_position(position, page_index, page_owner);
         if (!boundaries) throw DecodeFailure(boundaries.diagnostics().front());
         boundary_rows.insert(boundary_rows.end(), boundaries.value().items.begin(), boundaries.value().items.end());
     }
@@ -525,6 +527,18 @@ LV canonical_root_panel_payload(
     }
     return value;
 }
+
+LV canonical_panel_payload(const std::vector<model::Page>& pages, model::ControlRef owner) {
+    if (pages.empty()) {
+        fail("OOF1122", "$/Panel/Pages", "at least one named Panel Page", "empty",
+            "Panel page storage requires explicit Pages");
+    }
+    auto envelope = canonical_root_panel_payload(8, 8, pages, owner);
+    envelope.items[1].items[9] = raw("1");
+    envelope.items[1].items[12] = raw("0");
+    return envelope;
+}
+
 
 LV canonical_button_base(bool enabled) {
     auto value = parse_constant(
@@ -1042,6 +1056,79 @@ void insert_incoming_anchor_lists(LV& value, const IncomingAnchorLists& incoming
         value.items.begin() + static_cast<std::ptrdiff_t>(prefix_count + incoming.size()));
     value.items.insert(value.items.begin() + static_cast<std::ptrdiff_t>(prefix_count), records.begin(), records.end());
 }
+
+struct DecodedOwnerPages {
+    std::vector<model::Page> pages;
+    IncomingAnchorLists incoming;
+};
+
+DecodedOwnerPages decode_owner_pages(
+    const LV& envelope,
+    std::uint64_t& next_page_id,
+    std::optional<model::ControlRef> owner,
+    bool panel,
+    std::string_view path) {
+    require_arity(envelope, 3, path);
+    require_exact(envelope.items[0], raw("1"), child_path(path, 0), "Owner page envelope marker is unsupported");
+    require_exact(envelope.items[2], list({raw("0")}), child_path(path, 2),
+        "Owner page envelope trailer is unsupported");
+    const auto& payload = envelope.items[1];
+    std::size_t incoming_end = 2;
+    auto incoming = decode_incoming_anchor_lists(payload, incoming_end, path);
+    auto normalized = payload;
+    normalized.items.erase(normalized.items.begin() + 2,
+        normalized.items.begin() + static_cast<std::ptrdiff_t>(incoming_end));
+    auto decoded_pages = decode_page_table(at(normalized, 5, path), next_page_id, child_path(path, 5));
+    if (!decoded_pages) throw DecodeFailure(decoded_pages.diagnostics().front());
+    auto pages = std::move(decoded_pages.value());
+    if (pages.empty()) {
+        fail("OOF1122", child_path(path, 5), "non-empty owner Page table", "empty",
+            "Owner Page table cannot be empty");
+    }
+    const auto count = pages.size();
+    if (integer_atom<std::uint32_t>(at(normalized, 9, path), child_path(path, 9)) != count * 4) {
+        fail("OOF1114", child_path(path, 9), std::to_string(count * 4), describe(at(normalized, 9, path)),
+            "Owner boundary count does not match its Page table");
+    }
+    if (normalized.items.size() < 10 + count * 4) {
+        fail("OOF1102", std::string(path), "four boundary rows per Page", describe(normalized),
+            "Owner Page boundary table is truncated");
+    }
+    for (std::size_t page_index = 0; page_index < count; ++page_index) {
+        LV boundaries = list(std::vector<LV>(
+            normalized.items.begin() + static_cast<std::ptrdiff_t>(10 + page_index * 4),
+            normalized.items.begin() + static_cast<std::ptrdiff_t>(14 + page_index * 4)));
+        auto position = decode_page_position(boundaries, static_cast<std::uint32_t>(page_index), owner);
+        if (!position) throw DecodeFailure(position.diagnostics().front());
+        pages[page_index].position.set(std::move(position.value()));
+    }
+    auto expected = panel ? canonical_panel_payload(pages, *owner) :
+        canonical_root_panel_payload(8, 8, pages, owner);
+    expected.items[1].items.erase(expected.items[1].items.begin() + 2,
+        expected.items[1].items.begin() + 8);
+    require_exact(normalized, expected.items[1], path,
+        "Owner page properties contain an unsupported variation");
+    if (pages.size() > std::numeric_limits<std::uint64_t>::max() - next_page_id) {
+        fail("OOF1122", std::string(path), "Page IDs within uint64 range", std::to_string(pages.size()),
+            "Page ID allocation overflows uint64");
+    }
+    next_page_id += pages.size();
+    return DecodedOwnerPages{std::move(pages), std::move(incoming)};
+}
+
+LV encode_owner_pages(
+    const std::vector<model::Page>& pages,
+    const IncomingAnchorLists& incoming,
+    bool panel,
+    std::optional<model::ControlRef> owner = std::nullopt,
+    std::int32_t width = 8,
+    std::int32_t height = 8) {
+    auto envelope = panel ? canonical_panel_payload(pages, *owner) :
+        canonical_root_panel_payload(width, height, pages, owner);
+    insert_incoming_anchor_lists(envelope.items[1], incoming, 2);
+    return envelope;
+}
+
 
 void require_incoming_graph(
     const IncomingAnchorLists& observed,
@@ -1575,7 +1662,7 @@ LV encode_button(
         !control.children.empty() || control.position.default_control.is_explicit() ||
         control.position.tab_order.is_explicit() || control.position.z_order.is_explicit() ||
         control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$", "plain top-level Button", control.name, "Button uses a storage concept outside the executable slice");
+        fail("OOF1122", "$", "plain Button", control.name, "Button uses a storage concept outside the executable slice");
     }
     require_allowed_properties(control.properties(), {"Caption", "Enabled", "MultiLine"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -1614,7 +1701,7 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
         control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/LabelDecoration", "plain top-level LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
+        fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(control.properties(), {"Caption", "HorizontalAlign"}, "$/LabelDecoration");
     const std::string caption = explicit_string(control.properties(), "Caption");
@@ -2323,34 +2410,10 @@ Result<model::OrdinaryFormDocument> decode_document(
         require_raw_constant(root_panel.items[0], root_panel_guid, "$/1/2/0");
         const auto& root_panel_envelope = root_panel.items[1];
         require_arity(root_panel_envelope, 3, "$/1/2/1");
-        const auto expected_root_panel_envelope = canonical_root_panel_payload(width, height);
-        require_exact(root_panel_envelope.items[0], expected_root_panel_envelope.items[0], "$/1/2/1/0",
-            "Root panel envelope marker is unsupported");
-        require_exact(root_panel_envelope.items[2], expected_root_panel_envelope.items[2], "$/1/2/1/2",
-            "Root panel envelope trailer is unsupported");
-        const auto& root_panel_payload = root_panel_envelope.items[1];
-        std::size_t root_incoming_end = 2;
-        const auto root_incoming = decode_incoming_anchor_lists(root_panel_payload, root_incoming_end, "$/1/2/1");
-        auto normalized_root_panel_payload = root_panel_payload;
-        normalized_root_panel_payload.items.erase(
-            normalized_root_panel_payload.items.begin() + 2,
-            normalized_root_panel_payload.items.begin() + static_cast<std::ptrdiff_t>(root_incoming_end));
-        auto root_page_table = decode_page_table(
-            at(normalized_root_panel_payload, 5, "$/1/2/1"), stored_max_id + 1, "$/1/2/1/5");
-        if (!root_page_table) throw DecodeFailure(root_page_table.diagnostics().front());
-        auto root_pages = std::move(root_page_table.value());
-        if (normalized_root_panel_payload.items.size() < 10 + root_pages.size() * 4) {
-            fail("OOF1102", "$/1/2/1", "four boundary rows per root Page", describe(normalized_root_panel_payload),
-                "Root Page boundary table is truncated");
-        }
-        for (std::size_t page_index = 0; page_index < root_pages.size(); ++page_index) {
-            LV boundaries = list(std::vector<LV>(
-                normalized_root_panel_payload.items.begin() + static_cast<std::ptrdiff_t>(10 + page_index * 4),
-                normalized_root_panel_payload.items.begin() + static_cast<std::ptrdiff_t>(14 + page_index * 4)));
-            auto position = decode_page_position(boundaries, static_cast<std::uint32_t>(page_index));
-            if (!position) throw DecodeFailure(position.diagnostics().front());
-            root_pages[page_index].position.set(std::move(position.value()));
-        }
+        std::uint64_t next_page_id = stored_max_id + 1;
+        auto root_owner = decode_owner_pages(root_panel_envelope, next_page_id, std::nullopt, false, "$/1/2/1");
+        auto root_pages = std::move(root_owner.pages);
+        const auto& root_incoming = root_owner.incoming;
         const model::LocalizedStringValue canonical_page_title{{{"ru", "Страница1"}}};
         bool implicit_default_page = root_pages.size() == 1 && root_pages[0].name == "Страница1" &&
             root_pages[0].title.value() == canonical_page_title && root_pages[0].visible.value() &&
@@ -2370,16 +2433,6 @@ Result<model::OrdinaryFormDocument> decode_document(
                     !anchors[index].proportional;
             }
         }
-        auto expected_root_panel_envelope_with_pages = canonical_root_panel_payload(width, height, root_pages);
-        auto expected_root_panel_payload = expected_root_panel_envelope_with_pages.items[1];
-        expected_root_panel_payload.items.erase(
-            expected_root_panel_payload.items.begin() + 2,
-            expected_root_panel_payload.items.begin() + 8);
-        require_exact(
-            normalized_root_panel_payload,
-            expected_root_panel_payload,
-            "$/1/2/1",
-            "Root panel payload differs from the proven canonical layout after anchor fanout");
 
         const auto attributes_result = decode_attributes(payload.items[2]);
         if (!attributes_result) {
@@ -2431,20 +2484,6 @@ Result<model::OrdinaryFormDocument> decode_document(
             actual_max_id = std::max(actual_max_id, object_id);
         }
 
-        const auto& children = root_panel.items[2];
-        require_list(children, "$/1/2/2");
-        if (children.items.empty()) {
-            fail("OOF1103", "$/1/2/2/0", "control count", "missing", "Root control table has no count");
-        }
-        const std::uint32_t control_count = integer_atom<std::uint32_t>(children.items[0], "$/1/2/2/0");
-        if (children.items.size() != static_cast<std::size_t>(control_count) + 1) {
-            fail(
-                "OOF1102",
-                "$/1/2/2",
-                "list arity " + std::to_string(static_cast<std::size_t>(control_count) + 1),
-                "list arity " + std::to_string(children.items.size()),
-                "Root control table count does not match its records");
-        }
         std::unordered_map<std::int64_t, const AttributeRecord*> attributes_by_id;
         for (const auto& attribute : attributes.attributes) {
             if (!attributes_by_id.emplace(attribute.id.object_id, &attribute).second) {
@@ -2458,140 +2497,187 @@ Result<model::OrdinaryFormDocument> decode_document(
             }
         }
         std::unordered_set<std::int64_t> consumed_link_ids;
-        std::vector<std::vector<std::optional<DecodedControl>>> decoded_by_page(root_pages.size());
-        std::vector<std::uint32_t> page_control_counts(root_pages.size(), 0);
+        std::vector<DecodedControl> pending_controls;
+        std::vector<model::Page> nested_pages;
+        const auto& button_descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
+        const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
         const auto& input_descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
-        for (std::uint32_t index = 0; index < control_count; ++index) {
-            const auto path = child_path("$/1/2/2", static_cast<std::size_t>(index) + 1);
-            const auto& child_record = children.items[index + 1];
-            if (!child_record.is_list || child_record.items.empty()) {
-                require_arity(child_record, 1, path);
+        const auto& checkbox_descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
+        const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
+        using DecodeChildTable = std::function<void(
+            const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&, std::string_view)>;
+        DecodeChildTable decode_child_table;
+        decode_child_table = [&](const LV& child_table, std::vector<model::Page>& pages,
+                                 GeometryOwner owner, const IncomingAnchorLists& owner_incoming,
+                                 std::string_view path) {
+            require_list(child_table, path);
+            if (child_table.items.empty()) fail("OOF1103", child_path(path, 0), "control count", "missing", "Control table has no count");
+            const auto count = integer_atom<std::uint32_t>(child_table.items[0], child_path(path, 0));
+            if (child_table.items.size() != static_cast<std::size_t>(count) + 1) {
+                fail("OOF1102", std::string(path), "control count matching records", describe(child_table), "Control table count does not match its records");
             }
-            static_cast<void>(raw_atom(at(child_record, 1, path), child_path(path, 1)));
-            const auto geometry_path = child_path(path, 3);
-            const auto& geometry = at(child_record, 3, path);
-            std::size_t ordinal_slot = 0;
-            const auto page_ordinal = geometry_page_ordinal(geometry, geometry_path, ordinal_slot);
-            if (page_ordinal.page >= root_pages.size()) {
-                fail("OOF1114", child_path(geometry_path, ordinal_slot - 1), "root Page index below Page count", std::to_string(page_ordinal.page), "Control geometry references a missing root Page");
-            }
-            if (page_ordinal.ordinal >= control_count) {
-                fail("OOF1114", child_path(geometry_path, ordinal_slot), "page-local ChildItems ordinal below control count", std::to_string(page_ordinal.ordinal), "Control geometry ordinal is outside the Page range");
-            }
-            auto& page_controls = decoded_by_page[page_ordinal.page];
-            if (page_controls.size() <= page_ordinal.ordinal) page_controls.resize(static_cast<std::size_t>(page_ordinal.ordinal) + 1);
-            if (page_controls[page_ordinal.ordinal]) {
-                fail("OOF1114", child_path(geometry_path, ordinal_slot), "unique page-local ChildItems ordinal", std::to_string(page_ordinal.ordinal), "Control geometry ordinal is duplicated");
-            }
-            ++page_control_counts[page_ordinal.page];
-            const GeometryContext geometry_context{FormGeometryOwner{}, page_ordinal.page, page_ordinal.ordinal};
-            const std::string child_guid = raw_atom(child_record.items[0], child_path(path, 0));
-            const auto& button_descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
-            const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
-            if (child_guid == button_descriptor.guid) {
-                auto decoded = decode_button(child_record, path, geometry_context);
-                actual_max_id = std::max(actual_max_id, decoded.control.id.value());
-                page_controls[page_ordinal.ordinal].emplace(std::move(decoded));
-            } else if (child_guid == label_descriptor.guid) {
-                auto decoded = decode_label(child_record, path, geometry_context);
-                actual_max_id = std::max(actual_max_id, decoded.control.id.value());
-                page_controls[page_ordinal.ordinal].emplace(std::move(decoded));
-            } else if (child_guid == input_descriptor.guid ||
-                       child_guid == model::metamodel::descriptor_for(model::ControlKind::check_box).guid) {
-                const auto candidate_id = integer_atom<std::uint64_t>(at(child_record, 1, path), child_path(path, 1));
-                if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
-                    fail("OOF1122", child_path(path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
-                        "Control ID cannot be resolved through the attribute-link table");
+            struct RecordSlot { const LV* record; std::string path; std::uint32_t ordinal; };
+            std::vector<std::vector<std::optional<RecordSlot>>> ordered(pages.size());
+            for (std::uint32_t index = 0; index < count; ++index) {
+                const auto record_path = child_path(path, static_cast<std::size_t>(index) + 1);
+                const auto& record = child_table.items[index + 1];
+                require_list(record, record_path);
+                static_cast<void>(raw_atom(at(record, 1, record_path), child_path(record_path, 1)));
+                const auto geometry_path = child_path(record_path, 3);
+                const auto& geometry = at(record, 3, record_path);
+                std::size_t ordinal_slot = 0;
+                const auto page_ordinal = geometry_page_ordinal(geometry, geometry_path, ordinal_slot);
+                if (page_ordinal.page >= pages.size()) {
+                    fail("OOF1114", child_path(geometry_path, ordinal_slot - 1), "owner Page index below Page count",
+                        std::to_string(page_ordinal.page), "Control geometry references a missing Page");
                 }
-                const auto candidate_key = static_cast<std::int64_t>(candidate_id);
-                const auto link_it = links_by_control.find(candidate_key);
-                if (link_it == links_by_control.end()) {
-                    fail("OOF1122", "$/2/3", "DataPath link for each InputField or CheckBox",
-                        std::to_string(candidate_id), "Linked control has no attribute link");
+                if (page_ordinal.ordinal >= count) {
+                    fail("OOF1114", child_path(geometry_path, ordinal_slot), "page-local ordinal below control count",
+                        std::to_string(page_ordinal.ordinal), "Control geometry ordinal is outside its Page range");
                 }
-                consumed_link_ids.insert(candidate_key);
-                const auto& link = *link_it->second;
-                if (!link.attribute_id.is_null || link.attribute_id.uuid.canonical != null_uuid) {
-                    fail("OOF1122", "$/2/3", "null-UUID attribute link", describe(child_record),
-                        "Control DataPath link uses an unsupported target");
+                auto& page_records = ordered[page_ordinal.page];
+                if (page_records.size() <= page_ordinal.ordinal) page_records.resize(static_cast<std::size_t>(page_ordinal.ordinal) + 1);
+                if (page_records[page_ordinal.ordinal]) {
+                    fail("OOF1114", child_path(geometry_path, ordinal_slot), "unique page-local ordinal",
+                        std::to_string(page_ordinal.ordinal), "Control geometry ordinal is duplicated");
                 }
-                const auto attribute_it = attributes_by_id.find(link.attribute_id.object_id);
-                if (attribute_it == attributes_by_id.end()) {
-                    fail("OOF1122", "$/2/3", "link to an existing Attribute",
-                        std::to_string(link.attribute_id.object_id), "DataPath target is unresolved");
-                }
-                const auto& attribute = *attribute_it->second;
-                DecodedControl linked_control = child_guid == input_descriptor.guid
-                    ? decode_input_field(child_record, path, attribute, geometry_context)
-                    : decode_check_box(child_record, path, attribute, geometry_context);
-                linked_control.control.data_path = model::DataPath{
-                    model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attribute.id.object_id)}},
-                    {},
-                };
-                actual_max_id = std::max(actual_max_id, linked_control.control.id.value());
-                page_controls[page_ordinal.ordinal].emplace(std::move(linked_control));
-            } else {
-                fail("OOF1122", path, "supported top-level Button, LabelDecoration, InputField, or CheckBox record", child_guid, "Control payload is unsupported");
+                page_records[page_ordinal.ordinal] = RecordSlot{&record, record_path, page_ordinal.ordinal};
             }
-        }
-        for (std::size_t page = 0; page < decoded_by_page.size(); ++page) {
-            auto& controls = decoded_by_page[page];
-            if (controls.size() != page_control_counts[page]) {
-                fail("OOF1114", "$/1/2/2", "contiguous page-local ChildItems ordinals", std::to_string(page), "Control geometry ordinals do not form a page-local permutation");
-            }
-            for (std::size_t ordinal = 0; ordinal < controls.size(); ++ordinal) {
-                if (!controls[ordinal]) {
-                    fail("OOF1114", "$/1/2/2", "permutation of page-local ChildItems ordinals", std::to_string(ordinal), "Control geometry ordinals do not cover every Page position");
+            for (std::size_t page_index = 0; page_index < ordered.size(); ++page_index) {
+                auto& page_records = ordered[page_index];
+                const auto record_count = static_cast<std::size_t>(std::count_if(
+                    child_table.items.begin() + 1, child_table.items.end(), [&](const LV& record) {
+                        std::size_t ordinal_slot = 0;
+                        const auto page_ordinal = geometry_page_ordinal(at(record, 3, path), path, ordinal_slot);
+                        return page_ordinal.page == page_index;
+                    }));
+                if (page_records.size() != record_count) {
+                    fail("OOF1114", std::string(path), "contiguous page-local ChildItems ordinals",
+                        std::to_string(page_index), "Page child ordinals do not form a permutation");
+                }
+                for (std::size_t ordinal = 0; ordinal < page_records.size(); ++ordinal) {
+                    if (!page_records[ordinal]) fail("OOF1114", std::string(path), "page-local ordinal permutation",
+                        std::to_string(ordinal), "Page child ordinals do not cover every position");
                 }
             }
-        }
-        std::unordered_map<std::uint64_t, IncomingAnchorLists> expected_control_incoming;
-        IncomingAnchorLists expected_form_incoming;
-        std::unordered_set<std::uint64_t> decoded_control_ids;
-        for (const auto& page_controls : decoded_by_page) for (const auto& decoded_slot : page_controls) {
-            decoded_control_ids.insert(decoded_slot->control.id.value());
-        }
-        for (const auto& page_controls : decoded_by_page) for (const auto& decoded_slot : page_controls) {
-            const auto source_id = decoded_slot->control.id.value();
-            for (const auto& binding : decoded_slot->control.position.bindings.anchors) {
-                const auto source_edge = source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
-                const auto append_target = [&](const std::optional<model::ControlRef>& target, model::BindingCoordinate coordinate) {
-                    const auto target_edge = target_dependency_bucket(
-                        target_platform_edge(coordinate, "$/Position/Bindings/targetCoordinate"),
-                        "$/Position/Bindings/targetCoordinate");
-                    if (!target.has_value()) {
-                        expected_form_incoming[target_edge].push_back({source_id, source_edge});
-                        return;
+            std::vector<std::vector<DecodedControl>> decoded(ordered.size());
+            std::unordered_set<std::uint64_t> owner_child_ids;
+            std::unordered_map<std::uint64_t, std::string> child_record_paths;
+            for (std::size_t page_index = 0; page_index < ordered.size(); ++page_index) {
+                for (const auto& slot : ordered[page_index]) {
+                    const auto& record = *slot->record;
+                    const auto& record_path = slot->path;
+                    const GeometryContext context{owner, static_cast<std::uint32_t>(page_index), slot->ordinal};
+                    const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
+                    DecodedControl child;
+                    if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
+                    else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
+                    else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid) {
+                        const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
+                        if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+                            fail("OOF1122", child_path(record_path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
+                                "Control ID cannot be resolved through the attribute-link table");
+                        }
+                        const auto candidate_key = static_cast<std::int64_t>(candidate_id);
+                        const auto link_it = links_by_control.find(candidate_key);
+                        if (link_it == links_by_control.end()) fail("OOF1122", "$/2/3", "DataPath link for each InputField or CheckBox",
+                            std::to_string(candidate_id), "Linked control has no attribute link");
+                        if (!consumed_link_ids.insert(candidate_key).second) fail("OOF1122", "$/2/3", "one DataPath link per linked control",
+                            std::to_string(candidate_id), "Attribute link was consumed more than once");
+                        const auto& link = *link_it->second;
+                        if (!link.attribute_id.is_null || link.attribute_id.uuid.canonical != null_uuid) {
+                            fail("OOF1122", "$/2/3", "null-UUID attribute link", describe(record), "Control DataPath link uses an unsupported target");
+                        }
+                        const auto attribute_it = attributes_by_id.find(link.attribute_id.object_id);
+                        if (attribute_it == attributes_by_id.end()) fail("OOF1122", "$/2/3", "link to an existing Attribute",
+                            std::to_string(link.attribute_id.object_id), "DataPath target is unresolved");
+                        child = guid == input_descriptor.guid
+                            ? decode_input_field(record, record_path, *attribute_it->second, context)
+                            : decode_check_box(record, record_path, *attribute_it->second, context);
+                        child.control.data_path = model::DataPath{
+                            model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attribute_it->second->id.object_id)}}, {}};
+                    } else if (guid == panel_descriptor.guid) {
+                        require_arity(record, 6, record_path);
+                        const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
+                        if (raw_id == 0) fail("OOF1105", child_path(record_path, 1), "positive Panel ID", "0", "Panel ID is invalid");
+                        auto geometry = decode_geometry(at(record, 3, record_path), child_path(record_path, 3), context);
+                        const auto& info = at(record, 4, record_path);
+                        require_arity(info, 6, child_path(record_path, 4));
+                        require_raw_constant(info.items[0], "14", child_path(child_path(record_path, 4), 0));
+                        const auto name = string_atom(info.items[1], child_path(child_path(record_path, 4), 1));
+                        if (name.empty()) fail("OOF1115", child_path(child_path(record_path, 4), 1), "non-empty Panel Name", "empty", "Panel Name is required");
+                        require_raw_constant(info.items[2], "4294967295", child_path(child_path(record_path, 4), 2));
+                        require_raw_constant(info.items[3], "0", child_path(child_path(record_path, 4), 3));
+                        require_raw_constant(info.items[4], "0", child_path(child_path(record_path, 4), 4));
+                        require_raw_constant(info.items[5], "0", child_path(child_path(record_path, 4), 5));
+                        const model::ControlRef panel_ref{model::ObjectId{raw_id}};
+                        auto panel_owner = decode_owner_pages(at(record, 2, record_path), next_page_id, panel_ref, true,
+                            child_path(record_path, 2));
+                        model::ControlNode panel{panel_ref.id(), name, model::PanelPayload{}};
+                        panel.position = std::move(geometry.position);
+                        for (const auto& page : panel_owner.pages) panel.children.push_back(model::PageRef{page.id});
+                        decode_child_table(at(record, 5, record_path), panel_owner.pages, GeometryOwner{panel_ref},
+                            panel_owner.incoming, child_path(record_path, 5));
+                        for (auto& page : panel_owner.pages) nested_pages.push_back(std::move(page));
+                        child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming)};
+                    } else {
+                        fail("OOF1122", record_path, "supported leaf controls or Panel", guid, "Control payload is unsupported");
                     }
-                    const auto target_id = target->id().value();
-                    if (!decoded_control_ids.contains(target_id)) {
-                        fail("OOF1114", "$/1/2/2", "binding target resolving to a decoded control", std::to_string(target_id),
-                            "Primary or proportional binding target is dangling or unsupported");
-                    }
-                    expected_control_incoming[target_id][target_edge].push_back({source_id, source_edge});
-                };
-                append_target(binding.target, binding.target_coordinate);
-                if (binding.proportional.has_value()) {
-                    append_target(binding.proportional->target, binding.proportional->coordinate);
+                    const auto child_id = child.control.id.value();
+                    if (!owner_child_ids.insert(child_id).second) fail("OOF1122", std::string(path), "unique immediate child Control IDs",
+                        std::to_string(child_id), "Owner child table contains a duplicate Control ID");
+                    child_record_paths.emplace(child_id, record_path);
+                    actual_max_id = std::max(actual_max_id, child_id);
+                    pages[page_index].children.push_back(model::ControlRef{child.control.id});
+                    decoded[page_index].push_back(std::move(child));
                 }
             }
-        }
-        require_incoming_graph(root_incoming, std::move(expected_form_incoming), "$/1/2/1");
-        for (std::size_t physical_index = 0; physical_index < control_count; ++physical_index) {
-            const auto& child_record = children.items[physical_index + 1];
-            const auto control_id = integer_atom<std::uint64_t>(child_record.items[1], "$/1/2/2");
-            const DecodedControl* decoded_slot = nullptr;
-            for (const auto& page_controls : decoded_by_page) for (const auto& candidate : page_controls) {
-                if (candidate && candidate->control.id.value() == control_id) decoded_slot = &*candidate;
+            IncomingAnchorLists expected_owner_incoming;
+            std::unordered_map<std::uint64_t, IncomingAnchorLists> expected_sibling_incoming;
+            for (const auto& page_controls : decoded) for (const auto& child : page_controls) {
+                const auto source_id = child.control.id.value();
+                for (const auto& binding : child.control.position.bindings.anchors) {
+                    const auto source_edge = source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
+                    const auto append_target = [&](const std::optional<model::ControlRef>& target, model::BindingCoordinate coordinate) {
+                        const auto target_edge = target_dependency_bucket(
+                            target_platform_edge(coordinate, "$/Position/Bindings/targetCoordinate"),
+                            "$/Position/Bindings/targetCoordinate");
+                        const bool is_form_owner = std::holds_alternative<FormGeometryOwner>(owner) && !target;
+                        const auto* panel_owner = std::get_if<model::ControlRef>(&owner);
+                        const bool is_panel_owner = panel_owner && target && target->id() == panel_owner->id();
+                        if (is_form_owner || is_panel_owner) {
+                            expected_owner_incoming[target_edge].push_back({source_id, source_edge});
+                            return;
+                        }
+                        if (!target || !owner_child_ids.contains(target->id().value())) {
+                            fail("OOF1114", std::string(path), "binding target in the same owner child graph",
+                                target ? std::to_string(target->id().value()) : "Form target", "Binding target is dangling or outside its owner");
+                        }
+                        expected_sibling_incoming[target->id().value()][target_edge].push_back({source_id, source_edge});
+                    };
+                    append_target(binding.target, binding.target_coordinate);
+                    if (binding.proportional) append_target(binding.proportional->target, binding.proportional->coordinate);
+                }
             }
-            if (decoded_slot == nullptr) throw std::logic_error("decoded control table lost a physical record");
-            const auto expected = expected_control_incoming.find(control_id);
-            const IncomingAnchorLists empty;
-            require_incoming_graph(
-                decoded_slot->incoming,
-                expected == expected_control_incoming.end() ? empty : expected->second,
-                child_path("$/1/2/2", physical_index + 1) + "/3");
+            require_incoming_graph(owner_incoming, std::move(expected_owner_incoming), path);
+            for (const auto& page_controls : decoded) for (const auto& child : page_controls) {
+                const auto found = expected_sibling_incoming.find(child.control.id.value());
+                const IncomingAnchorLists empty;
+                require_incoming_graph(child.incoming, found == expected_sibling_incoming.end() ? empty : found->second,
+                    child_path(child_record_paths.at(child.control.id.value()), 3));
+                pending_controls.push_back(child);
+            }
+        };
+        decode_child_table(root_panel.items[2], root_pages, GeometryOwner{FormGeometryOwner{}}, root_incoming, "$/1/2/2");
+        if (implicit_default_page) {
+            for (const auto& child : root_pages[0].children) form.children.push_back(child);
+        } else {
+            for (const auto& page : root_pages) form.children.push_back(model::PageRef{page.id});
         }
+        if (!implicit_default_page) {
+            for (auto& page : root_pages) document.add_page(std::move(page));
+        }
+        for (auto& page : nested_pages) document.add_page(std::move(page));
         if (consumed_link_ids.size() != links_by_control.size()) {
             fail("OOF1122", "$/2/3", "one matching link per decoded InputField or CheckBox", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
         }
@@ -2616,13 +2702,13 @@ Result<model::OrdinaryFormDocument> decode_document(
             3,
             (empty_attributes ? actual_max_id : attribute_max_id) + 1);
         // Пустой заголовок выделения реквизитов не связан с ID контролов;
-        // допускаются значение свежего Designer (1) и значение текущего сборщика.
+        // допускаются подтвержденные минимальные значения Designer (1, 3) и текущий размер.
         const std::string expected_slot_count = empty_attributes
-            ? "1 or " + std::to_string(expected_slots)
+            ? "1, 3, or " + std::to_string(expected_slots)
             : std::to_string(expected_slots);
         if (expected_slots > std::numeric_limits<std::uint32_t>::max() ||
             (attributes.slot_count != expected_slots &&
-             !(empty_attributes && attributes.slot_count == 1))) {
+             !(empty_attributes && (attributes.slot_count == 1 || attributes.slot_count == 3)))) {
             fail(
                 "OOF1114",
                 "$/2/1",
@@ -2640,10 +2726,8 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
 
         std::uint64_t synthetic_event_offset = 0;
-        std::uint64_t event_id_base = stored_max_id;
-        for (const auto& page : root_pages) event_id_base = std::max(event_id_base, page.id.value());
-        for (std::size_t page_index = 0; page_index < decoded_by_page.size(); ++page_index) for (auto& decoded_slot : decoded_by_page[page_index]) {
-            auto& decoded_control = *decoded_slot;
+        const std::uint64_t event_id_base = std::max(stored_max_id, next_page_id - 1);
+        for (auto& decoded_control : pending_controls) {
             if (decoded_control.click_handler) {
                 if (synthetic_event_offset >=
                     std::numeric_limits<std::uint64_t>::max() - event_id_base) {
@@ -2658,16 +2742,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     model::ControlRef{decoded_control.control.id},
                 });
             }
-            if (implicit_default_page) {
-                form.children.push_back(model::ControlRef{decoded_control.control.id});
-            } else {
-                root_pages[page_index].children.push_back(model::ControlRef{decoded_control.control.id});
-            }
             document.add_control(std::move(decoded_control.control));
-        }
-        if (!implicit_default_page) {
-            for (const auto& page : root_pages) form.children.push_back(model::PageRef{page.id});
-            for (auto& page : root_pages) document.add_page(std::move(page));
         }
         document.set_form(std::move(form));
 
@@ -2677,7 +2752,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 "OOF1123",
                 "$",
                 "valid OrdinaryFormDocument",
-                std::to_string(report.violations.size()) + " invariant violations",
+                std::to_string(report.violations.size()) + " invariant violations: " + report.violations.front().message,
                 "Decoded storage does not satisfy the product object model");
         }
         return document;
@@ -2736,134 +2811,174 @@ Result<list_stream::ListValue> encode_document(
                 "Form dimensions cannot produce a platform root panel");
         }
 
-        std::vector<model::Page> root_pages;
-        const bool explicit_pages = !document.collections().pages.empty();
-        if (explicit_pages) {
-            std::unordered_set<std::uint64_t> seen_pages;
-            for (const auto& item : document.form().children) {
-                const auto* reference = std::get_if<model::PageRef>(&item);
-                if (reference == nullptr) {
-                    fail("OOF1122", "$/Form/ChildItems", "Page references when root Pages are explicit", "direct Control reference",
-                        "Root controls must be owned by a named Page when the document has explicit root Pages");
-                }
-                const auto* page = document.find_page(reference->id());
-                if (page == nullptr || !seen_pages.insert(page->id.value()).second) {
-                    fail("OOF1122", "$/Form/ChildItems", "unique references to existing root Pages", std::to_string(reference->id().value()),
-                        "Root Page order contains a dangling or duplicate Page reference");
-                }
-                root_pages.push_back(*page);
-            }
-            if (root_pages.size() != document.collections().pages.size()) {
-                fail("OOF1122", "$/Form/ChildItems", "all root Pages in ChildItems order", std::to_string(root_pages.size()),
-                    "Every root Page must occur exactly once in Form ChildItems");
-            }
-        }
-
-        struct RootControl {
+        struct EncodedOwner {
+            std::vector<model::Page> pages;
+            LV child_table;
+            IncomingAnchorLists incoming;
+        };
+        struct EncodedChild {
             const model::ControlNode* control;
             std::uint32_t page_index;
             std::size_t ordinal;
             LV record;
         };
-        std::vector<RootControl> root_controls;
         std::vector<form_stream::AttributeLink> ordered_control_links;
-        std::unordered_map<std::uint64_t, std::size_t> ordinal_by_control;
-        std::unordered_map<std::uint64_t, IncomingAnchorLists> control_incoming;
-        IncomingAnchorLists form_incoming;
         std::uint64_t max_id = document.form().id.value();
-        const auto append_control = [&](const model::ControlRef& reference, std::uint32_t page_index,
-                                        std::size_t ordinal) {
-            const auto* control = document.find_control(reference.id());
-            if (control == nullptr) {
-                fail("OOF1123", "$/Form/ChildItems", "existing control", std::to_string(reference.id().value()),
+        std::unordered_set<std::uint64_t> seen_control_ids;
+        std::unordered_set<std::uint64_t> seen_page_ids;
+        using EncodeOwnerFn = std::function<EncodedOwner(
+            const std::vector<model::ChildItemRef>&, GeometryOwner, bool, std::string_view)>;
+        EncodeOwnerFn encode_owner;
+        encode_owner = [&](const std::vector<model::ChildItemRef>& owner_children, GeometryOwner owner,
+                           bool panel_owner, std::string_view path) -> EncodedOwner {
+            std::vector<model::Page> pages;
+            bool has_page_refs = false;
+            for (const auto& item : owner_children) {
+                if (const auto* page_ref = std::get_if<model::PageRef>(&item)) {
+                    has_page_refs = true;
+                    const auto* page = document.find_page(page_ref->id());
+                    if (page == nullptr || !seen_page_ids.insert(page->id.value()).second) {
+                        fail("OOF1122", std::string(path), "unique reference to an existing Page", std::to_string(page_ref->id().value()),
+                            "Page reference is dangling or assigned to more than one owner");
+                    }
+                    pages.push_back(*page);
+                } else if (has_page_refs) {
+                    fail("OOF1122", std::string(path), "Page references only", "mixed Page and Control references",
+                        "Owner child sequence cannot mix Pages and direct controls");
+                }
+            }
+            if (has_page_refs && std::any_of(owner_children.begin(), owner_children.end(), [](const auto& item) {
+                    return !std::holds_alternative<model::PageRef>(item);
+                })) {
+                fail("OOF1122", std::string(path), "Page references only", "mixed Page and Control references",
+                    "Owner child sequence cannot mix Pages and direct controls");
+            }
+            if (panel_owner && !has_page_refs) {
+                fail("OOF1122", std::string(path), "explicit Page references inside Panel", "direct controls",
+                    "Panel storage requires named Pages");
+            }
+            std::vector<EncodedChild> children;
+            const auto append_control = [&](const model::ControlRef& reference, std::uint32_t page_index,
+                                            std::size_t ordinal) {
+                const auto* control = document.find_control(reference.id());
+                if (control == nullptr) fail("OOF1123", std::string(path), "existing Control", std::to_string(reference.id().value()),
                     "Child reference is dangling");
+                if (!seen_control_ids.insert(control->id.value()).second) fail("OOF1122", std::string(path), "unique Control reference",
+                    std::to_string(control->id.value()), "Control is assigned to more than one owner");
+                if (ordinal >= std::numeric_limits<std::uint32_t>::max()) fail("OOF1120", std::string(path),
+                    "page-local ordinal within uint32 range", std::to_string(ordinal), "Child ordinal overflows");
+                const GeometryContext context{owner, page_index, static_cast<std::uint32_t>(ordinal)};
+                LV record;
+                if (control->kind() == model::ControlKind::button) {
+                    record = encode_button(document, *control, context);
+                } else if (control->kind() == model::ControlKind::label_decoration) {
+                    record = encode_label(*control, context);
+                } else if (control->kind() == model::ControlKind::input_field) {
+                    record = encode_input_field(document, *control, context);
+                } else if (control->kind() == model::ControlKind::check_box) {
+                    record = encode_check_box(document, *control, context);
+                } else if (control->kind() == model::ControlKind::panel) {
+                    if (!control->events.empty() || control->data_path || !control->extension_properties.empty()) {
+                        fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",
+                            control->name, "Panel uses a storage concept outside the supported profile");
+                    }
+                    require_allowed_properties(control->properties(), {}, child_path(path, ordinal) + "/Panel");
+                    const model::ControlRef panel_ref{control->id};
+                    auto panel_owner = encode_owner(control->children, GeometryOwner{panel_ref}, true,
+                        child_path(path, ordinal) + "/Panel/ChildItems");
+                    auto panel_properties = encode_owner_pages(panel_owner.pages, panel_owner.incoming, true, panel_ref);
+                    const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
+                    const auto info = list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
+                    record = list({raw(std::string(panel_descriptor.guid)), raw(std::to_string(control->id.value())),
+                        std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
+                        info, std::move(panel_owner.child_table)});
+                } else {
+                    fail("OOF1122", std::string(path), "Button, LabelDecoration, InputField, CheckBox, or Panel", control->name,
+                        "Control payload is unsupported");
+                }
+                if (control->kind() == model::ControlKind::input_field || control->kind() == model::ControlKind::check_box) {
+                    ordered_control_links.push_back(form_stream::AttributeLink{
+                        static_cast<std::int64_t>(control->id.value()),
+                        model::CompositeIdValue{static_cast<std::int64_t>(control->data_path->attribute.id().value()),
+                            model::UuidValue{std::string(null_uuid)}, true}});
+                }
+                max_id = std::max(max_id, control->id.value());
+                children.push_back(EncodedChild{control, page_index, ordinal, std::move(record)});
+            };
+            if (has_page_refs) {
+                for (std::size_t page_index = 0; page_index < pages.size(); ++page_index) {
+                    if (page_index >= std::numeric_limits<std::uint32_t>::max()) fail("OOF1120", std::string(path),
+                        "Page index within uint32 range", std::to_string(page_index), "Page index overflows");
+                    for (std::size_t ordinal = 0; ordinal < pages[page_index].children.size(); ++ordinal) {
+                        const auto* control_ref = std::get_if<model::ControlRef>(&pages[page_index].children[ordinal]);
+                        if (!control_ref) fail("OOF1122", std::string(path), "Control references inside Page", "nested Page reference",
+                            "A Page cannot directly contain another Page");
+                        append_control(*control_ref, static_cast<std::uint32_t>(page_index), ordinal);
+                    }
+                }
+            } else {
+                for (std::size_t ordinal = 0; ordinal < owner_children.size(); ++ordinal) {
+                    const auto* control_ref = std::get_if<model::ControlRef>(&owner_children[ordinal]);
+                    if (!control_ref) fail("OOF1122", std::string(path), "Control references or Page references", "unsupported child item",
+                        "Owner child sequence contains an unsupported item");
+                    append_control(*control_ref, 0, ordinal);
+                }
             }
-            if (ordinal > std::numeric_limits<std::uint32_t>::max() - 1) {
-                fail("OOF1120", "$/Form/ChildItems", "ordinal within uint32 range", std::to_string(ordinal),
-                    "Page-local ChildItems ordinal overflows");
+            std::unordered_set<std::uint64_t> immediate_ids;
+            for (const auto& child : children) immediate_ids.insert(child.control->id.value());
+            IncomingAnchorLists owner_incoming;
+            std::unordered_map<std::uint64_t, IncomingAnchorLists> child_incoming;
+            const auto* panel = std::get_if<model::ControlRef>(&owner);
+            for (const auto& child : children) {
+                for (const auto& binding : child.control->position.bindings.anchors) {
+                    const auto source_edge = source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
+                    const auto add_target = [&](const std::optional<model::ControlRef>& target, model::BindingCoordinate coordinate) {
+                        const auto target_edge = target_dependency_bucket(
+                            target_platform_edge(coordinate, "$/Position/Bindings/targetCoordinate"),
+                            "$/Position/Bindings/targetCoordinate");
+                        const bool targets_owner = panel && target && target->id() == panel->id();
+                        if ((!panel && !target) || targets_owner) {
+                            owner_incoming[target_edge].push_back({child.control->id.value(), source_edge});
+                        } else if (!target || !immediate_ids.contains(target->id().value())) {
+                            fail("OOF1123", std::string(path), "binding target in the same owner child graph",
+                                target ? std::to_string(target->id().value()) : "Form target",
+                                "Binding target is dangling or outside its immediate owner");
+                        } else {
+                            child_incoming[target->id().value()][target_edge].push_back({child.control->id.value(), source_edge});
+                        }
+                    };
+                    add_target(binding.target, binding.target_coordinate);
+                    if (binding.proportional) add_target(binding.proportional->target, binding.proportional->coordinate);
+                }
             }
-            const GeometryContext context{FormGeometryOwner{}, page_index, static_cast<std::uint32_t>(ordinal)};
-            LV record;
-            if (control->kind() == model::ControlKind::button) record = encode_button(document, *control, context);
-            else if (control->kind() == model::ControlKind::label_decoration) record = encode_label(*control, context);
-            else if (control->kind() == model::ControlKind::input_field) record = encode_input_field(document, *control, context);
-            else if (control->kind() == model::ControlKind::check_box) record = encode_check_box(document, *control, context);
-            else fail("OOF1122", "$/Form/ChildItems", "supported root leaf control", control->name,
-                "Control payload is unsupported");
-            if (!ordinal_by_control.emplace(control->id.value(), ordinal).second) {
-                fail("OOF1122", "$/Form/ChildItems", "unique root control reference", std::to_string(control->id.value()),
-                    "Control occurs more than once in root Pages");
+            for (auto& child : children) {
+                const auto found = child_incoming.find(child.control->id.value());
+                const IncomingAnchorLists empty;
+                child.record.items[3] = encode_geometry(child.control->position,
+                    GeometryContext{owner, child.page_index, static_cast<std::uint32_t>(child.ordinal)},
+                    found == child_incoming.end() ? empty : found->second);
             }
-            root_controls.push_back(RootControl{control, page_index, ordinal, std::move(record)});
-            if (control->kind() == model::ControlKind::input_field || control->kind() == model::ControlKind::check_box) {
-                ordered_control_links.push_back(form_stream::AttributeLink{
-                    static_cast<std::int64_t>(control->id.value()),
-                    model::CompositeIdValue{static_cast<std::int64_t>(control->data_path->attribute.id().value()),
-                        model::UuidValue{std::string(null_uuid)}, true}});
-            }
-            max_id = std::max(max_id, control->id.value());
+            std::sort(children.begin(), children.end(), [](const EncodedChild& left, const EncodedChild& right) {
+                return left.control->id.value() < right.control->id.value();
+            });
+            std::vector<LV> records{raw(std::to_string(children.size()))};
+            for (auto& child : children) records.push_back(std::move(child.record));
+            return EncodedOwner{std::move(pages), list(std::move(records)), std::move(owner_incoming)};
         };
-        if (explicit_pages) {
-            for (std::size_t page_index = 0; page_index < root_pages.size(); ++page_index) {
-                const auto& page = root_pages[page_index];
-                if (page_index > std::numeric_limits<std::uint32_t>::max()) {
-                    fail("OOF1120", "$/Form/ChildItems", "Page index within uint32 range", std::to_string(page_index),
-                        "Root Page index overflows");
-                }
-                for (std::size_t ordinal = 0; ordinal < page.children.size(); ++ordinal) {
-                    const auto* control_ref = std::get_if<model::ControlRef>(&page.children[ordinal]);
-                    if (control_ref == nullptr) {
-                        fail("OOF1122", "$/Page/ChildItems", "supported leaf Control references", "nested Page reference",
-                            "Nested Pages are outside the root-page codec scope");
-                    }
-                    append_control(*control_ref, static_cast<std::uint32_t>(page_index), ordinal);
-                }
-            }
-        } else {
-            for (std::size_t ordinal = 0; ordinal < document.form().children.size(); ++ordinal) {
-                const auto* control_ref = std::get_if<model::ControlRef>(&document.form().children[ordinal]);
-                if (control_ref == nullptr) {
-                    fail("OOF1122", "$/Form/ChildItems", "Control references for implicit default Page", "Page reference",
-                        "The implicit default Page cannot be mixed with explicit Page references");
-                }
-                append_control(*control_ref, 0, ordinal);
-            }
+        auto root_owner = encode_owner(document.form().children, GeometryOwner{FormGeometryOwner{}}, false, "$/Form/ChildItems");
+        auto root_pages = std::move(root_owner.pages);
+        auto child_records = std::move(root_owner.child_table);
+        auto form_incoming = std::move(root_owner.incoming);
+        if (seen_control_ids.size() != document.collections().controls.size()) {
+            fail("OOF1122", "$/Form/ChildItems", "every Control assigned to an owner child graph",
+                std::to_string(document.collections().controls.size() - seen_control_ids.size()),
+                "Document contains an unowned Control");
         }
-        for (const auto& root_control : root_controls) {
-            const auto control_id = root_control.control->id.value();
-            for (const auto& binding : root_control.control->position.bindings.anchors) {
-                const auto source_edge = source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
-                const auto append_target = [&](const std::optional<model::ControlRef>& target, model::BindingCoordinate coordinate) {
-                    const auto target_edge = target_dependency_bucket(
-                        target_platform_edge(coordinate, "$/Position/Bindings/targetCoordinate"),
-                        "$/Position/Bindings/targetCoordinate");
-                    if (!target.has_value()) {
-                        form_incoming[target_edge].push_back({control_id, source_edge});
-                        return;
-                    }
-                    const auto target_id = target->id().value();
-                    if (!ordinal_by_control.contains(target_id)) {
-                        fail("OOF1123", "$/Position/Bindings/targetId", "target control in encoded root Page graph",
-                            std::to_string(target_id), "Primary or proportional binding target is outside the encoded root control graph");
-                    }
-                    control_incoming[target_id][target_edge].push_back({control_id, source_edge});
-                };
-                append_target(binding.target, binding.target_coordinate);
-                if (binding.proportional) append_target(binding.proportional->target, binding.proportional->coordinate);
-            }
+        if (seen_page_ids.size() != document.collections().pages.size()) {
+            fail("OOF1122", "$/Form/ChildItems", "every Page assigned to an owner child graph",
+                std::to_string(document.collections().pages.size() - seen_page_ids.size()),
+                "Document contains an unowned Page");
         }
-        for (auto& item : root_controls) {
-            const auto incoming = control_incoming.find(item.control->id.value());
-            const IncomingAnchorLists empty;
-            item.record.items[3] = encode_geometry(item.control->position,
-                GeometryContext{FormGeometryOwner{}, item.page_index, static_cast<std::uint32_t>(item.ordinal)},
-                incoming == control_incoming.end() ? empty : incoming->second);
-        }
-        std::sort(root_controls.begin(), root_controls.end(), [](const RootControl& left, const RootControl& right) {
-            return left.control->id.value() < right.control->id.value();
-        });
-        std::vector<LV> child_records{raw(std::to_string(root_controls.size()))};
-        for (auto& item : root_controls) child_records.push_back(std::move(item.record));
 
         AttributesRecord attributes;
         std::uint64_t max_attribute_id = 0;
@@ -2913,16 +3028,15 @@ Result<list_stream::ListValue> encode_document(
             throw DecodeFailure(encoded_attributes_result.diagnostics().front());
         }
 
-        auto root_panel_payload = canonical_root_panel_payload(width, height, root_pages);
-        if (root_pages.size() > 1) root_panel_payload.items[1].items[9] = raw("1");
-        insert_incoming_anchor_lists(root_panel_payload.items[1], form_incoming, 2);
+        auto root_panel_payload = encode_owner_pages(root_pages, form_incoming, false, std::nullopt, width, height);
+        const auto root_control_count = child_records.items.size() - 1;
         const auto root_panel = list({
             raw(std::string(root_panel_guid)),
             std::move(root_panel_payload),
-            list(std::move(child_records)),
+            std::move(child_records),
         });
         const std::uint32_t serialization_counter = static_cast<std::uint32_t>(
-            3 + root_controls.size() * 6);
+            3 + root_control_count * 6);
         const auto form_section = list({
             raw("18"),
             list({
