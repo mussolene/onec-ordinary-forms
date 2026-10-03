@@ -712,6 +712,34 @@ model::FontValue explicit_button_font(const model::PropertySet& properties) {
     return std::get<model::FontValue>(entry->value);
 }
 
+LV encode_button_shortcut(const model::ShortcutValue& shortcut) {
+    try {
+        return list_stream::parse(value_codec::encode_shortcut(shortcut));
+    } catch (const std::exception& error) {
+        fail("OOF1122", "$/Button/Shortcut", "supported named Shortcut value", error.what(),
+            "Button Shortcut cannot be represented by the platform codec");
+    }
+}
+
+model::ShortcutValue decode_button_shortcut(const LV& value, std::string_view path) {
+    try {
+        return value_codec::decode_shortcut(list_stream::dump_compact(value));
+    } catch (const std::exception& error) {
+        fail("OOF1114", std::string(path), "supported canonical Button Shortcut record", error.what(),
+            "Button Shortcut record is malformed or unsupported");
+    }
+}
+
+model::ShortcutValue explicit_button_shortcut(const model::PropertySet& properties) {
+    const auto* entry = properties.find(model::PropertyId::from_name("Shortcut"));
+    if (entry == nullptr) return {};
+    if (!std::holds_alternative<model::ShortcutValue>(entry->value)) {
+        fail("OOF1122", "$/Button/Shortcut", "ShortcutValue", "different value type",
+            "Button Shortcut property has the wrong value type");
+    }
+    return std::get<model::ShortcutValue>(entry->value);
+}
+
 LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
     const model::ColorValue* border_color = nullptr,
     const model::ColorValue* button_text_color = nullptr,
@@ -744,7 +772,8 @@ LV canonical_button_properties(
     const model::ColorValue& border_color,
     const model::ColorValue& button_text_color,
     const model::ColorValue& button_back_color,
-    const model::FontValue& font) {
+    const model::FontValue& font,
+    const model::ShortcutValue& shortcut) {
     auto properties = list({
         canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font),
         raw("14"),
@@ -755,7 +784,7 @@ LV canonical_button_properties(
         raw(std::to_string(picture_location)),
         raw(std::to_string(picture_size)),
         parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"),
-        parse_constant("{0,0,0}"),
+        encode_button_shortcut(shortcut),
         raw(multi_line ? "1" : "0"),
         raw(std::to_string(menu_mode)),
         raw("0"),
@@ -1743,6 +1772,8 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     require_arity(properties, menu_mode == 0 ? 16 : 17, properties_path);
     const bool multi_line = bool_atom(
         properties.items[10], child_path(properties_path, 10));
+    const auto shortcut = decode_button_shortcut(
+        properties.items[9], child_path(properties_path, 9));
     const auto picture = decode_button_picture(properties.items[8], child_path(properties_path, 8));
     auto normalized_properties = properties;
     normalized_properties.items[0] = std::move(normalized_base);
@@ -1750,7 +1781,8 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     require_exact(
         normalized_properties,
         canonical_button_properties(enabled, caption, horizontal_align, vertical_align, picture_location,
-            picture_size, menu_mode, multi_line, tool_tip, border_color, button_text_color, button_back_color, font),
+            picture_size, menu_mode, multi_line, tool_tip, border_color, button_text_color,
+            button_back_color, font, shortcut),
         properties_path,
         "Button payload contains an unsupported property variation");
 
@@ -1805,6 +1837,9 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     }
     if (font != model::FontValue{}) {
         control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
+    }
+    if (shortcut != model::ShortcutValue{}) {
+        control.properties().set_explicit(model::PropertyId::from_name("Shortcut"), shortcut);
     }
     if (horizontal_align != 1) {
         static constexpr std::string_view members[] = {"Left", "Center", "Right"};
@@ -2164,7 +2199,7 @@ LV encode_button(
     }
     require_allowed_properties(control.properties(),
         {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign",
-            "PictureLocation", "PictureSize", "MenuMode", "BorderColor", "ButtonTextColor", "ButtonBackColor", "Font", "Picture"}, "$/Button");
+            "PictureLocation", "PictureSize", "MenuMode", "BorderColor", "ButtonTextColor", "ButtonBackColor", "Font", "Shortcut", "Picture"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
@@ -2232,11 +2267,12 @@ LV encode_button(
     const auto menu_mode = enum_storage_value(control.properties(), "MenuMode", "MenuMode", 0,
         {{"DontUse", 0}, {"Use", 1}, {"UseExtra", 2}});
     const bool multi_line = explicit_bool(control.properties(), "MultiLine", false);
+    const auto shortcut = explicit_button_shortcut(control.properties());
     const auto handler = button_click_handler(document, control);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
     auto button_properties = canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
         picture_location, picture_size, menu_mode, multi_line, tool_tip,
-        border_color, button_text_color, button_back_color, font);
+        border_color, button_text_color, button_back_color, font, shortcut);
     if (picture_asset != nullptr) button_properties.items[8] = encode_button_picture(*picture_asset, "$/Button/Picture");
     if (standard_picture != nullptr) button_properties.items[8] = encode_standard_button_picture(*standard_picture);
     return list({

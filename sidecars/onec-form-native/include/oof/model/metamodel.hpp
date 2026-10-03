@@ -79,6 +79,7 @@ enum class ValueCodec : std::uint8_t {
     string,
     localized_string,
     formatted_string,
+    shortcut,
     date,
     uuid,
     composite_id,
@@ -90,6 +91,11 @@ enum class ValueCodec : std::uint8_t {
     control_reference,
     attribute_reference,
     command_reference,
+};
+
+struct ShortcutKeyDescriptor {
+    std::string_view name;
+    std::uint32_t storage_code = 0;
 };
 
 enum class PersistenceClass : std::uint8_t {
@@ -126,6 +132,7 @@ enum class DefaultKind : std::uint8_t {
     enumeration,
     color,
     font,
+    shortcut,
 };
 
 struct DefaultValue {
@@ -300,5 +307,7 @@ private:
 [[nodiscard]] std::string_view storage_codec_name(StorageCodec codec) noexcept;
 [[nodiscard]] std::string_view value_kind_name(ValueKind kind) noexcept;
 [[nodiscard]] std::string_view value_codec_name(ValueCodec codec) noexcept;
+[[nodiscard]] std::span<const ShortcutKeyDescriptor> shortcut_key_descriptors() noexcept;
+[[nodiscard]] const ShortcutKeyDescriptor* find_shortcut_key(std::string_view name) noexcept;
 
 }  // namespace oof::model::metamodel

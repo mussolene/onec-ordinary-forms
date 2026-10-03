@@ -738,9 +738,12 @@ void test_button_colors_round_trip_and_validation() {
     absolute.green = 83;
     absolute.blue = 201;
     rgb.properties().set_explicit(model::PropertyId::from_name("BorderColor"), absolute);
+    rgb.properties().set_explicit(model::PropertyId::from_name("ButtonBackColor"), absolute);
     rgb.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"),
         model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
             model::QualifiedName{"StyleColors.ButtonBackColor"}});
+    const model::ShortcutValue shortcut{"Enter", false, true, false};
+    rgb.properties().set_explicit(model::PropertyId::from_name("Shortcut"), shortcut);
     model::FontValue full_font;
     full_font.kind = model::FontKind::absolute;
     full_font.face_name = "Arial";
@@ -783,8 +786,11 @@ void test_button_colors_round_trip_and_validation() {
     expect(rgb_base.items[6].items[1].atom == "0" && rgb_base.items[6].items[2].items[0].atom == "13194001",
         "Button absolute RGB must use the observed packed BGR integer");
     expect(rgb_base.items[10].items[2].items[0].atom == "-7" &&
-               rgb_base.items[9].items[2].items[0].atom == "-7",
+               rgb_base.items[9].items[1].atom == "0" &&
+               rgb_base.items[9].items[2].items[0].atom == "13194001",
         "Button style colors must use their named platform identifiers independently");
+    expect(list_stream::dump_compact(records[1].items[2].items[1].items[9]) == "{0,13,8}",
+        "Button.Shortcut must occupy info properties[9] independently of base[9] color");
     expect(list_stream::dump_compact(rgb_base.items[4]) ==
                "{8,0,63,125,0,0,0,400,1,0,1,0,0,0,0,0,\"Arial\",1,125,0}",
         "Button.Font must encode explicit false values and named height/scale data");
@@ -808,12 +814,17 @@ void test_button_colors_round_trip_and_validation() {
     expect(decoded_rgb && decoded_auto && decoded_named && decoded_copy_scale,
         "Button color and Font owners must survive decoding");
     const auto* border = decoded_rgb->properties().find(model::PropertyId::from_name("BorderColor"));
+    const auto* back_color = decoded_rgb->properties().find(model::PropertyId::from_name("ButtonBackColor"));
+    const auto* decoded_shortcut = decoded_rgb->properties().find(model::PropertyId::from_name("Shortcut"));
     const auto* text = decoded_rgb->properties().find(model::PropertyId::from_name("ButtonTextColor"));
     const auto* decoded_style = text ? std::get_if<model::QualifiedName>(
         &std::get<model::ColorValue>(text->value).style) : nullptr;
     expect(border && std::get<model::ColorValue>(border->value) == absolute && decoded_style &&
                *decoded_style == model::QualifiedName{"StyleColors.ButtonBackColor"},
         "non-default Button RGB and cross-style reference must round-trip");
+    expect(back_color && std::get<model::ColorValue>(back_color->value) == absolute &&
+               decoded_shortcut && std::get<model::ShortcutValue>(decoded_shortcut->value) == shortcut,
+        "Button.Shortcut and ButtonBackColor must decode from their distinct storage records");
     const auto* decoded_font = decoded_rgb->properties().find(model::PropertyId::from_name("Font"));
     expect(decoded_font && std::get<model::FontValue>(decoded_font->value) == full_font,
         "Button Font must preserve explicit false values and each named field");

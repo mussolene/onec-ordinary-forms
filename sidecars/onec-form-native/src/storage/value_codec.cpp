@@ -1,5 +1,8 @@
 #include "oof/storage/value_codec.hpp"
 
+#include "oof/model/metamodel.hpp"
+
+#include <algorithm>
 #include <cstdint>
 #include <cmath>
 #include <limits>
@@ -15,6 +18,8 @@ namespace {
 constexpr std::uint32_t localized_string_version = 1;
 constexpr std::uint32_t formatted_string_version = 1;
 constexpr std::uint32_t color_field_count = 3;
+constexpr std::uint32_t shortcut_version = 0;
+constexpr std::uint32_t shortcut_allowed_flags = 16U | 8U | 4U;
 constexpr std::string_view type_domain_root = "Pattern";
 constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
 
@@ -568,6 +573,50 @@ model::FontValue read_font(list_stream::ListInStream& in) {
     return value;
 }
 
+void write_shortcut(list_stream::ListOutStream& out, const model::ShortcutValue& value) {
+    const auto* key = model::metamodel::find_shortcut_key(value.key);
+    if (key == nullptr) {
+        throw std::runtime_error("Shortcut contains an unsupported named key " + value.key);
+    }
+    const std::uint32_t flags = (value.alt ? 16U : 0U) |
+                                (value.ctrl ? 8U : 0U) |
+                                (value.shift ? 4U : 0U);
+    out.begin_list();
+    out.write_uint32(shortcut_version);
+    out.write_uint32(key->storage_code);
+    out.write_uint32(flags);
+    out.end_list();
+}
+
+model::ShortcutValue read_shortcut(list_stream::ListInStream& in) {
+    in.begin_list();
+    const auto version = in.read_uint32();
+    if (version != shortcut_version) {
+        throw std::runtime_error("Shortcut version marker is unsupported");
+    }
+    const auto key_code = in.read_uint32();
+    const auto flags = in.read_uint32();
+    if (in.has_next()) {
+        throw std::runtime_error("Shortcut record has trailing fields");
+    }
+    in.end_list();
+    if ((flags & ~shortcut_allowed_flags) != 0) {
+        throw std::runtime_error("Shortcut record contains unknown modifier flags");
+    }
+    const auto keys = model::metamodel::shortcut_key_descriptors();
+    const auto key = std::ranges::find(keys, key_code, &model::metamodel::ShortcutKeyDescriptor::storage_code);
+    if (key == keys.end()) {
+        throw std::runtime_error("Shortcut record contains an unsupported key code " +
+                                 std::to_string(key_code));
+    }
+    return model::ShortcutValue{
+        std::string(key->name),
+        (flags & 16U) != 0,
+        (flags & 8U) != 0,
+        (flags & 4U) != 0,
+    };
+}
+
 std::string encode_localized_string(const model::LocalizedStringValue& value) {
     return encode_value(value, write_localized_string);
 }
@@ -629,6 +678,19 @@ std::string encode_font(const model::FontValue& value) {
 model::FontValue decode_font(std::string_view text) {
     list_stream::ListInStream in(text);
     return read_font(in);
+}
+
+std::string encode_shortcut(const model::ShortcutValue& value) {
+    return encode_value(value, write_shortcut);
+}
+
+model::ShortcutValue decode_shortcut(std::string_view text) {
+    list_stream::ListInStream in(text);
+    const auto value = read_shortcut(in);
+    if (in.has_next()) {
+        throw std::runtime_error("Shortcut stream contains trailing values");
+    }
+    return value;
 }
 
 }  // namespace oof::storage::value_codec

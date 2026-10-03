@@ -143,7 +143,7 @@
               <Property name="PictureLocation" apiName="PictureLocation" russianName="ПоложениеКартинки" russianType="ПоложениеКартинкиКнопки" valueCodec="enumeration"/>
               <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="РазмерКартинки" valueCodec="enumeration"/>
               <Property name="MenuMode" apiName="MenuMode" russianName="РежимМеню" russianType="ИспользованиеРежимаМеню" valueCodec="enumeration"/>
-              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="unclassified"/>
+              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="ButtonTextColor" apiName="ButtonTextColor" russianName="ЦветТекстаКнопки" russianType="Цвет" valueCodec="color"/>
               <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
@@ -166,7 +166,7 @@
               <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
               <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
               <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
-              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="unclassified"/>
+              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
               <Property name="NonselectedPictureText" apiName="NonselectedPictureText" russianName="ТекстНевыбраннойКартинки" russianType="Строка" valueCodec="string"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
@@ -294,7 +294,7 @@
               <Property name="ListChoiceMode" apiName="ListChoiceMode" russianName="РежимВыбораИзСписка" russianType="Булево" valueCodec="boolean"/>
               <Property name="IncompleteChoiceMode" apiName="IncompleteChoiceMode" russianName="РежимВыбораНезаполненного" russianType="РежимВыбораНезаполненного" valueCodec="enumeration"/>
               <Property name="PasswordMode" apiName="PasswordMode" russianName="РежимПароля" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="unclassified"/>
+              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
               <Property name="ChoiceList" apiName="ChoiceList" russianName="СписокВыбора" russianType="СписокЗначений" valueCodec="unclassified"/>
               <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
               <Property name="Format" apiName="Format" russianName="Формат" russianType="Строка" valueCodec="string"/>
@@ -717,7 +717,7 @@
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
               <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="РазмерКартинки" valueCodec="enumeration"/>
               <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
-              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="unclassified"/>
+              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
               <Property name="Format" apiName="Format" russianName="Формат" russianType="Строка" valueCodec="string"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>

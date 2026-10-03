@@ -860,6 +860,51 @@ model::FontValue parse_font(xmlNodePtr node) {
     return value;
 }
 
+model::ShortcutValue parse_shortcut(xmlNodePtr node) {
+    static constexpr std::string_view allowed_attributes[] = {"Alt", "Ctrl", "Shift"};
+    for (xmlAttrPtr attribute = node->properties; attribute != nullptr; attribute = attribute->next) {
+        const std::string_view name(reinterpret_cast<const char*>(attribute->name));
+        if (std::ranges::find(allowed_attributes, name) == std::end(allowed_attributes)) {
+            fail("OOF2003", node, {}, std::string(name), "named Shortcut attribute", "unsupported",
+                "Shortcut contains an unsupported attribute");
+        }
+    }
+
+    model::ShortcutValue value;
+    value.alt = parse_boolean(required_attribute(node, "Alt"), node, "Alt");
+    value.ctrl = parse_boolean(required_attribute(node, "Ctrl"), node, "Ctrl");
+    value.shift = parse_boolean(required_attribute(node, "Shift"), node, "Shift");
+
+    xmlNodePtr key_node = nullptr;
+    for (xmlNodePtr child = node->children; child != nullptr; child = child->next) {
+        if (child->type == XML_ELEMENT_NODE) {
+            if (node_name(child) != "Key" || key_node != nullptr) {
+                fail("OOF2003", child, {}, "Key", "one named Key child", node_name(child),
+                    "Shortcut must contain exactly one Key child");
+            }
+            key_node = child;
+        } else if ((child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) &&
+                   !trim_ascii(reinterpret_cast<const char*>(child->content)).empty()) {
+            fail("OOF2003", node, {}, "Shortcut", "Key child only", "text content",
+                "Shortcut cannot contain text outside Key");
+        }
+    }
+    if (key_node == nullptr) {
+        fail("OOF2003", node, {}, "Key", "required Key child", "missing",
+            "Shortcut must contain one Key child");
+    }
+    if (key_node->properties != nullptr || !element_children(key_node).empty()) {
+        fail("OOF2003", key_node, {}, "Key", "text key name only", "attributes or nested elements",
+            "Shortcut Key must contain only a key name");
+    }
+    value.key = node_text(key_node);
+    if (trim_ascii(value.key) != value.key || mm::find_shortcut_key(value.key) == nullptr) {
+        fail("OOF2003", key_node, {}, "Key", "platform named key", value.key,
+            "Shortcut Key is not a supported platform key name");
+    }
+    return value;
+}
+
 model::PictureRef parse_picture_reference(
     xmlNodePtr node,
     std::string_view property,
@@ -924,6 +969,8 @@ model::PropertyValue parse_property_value(
             return parse_color(node);
         case mm::ValueCodec::font:
             return parse_font(node);
+        case mm::ValueCodec::shortcut:
+            return parse_shortcut(node);
         case mm::ValueCodec::picture:
             return parse_picture_reference(node, property, object_id);
         case mm::ValueCodec::control_reference:
@@ -983,6 +1030,9 @@ bool equals_descriptor_default(
         case mm::DefaultKind::font:
             return canonical == "automatic" && std::holds_alternative<model::FontValue>(value) &&
                 std::get<model::FontValue>(value) == model::FontValue{};
+        case mm::DefaultKind::shortcut:
+            return canonical == "None" && std::holds_alternative<model::ShortcutValue>(value) &&
+                std::get<model::ShortcutValue>(value) == model::ShortcutValue{};
     }
     return false;
 }
@@ -1998,6 +2048,22 @@ private:
             case mm::ValueCodec::font:
                 write_font(name, require_value<model::FontValue>(value, object_id, name, "font"), object_id);
                 return;
+            case mm::ValueCodec::shortcut: {
+                const auto& shortcut = require_value<model::ShortcutValue>(
+                    value, object_id, name, "Shortcut");
+                if (mm::find_shortcut_key(shortcut.key) == nullptr) {
+                    serialization_fail(std::string(object_id), std::string(name),
+                        "platform named key", shortcut.key, "Shortcut Key is not supported");
+                }
+                writer_.open(name, {
+                    {"Alt", shortcut.alt ? "true" : "false"},
+                    {"Ctrl", shortcut.ctrl ? "true" : "false"},
+                    {"Shift", shortcut.shift ? "true" : "false"},
+                });
+                writer_.text("Key", shortcut.key);
+                writer_.close(name);
+                return;
+            }
             case mm::ValueCodec::picture:
             {
                 const auto& reference = require_value<model::PictureRef>(value, object_id, name, "picture reference");

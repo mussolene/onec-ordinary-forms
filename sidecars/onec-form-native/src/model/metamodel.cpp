@@ -30,6 +30,24 @@ struct HelpControlName {
 
 constexpr auto all_versions = VersionMask::all_supported;
 
+constexpr std::array<ShortcutKeyDescriptor, 80> shortcut_keys{{
+    {"None", 0}, {"BackSpace", 8}, {"Space", 32}, {"PageUp", 33}, {"PageDown", 34},
+    {"Home", 36}, {"End", 35}, {"Left", 37}, {"Up", 38}, {"Right", 39}, {"Down", 40},
+    {"Ins", 45}, {"Del", 46}, {"Tab", 9}, {"Enter", 13}, {"Esc", 27},
+    {"_0", 48}, {"_1", 49}, {"_2", 50}, {"_3", 51}, {"_4", 52}, {"_5", 53},
+    {"_6", 54}, {"_7", 55}, {"_8", 56}, {"_9", 57},
+    {"A", 65}, {"B", 66}, {"C", 67}, {"D", 68}, {"E", 69}, {"F", 70}, {"G", 71},
+    {"H", 72}, {"I", 73}, {"J", 74}, {"K", 75}, {"L", 76}, {"M", 77}, {"N", 78},
+    {"O", 79}, {"P", 80}, {"Q", 81}, {"R", 82}, {"S", 83}, {"T", 84}, {"U", 85},
+    {"V", 86}, {"W", 87}, {"X", 88}, {"Y", 89}, {"Z", 90},
+    {"Num0", 96}, {"Num1", 97}, {"Num2", 98}, {"Num3", 99}, {"Num4", 100},
+    {"Num5", 101}, {"Num6", 102}, {"Num7", 103}, {"Num8", 104}, {"Num9", 105},
+    {"NumMultiply", 106}, {"NumAdd", 107}, {"NumSubtract", 109}, {"NumDecimal", 110},
+    {"NumDivide", 111}, {"F1", 112}, {"F2", 113}, {"F3", 114}, {"F4", 115},
+    {"F5", 116}, {"F6", 117}, {"F7", 118}, {"F8", 119}, {"F9", 120}, {"F10", 121},
+    {"F11", 122}, {"F12", 123}, {"Break", 3},
+}};
+
 ValueCodec initial_value_codec(ValueKind kind, std::u8string_view platform_type) noexcept {
     switch (kind) {
         case ValueKind::boolean:
@@ -46,6 +64,8 @@ ValueCodec initial_value_codec(ValueKind kind, std::u8string_view platform_type)
             return ValueCodec::color;
         case ValueKind::font:
             return ValueCodec::font;
+        case ValueKind::shortcut:
+            return ValueCodec::shortcut;
         case ValueKind::identifier:
             return ValueCodec::uuid;
         case ValueKind::enumeration:
@@ -55,7 +75,6 @@ ValueCodec initial_value_codec(ValueKind kind, std::u8string_view platform_type)
                                                        : ValueCodec::unclassified;
         case ValueKind::unknown:
         case ValueKind::border:
-        case ValueKind::shortcut:
         case ValueKind::binary:
         case ValueKind::collection:
         case ValueKind::variant:
@@ -678,6 +697,12 @@ void apply_proven_storage_overrides(
         StorageCodec::control_base,
         DefaultKind::font,
         "automatic");
+    classify_property(
+        button,
+        "Shortcut",
+        StorageCodec::control_info,
+        DefaultKind::shortcut,
+        "None");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(
@@ -1347,6 +1372,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "localized-string";
         case ValueCodec::formatted_string:
             return "formatted-string";
+        case ValueCodec::shortcut:
+            return "shortcut";
         case ValueCodec::date:
             return "date";
         case ValueCodec::uuid:
@@ -1371,6 +1398,15 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "command-reference";
     }
     return "unclassified";
+}
+
+std::span<const ShortcutKeyDescriptor> shortcut_key_descriptors() noexcept {
+    return shortcut_keys;
+}
+
+const ShortcutKeyDescriptor* find_shortcut_key(std::string_view name) noexcept {
+    const auto found = std::ranges::find(shortcut_keys, name, &ShortcutKeyDescriptor::name);
+    return found == shortcut_keys.end() ? nullptr : &*found;
 }
 
 }  // namespace oof::model::metamodel

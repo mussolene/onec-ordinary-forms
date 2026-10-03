@@ -353,6 +353,15 @@ struct PictureRef {
     friend bool operator==(const PictureRef&, const PictureRef&) = default;
 };
 
+struct ShortcutValue {
+    std::string key = "None";
+    bool alt = false;
+    bool ctrl = false;
+    bool shift = false;
+
+    friend bool operator==(const ShortcutValue&, const ShortcutValue&) = default;
+};
+
 using PropertyValue = std::variant<
     UndefinedValue,
     bool,
@@ -369,6 +378,7 @@ using PropertyValue = std::variant<
     ColorValue,
     FontValue,
     PictureRef,
+    ShortcutValue,
     ControlRef,
     AttributeRef,
     CommandRef>;

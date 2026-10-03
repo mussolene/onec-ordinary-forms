@@ -461,6 +461,57 @@ void test_typed_values_and_canonicalization() {
     expect(source::parse_form_xml(serialized.value()).ok(), "canonical typed values must validate and reparse");
 }
 
+void test_button_shortcut_xml() {
+    constexpr std::string_view xml =
+        "<Form id=\"1\" name=\"Shortcuts\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Button id=\"2\" name=\"Run\"><Position/><Shortcut Alt=\"true\" Ctrl=\"false\" Shift=\"true\">"
+        "<Key>PageDown</Key></Shortcut></Button></ChildItems></Form>";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "named Button Shortcut must parse");
+    const auto* button = parsed.value().find_control(model::ObjectId{2});
+    expect(button != nullptr, "Shortcut Button must resolve");
+    const auto* entry = button->properties().find(model::PropertyId::from_name("Shortcut"));
+    expect(entry != nullptr && std::get<model::ShortcutValue>(entry->value) ==
+               model::ShortcutValue{"PageDown", true, false, true},
+        "named key and modifiers must enter the object model without platform codes");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("Alt=\"true\"") != std::string::npos &&
+               serialized.value().find("Ctrl=\"false\"") != std::string::npos &&
+               serialized.value().find("Shift=\"true\"") != std::string::npos &&
+               serialized.value().find("<Key>PageDown</Key>") != std::string::npos,
+        "Shortcut serialization must retain named key and flags");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    const auto* reparsed_button = reparsed.ok()
+        ? reparsed.value().find_control(model::ObjectId{2})
+        : nullptr;
+    const auto* reparsed_shortcut = reparsed_button
+        ? reparsed_button->properties().find(model::PropertyId::from_name("Shortcut"))
+        : nullptr;
+    expect(reparsed_shortcut && std::get<model::ShortcutValue>(reparsed_shortcut->value) ==
+               model::ShortcutValue{"PageDown", true, false, true},
+        "serialized Shortcut must parse back to the same named model value");
+
+    auto default_shortcut = source::parse_form_xml(
+        "<Form id=\"1\" name=\"Default\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Button id=\"2\" name=\"Run\"><Position/><Shortcut Alt=\"false\" Ctrl=\"false\" Shift=\"false\">"
+        "<Key>None</Key></Shortcut></Button></ChildItems></Form>");
+    expect(default_shortcut.ok(), "explicit empty Shortcut must parse");
+    auto default_xml = source::serialize_form_xml(default_shortcut.value());
+    expect(default_xml.ok() && default_xml.value().find("<Shortcut") == std::string::npos,
+        "None without modifiers must serialize as the default absence");
+
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"Bad\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Button id=\"2\" name=\"Run\"><Position/><Shortcut Alt=\"false\" Ctrl=\"false\" Shift=\"false\" keycode=\"65\">"
+        "<Key>A</Key></Shortcut></Button></ChildItems></Form>"), "OOF2002",
+        "Shortcut must reject raw numeric key attributes");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"Bad\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Button id=\"2\" name=\"Run\"><Position/><Shortcut Alt=\"false\" Ctrl=\"false\" Shift=\"false\">"
+        "<Key>Unknown</Key></Shortcut></Button></ChildItems></Form>"), "OOF2002",
+        "Shortcut must reject unknown named keys");
+}
+
 void test_boolean_type_domain_xml_roundtrip() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Boolean" ordinaryFormVersion="2.1">
@@ -729,6 +780,7 @@ int main() {
         test_all_control_variants();
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
+        test_button_shortcut_xml();
         test_boolean_type_domain_xml_roundtrip();
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();

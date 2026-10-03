@@ -166,6 +166,97 @@
     </xs:simpleContent>
   </xs:complexType>
 
+  <xs:simpleType name="ShortcutKeyType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="None"/>
+      <xs:enumeration value="BackSpace"/>
+      <xs:enumeration value="Space"/>
+      <xs:enumeration value="PageUp"/>
+      <xs:enumeration value="PageDown"/>
+      <xs:enumeration value="Home"/>
+      <xs:enumeration value="End"/>
+      <xs:enumeration value="Left"/>
+      <xs:enumeration value="Up"/>
+      <xs:enumeration value="Right"/>
+      <xs:enumeration value="Down"/>
+      <xs:enumeration value="Ins"/>
+      <xs:enumeration value="Del"/>
+      <xs:enumeration value="Tab"/>
+      <xs:enumeration value="Enter"/>
+      <xs:enumeration value="Esc"/>
+      <xs:enumeration value="_0"/>
+      <xs:enumeration value="_1"/>
+      <xs:enumeration value="_2"/>
+      <xs:enumeration value="_3"/>
+      <xs:enumeration value="_4"/>
+      <xs:enumeration value="_5"/>
+      <xs:enumeration value="_6"/>
+      <xs:enumeration value="_7"/>
+      <xs:enumeration value="_8"/>
+      <xs:enumeration value="_9"/>
+      <xs:enumeration value="A"/>
+      <xs:enumeration value="B"/>
+      <xs:enumeration value="C"/>
+      <xs:enumeration value="D"/>
+      <xs:enumeration value="E"/>
+      <xs:enumeration value="F"/>
+      <xs:enumeration value="G"/>
+      <xs:enumeration value="H"/>
+      <xs:enumeration value="I"/>
+      <xs:enumeration value="J"/>
+      <xs:enumeration value="K"/>
+      <xs:enumeration value="L"/>
+      <xs:enumeration value="M"/>
+      <xs:enumeration value="N"/>
+      <xs:enumeration value="O"/>
+      <xs:enumeration value="P"/>
+      <xs:enumeration value="Q"/>
+      <xs:enumeration value="R"/>
+      <xs:enumeration value="S"/>
+      <xs:enumeration value="T"/>
+      <xs:enumeration value="U"/>
+      <xs:enumeration value="V"/>
+      <xs:enumeration value="W"/>
+      <xs:enumeration value="X"/>
+      <xs:enumeration value="Y"/>
+      <xs:enumeration value="Z"/>
+      <xs:enumeration value="Num0"/>
+      <xs:enumeration value="Num1"/>
+      <xs:enumeration value="Num2"/>
+      <xs:enumeration value="Num3"/>
+      <xs:enumeration value="Num4"/>
+      <xs:enumeration value="Num5"/>
+      <xs:enumeration value="Num6"/>
+      <xs:enumeration value="Num7"/>
+      <xs:enumeration value="Num8"/>
+      <xs:enumeration value="Num9"/>
+      <xs:enumeration value="NumMultiply"/>
+      <xs:enumeration value="NumAdd"/>
+      <xs:enumeration value="NumSubtract"/>
+      <xs:enumeration value="NumDecimal"/>
+      <xs:enumeration value="NumDivide"/>
+      <xs:enumeration value="F1"/>
+      <xs:enumeration value="F2"/>
+      <xs:enumeration value="F3"/>
+      <xs:enumeration value="F4"/>
+      <xs:enumeration value="F5"/>
+      <xs:enumeration value="F6"/>
+      <xs:enumeration value="F7"/>
+      <xs:enumeration value="F8"/>
+      <xs:enumeration value="F9"/>
+      <xs:enumeration value="F10"/>
+      <xs:enumeration value="F11"/>
+      <xs:enumeration value="F12"/>
+      <xs:enumeration value="Break"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="ShortcutValueType">
+    <xs:sequence><xs:element name="Key" type="ShortcutKeyType" minOccurs="1" maxOccurs="1"/></xs:sequence>
+    <xs:attribute name="Alt" type="xs:boolean" use="required"/>
+    <xs:attribute name="Ctrl" type="xs:boolean" use="required"/>
+    <xs:attribute name="Shift" type="xs:boolean" use="required"/>
+  </xs:complexType>
+
   <xs:simpleType name="StandardPictureNameType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="PictureLib.AccountingRegister">
@@ -1632,7 +1723,7 @@
       <xs:element name="PictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MenuMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Shortcut" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -1668,7 +1759,7 @@
       <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Shortcut" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="NonselectedPictureText" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -1838,7 +1929,7 @@
       <xs:element name="ListChoiceMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="IncompleteChoiceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PasswordMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Shortcut" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChoiceList" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Format" type="xs:string" minOccurs="0" maxOccurs="1"/>
@@ -2438,7 +2529,7 @@
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Shortcut" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Format" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>

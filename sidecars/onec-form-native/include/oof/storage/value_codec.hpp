@@ -44,6 +44,9 @@ void write_color(list_stream::ListOutStream& out, const model::ColorValue& value
 void write_font(list_stream::ListOutStream& out, const model::FontValue& value);
 [[nodiscard]] model::FontValue read_font(list_stream::ListInStream& in);
 
+void write_shortcut(list_stream::ListOutStream& out, const model::ShortcutValue& value);
+[[nodiscard]] model::ShortcutValue read_shortcut(list_stream::ListInStream& in);
+
 [[nodiscard]] std::string encode_localized_string(
     const model::LocalizedStringValue& value);
 [[nodiscard]] model::LocalizedStringValue decode_localized_string(std::string_view text);
@@ -60,5 +63,7 @@ void write_font(list_stream::ListOutStream& out, const model::FontValue& value);
 [[nodiscard]] model::ColorValue decode_color(std::string_view text);
 [[nodiscard]] std::string encode_font(const model::FontValue& value);
 [[nodiscard]] model::FontValue decode_font(std::string_view text);
+[[nodiscard]] std::string encode_shortcut(const model::ShortcutValue& value);
+[[nodiscard]] model::ShortcutValue decode_shortcut(std::string_view text);
 
 }  // namespace oof::storage::value_codec

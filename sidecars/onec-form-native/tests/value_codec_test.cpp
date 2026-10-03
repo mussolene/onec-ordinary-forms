@@ -1,10 +1,12 @@
 #include <exception>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
 #include "oof/storage/value_codec.hpp"
+#include "oof/model/metamodel.hpp"
 
 namespace {
 
@@ -325,6 +327,35 @@ void test_font() {
         "unobserved style font overrides must be rejected");
 }
 
+void test_shortcut() {
+    const auto keys = model::metamodel::shortcut_key_descriptors();
+    expect(keys.size() == 80, "Shortcut must expose all platform key names");
+    for (const auto& key : keys) {
+        for (std::uint32_t flags = 0; flags < 8; ++flags) {
+            const model::ShortcutValue value{
+                std::string(key.name),
+                (flags & 1U) != 0,
+                (flags & 2U) != 0,
+                (flags & 4U) != 0,
+            };
+            expect(codec::decode_shortcut(codec::encode_shortcut(value)) == value,
+                "every named Shortcut key and modifier combination must round-trip");
+        }
+    }
+    expect(codec::encode_shortcut(model::ShortcutValue{"A", true, true, false}) == "{0,65,24}",
+        "Shortcut must map named modifiers to the platform flags");
+    expect(codec::decode_shortcut("{0,13,28}") == model::ShortcutValue{"Enter", true, true, true},
+        "navigation Shortcut key must decode by its named Win32 key value");
+    expect_rejected([] { static_cast<void>(codec::decode_shortcut("{1,65,0}")); },
+        "unknown Shortcut version must be rejected");
+    expect_rejected([] { static_cast<void>(codec::decode_shortcut("{0,65,32}")); },
+        "unknown Shortcut modifier flags must be rejected");
+    expect_rejected([] { static_cast<void>(codec::decode_shortcut("{0,999,0}")); },
+        "unknown Shortcut key code must be rejected");
+    expect_rejected([] { static_cast<void>(codec::encode_shortcut(model::ShortcutValue{"NotAKey"})); },
+        "unknown named Shortcut key must be rejected");
+}
+
 }  // namespace
 
 int main() {
@@ -336,6 +367,7 @@ int main() {
         test_style_reference();
         test_color();
         test_font();
+        test_shortcut();
     } catch (const std::exception& error) {
         std::cerr << "value codec tests: FAIL: " << error.what() << '\n';
         return 1;

@@ -1,6 +1,7 @@
 #include "oof/model/ordinary_form.hpp"
 
 #include <array>
+#include <algorithm>
 #include <functional>
 #include <limits>
 #include <set>
@@ -62,6 +63,9 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::color;
             } else if constexpr (std::is_same_v<Value, FontValue>) {
                 return expected == metamodel::ValueCodec::font;
+            } else if constexpr (std::is_same_v<Value, ShortcutValue>) {
+                return expected == metamodel::ValueCodec::shortcut &&
+                       metamodel::find_shortcut_key(typed_value.key) != nullptr;
             } else if constexpr (std::is_same_v<Value, PictureRef>) {
                 return expected == metamodel::ValueCodec::picture;
             } else if constexpr (std::is_same_v<Value, ControlRef>) {

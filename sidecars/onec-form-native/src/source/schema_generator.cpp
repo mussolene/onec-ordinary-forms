@@ -85,6 +85,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "LocalizedStringValueType";
         case ValueCodec::formatted_string:
             return "FormattedStringValueType";
+        case ValueCodec::shortcut:
+            return "ShortcutValueType";
         case ValueCodec::date:
             return "DateValueType";
         case ValueCodec::uuid:
@@ -414,6 +416,21 @@ void append_value_types(std::string& output) {
     </xs:simpleContent>
   </xs:complexType>
 )XSD";
+
+    output += "\n  <xs:simpleType name=\"ShortcutKeyType\">\n    <xs:restriction base=\"xs:string\">\n";
+    for (const auto& key : model::metamodel::shortcut_key_descriptors()) {
+        output += "      <xs:enumeration value=\"";
+        append_xml_escaped(output, key.name);
+        output += "\"/>\n";
+    }
+    output +=
+        "    </xs:restriction>\n  </xs:simpleType>\n"
+        "  <xs:complexType name=\"ShortcutValueType\">\n"
+        "    <xs:sequence><xs:element name=\"Key\" type=\"ShortcutKeyType\" minOccurs=\"1\" maxOccurs=\"1\"/></xs:sequence>\n"
+        "    <xs:attribute name=\"Alt\" type=\"xs:boolean\" use=\"required\"/>\n"
+        "    <xs:attribute name=\"Ctrl\" type=\"xs:boolean\" use=\"required\"/>\n"
+        "    <xs:attribute name=\"Shift\" type=\"xs:boolean\" use=\"required\"/>\n"
+        "  </xs:complexType>\n";
 
     const auto pictures = model::metamodel::standard_picture_descriptors();
     output += "\n  <xs:simpleType name=\"StandardPictureNameType\">\n    <xs:restriction base=\"xs:string\">\n";
