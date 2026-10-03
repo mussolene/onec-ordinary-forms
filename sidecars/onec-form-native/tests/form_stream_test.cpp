@@ -56,6 +56,16 @@ list_stream::ListValue versioned_record(std::uint32_t version, std::size_t arity
     return list_stream::ListValue::list(std::move(items));
 }
 
+std::size_t geometry_tail_start(const list_stream::ListValue& geometry) {
+    std::size_t cursor = 12;
+    for (std::size_t edge = 0; edge < 6; ++edge) {
+        const auto count = static_cast<std::size_t>(std::stoul(geometry.items.at(cursor).atom));
+        cursor += 1 + count;
+    }
+    expect(geometry.items.size() == cursor + 5, "geometry tail must follow the variable anchor records");
+    return cursor;
+}
+
 list_stream::ListValue layout_fixture(form_stream::LayoutKind kind) {
     std::vector<list_stream::ListValue> root(
         20,
@@ -317,7 +327,9 @@ void test_empty_attributes_allocator_header() {
     });
 
     auto encoded = form_stream::encode_document(document);
-    expect(encoded.ok(), "high-ID Button must encode using the current writer allocation count");
+    expect(encoded.ok(), encoded ? "high-ID Button must encode using the current writer allocation count" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message + " expected=" +
+        encoded.diagnostics().front().expected + " actual=" + encoded.diagnostics().front().actual);
     expect(
         encoded.value().items[2].items[1].atom == "11",
         "current writer allocation count must be derived from the high object ID");
@@ -457,12 +469,12 @@ void test_multiple_top_level_buttons_round_trip() {
         "three-Button storage must round-trip in order without drift");
 
     auto wrong_sibling_index = encoded.value();
-    wrong_sibling_index.items[1].items[2].items[2].items[2].items[3].items[21] =
+    wrong_sibling_index.items[1].items[2].items[2].items[2].items[3].items[geometry_tail_start(wrong_sibling_index.items[1].items[2].items[2].items[2].items[3]) + 1] =
         list_stream::ListValue::raw_atom("0");
     expect_failure(
         form_stream::decode_document(wrong_sibling_index, "Main"),
         "OOF1114",
-        "$/1/2/2/2/3/21",
+        "$/1/2/2/2/3/20",
         "Button geometry with an incorrect sibling index must be rejected");
 }
 
@@ -671,11 +683,11 @@ void test_button_then_label_decoration_round_trip() {
 
     auto unsupported_leaf = encoded.value();
     auto& label_record = unsupported_leaf.items[1].items[2].items[2].items[2];
-    label_record.items[3].items[24] = list_stream::ListValue::raw_atom("7");
+    label_record.items[3].items[6].items[2] = list_stream::parse("{2,-1,6,7}");
     expect_failure(
         form_stream::decode_document(unsupported_leaf, "Main"),
         "OOF1114",
-        "$/1/2/2/2/3",
+        "$/1/2/2/2/3/6/2",
         "unsupported LabelDecoration storage leaves must fail closed");
 }
 
@@ -694,7 +706,7 @@ void test_fresh_checkbox_stream_decode() {
 )OOF");
     stream.value().items[2] = list_stream::parse(R"OOF({{-1},4,{1,{{3},1,0,1,"Флажок1",{"Pattern",{"B"}}}},{1,{3,{1,{3}}}}})OOF");
     const auto decoded = form_stream::decode_document(stream.value(), "Fresh");
-    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
     const auto* check_box = decoded.value().find_control(model::ObjectId{3});
     expect(check_box != nullptr && check_box->kind() == model::ControlKind::check_box &&
                check_box->name == "Флажок1" && check_box->data_path &&
@@ -856,15 +868,6 @@ void test_button_label_input_field_round_trip() {
         "$/1/2/2/3/2/1",
         "InputField type must match its linked Attribute");
 
-    auto wrong_self_reference = encoded.value();
-    auto& input_geometry = wrong_self_reference.items[1].items[2].items[2].items[3].items[3];
-    input_geometry.items[13].items[1] = list_stream::ListValue::raw_atom("10");
-    expect_failure(
-        form_stream::decode_document(wrong_self_reference, "Main"),
-        "OOF1114",
-        "$/1/2/2/3/3",
-        "InputField geometry self references must match the named control ID");
-
     expect_failure(
         form_stream::encode_document(make_input_document(10, true, true)),
         "OOF1122",
@@ -914,7 +917,7 @@ void test_single_input_field_round_trip() {
     expect(encoded.ok(), encoded ? "single InputField profile must encode" : encoded.diagnostics().front().message);
     auto encoded_input = encoded.value();
     auto& input_record = encoded_input.items[1].items[2].items[2].items[1];
-    expect(input_record.items[3].items[21].atom == "0" && input_record.items[3].items[22].atom == "1",
+    expect(input_record.items[3].items[geometry_tail_start(input_record.items[3]) + 1].atom == "0" && input_record.items[3].items[geometry_tail_start(input_record.items[3]) + 2].atom == "1",
         "single InputField geometry must use sibling references 0 and 1");
 
     const auto decoded = form_stream::decode_document(encoded.value(), "Main");
@@ -938,12 +941,12 @@ void test_single_input_field_round_trip() {
         "single InputField DataPath must survive two round-trips");
 
     auto wrong_sibling_reference = encoded.value();
-    wrong_sibling_reference.items[1].items[2].items[2].items[1].items[3].items[21] =
+    wrong_sibling_reference.items[1].items[2].items[2].items[1].items[3].items[geometry_tail_start(wrong_sibling_reference.items[1].items[2].items[2].items[1].items[3]) + 1] =
         list_stream::ListValue::raw_atom("2");
     expect_failure(
         form_stream::decode_document(wrong_sibling_reference, "Main"),
         "OOF1114",
-        "$/1/2/2/1/3/21",
+        "$/1/2/2/1/3/20",
         "single InputField must reject triple-profile geometry references");
 }
 
@@ -992,8 +995,8 @@ void test_two_input_fields_round_trip() {
     const auto& children = encoded.value().items[1].items[2].items[2];
     expect(children.items[1].items[1].atom == "9" && children.items[2].items[1].atom == "12",
         "two InputFields must preserve Form.children order");
-    expect(children.items[1].items[3].items[21].atom == "0" && children.items[1].items[3].items[22].atom == "1" &&
-               children.items[2].items[3].items[21].atom == "1" && children.items[2].items[3].items[22].atom == "2",
+    expect(children.items[1].items[3].items[geometry_tail_start(children.items[1].items[3]) + 1].atom == "0" && children.items[1].items[3].items[geometry_tail_start(children.items[1].items[3]) + 2].atom == "1" &&
+               children.items[2].items[3].items[geometry_tail_start(children.items[2].items[3]) + 1].atom == "1" && children.items[2].items[3].items[geometry_tail_start(children.items[2].items[3]) + 2].atom == "2",
         "two InputFields must use sequential sibling geometry references");
     const auto& links = encoded.value().items[2].items[3];
     expect(links.items[1].items[0].atom == "9" && links.items[2].items[0].atom == "12",
@@ -1071,9 +1074,9 @@ void test_two_input_fields_round_trip() {
         "InputField links must resolve by control ID regardless of table order");
 
     auto wrong_geometry = encoded.value();
-    wrong_geometry.items[1].items[2].items[2].items[2].items[3].items[22] =
+    wrong_geometry.items[1].items[2].items[2].items[2].items[3].items[geometry_tail_start(wrong_geometry.items[1].items[2].items[2].items[2].items[3]) + 2] =
         list_stream::ListValue::raw_atom("4");
-    expect_failure(form_stream::decode_document(wrong_geometry, "Main"), "OOF1114", "$/1/2/2/2/3",
+    expect_failure(form_stream::decode_document(wrong_geometry, "Main"), "OOF1114", "$/1/2/2/2/3/20",
         "unknown two-InputField sibling geometry must fail closed");
 
     auto truncated_input = encoded.value();
@@ -1142,13 +1145,11 @@ void test_two_input_fields_round_trip() {
         const auto& record = mixed_child_records.items[index + 1];
         const auto& geometry = record.items[3];
         const auto control_id = record.items[1].atom;
-        for (const std::size_t slot : {7U, 9U}) {
-            expect(geometry.items[slot].items[1].items[1].atom == control_id,
-                "mixed control geometry references must derive from the control ID");
-        }
-        for (const std::size_t slot : {13U, 16U}) {
-            expect(geometry.items[slot].items[1].atom == control_id,
-                "mixed control secondary geometry references must derive from the control ID");
+        expect(geometry.items.size() == 23,
+            "unbound controls must use the 23-field geometry form without implicit self-links");
+        for (std::size_t slot = 6; slot < 12; ++slot) {
+            expect(list_stream::dump_compact(geometry.items[slot]) == "{0,{2,-1,6,0},{2,-1,6,0}}",
+                "unbound geometry slots must use the explicit empty-binding sentinel");
         }
         const auto logical_position = std::ranges::find(
             expected_order, model::ObjectId{std::stoull(control_id)});
@@ -1156,8 +1157,8 @@ void test_two_input_fields_round_trip() {
             "every stored record must map to a logical ChildItems position");
         const auto logical_index = static_cast<std::size_t>(
             std::distance(expected_order.begin(), logical_position));
-        expect(geometry.items[21].atom == std::to_string(logical_index) &&
-                   geometry.items[22].atom == std::to_string(logical_index + 1),
+        expect(geometry.items[geometry_tail_start(geometry) + 1].atom == std::to_string(logical_index) &&
+                   geometry.items[geometry_tail_start(geometry) + 2].atom == std::to_string(logical_index + 1),
             "mixed control geometry sibling indexes must derive from ChildItems order");
     }
     const auto mixed_decoded = form_stream::decode_document(mixed_encoded.value(), "Mixed");
@@ -1223,20 +1224,14 @@ void test_two_input_fields_round_trip() {
         [](const list_stream::ListValue& item) { return item.items.size() > 1 ? item.items[1].atom : std::string{}; });
     expect(check_box_record != unsupported_checkbox_geometry.items[1].items[2].items[2].items.end(),
         "mixed stream must contain the CheckBox geometry record");
-    check_box_record->items[3].items[24] = list_stream::ListValue::raw_atom("7");
-    expect(!form_stream::decode_document(unsupported_checkbox_geometry, "Mixed"),
-        "CheckBox must reject unsupported geometry variants");
-
-    auto changed_label_reference = mixed_encoded.value();
-    changed_label_reference.items[1].items[2].items[2].items[3].items[3].items[13].items[1] =
-        list_stream::ListValue::raw_atom("99");
-    expect_failure(form_stream::decode_document(changed_label_reference, "Mixed"), "OOF1114", "$/1/2/2/3/3",
-        "LabelDecoration must reject a geometry reference that differs from its ID");
+    check_box_record->items[3].items[6].items[2] = list_stream::parse("{2,-1,6,7}");
+    expect_failure(form_stream::decode_document(unsupported_checkbox_geometry, "Mixed"), "OOF1114",
+        "$/1/2/2/4/3/6/2", "CheckBox must reject a non-sentinel secondary tuple");
 
     auto changed_button_index = mixed_encoded.value();
-    changed_button_index.items[1].items[2].items[2].items[2].items[3].items[22] =
+    changed_button_index.items[1].items[2].items[2].items[2].items[3].items[geometry_tail_start(changed_button_index.items[1].items[2].items[2].items[2].items[3]) + 2] =
         list_stream::ListValue::raw_atom("9");
-    expect_failure(form_stream::decode_document(changed_button_index, "Mixed"), "OOF1114", "$/1/2/2/2/3",
+    expect_failure(form_stream::decode_document(changed_button_index, "Mixed"), "OOF1114", "$/1/2/2/2/3/20",
         "Button must reject geometry sibling indexes that differ from ChildItems");
 
     auto unsupported_action_text = mixed_encoded.value();
@@ -1266,12 +1261,12 @@ void test_two_button_sibling_index() {
         "two Buttons must decode with matching sibling indexes");
 
     auto wrong_sibling_index = encoded.value();
-    wrong_sibling_index.items[1].items[2].items[2].items[2].items[3].items[21] =
+    wrong_sibling_index.items[1].items[2].items[2].items[2].items[3].items[geometry_tail_start(wrong_sibling_index.items[1].items[2].items[2].items[2].items[3]) + 1] =
         list_stream::ListValue::raw_atom("0");
     expect_failure(
         form_stream::decode_document(wrong_sibling_index, "Main"),
         "OOF1114",
-        "$/1/2/2/2/3/21",
+        "$/1/2/2/2/3/20",
         "second Button must reject a sibling index of zero");
 }
 
@@ -1319,8 +1314,8 @@ void test_six_reordered_controls_use_logical_geometry_ordinals() {
         const auto& record = children.items[index + 1];
         expect(std::stoull(record.items[1].atom) == physical_ids[index],
             "writer must sort physical control records by numeric ID");
-        expect(record.items[3].items[21].atom == std::to_string(physical_ordinals[index]) &&
-                   record.items[3].items[22].atom == std::to_string(physical_ordinals[index] + 1),
+        expect(record.items[3].items[geometry_tail_start(record.items[3]) + 1].atom == std::to_string(physical_ordinals[index]) &&
+                   record.items[3].items[geometry_tail_start(record.items[3]) + 2].atom == std::to_string(physical_ordinals[index] + 1),
             "physical control records must retain logical geometry ordinals");
     }
     const auto& links = encoded.value().items[2].items[3];
@@ -1348,21 +1343,25 @@ void test_six_reordered_controls_use_logical_geometry_ordinals() {
     verify_logical(permuted, "noncanonical physical record permutation must preserve logical ChildItems order");
 
     auto duplicate_ordinal = encoded.value();
-    duplicate_ordinal.items[1].items[2].items[2].items[6].items[3].items[21] =
-        list_stream::ListValue::raw_atom("4");
-    expect_failure(form_stream::decode_document(duplicate_ordinal, "Reordered"), "OOF1114", "$/1/2/2/6/3/21",
+    auto& duplicate_geometry = duplicate_ordinal.items[1].items[2].items[2].items[6].items[3];
+    const auto duplicate_tail = geometry_tail_start(duplicate_geometry);
+    duplicate_geometry.items[duplicate_tail + 1] = list_stream::ListValue::raw_atom("4");
+    duplicate_geometry.items[duplicate_tail + 2] = list_stream::ListValue::raw_atom("5");
+    expect_failure(form_stream::decode_document(duplicate_ordinal, "Reordered"), "OOF1114", "$/1/2/2/6/3/19",
         "duplicate geometry ordinals must be rejected");
 
     auto out_of_range_ordinal = encoded.value();
-    out_of_range_ordinal.items[1].items[2].items[2].items[6].items[3].items[21] =
-        list_stream::ListValue::raw_atom("6");
-    expect_failure(form_stream::decode_document(out_of_range_ordinal, "Reordered"), "OOF1114", "$/1/2/2/6/3/21",
+    auto& out_of_range_geometry = out_of_range_ordinal.items[1].items[2].items[2].items[6].items[3];
+    const auto out_of_range_tail = geometry_tail_start(out_of_range_geometry);
+    out_of_range_geometry.items[out_of_range_tail + 1] = list_stream::ListValue::raw_atom("6");
+    out_of_range_geometry.items[out_of_range_tail + 2] = list_stream::ListValue::raw_atom("7");
+    expect_failure(form_stream::decode_document(out_of_range_ordinal, "Reordered"), "OOF1114", "$/1/2/2/6/3/19",
         "out-of-range geometry ordinals must be rejected");
 
     auto wrong_next_index = encoded.value();
-    wrong_next_index.items[1].items[2].items[2].items[6].items[3].items[22] =
+    wrong_next_index.items[1].items[2].items[2].items[6].items[3].items[geometry_tail_start(wrong_next_index.items[1].items[2].items[2].items[6].items[3]) + 2] =
         list_stream::ListValue::raw_atom("2");
-    expect_failure(form_stream::decode_document(wrong_next_index, "Reordered"), "OOF1114", "$/1/2/2/6/3",
+    expect_failure(form_stream::decode_document(wrong_next_index, "Reordered"), "OOF1114", "$/1/2/2/6/3/20",
         "geometry next index must equal logical ordinal plus one");
 }
 
@@ -1388,16 +1387,154 @@ void test_manual_bindings_are_not_silently_discarded() {
             control.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
         }
         document.add_control(control);
-        expect(form_stream::encode_document(document).ok(), "plain control fixture must encode");
         for (const bool horizontal : {true, false}) {
             model::OrdinaryFormDocument manual(document.form());
             for (const auto& attribute : document.collections().attributes) manual.add_attribute(attribute);
-            control.position.bindings.manual_horizontal.set(horizontal);
-            control.position.bindings.manual_vertical.set(!horizontal);
-            manual.add_control(control);
-            expect(!form_stream::encode_document(manual), "manual binding must not disappear during encoding");
+            auto manual_control = control;
+            manual_control.position.bindings.manual_horizontal.set(horizontal);
+            manual_control.position.bindings.manual_vertical.set(!horizontal);
+            manual.add_control(std::move(manual_control));
+            const auto encoded = form_stream::encode_document(manual);
+            expect(encoded.ok(), "both manual axes must encode for each supported control type");
+            const auto decoded = form_stream::decode_document(encoded.value(), "ManualBindings");
+            expect(decoded.ok(), "both manual axes must decode for each supported control type");
+            const auto* roundtrip = decoded.value().find_control(model::ObjectId{2});
+            expect(roundtrip != nullptr && roundtrip->position.bindings.manual_horizontal.value() == horizontal &&
+                       roundtrip->position.bindings.manual_vertical.value() == !horizontal,
+                "manual axes must survive Form.bin round-trip");
         }
     }
+}
+
+void test_anchor_bindings_round_trip_and_fanout() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Bindings";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{9}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode run{model::ObjectId{2}, "Run", model::ButtonPayload{}};
+    model::AnchorBinding right_to_form;
+    right_to_form.coordinate = model::BindingCoordinate::right;
+    right_to_form.target_coordinate = model::BindingCoordinate::right;
+    right_to_form.offset.set(-380);
+    model::AnchorBindingTarget form_left;
+    form_left.coordinate = model::BindingCoordinate::left;
+    form_left.offset.set(120);
+    right_to_form.proportional = form_left;
+    run.position.bindings.anchors.push_back(right_to_form);
+
+    model::AnchorBinding top_to_control;
+    top_to_control.coordinate = model::BindingCoordinate::top;
+    top_to_control.target = model::ControlRef{model::ObjectId{9}};
+    top_to_control.target_coordinate = model::BindingCoordinate::bottom;
+    top_to_control.offset.set(15);
+    model::AnchorBindingTarget control_left;
+    control_left.target = model::ControlRef{model::ObjectId{9}};
+    control_left.coordinate = model::BindingCoordinate::left;
+    control_left.offset.set(-5);
+    top_to_control.proportional = control_left;
+    run.position.bindings.anchors.push_back(top_to_control);
+    run.position.bindings.manual_horizontal.set(true);
+    run.position.bindings.manual_vertical.set(true);
+
+    model::ControlNode text{model::ObjectId{9}, "Text", model::ButtonPayload{}};
+    model::AnchorBinding bottom_to_form;
+    bottom_to_form.coordinate = model::BindingCoordinate::bottom;
+    bottom_to_form.target_coordinate = model::BindingCoordinate::bottom;
+    bottom_to_form.offset.set(40);
+    text.position.bindings.anchors.push_back(bottom_to_form);
+    model::AnchorBinding left_to_self;
+    left_to_self.coordinate = model::BindingCoordinate::left;
+    left_to_self.target = model::ControlRef{model::ObjectId{9}};
+    left_to_self.target_coordinate = model::BindingCoordinate::right;
+    text.position.bindings.anchors.push_back(left_to_self);
+    document.add_control(std::move(run));
+    document.add_control(std::move(text));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "primary and proportional bindings must encode" : encoded.diagnostics().front().message);
+    const auto& root_body = encoded.value().items[1].items[2].items[1].items[1];
+    expect(root_body.items[3].atom == "1" &&
+               list_stream::dump_compact(root_body.items[4]) == "{0,9,1}" &&
+               root_body.items[5].atom == "1" &&
+               list_stream::dump_compact(root_body.items[6]) == "{0,2,3}" &&
+               root_body.items[7].atom == "1" &&
+               list_stream::dump_compact(root_body.items[8]) == "{0,2,3}",
+        "root Bottom, Left, and Right fanout counts and tuples must be derived from outgoing links: " +
+            list_stream::dump_compact(root_body));
+
+    const auto& children = encoded.value().items[1].items[2].items[2];
+    const auto find_record = [&](std::uint64_t id) -> const list_stream::ListValue& {
+        for (std::size_t index = 1; index < children.items.size(); ++index) {
+            const auto& record = children.items[index];
+            if (record.is_list && record.items.size() > 1 && !record.items[1].is_list &&
+                record.items[1].atom == std::to_string(id)) return record;
+        }
+        throw std::runtime_error("encoded control record is missing");
+    };
+    const auto& run_geometry = find_record(2).items[3];
+    expect(list_stream::dump_compact(run_geometry.items[9]) == "{0,{2,0,3,-380},{2,0,2,120}}" &&
+               list_stream::dump_compact(run_geometry.items[6]) == "{0,{2,9,1,15},{2,9,2,-5}}",
+        "primary and proportional target IDs, edge codes, and offsets must map into shared geometry slots");
+    const auto& text_geometry = find_record(9).items[3];
+    expect(list_stream::dump_compact(text_geometry.items[7]) == "{0,{2,0,1,40},{2,-1,6,0}}" &&
+               list_stream::dump_compact(text_geometry.items[8]) == "{0,{2,9,3,0},{2,-1,6,0}}",
+        "Form and self-control primary targets must encode in their source-edge slots");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "Bindings");
+    expect(decoded.ok(), decoded ? "anchor binding graph must decode" : decoded.diagnostics().front().message);
+    const auto* roundtrip_run = decoded.value().find_control(model::ObjectId{2});
+    const auto* roundtrip_text = decoded.value().find_control(model::ObjectId{9});
+    expect(roundtrip_run != nullptr && roundtrip_text != nullptr &&
+               roundtrip_run->position.bindings.anchors.size() == 2 &&
+               roundtrip_run->position.bindings.anchors[1].target_coordinate == model::BindingCoordinate::right &&
+               !roundtrip_run->position.bindings.anchors[1].target.has_value() &&
+               roundtrip_run->position.bindings.anchors[1].proportional.has_value() &&
+               !roundtrip_run->position.bindings.anchors[1].proportional->target.has_value() &&
+               roundtrip_run->position.bindings.anchors[1].proportional->coordinate == model::BindingCoordinate::left &&
+               roundtrip_run->position.bindings.anchors[1].proportional->offset.value() == 120 &&
+               roundtrip_run->position.bindings.anchors[0].target == model::ControlRef{model::ObjectId{9}} &&
+               roundtrip_run->position.bindings.anchors[0].proportional->target == model::ControlRef{model::ObjectId{9}} &&
+               roundtrip_run->position.bindings.manual_horizontal.value() &&
+               roundtrip_run->position.bindings.manual_vertical.value() &&
+               roundtrip_text->position.bindings.anchors.size() == 2 &&
+               roundtrip_text->position.bindings.anchors[1].target == model::ControlRef{model::ObjectId{9}},
+        "Form, cross-control, self, proportional, and manual bindings must survive decode; Run anchors=" +
+            (roundtrip_run == nullptr ? std::string("missing") :
+             std::to_string(roundtrip_run->position.bindings.anchors.size())) +
+            ", Text anchors=" + (roundtrip_text == nullptr ? std::string("missing") :
+             std::to_string(roundtrip_text->position.bindings.anchors.size())));
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "all binding tuples and fanout counts must be stable across decode and encode");
+
+    auto stale_root = encoded.value();
+    stale_root.items[1].items[2].items[1].items[1].items[6].items[1] = list_stream::ListValue::raw_atom("7");
+    expect(!form_stream::decode_document(stale_root, "Bindings"),
+        "root incoming tuples must be checked against the outgoing graph");
+    auto unsupported_root_marker = encoded.value();
+    unsupported_root_marker.items[1].items[2].items[1].items[0] = list_stream::ListValue::raw_atom("2");
+    expect_failure(form_stream::decode_document(unsupported_root_marker, "Bindings"), "OOF1114", "$/1/2/1/0",
+        "unsupported root-panel envelope marker must be rejected");
+    auto unsupported_root_trailer = encoded.value();
+    unsupported_root_trailer.items[1].items[2].items[1].items[2] = list_stream::parse("{1}");
+    expect_failure(form_stream::decode_document(unsupported_root_trailer, "Bindings"), "OOF1114", "$/1/2/1/2",
+        "unsupported root-panel envelope trailer must be rejected");
+    auto dangling_target = encoded.value();
+    dangling_target.items[1].items[2].items[2].items[1].items[3].items[9].items[1].items[1] =
+        list_stream::ListValue::raw_atom("77");
+    expect(!form_stream::decode_document(dangling_target, "Bindings"),
+        "primary target IDs absent from the form graph must be rejected");
+    auto out_of_range_edge = encoded.value();
+    out_of_range_edge.items[1].items[2].items[2].items[1].items[3].items[9].items[1].items[2] =
+        list_stream::ListValue::raw_atom("5");
+    expect(!form_stream::decode_document(out_of_range_edge, "Bindings"),
+        "unproven center target coordinates must be rejected");
+    auto orphan_proportional = encoded.value();
+    orphan_proportional.items[1].items[2].items[2].items[1].items[3].items[9].items[1] =
+        list_stream::parse("{2,-1,6,0}");
+    expect(!form_stream::decode_document(orphan_proportional, "Bindings"),
+        "proportional tuple without a primary tuple must be rejected");
 }
 
 void test_platform_empty_document_fixture() {
@@ -1406,7 +1543,8 @@ void test_platform_empty_document_fixture() {
 )OOF";
     const auto payload = list_stream::parse(fixture);
     const auto decoded = form_stream::decode_document(payload, "Empty");
-    expect(decoded.ok(), "platform empty-form fixture must decode into the product model");
+    expect(decoded.ok(), decoded ? "platform empty-form fixture must decode into the product model" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
     expect(decoded.value().form().name == "Empty", "external form name must be retained");
     expect(decoded.value().collections().controls.empty(), "empty fixture must have no controls");
     const auto* caption = decoded.value().form().properties.find(
@@ -1442,6 +1580,7 @@ int main() {
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
         test_manual_bindings_are_not_silently_discarded();
+        test_anchor_bindings_round_trip_and_fanout();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';
