@@ -741,6 +741,155 @@ void test_single_input_field_round_trip() {
         "single InputField must reject triple-profile geometry references");
 }
 
+void test_two_input_fields_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {
+        model::ControlRef{model::ObjectId{9}},
+        model::ControlRef{model::ObjectId{12}},
+    };
+    model::OrdinaryFormDocument document(std::move(form));
+
+    model::TypeDomainPatternValue string64;
+    model::TypeDomainEntry string64_entry;
+    string64_entry.term = model::TypeDomainTerm::string;
+    string64_entry.string = model::LengthQualifiers{64, false};
+    string64.entries.push_back(string64_entry);
+    model::TypeDomainPatternValue string20;
+    model::TypeDomainEntry string20_entry;
+    string20_entry.term = model::TypeDomainTerm::string;
+    string20_entry.string = model::LengthQualifiers{20, true};
+    string20.entries.push_back(string20_entry);
+    model::Attribute second_attribute{model::ObjectId{7}, "SecondValue", string20};
+    second_attribute.main.set(true);
+    document.add_attribute(std::move(second_attribute));
+    model::Attribute first_attribute{model::ObjectId{1}, "FirstValue", string64};
+    first_attribute.main.set(false);
+    document.add_attribute(std::move(first_attribute));
+
+    model::ControlNode second{model::ObjectId{12}, "SecondInput", model::InputFieldPayload{}};
+    second.data_path = model::DataPath{model::AttributeRef{model::ObjectId{7}}, {}};
+    second.properties().set_explicit(model::PropertyId::from_name("Enabled"), true);
+    second.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+    document.add_control(std::move(second));
+    model::ControlNode first{model::ObjectId{9}, "FirstInput", model::InputFieldPayload{}};
+    first.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+    first.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    first.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+    first.position.left.set(242);
+    first.position.top.set(146);
+    document.add_control(std::move(first));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "two InputFields with two linked Attributes must encode" : encoded.diagnostics().front().message);
+    const auto& children = encoded.value().items[1].items[2].items[2];
+    expect(children.items[1].items[1].atom == "9" && children.items[2].items[1].atom == "12",
+        "two InputFields must preserve Form.children order");
+    expect(children.items[1].items[3].items[21].atom == "0" && children.items[1].items[3].items[22].atom == "1" &&
+               children.items[2].items[3].items[21].atom == "1" && children.items[2].items[3].items[22].atom == "2",
+        "two InputFields must use sequential sibling geometry references");
+    const auto& links = encoded.value().items[2].items[3];
+    expect(links.items[1].items[0].atom == "9" && links.items[2].items[0].atom == "12",
+        "InputField links must follow Form.children order instead of collection insertion order");
+    expect(encoded.value().items[2].items[1].atom == "8",
+        "sparse Attribute IDs must determine the Attribute slot count");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    expect(decoded.value().form().children.size() == 2 &&
+               std::get<model::ControlRef>(decoded.value().form().children[0]).id() == model::ObjectId{9} &&
+               std::get<model::ControlRef>(decoded.value().form().children[1]).id() == model::ObjectId{12},
+        "two InputFields must decode in child order");
+    const auto* decoded_first = decoded.value().find_control(model::ObjectId{9});
+    const auto* decoded_second = decoded.value().find_control(model::ObjectId{12});
+    expect(decoded_first->data_path->attribute.id() == model::ObjectId{1} &&
+               decoded_second->data_path->attribute.id() == model::ObjectId{7},
+        "each InputField must resolve its own attribute link");
+    expect(decoded.value().find_attribute(model::ObjectId{1})->type == string64 &&
+               decoded.value().find_attribute(model::ObjectId{7})->type == string20 &&
+               !decoded.value().find_attribute(model::ObjectId{1})->main.value() &&
+               decoded.value().find_attribute(model::ObjectId{7})->main.value(),
+        "sparse Attribute IDs, types, and Main flags must survive decode");
+    const auto property_bool_or = [](const model::ControlNode& control, std::string_view name, bool fallback) {
+        const auto* property = control.properties().find(model::PropertyId::from_name(name));
+        return property == nullptr ? fallback : std::get<bool>(property->value);
+    };
+    expect(!property_bool_or(*decoded_first, "Enabled", true) &&
+               property_bool_or(*decoded_first, "ReadOnly", false) &&
+               property_bool_or(*decoded_second, "Enabled", true) &&
+               !property_bool_or(*decoded_second, "ReadOnly", false),
+        "each InputField must preserve independent Enabled and ReadOnly values");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok(), "decoded two-InputField document must re-encode");
+    const auto redecode = form_stream::decode_document(reencoded.value(), "Main");
+    expect(redecode.ok() && redecode.value().find_control(model::ObjectId{9})->data_path->attribute.id() == model::ObjectId{1} &&
+               redecode.value().find_control(model::ObjectId{12})->data_path->attribute.id() == model::ObjectId{7},
+        "both InputField links must survive two round-trips");
+
+    auto duplicate_link = encoded.value();
+    duplicate_link.items[2].items[3].items[2] = duplicate_link.items[2].items[3].items[1];
+    expect_failure(form_stream::decode_document(duplicate_link, "Main"), "OOF1122", "$/2/3",
+        "duplicate control links must be rejected as ambiguous");
+
+    auto missing_link = encoded.value();
+    missing_link.items[2].items[3].items.pop_back();
+    missing_link.items[2].items[3].items[0] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(missing_link, "Main"), "OOF1122", "$/2/3",
+        "an InputField without a DataPath link must be rejected");
+
+    auto leftover_link = encoded.value();
+    auto extra_link = leftover_link.items[2].items[3].items[1];
+    extra_link.items[0] = list_stream::ListValue::raw_atom("99");
+    leftover_link.items[2].items[3].items.push_back(std::move(extra_link));
+    leftover_link.items[2].items[3].items[0] = list_stream::ListValue::raw_atom("3");
+    expect_failure(form_stream::decode_document(leftover_link, "Main"), "OOF1122", "$/2/3",
+        "links without a matching InputField must be rejected");
+
+    auto dangling_target = encoded.value();
+    dangling_target.items[2].items[3].items[1].items[1].items[1].items[0] =
+        list_stream::ListValue::raw_atom("99");
+    expect_failure(form_stream::decode_document(dangling_target, "Main"), "OOF1122", "$/2/3",
+        "links to missing Attributes must be rejected");
+
+    auto swapped_links = encoded.value();
+    std::swap(swapped_links.items[2].items[3].items[1], swapped_links.items[2].items[3].items[2]);
+    const auto decoded_swapped_links = form_stream::decode_document(swapped_links, "Main");
+    expect(decoded_swapped_links.ok() &&
+               decoded_swapped_links.value().find_control(model::ObjectId{9})->data_path->attribute.id() == model::ObjectId{1} &&
+               decoded_swapped_links.value().find_control(model::ObjectId{12})->data_path->attribute.id() == model::ObjectId{7},
+        "InputField links must resolve by control ID regardless of table order");
+
+    auto wrong_geometry = encoded.value();
+    wrong_geometry.items[1].items[2].items[2].items[2].items[3].items[22] =
+        list_stream::ListValue::raw_atom("4");
+    expect_failure(form_stream::decode_document(wrong_geometry, "Main"), "OOF1114", "$/1/2/2/2/3",
+        "unknown two-InputField sibling geometry must fail closed");
+
+    auto truncated_input = encoded.value();
+    const auto input_guid = truncated_input.items[1].items[2].items[2].items[1].items[0];
+    truncated_input.items[1].items[2].items[2].items[1] =
+        list_stream::ListValue::list({input_guid});
+    expect_failure(form_stream::decode_document(truncated_input, "Main"), "OOF1103", "$/1/2/2/1/1",
+        "truncated InputField record must report the missing ID slot");
+
+    model::Form mixed_form;
+    mixed_form.id = model::ObjectId{1};
+    mixed_form.name = "Mixed";
+    mixed_form.children = {
+        model::ControlRef{model::ObjectId{9}},
+        model::ControlRef{model::ObjectId{2}},
+    };
+    model::OrdinaryFormDocument mixed_document(std::move(mixed_form));
+    mixed_document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", string64});
+    model::ControlNode mixed_input{model::ObjectId{9}, "Input", model::InputFieldPayload{}};
+    mixed_input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+    mixed_document.add_control(std::move(mixed_input));
+    mixed_document.add_control(model::ControlNode{model::ObjectId{2}, "Button", model::ButtonPayload{}});
+    expect_failure(form_stream::encode_document(mixed_document), "OOF1122", "$/Form/ChildItems",
+        "mixed InputField and Button composition must remain unsupported");
+}
+
 void test_two_button_sibling_index() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -806,6 +955,7 @@ int main() {
         test_button_then_label_decoration_round_trip();
         test_button_label_input_field_round_trip();
         test_single_input_field_round_trip();
+        test_two_input_fields_round_trip();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';
