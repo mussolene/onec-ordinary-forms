@@ -16,10 +16,10 @@ namespace fb = oof::storage::formbin;
 
 std::vector<std::uint8_t> read_bytes(const std::string& path) {
     std::ifstream input(path, std::ios::binary);
-    if (!input) throw std::runtime_error("cannot open input Form.bin");
+    if (!input) throw std::runtime_error("cannot open input file");
     std::vector<std::uint8_t> bytes{
         std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
-    if (input.bad()) throw std::runtime_error("failed while reading input Form.bin");
+    if (input.bad()) throw std::runtime_error("failed while reading input file");
     return bytes;
 }
 
@@ -45,6 +45,18 @@ ls::ListValue read_form_tree(const std::string& path) {
         return ls::parse(text);
     } catch (const std::exception& error) {
         throw std::runtime_error(std::string("invalid or truncated form list stream: ") + error.what());
+    }
+}
+
+ls::ListValue read_list_stream_tree(const std::string& path) {
+    const auto bytes = read_bytes(path);
+    std::size_t offset = 0;
+    if (bytes.size() >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf) offset = 3;
+    const std::string text(bytes.begin() + static_cast<std::ptrdiff_t>(offset), bytes.end());
+    try {
+        return ls::parse(text);
+    } catch (const std::exception& error) {
+        throw std::runtime_error(std::string("invalid or truncated list stream: ") + error.what());
     }
 }
 
@@ -105,20 +117,27 @@ void diff(const ls::ListValue& before, const ls::ListValue& after, const std::st
 int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]) == "--help") {
         std::cout << "Usage: compare_form_streams <baseline.Form.bin> <variant.Form.bin> [variant.Form.bin ...]\n"
+                  << "       compare_form_streams --list-stream <baseline.txt> <variant.txt> [variant.txt ...]\n"
                   << "Recursively compare parsed form list-stream trees. Paths are positional; their meaning is not inferred.\n"
+                  << "The default reads Form.bin form payloads; --list-stream reads UTF-8 list-stream text directly (optional BOM).\n"
                   << "Shows input atom values; module stream and container metadata are not compared.\n"
                   << "Atom previews are capped at 96 bytes.\n";
         return 0;
     }
-    if (argc < 3) {
-        std::cerr << "Usage: compare_form_streams <baseline.Form.bin> <variant.Form.bin> [variant.Form.bin ...]\n";
+    const bool list_stream_mode = argc > 1 && std::string(argv[1]) == "--list-stream";
+    const int first_path = list_stream_mode ? 2 : 1;
+    if (argc - first_path < 2) {
+        std::cerr << (list_stream_mode
+            ? "Usage: compare_form_streams --list-stream <baseline.txt> <variant.txt> [variant.txt ...]\n"
+            : "Usage: compare_form_streams <baseline.Form.bin> <variant.Form.bin> [variant.Form.bin ...]\n");
         return 2;
     }
     try {
-        const auto baseline = read_form_tree(argv[1]);
-        for (int arg = 2; arg < argc; ++arg) {
-            const auto variant = read_form_tree(argv[arg]);
-            std::cout << "COMPARE base -> variant-" << (arg - 1) << '\n';
+        const auto read_tree = list_stream_mode ? read_list_stream_tree : read_form_tree;
+        const auto baseline = read_tree(argv[first_path]);
+        for (int arg = first_path + 1; arg < argc; ++arg) {
+            const auto variant = read_tree(argv[arg]);
+            std::cout << "COMPARE base -> variant-" << (arg - first_path) << '\n';
             std::size_t changes = 0;
             diff(baseline, variant, "$", changes);
             std::cout << "CHANGE_COUNT " << changes << "\n";
