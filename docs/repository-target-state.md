@@ -28,8 +28,9 @@ Form.xml + Form/Module.bsl -> OrdinaryForm -> Form.bin
 ## Ближайшие этапы
 
 Состояние на 2026-10-03: первый этап выполнен частично. Подтверждены несколько
-Button и отдельный порядок Button, LabelDecoration, InputField с одним
-строковым реквизитом и DataPath. У InputField редактируются ID, имя, Position,
+Button, порядок Button, LabelDecoration, InputField и один InputField без
+этих соседей с одним строковым реквизитом и DataPath.
+У InputField редактируются ID, имя, Position,
 Enabled, ReadOnly и строковые квалификаторы реквизита; независимая сборка XML и строгая
 выгрузка Designer сохраняют значения. Произвольный состав элементов,
 остальные типы реквизитов и обработчики InputField еще не проверены.

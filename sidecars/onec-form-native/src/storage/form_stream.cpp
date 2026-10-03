@@ -529,11 +529,15 @@ LV canonical_input_field_info(
 
 LV canonical_input_field_geometry(
     std::uint64_t control_id,
+    std::size_t sibling_index,
     std::int32_t left,
     std::int32_t top,
     std::int32_t width,
     std::int32_t height,
     bool visible) {
+    if (sibling_index != 0 && sibling_index != 2) {
+        fail("OOF1122", "$/Form/ChildItems", "InputField sibling index 0 or 2", std::to_string(sibling_index), "InputField geometry is outside the supported composition");
+    }
     if (width < 0 || height < 0 ||
         left > std::numeric_limits<std::int32_t>::max() - width ||
         top > std::numeric_limits<std::int32_t>::max() - height) {
@@ -549,6 +553,8 @@ LV canonical_input_field_geometry(
     value.items[9].items[1].items[1] = raw(std::to_string(control_id));
     value.items[13].items[1] = raw(std::to_string(control_id));
     value.items[16].items[1] = raw(std::to_string(control_id));
+    value.items[21] = raw(std::to_string(sibling_index));
+    value.items[22] = raw(std::to_string(sibling_index + 1));
     value.items[1] = raw(std::to_string(left));
     value.items[2] = raw(std::to_string(top));
     value.items[3] = raw(std::to_string(left + width));
@@ -889,7 +895,8 @@ model::ControlNode decode_label(const LV& record, std::string_view path) {
 model::ControlNode decode_input_field(
     const LV& record,
     std::string_view path,
-    const AttributeRecord& linked_attribute) {
+    const AttributeRecord& linked_attribute,
+    std::size_t sibling_index) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -947,7 +954,14 @@ model::ControlNode decode_input_field(
     }
     require_exact(
         geometry,
-        canonical_input_field_geometry(raw_id, left, top, static_cast<std::int32_t>(width64), static_cast<std::int32_t>(height64), visible),
+        canonical_input_field_geometry(
+            raw_id,
+            sibling_index,
+            left,
+            top,
+            static_cast<std::int32_t>(width64),
+            static_cast<std::int32_t>(height64),
+            visible),
         geometry_path,
         "InputField Position contains an unsupported storage leaf");
 
@@ -1150,9 +1164,9 @@ LV encode_input_field(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
     std::size_t sibling_index) {
-    if (sibling_index != 2 || control.kind() != model::ControlKind::input_field ||
+    if ((sibling_index != 0 && sibling_index != 2) || control.kind() != model::ControlKind::input_field ||
         control.id.value() == 0) {
-        fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at sibling index 2", control.name, "InputField is outside the supported Button-Label-InputField profile");
+        fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at sibling index 0 or 2", control.name, "InputField is outside the supported profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
@@ -1181,7 +1195,7 @@ LV encode_input_field(
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         canonical_input_field_info(attribute->type, enabled, read_only),
-        canonical_input_field_geometry(control.id.value(), left, top, width, height, visible),
+                canonical_input_field_geometry(control.id.value(), sibling_index, left, top, width, height, visible),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
@@ -1684,9 +1698,9 @@ Result<model::OrdinaryFormDocument> decode_document(
                 decoded_label = decode_label(child_record, path);
                 actual_max_id = std::max(actual_max_id, decoded_label->id.value());
             } else if (child_guid == input_descriptor.guid && !decoded_input_field &&
-                       index == 2 && decoded_buttons.size() == 1 && decoded_label &&
-                       control_count == 3 && attributes.attributes.size() == 1 &&
-                       attributes.links.size() == 1) {
+                       ((control_count == 1 && index == 0 && decoded_buttons.empty() && !decoded_label) ||
+                        (control_count == 3 && index == 2 && decoded_buttons.size() == 1 && decoded_label)) &&
+                       attributes.attributes.size() == 1 && attributes.links.size() == 1) {
                 const auto& attribute = attributes.attributes.front();
                 const auto& link = attributes.links.front();
                 const auto attribute_id = static_cast<std::uint64_t>(attribute.id.object_id);
@@ -1696,11 +1710,11 @@ Result<model::OrdinaryFormDocument> decode_document(
                     link.attribute_id.uuid.canonical != null_uuid) {
                     fail("OOF1122", "$/2/3", "single Control-to-Attribute link matching InputField and Attribute ID", "mismatched link", "DataPath link is outside the supported profile");
                 }
-                decoded_input_field = decode_input_field(child_record, path, attribute);
+                decoded_input_field = decode_input_field(child_record, path, attribute, index);
                 decoded_input_field->data_path = model::DataPath{model::AttributeRef{model::ObjectId{attribute_id}}, {}};
                 actual_max_id = std::max(actual_max_id, decoded_input_field->id.value());
             } else {
-                fail("OOF1122", path, "top-level Buttons, optionally followed by one LabelDecoration at index 1", child_guid, "Control ordering is outside the supported storage slice");
+                fail("OOF1122", path, "one InputField alone or top-level Buttons with optional LabelDecoration and InputField in supported order", child_guid, "Control ordering is outside the supported storage slice");
             }
         }
 
@@ -1864,10 +1878,12 @@ Result<list_stream::ListValue> encode_document(
                        (document.form().children.size() == 2 || document.form().children.size() == 3)) {
                 child_records.push_back(encode_label(*control, sibling_index));
                 has_label = true;
-            } else if (control->kind() == model::ControlKind::input_field && has_label && sibling_index == 2 && document.form().children.size() == 3) {
+            } else if (control->kind() == model::ControlKind::input_field &&
+                       ((sibling_index == 0 && document.form().children.size() == 1) ||
+                        (has_label && sibling_index == 2 && document.form().children.size() == 3))) {
                 child_records.push_back(encode_input_field(document, *control, sibling_index));
             } else {
-                fail("OOF1122", "$/Form/ChildItems", "top-level Buttons, optionally followed by one LabelDecoration at index 1", control->name, "Control ordering is outside the supported storage slice");
+                fail("OOF1122", "$/Form/ChildItems", "one InputField alone or top-level Buttons with optional LabelDecoration and InputField in supported order", control->name, "Control ordering is outside the supported storage slice");
             }
             max_id = std::max(max_id, control_id.value());
         }
@@ -1897,8 +1913,10 @@ Result<list_stream::ListValue> encode_document(
         for (const auto& control : document.collections().controls) {
             if (control.kind() != model::ControlKind::input_field) continue;
             ++input_count;
-            if (input_count != 1 || document.form().children.size() != 3 || max_attribute_id == 0) {
-                fail("OOF1122", "$/Form/ChildItems", "one InputField with one Attribute in Button-Label-InputField order", control.name, "InputField is outside the supported document profile");
+            const bool single_input_profile = document.form().children.size() == 1;
+            if (input_count != 1 || (!single_input_profile && document.form().children.size() != 3) ||
+                max_attribute_id == 0 || (single_input_profile && attributes.attributes.size() != 1)) {
+                fail("OOF1122", "$/Form/ChildItems", "one InputField with one Attribute in a supported composition", control.name, "InputField is outside the supported document profile");
             }
             attributes.links.push_back(form_stream::AttributeLink{
                 static_cast<std::int64_t>(control.id.value()),

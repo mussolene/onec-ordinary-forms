@@ -684,6 +684,63 @@ void test_button_label_input_field_round_trip() {
         "unknown payload field beside ReadOnly must fail closed");
 }
 
+void test_single_input_field_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {model::ControlRef{model::ObjectId{9}}};
+    model::OrdinaryFormDocument document(std::move(form));
+
+    model::TypeDomainPatternValue string64;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{64, false};
+    string64.entries.push_back(string_entry);
+    document.add_attribute(model::Attribute{model::ObjectId{1}, "SyntheticValue", string64});
+
+    model::ControlNode input{model::ObjectId{9}, "InputSynthetic", model::InputFieldPayload{}};
+    input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+    input.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    input.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+    document.add_control(std::move(input));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "single InputField profile must encode" : encoded.diagnostics().front().message);
+    auto encoded_input = encoded.value();
+    auto& input_record = encoded_input.items[1].items[2].items[2].items[1];
+    expect(input_record.items[3].items[21].atom == "0" && input_record.items[3].items[22].atom == "1",
+        "single InputField geometry must use sibling references 0 and 1");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    expect(decoded.value().form().children.size() == 1, "single InputField composition must survive round-trip");
+    const auto* decoded_input = decoded.value().find_control(model::ObjectId{9});
+    expect(decoded_input && decoded_input->data_path &&
+               decoded_input->data_path->attribute.id() == model::ObjectId{1},
+        "single InputField DataPath must survive round-trip");
+    expect(decoded.value().find_attribute(model::ObjectId{1})->type == string64,
+        "single InputField String(64) type must survive round-trip");
+    expect(decoded_input->properties().find(model::PropertyId::from_name("Enabled")) != nullptr &&
+               !std::get<bool>(decoded_input->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+               std::get<bool>(decoded_input->properties().find(model::PropertyId::from_name("ReadOnly"))->value),
+        "single InputField Enabled and ReadOnly must survive round-trip");
+
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok(), "single InputField document must re-encode");
+    const auto redecode = form_stream::decode_document(reencoded.value(), "Main");
+    expect(redecode.ok() && redecode.value().find_control(model::ObjectId{9})->data_path->attribute.id() == model::ObjectId{1},
+        "single InputField DataPath must survive two round-trips");
+
+    auto wrong_sibling_reference = encoded.value();
+    wrong_sibling_reference.items[1].items[2].items[2].items[1].items[3].items[21] =
+        list_stream::ListValue::raw_atom("2");
+    expect_failure(
+        form_stream::decode_document(wrong_sibling_reference, "Main"),
+        "OOF1114",
+        "$/1/2/2/1/3",
+        "single InputField must reject triple-profile geometry references");
+}
+
 void test_two_button_sibling_index() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -748,6 +805,7 @@ int main() {
         test_multiple_top_level_buttons_round_trip();
         test_button_then_label_decoration_round_trip();
         test_button_label_input_field_round_trip();
+        test_single_input_field_round_trip();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';
