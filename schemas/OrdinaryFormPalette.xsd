@@ -269,7 +269,7 @@
               <Property name="ChoiceIncomplete" apiName="ChoiceIncomplete" russianName="ВыборНезаполненного" russianType="Булево" valueCodec="boolean"/>
               <Property name="SelectedText" apiName="SelectedText" russianName="ВыделенныйТекст" russianType="Строка" valueCodec="string"/>
               <Property name="MarkNegatives" apiName="MarkNegatives" russianName="ВыделятьОтрицательные" russianType="Булево" valueCodec="boolean"/>
-              <Property name="ChoiceListHeight" apiName="ChoiceListHeight" russianName="ВысотаСпискаВыбора" russianType="Число" valueCodec="decimal"/>
+              <Property name="ChoiceListHeight" apiName="ChoiceListHeight" russianName="ВысотаСпискаВыбора" russianType="Число" valueCodec="integer32"/>
               <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>

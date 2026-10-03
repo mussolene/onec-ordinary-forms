@@ -312,6 +312,25 @@ void test_help_metamodel() {
             input_format->default_value.kind == DefaultKind::string &&
             input_format->default_value.canonical.empty(),
         "InputField Format must declare its empty info-string default");
+    const auto* input_horizontal = find_property(ControlKind::input_field, "HorizontalAlign");
+    const auto* input_vertical = find_property(ControlKind::input_field, "VerticalAlign");
+    const auto* input_choice_height = find_property(ControlKind::input_field, "ChoiceListHeight");
+    expect(input_horizontal && input_horizontal->persistence == PersistenceClass::persisted_editable &&
+            input_horizontal->storage_codec == StorageCodec::control_info &&
+            input_horizontal->default_value.kind == DefaultKind::enumeration &&
+            input_horizontal->default_value.canonical == "Auto",
+        "InputField HorizontalAlign must declare its Auto enum default");
+    expect(input_vertical && input_vertical->persistence == PersistenceClass::persisted_editable &&
+            input_vertical->storage_codec == StorageCodec::control_info &&
+            input_vertical->default_value.kind == DefaultKind::enumeration &&
+            input_vertical->default_value.canonical == "Top",
+        "InputField VerticalAlign must declare its Top enum default");
+    expect(input_choice_height && input_choice_height->persistence == PersistenceClass::persisted_editable &&
+            input_choice_height->storage_codec == StorageCodec::control_info &&
+            input_choice_height->default_value.kind == DefaultKind::integer &&
+            input_choice_height->default_value.canonical == "0" &&
+            input_choice_height->value_codec == ValueCodec::integer32,
+        "InputField ChoiceListHeight must declare its int32 zero default");
     expect(
         find_property(ControlKind::input_field, "AutoMarkIncomplete")->persistence == PersistenceClass::persisted_editable &&
             find_property(ControlKind::input_field, "AutoMarkIncomplete")->storage_codec == StorageCodec::control_info &&

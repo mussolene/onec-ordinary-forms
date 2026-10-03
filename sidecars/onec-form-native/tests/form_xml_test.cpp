@@ -1,6 +1,7 @@
 #include <array>
 #include <exception>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -422,8 +423,9 @@ void test_typed_values_and_canonicalization() {
     <InputField id="4" name="Input">
       <DataPath attributeId="2"/>
       <Position/>
-      <VerticalAlign type="VerticalAlign" member="Top"/>
-      <ChoiceListHeight>0012.3400</ChoiceListHeight>
+      <VerticalAlign type="VerticalAlign" member="Bottom"/>
+      <ChoiceListHeight>0007</ChoiceListHeight>
+      <HorizontalAlign type="HorizontalAlign" member="Right"/>
       <Picture>3</Picture>
       <TypeRestriction>
         <Entry term="numeric" length="15" precision="3" nonNegative="true"/>
@@ -448,8 +450,15 @@ void test_typed_values_and_canonicalization() {
     const model::ControlNode* input = parsed.value().find_control(model::ObjectId{4});
     expect(input != nullptr, "InputField must resolve");
     const auto* height = input->properties().find(model::PropertyId::from_name("ChoiceListHeight"));
-    expect(height != nullptr, "decimal property must materialize");
-    expect(std::get<model::DecimalValue>(height->value).canonical == "12.34", "decimal lexical form must canonicalize");
+    expect(height != nullptr, "InputField ChoiceListHeight must materialize");
+    expect(std::get<std::int64_t>(height->value) == 7, "integer lexical form must canonicalize");
+    expect(std::get<model::EnumerationValue>(input->properties().find(
+               model::PropertyId::from_name("HorizontalAlign"))->value) ==
+               model::EnumerationValue{"HorizontalAlign", "Right"} &&
+           std::get<model::EnumerationValue>(input->properties().find(
+               model::PropertyId::from_name("VerticalAlign"))->value) ==
+               model::EnumerationValue{"VerticalAlign", "Bottom"},
+        "InputField alignment enum members must parse as named values");
     expect(input->properties().find(model::PropertyId::from_name("AutoChoiceIncomplete")) == nullptr,
         "omitted AutoChoiceIncomplete must retain the false default");
     std::string auto_choice_true_source(xml);
@@ -466,7 +475,10 @@ void test_typed_values_and_canonicalization() {
 
     auto serialized = source::serialize_form_xml(parsed.value());
     expect(serialized.ok(), "typed values must serialize");
-    expect(serialized.value().find(">12.34</ChoiceListHeight>") != std::string::npos, "decimal output must be canonical");
+    expect(serialized.value().find(">7</ChoiceListHeight>") != std::string::npos, "integer output must be canonical");
+    expect(serialized.value().find("type=\"HorizontalAlign\" member=\"Right\"") != std::string::npos &&
+            serialized.value().find("type=\"VerticalAlign\" member=\"Bottom\"") != std::string::npos,
+        "InputField alignment enums must serialize with their named type and member");
     expect(serialized.value().find("<AutoChoiceIncomplete>true</AutoChoiceIncomplete>") != std::string::npos,
         "named AutoChoiceIncomplete=true must serialize");
     auto reparsed_input = source::parse_form_xml(serialized.value());
@@ -620,6 +632,76 @@ void test_input_field_tooltip_and_format_xml_round_trip() {
                 "InputField strings must coexist with persisted Boolean flags in XML");
         }
     }
+}
+
+void test_input_field_layout_xml_round_trip() {
+    const auto make_xml = [](std::optional<std::string> horizontal,
+                             std::optional<std::string> vertical,
+                             std::string height) {
+        std::string xml = R"XML(<Form id="1" name="InputLayout" ordinaryFormVersion="2.1"><Attributes>
+<Attribute id="1" name="Value"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute>
+</Attributes><ChildItems><InputField id="2" name="Entry"><DataPath attributeId="1"/><Position/>)XML";
+        if (vertical) xml += "<VerticalAlign type=\"VerticalAlign\" member=\"" + *vertical + "\"/>";
+        if (!height.empty()) xml += "<ChoiceListHeight>" + height + "</ChoiceListHeight>";
+        if (horizontal) xml += "<HorizontalAlign type=\"HorizontalAlign\" member=\"" + *horizontal + "\"/>";
+        xml += "</InputField></ChildItems></Form>";
+        return xml;
+    };
+    const auto round_trip_enum = [&](std::string_view property, std::string_view type,
+                                     std::string_view member) {
+        const auto xml = property == "HorizontalAlign"
+            ? make_xml(std::string(member), std::nullopt, {})
+            : make_xml(std::nullopt, std::string(member), {});
+        const auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), "InputField named alignment XML must parse");
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        const bool is_default = (property == "HorizontalAlign" && member == "Auto") ||
+            (property == "VerticalAlign" && member == "Top");
+        const auto* parsed_input = parsed.value().find_control(model::ObjectId{2});
+        const auto* parsed_property = parsed_input->properties().find(model::PropertyId::from_name(property));
+        expect((is_default && parsed_property == nullptr) ||
+                (parsed_property && std::get<model::EnumerationValue>(parsed_property->value) ==
+                    model::EnumerationValue{std::string(type), std::string(member)}),
+            std::string("InputField ") + std::string(property) + " must parse enum member " + std::string(member));
+        const auto expected_member = "type=\"" + std::string(type) + "\" member=\"" + std::string(member) + "\"";
+        expect(serialized.ok() && (is_default
+                ? serialized.value().find("<" + std::string(property)) == std::string::npos
+                : serialized.value().find(expected_member) != std::string::npos),
+            std::string("InputField ") + std::string(property) + " must preserve enum member " + std::string(member));
+        const auto reparsed = source::parse_form_xml(serialized.value());
+        expect(reparsed.ok(), "InputField alignment XML must reparse");
+    };
+    for (const std::string_view member : {"Left", "Center", "Right", "Justify", "Auto"}) {
+        round_trip_enum("HorizontalAlign", "HorizontalAlign", member);
+    }
+    for (const std::string_view member : {"Top", "Center", "Bottom"}) {
+        round_trip_enum("VerticalAlign", "VerticalAlign", member);
+    }
+
+    const auto defaults = source::parse_form_xml(make_xml("Auto", "Top", "0"));
+    expect(defaults.ok(), "explicit InputField layout defaults must parse");
+    const auto defaults_xml = source::serialize_form_xml(defaults.value());
+    expect(defaults_xml.ok() && defaults_xml.value().find("<HorizontalAlign") == std::string::npos &&
+            defaults_xml.value().find("<VerticalAlign") == std::string::npos &&
+            defaults_xml.value().find("<ChoiceListHeight>") == std::string::npos,
+        "InputField layout defaults must normalize to omitted XML properties");
+
+    for (const std::string_view value : {"0", "7", "-7", "-2147483648", "2147483647"}) {
+        const auto parsed = source::parse_form_xml(make_xml(std::nullopt, std::nullopt, std::string(value)));
+        expect(parsed.ok(), "int32 InputField ChoiceListHeight values must parse");
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        const auto expected_property = value == "0"
+            ? std::string("<ChoiceListHeight>")
+            : "<ChoiceListHeight>" + std::string(value) + "</ChoiceListHeight>";
+        expect(serialized.ok() && (value == "0"
+                ? serialized.value().find(expected_property) == std::string::npos
+                : serialized.value().find(expected_property) != std::string::npos),
+            "int32 InputField ChoiceListHeight values must serialize without normalization loss");
+    }
+    expect_code(source::parse_form_xml(make_xml(std::nullopt, std::nullopt, "7.5")), "OOF2002",
+        "fractional InputField ChoiceListHeight XML must be rejected by the int32 schema type");
+    expect_code(source::parse_form_xml(make_xml(std::nullopt, std::nullopt, "2147483648")), "OOF2002",
+        "out-of-int32 InputField ChoiceListHeight XML must be rejected");
 }
 
 void test_button_shortcut_xml() {
@@ -976,6 +1058,7 @@ int main() {
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
+        test_input_field_layout_xml_round_trip();
         test_button_shortcut_xml();
         test_boolean_type_domain_xml_roundtrip();
         test_inherited_property_has_one_surface();

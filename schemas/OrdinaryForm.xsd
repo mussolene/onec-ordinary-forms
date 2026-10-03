@@ -1915,7 +1915,7 @@
       <xs:element name="ChoiceIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectedText" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MarkNegatives" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChoiceListHeight" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChoiceListHeight" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalAlign" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0" maxOccurs="1"/>

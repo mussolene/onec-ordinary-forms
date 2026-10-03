@@ -731,6 +731,10 @@ void apply_proven_storage_overrides(
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
     classify_property(input_field, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
     classify_property(input_field, "Format", StorageCodec::control_info, DefaultKind::string, "");
+    classify_property(input_field, "HorizontalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Auto");
+    classify_property(input_field, "VerticalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Top");
+    classify_property(input_field, "ChoiceListHeight", StorageCodec::control_info, DefaultKind::integer, "0");
+    std::ranges::find(input_field, "ChoiceListHeight", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     classify_property(
         input_field,
         "AutoChoiceIncomplete",

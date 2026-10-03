@@ -907,6 +907,12 @@ struct InputFieldTextValues {
     std::string format;
 };
 
+struct InputFieldLayoutValues {
+    std::int32_t horizontal_align = 4;
+    std::int32_t vertical_align = 0;
+    std::int32_t choice_list_height = 0;
+};
+
 InputFieldFlagValues decode_input_field_flags(const LV& info, std::string_view path) {
     const auto paired_path = child_path(path, 3);
     require_arity(info.items[3], 2, paired_path);
@@ -938,7 +944,8 @@ LV canonical_input_field_info(
     bool enabled,
     bool read_only,
     const InputFieldFlagValues& flags,
-    const InputFieldTextValues& text_values) {
+    const InputFieldTextValues& text_values,
+    const InputFieldLayoutValues& layout_values) {
     auto value = parse_constant(R"OOF(
 {9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{1,{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{"U"},{"U"},0,"",0,0}}},{0},0,1,0,{1,0},0}
 )OOF");
@@ -952,6 +959,9 @@ LV canonical_input_field_info(
     value.items[2].items[0].items[0].items[12] = encoded_localized(text_values.tool_tip);
     value.items[2].items[0].items[13] = raw(read_only ? "1" : "0");
     value.items[2].items[0].items[34] = encoded_localized(text_values.format);
+    value.items[2].items[0].items[17] = raw(std::to_string(layout_values.horizontal_align));
+    value.items[2].items[0].items[18] = raw(std::to_string(layout_values.vertical_align));
+    value.items[2].items[0].items[31] = raw(std::to_string(layout_values.choice_list_height));
     value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().string.length));
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
@@ -2439,11 +2449,26 @@ DecodedControl decode_input_field(
     const bool read_only = bool_atom(payload.items[13], child_path(payload_path, 13));
     const std::string format = decoded_single_language_text(
         payload.items[34], child_path(payload_path, 34));
+    const auto horizontal_align = integer_atom<std::int32_t>(
+        payload.items[17], child_path(payload_path, 17));
+    if (horizontal_align < 0 || horizontal_align > 4) {
+        fail("OOF1114", child_path(payload_path, 17), "HorizontalAlign storage value 0 through 4",
+            std::to_string(horizontal_align), "InputField.HorizontalAlign storage value is unsupported");
+    }
+    const auto vertical_align = integer_atom<std::int32_t>(
+        payload.items[18], child_path(payload_path, 18));
+    if (vertical_align < 0 || vertical_align > 2) {
+        fail("OOF1114", child_path(payload_path, 18), "VerticalAlign storage value 0 through 2",
+            std::to_string(vertical_align), "InputField.VerticalAlign storage value is unsupported");
+    }
+    const auto choice_list_height = integer_atom<std::int32_t>(
+        payload.items[31], child_path(payload_path, 31));
     const auto input_field_flags = decode_input_field_flags(info, info_path);
     const InputFieldTextValues text_values{tool_tip, format};
+    const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height};
     require_exact(
         info,
-        canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values),
+        canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values),
         info_path,
         "InputField uses an unsupported property, event, or storage variation");
 
@@ -2469,6 +2494,20 @@ DecodedControl decode_input_field(
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     if (!format.empty()) control.properties().set_explicit(model::PropertyId::from_name("Format"), format);
+    if (horizontal_align != 4) {
+        constexpr std::array<std::string_view, 5> members{"Left", "Center", "Right", "Justify", "Auto"};
+        control.properties().set_explicit(model::PropertyId::from_name("HorizontalAlign"),
+            model::EnumerationValue{"HorizontalAlign", std::string(members[static_cast<std::size_t>(horizontal_align)])});
+    }
+    if (vertical_align != 0) {
+        constexpr std::array<std::string_view, 3> members{"Top", "Center", "Bottom"};
+        control.properties().set_explicit(model::PropertyId::from_name("VerticalAlign"),
+            model::EnumerationValue{"VerticalAlign", std::string(members[static_cast<std::size_t>(vertical_align)])});
+    }
+    if (choice_list_height != 0) {
+        control.properties().set_explicit(model::PropertyId::from_name("ChoiceListHeight"),
+            static_cast<std::int64_t>(choice_list_height));
+    }
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         if (input_field_flags[index] != input_field_flag_mappings[index].default_value) {
             control.properties().set_explicit(
@@ -2507,7 +2546,8 @@ std::string explicit_string(
 std::int32_t explicit_integer(
     const model::PropertySet& properties,
     std::string_view name,
-    std::int32_t default_value) {
+    std::int32_t default_value,
+    std::string_view property_path = "$") {
     const auto* value = properties.find(model::PropertyId::from_name(name));
     if (value == nullptr) {
         return default_value;
@@ -2521,16 +2561,45 @@ std::int32_t explicit_integer(
         const char* end = begin + decimal.size();
         const auto result = std::from_chars(begin, end, parsed, 10);
         if (decimal.empty() || result.ec != std::errc{} || result.ptr != end) {
-            fail("OOF1121", "$", "integral decimal property", decimal, "Storage dimension must be an integer");
+            fail("OOF1121", std::string(property_path), "integral decimal property", decimal,
+                "Storage integer property must be integral");
         }
     } else {
-        fail("OOF1121", "$", "integer property", "different value kind", "Storage encoder received an invalid property value");
+        fail("OOF1121", std::string(property_path), "integer property", "different value kind",
+            "Storage encoder received an invalid property value");
     }
     if (parsed < std::numeric_limits<std::int32_t>::min() ||
         parsed > std::numeric_limits<std::int32_t>::max()) {
-        fail("OOF1120", "$", "int32 property", std::to_string(parsed), "Storage integer is out of range");
+        fail("OOF1120", std::string(property_path), "int32 property", std::to_string(parsed),
+            "Storage integer is out of range");
     }
     return static_cast<std::int32_t>(parsed);
+}
+
+std::int32_t explicit_enum_storage_value(
+    const model::PropertySet& values,
+    std::string_view owner,
+    std::string_view name,
+    std::string_view expected_type,
+    std::int32_t default_value,
+    std::initializer_list<std::pair<std::string_view, std::int32_t>> members) {
+    const auto* entry = values.find(model::PropertyId::from_name(name));
+    if (entry == nullptr) return default_value;
+    const auto path = std::string("$/") + std::string(owner) + "/" + std::string(name);
+    if (!std::holds_alternative<model::EnumerationValue>(entry->value)) {
+        fail("OOF1122", path, "EnumerationValue of " + std::string(expected_type), "non-enumeration",
+            std::string(owner) + " enumeration has the wrong value type");
+    }
+    const auto& value = std::get<model::EnumerationValue>(entry->value);
+    if (value.type_name != expected_type) {
+        fail("OOF1122", path, std::string(expected_type) + " enumeration",
+            value.type_name + "." + value.member, std::string(owner) + " enumeration type is unsupported");
+    }
+    for (const auto& [member, storage_value] : members) {
+        if (value.member == member) return storage_value;
+    }
+    fail("OOF1122", path, std::string(expected_type) + " supported member", value.member,
+        std::string(owner) + " enum member is unsupported");
 }
 
 void require_allowed_properties(
@@ -2620,39 +2689,16 @@ LV encode_button(
             }
         }
     }
-    const auto enum_storage_value = [](const model::PropertySet& values, std::string_view name,
-                                       std::string_view expected_type, std::int32_t default_value,
-                                       std::initializer_list<std::pair<std::string_view, std::int32_t>> members) {
-        const auto* entry = values.find(model::PropertyId::from_name(name));
-        if (entry == nullptr) return default_value;
-        if (!std::holds_alternative<model::EnumerationValue>(entry->value)) {
-            fail("OOF1122", std::string("$/Button/") + std::string(name),
-                "EnumerationValue of " + std::string(expected_type), "non-enumeration",
-                "Button enumeration has the wrong value type");
-        }
-        const auto& value = std::get<model::EnumerationValue>(entry->value);
-        if (value.type_name != expected_type) {
-            fail("OOF1122", std::string("$/Button/") + std::string(name),
-                std::string(expected_type) + " enumeration", value.type_name + "." + value.member,
-                "Button enumeration type is unsupported");
-        }
-        for (const auto& [member, storage_value] : members) {
-            if (value.member == member) return storage_value;
-        }
-        fail("OOF1122", std::string("$/Button/") + std::string(name),
-            std::string(expected_type) + " supported member", value.member,
-            "Button enum member is unsupported");
-    };
-    const auto horizontal_align = enum_storage_value(control.properties(), "HorizontalAlign",
+    const auto horizontal_align = explicit_enum_storage_value(control.properties(), "Button", "HorizontalAlign",
         "HorizontalAlign", 1, {{"Left", 0}, {"Center", 1}, {"Right", 2}});
-    const auto vertical_align = enum_storage_value(control.properties(), "VerticalAlign",
+    const auto vertical_align = explicit_enum_storage_value(control.properties(), "Button", "VerticalAlign",
         "VerticalAlign", 1, {{"Top", 0}, {"Center", 1}, {"Bottom", 2}});
-    const auto picture_location = enum_storage_value(control.properties(), "PictureLocation",
+    const auto picture_location = explicit_enum_storage_value(control.properties(), "Button", "PictureLocation",
         "PictureLocation", 0, {{"Left", 0}, {"Right", 1}});
-    const auto picture_size = enum_storage_value(control.properties(), "PictureSize", "PictureSize", 0,
+    const auto picture_size = explicit_enum_storage_value(control.properties(), "Button", "PictureSize", "PictureSize", 0,
         {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3},
             {"AutoSize", 4}, {"ByFontSize", 7}});
-    const auto menu_mode = enum_storage_value(control.properties(), "MenuMode", "MenuMode", 0,
+    const auto menu_mode = explicit_enum_storage_value(control.properties(), "Button", "MenuMode", "MenuMode", 0,
         {{"DontUse", 0}, {"Use", 1}, {"UseExtra", 2}});
     const bool multi_line = explicit_bool(control.properties(), "MultiLine", false);
     const auto shortcut = explicit_button_shortcut(control.properties());
@@ -2785,7 +2831,8 @@ LV encode_input_field(
     require_allowed_properties(control.properties(), {
         "Enabled", "ReadOnly", "ToolTip", "Format", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
         "ClearButton", "SpinButton", "ChoiceListButton", "Transparent", "MultiLine",
-        "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete"}, "$/InputField");
+        "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete",
+        "HorizontalAlign", "VerticalAlign", "ChoiceListHeight"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -2799,6 +2846,13 @@ LV encode_input_field(
         explicit_string(control.properties(), "ToolTip"),
         explicit_string(control.properties(), "Format"),
     };
+    const InputFieldLayoutValues layout_values{
+        explicit_enum_storage_value(control.properties(), "InputField", "HorizontalAlign", "HorizontalAlign", 4,
+            {{"Left", 0}, {"Center", 1}, {"Right", 2}, {"Justify", 3}, {"Auto", 4}}),
+        explicit_enum_storage_value(control.properties(), "InputField", "VerticalAlign", "VerticalAlign", 0,
+            {{"Top", 0}, {"Center", 1}, {"Bottom", 2}}),
+        explicit_integer(control.properties(), "ChoiceListHeight", 0, "$/InputField/ChoiceListHeight"),
+    };
     InputFieldFlagValues input_field_flags{};
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
@@ -2808,7 +2862,7 @@ LV encode_input_field(
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags, text_values),
+        canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags, text_values, layout_values),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

@@ -5,6 +5,8 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <optional>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1907,6 +1909,184 @@ void test_input_field_tooltip_and_format_round_trip() {
     }
 }
 
+void test_input_field_alignment_and_choice_list_height_round_trip() {
+    struct LayoutProperties {
+        std::optional<std::string> horizontal;
+        std::optional<std::string> vertical;
+        std::optional<std::int64_t> height;
+        bool include_existing_properties = false;
+        std::optional<model::DecimalValue> decimal_height;
+    };
+    const auto make_document = [](const LayoutProperties& values) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "InputLayout";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::string;
+        entry.string = model::LengthQualifiers{64, false};
+        type.entries.push_back(entry);
+        document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", type});
+        model::ControlNode input{model::ObjectId{2}, "Entry", model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+        if (values.horizontal) {
+            input.properties().set_explicit(model::PropertyId::from_name("HorizontalAlign"),
+                model::EnumerationValue{"HorizontalAlign", *values.horizontal});
+        }
+        if (values.vertical) {
+            input.properties().set_explicit(model::PropertyId::from_name("VerticalAlign"),
+                model::EnumerationValue{"VerticalAlign", *values.vertical});
+        }
+        if (values.height) {
+            input.properties().set_explicit(model::PropertyId::from_name("ChoiceListHeight"), *values.height);
+        }
+        if (values.decimal_height) {
+            input.properties().set_explicit(model::PropertyId::from_name("ChoiceListHeight"), *values.decimal_height);
+        }
+        if (values.include_existing_properties) {
+            input.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+            input.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+            input.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Hint"));
+            input.properties().set_explicit(model::PropertyId::from_name("Format"), std::string("N=2"));
+            const std::array<std::pair<std::string_view, bool>, 14> flags{{
+                {"AutoChoiceIncomplete", true}, {"Wrap", false}, {"ChooseType", false},
+                {"MarkNegatives", true}, {"ChoiceButton", true}, {"OpenButton", true},
+                {"ClearButton", true}, {"SpinButton", true}, {"ChoiceListButton", true},
+                {"Transparent", true}, {"MultiLine", true}, {"ExtendedEdit", true},
+                {"PasswordMode", true}, {"AutoMarkIncomplete", true},
+            }};
+            for (const auto& [name, value] : flags) {
+                input.properties().set_explicit(model::PropertyId::from_name(name), value);
+            }
+        }
+        document.add_control(std::move(input));
+        return document;
+    };
+    const auto input_record = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1];
+    };
+    const auto payload = [&](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        return input_record(encoded).items[2].items[2].items[0];
+    };
+    const auto round_trip = [&](const LayoutProperties& values, std::int32_t horizontal,
+                                std::int32_t vertical, std::int32_t height) {
+        const auto encoded = form_stream::encode_document(make_document(values));
+        expect(encoded.ok(), "InputField layout values must encode");
+        const auto& encoded_payload = payload(encoded.value());
+        expect(encoded_payload.items[17].atom == std::to_string(horizontal) &&
+                encoded_payload.items[18].atom == std::to_string(vertical) &&
+                encoded_payload.items[31].atom == std::to_string(height),
+            "InputField alignment and height must occupy their proven control-info slots");
+        const auto decoded = form_stream::decode_document(encoded.value(), "InputLayout");
+        expect(decoded.ok(), "InputField layout values must decode");
+        const auto* input = decoded.value().find_control(model::ObjectId{2});
+        expect(input != nullptr, "InputField layout control must resolve");
+        const auto* decoded_horizontal = input->properties().find(model::PropertyId::from_name("HorizontalAlign"));
+        const auto* decoded_vertical = input->properties().find(model::PropertyId::from_name("VerticalAlign"));
+        const auto* decoded_height = input->properties().find(model::PropertyId::from_name("ChoiceListHeight"));
+        constexpr std::array<std::string_view, 5> horizontal_members{"Left", "Center", "Right", "Justify", "Auto"};
+        constexpr std::array<std::string_view, 3> vertical_members{"Top", "Center", "Bottom"};
+        expect((horizontal == 4 && decoded_horizontal == nullptr) ||
+                (decoded_horizontal && std::get<model::EnumerationValue>(decoded_horizontal->value) ==
+                    model::EnumerationValue{"HorizontalAlign", std::string(horizontal_members[horizontal])}),
+            "InputField HorizontalAlign must round-trip and omit Auto default");
+        expect((vertical == 0 && decoded_vertical == nullptr) ||
+                (decoded_vertical && std::get<model::EnumerationValue>(decoded_vertical->value) ==
+                    model::EnumerationValue{"VerticalAlign", std::string(vertical_members[vertical])}),
+            "InputField VerticalAlign must round-trip and omit Top default");
+        expect((height == 0 && decoded_height == nullptr) ||
+                (decoded_height && std::get<std::int64_t>(decoded_height->value) == height),
+            "InputField ChoiceListHeight must round-trip and omit zero default");
+        if (values.include_existing_properties) {
+            std::size_t explicit_count = 0;
+            input->properties().for_each_explicit([&](const model::PropertyEntry&) { ++explicit_count; });
+            expect(explicit_count == 21,
+                "new InputField layout properties must coexist with all 18 prior properties");
+        }
+        const auto reencoded = form_stream::encode_document(decoded.value());
+        expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+                list_stream::dump_compact(encoded.value()),
+            "InputField layout properties must preserve exact storage on reencode");
+        return encoded.value();
+    };
+
+    constexpr std::array<std::pair<std::string_view, std::int32_t>, 5> horizontal_values{{
+        {"Left", 0}, {"Center", 1}, {"Right", 2}, {"Justify", 3}, {"Auto", 4},
+    }};
+    for (const auto& [member, slot] : horizontal_values) {
+        round_trip(LayoutProperties{std::string(member), std::nullopt, std::nullopt, false, std::nullopt}, slot, 0, 0);
+    }
+    constexpr std::array<std::pair<std::string_view, std::int32_t>, 3> vertical_values{{
+        {"Top", 0}, {"Center", 1}, {"Bottom", 2},
+    }};
+    for (const auto& [member, slot] : vertical_values) {
+        round_trip(LayoutProperties{std::nullopt, std::string(member), std::nullopt, false, std::nullopt}, 4, slot, 0);
+    }
+    for (const std::int32_t value : {0, 7, -7, std::numeric_limits<std::int32_t>::min(),
+             std::numeric_limits<std::int32_t>::max()}) {
+        round_trip(LayoutProperties{std::nullopt, std::nullopt, value, false, std::nullopt}, 4, 0, value);
+    }
+    round_trip(LayoutProperties{"Right", "Bottom", 7, true, std::nullopt}, 2, 2, 7);
+
+    const auto defaults = form_stream::encode_document(make_document({}));
+    expect(defaults.ok(), "default InputField layout must encode");
+    auto invalid_horizontal = defaults.value();
+    invalid_horizontal.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[17] =
+        list_stream::ListValue::raw_atom("5");
+    expect_failure(form_stream::decode_document(invalid_horizontal, "InputLayout"), "OOF1114",
+        "$/1/2/2/1/2/2/0/17", "unknown InputField HorizontalAlign storage values must fail closed");
+    auto invalid_vertical = defaults.value();
+    invalid_vertical.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[18] =
+        list_stream::ListValue::raw_atom("3");
+    expect_failure(form_stream::decode_document(invalid_vertical, "InputLayout"), "OOF1114",
+        "$/1/2/2/1/2/2/0/18", "unknown InputField VerticalAlign storage values must fail closed");
+    auto out_of_range_storage_height = defaults.value();
+    out_of_range_storage_height.items[1].items[2].items[2].items[1].items[2].items[2].items[0].items[31] =
+        list_stream::ListValue::raw_atom("2147483648");
+    expect_failure(form_stream::decode_document(out_of_range_storage_height, "InputLayout"), "OOF1105",
+        "$/1/2/2/1/2/2/0/31", "out-of-int32 InputField ChoiceListHeight storage must fail closed");
+
+    const auto expect_invalid_property = [&](std::optional<model::EnumerationValue> horizontal,
+                                             std::optional<model::EnumerationValue> vertical,
+                                             std::string_view property_path) {
+        auto form = model::Form{};
+        form.id = model::ObjectId{1};
+        form.name = "InvalidInputLayout";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::string;
+        entry.string = model::LengthQualifiers{64, false};
+        type.entries.push_back(entry);
+        document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", type});
+        model::ControlNode input{model::ObjectId{2}, "Entry", model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+        if (horizontal) input.properties().set_explicit(model::PropertyId::from_name("HorizontalAlign"), *horizontal);
+        if (vertical) input.properties().set_explicit(model::PropertyId::from_name("VerticalAlign"), *vertical);
+        document.add_control(std::move(input));
+        expect_failure(form_stream::encode_document(document), "OOF1122", property_path,
+            "InputField must reject invalid enum type or member");
+    };
+    expect_invalid_property(model::EnumerationValue{"VerticalAlign", "Top"}, std::nullopt,
+        "$/InputField/HorizontalAlign");
+    expect_invalid_property(model::EnumerationValue{"HorizontalAlign", "Middle"}, std::nullopt,
+        "$/InputField/HorizontalAlign");
+    expect_invalid_property(std::nullopt, model::EnumerationValue{"HorizontalAlign", "Center"},
+        "$/InputField/VerticalAlign");
+    expect_invalid_property(std::nullopt, model::EnumerationValue{"VerticalAlign", "Middle"},
+        "$/InputField/VerticalAlign");
+
+    auto fractional_document = make_document({std::nullopt, std::nullopt, std::nullopt, false, model::DecimalValue{"7.5"}});
+    expect_failure(form_stream::encode_document(fractional_document), "OOF1123", "$",
+        "fractional ChoiceListHeight must be rejected as invalid for the integer32 model property");
+    auto overflow_document = make_document({std::nullopt, std::nullopt, std::nullopt, false, model::DecimalValue{"2147483648"}});
+    expect_failure(form_stream::encode_document(overflow_document), "OOF1123", "$",
+        "ChoiceListHeight outside int32 must be rejected by model validation");
+}
+
 void test_single_input_field_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -3397,6 +3577,7 @@ int main() {
         test_fresh_checkbox_stream_decode();
         test_button_label_input_field_round_trip();
         test_input_field_tooltip_and_format_round_trip();
+        test_input_field_alignment_and_choice_list_height_round_trip();
         test_single_input_field_round_trip();
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
