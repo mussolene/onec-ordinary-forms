@@ -723,6 +723,129 @@ void test_button_alignments_and_tooltip_round_trip() {
         "normalizing a mixed-ending ToolTip through the model must preserve its storage record");
 }
 
+void test_button_colors_round_trip_and_validation() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "ButtonColors";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{4}},
+        model::ControlRef{model::ObjectId{6}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode rgb{model::ObjectId{2}, "RGB", model::ButtonPayload{}};
+    model::ColorValue absolute;
+    absolute.kind = model::ColorKind::absolute;
+    absolute.red = 17;
+    absolute.green = 83;
+    absolute.blue = 201;
+    rgb.properties().set_explicit(model::PropertyId::from_name("BorderColor"), absolute);
+    rgb.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"),
+        model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+            model::QualifiedName{"StyleColors.ButtonBackColor"}});
+    document.add_control(std::move(rgb));
+    model::ControlNode automatic{model::ObjectId{4}, "Automatic", model::ButtonPayload{}};
+    automatic.properties().set_explicit(model::PropertyId::from_name("BorderColor"), model::ColorValue{});
+    document.add_control(std::move(automatic));
+    model::ControlNode named_styles{model::ObjectId{6}, "NamedStyles", model::ButtonPayload{}};
+    named_styles.properties().set_explicit(model::PropertyId::from_name("BorderColor"),
+        model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+            model::QualifiedName{"StyleColors.ButtonTextColor"}});
+    named_styles.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"),
+        model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+            model::QualifiedName{"StyleColors.ButtonBorderColor"}});
+    document.add_control(std::move(named_styles));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "Button absolute, automatic, and style colors must encode");
+    const auto& records = encoded.value().items[1].items[2].items[2].items;
+    const auto& rgb_base = records[1].items[2].items[1].items[0];
+    expect(rgb_base.items[6].items[1].atom == "0" && rgb_base.items[6].items[2].items[0].atom == "13194001",
+        "Button absolute RGB must use the observed packed BGR integer");
+    expect(rgb_base.items[10].items[2].items[0].atom == "-7" &&
+               rgb_base.items[9].items[2].items[0].atom == "-7",
+        "Button style colors must use their named platform identifiers independently");
+    const auto& named_base = records[3].items[2].items[1].items[0];
+    expect(named_base.items[6].items[2].items[0].atom == "-21" &&
+               named_base.items[10].items[2].items[0].atom == "-34",
+        "Button BorderColor and ButtonTextColor must retain explicit -21 and -34 named styles");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "ButtonColors");
+    expect(decoded.ok(), "Button color values must decode");
+    const auto* decoded_rgb = decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_auto = decoded.value().find_control(model::ObjectId{4});
+    const auto* decoded_named = decoded.value().find_control(model::ObjectId{6});
+    expect(decoded_rgb && decoded_auto && decoded_named, "Button color owners must survive decoding");
+    const auto* border = decoded_rgb->properties().find(model::PropertyId::from_name("BorderColor"));
+    const auto* text = decoded_rgb->properties().find(model::PropertyId::from_name("ButtonTextColor"));
+    const auto* decoded_style = text ? std::get_if<model::QualifiedName>(
+        &std::get<model::ColorValue>(text->value).style) : nullptr;
+    expect(border && std::get<model::ColorValue>(border->value) == absolute && decoded_style &&
+               *decoded_style == model::QualifiedName{"StyleColors.ButtonBackColor"},
+        "non-default Button RGB and cross-style reference must round-trip");
+    expect(!decoded_auto->properties().find(model::PropertyId::from_name("BorderColor")),
+        "explicit canonical Button default color must normalize to absent");
+    const auto* named_border = decoded_named->properties().find(model::PropertyId::from_name("BorderColor"));
+    const auto* named_text = decoded_named->properties().find(model::PropertyId::from_name("ButtonTextColor"));
+    expect(named_border && std::get<model::ColorValue>(named_border->value).style ==
+               model::StyleReference{model::QualifiedName{"StyleColors.ButtonTextColor"}} &&
+               named_text && std::get<model::ColorValue>(named_text->value).style ==
+               model::StyleReference{model::QualifiedName{"StyleColors.ButtonBorderColor"}},
+        "all observed named style identifiers must decode to their public names");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "Button color storage must round-trip without drift");
+
+    auto invalid_color = absolute;
+    invalid_color.kind = static_cast<model::ColorKind>(255);
+    invalid_color.style = model::QualifiedName{"StyleColors.ButtonTextColor"};
+    model::Form invalid_form;
+    invalid_form.id = model::ObjectId{1};
+    invalid_form.name = "InvalidColor";
+    invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument unknown_kind(std::move(invalid_form));
+    model::ControlNode unknown_button{model::ObjectId{2}, "Unknown", model::ButtonPayload{}};
+    unknown_button.properties().set_explicit(model::PropertyId::from_name("BorderColor"), invalid_color);
+    unknown_kind.add_control(std::move(unknown_button));
+    expect_failure(form_stream::encode_document(unknown_kind), "OOF1122", "$/Button/BorderColor",
+        "unknown ColorKind values must not be normalized as style references");
+
+    invalid_color = absolute;
+    invalid_color.alpha = 254;
+    model::Form alpha_form;
+    alpha_form.id = model::ObjectId{1};
+    alpha_form.name = "InvalidAlpha";
+    alpha_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument bad_alpha(std::move(alpha_form));
+    model::ControlNode alpha_button{model::ObjectId{2}, "Alpha", model::ButtonPayload{}};
+    alpha_button.properties().set_explicit(model::PropertyId::from_name("BorderColor"), invalid_color);
+    bad_alpha.add_control(std::move(alpha_button));
+    expect_failure(form_stream::encode_document(bad_alpha), "OOF1122", "$/Button/BorderColor",
+        "Button absolute colors with alpha must be rejected");
+
+    const auto reject_color = [](model::ColorValue color, std::string_view message) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "InvalidStyle";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument invalid(std::move(form));
+        model::ControlNode button{model::ObjectId{2}, "Invalid", model::ButtonPayload{}};
+        button.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"), std::move(color));
+        invalid.add_control(std::move(button));
+        expect_failure(form_stream::encode_document(invalid), "OOF1122", "$/Button/ButtonTextColor", message);
+    };
+    auto malformed_style = model::ColorValue{model::ColorKind::style_reference, 1, 0, 0, 254,
+        model::QualifiedName{"StyleColors.ButtonTextColor"}};
+    reject_color(malformed_style, "style colors with explicit channels or alpha must be rejected");
+    malformed_style = model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+        model::QualifiedName{"StyleColors.UnknownColor"}};
+    reject_color(malformed_style, "unknown qualified style references must be rejected");
+
+    auto malformed_storage = encoded.value();
+    malformed_storage.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[6].items[2].items[0] =
+        list_stream::ListValue::raw_atom("16777216");
+    expect_failure(form_stream::decode_document(malformed_storage, "ButtonColors"), "OOF1114",
+        "$/1/2/2/1/2/1/0/6/2/0", "out-of-range packed Button RGB must be rejected");
+}
+
 void test_button_picture_enums_round_trip_and_validation() {
     static constexpr std::string_view size_names[] = {
         "RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "ByFontSize"};
@@ -2622,6 +2745,7 @@ int main() {
         test_multiple_top_level_buttons_round_trip();
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
+        test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
         test_button_then_label_decoration_round_trip();
         test_fresh_checkbox_stream_decode();

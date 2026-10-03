@@ -213,8 +213,8 @@ Module.bsl совпадают; повторная сборка дает иден
 ## Текущий исполняемый набор свойств Button
 
 Поддержаны Caption, Enabled, MultiLine, ToolTip, HorizontalAlign,
-VerticalAlign, PictureLocation и PictureSize, а также Name, Position,
-подтвержденные Bindings и Click.
+VerticalAlign, PictureLocation, PictureSize, BorderColor, ButtonTextColor и
+ButtonBackColor, а также Name, Position, подтвержденные Bindings и Click.
 Выравнивания по умолчанию Center, подсказка пустая. Неподдержанные члены
 перечислений и чужой тип, даже с default member, отвергаются при сборке.
 Именованный XML с Right/Bottom и многострочной подсказкой прошел строгий
@@ -229,5 +229,16 @@ default RealSize. Само свойство Picture и содержимое ка
 `ev_a042ad82e22642eabe0a0c117af4e6c1`,
 `ev_364cb10e1ffd4ee38697aa5f43b6e274`.
 
-Это 8/16 прямых свойств Button, не полная поддержка типа. API GetPropVal
+Цвета поддерживают непрозрачный RGB, automatic и именованные ссылки
+StyleColors.ButtonTextColor, StyleColors.ButtonBackColor,
+StyleColors.ButtonBorderColor. BorderColor по умолчанию automatic, текст и
+фон ссылаются на соответствующие цвета стиля. Альфа-канал, другие имена
+стиля и другие виды платформенных цветов явно отвергаются. Проверены
+15 отдельных присваиваний с обратным чтением и строгая сборка из XML;
+12 getters созданной формы совпали с заданными значениями. Доказательства:
+`ev_59bffaa579c3408aa501cc0716a4ae76`,
+`ev_3f6d1fc6961e4480ab402ab91a64649a`.
+
+Это 11/16 прямых свойств Button в перечисленных вариантах, не полная
+поддержка типа. API GetPropVal
 с вычислением default пока остается требованием целевой модели.

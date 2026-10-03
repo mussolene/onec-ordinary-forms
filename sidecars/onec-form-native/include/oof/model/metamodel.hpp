@@ -124,6 +124,7 @@ enum class DefaultKind : std::uint8_t {
     decimal,
     string,
     enumeration,
+    color,
 };
 
 struct DefaultValue {

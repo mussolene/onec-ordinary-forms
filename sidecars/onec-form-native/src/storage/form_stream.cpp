@@ -571,7 +571,122 @@ LV canonical_panel_payload(const std::vector<model::Page>& pages, model::Control
 }
 
 
-LV canonical_button_base(bool enabled, std::string_view tool_tip = {}) {
+model::ColorValue button_color_default(std::string_view property) {
+    if (property == "BorderColor") {
+        return model::ColorValue{};
+    }
+    model::ColorValue value;
+    value.kind = model::ColorKind::style_reference;
+    if (property == "ButtonTextColor") {
+        value.style = model::QualifiedName{"StyleColors.ButtonTextColor"};
+    } else if (property == "ButtonBackColor") {
+        value.style = model::QualifiedName{"StyleColors.ButtonBackColor"};
+    } else {
+        fail("OOF1122", "$/Button", "known Button color property", std::string(property),
+            "Button color default is not declared");
+    }
+    return value;
+}
+
+LV encode_button_color(const model::ColorValue& color, std::string_view path) {
+    const bool default_channels = color.red == 0 && color.green == 0 &&
+        color.blue == 0 && color.alpha == 255;
+    if (color.kind == model::ColorKind::automatic) {
+        if (!default_channels || !std::holds_alternative<std::monostate>(color.style)) {
+            fail("OOF1122", std::string(path), "automatic color defaults", "non-default fields",
+                "Button automatic color carries unsupported channels or a style reference");
+        }
+        return list({raw("4"), raw("4"), list({raw("0")}), raw("4")});
+    }
+    if (color.kind == model::ColorKind::absolute) {
+        if (color.alpha != 255 || !std::holds_alternative<std::monostate>(color.style)) {
+            fail("OOF1122", std::string(path), "opaque absolute RGB without a style", "alpha or style",
+                "Button absolute colors support opaque RGB values only");
+        }
+        const std::uint32_t packed = (static_cast<std::uint32_t>(color.blue) << 16) |
+            (static_cast<std::uint32_t>(color.green) << 8) | color.red;
+        return list({raw("4"), raw("0"), list({raw(std::to_string(packed))}), raw("0")});
+    }
+    if (color.kind != model::ColorKind::style_reference) {
+        fail("OOF1122", std::string(path), "ColorKind absolute, automatic, or style_reference",
+            std::to_string(static_cast<unsigned int>(color.kind)),
+            "Button color kind is unsupported");
+    }
+    if (!default_channels) {
+        fail("OOF1122", std::string(path), "named style color without channels", "non-default channels",
+            "Button style colors cannot carry explicit channels");
+    }
+    const auto* name = std::get_if<model::QualifiedName>(&color.style);
+    if (name == nullptr) {
+        fail("OOF1122", std::string(path), "known QualifiedName style reference", "non-named style",
+            "Button colors support named style references only");
+    }
+    std::int32_t style_id = 0;
+    if (name->value == "StyleColors.ButtonTextColor") style_id = -21;
+    else if (name->value == "StyleColors.ButtonBackColor") style_id = -7;
+    else if (name->value == "StyleColors.ButtonBorderColor") style_id = -34;
+    else fail("OOF1122", std::string(path), "known Button StyleColors property", name->value,
+        "Button color style reference is unsupported");
+    return list({raw("4"), raw("3"), list({raw(std::to_string(style_id))}), raw("3")});
+}
+
+model::ColorValue decode_button_color(const LV& value, std::string_view path) {
+    require_arity(value, 4, path);
+    require_raw_constant(value.items[0], "4", child_path(path, 0));
+    const auto kind = integer_atom<std::int32_t>(value.items[1], child_path(path, 1));
+    if (kind == 4) {
+        require_exact(value, list({raw("4"), raw("4"), list({raw("0")}), raw("4")}),
+            path, "Button automatic color record is malformed");
+        return model::ColorValue{};
+    }
+    if (kind == 0) {
+        require_raw_constant(value.items[3], "0", child_path(path, 3));
+        require_arity(value.items[2], 1, child_path(path, 2));
+        const auto packed = integer_atom<std::int64_t>(value.items[2].items[0], child_path(path, 2) + "/0");
+        if (packed < 0 || packed > 0x00ffffff) {
+            fail("OOF1114", child_path(path, 2) + "/0", "packed RGB in 0..16777215",
+                std::to_string(packed), "Button packed RGB color is out of range");
+        }
+        model::ColorValue color;
+        color.kind = model::ColorKind::absolute;
+        color.red = static_cast<std::uint8_t>(packed & 0xff);
+        color.green = static_cast<std::uint8_t>((packed >> 8) & 0xff);
+        color.blue = static_cast<std::uint8_t>((packed >> 16) & 0xff);
+        return color;
+    }
+    if (kind == 3) {
+        require_raw_constant(value.items[3], "3", child_path(path, 3));
+        require_arity(value.items[2], 1, child_path(path, 2));
+        const auto style_id = integer_atom<std::int32_t>(value.items[2].items[0], child_path(path, 2) + "/0");
+        std::string_view style_name;
+        if (style_id == -21) style_name = "StyleColors.ButtonTextColor";
+        else if (style_id == -7) style_name = "StyleColors.ButtonBackColor";
+        else if (style_id == -34) style_name = "StyleColors.ButtonBorderColor";
+        else fail("OOF1114", child_path(path, 2) + "/0", "known Button StyleColors ID",
+            std::to_string(style_id), "Button color style identifier is unsupported");
+        model::ColorValue color;
+        color.kind = model::ColorKind::style_reference;
+        color.style = model::QualifiedName{std::string(style_name)};
+        return color;
+    }
+    fail("OOF1114", child_path(path, 1), "Button color kind 0, 3, or 4", std::to_string(kind),
+        "Button color storage kind is unsupported");
+}
+
+model::ColorValue explicit_button_color(const model::PropertySet& properties, std::string_view name) {
+    const auto* entry = properties.find(model::PropertyId::from_name(name));
+    if (entry == nullptr) return button_color_default(name);
+    if (!std::holds_alternative<model::ColorValue>(entry->value)) {
+        fail("OOF1122", std::string("$/Button/") + std::string(name), "ColorValue", "different value type",
+            "Button color property has the wrong value type");
+    }
+    return std::get<model::ColorValue>(entry->value);
+}
+
+LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
+    const model::ColorValue* border_color = nullptr,
+    const model::ColorValue* button_text_color = nullptr,
+    const model::ColorValue* button_back_color = nullptr) {
     auto value = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
@@ -579,6 +694,9 @@ LV canonical_button_base(bool enabled, std::string_view tool_tip = {}) {
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
     value.items[1] = raw(enabled ? "1" : "0");
     value.items[12] = encoded_localized(tool_tip);
+    if (border_color != nullptr) value.items[6] = encode_button_color(*border_color, "$/Button/BorderColor");
+    if (button_text_color != nullptr) value.items[10] = encode_button_color(*button_text_color, "$/Button/ButtonTextColor");
+    if (button_back_color != nullptr) value.items[9] = encode_button_color(*button_back_color, "$/Button/ButtonBackColor");
     return value;
 }
 
@@ -590,9 +708,12 @@ LV canonical_button_properties(
     std::int32_t picture_location,
     std::int32_t picture_size,
     bool multi_line,
-    std::string_view tool_tip) {
+    std::string_view tool_tip,
+    const model::ColorValue& border_color,
+    const model::ColorValue& button_text_color,
+    const model::ColorValue& button_back_color) {
     return list({
-        canonical_button_base(enabled, tool_tip),
+        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color),
         raw("14"),
         encoded_localized(caption),
         raw(std::to_string(horizontal_align)),
@@ -1330,6 +1451,9 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base.items[12], child_path(base_path, 12));
+    const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
+    const auto button_back_color = decode_button_color(base.items[9], child_path(base_path, 9));
+    const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
     const std::string observed_state = raw_atom(base.items[17], child_path(base_path, 17));
     if (observed_state != "1" && observed_state != "2") {
         fail(
@@ -1345,7 +1469,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     normalized_base.items[17] = raw("2");
     require_exact(
         normalized_base,
-        canonical_button_base(enabled, tool_tip),
+        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color),
         base_path,
         "Button base record contains an unsupported property variation");
     const std::string caption = decoded_single_language_text(
@@ -1382,7 +1506,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     require_exact(
         normalized_properties,
         canonical_button_properties(enabled, caption, horizontal_align, vertical_align, picture_location,
-            picture_size, multi_line, tool_tip),
+            picture_size, multi_line, tool_tip, border_color, button_text_color, button_back_color),
         properties_path,
         "Button payload contains an unsupported property variation");
 
@@ -1419,6 +1543,15 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     }
     if (!tool_tip.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    }
+    if (border_color != button_color_default("BorderColor")) {
+        control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+    }
+    if (button_text_color != button_color_default("ButtonTextColor")) {
+        control.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"), button_text_color);
+    }
+    if (button_back_color != button_color_default("ButtonBackColor")) {
+        control.properties().set_explicit(model::PropertyId::from_name("ButtonBackColor"), button_back_color);
     }
     if (horizontal_align != 1) {
         static constexpr std::string_view members[] = {"Left", "Center", "Right"};
@@ -1767,10 +1900,13 @@ LV encode_button(
     }
     require_allowed_properties(control.properties(),
         {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign",
-            "PictureLocation", "PictureSize"}, "$/Button");
+            "PictureLocation", "PictureSize", "BorderColor", "ButtonTextColor", "ButtonBackColor"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto border_color = explicit_button_color(control.properties(), "BorderColor");
+    const auto button_text_color = explicit_button_color(control.properties(), "ButtonTextColor");
+    const auto button_back_color = explicit_button_color(control.properties(), "ButtonBackColor");
     const auto enum_storage_value = [](const model::PropertySet& values, std::string_view name,
                                        std::string_view expected_type, std::int32_t default_value,
                                        std::initializer_list<std::pair<std::string_view, std::int32_t>> members) {
@@ -1812,7 +1948,8 @@ LV encode_button(
         list({
             raw("1"),
             canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
-                picture_location, picture_size, multi_line, tool_tip),
+                picture_location, picture_size, multi_line, tool_tip,
+                border_color, button_text_color, button_back_color),
             canonical_event_table(handler),
         }),
         encode_geometry(control.position, context, IncomingAnchorLists{}),

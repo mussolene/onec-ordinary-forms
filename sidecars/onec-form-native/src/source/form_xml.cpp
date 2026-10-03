@@ -929,6 +929,20 @@ bool equals_descriptor_default(
             return std::holds_alternative<model::EnumerationValue>(value) &&
                    std::get<model::EnumerationValue>(value).type_name == descriptor.api_name &&
                    std::get<model::EnumerationValue>(value).member == canonical;
+        case mm::DefaultKind::color: {
+            if (!std::holds_alternative<model::ColorValue>(value)) return false;
+            const auto& color = std::get<model::ColorValue>(value);
+            const bool default_channels = color.red == 0 && color.green == 0 &&
+                color.blue == 0 && color.alpha == 255;
+            if (!default_channels) return false;
+            if (canonical == "automatic") {
+                return color.kind == model::ColorKind::automatic &&
+                    std::holds_alternative<std::monostate>(color.style);
+            }
+            const auto* style = std::get_if<model::QualifiedName>(&color.style);
+            return color.kind == model::ColorKind::style_reference && style != nullptr &&
+                style->value == canonical;
+        }
     }
     return false;
 }

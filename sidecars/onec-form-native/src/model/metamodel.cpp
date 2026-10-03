@@ -345,6 +345,24 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::enumeration,
         "RealSize");
+    classify_property(
+        button,
+        "BorderColor",
+        StorageCodec::control_base,
+        DefaultKind::color,
+        "automatic");
+    classify_property(
+        button,
+        "ButtonTextColor",
+        StorageCodec::control_base,
+        DefaultKind::color,
+        "StyleColors.ButtonTextColor");
+    classify_property(
+        button,
+        "ButtonBackColor",
+        StorageCodec::control_base,
+        DefaultKind::color,
+        "StyleColors.ButtonBackColor");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(
