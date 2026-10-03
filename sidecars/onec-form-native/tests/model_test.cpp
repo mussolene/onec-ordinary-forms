@@ -392,7 +392,7 @@ void test_page_object_graph() {
     expect(document.validate().ok(), "panel-page-control graph must validate");
 }
 
-void test_page_policy_rejection() {
+void test_root_page_and_remaining_page_policies() {
     Form form;
     form.id = ObjectId{1};
     form.children.push_back(PageRef{ObjectId{11}});
@@ -401,11 +401,92 @@ void test_page_policy_rejection() {
     Page page;
     page.id = ObjectId{11};
     page.name = "RootPage";
+    page.children.push_back(ControlRef{ObjectId{12}});
     document.add_page(std::move(page));
+    document.add_control(ControlNode{ObjectId{12}, "PageButton", ButtonPayload{}});
 
-    expect(
-        document.validate().has(InvariantCode::illegal_children),
-        "form root must reject a page that is not owned by a panel");
+    expect(document.validate().ok(), "form root may own a page with control children");
+
+    Form dangling_seed;
+    dangling_seed.id = ObjectId{1};
+    dangling_seed.children.push_back(PageRef{ObjectId{99}});
+    OrdinaryFormDocument dangling_document(std::move(dangling_seed));
+    expect(dangling_document.validate().has(InvariantCode::dangling_reference),
+        "a root Page reference must still resolve to a Page object");
+
+    Form group_seed;
+    group_seed.id = ObjectId{1};
+    group_seed.name = "Main";
+    OrdinaryFormDocument group_document(std::move(group_seed));
+    ControlNode group{ObjectId{2}, "Group", UsualGroupPayload{}};
+    group.children.push_back(PageRef{ObjectId{3}});
+    group_document.add_control(std::move(group));
+    Page illegal_page;
+    illegal_page.id = ObjectId{3};
+    illegal_page.name = "IllegalPage";
+    group_document.add_page(std::move(illegal_page));
+    auto group_form = group_document.form();
+    group_form.children.push_back(ControlRef{ObjectId{2}});
+    group_document.set_form(std::move(group_form));
+    expect(group_document.validate().has(InvariantCode::illegal_children),
+        "UsualGroup must continue to reject Page children");
+
+    Form nested_seed;
+    nested_seed.id = ObjectId{1};
+    nested_seed.name = "Main";
+    OrdinaryFormDocument nested_page_document(std::move(nested_seed));
+    Page parent_page;
+    parent_page.id = ObjectId{2};
+    parent_page.name = "ParentPage";
+    parent_page.children.push_back(PageRef{ObjectId{3}});
+    nested_page_document.add_page(std::move(parent_page));
+    Page nested_page;
+    nested_page.id = ObjectId{3};
+    nested_page.name = "NestedPage";
+    nested_page_document.add_page(std::move(nested_page));
+    auto nested_form = nested_page_document.form();
+    nested_form.children.push_back(PageRef{ObjectId{2}});
+    nested_page_document.set_form(std::move(nested_form));
+    expect(nested_page_document.validate().has(InvariantCode::illegal_children),
+        "Page must continue to reject nested Page children");
+
+    Form multiply_owned_seed;
+    multiply_owned_seed.id = ObjectId{1};
+    multiply_owned_seed.name = "Main";
+    OrdinaryFormDocument multiply_owned_document(std::move(multiply_owned_seed));
+    Page multiply_owned_page;
+    multiply_owned_page.id = ObjectId{2};
+    multiply_owned_page.name = "SharedPage";
+    multiply_owned_document.add_page(std::move(multiply_owned_page));
+    auto multiply_owned_form = multiply_owned_document.form();
+    multiply_owned_form.children.push_back(PageRef{ObjectId{2}});
+    multiply_owned_document.set_form(std::move(multiply_owned_form));
+    ControlNode panel{ObjectId{3}, "Panel", PanelPayload{}};
+    panel.children.push_back(PageRef{ObjectId{2}});
+    multiply_owned_document.add_control(std::move(panel));
+    auto multiply_owned_form_again = multiply_owned_document.form();
+    multiply_owned_form_again.children.push_back(ControlRef{ObjectId{3}});
+    multiply_owned_document.set_form(std::move(multiply_owned_form_again));
+    expect(multiply_owned_document.validate().has(InvariantCode::multiple_parents),
+        "a root Page must still have exactly one authoritative parent");
+
+    Form page_cycle_seed;
+    page_cycle_seed.id = ObjectId{1};
+    page_cycle_seed.name = "Main";
+    OrdinaryFormDocument page_cycle_document(std::move(page_cycle_seed));
+    Page root_page;
+    root_page.id = ObjectId{2};
+    root_page.name = "RootPage";
+    root_page.children.push_back(ControlRef{ObjectId{3}});
+    page_cycle_document.add_page(std::move(root_page));
+    ControlNode cycle_panel{ObjectId{3}, "CyclePanel", PanelPayload{}};
+    cycle_panel.children.push_back(PageRef{ObjectId{2}});
+    page_cycle_document.add_control(std::move(cycle_panel));
+    auto page_cycle_form = page_cycle_document.form();
+    page_cycle_form.children.push_back(PageRef{ObjectId{2}});
+    page_cycle_document.set_form(std::move(page_cycle_form));
+    expect(page_cycle_document.validate().has(InvariantCode::cycle),
+        "a root Page cycle through Panel must continue to be rejected");
 }
 
 void test_dangling_and_child_policy_rejection() {
@@ -567,7 +648,7 @@ int main() {
         test_category_scoped_object_ids();
         test_cycle_rejection();
         test_page_object_graph();
-        test_page_policy_rejection();
+        test_root_page_and_remaining_page_policies();
         test_dangling_and_child_policy_rejection();
         test_property_reference_rejection();
         test_property_applicability_and_type_validation();

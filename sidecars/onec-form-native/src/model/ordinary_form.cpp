@@ -542,14 +542,6 @@ ValidationReport OrdinaryFormDocument::validate() const {
 
     for (const ChildItemRef& child : form_.children) {
         require_child(form_.id, child);
-        if (std::holds_alternative<PageRef>(child)) {
-            add_violation(
-                report,
-                InvariantCode::illegal_children,
-                form_.id,
-                child_id(child),
-                "form root accepts controls, not panel pages");
-        }
     }
     std::set<std::string_view> form_event_names;
     for (const EventRef event : form_.events) {

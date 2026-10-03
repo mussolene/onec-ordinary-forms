@@ -626,7 +626,7 @@
       <xs:element name="Attributes" type="AttributesType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Commands" type="CommandsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureAssets" type="PictureAssetsType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChildItems" type="ControlChildItemsType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ChildItems" type="PanelChildItemsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="id" type="ObjectIdType" use="required"/>
     <xs:attribute name="name" type="xs:string" use="required"/>

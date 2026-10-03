@@ -650,7 +650,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "      <xs:element name=\"Attributes\" type=\"AttributesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Commands\" type=\"CommandsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"PictureAssets\" type=\"PictureAssetsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
-        "      <xs:element name=\"ChildItems\" type=\"ControlChildItemsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"ChildItems\" type=\"PanelChildItemsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "    </xs:sequence>\n"
         "    <xs:attribute name=\"id\" type=\"ObjectIdType\" use=\"required\"/>\n"
         "    <xs:attribute name=\"name\" type=\"xs:string\" use=\"required\"/>\n"

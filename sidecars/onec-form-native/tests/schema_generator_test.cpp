@@ -476,7 +476,7 @@ void test_document_package_types(
         "AttributesType",
         "CommandsType",
         "PictureAssetsType",
-        "ControlChildItemsType",
+        "PanelChildItemsType",
     };
     for (std::size_t index = 0; index < form_surface_names.size(); ++index) {
         expect_element_shape(
@@ -976,8 +976,8 @@ void test_document_instances(xmlSchemaPtr schema) {
         validate_document(
             schema,
             "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\">"
-            "<ChildItems><Page id=\"2\" name=\"RootPage\"/></ChildItems></Form>") != 0,
-        "Form root must reject Page");
+            "<ChildItems><Page id=\"2\" name=\"RootPage\"/></ChildItems></Form>") == 0,
+        "Form root must accept Page");
 }
 
 void test_schema_structure_coverage_does_not_imply_codec_coverage(
