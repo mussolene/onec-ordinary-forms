@@ -116,13 +116,24 @@ are rejected instead of reconstructed from a baseline stream.
 
 Changing the observed Right constraint changes the runtime width of a bound
 child while its saved rectangle remains fixed. This establishes a layout
-effect, not the complete formula for every page variant. Bottom has storage
-roundtrip coverage but no independent runtime formula proof. The root writer
+effect, not the complete formula for every page variant. A subsequent Bottom
+experiment confirms a four-pixel height change for a four-unit constraint
+change, with the saved rectangle fixed. A larger change encounters another
+size limit whose formula remains unproven. The root writer
 now uses this named boundary encoder. Verification:
 `ev_d8864750203a47bfa4413ae13c294c97`,
 `ev_d1df9f1b84274f029da48a13d8776302`,
 `ev_e2fddecde6c9498c8f119fd3d812cc7b`.
 Whole recursive Panel/Page document serialization remains incomplete.
+
+The ordinary-control geometry codec uses an explicit owner, page index and
+local sibling ordinal. Within a Panel, platform target zero resolves to that
+Panel in named bindings, including proportional targets. At root it resolves
+to Form. A nested binding to Form is rejected until its separate storage
+representation is established. Page and ordinal mismatches, invalid owners,
+incoming IDs and source edges fail explicitly. This codec does not by itself
+implement the recursive Panel/Page tables. Runtime Bottom evidence:
+`ev_7efcc3e0e5ae4378b70db7f71010f4fc`.
 
 The editable package is:
 

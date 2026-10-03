@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -1748,6 +1749,143 @@ void test_page_boundary_position_codec() {
         "missing Page constraints must not be inferred from coordinates");
 }
 
+void test_owner_aware_control_geometry_codec() {
+    const model::ControlRef owner{model::ObjectId{42}};
+    const form_stream::GeometryContext context{owner, 3, 7};
+    form_stream::ControlGeometry source;
+    source.position.width.set(120);
+    source.position.height.set(24);
+    model::AnchorBinding binding;
+    binding.coordinate = model::BindingCoordinate::right;
+    binding.target_coordinate = model::BindingCoordinate::right;
+    binding.target = owner;
+    model::AnchorBindingTarget proportional;
+    proportional.coordinate = model::BindingCoordinate::left;
+    proportional.target = owner;
+    binding.proportional = proportional;
+    source.position.bindings.anchors.push_back(binding);
+    source.incoming[0].push_back({9, 1});
+
+    const auto encoded = form_stream::encode_control_geometry(source, context);
+    expect(encoded.ok(), encoded ? "nested geometry must encode" : encoded.diagnostics().front().message);
+    const auto cursor = geometry_tail_start(encoded.value());
+    expect(encoded.value().items[cursor].atom == "3" && encoded.value().items[cursor + 1].atom == "7" &&
+               encoded.value().items[cursor + 2].atom == "8",
+        "geometry must encode the explicit page and local sibling ordinal");
+    expect(list_stream::dump_compact(encoded.value().items[9]) == "{0,{2,0,3,0},{2,0,2,0}}",
+        "primary and proportional references to the owning Panel must encode as target zero");
+
+    const auto decoded = form_stream::decode_control_geometry(encoded.value(), context);
+    expect(decoded.ok(), decoded ? "nested geometry must decode" : decoded.diagnostics().front().message);
+    const auto& roundtrip = decoded.value();
+    expect(roundtrip.position.bindings.anchors.size() == 1 &&
+               roundtrip.position.bindings.anchors[0].target == owner &&
+               roundtrip.position.bindings.anchors[0].proportional.has_value() &&
+               roundtrip.position.bindings.anchors[0].proportional->target == owner,
+        "target-zero primary and proportional bindings must resolve to the owning Panel");
+    expect(roundtrip.incoming == source.incoming,
+        "owner-aware geometry roundtrip must preserve named incoming dependencies");
+    expect(roundtrip.position.width.value() == 120 && roundtrip.position.height.value() == 24,
+        "nested geometry must preserve named Position dimensions");
+
+    auto bad = encoded.value();
+    bad.items[cursor] = list_stream::ListValue::raw_atom("4");
+    expect_failure(form_stream::decode_control_geometry(bad, context), "OOF1114",
+        "$/" + std::to_string(cursor),
+        "geometry with a different page index must fail against its owner context");
+    bad = encoded.value();
+    bad.items[cursor + 2] = list_stream::ListValue::raw_atom("9");
+    expect_failure(form_stream::decode_control_geometry(bad, context), "OOF1114",
+        "$/" + std::to_string(cursor + 1),
+        "geometry with a mismatched next index must be rejected");
+    bad = encoded.value();
+    bad.items[cursor + 1] = list_stream::ListValue::raw_atom("6");
+    expect_failure(form_stream::decode_control_geometry(bad, context), "OOF1114",
+        "$/" + std::to_string(cursor + 1),
+        "geometry with a different local ordinal must be rejected");
+
+    auto form_target = source;
+    form_target.position.bindings.anchors[0].target.reset();
+    expect_failure(form_stream::encode_control_geometry(form_target, context), "OOF1122",
+        "$/Position/Bindings/targetId", "Form target cannot be encoded in nested geometry");
+    auto invalid_target = source;
+    invalid_target.position.bindings.anchors[0].target = model::ControlRef{model::ObjectId{0}};
+    expect_failure(form_stream::encode_control_geometry(invalid_target, context), "OOF1122",
+        "$/Position/Bindings/targetId", "explicit primary target ID zero must not collapse to the owner sentinel");
+    invalid_target = source;
+    invalid_target.position.bindings.anchors[0].proportional->target =
+        model::ControlRef{model::ObjectId{0}};
+    expect_failure(form_stream::encode_control_geometry(invalid_target, context), "OOF1122",
+        "$/Position/Bindings/ProportionalBinding/targetId",
+        "explicit proportional target ID zero must not collapse to the owner sentinel");
+
+    auto unsupported_position = source;
+    unsupported_position.position.default_control.set(std::optional<bool>{true});
+    expect_failure(form_stream::encode_control_geometry(unsupported_position, context), "OOF1122",
+        "$/Position", "explicit DefaultControl must be rejected by standalone geometry encoding");
+    unsupported_position = source;
+    unsupported_position.position.tab_order.set(std::optional<std::int32_t>{2});
+    expect_failure(form_stream::encode_control_geometry(unsupported_position, context), "OOF1122",
+        "$/Position", "explicit TabOrder must be rejected by standalone geometry encoding");
+    unsupported_position = source;
+    unsupported_position.position.z_order.set(std::optional<std::int32_t>{3});
+    expect_failure(form_stream::encode_control_geometry(unsupported_position, context), "OOF1122",
+        "$/Position", "explicit ZOrder must be rejected by standalone geometry encoding");
+    unsupported_position = source;
+    unsupported_position.position.collapse.set(
+        std::optional<model::EnumerationValue>{model::EnumerationValue{"Collapse", "None"}});
+    expect_failure(form_stream::encode_control_geometry(unsupported_position, context), "OOF1122",
+        "$/Position", "explicit Collapse must be rejected by standalone geometry encoding");
+    unsupported_position = source;
+    unsupported_position.position.bindings.dimensions.push_back(
+        model::DimensionBinding{model::BindingDimension::width, {}});
+    expect_failure(form_stream::encode_control_geometry(unsupported_position, context), "OOF1122",
+        "$/Position", "dimension bindings must be rejected by standalone geometry encoding");
+
+    auto invalid_incoming = source;
+    invalid_incoming.incoming[0][0].source_control_id = 0;
+    expect_failure(form_stream::encode_control_geometry(invalid_incoming, context), "OOF1122",
+        "$/Position/Incoming/0/0", "incoming source ID zero must be rejected by the writer");
+    invalid_incoming = source;
+    invalid_incoming.incoming[0][0].source_control_id =
+        static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) + 1;
+    expect_failure(form_stream::encode_control_geometry(invalid_incoming, context), "OOF1122",
+        "$/Position/Incoming/0/0", "incoming source IDs outside int64 must be rejected by the writer");
+    invalid_incoming = source;
+    invalid_incoming.incoming[0][0].source_edge = 4;
+    expect_failure(form_stream::encode_control_geometry(invalid_incoming, context), "OOF1122",
+        "$/Position/Incoming/0/0", "unsupported incoming source edges must be rejected by the writer");
+    const form_stream::GeometryContext invalid_owner{model::ControlRef{model::ObjectId{0}}, 3, 7};
+    expect_failure(form_stream::encode_control_geometry(source, invalid_owner), "OOF1122",
+        "$/Position/0", "a zero Panel owner ID must be rejected");
+    const form_stream::GeometryContext root_context{form_stream::FormGeometryOwner{}, 0, 2};
+    form_target.position.bindings.anchors.clear();
+    form_target.position.bindings.anchors.push_back(binding);
+    form_target.position.bindings.anchors[0].target.reset();
+    form_target.position.bindings.anchors[0].proportional->target.reset();
+    const auto root_geometry = form_stream::encode_control_geometry(form_target, root_context);
+    expect(root_geometry.ok(), "Form-target primary and proportional references must remain supported at root");
+    const auto root_roundtrip = form_stream::decode_control_geometry(root_geometry.value(), root_context);
+    expect(root_roundtrip.ok() &&
+               !root_roundtrip.value().position.bindings.anchors[0].target.has_value() &&
+               !root_roundtrip.value().position.bindings.anchors[0].proportional->target.has_value(),
+        "root target-zero references must retain Form semantics");
+
+    auto foreign = source;
+    foreign.position.bindings.anchors[0].target = model::ControlRef{model::ObjectId{77}};
+    foreign.position.bindings.anchors[0].proportional->target = model::ControlRef{model::ObjectId{77}};
+    const auto foreign_encoded = form_stream::encode_control_geometry(foreign, context);
+    expect(foreign_encoded.ok() && foreign_encoded.value().items[9].items[1].items[1].atom == "77" &&
+               foreign_encoded.value().items[9].items[2].items[1].atom == "77",
+        "references to controls other than the owner must retain their explicit IDs");
+    const auto foreign_decoded = form_stream::decode_control_geometry(foreign_encoded.value(), context);
+    expect(foreign_decoded.ok() &&
+               foreign_decoded.value().position.bindings.anchors[0].target == model::ControlRef{model::ObjectId{77}} &&
+               foreign_decoded.value().position.bindings.anchors[0].proportional->target ==
+                   model::ControlRef{model::ObjectId{77}},
+        "references other than target zero must decode as their explicit control IDs");
+}
+
 }  // namespace
 
 int main() {
@@ -1772,6 +1910,7 @@ int main() {
         test_anchor_bindings_round_trip_and_fanout();
         test_center_target_coordinates();
         test_page_boundary_position_codec();
+        test_owner_aware_control_geometry_codec();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

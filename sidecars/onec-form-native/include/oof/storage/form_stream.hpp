@@ -1,10 +1,12 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "oof/model/ordinary_form.hpp"
@@ -65,6 +67,29 @@ struct AttributesRecord {
     friend bool operator==(const AttributesRecord&, const AttributesRecord&) = default;
 };
 
+struct FormGeometryOwner {};
+using GeometryOwner = std::variant<FormGeometryOwner, model::ControlRef>;
+
+struct GeometryContext {
+    GeometryOwner owner = FormGeometryOwner{};
+    std::uint32_t page_index = 0;
+    std::uint32_t sibling_ordinal = 0;
+};
+
+struct GeometryIncomingAnchor {
+    std::uint64_t source_control_id = 0;
+    std::int32_t source_edge = 0;
+
+    friend bool operator==(const GeometryIncomingAnchor&, const GeometryIncomingAnchor&) = default;
+};
+
+using GeometryIncomingAnchorLists = std::array<std::vector<GeometryIncomingAnchor>, 6>;
+
+struct ControlGeometry {
+    model::Position position;
+    GeometryIncomingAnchorLists incoming;
+};
+
 [[nodiscard]] Result<RuntimeEnvelope> decode_runtime_envelope(std::string_view text);
 [[nodiscard]] Result<std::string> encode_runtime_envelope(const RuntimeEnvelope& envelope);
 
@@ -80,6 +105,14 @@ struct AttributesRecord {
     std::string_view path = "$/2");
 [[nodiscard]] Result<list_stream::ListValue> encode_attributes(
     const AttributesRecord& record);
+
+// Ordinary-control geometry is interpreted relative to its owning Form or Panel.
+[[nodiscard]] Result<ControlGeometry> decode_control_geometry(
+    const list_stream::ListValue& geometry,
+    const GeometryContext& context);
+[[nodiscard]] Result<list_stream::ListValue> encode_control_geometry(
+    const ControlGeometry& geometry,
+    const GeometryContext& context);
 
 // Page boundary constraints are distinct from ordinary-control geometry.
 // The owner is Form for root pages and the containing Panel for nested pages.

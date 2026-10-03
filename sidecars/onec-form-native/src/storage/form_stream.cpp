@@ -502,7 +502,7 @@ LV canonical_input_field_info(
 }
 
 
-using IncomingAnchorLists = std::array<std::vector<std::pair<std::uint64_t, std::int32_t>>, 6>;
+using IncomingAnchorLists = std::array<std::vector<GeometryIncomingAnchor>, 6>;
 
 constexpr std::array<model::BindingCoordinate, 6> geometry_coordinates{
     model::BindingCoordinate::top,
@@ -578,7 +578,28 @@ struct DecodedGeometry {
     std::uint32_t next = 0;
 };
 
-std::pair<std::uint64_t, std::int32_t> decode_incoming_anchor(
+void validate_geometry_context(const GeometryContext& context, std::string_view path) {
+    if (const auto* panel = std::get_if<model::ControlRef>(&context.owner);
+        panel != nullptr && (panel->id().value() == 0 ||
+            panel->id().value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))) {
+        fail("OOF1122", child_path(path, 0), "positive int64 Panel ID",
+            std::to_string(panel->id().value()), "Geometry owner Panel ID is invalid");
+    }
+    if (context.sibling_ordinal == std::numeric_limits<std::uint32_t>::max()) {
+        fail("OOF1122", child_path(path, 2), "sibling ordinal below uint32 maximum", "uint32 maximum",
+            "Control geometry next index would overflow");
+    }
+}
+
+GeometryContext root_geometry_context(std::size_t sibling_ordinal, std::string_view path) {
+    if (sibling_ordinal >= std::numeric_limits<std::uint32_t>::max()) {
+        fail("OOF1122", std::string(path), "sibling ordinal below uint32 maximum",
+            std::to_string(sibling_ordinal), "Form child ordinal cannot be encoded");
+    }
+    return GeometryContext{FormGeometryOwner{}, 0, static_cast<std::uint32_t>(sibling_ordinal)};
+}
+
+GeometryIncomingAnchor decode_incoming_anchor(
     const LV& tuple,
     std::string_view path) {
     require_arity(tuple, 3, path);
@@ -593,7 +614,7 @@ std::pair<std::uint64_t, std::int32_t> decode_incoming_anchor(
         fail("OOF1114", child_path(path, 2), "incoming source edge 0..3", std::to_string(source_edge),
             "Incoming anchor source edge is unsupported");
     }
-    return {source_id, source_edge};
+    return GeometryIncomingAnchor{source_id, source_edge};
 }
 
 IncomingAnchorLists decode_incoming_anchor_lists(
@@ -622,7 +643,8 @@ IncomingAnchorLists decode_incoming_anchor_lists(
 DecodedGeometry decode_geometry(
     const LV& geometry,
     std::string_view path,
-    std::size_t logical_index) {
+    const GeometryContext& context) {
+    validate_geometry_context(context, path);
     require_list(geometry, path);
     if (geometry.items.size() < 23) {
         fail("OOF1102", std::string(path), "geometry prefix, six counts, and five tail values", describe(geometry),
@@ -676,7 +698,11 @@ DecodedGeometry decode_geometry(
             model::AnchorBinding binding;
             binding.coordinate = geometry_coordinates[slot];
             binding.target_coordinate = model_target_coordinate(target_edge, child_path(primary_path, 2));
-            if (target_id != 0) binding.target = model::ControlRef{model::ObjectId{static_cast<std::uint64_t>(target_id)}};
+            if (target_id != 0) {
+                binding.target = model::ControlRef{model::ObjectId{static_cast<std::uint64_t>(target_id)}};
+            } else if (const auto* panel = std::get_if<model::ControlRef>(&context.owner)) {
+                binding.target = *panel;
+            }
             if (offset != 0) binding.offset.set(offset);
             binding_value = std::move(binding);
         }
@@ -701,7 +727,11 @@ DecodedGeometry decode_geometry(
             }
             model::AnchorBindingTarget target;
             target.coordinate = model_target_coordinate(secondary_edge, child_path(secondary_path, 2));
-            if (secondary_id != 0) target.target = model::ControlRef{model::ObjectId{static_cast<std::uint64_t>(secondary_id)}};
+            if (secondary_id != 0) {
+                target.target = model::ControlRef{model::ObjectId{static_cast<std::uint64_t>(secondary_id)}};
+            } else if (const auto* panel = std::get_if<model::ControlRef>(&context.owner)) {
+                target.target = *panel;
+            }
             if (secondary_offset != 0) target.offset.set(secondary_offset);
             binding_value->proportional = std::move(target);
         }
@@ -715,12 +745,14 @@ DecodedGeometry decode_geometry(
             "Geometry record has an unexpected trailing shape");
     }
     const auto page = integer_atom<std::uint32_t>(geometry.items[cursor], child_path(path, cursor));
-    if (page != 0) {
-        fail("OOF1122", child_path(path, cursor), "root page index 0", std::to_string(page), "Page geometry is unsupported");
+    if (page != context.page_index) {
+        fail("OOF1114", child_path(path, cursor), "geometry page index matching its owner context",
+            std::to_string(page), "Geometry page index does not match its owner context");
     }
     decoded.ordinal = integer_atom<std::uint32_t>(geometry.items[cursor + 1], child_path(path, cursor + 1));
     decoded.next = integer_atom<std::uint32_t>(geometry.items[cursor + 2], child_path(path, cursor + 2));
-    if (decoded.ordinal != logical_index || decoded.next != logical_index + 1) {
+    if (context.sibling_ordinal == std::numeric_limits<std::uint32_t>::max() ||
+        decoded.ordinal != context.sibling_ordinal || decoded.next != context.sibling_ordinal + 1) {
         fail("OOF1114", child_path(path, cursor + 1), "logical ordinal and next index", describe(geometry),
             "Geometry child ordinal or next index is inconsistent");
     }
@@ -731,7 +763,11 @@ DecodedGeometry decode_geometry(
     return decoded;
 }
 
-std::uint32_t geometry_ordinal(const LV& geometry, std::string_view path, std::size_t& ordinal_slot) {
+std::uint32_t geometry_ordinal(
+    const LV& geometry,
+    std::string_view path,
+    std::uint32_t expected_page,
+    std::size_t& ordinal_slot) {
     require_list(geometry, path);
     std::size_t cursor = 12;
     for (std::size_t edge = 0; edge < 6; ++edge) {
@@ -749,26 +785,40 @@ std::uint32_t geometry_ordinal(const LV& geometry, std::string_view path, std::s
         fail("OOF1102", std::string(path), "dynamic incoming records followed by five tail values", describe(geometry),
             "Geometry record has an unexpected trailing shape");
     }
+    const auto page = integer_atom<std::uint32_t>(geometry.items[cursor], child_path(path, cursor));
+    if (page != expected_page) {
+        fail("OOF1114", child_path(path, cursor), "geometry page index matching its owner context",
+            std::to_string(page), "Geometry page index does not match its owner context");
+    }
     const auto ordinal = integer_atom<std::uint32_t>(geometry.items[cursor + 1], child_path(path, cursor + 1));
     ordinal_slot = cursor + 1;
     const auto next = integer_atom<std::uint32_t>(geometry.items[cursor + 2], child_path(path, cursor + 2));
-    if (next != ordinal + 1) {
+    if (ordinal == std::numeric_limits<std::uint32_t>::max() || next != ordinal + 1) {
         fail("OOF1114", child_path(path, cursor + 2), "next index equal to ordinal plus one", std::to_string(next),
             "Geometry next index is inconsistent");
     }
     return ordinal;
 }
 
-std::vector<std::pair<std::uint64_t, std::int32_t>> sorted_incoming(
-    std::vector<std::pair<std::uint64_t, std::int32_t>> incoming) {
-    std::sort(incoming.begin(), incoming.end());
+std::vector<GeometryIncomingAnchor> sorted_incoming(std::vector<GeometryIncomingAnchor> incoming) {
+    std::sort(incoming.begin(), incoming.end(), [](const auto& left, const auto& right) {
+        return std::tie(left.source_control_id, left.source_edge) <
+               std::tie(right.source_control_id, right.source_edge);
+    });
     return incoming;
 }
 
 LV encode_geometry(
     const model::Position& position,
-    std::size_t sibling_index,
+    const GeometryContext& context,
     const IncomingAnchorLists& incoming) {
+    validate_geometry_context(context, "$/Position");
+    if (position.default_control.is_explicit() || position.tab_order.is_explicit() ||
+        position.z_order.is_explicit() || position.collapse.is_explicit() ||
+        !position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/Position", "geometry Position without unsupported control or dimension properties",
+            "unsupported Position property", "Control geometry codec cannot represent this Position property");
+    }
     const auto left = position.left.value();
     const auto top = position.top.value();
     const auto width = position.width.value();
@@ -790,20 +840,30 @@ LV encode_geometry(
         }
         static_cast<void>(source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate"));
         const auto target_edge = target_platform_edge(binding.target_coordinate, "$/Position/Bindings/targetCoordinate");
-        const std::uint64_t target_id = binding.target.has_value() ? binding.target->id().value() : 0;
-        if (target_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
-            fail("OOF1122", "$/Position/Bindings/targetId", "Form or positive int64 target ID", std::to_string(target_id),
-                "Primary binding target ID cannot be represented");
-        }
+        const auto encoded_target_id = [&](const std::optional<model::ControlRef>& target, std::string_view path) {
+            const auto* panel = std::get_if<model::ControlRef>(&context.owner);
+            if (!target.has_value()) {
+                if (panel != nullptr) {
+                    fail("OOF1122", std::string(path), "owning Panel target for nested geometry", "Form target",
+                        "Form target is not representable in nested geometry");
+                }
+                return std::uint64_t{0};
+            }
+            const auto target_id = target->id().value();
+            if (target_id == 0 || target_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+                fail("OOF1122", std::string(path), "positive int64 target control ID", std::to_string(target_id),
+                    "Control binding target ID cannot be represented");
+            }
+            if (panel != nullptr && target_id == panel->id().value()) return std::uint64_t{0};
+            return target_id;
+        };
+        const std::uint64_t target_id = encoded_target_id(binding.target, "$/Position/Bindings/targetId");
         LV secondary = parse_constant("{2,-1,6,0}");
         if (binding.proportional.has_value()) {
             const auto& target = *binding.proportional;
             const auto proportional_edge = target_platform_edge(target.coordinate, "$/Position/Bindings/ProportionalBinding/targetCoordinate");
-            const std::uint64_t proportional_id = target.target.has_value() ? target.target->id().value() : 0;
-            if (proportional_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
-                fail("OOF1122", "$/Position/Bindings/ProportionalBinding/targetId", "Form or positive int64 target ID", std::to_string(proportional_id),
-                    "Proportional binding target ID cannot be represented");
-            }
+            const std::uint64_t proportional_id = encoded_target_id(
+                target.target, "$/Position/Bindings/ProportionalBinding/targetId");
             secondary = list({raw("2"), raw(std::to_string(proportional_id)), raw(std::to_string(proportional_edge)),
                 raw(std::to_string(target.offset.value()))});
         }
@@ -820,13 +880,28 @@ LV encode_geometry(
     for (const auto& list_for_edge : incoming) {
         auto ordered = sorted_incoming(list_for_edge);
         values.push_back(raw(std::to_string(ordered.size())));
-        for (const auto& [source_id, source_edge] : ordered) {
-            values.push_back(list({raw("0"), raw(std::to_string(source_id)), raw(std::to_string(source_edge))}));
+        for (const auto& anchor : ordered) {
+            values.push_back(list({raw("0"), raw(std::to_string(anchor.source_control_id)), raw(std::to_string(anchor.source_edge))}));
         }
     }
-    values.push_back(raw("0"));
-    values.push_back(raw(std::to_string(sibling_index)));
-    values.push_back(raw(std::to_string(sibling_index + 1)));
+    for (std::size_t edge = 0; edge < incoming.size(); ++edge) {
+        for (std::size_t index = 0; index < incoming[edge].size(); ++index) {
+            const auto& anchor = incoming[edge][index];
+            const auto anchor_path = "$/Position/Incoming/" + std::to_string(edge) + "/" + std::to_string(index);
+            if (anchor.source_control_id == 0 ||
+                anchor.source_control_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+                fail("OOF1122", anchor_path, "positive int64 source control ID",
+                    std::to_string(anchor.source_control_id), "Incoming anchor source ID cannot be represented");
+            }
+            if (anchor.source_edge < 0 || anchor.source_edge > 3) {
+                fail("OOF1122", anchor_path, "incoming source edge 0..3", std::to_string(anchor.source_edge),
+                    "Incoming anchor source edge is unsupported");
+            }
+        }
+    }
+    values.push_back(raw(std::to_string(context.page_index)));
+    values.push_back(raw(std::to_string(context.sibling_ordinal)));
+    values.push_back(raw(std::to_string(context.sibling_ordinal + 1)));
     values.push_back(raw(position.bindings.manual_horizontal.value() ? "1" : "0"));
     values.push_back(raw(position.bindings.manual_vertical.value() ? "1" : "0"));
     return list(std::move(values));
@@ -837,8 +912,8 @@ void insert_incoming_anchor_lists(LV& value, const IncomingAnchorLists& incoming
     for (const auto& list_for_edge : incoming) {
         auto ordered = sorted_incoming(list_for_edge);
         records.push_back(raw(std::to_string(ordered.size())));
-        for (const auto& [source_id, source_edge] : ordered) {
-            records.push_back(list({raw("0"), raw(std::to_string(source_id)), raw(std::to_string(source_edge))}));
+        for (const auto& anchor : ordered) {
+            records.push_back(list({raw("0"), raw(std::to_string(anchor.source_control_id)), raw(std::to_string(anchor.source_edge))}));
         }
     }
     if (value.items.size() < prefix_count + incoming.size()) {
@@ -988,7 +1063,7 @@ struct DecodedControl {
     IncomingAnchorLists incoming;
 };
 
-DecodedControl decode_button(const LV& record, std::string_view path, std::size_t sibling_index) {
+DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -1042,7 +1117,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, std::size_
     const auto click_handler = decode_button_event(info.items[2], child_path(info_path, 2));
 
     const auto geometry_path = child_path(path, 3);
-    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, sibling_index);
+    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
     const auto& metadata = record.items[4];
     const std::string metadata_path = child_path(path, 4);
     require_arity(metadata, 6, metadata_path);
@@ -1080,7 +1155,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, std::size_
     return {std::move(control), click_handler, std::move(decoded_geometry.incoming)};
 }
 
-DecodedControl decode_label(const LV& record, std::string_view path, std::size_t sibling_index) {
+DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -1114,7 +1189,7 @@ DecodedControl decode_label(const LV& record, std::string_view path, std::size_t
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2), "LabelDecoration events are unsupported");
 
     const auto geometry_path = child_path(path, 3);
-    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, sibling_index);
+    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
     const auto& metadata = record.items[4];
     const std::string metadata_path = child_path(path, 4);
     require_arity(metadata, 6, metadata_path);
@@ -1150,7 +1225,7 @@ DecodedControl decode_check_box(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    std::size_t sibling_index) {
+    const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -1188,7 +1263,7 @@ DecodedControl decode_check_box(
         "CheckBox uses an unsupported property, event, or storage variation");
 
     const auto geometry_path = child_path(path, 3);
-    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, sibling_index);
+    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
     const auto& metadata = record.items[4];
     const auto metadata_path = child_path(path, 4);
     require_arity(metadata, 6, metadata_path);
@@ -1215,7 +1290,7 @@ DecodedControl decode_input_field(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    std::size_t sibling_index) {
+    const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -1255,7 +1330,7 @@ DecodedControl decode_input_field(
         "InputField uses an unsupported property, event, or storage variation");
 
     const auto geometry_path = child_path(path, 3);
-    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, sibling_index);
+    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
     const auto& metadata = record.items[4];
     const auto metadata_path = child_path(path, 4);
     require_arity(metadata, 6, metadata_path);
@@ -1373,7 +1448,7 @@ std::optional<std::string_view> button_click_handler(
 LV encode_button(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
-    std::size_t sibling_index) {
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::button || control.id.value() == 0 ||
         control.id.value() > std::numeric_limits<std::int64_t>::max()) {
         fail("OOF1122", "$", "Button with positive int64 ID", std::to_string(control.id.value()), "Unsupported control record");
@@ -1398,7 +1473,7 @@ LV encode_button(
             canonical_button_properties(enabled, caption, multi_line),
             canonical_event_table(handler),
         }),
-        encode_geometry(control.position, sibling_index, IncomingAnchorLists{}),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({
             raw("14"),
             string_value(control.name),
@@ -1411,7 +1486,7 @@ LV encode_button(
     });
 }
 
-LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
+LV encode_label(const model::ControlNode& control, const GeometryContext& context) {
     if (control.kind() != model::ControlKind::label_decoration ||
         control.id.value() == 0 || control.id.value() > std::numeric_limits<std::int64_t>::max()) {
         fail("OOF1122", "$/Form/ChildItems", "LabelDecoration with positive int64 ID", control.name, "LabelDecoration is outside the supported profile");
@@ -1444,7 +1519,7 @@ LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         list({raw("3"), canonical_label_properties(caption, horizontal_align), list({raw("0")})}),
-        encode_geometry(control.position, sibling_index, IncomingAnchorLists{}),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
@@ -1453,7 +1528,7 @@ LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
 LV encode_check_box(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
-    std::size_t sibling_index) {
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::check_box || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "CheckBox with positive int64 ID", control.name, "CheckBox is outside the supported profile");
@@ -1483,7 +1558,7 @@ LV encode_check_box(
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         canonical_check_box_info(enabled, caption),
-        encode_geometry(control.position, sibling_index, IncomingAnchorLists{}),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
@@ -1492,7 +1567,7 @@ LV encode_check_box(
 LV encode_input_field(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
-    std::size_t sibling_index) {
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::input_field ||
         control.id.value() == 0) {
         fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at its ChildItems index", control.name, "InputField is outside the supported profile");
@@ -1519,7 +1594,7 @@ LV encode_input_field(
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         canonical_input_field_info(attribute->type, enabled, read_only),
-        encode_geometry(control.position, sibling_index, IncomingAnchorLists{}),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
@@ -1894,6 +1969,25 @@ Result<AttributesRecord> decode_attributes(
     });
 }
 
+Result<ControlGeometry> decode_control_geometry(
+    const list_stream::ListValue& geometry,
+    const GeometryContext& context) {
+    return capture_decode_failure<ControlGeometry>([&geometry, &context] {
+        validate_geometry_context(context, "$/Position");
+        auto decoded = decode_geometry(geometry, "$", context);
+        return ControlGeometry{std::move(decoded.position), std::move(decoded.incoming)};
+    });
+}
+
+Result<list_stream::ListValue> encode_control_geometry(
+    const ControlGeometry& geometry,
+    const GeometryContext& context) {
+    return capture_decode_failure<list_stream::ListValue>([&geometry, &context] {
+        validate_geometry_context(context, "$/Position");
+        return encode_geometry(geometry.position, context, geometry.incoming);
+    });
+}
+
 Result<list_stream::ListValue> encode_attributes(const AttributesRecord& record) {
     return capture_decode_failure<list_stream::ListValue>([&record] {
         if (record.attributes.size() > std::numeric_limits<std::uint32_t>::max() ||
@@ -2153,22 +2247,23 @@ Result<model::OrdinaryFormDocument> decode_document(
             const auto geometry_path = child_path(path, 3);
             const auto& geometry = at(child_record, 3, path);
             std::size_t ordinal_slot = 0;
-            const auto logical_index = geometry_ordinal(geometry, geometry_path, ordinal_slot);
+            const auto logical_index = geometry_ordinal(geometry, geometry_path, 0, ordinal_slot);
             if (logical_index >= control_count) {
                 fail("OOF1114", child_path(geometry_path, ordinal_slot), "ChildItems ordinal below control count", std::to_string(logical_index), "Control geometry ordinal is outside the ChildItems range");
             }
             if (decoded_controls[logical_index]) {
                 fail("OOF1114", child_path(geometry_path, ordinal_slot), "unique ChildItems ordinal", std::to_string(logical_index), "Control geometry ordinal is duplicated");
             }
+            const GeometryContext geometry_context{FormGeometryOwner{}, 0, logical_index};
             const std::string child_guid = raw_atom(child_record.items[0], child_path(path, 0));
             const auto& button_descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
             const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
             if (child_guid == button_descriptor.guid) {
-                auto decoded = decode_button(child_record, path, logical_index);
+                auto decoded = decode_button(child_record, path, geometry_context);
                 actual_max_id = std::max(actual_max_id, decoded.control.id.value());
                 decoded_controls[logical_index].emplace(std::move(decoded));
             } else if (child_guid == label_descriptor.guid) {
-                auto decoded = decode_label(child_record, path, logical_index);
+                auto decoded = decode_label(child_record, path, geometry_context);
                 actual_max_id = std::max(actual_max_id, decoded.control.id.value());
                 decoded_controls[logical_index].emplace(std::move(decoded));
             } else if (child_guid == input_descriptor.guid ||
@@ -2197,8 +2292,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                 }
                 const auto& attribute = *attribute_it->second;
                 DecodedControl linked_control = child_guid == input_descriptor.guid
-                    ? decode_input_field(child_record, path, attribute, logical_index)
-                    : decode_check_box(child_record, path, attribute, logical_index);
+                    ? decode_input_field(child_record, path, attribute, geometry_context)
+                    : decode_check_box(child_record, path, attribute, geometry_context);
                 linked_control.control.data_path = model::DataPath{
                     model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attribute.id.object_id)}},
                     {},
@@ -2229,7 +2324,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         target_platform_edge(coordinate, "$/Position/Bindings/targetCoordinate"),
                         "$/Position/Bindings/targetCoordinate");
                     if (!target.has_value()) {
-                        expected_form_incoming[target_edge].emplace_back(source_id, source_edge);
+                        expected_form_incoming[target_edge].push_back({source_id, source_edge});
                         return;
                     }
                     const auto target_id = target->id().value();
@@ -2237,7 +2332,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         fail("OOF1114", "$/1/2/2", "binding target resolving to a decoded control", std::to_string(target_id),
                             "Primary or proportional binding target is dangling or unsupported");
                     }
-                    expected_control_incoming[target_id][target_edge].emplace_back(source_id, source_edge);
+                    expected_control_incoming[target_id][target_edge].push_back({source_id, source_edge});
                 };
                 append_target(binding.target, binding.target_coordinate);
                 if (binding.proportional.has_value()) {
@@ -2398,6 +2493,7 @@ Result<list_stream::ListValue> encode_document(
         IncomingAnchorLists form_incoming;
         std::uint64_t max_id = document.form().id.value();
         for (std::size_t sibling_index = 0; sibling_index < document.form().children.size(); ++sibling_index) {
+            const auto geometry_context = root_geometry_context(sibling_index, "$/Form/ChildItems");
             const auto& child = document.form().children[sibling_index];
             if (!std::holds_alternative<model::ControlRef>(child)) {
                 fail("OOF1122", "$/Form/ChildItems", "Button reference", "Page reference", "Page storage is not implemented");
@@ -2409,13 +2505,13 @@ Result<list_stream::ListValue> encode_document(
             }
             ordinal_by_control.emplace(control_id.value(), sibling_index);
             if (control->kind() == model::ControlKind::button) {
-                child_records.push_back(encode_button(document, *control, sibling_index));
+                child_records.push_back(encode_button(document, *control, geometry_context));
             } else if (control->kind() == model::ControlKind::label_decoration) {
-                child_records.push_back(encode_label(*control, sibling_index));
+                child_records.push_back(encode_label(*control, geometry_context));
             } else if (control->kind() == model::ControlKind::input_field) {
-                child_records.push_back(encode_input_field(document, *control, sibling_index));
+                child_records.push_back(encode_input_field(document, *control, geometry_context));
             } else if (control->kind() == model::ControlKind::check_box) {
-                child_records.push_back(encode_check_box(document, *control, sibling_index));
+                child_records.push_back(encode_check_box(document, *control, geometry_context));
             } else {
                 fail("OOF1122", "$/Form/ChildItems", "supported top-level Button, LabelDecoration, InputField, or CheckBox", control->name, "Control payload is unsupported");
             }
@@ -2443,7 +2539,7 @@ Result<list_stream::ListValue> encode_document(
                         target_platform_edge(coordinate, "$/Position/Bindings/targetCoordinate"),
                         "$/Position/Bindings/targetCoordinate");
                     if (!target.has_value()) {
-                        form_incoming[target_edge].emplace_back(control_id.value(), source_edge);
+                        form_incoming[target_edge].push_back({control_id.value(), source_edge});
                         return;
                     }
                     const auto target_id = target->id().value();
@@ -2451,7 +2547,7 @@ Result<list_stream::ListValue> encode_document(
                         fail("OOF1123", "$/Position/Bindings/targetId", "target control in encoded root ChildItems",
                             std::to_string(target_id), "Primary or proportional binding target is outside the encoded control graph");
                     }
-                    control_incoming[target_id][target_edge].emplace_back(control_id.value(), source_edge);
+                    control_incoming[target_id][target_edge].push_back({control_id.value(), source_edge});
                 };
                 append_target(binding.target, binding.target_coordinate);
                 if (binding.proportional.has_value()) {
@@ -2466,7 +2562,7 @@ Result<list_stream::ListValue> encode_document(
             const IncomingAnchorLists empty;
             child_records[index].items[3] = encode_geometry(
                 control->position,
-                ordinal_by_control.at(control_id),
+                root_geometry_context(ordinal_by_control.at(control_id), "$/Form/ChildItems"),
                 incoming == control_incoming.end() ? empty : incoming->second);
         }
         std::sort(child_records.begin() + 1, child_records.end(), [](const LV& left, const LV& right) {
