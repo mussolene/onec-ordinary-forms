@@ -67,9 +67,7 @@ docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "set -eu
     >'$base/out/create.log' 2>&1
   set +e
   OOF_PROXY_FORMDOCUMENT_FACTORY=1 \
-  OOF_PROXY_FORMDOCUMENT_OBJECT=1 \
   OOF_CREATE_FORMDOCUMENT=1 \
-  OOF_FORMDOCUMENT_METHOD_LIMIT=200 \
   LD_PRELOAD='$base/oof_scom_formdocument_probe.so' \
   xvfb-run -a timeout 120 \"\$platform/1cv8\" DESIGNER \
     /F '$base/dbroot/db' \

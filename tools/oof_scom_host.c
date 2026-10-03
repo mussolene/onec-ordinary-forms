@@ -19,10 +19,9 @@ typedef struct Guid {
     uint8_t d[8];
 } Guid;
 typedef uintptr_t (*create_instance_fn)(void *, void *, const Guid *, void **);
-typedef uintptr_t (*release_fn)(void *);
 
 static const Guid IID_IUnknown = {0x00000000u, 0x0000u, 0x0000u, {0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}};
-static const Guid IID_IFormDocument = {0x364f0971u, 0x70a0u, 0x47ddu, {0xaf, 0x6d, 0xb0, 0x94, 0xa7, 0xf6, 0x3a, 0xfb}};
+static const Guid IID_IFormDocument = {0xda8583a2u, 0xa3ddu, 0x42feu, {0x89, 0x95, 0x1f, 0xf6, 0x4e, 0xaa, 0x59, 0x05}};
 
 typedef struct Module {
     const char *name;
@@ -69,45 +68,154 @@ static void guid_text(uintptr_t value, char *out, size_t out_size) {
              p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
 }
 
+static uintptr_t readable_mapping_end(uintptr_t value) {
+    FILE *fp = fopen("/proc/self/maps", "r");
+    if (!fp) {
+        return 0;
+    }
+    char line[512];
+    uintptr_t result = 0;
+    while (fgets(line, sizeof(line), fp)) {
+        unsigned long start = 0;
+        unsigned long end = 0;
+        char perms[8] = {0};
+        if (sscanf(line, "%lx-%lx %7s", &start, &end, perms) == 3 && perms[0] == 'r' &&
+            value >= (uintptr_t)start && value < (uintptr_t)end) {
+            result = (uintptr_t)end;
+            break;
+        }
+    }
+    fclose(fp);
+    return result;
+}
+
+static int readable_bytes(uintptr_t value, size_t size) {
+    if (value < 0x10000 || size == 0 || value > UINTPTR_MAX - size) {
+        return 0;
+    }
+    uintptr_t end = readable_mapping_end(value);
+    return end && value + size <= end;
+}
+
+static void object_rtti(void *obj, char *name, size_t name_size,
+                        uintptr_t *typeinfo_out, const char **owner_out) {
+    if (!name || name_size < 2) {
+        return;
+    }
+    name[0] = 0;
+    if (typeinfo_out) {
+        *typeinfo_out = 0;
+    }
+    if (owner_out) {
+        *owner_out = "<unknown>";
+    }
+    uintptr_t vtable_value = 0;
+    if (!obj || !readable_bytes((uintptr_t)obj, sizeof(vtable_value))) {
+        return;
+    }
+    memcpy(&vtable_value, obj, sizeof(vtable_value));
+    if (!vtable_value || vtable_value < sizeof(void *)) {
+        return;
+    }
+    uintptr_t typeinfo = 0;
+    if (!readable_bytes(vtable_value - sizeof(void *), sizeof(typeinfo))) {
+        return;
+    }
+    memcpy(&typeinfo, (const void *)(vtable_value - sizeof(void *)), sizeof(typeinfo));
+    if (!readable_bytes(typeinfo, sizeof(void *) * 2)) {
+        return;
+    }
+    uintptr_t name_value = 0;
+    memcpy(&name_value, (const void *)(typeinfo + sizeof(void *)), sizeof(name_value));
+    uintptr_t span_end = readable_mapping_end(name_value);
+    if (!span_end || name_value >= span_end) {
+        return;
+    }
+    size_t copy_size = span_end - name_value;
+    if (copy_size >= name_size) {
+        copy_size = name_size - 1;
+    }
+    if (!copy_size) {
+        return;
+    }
+    memcpy(name, (const void *)name_value, copy_size);
+    char *terminator = memchr(name, 0, copy_size);
+    if (!terminator) {
+        name[0] = 0;
+        return;
+    }
+    if (typeinfo_out) {
+        *typeinfo_out = typeinfo;
+    }
+    if (owner_out) {
+        Dl_info info;
+        if (readable_bytes(vtable_value, sizeof(void *)) &&
+            dladdr(*(void **)vtable_value, &info) != 0 && info.dli_fname) {
+            *owner_out = info.dli_fname;
+        }
+    }
+}
+
+static void log_factory_rtti(uintptr_t class_guid, uintptr_t factory_value) {
+    char guid[80];
+    char rtti[256];
+    const char *owner = "<unknown>";
+    uintptr_t typeinfo = 0;
+    uintptr_t factory_vtable = 0;
+    uintptr_t create_instance = 0;
+    uintptr_t create_offset = 0;
+    uintptr_t creator_callback = 0;
+    uintptr_t creator_offset = 0;
+    const char *create_owner = "<unknown>";
+    const char *creator_owner = "<unknown>";
+    guid_text(class_guid, guid, sizeof(guid));
+    object_rtti((void *)factory_value, rtti, sizeof(rtti), &typeinfo, &owner);
+    if (readable_bytes(factory_value, sizeof(factory_vtable))) {
+        memcpy(&factory_vtable, (const void *)factory_value, sizeof(factory_vtable));
+    }
+    if (readable_bytes(factory_vtable, sizeof(void *) * 4)) {
+        memcpy(&create_instance,
+               (const void *)(factory_vtable + sizeof(void *) * 3),
+               sizeof(create_instance));
+        Dl_info info;
+        if (create_instance && dladdr((void *)create_instance, &info) != 0 && info.dli_fname) {
+            const char *slash = strrchr(info.dli_fname, '/');
+            create_owner = slash ? slash + 1 : info.dli_fname;
+            if (info.dli_fbase) {
+                create_offset = create_instance - (uintptr_t)info.dli_fbase;
+            }
+        }
+    }
+    if (factory_value <= UINTPTR_MAX - 0x38 &&
+        readable_bytes(factory_value + 0x38, sizeof(creator_callback))) {
+        memcpy(&creator_callback, (const void *)(factory_value + 0x38),
+               sizeof(creator_callback));
+        Dl_info info;
+        if (creator_callback && dladdr((void *)creator_callback, &info) != 0 && info.dli_fname) {
+            const char *slash = strrchr(info.dli_fname, '/');
+            creator_owner = slash ? slash + 1 : info.dli_fname;
+            if (info.dli_fbase) {
+                creator_offset = creator_callback - (uintptr_t)info.dli_fbase;
+            }
+        }
+    }
+    fprintf(stderr,
+            "OOF_SCOM_HOST_REGISTRATION_RTTI class_guid=%s factory=%p factory_vtable=%p create_instance=%p create_offset=0x%lx create_owner=%s creator_callback=%p creator_offset=0x%lx creator_owner=%s typeinfo=%p rtti=%s owner=%s\n",
+            guid, (void *)factory_value, (void *)factory_vtable,
+            (void *)create_instance, (unsigned long)create_offset, create_owner,
+            (void *)creator_callback, (unsigned long)creator_offset, creator_owner,
+            (void *)typeinfo, rtti[0] ? rtti : "<unavailable>", owner);
+}
+
 static int is_formdocument_guid(uintptr_t value) {
     if (value < 0x10000) {
         return 0;
     }
     const Guid *g = (const Guid *)value;
-    return g->a == 0x0ec7b148u && g->b == 0xcdf9u && g->c == 0x451cu &&
-           g->d[0] == 0x98 && g->d[1] == 0x21 && g->d[2] == 0x02 &&
-           g->d[3] == 0x2b && g->d[4] == 0x95 && g->d[5] == 0xc0 &&
-           g->d[6] == 0xfa && g->d[7] == 0x23;
-}
-
-static const char *obj_name_for(void *ptr) {
-    Dl_info info;
-    if (ptr && dladdr(ptr, &info) != 0 && info.dli_fname && *info.dli_fname) {
-        return info.dli_fname;
-    }
-    return "<unknown>";
-}
-
-static void dump_vtable(const char *label, void *obj, size_t limit) {
-    if (!obj) {
-        return;
-    }
-    void **vtable = *(void ***)obj;
-    fprintf(stderr, "OOF_SCOM_HOST_VTABLE label=%s obj=%p vtable=%p\n", label, obj, vtable);
-    for (size_t i = 0; vtable && i < limit; ++i) {
-        Dl_info info;
-        const char *name = "<unknown>";
-        uintptr_t offset = 0;
-        if (dladdr(vtable[i], &info) != 0 && info.dli_fname) {
-            name = info.dli_sname ? info.dli_sname : info.dli_fname;
-            if (info.dli_fbase) {
-                offset = (uintptr_t)vtable[i] - (uintptr_t)info.dli_fbase;
-            }
-        }
-        fprintf(stderr,
-                "OOF_SCOM_HOST_VTABLE_ENTRY label=%s slot=%zu fn=%p offset=0x%lx symbol=%s\n",
-                label, i, vtable[i], (unsigned long)offset, name);
-    }
+    return g->a == 0xa3f2959bu && g->b == 0x9763u && g->c == 0x43d6u &&
+           g->d[0] == 0x90 && g->d[1] == 0x9d && g->d[2] == 0x1a &&
+           g->d[3] == 0x37 && g->d[4] == 0xc1 && g->d[5] == 0x7d &&
+           g->d[6] == 0x3d && g->d[7] == 0x48;
 }
 
 static void try_create_formdocument(uintptr_t class_guid, uintptr_t factory_value) {
@@ -117,25 +225,51 @@ static void try_create_formdocument(uintptr_t class_guid, uintptr_t factory_valu
         return;
     }
     void *factory = (void *)factory_value;
-    void **vptr = *(void ***)factory;
-    if (!vptr) {
-        fprintf(stderr, "OOF_SCOM_HOST_CREATE_FORMDOCUMENT_NO_VTABLE factory=%p\n", factory);
+    uintptr_t vtable_value = 0;
+    if (!readable_bytes(factory_value, sizeof(vtable_value))) {
         return;
     }
-    create_instance_fn create = (create_instance_fn)vptr[3];
+    memcpy(&vtable_value, factory, sizeof(vtable_value));
+    if (!readable_bytes(vtable_value, sizeof(void *) * 4)) {
+        return;
+    }
+    uintptr_t create_value = 0;
+    memcpy(&create_value, (const void *)(vtable_value + sizeof(void *) * 3), sizeof(create_value));
+    create_instance_fn create = (create_instance_fn)create_value;
     void *obj_unknown = 0;
-    void *obj_form = 0;
+    void *obj_document = 0;
     uintptr_t hr_unknown = create ? create(factory, 0, &IID_IUnknown, &obj_unknown) : 0xffffffffu;
-    uintptr_t hr_form = create ? create(factory, 0, &IID_IFormDocument, &obj_form) : 0xffffffffu;
+    uintptr_t hr_document = create ? create(factory, 0, &IID_IFormDocument, &obj_document) : 0xffffffffu;
+    char rtti[256];
+    char guid[80];
+    const char *owner = "<unknown>";
+    uintptr_t typeinfo = 0;
+    guid_text(class_guid, guid, sizeof(guid));
+    object_rtti(obj_unknown, rtti, sizeof(rtti), &typeinfo, &owner);
+    char document_rtti[256];
+    const char *document_owner = "<unknown>";
+    uintptr_t document_typeinfo = 0;
+    object_rtti(obj_document, document_rtti, sizeof(document_rtti),
+                &document_typeinfo, &document_owner);
+    int type_ok = hr_unknown == 0 && hr_document == 0 &&
+                  strcmp(rtti, "N4core11SCOM_ObjectI12FormDocumentEE") == 0 &&
+                  strcmp(document_rtti, "N4core11SCOM_ObjectI12FormDocumentEE") == 0;
     fprintf(stderr,
-            "OOF_SCOM_HOST_CREATE_FORMDOCUMENT factory=%p vtable=%p create=%p hr_unknown=0x%lx obj_unknown=%p obj_unknown_vtable=%p obj_unknown_lib=%s hr_form=0x%lx obj_form=%p obj_form_vtable=%p obj_form_lib=%s\n",
-            factory, vptr, (void *)create, (unsigned long)hr_unknown, obj_unknown,
-            obj_unknown ? *(void **)obj_unknown : 0,
-            obj_unknown ? obj_name_for(*(void **)obj_unknown) : "<null>",
-            (unsigned long)hr_form, obj_form,
-            obj_form ? *(void **)obj_form : 0,
-            obj_form ? obj_name_for(*(void **)obj_form) : "<null>");
-    dump_vtable("IFormDocument", obj_form ? obj_form : obj_unknown, 16);
+            "OOF_SCOM_HOST_CREATE_FORMDOCUMENT class_guid=%s factory=%p create=%p hr_unknown=0x%lx obj_unknown=%p hr_iformdocument=0x%lx obj_iformdocument=%p typeinfo=%p rtti=%s owner=%s iformdocument_typeinfo=%p iformdocument_rtti=%s iformdocument_owner=%s type_match=%s\n",
+            guid,
+            factory, (void *)create, (unsigned long)hr_unknown,
+            obj_unknown, (unsigned long)hr_document, obj_document, (void *)typeinfo,
+            rtti[0] ? rtti : "<unavailable>", owner, (void *)document_typeinfo,
+            document_rtti[0] ? document_rtti : "<unavailable>", document_owner,
+            type_ok ? "yes" : "no");
+    void *objs[] = {obj_document, obj_unknown};
+    for (size_t i = 0; i < 2; ++i) {
+        if (!objs[i]) continue;
+        uintptr_t object_vtable = 0, release_value = 0;
+        if (readable_bytes((uintptr_t)objs[i], sizeof(object_vtable))) memcpy(&object_vtable, objs[i], sizeof(object_vtable));
+        if (readable_bytes(object_vtable, sizeof(void *) * 3)) memcpy(&release_value, (const void *)(object_vtable + sizeof(void *) * 2), sizeof(release_value));
+        if (release_value) ((uintptr_t (*)(void *))release_value)(objs[i]);
+    }
 }
 
 static uintptr_t fake_registrar_method(const char *slot, void *self, uintptr_t a,
@@ -152,6 +286,7 @@ static uintptr_t fake_registrar_method(const char *slot, void *self, uintptr_t a
 
 static uintptr_t fake_registrar_060(void *self, uintptr_t a, uintptr_t b,
                                     uintptr_t c, uintptr_t d, uintptr_t e) {
+    log_factory_rtti(a, b);
     try_create_formdocument(a, b);
     return fake_registrar_method("060", self, a, b, c, d, e);
 }

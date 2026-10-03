@@ -19,10 +19,109 @@ needed again; current product code should stay native C++.
 
 ## Platform Entry Points
 
-- `00255f70`: write-side persistence entry. It constructs
-  `core::ListOutStream::ListOutStream`.
-- `00256510`: read-side persistence entry. It constructs
-  `core::ListInStream::ListInStream`.
+Addresses below use Ghidra image base `0x100000`, not runtime module offsets.
+For the current `dsgnfrm.so`, SHA-256 is
+`416f3d4317a9c18949a4527f1ccc817dc8bf067f87a2414f99a469ca32574523`.
+The extractor records `imageBase` and `imageOffset` to make this distinction
+explicit.
+
+## Проверка идентичности объектов, 2026-10-03
+
+Старые пробы ошибочно называли `FormDocument` класс с CLSID
+`0ec7b148-cdf9-451c-9821-022b95c0fa23` и интерфейсом
+`364f0971-70a0-47dd-af6d-b094a7f63afb`. Создание этих объектов возвращает
+успех, но текущая ELF relocation связывает их таблицу методов
+`dsgnfrm+0x1f6720` с RTTI `core::SCOM_Object<DeferredHelpProvider>`.
+Свежая декомпиляция показывает операции со списком модулей и справкой.
+Успех этой пробы не доказывает создание или сохранение документа формы.
+
+Настоящий `core::SCOM_Object<FormDocument>` имеет другую RTTI-запись
+`dsgnfrm+0x1fa5d0` и основную таблицу методов `dsgnfrm+0x1fa2d8`.
+Назначение интерфейса нужно подтверждать вместе с типом объекта и его
+таблицей методов. Одного имени константы GUID в исследовательском коде
+недостаточно.
+
+Для этого же бинарника установлена цепочка:
+
+| Сущность | Подтвержденная связь |
+| --- | --- |
+| CLSID `FormDocument` | `a3f2959b-9763-43d6-909d-1a37c17d3d48`; регистрация указывает callback `dsgnfrm+0x1bdb50` |
+| Создание без агрегации | Callback вызывает `dsgnfrm+0x1bdba0`, выделяет объект размером `0x260` и устанавливает таблицы методов `SCOM_Object<FormDocument>` |
+| IID `IFormDocument` | `da8583a2-a3dd-42fe-8995-1ff64eaa5905`; `QueryInterface` и RTTI согласованно указывают на подобъект `this+0x138` |
+| `IDocument` / `IPersistableDocument` | Общий подобъект `this+0x128`; GUID `425ee300-9dd3-11d4-84ae-008048da06df` и `39d1961c-1881-4e3f-8453-16ad0a648b05` возвращают этот указатель, их индивидуальные имена пока не разведены |
+
+Все 15 наблюдавшихся регистраций используют общую фабрику
+`ATL::CComObjectNoLock<ATL::CComClassFactory>`. Ее `CreateInstance` по адресу
+`dsgnfrm+0x167e40` вызывает индивидуальный callback из поля `factory+0x38`.
+Поэтому тип общей фабрики сам по себе тоже не определяет создаваемый класс.
+Исправленные пробы выводят callback, RTTI и проверяют точный тип результата.
+
+| Эксперимент | Результат и граница доказательства |
+| --- | --- |
+| Создание внутри Designer | Оба `CreateInstance` возвращают `hr=0`; RTTI основного и запрошенного интерфейсов соответствует `SCOM_Object<FormDocument>`. Синтетическая обработка выгружена, код Designer `0` |
+| Создание в отдельном процессе | Создание и RTTI подтверждены. Последующая инициализация с подставными сервисами падает: `SIGSEGV`, `dsgnfrm+0x167322`, адрес обращения `0x209`; дочерний процесс `139`, оболочка `1` |
+| Загрузка, изменение, сохранение через созданный объект | `UNKNOWN`: эти методы не вызывались. Выгрузка обработки Designer не доказывает их работоспособность у отдельно созданного объекта |
+
+Повторная декомпиляция показывает, что `IFormDocument` содержит операции
+над ссылкой на другой объект, а не готовую пару функций чтения/записи
+`Form.bin`. Для текущего бинарника установлены следующие границы:
+
+| Ghidra-адрес | Наблюдаемая операция |
+| --- | --- |
+| `0x2b5ff0 -> 0x2b5c70` | Метод `IFormDocument` передает указатель в поле полного объекта `+0x160`, управляет ссылками и связанными объектами |
+| `0x2b6030` | Возвращает ссылку из того же поля через скрытый параметр результата C++ и увеличивает счетчик ссылок; нельзя вызывать как обычную C-функцию с одним аргументом |
+| `0x295230 -> 0x295dd0` | Перечисляет связанные объекты; прямого чтения потока нет |
+| `0x295260 -> 0x296220` | Работает с сервисами интерфейса, сообщением и результатом диалога; прямого чтения потока нет |
+| `0x295270 -> 0x298950` | Обходит связанные представления и вызывает сервис интерфейса |
+| `0x2955b0 -> 0x2b6900` | Меняет флаг и распространяет его на связанные объекты и представления |
+
+Это локализует следующий вопрос: кто создает и сериализует объект,
+передаваемый в `IFormDocument`, и какие именно дескрипторы свойств он
+использует. Расширять подставное окружение до копии Designer или вызывать
+неустановленные сигнатуры ради успешного кода завершения не требуется.
+Полный цикл загрузки, изменения свойства и сохранения через библиотеки
+остается неподтвержденным.
+
+Доказательство исправления классификации и проверки двух ОС:
+`ev_c5010733fc4c4678877d5ce9613cd9eb`; итоговая повторная проверка создания
+настоящего документа: `ev_4c6d7d21265a42748af50941a68c4f71`;
+карта интерфейсов и проверка адресов: `ev_83670f1e9a2a4cec907cbb63b2e2cf8a`.
+Сырые тела функций и журналы остаются в игнорируемых результатах исследования.
+
+## Граница переносимости
+
+Текущие `liboof` и `oof` собираются без библиотек 1С. На 2026-10-03 свежие
+Release-сборки и CTest прошли на macOS arm64 и Debian 12 amd64, по 11/11.
+Синтетический XML и модуль с кириллицей дали одинаковый `Form.bin` и
+побайтово одинаковые результаты обратной выгрузки на обеих ОС. Проверка
+Windows остается `UNKNOWN`, среды компиляции и запуска нет.
+
+Тот же созданный `Form.bin` помещен целиком в исходники синтетической
+обработки и собран штатной командой Designer
+`/LoadExternalDataProcessorOrReportFromFiles`, код `0`. Последующая строгая
+выгрузка через `tools/platform_validate_epf.sh` также завершилась с кодом
+`0`. После нее `oof dump` восстановил побайтово тот же публичный XML;
+в модуле изменились только окончания строк `LF -> CRLF`. Проверен один
+синтетический `Button` с кириллицей, координатами, флагами и обработчиком
+`Click`. Доказательство: `ev_4471669be664425a8c8348f044b49326`.
+
+Это доказательство переносимости реализованного подмножества, не полноты
+формата. Неподдержанные объекты по-прежнему отклоняются. Продуктовый путь
+остается `Form.bin -> OrdinaryForm -> Form.xml + Module.bsl` и обратно;
+платформенные библиотеки, Ghidra и Designer служат для исследования и
+независимой проверки. Визуальный редактор можно строить над этой же моделью
+после расширения чтения и записи, он не устраняет пробелы сериализации.
+
+## Уточнение прежних кандидатов
+
+The former persistence candidates `00255f70` and `00256510` serialize and
+restore the designer setting `FormDesigner/UseWizardForInsertControl` using
+list streams. Fresh decompilation on 2026-10-03 confirmed the settings access
+and a global GUID/flag collection. They are not evidence of a `Form.bin`
+document reader or writer and have been removed from the default target set.
+
+The following functions concern control transfer formats. Their existence
+does not establish a complete document persistence API:
 - `002709e0`, `00270da0`, `00270fe0`: ordinary-control triplet entries. Each
   calls `wbase::cf_form_controls8`,
   `wbase::cf_form_controls_position8`, and
@@ -49,8 +148,9 @@ these form/designer/runtime objects:
 - support dialogs/sites: `FormDesignerSite`, `TestForm`, `ControlSelDlg`,
   `FieldsDialog`, `PropertiesEditDialog`, `GridParametersDialog`.
 
-The C++ engine should keep the same plain separation: transfer object,
-descriptor enumerator, designer graph, runtime graph, and control-site bridge.
+These names describe the platform's internal responsibilities. They are not
+a requirement to reproduce the Designer object hierarchy in the product.
+The product only needs the named form model and its verified codec.
 
 ## Transfer Formats
 
@@ -84,8 +184,9 @@ the ordinary-form mechanism:
 - scalar support: `ShortCut`, `Date`, `Numeric`;
 - persistence support: `IInPersistenceStorage`, `IOutPersistenceStorage`.
 
-This is the order to port into the native engine. Starting with controls
-without these value serializers repeats the current slot-guessing problem.
+These are candidates for targeted extraction when a supported public property
+needs them. Porting every platform service or serializer before extending the
+form model is not a prerequisite.
 
 `LocalWString`/`FormattedString` localization support must be extracted from
 the platform serializers themselves. The local Linux library set referenced

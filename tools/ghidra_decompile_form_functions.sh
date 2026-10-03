@@ -6,10 +6,11 @@ if [[ $# -lt 1 ]]; then
 Usage:
   tools/ghidra_decompile_form_functions.sh /path/to/platform-library.so [out-dir] [address-or-function ...]
 
-Runs Ghidra headless in Docker and decompiles ordinary-form serializer
-candidates. If no functions are provided, the default target set covers the
-known cf_form_controls_info8 xrefs plus ListOutStream/ListInStream paths:
-  FUN_002709e0 FUN_00270da0 FUN_00270fe0 FUN_002c9430 FUN_00255f70 FUN_00256510
+Runs Ghidra headless in Docker and decompiles ordinary-control transfer
+candidates. The default addresses belong to the researched dsgnfrm build:
+  FUN_002709e0 FUN_00270da0 FUN_00270fe0 FUN_002c9430
+Explicit targets use Ghidra addresses, not runtime module offsets. The JSON
+records imageBase and each function's imageOffset for address comparison.
 
 Keep platform binaries and generated decompile output in /tmp, work/, or
 another ignored/private directory. Do not commit those artifacts.
