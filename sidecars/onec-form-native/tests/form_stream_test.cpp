@@ -466,6 +466,101 @@ void test_multiple_top_level_buttons_round_trip() {
         "Button geometry with an incorrect sibling index must be rejected");
 }
 
+void test_button_multiline_round_trip_and_validation() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {
+        model::ControlRef{model::ObjectId{2}},
+        model::ControlRef{model::ObjectId{7}},
+        model::ControlRef{model::ObjectId{12}},
+    };
+    model::OrdinaryFormDocument document(std::move(form));
+
+    model::ControlNode first{model::ObjectId{2}, "First", model::ButtonPayload{}};
+    first.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
+    document.add_control(std::move(first));
+    model::ControlNode second{model::ObjectId{7}, "Second", model::ButtonPayload{}};
+    second.properties().set_explicit(model::PropertyId::from_name("MultiLine"), false);
+    document.add_control(std::move(second));
+    document.add_control(model::ControlNode{
+        model::ObjectId{12}, "Third", model::ButtonPayload{}});
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "Button.MultiLine values must encode");
+    const auto& records = encoded.value().items[1].items[2].items[2].items;
+    expect(records[1].items[2].items[1].items[5].atom == "0" &&
+               records[2].items[2].items[1].items[5].atom == "0" &&
+               records[3].items[2].items[1].items[5].atom == "0" &&
+               records[1].items[2].items[1].items[10].atom == "1" &&
+               records[2].items[2].items[1].items[10].atom == "0" &&
+               records[3].items[2].items[1].items[10].atom == "0",
+        "Button.MultiLine must change only property slot 10 and preserve slot 5");
+    for (std::size_t button = 1; button < records.size(); ++button) {
+        for (std::size_t slot = 0; slot < records[button].items[2].items[1].items.size(); ++slot) {
+            if (slot == 10) {
+                continue;
+            }
+            expect(
+                list_stream::dump_compact(records[button].items[2].items[1].items[slot]) ==
+                    list_stream::dump_compact(records[1].items[2].items[1].items[slot]),
+                "Button.MultiLine must leave other property slots unchanged");
+        }
+    }
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), "Button.MultiLine values must decode");
+    const auto property_bool_or = [&](model::ObjectId id, bool fallback) {
+        const auto* control = decoded.value().find_control(id);
+        expect(control != nullptr, "Button.MultiLine control must exist after decoding");
+        const auto* value = control->properties().find(model::PropertyId::from_name("MultiLine"));
+        return value == nullptr ? fallback : std::get<bool>(value->value);
+    };
+    expect(property_bool_or(model::ObjectId{2}, false) &&
+               !property_bool_or(model::ObjectId{7}, false) &&
+               !property_bool_or(model::ObjectId{12}, false),
+        "true and default-false Button.MultiLine values must remain independent");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok(), "decoded Button.MultiLine controls must re-encode");
+    expect(
+        list_stream::dump_compact(reencoded.value()) ==
+            list_stream::dump_compact(encoded.value()),
+        "Button.MultiLine storage must round-trip without changing other slots");
+
+    auto invalid_slot_boolean = encoded.value();
+    invalid_slot_boolean.items[1].items[2].items[2].items[1].items[2].items[1].items[10] =
+        list_stream::ListValue::raw_atom("2");
+    expect_failure(
+        form_stream::decode_document(invalid_slot_boolean, "Main"),
+        "OOF1105",
+        "$/1/2/2/1/2/1/10",
+        "Button.MultiLine storage values outside Boolean 0 or 1 must be rejected");
+
+    auto invalid_unknown_slot = encoded.value();
+    invalid_unknown_slot.items[1].items[2].items[2].items[1].items[2].items[1].items[5] =
+        list_stream::ListValue::raw_atom("1");
+    expect_failure(
+        form_stream::decode_document(invalid_unknown_slot, "Main"),
+        "OOF1114",
+        "$/1/2/2/1/2/1",
+        "unsupported Button property slot 5 variation must be rejected");
+
+    model::Form invalid_form;
+    invalid_form.id = model::ObjectId{1};
+    invalid_form.name = "Main";
+    invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+    model::ControlNode wrong_type{model::ObjectId{2}, "WrongType", model::ButtonPayload{}};
+    wrong_type.properties().set_explicit(
+        model::PropertyId::from_name("MultiLine"), std::string("true"));
+    invalid_document.add_control(std::move(wrong_type));
+    expect_failure(
+        form_stream::encode_document(invalid_document),
+        "OOF1123",
+        "$",
+        "Button.MultiLine values with a non-Boolean model type must be rejected");
+}
+
 void test_button_then_label_decoration_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -1289,6 +1384,7 @@ int main() {
         test_attribute_allocator_is_separate_from_control_ids();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
+        test_button_multiline_round_trip_and_validation();
         test_button_then_label_decoration_round_trip();
         test_fresh_checkbox_stream_decode();
         test_button_label_input_field_round_trip();

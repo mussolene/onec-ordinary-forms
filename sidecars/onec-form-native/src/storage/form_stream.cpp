@@ -395,7 +395,7 @@ LV canonical_button_base(bool enabled) {
     return value;
 }
 
-LV canonical_button_properties(bool enabled, std::string_view caption) {
+LV canonical_button_properties(bool enabled, std::string_view caption, bool multi_line) {
     return list({
         canonical_button_base(enabled),
         raw("14"),
@@ -407,7 +407,7 @@ LV canonical_button_properties(bool enabled, std::string_view caption) {
         raw("0"),
         parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"),
         parse_constant("{0,0,0}"),
-        raw("0"),
+        raw(multi_line ? "1" : "0"),
         raw("0"),
         raw("0"),
         raw("0"),
@@ -771,11 +771,13 @@ DecodedControl decode_button(const LV& record, std::string_view path, std::size_
     const std::string caption = decoded_single_language_text(
         properties.items[2],
         child_path(properties_path, 2));
+    const bool multi_line = bool_atom(
+        properties.items[10], child_path(properties_path, 10));
     auto normalized_properties = properties;
     normalized_properties.items[0] = std::move(normalized_base);
     require_exact(
         normalized_properties,
-        canonical_button_properties(enabled, caption),
+        canonical_button_properties(enabled, caption, multi_line),
         properties_path,
         "Button payload contains an unsupported property variation");
 
@@ -838,6 +840,9 @@ DecodedControl decode_button(const LV& record, std::string_view path, std::size_
     };
     if (!caption.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    }
+    if (multi_line) {
+        control.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
     }
     if (!enabled) {
         control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
@@ -1250,9 +1255,10 @@ LV encode_button(
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$", "plain top-level Button", control.name, "Button uses a storage concept outside the executable slice");
     }
-    require_allowed_properties(control.properties(), {"Caption", "Enabled"}, "$/Button");
+    require_allowed_properties(control.properties(), {"Caption", "Enabled", "MultiLine"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
+    const bool multi_line = explicit_bool(control.properties(), "MultiLine", false);
     const auto handler = button_click_handler(document, control);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
     return list({
@@ -1260,7 +1266,7 @@ LV encode_button(
         raw(std::to_string(control.id.value())),
         list({
             raw("1"),
-            canonical_button_properties(enabled, caption),
+            canonical_button_properties(enabled, caption, multi_line),
             canonical_event_table(handler),
         }),
         canonical_button_geometry(

@@ -309,6 +309,12 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::string,
         "");
+    classify_property(
+        button,
+        "MultiLine",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "false");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(
