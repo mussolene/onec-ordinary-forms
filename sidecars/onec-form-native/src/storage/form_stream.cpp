@@ -6,7 +6,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <array>
 #include <initializer_list>
 #include <limits>
 #include <optional>
@@ -1681,11 +1680,252 @@ std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, s
     return picture;
 }
 
+constexpr std::string_view menu_owner_guid = "31946946-0a9b-40a2-95cf-82f200778341";
+constexpr std::string_view menu_action_guid = "e1692cc2-605b-4535-84dd-28440238746c";
+constexpr std::string_view menu_reference_guid = "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6";
+
+std::string menu_identity(std::uint64_t owner, std::uint64_t item) {
+    std::array<char, 32> digits;
+    digits.fill('0');
+    for (std::size_t half = 0; half < 2; ++half) {
+        std::array<char, 16> converted{};
+        const auto result = std::to_chars(converted.data(), converted.data() + converted.size(), half == 0 ? owner : item, 16);
+        const auto length = static_cast<std::size_t>(result.ptr - converted.data());
+        std::copy_n(converted.data(), length, digits.data() + half * 16 + 16 - length);
+    }
+    return std::string(digits.data(), 8) + "-" + std::string(digits.data() + 8, 4) + "-" +
+        std::string(digits.data() + 12, 4) + "-" + std::string(digits.data() + 16, 4) + "-" + std::string(digits.data() + 20, 12);
+}
+
+LV menu_entry_properties(const model::CommandBarButton& entry, std::string_view owner, std::uint64_t id) {
+    const auto type = entry.type == model::CommandBarButtonKind::action ? 0 :
+        entry.type == model::CommandBarButtonKind::submenu ? 1 : 2;
+    const auto representation = entry.representation == model::ButtonRepresentation::automatic ? 0 :
+        entry.representation == model::ButtonRepresentation::text ? 1 :
+        entry.representation == model::ButtonRepresentation::picture ? 2 : 3;
+    return list({raw("8"), string_value(entry.name), raw(entry.changes_data ? "1" : "0"), raw("1"),
+        encoded_localized(entry.text), raw(entry.text.empty() ? "0" : "1"), raw(std::string(owner)),
+        raw(std::to_string(id)), raw("1e2"), raw(std::to_string(type)), raw(std::to_string(representation)),
+        raw(entry.enabled ? "1" : "0"), raw(entry.checked ? "1" : "0"),
+        raw(entry.type == model::CommandBarButtonKind::separator ? "0" : "1"), raw("0"), raw("0")});
+}
+
+LV menu_handler(std::string_view handler) {
+    return list({raw("3"), string_value(std::string(handler)), parse_constant(
+        "{1,\"\",{1,0},{1,0},{1,0},{4,0,{0},\"\",-1,-1,1,0,\"\"},{0,0,0}}")});
+}
+
+LV menu_picture(const model::PictureRef& reference, const model::OrdinaryFormDocument& document) {
+    if (reference.standard_name) {
+        const auto* descriptor = model::metamodel::find_standard_picture(reference.standard_name->value);
+        if (!descriptor || reference.asset) fail("OOF1122", "$/Button/Buttons/Picture", "valid standard picture",
+            reference.standard_name->value, "Menu picture reference is inconsistent");
+        return encode_standard_button_picture(*descriptor);
+    }
+    const auto* asset = document.find_asset(reference.asset.id());
+    if (!asset) fail("OOF1123", "$/Button/Buttons/Picture", "existing picture asset", "missing", "Menu picture reference is dangling");
+    return encode_button_picture(*asset, "$/Button/Buttons/Picture");
+}
+
+LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
+                      const model::OrdinaryFormDocument& document, std::uint64_t control_id) {
+    const auto owner = menu_identity(control_id | 0x8000000000000000ULL, 0);
+    struct Item { const model::CommandBarButton* entry; std::uint64_t id; std::string action_id; };
+    std::vector<Item> items;
+    std::unordered_map<const model::CommandBarButton*, std::uint64_t> ids;
+    std::function<void(const std::vector<model::CommandBarButton>&, std::size_t)> collect;
+    collect = [&](const auto& collection, std::size_t depth) {
+        if (depth > 256) fail("OOF1122", "$/Button/Buttons", "menu depth at most 256", "too deep", "Menu nesting is too deep");
+        for (const auto& entry : collection) {
+            const auto id = items.size() + 1;
+            ids.emplace(&entry, id);
+            items.push_back({&entry, id, menu_identity(control_id, id)});
+            collect(entry.buttons, depth + 1);
+        }
+    };
+    collect(entries, 0);
+    std::vector<LV> result{raw("5"), raw(owner), raw(std::to_string(items.size())), raw("1"), raw(std::to_string(items.size()))};
+    for (auto it = items.rbegin(); it != items.rend(); ++it) {
+        const auto& entry = *it->entry;
+        LV action = entry.type == model::CommandBarButtonKind::action
+            ? menu_handler(*entry.action)
+            : entry.type == model::CommandBarButtonKind::submenu
+                ? list({raw("1"), raw(owner), raw(std::to_string(it->id))})
+                : parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}");
+        unsigned mask = (entry.picture ? 1 : 0) | (!entry.tooltip.empty() ? 2 : 0) |
+            (!entry.explanation.empty() ? 4 : 0) | (entry.shortcut != model::ShortcutValue{} ? 8 : 0);
+        std::vector<LV> record{raw("8"), raw(it->action_id), raw("1"),
+            raw(std::string(entry.type == model::CommandBarButtonKind::action ? menu_action_guid : menu_reference_guid)),
+            std::move(action), raw(std::to_string(mask))};
+        if (!entry.tooltip.empty()) record.push_back(encoded_localized(entry.tooltip));
+        if (!entry.explanation.empty()) record.push_back(encoded_localized(entry.explanation));
+        if (entry.picture) record.push_back(menu_picture(*entry.picture, document));
+        if (entry.shortcut != model::ShortcutValue{}) record.push_back(encode_button_shortcut(entry.shortcut));
+        record.push_back(raw("0")); record.push_back(raw("0"));
+        result.push_back(list(std::move(record)));
+    }
+    result.push_back(raw(std::to_string(1 + std::count_if(items.begin(), items.end(), [](const auto& item) {
+        return item.entry->type == model::CommandBarButtonKind::submenu;
+    }))));
+    const auto group = [&](const auto& collection, std::uint64_t id) {
+        std::vector<LV> value{raw("5"), raw(id == 0 ? std::string(menu_owner_guid) : owner), raw(std::to_string(id)),
+            raw("0"), raw(std::to_string(collection.size()))};
+        for (const auto& entry : collection) {
+            const auto entry_id = ids.at(&entry);
+            value.push_back(raw(items[entry_id - 1].action_id));
+            value.push_back(menu_entry_properties(entry, owner, entry_id));
+        }
+        std::vector<LV> submenu_refs{raw(std::to_string(std::count_if(collection.begin(), collection.end(), [](const auto& entry) {
+            return entry.type == model::CommandBarButtonKind::submenu;
+        })))};
+        for (const auto& entry : collection) if (entry.type == model::CommandBarButtonKind::submenu) {
+            submenu_refs.push_back(raw(owner));
+            submenu_refs.push_back(raw(std::to_string(ids.at(&entry))));
+            submenu_refs.push_back(raw("0"));
+        }
+        value.push_back(list({raw("-1"), raw("0"), list(std::move(submenu_refs))}));
+        return list(std::move(value));
+    };
+    result.push_back(group(entries, 0));
+    for (const auto& item : items) if (item.entry->type == model::CommandBarButtonKind::submenu)
+        result.push_back(group(item.entry->buttons, item.id));
+    return list(std::move(result));
+}
+
+struct DecodedMenu {
+    std::vector<model::CommandBarButton> entries;
+    std::vector<model::PictureAsset> assets;
+};
+
+DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::string_view control_name) {
+    require_list(menu, path);
+    if (menu.items.size() < 7) fail("OOF1102", std::string(path), "menu header and collections", describe(menu), "Menu is incomplete");
+    require_raw_constant(menu.items[0], "5", path);
+    const auto owner = uuid_atom(menu.items[1], child_path(path, 1)).canonical;
+    const auto max_id = integer_atom<std::uint64_t>(menu.items[2], path);
+    require_raw_constant(menu.items[3], "1", path);
+    const auto action_count = integer_atom<std::size_t>(menu.items[4], path);
+    if (action_count > menu.items.size() - 6) fail("OOF1102", std::string(path), "bounded action count", describe(menu), "Menu action count exceeds its record");
+    std::unordered_map<std::string, const LV*> actions;
+    for (std::size_t i = 0; i < action_count; ++i) {
+        const auto& action = menu.items[5 + i];
+        require_list(action, path);
+        if (action.items.size() < 8) fail("OOF1102", std::string(path), "action header", describe(action), "Menu action is incomplete");
+        const auto guid = uuid_atom(action.items[1], path).canonical;
+        if (!actions.emplace(guid, &action).second) fail("OOF1114", std::string(path), "unique actions", guid, "Duplicate menu action");
+    }
+    const auto group_count = integer_atom<std::size_t>(menu.items[5 + action_count], path);
+    if (group_count != menu.items.size() - 6 - action_count || group_count == 0)
+        fail("OOF1102", std::string(path), "exact menu collection count", describe(menu), "Menu collection count is inconsistent");
+    std::unordered_map<std::uint64_t, const LV*> groups;
+    for (std::size_t i = 0; i < group_count; ++i) {
+        const auto& group = menu.items[6 + action_count + i];
+        require_list(group, path);
+        if (group.items.size() < 6) fail("OOF1102", std::string(path), "collection header", describe(group), "Menu collection is incomplete");
+        require_raw_constant(group.items[0], "5", path);
+        const auto id = integer_atom<std::uint64_t>(group.items[2], path);
+        require_raw_constant(group.items[1], id == 0 ? menu_owner_guid : std::string_view(owner), path);
+        require_raw_constant(group.items[3], "0", path);
+        if (!groups.emplace(id, &group).second) fail("OOF1114", std::string(path), "unique collections", std::to_string(id), "Duplicate menu collection");
+    }
+    DecodedMenu decoded;
+    std::unordered_set<std::uint64_t> consumed_groups, entry_ids;
+    std::unordered_set<std::string> consumed_actions;
+    std::function<std::vector<model::CommandBarButton>(std::uint64_t, std::string, std::size_t)> visit;
+    visit = [&](std::uint64_t group_id, std::string asset_path, std::size_t depth) {
+        if (depth > 256 || !consumed_groups.insert(group_id).second || !groups.contains(group_id))
+            fail("OOF1114", std::string(path), "existing acyclic owned collections", std::to_string(group_id), "Menu ownership is invalid");
+        const auto& group = *groups.at(group_id);
+        const auto count = integer_atom<std::size_t>(group.items[4], path);
+        if (count > (group.items.size() - 6) / 2 || group.items.size() != 6 + 2 * count)
+            fail("OOF1102", std::string(path), "exact collection size", describe(group), "Menu item count is inconsistent");
+        std::vector<LV> submenu_refs{raw("0")};
+        std::size_t submenu_count = 0;
+        std::vector<model::CommandBarButton> entries;
+        std::unordered_set<std::string> names;
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto guid = uuid_atom(group.items[5 + 2 * i], path).canonical;
+            if (!actions.contains(guid) || !consumed_actions.insert(guid).second)
+                fail("OOF1114", std::string(path), "unique existing action reference", guid, "Menu action is dangling or shared");
+            const auto& props = group.items[6 + 2 * i];
+            require_arity(props, 16, path);
+            model::CommandBarButton entry;
+            entry.name = string_atom(props.items[1], path);
+            if (entry.name.empty() || !names.insert(entry.name).second) fail("OOF1114", std::string(path), "unique named items", entry.name, "Menu name is empty or duplicated");
+            entry.changes_data = bool_atom(props.items[2], path);
+            entry.text = decoded_single_language_text(props.items[4], path);
+            const auto id = integer_atom<std::uint64_t>(props.items[7], path);
+            if (id == 0 || id > max_id || !entry_ids.insert(id).second)
+                fail("OOF1114", std::string(path), "positive unique item ID within maximum", std::to_string(id), "Menu identity is invalid");
+            const auto type = integer_atom<unsigned>(props.items[9], path);
+            if (type > 2) fail("OOF1114", std::string(path), "Action, Submenu, or Separator", std::to_string(type), "Menu item type is unsupported");
+            entry.type = type == 0 ? model::CommandBarButtonKind::action : type == 1 ? model::CommandBarButtonKind::submenu : model::CommandBarButtonKind::separator;
+            const auto representation = integer_atom<unsigned>(props.items[10], path);
+            if (representation > 3) fail("OOF1114", std::string(path), "known representation", std::to_string(representation), "Menu representation is unsupported");
+            entry.representation = representation == 0 ? model::ButtonRepresentation::automatic : representation == 1 ? model::ButtonRepresentation::text : representation == 2 ? model::ButtonRepresentation::picture : model::ButtonRepresentation::picture_text;
+            entry.enabled = bool_atom(props.items[11], path);
+            entry.checked = bool_atom(props.items[12], path);
+            auto normalized = props;
+            normalized.items[8] = raw("1e2");
+            if (raw_atom(props.items[8], path) != "1e2" && raw_atom(props.items[8], path) != "100")
+                fail("OOF1114", std::string(path), "scale 100", describe(props.items[8]), "Menu scale is unsupported");
+            require_exact(normalized, menu_entry_properties(entry, owner, id), path, "Menu item property is unsupported");
+            const auto& action = *actions.at(guid);
+            require_raw_constant(action.items[0], "8", path); require_raw_constant(action.items[2], "1", path);
+            require_raw_constant(action.items[3], type == 0 ? menu_action_guid : menu_reference_guid, path);
+            if (type == 0) {
+                require_arity(action.items[4], 3, path);
+                entry.action = string_atom(action.items[4].items[1], path);
+                if (entry.action->empty()) fail("OOF1114", std::string(path), "nonempty handler", "empty", "Menu action has no handler");
+                require_exact(action.items[4], menu_handler(*entry.action), path, "Menu handler metadata is unsupported");
+            } else {
+                require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
+                    parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"), path, "Menu action target is unsupported");
+            }
+            const auto mask = integer_atom<unsigned>(action.items[5], path);
+            if (mask > 15) fail("OOF1114", std::string(path), "known property flags", std::to_string(mask), "Menu action flags are unsupported");
+            std::size_t cursor = 6;
+            const auto take = [&]() -> const LV& { return at(action, cursor++, path); };
+            if (mask & 2) entry.tooltip = decoded_single_language_text(take(), path);
+            if (mask & 4) entry.explanation = decoded_single_language_text(take(), path);
+            if (mask & 1) {
+                const auto picture = decode_button_picture(take(), path);
+                if (!picture) fail("OOF1114", std::string(path), "nonempty picture", "empty", "Menu picture flag is inconsistent");
+                if (picture->standard_name) entry.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}};
+                else {
+                    decoded.assets.push_back(model::PictureAsset{model::ObjectId{decoded.assets.size() + 1},
+                        asset_path + "/" + entry.name + "/Picture." + std::string(picture_format_extension(picture->format)),
+                        picture->format, picture->bytes, picture->transparent});
+                    entry.picture = model::PictureRef{model::PictureAssetRef{decoded.assets.back().id}};
+                }
+            }
+            if (mask & 8) entry.shortcut = decode_button_shortcut(take(), path);
+            require_raw_constant(take(), "0", path); require_raw_constant(take(), "0", path);
+            require_arity(action, cursor, path);
+            if (type == 1) {
+                ++submenu_count;
+                submenu_refs.push_back(raw(owner)); submenu_refs.push_back(raw(std::to_string(id))); submenu_refs.push_back(raw("0"));
+                entry.buttons = visit(id, asset_path + "/" + entry.name + "/Buttons", depth + 1);
+            }
+            entries.push_back(std::move(entry));
+        }
+        submenu_refs[0] = raw(std::to_string(submenu_count));
+        require_exact(group.items.back(), list({raw("-1"), raw("0"), list(std::move(submenu_refs))}),
+            path, "Menu submenu references are inconsistent");
+        return entries;
+    };
+    decoded.entries = visit(0, "Items/" + std::string(control_name) + "/Buttons", 0);
+    if (consumed_groups.size() != groups.size() || consumed_actions.size() != actions.size())
+        fail("OOF1114", std::string(path), "all owned menu objects consumed", "orphan", "Menu has unconsumed objects");
+    return decoded;
+}
+
 struct DecodedControl {
     model::ControlNode control;
     std::optional<std::string> click_handler;
     IncomingAnchorLists incoming;
     std::optional<model::PictureAsset> picture_asset;
+    std::vector<model::PictureAsset> menu_assets;
 };
 
 DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context) {
@@ -1778,6 +2018,13 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     auto normalized_properties = properties;
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[8] = canonical_button_picture();
+    if (menu_mode != 0) normalized_properties.items[12] = parse_constant(
+        "{5,53232d71-06b1-4ec1-a94d-77fafadef407,0,1,0,1,"
+        "{5,31946946-0a9b-40a2-95cf-82f200778341,0,0,0,{-1,0,{0}}}}");
+    const auto control_state = integer_atom<unsigned>(normalized_properties.items.back(), properties_path);
+    if (control_state != 1 && control_state != 2) fail("OOF1114", properties_path,
+        "known internal control state", std::to_string(control_state), "Button control state is unsupported");
+    normalized_properties.items.back() = raw("1");
     require_exact(
         normalized_properties,
         canonical_button_properties(enabled, caption, horizontal_align, vertical_align, picture_location,
@@ -1890,7 +2137,12 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
             model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
                 model::QualifiedName{*picture->standard_name}});
     }
-    return {std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset)};
+    DecodedMenu menu;
+    if (menu_mode != 0) {
+        menu = decode_button_menu(properties.items[12], child_path(properties_path, 12), name);
+        std::get<model::ButtonPayload>(control.payload).buttons = std::move(menu.entries);
+    }
+    return {std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset), std::move(menu.assets)};
 }
 
 DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
@@ -1956,7 +2208,7 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
         model::EnumerationValue{
             "HorizontalAlign", horizontal_align == 4 ? "Auto" : "Left"});
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
 DecodedControl decode_check_box(
@@ -2021,7 +2273,7 @@ DecodedControl decode_check_box(
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
 DecodedControl decode_input_field(
@@ -2088,7 +2340,7 @@ DecodedControl decode_input_field(
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
 bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value) {
@@ -2274,6 +2526,11 @@ LV encode_button(
         picture_location, picture_size, menu_mode, multi_line, tool_tip,
         border_color, button_text_color, button_back_color, font, shortcut);
     if (picture_asset != nullptr) button_properties.items[8] = encode_button_picture(*picture_asset, "$/Button/Picture");
+    const auto& menu_entries = std::get<model::ButtonPayload>(control.payload).buttons;
+    if (!menu_entries.empty()) {
+        if (menu_mode == 0) fail("OOF1122", "$/Button/Buttons", "enabled MenuMode", "DontUse", "Menu entries require MenuMode");
+        button_properties.items[12] = encode_button_menu(menu_entries, document, control.id.value());
+    }
     if (standard_picture != nullptr) button_properties.items[8] = encode_standard_button_picture(*standard_picture);
     return list({
         raw(std::string(descriptor.guid)),
@@ -3224,7 +3481,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         decode_child_table(at(record, 5, record_path), panel_owner.pages, GeometryOwner{panel_ref},
                             panel_owner.incoming, child_path(record_path, 5));
                         for (auto& page : panel_owner.pages) nested_pages.push_back(std::move(page));
-                        child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming), std::nullopt};
+                        child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
                     } else {
                         fail("OOF1122", record_path, "supported leaf controls or Panel", guid, "Control payload is unsupported");
                     }
@@ -3359,6 +3616,26 @@ Result<model::OrdinaryFormDocument> decode_document(
                     model::PictureRef{model::PictureAssetRef{asset_id}});
                 decoded_picture_assets.push_back(std::move(*decoded_control.picture_asset));
             }
+            if (!decoded_control.menu_assets.empty()) {
+                std::unordered_map<std::uint64_t, model::ObjectId> asset_ids;
+                for (auto& asset : decoded_control.menu_assets) {
+                    if (synthetic_event_offset >= std::numeric_limits<std::uint64_t>::max() - event_id_base)
+                        fail("OOF1120", "$/Button/Buttons/Picture", "allocatable picture ID", "overflow", "Picture ID overflows");
+                    const model::ObjectId id{event_id_base + ++synthetic_event_offset};
+                    asset_ids.emplace(asset.id.value(), id);
+                    asset.id = id;
+                    decoded_picture_assets.push_back(std::move(asset));
+                }
+                std::function<void(std::vector<model::CommandBarButton>&)> update;
+                update = [&](auto& entries) {
+                    for (auto& entry : entries) {
+                        if (entry.picture && !entry.picture->standard_name)
+                            entry.picture->asset = model::PictureAssetRef{asset_ids.at(entry.picture->asset.id().value())};
+                        update(entry.buttons);
+                    }
+                };
+                update(std::get<model::ButtonPayload>(decoded_control.control.payload).buttons);
+            }
             document.add_control(std::move(decoded_control.control));
         }
         for (auto& asset : decoded_picture_assets) document.add_asset(std::move(asset));
@@ -3425,6 +3702,17 @@ Result<list_stream::ListValue> encode_document(
                 }
                 referenced_picture_ids.insert(reference.asset.id().value());
             }
+        }
+        for (const auto& control : document.collections().controls) {
+            if (control.kind() != model::ControlKind::button) continue;
+            std::function<void(const std::vector<model::CommandBarButton>&)> collect_pictures;
+            collect_pictures = [&](const auto& entries) {
+                for (const auto& entry : entries) {
+                    if (entry.picture && !entry.picture->standard_name) referenced_picture_ids.insert(entry.picture->asset.id().value());
+                    collect_pictures(entry.buttons);
+                }
+            };
+            collect_pictures(std::get<model::ButtonPayload>(control.payload).buttons);
         }
         if (referenced_picture_ids.size() != document.assets().size()) {
             fail("OOF1122", "$/PictureAssets", "one referenced asset per declared asset", "orphan or duplicate ID",

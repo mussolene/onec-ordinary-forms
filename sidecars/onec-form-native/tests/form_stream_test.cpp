@@ -1020,6 +1020,54 @@ void test_button_picture_enums_round_trip_and_validation() {
         "$/1/2/2/1/2/1/6", "unsupported Button.PictureLocation storage values must be rejected");
 }
 
+void test_named_button_menu_round_trip_and_invalid_references() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "Menu";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode button{model::ObjectId{2}, "Run", model::ButtonPayload{}};
+    button.properties().set_explicit(model::PropertyId::from_name("MenuMode"), model::EnumerationValue{"MenuMode", "UseExtra"});
+    model::CommandBarButton action;
+    action.name = "ActionOne"; action.action = "RunHandler"; action.text = "Первое";
+    action.explanation = "Пояснение"; action.tooltip = "Подсказка";
+    action.enabled = false; action.checked = true; action.changes_data = true;
+    action.representation = model::ButtonRepresentation::picture_text;
+    action.shortcut = {"A", false, true, false};
+    action.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.ActivateTask"}};
+    model::CommandBarButton divider; divider.name = "Divider"; divider.type = model::CommandBarButtonKind::separator;
+    model::CommandBarButton submenu; submenu.name = "More"; submenu.type = model::CommandBarButtonKind::submenu;
+    submenu.text = "Еще"; submenu.buttons = {action, divider};
+    std::get<model::ButtonPayload>(button.payload).buttons = {action, divider, submenu};
+    document.add_control(std::move(button));
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "named menu must encode" : encoded.diagnostics().front().message);
+    const auto& menu_record = encoded.value().items[1].items[2].items[2].items[1].items[2].items[1].items[12];
+    const auto& complete_action = menu_record.items[9];
+    expect(complete_action.items[5].atom == "15" && complete_action.items[6].items[0].atom == "1" &&
+        complete_action.items[7].items[0].atom == "1" && complete_action.items[8].items[0].atom == "4" &&
+        complete_action.items[9].items[0].atom == "0",
+        "platform flags 15 store ToolTip, Explanation, Picture, Shortcut in that order, not bit order");
+    const auto decoded = form_stream::decode_document(encoded.value(), "Menu");
+    expect(decoded.ok(), decoded ? "named menu must decode" : decoded.diagnostics().front().message);
+    expect(std::get<model::ButtonPayload>(decoded.value().find_control(model::ObjectId{2})->payload).buttons ==
+        std::get<model::ButtonPayload>(document.find_control(model::ObjectId{2})->payload).buttons,
+        "named recursive menu properties and actions must survive independent encoding and decoding");
+    const auto repeated = form_stream::encode_document(decoded.value());
+    expect(repeated.ok() && list_stream::dump_compact(repeated.value()) == list_stream::dump_compact(encoded.value()),
+        "menu identity must be derived deterministically without preserving a source payload");
+    const auto menu_at = [](auto& root) -> auto& { return root.items[1].items[2].items[2].items[1].items[2].items[1].items[12]; };
+    auto dangling = encoded.value();
+    auto& menu = menu_at(dangling);
+    const auto count = static_cast<std::size_t>(std::stoul(menu.items[4].atom));
+    menu.items[6 + count].items[5] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+    expect(!form_stream::decode_document(dangling, "Menu"), "dangling action references must be rejected");
+    auto flags = encoded.value(); menu_at(flags).items[5].items[5] = list_stream::ListValue::raw_atom("16");
+    expect(!form_stream::decode_document(flags, "Menu"), "unknown menu action flags must be rejected");
+    auto cycle = encoded.value();
+    menu_at(cycle).items[6 + count].items[10].items[7] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(cycle, "Menu"), "inconsistent submenu targets must be rejected");
+}
+
 void test_button_menu_mode_round_trip_and_validation() {
     static constexpr std::string_view members[] = {"DontUse", "Use", "UseExtra"};
     const std::string menu_block =
@@ -1096,10 +1144,10 @@ void test_button_menu_mode_round_trip_and_validation() {
     expect(!form_stream::decode_document(wrong_arity_enabled, "MenuModes"),
         "Use must reject a 16-field record");
     auto unknown_menu_descriptor = encoded.value();
-    unknown_menu_descriptor.items[1].items[2].items[2].items[2].items[2].items[1].items[12].items[1] =
-        list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000001");
+    unknown_menu_descriptor.items[1].items[2].items[2].items[2].items[2].items[1].items[12].items[0] =
+        list_stream::ListValue::raw_atom("6");
     expect(!form_stream::decode_document(unknown_menu_descriptor, "MenuModes"),
-        "noncanonical menu descriptor content must be rejected rather than preserved as raw data");
+        "unknown menu format version must be rejected rather than preserved as raw data");
 
     model::Form invalid_form;
     invalid_form.id = model::ObjectId{1};
@@ -3081,6 +3129,7 @@ int main() {
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();
+        test_named_button_menu_round_trip_and_invalid_references();
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();

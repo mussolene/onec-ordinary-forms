@@ -432,6 +432,8 @@ void expect_property_element(
             type == "UnclassifiedValueType",
             "unclassified property must use the rejecting type");
     } else {
+        if (descriptor.value_codec == ValueCodec::command_bar_buttons)
+            expect(type == "CommandBarButtonsType", "menu collection must use its descriptor-backed schema type");
         expect(
             type != "UnclassifiedValueType",
             "classified property must use its codec type");

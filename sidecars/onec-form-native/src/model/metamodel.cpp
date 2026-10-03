@@ -613,6 +613,8 @@ void apply_proven_storage_overrides(
     std::vector<PropertyDescriptor>& form_properties,
     std::array<std::vector<EventDescriptor>, control_kind_count>& events) {
     auto& button = properties[static_cast<std::size_t>(ControlKind::button)];
+    classify_property(button, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
+    std::ranges::find(button, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
     classify_property(
         button,
         "Enabled",
@@ -1356,6 +1358,8 @@ std::string_view value_kind_name(ValueKind kind) noexcept {
 
 std::string_view value_codec_name(ValueCodec codec) noexcept {
     switch (codec) {
+        case ValueCodec::command_bar_buttons:
+            return "command-bar-buttons";
         case ValueCodec::unclassified:
             return "unclassified";
         case ValueCodec::boolean:

@@ -719,6 +719,32 @@ ValidationReport OrdinaryFormDocument::validate() const {
     }
 
     for (const auto& control : collections_.controls) {
+        if (const auto* button = std::get_if<ButtonPayload>(&control.payload)) {
+            const auto validate_buttons = [&](const auto& self, const std::vector<CommandBarButton>& items, std::size_t depth) -> void {
+                if (depth > 256) {
+                    add_violation(report, InvariantCode::invalid_property, control.id, {}, "button menu nesting is too deep");
+                    return;
+                }
+                std::set<std::string> names;
+                for (const auto& item : items) {
+                    const auto invalid = [&](std::string reason) {
+                        add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
+                    };
+                    if (item.type != CommandBarButtonKind::action && item.type != CommandBarButtonKind::submenu && item.type != CommandBarButtonKind::separator) invalid("unknown menu item type");
+                    if (item.representation != ButtonRepresentation::automatic && item.representation != ButtonRepresentation::picture && item.representation != ButtonRepresentation::text && item.representation != ButtonRepresentation::picture_text) invalid("unknown menu representation");
+                    if (item.name.empty() || !names.insert(item.name).second) invalid("button menu item names must be non-empty and unique within each collection");
+                    if (item.type == CommandBarButtonKind::action && (!item.action || item.action->empty())) invalid("Action menu item requires a handler");
+                    if (item.type != CommandBarButtonKind::action && item.action) invalid("only Action menu items may have a handler");
+                    if (item.type != CommandBarButtonKind::submenu && !item.buttons.empty()) invalid("only Submenu items may contain buttons");
+                    if (item.type == CommandBarButtonKind::separator &&
+                        (!item.text.empty() || !item.explanation.empty() || !item.tooltip.empty() || !item.enabled || item.checked || item.changes_data || item.representation != ButtonRepresentation::automatic || item.shortcut != ShortcutValue{} || item.picture || item.action)) invalid("Separator cannot have properties");
+                    if (metamodel::find_shortcut_key(item.shortcut.key) == nullptr) invalid("button menu Shortcut has unsupported key");
+                    if (item.picture) require_picture(control.id, *item.picture);
+                    self(self, item.buttons, depth + 1);
+                }
+            };
+            validate_buttons(validate_buttons, button->buttons, 0);
+        }
         const auto& descriptor = metamodel::descriptor_for(control.kind());
         if (!control.children.empty() && descriptor.child_policy == metamodel::ChildPolicy::forbidden) {
             add_violation(

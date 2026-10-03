@@ -72,6 +72,7 @@ enum class ValueKind : std::uint8_t {
 
 enum class ValueCodec : std::uint8_t {
     unclassified,
+    command_bar_buttons,
     boolean,
     integer,
     integer32,

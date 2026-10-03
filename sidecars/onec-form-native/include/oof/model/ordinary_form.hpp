@@ -362,6 +362,26 @@ struct ShortcutValue {
     friend bool operator==(const ShortcutValue&, const ShortcutValue&) = default;
 };
 
+enum class CommandBarButtonKind : std::uint8_t { action, submenu, separator };
+enum class ButtonRepresentation : std::uint8_t { automatic, picture, text, picture_text };
+
+struct CommandBarButton {
+    std::string name;
+    CommandBarButtonKind type = CommandBarButtonKind::action;
+    std::string text;
+    std::string explanation;
+    std::string tooltip;
+    bool enabled = true;
+    bool checked = false;
+    bool changes_data = false;
+    ButtonRepresentation representation = ButtonRepresentation::automatic;
+    ShortcutValue shortcut{};
+    std::optional<PictureRef> picture;
+    std::optional<std::string> action;
+    std::vector<CommandBarButton> buttons;
+    friend bool operator==(const CommandBarButton&, const CommandBarButton&) = default;
+};
+
 using PropertyValue = std::variant<
     UndefinedValue,
     bool,
@@ -549,7 +569,9 @@ struct TypedControlPayload {
 
 struct PanelPayload final : TypedControlPayload<ControlKind::panel> {};
 struct CommandBarPayload final : TypedControlPayload<ControlKind::command_bar> {};
-struct ButtonPayload final : TypedControlPayload<ControlKind::button> {};
+struct ButtonPayload final : TypedControlPayload<ControlKind::button> {
+    std::vector<CommandBarButton> buttons;
+};
 struct PictureDecorationPayload final
     : TypedControlPayload<ControlKind::picture_decoration> {};
 struct CheckBoxPayload final : TypedControlPayload<ControlKind::check_box> {};

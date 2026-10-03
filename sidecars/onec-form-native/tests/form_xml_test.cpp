@@ -748,6 +748,36 @@ void test_standard_picture_xml_reference_roundtrip() {
     expect(!source::parse_form_xml(unknown).ok(), "unknown standard picture names must be rejected");
 }
 
+void test_button_menu_model_roundtrip_and_rejections() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="run" type="Action"><Text>Run</Text><Shortcut Alt="false" Ctrl="true" Shift="false"><Key>R</Key></Shortcut><Action>RunHandler</Action></CommandBarButton><CommandBarButton name="more" type="Submenu"><Text>More</Text><Buttons><CommandBarButton name="sep" type="Separator"/></Buttons></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed.diagnostics().empty() ? "typed Button.Buttons tree must parse" : parsed.diagnostics().front().message);
+    const auto* button = parsed.value().find_control(model::ObjectId{2});
+    const auto* payload = button ? std::get_if<model::ButtonPayload>(&button->payload) : nullptr;
+    expect(payload && payload->buttons.size() == 2 && payload->buttons[1].buttons.size() == 1,
+        "button menu and recursive submenu must live in ButtonPayload");
+    expect(payload->buttons[0].action == "RunHandler" && payload->buttons[0].shortcut.key == "R",
+        "handler and typed shortcut must be retained");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<CommandBarButton name=\"sep\" type=\"Separator\">") != std::string::npos,
+        "button menu must serialize in named XML");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "serialized button menu must parse again");
+    const auto* restored = std::get_if<model::ButtonPayload>(&reparsed.value().find_control(model::ObjectId{2})->payload);
+    expect(restored && restored->buttons == payload->buttons, "recursive button menu must roundtrip exactly");
+    constexpr std::string_view picture_xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><PictureAssets><PictureAsset id="4" relativePath="Items/Run/Buttons/More/Buttons/Item/Picture.gif" format="gif"/></PictureAssets><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Picture>4</Picture><Action>RunHandler</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
+    expect(source::parse_form_xml(picture_xml).ok(), "named menu picture paths must parse within source package");
+    auto unsafe = std::string(picture_xml);
+    unsafe.replace(unsafe.find("Buttons/More"), 12, "Buttons/../More");
+    expect(!source::parse_form_xml(unsafe).ok(), "menu picture paths must reject traversal");
+    auto malformed_path = std::string(picture_xml);
+    malformed_path.replace(malformed_path.find("Buttons/More"), 12, "Other/More");
+    expect(!source::parse_form_xml(malformed_path).ok(), "menu paths may only use named Buttons ownership segments");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"/></Buttons></Button></ChildItems></Form>)XML").ok(), "Action requires handler");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action>One</Action></CommandBarButton><CommandBarButton name="x" type="Action"><Action>Two</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "duplicate names in a collection must be rejected");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Submenu"><Action>Bad</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "non-Action handler must be rejected");
+}
+
 void test_event_owner_invariant() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -788,6 +818,7 @@ int main() {
         test_event_owner_invariant();
         test_button_foreign_enum_default_is_retained();
         test_standard_picture_xml_reference_roundtrip();
+        test_button_menu_model_roundtrip_and_rejections();
         test_label_horizontal_align_xml_roundtrip();
     } catch (const std::exception& error) {
         std::cerr << "form XML tests: FAIL: " << error.what() << '\n';
