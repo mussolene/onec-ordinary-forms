@@ -146,3 +146,20 @@ Forms/<FormName>/Ext/Form/Items/<ElementName>/Picture.*
 Everything in this package must describe named `OrdinaryForm` concepts. If a
 low-level platform value is needed for rebuild, promote it into a named concept
 with a descriptor-backed serializer.
+
+
+The Page table codec now handles named Name, localized Title, Visible and
+Enabled properties in both directions, preserving order and validating
+identity, counts and language uniqueness. Position and children remain separate
+owner surfaces. Unsupported property variations are rejected. The root writer
+uses this codec for its standard page. Current macOS and fresh Linux suites
+pass 11/11, and strict Designer root reconstruction from XML and module passes:
+`ev_de0a60c9770b4bfa911e743a39c8acab`,
+`ev_0c9e829731ff45df8ec194f0d5464c58`.
+
+A controlled Designer experiment identifies a tab-picture descriptor within
+Page metadata. Clearing a standard picture removes its UUID and changes Bottom
+constraints for all three pages, without changing saved rectangles or child
+geometry. The complete descriptor is not implemented; such pages fail
+explicitly. Evidence: `ev_1c4a7ce42e2d453e9479eaafa15bdad8`.
+Whole recursive Panel/Page document serialization remains incomplete.

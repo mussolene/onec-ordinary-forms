@@ -106,6 +106,14 @@ struct ControlGeometry {
 [[nodiscard]] Result<list_stream::ListValue> encode_attributes(
     const AttributesRecord& record);
 
+// Page-table rows include only Name, Title, Visible, and Enabled metadata.
+[[nodiscard]] Result<std::vector<model::Page>> decode_page_table(
+    const list_stream::ListValue& table,
+    std::uint64_t starting_id,
+    std::string_view path = "$/Pages");
+[[nodiscard]] Result<list_stream::ListValue> encode_page_table(
+    const std::vector<model::Page>& pages);
+
 // Ordinary-control geometry is interpreted relative to its owning Form or Panel.
 [[nodiscard]] Result<ControlGeometry> decode_control_geometry(
     const list_stream::ListValue& geometry,

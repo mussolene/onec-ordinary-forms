@@ -1749,6 +1749,118 @@ void test_page_boundary_position_codec() {
         "missing Page constraints must not be inferred from coordinates");
 }
 
+void test_page_table_codec() {
+    model::Page page;
+    page.id = model::ObjectId{1};
+    page.name = "Страница1";
+    model::LocalizedStringValue default_title;
+    default_title.items.push_back({"ru", "Страница1"});
+    page.title.set(default_title);
+
+    const auto table = form_stream::encode_page_table({page});
+    expect(table.ok(), table ? "default Page table must encode" : table.diagnostics().front().message);
+    const auto expected = list_stream::parse(
+        R"({1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}})");
+    expect(list_stream::dump_compact(table.value()) == list_stream::dump_compact(expected),
+        "Page table writer must match the confirmed default row exactly");
+
+    const auto decoded = form_stream::decode_page_table(expected, 40);
+    expect(decoded.ok() && decoded.value().size() == 1 &&
+               decoded.value()[0].id == model::ObjectId{40} && decoded.value()[0].name == "Страница1" &&
+               decoded.value()[0].title.value() == default_title &&
+               decoded.value()[0].visible.value() && decoded.value()[0].enabled.value(),
+        "default Page table must decode named properties and assign caller-selected IDs");
+
+    auto edited = page;
+    edited.id = model::ObjectId{8};
+    edited.name = "Operations";
+    edited.title.set(model::LocalizedStringValue{{{"ru", "Операции"}, {"en", "Operations"}}});
+    edited.visible.set(false);
+    edited.enabled.set(false);
+    const auto edited_table = form_stream::encode_page_table({edited});
+    expect(edited_table.ok(), "named Page Name, multilingual Title, Visible, and Enabled must encode");
+    const auto edited_roundtrip = form_stream::decode_page_table(edited_table.value(), 80);
+    expect(edited_roundtrip.ok() && edited_roundtrip.value()[0].id == model::ObjectId{80} &&
+               edited_roundtrip.value()[0].name == "Operations" &&
+               edited_roundtrip.value()[0].title.value() == edited.title.value() &&
+               !edited_roundtrip.value()[0].visible.value() && !edited_roundtrip.value()[0].enabled.value(),
+        "Page table roundtrip must preserve all localizations and supported edits");
+
+    const auto two_pages = form_stream::encode_page_table({page, edited});
+    expect(two_pages.ok(), "multiple Page rows must encode");
+    const auto two_pages_decoded = form_stream::decode_page_table(two_pages.value(), 100);
+    expect(two_pages_decoded.ok() && two_pages_decoded.value().size() == 2 &&
+               two_pages_decoded.value()[0].id == model::ObjectId{100} &&
+               two_pages_decoded.value()[1].id == model::ObjectId{101},
+        "Page table must preserve row order and allocate consecutive internal IDs");
+
+    auto malformed = expected;
+    malformed.items[1] = list_stream::ListValue::raw_atom("2");
+    expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1102", "$/Pages",
+        "Page table count that disagrees with row arity must fail");
+    malformed = expected;
+    malformed.items[2].items.pop_back();
+    expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1102", "$/Pages/2",
+        "Page rows with wrong arity must fail");
+    malformed = expected;
+    malformed.items[2].items[0] = list_stream::ListValue::raw_atom("7");
+    expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1106", "$/Pages/2/0",
+        "unknown Page record versions must fail");
+    malformed = expected;
+    malformed.items[2].items[2].items[0] = list_stream::ListValue::raw_atom("11");
+    expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1114", "$/Pages/2/2",
+        "unproven Page style values must fail");
+
+    auto duplicate_title = page;
+    duplicate_title.title.set(model::LocalizedStringValue{{{"ru", "Первый"}, {"ru", "Второй"}}});
+    expect_failure(form_stream::encode_page_table({duplicate_title}), "OOF1122", "$/Pages/0/1/1",
+        "duplicate Title language keys must be rejected by the writer");
+    malformed = expected;
+    malformed.items[2].items[1] = list_stream::parse("{1,2,{\"ru\",\"Первый\"},{\"ru\",\"Второй\"}}");
+    expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1122", "$/Pages/2/1/1",
+        "duplicate Title language keys must be rejected by the reader");
+
+    model::Page empty_language = page;
+    empty_language.title.set(model::LocalizedStringValue{{{"", "Title without language tag"}}});
+    const auto empty_language_table = form_stream::encode_page_table({empty_language});
+    expect(empty_language_table.ok(), "a single empty language tag remains accepted like the XML parser");
+    const auto empty_language_decoded = form_stream::decode_page_table(empty_language_table.value(), 1);
+    expect(empty_language_decoded.ok() &&
+               empty_language_decoded.value()[0].title.value() == empty_language.title.value(),
+        "an empty language tag must survive the Page table codec");
+
+    auto empty_name = page;
+    empty_name.name.clear();
+    expect_failure(form_stream::encode_page_table({empty_name}), "OOF1122", "$/Pages/0",
+        "empty Page names must fail on encode");
+    malformed = expected;
+    malformed.items[2].items[6] = list_stream::ListValue::string_atom("");
+    expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1115", "$/Pages/2/6",
+        "empty Page names must fail on decode");
+
+    auto duplicate_id = edited;
+    duplicate_id.id = page.id;
+    expect_failure(form_stream::encode_page_table({page, duplicate_id}), "OOF1122", "$/Pages/1",
+        "duplicate Page IDs must fail on encode");
+    const auto names_table = form_stream::encode_page_table({page, edited});
+    expect(names_table.ok(), "distinct Page names must encode");
+    malformed = names_table.value();
+    malformed.items[3].items[6] = list_stream::ListValue::string_atom(page.name);
+    expect_failure(form_stream::decode_page_table(malformed, 1), "OOF1122", "$/Pages/3/6",
+        "duplicate Page names within one owner table must fail on decode");
+    auto duplicate_name = page;
+    duplicate_name.id = model::ObjectId{9};
+    expect_failure(form_stream::encode_page_table({page, duplicate_name}), "OOF1122", "$/Pages/1",
+        "duplicate Page names within one owner table must fail on encode");
+
+    expect_failure(form_stream::decode_page_table(expected, 0), "OOF1122", "$/Pages",
+        "zero starting Page IDs must fail");
+    const auto overflow = form_stream::decode_page_table(
+        two_pages.value(), std::numeric_limits<std::uint64_t>::max());
+    expect_failure(overflow, "OOF1122", "$/Pages",
+        "Page ID assignment overflow must fail before allocating rows");
+}
+
 void test_owner_aware_control_geometry_codec() {
     const model::ControlRef owner{model::ObjectId{42}};
     const form_stream::GeometryContext context{owner, 3, 7};
@@ -1910,6 +2022,7 @@ int main() {
         test_anchor_bindings_round_trip_and_fanout();
         test_center_target_coordinates();
         test_page_boundary_position_codec();
+        test_page_table_codec();
         test_owner_aware_control_geometry_codec();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {

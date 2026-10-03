@@ -362,6 +362,97 @@ LV canonical_style_record(std::uint32_t version) {
     return value;
 }
 
+void validate_localized_languages(
+    const model::LocalizedStringValue& value,
+    std::string_view path) {
+    std::unordered_set<std::string> languages;
+    for (std::size_t index = 0; index < value.items.size(); ++index) {
+        const auto& language = value.items[index].language;
+        if (!languages.insert(language).second) {
+            fail("OOF1122", child_path(path, index), "one localized title item per language", language,
+                "Localized Page title contains a duplicate language");
+        }
+    }
+}
+
+LV encode_page_record(const model::Page& page, std::string_view path) {
+    if (page.id.value() == 0 || page.name.empty()) {
+        fail("OOF1122", std::string(path), "Page with positive ID and non-empty Name",
+            page.name, "Page identity cannot be encoded");
+    }
+    const auto& title = page.title.value();
+    if (title.items.size() > std::numeric_limits<std::uint32_t>::max()) {
+        fail("OOF1112", child_path(path, 1), "localized title entry count within uint32 range",
+            std::to_string(title.items.size()), "Page title has too many localizations");
+    }
+    validate_localized_languages(title, child_path(path, 1));
+    LV encoded_title;
+    try {
+        encoded_title = list_stream::parse(value_codec::encode_localized_string(title));
+    } catch (const std::exception& error) {
+        fail("OOF1108", child_path(path, 1), "encodable LocalizedString", error.what(),
+            "Page title cannot be encoded");
+    }
+    return list({
+        raw("6"),
+        std::move(encoded_title),
+        canonical_style_record(10),
+        raw("-1"),
+        raw(page.visible.value() ? "1" : "0"),
+        raw(page.enabled.value() ? "1" : "0"),
+        string_value(page.name),
+        raw("1"),
+        parse_constant("{4,4,{0},4}"),
+        parse_constant("{4,4,{0},4}"),
+        parse_constant("{8,3,0,1,100}"),
+        raw("1"),
+    });
+}
+
+model::Page decode_page_record(const LV& row, model::ObjectId id, std::string_view path) {
+    require_arity(row, 12, path);
+    require_raw_constant(row.items[0], "6", child_path(path, 0));
+    model::LocalizedStringValue title;
+    try {
+        list_stream::ListInStream in(row.items[1]);
+        title = value_codec::read_localized_string(in);
+        if (in.has_next()) {
+            fail("OOF1108", child_path(path, 1), "complete LocalizedString record", describe(row.items[1]),
+                "Page title has trailing values");
+        }
+    } catch (const DecodeFailure&) {
+        throw;
+    } catch (const std::exception& error) {
+        fail("OOF1108", child_path(path, 1), "LocalizedString record", describe(row.items[1]), error.what());
+    }
+    validate_localized_languages(title, child_path(path, 1));
+    require_exact(row.items[2], canonical_style_record(10), child_path(path, 2),
+        "Page style contains an unsupported variation");
+    require_raw_constant(row.items[3], "-1", child_path(path, 3));
+    const bool visible = bool_atom(row.items[4], child_path(path, 4));
+    const bool enabled = bool_atom(row.items[5], child_path(path, 5));
+    const auto name = string_atom(row.items[6], child_path(path, 6));
+    if (name.empty()) {
+        fail("OOF1115", child_path(path, 6), "non-empty Page Name", "empty", "Page Name is required");
+    }
+    require_raw_constant(row.items[7], "1", child_path(path, 7));
+    require_exact(row.items[8], parse_constant("{4,4,{0},4}"), child_path(path, 8),
+        "Page default property contains an unsupported variation");
+    require_exact(row.items[9], parse_constant("{4,4,{0},4}"), child_path(path, 9),
+        "Page default property contains an unsupported variation");
+    require_exact(row.items[10], parse_constant("{8,3,0,1,100}"), child_path(path, 10),
+        "Page default property contains an unsupported variation");
+    require_raw_constant(row.items[11], "1", child_path(path, 11));
+
+    model::Page page;
+    page.id = id;
+    page.name = name;
+    page.title.set(std::move(title));
+    if (!visible) page.visible.set(false);
+    if (!enabled) page.enabled.set(false);
+    return page;
+}
+
 LV canonical_root_panel_payload(std::int32_t width, std::int32_t height) {
     if (width < 8 || height < 8) {
         fail(
@@ -372,12 +463,21 @@ LV canonical_root_panel_payload(std::int32_t width, std::int32_t height) {
             "The platform root panel requires non-negative inner dimensions");
     }
     auto value = parse_constant(R"OOF(
-{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}}
+{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,0},1,1,0,4,0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}}
 )OOF");
     if (!value.is_list || value.items.size() != 3 ||
         !value.items[1].is_list || value.items[1].items.size() != 27) {
         throw std::logic_error("canonical root-panel codec template is malformed");
     }
+    model::Page default_page;
+    default_page.id = model::ObjectId{1};
+    default_page.name = "Страница1";
+    model::LocalizedStringValue default_title;
+    default_title.items.push_back({"ru", "Страница1"});
+    default_page.title.set(std::move(default_title));
+    const auto page_table = encode_page_table(std::vector<model::Page>{std::move(default_page)});
+    if (!page_table) throw DecodeFailure(page_table.diagnostics().front());
+    value.items[1].items[11] = page_table.value();
     model::Position position;
     position.left.set(8);
     position.top.set(8);
@@ -1966,6 +2066,75 @@ Result<AttributesRecord> decode_attributes(
             result.links.push_back(std::move(link));
         }
         return result;
+    });
+}
+
+Result<std::vector<model::Page>> decode_page_table(
+    const list_stream::ListValue& table,
+    std::uint64_t starting_id,
+    std::string_view path) {
+    return capture_decode_failure<std::vector<model::Page>>([&table, starting_id, path] {
+        require_list(table, path);
+        if (starting_id == 0) {
+            fail("OOF1122", std::string(path), "positive starting Page ID", "0",
+                "Page IDs must be positive");
+        }
+        if (table.items.size() < 2) {
+            fail("OOF1102", std::string(path), "table marker and page count", describe(table),
+                "Page table header is incomplete");
+        }
+        require_raw_constant(table.items[0], "1", child_path(path, 0));
+        const auto count = integer_atom<std::uint32_t>(table.items[1], child_path(path, 1));
+        if (static_cast<std::size_t>(count) != table.items.size() - 2) {
+            fail("OOF1102", std::string(path), "page count matching table rows", describe(table),
+                "Page table count does not match its rows");
+        }
+        const auto available_ids = std::numeric_limits<std::uint64_t>::max() - starting_id + 1;
+        if (count > available_ids) {
+            fail("OOF1122", std::string(path), "Page IDs within uint64 range",
+                std::to_string(count), "Page ID allocation overflows uint64");
+        }
+        std::vector<model::Page> pages;
+        pages.reserve(count);
+        std::unordered_set<std::string> names;
+        for (std::uint32_t index = 0; index < count; ++index) {
+            auto page = decode_page_record(
+                table.items[static_cast<std::size_t>(index) + 2],
+                model::ObjectId{starting_id + index},
+                child_path(path, static_cast<std::size_t>(index) + 2));
+            if (!names.insert(page.name).second) {
+                fail("OOF1122", child_path(child_path(path, static_cast<std::size_t>(index) + 2), 6),
+                    "unique Page Name within owner table", page.name, "Page table contains a duplicate Name");
+            }
+            pages.push_back(std::move(page));
+        }
+        return pages;
+    });
+}
+
+Result<list_stream::ListValue> encode_page_table(const std::vector<model::Page>& pages) {
+    return capture_decode_failure<list_stream::ListValue>([&pages] {
+        if (pages.size() > std::numeric_limits<std::uint32_t>::max()) {
+            fail("OOF1112", "$/Pages", "page count within uint32 range", std::to_string(pages.size()),
+                "Page table is too large");
+        }
+        std::unordered_set<std::uint64_t> ids;
+        std::unordered_set<std::string> names;
+        std::vector<LV> table{raw("1"), raw(std::to_string(pages.size()))};
+        table.reserve(pages.size() + 2);
+        for (std::size_t index = 0; index < pages.size(); ++index) {
+            const auto& page = pages[index];
+            if (!ids.insert(page.id.value()).second) {
+                fail("OOF1122", child_path("$/Pages", index), "unique Page IDs",
+                    std::to_string(page.id.value()), "Page table contains a duplicate ID");
+            }
+            if (!names.insert(page.name).second) {
+                fail("OOF1122", child_path("$/Pages", index), "unique Page Name within owner table",
+                    page.name, "Page table contains a duplicate Name");
+            }
+            table.push_back(encode_page_record(page, child_path("$/Pages", index)));
+        }
+        return list(std::move(table));
     });
 }
 
