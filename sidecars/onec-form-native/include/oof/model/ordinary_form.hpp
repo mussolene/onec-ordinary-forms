@@ -229,6 +229,7 @@ struct CompositeIdValue {
 enum class TypeDomainTerm : std::uint8_t {
     unknown,
     list,
+    boolean,
     binary,
     date,
     numeric,

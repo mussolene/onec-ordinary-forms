@@ -88,6 +88,22 @@ void test_composite_id() {
 }
 
 void test_type_domain() {
+    model::TypeDomainEntry boolean;
+    boolean.term = model::TypeDomainTerm::boolean;
+    const model::TypeDomainPatternValue platform_boolean_fixture{{boolean}};
+    expect(
+        codec::encode_type_domain(platform_boolean_fixture) == "{\"Pattern\",{\"B\"}}",
+        "Boolean type-domain must match the Designer 8.5.1 fixture");
+    expect(
+        codec::decode_type_domain("{\"Pattern\",{\"B\"}}") == platform_boolean_fixture,
+        "Boolean type-domain fixture must decode");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_type_domain("{\"Pattern\",{\"B\",1}}")); },
+        "Boolean type-domain qualifiers must be rejected");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_type_domain("{\"Pattern\",{\"B\",1,0}}")); },
+        "Boolean type-domain qualifiers must be rejected");
+
     model::TypeDomainEntry platform_type_entry;
     platform_type_entry.term = model::TypeDomainTerm::type;
     platform_type_entry.type_uuid =
@@ -115,11 +131,6 @@ void test_type_domain() {
     string.string = {64, false};
     value.entries.push_back(string);
 
-    model::TypeDomainEntry binary;
-    binary.term = model::TypeDomainTerm::binary;
-    binary.binary = {128, true};
-    value.entries.push_back(binary);
-
     model::TypeDomainEntry date;
     date.term = model::TypeDomainTerm::date;
     date.date = {true, false};
@@ -144,6 +155,16 @@ void test_type_domain() {
     expect_rejected(
         [] { static_cast<void>(codec::decode_type_domain("{\"Pattern\",{\"D\",\"DD\"}}")); },
         "duplicate date flags must be rejected");
+
+    model::TypeDomainEntry unconfirmed_binary;
+    unconfirmed_binary.term = model::TypeDomainTerm::binary;
+    unconfirmed_binary.binary = {128, true};
+    expect_rejected(
+        [&] {
+            static_cast<void>(codec::encode_type_domain(
+                model::TypeDomainPatternValue{{unconfirmed_binary}}));
+        },
+        "unconfirmed BinaryData type-domain encoding must be rejected");
 }
 
 void test_style_reference() {

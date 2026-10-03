@@ -23,8 +23,10 @@ std::string_view term_token(model::TypeDomainTerm term) {
             return "#";
         case model::TypeDomainTerm::list:
             return "L";
-        case model::TypeDomainTerm::binary:
+        case model::TypeDomainTerm::boolean:
             return "B";
+        case model::TypeDomainTerm::binary:
+            throw std::runtime_error("BinaryData type-domain encoding is not established");
         case model::TypeDomainTerm::date:
             return "D";
         case model::TypeDomainTerm::numeric:
@@ -47,7 +49,7 @@ model::TypeDomainTerm parse_term(std::string_view token) {
         return model::TypeDomainTerm::list;
     }
     if (token == "B") {
-        return model::TypeDomainTerm::binary;
+        return model::TypeDomainTerm::boolean;
     }
     if (token == "D") {
         return model::TypeDomainTerm::date;
@@ -271,12 +273,10 @@ void write_type_domain(
                     out.write_bool(entry.string.variable);
                 }
                 break;
-            case model::TypeDomainTerm::binary:
-                if (entry.binary.length != 0) {
-                    out.write_uint32(entry.binary.length);
-                    out.write_bool(entry.binary.variable);
-                }
+            case model::TypeDomainTerm::boolean:
                 break;
+            case model::TypeDomainTerm::binary:
+                throw std::runtime_error("BinaryData type-domain encoding is not established");
             case model::TypeDomainTerm::date:
                 if (!(entry.date.date && entry.date.time)) {
                     std::string flags;
@@ -328,12 +328,13 @@ model::TypeDomainPatternValue read_type_domain(list_stream::ListInStream& in) {
                     entry.string.variable = in.read_bool();
                 }
                 break;
-            case model::TypeDomainTerm::binary:
+            case model::TypeDomainTerm::boolean:
                 if (in.has_next()) {
-                    entry.binary.length = in.read_uint32();
-                    entry.binary.variable = in.read_bool();
+                    throw std::runtime_error("Boolean type-domain term must not have qualifiers");
                 }
                 break;
+            case model::TypeDomainTerm::binary:
+                throw std::runtime_error("BinaryData type-domain decoding is not established");
             case model::TypeDomainTerm::date:
                 if (in.has_next()) {
                     const std::string flags = in.read_string();

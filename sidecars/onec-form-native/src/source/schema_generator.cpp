@@ -319,6 +319,7 @@ void append_value_types(std::string& output) {
     <xs:restriction base="xs:string">
       <xs:enumeration value="unknown"/>
       <xs:enumeration value="list"/>
+      <xs:enumeration value="boolean"/>
       <xs:enumeration value="binary"/>
       <xs:enumeration value="date"/>
       <xs:enumeration value="numeric"/>

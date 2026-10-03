@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -7,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "oof/model/metamodel.hpp"
 #include "oof/storage/form_stream.hpp"
 
 namespace {
@@ -471,6 +473,7 @@ void test_button_then_label_decoration_round_trip() {
     form.children = {
         model::ControlRef{model::ObjectId{2}},
         model::ControlRef{model::ObjectId{3}},
+        model::ControlRef{model::ObjectId{7}},
     };
     model::OrdinaryFormDocument document(std::move(form));
     document.add_control(model::ControlNode{
@@ -486,19 +489,42 @@ void test_button_then_label_decoration_round_trip() {
     label.properties().set_explicit(
         model::PropertyId::from_name("Caption"),
         std::string("Updated caption"));
+    label.properties().set_explicit(
+        model::PropertyId::from_name("HorizontalAlign"),
+        model::EnumerationValue{"HorizontalAlign", "Auto"});
     label.position.left.set(151);
     label.position.top.set(135);
     label.position.width.set(75);
     label.position.height.set(20);
     label.position.visible.set(false);
     document.add_control(std::move(label));
+    model::ControlNode left_label{
+        model::ObjectId{7}, "LeftLabel", model::LabelDecorationPayload{}};
+    left_label.properties().set_explicit(
+        model::PropertyId::from_name("Caption"), std::string("Explicit left"));
+    left_label.properties().set_explicit(
+        model::PropertyId::from_name("HorizontalAlign"),
+        model::EnumerationValue{"HorizontalAlign", "Left"});
+    document.add_control(std::move(left_label));
+
+    const auto* align_descriptor = model::metamodel::find_property(
+        model::ControlKind::label_decoration, "HorizontalAlign");
+    expect(align_descriptor != nullptr &&
+               align_descriptor->persistence == model::metamodel::PersistenceClass::persisted_editable &&
+               align_descriptor->storage_codec == model::metamodel::StorageCodec::control_info &&
+               align_descriptor->value_codec == model::metamodel::ValueCodec::enumeration,
+        "LabelDecoration.HorizontalAlign must have a typed editable storage descriptor");
 
     const auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), encoded ? "Button followed by LabelDecoration must encode" :
         encoded.diagnostics().front().code + ":" + encoded.diagnostics().front().path + ":" + encoded.diagnostics().front().message);
     const auto decoded = form_stream::decode_document(encoded.value(), "Main");
     expect(decoded.ok(), "Button followed by LabelDecoration must decode");
-    expect(decoded.value().form().children.size() == 2, "Button and LabelDecoration order must survive");
+    expect(decoded.value().form().children.size() == 3, "Button and two LabelDecorations order must survive");
+    expect(std::get<model::ControlRef>(decoded.value().form().children[0]).id() == model::ObjectId{2} &&
+               std::get<model::ControlRef>(decoded.value().form().children[1]).id() == model::ObjectId{3} &&
+               std::get<model::ControlRef>(decoded.value().form().children[2]).id() == model::ObjectId{7},
+        "mixed supported control IDs and order must survive");
     const auto* decoded_label = decoded.value().find_control(model::ObjectId{3});
     expect(decoded_label != nullptr && decoded_label->kind() == model::ControlKind::label_decoration,
         "LabelDecoration identity must survive round-trip");
@@ -510,6 +536,43 @@ void test_button_then_label_decoration_round_trip() {
                decoded_label->position.width.value() == 75 && decoded_label->position.height.value() == 20,
         "LabelDecoration Position must survive round-trip");
     expect(!decoded_label->position.visible.value(), "LabelDecoration Visible must survive round-trip");
+    const auto* decoded_auto = decoded_label->properties().find(model::PropertyId::from_name("HorizontalAlign"));
+    expect(decoded_auto != nullptr &&
+               std::get<model::EnumerationValue>(decoded_auto->value) ==
+                   model::EnumerationValue{"HorizontalAlign", "Auto"},
+        "LabelDecoration HorizontalAlign Auto must round-trip");
+    const auto* decoded_left = decoded.value().find_control(model::ObjectId{7});
+    const auto* decoded_left_align = decoded_left->properties().find(
+        model::PropertyId::from_name("HorizontalAlign"));
+    expect(decoded_left_align != nullptr &&
+               std::get<model::EnumerationValue>(decoded_left_align->value) ==
+                   model::EnumerationValue{"HorizontalAlign", "Left"},
+        "explicit LabelDecoration HorizontalAlign Left must round-trip");
+
+    const auto rejects_alignment = [](model::EnumerationValue value) {
+        model::Form invalid_form;
+        invalid_form.id = model::ObjectId{1};
+        invalid_form.name = "Invalid";
+        invalid_form.children.push_back(model::ControlRef{model::ObjectId{2}});
+        model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+        model::ControlNode invalid_label{
+            model::ObjectId{2}, "Label", model::LabelDecorationPayload{}};
+        invalid_label.properties().set_explicit(
+            model::PropertyId::from_name("HorizontalAlign"), std::move(value));
+        invalid_document.add_control(std::move(invalid_label));
+        return !form_stream::encode_document(invalid_document);
+    };
+    expect(rejects_alignment(model::EnumerationValue{"VerticalAlign", "Auto"}),
+        "HorizontalAlign must reject an enumeration of another type");
+    expect(rejects_alignment(model::EnumerationValue{"HorizontalAlign", "Center"}),
+        "unsupported HorizontalAlign members must be rejected");
+
+    auto unknown_storage_value = encoded.value();
+    auto& unknown_label = unknown_storage_value.items[1].items[2].items[2].items[2];
+    unknown_label.items[2].items[1].items[3] = list_stream::ListValue::raw_atom("2");
+    expect(
+        !form_stream::decode_document(unknown_storage_value, "Main"),
+        "unknown LabelDecoration.HorizontalAlign storage values must be rejected");
 
     auto unsupported_leaf = encoded.value();
     auto& label_record = unsupported_leaf.items[1].items[2].items[2].items[2];
@@ -519,6 +582,38 @@ void test_button_then_label_decoration_round_trip() {
         "OOF1114",
         "$/1/2/2/2/3",
         "unsupported LabelDecoration storage leaves must fail closed");
+}
+
+void test_fresh_checkbox_stream_decode() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Fresh";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
+    model::OrdinaryFormDocument seed(std::move(form));
+    seed.add_control(model::ControlNode{model::ObjectId{2}, "Run", model::ButtonPayload{}});
+    seed.add_control(model::ControlNode{model::ObjectId{3}, "Placeholder", model::LabelDecorationPayload{}});
+    auto stream = form_stream::encode_document(seed);
+    expect(stream.ok(), "fresh fixture root must encode before inserting the observed CheckBox record");
+    stream.value().items[1].items[2].items[2].items[2] = list_stream::parse(R"OOF(
+{35af3d93-d7c7-4a2e-a8eb-bac87a1a3f26,3,{1,{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},7,{1,1,{"ru","Флажок1"}},1,0,1,0,100,1},4,0,0,0,0,0},{0}},{8,68,82,218,107,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,3,0,25},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,3,2,150},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},1,{0,3,1},0,1,{0,3,3},0,0,0,0,1,2,0,0},{14,"Флажок1",4294967295,0,0,0},{0}}
+)OOF");
+    stream.value().items[2] = list_stream::parse(R"OOF({{-1},4,{1,{{3},1,0,1,"Флажок1",{"Pattern",{"B"}}}},{1,{3,{1,{3}}}}})OOF");
+    const auto decoded = form_stream::decode_document(stream.value(), "Fresh");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    const auto* check_box = decoded.value().find_control(model::ObjectId{3});
+    expect(check_box != nullptr && check_box->kind() == model::ControlKind::check_box &&
+               check_box->name == "Флажок1" && check_box->data_path &&
+               check_box->data_path->attribute.id() == model::ObjectId{3},
+        "fresh CheckBox record and same-numbered Boolean Attribute must decode by distinct object category");
+    expect(check_box->position.left.value() == 68 && check_box->position.top.value() == 82 &&
+               check_box->position.width.value() == 150 && check_box->position.height.value() == 25,
+        "fresh CheckBox geometry must decode");
+    model::TypeDomainPatternValue boolean_type;
+    model::TypeDomainEntry boolean_entry;
+    boolean_entry.term = model::TypeDomainTerm::boolean;
+    boolean_type.entries.push_back(boolean_entry);
+    expect(decoded.value().find_attribute(model::ObjectId{3})->type == boolean_type,
+        "fresh CheckBox linked Attribute must decode exact Boolean token");
 }
 
 void test_button_label_input_field_round_trip() {
@@ -855,9 +950,13 @@ void test_two_input_fields_round_trip() {
     auto swapped_links = encoded.value();
     std::swap(swapped_links.items[2].items[3].items[1], swapped_links.items[2].items[3].items[2]);
     const auto decoded_swapped_links = form_stream::decode_document(swapped_links, "Main");
-    expect(decoded_swapped_links.ok() &&
-               decoded_swapped_links.value().find_control(model::ObjectId{9})->data_path->attribute.id() == model::ObjectId{1} &&
-               decoded_swapped_links.value().find_control(model::ObjectId{12})->data_path->attribute.id() == model::ObjectId{7},
+    expect(decoded_swapped_links.ok(), "reordered InputField links must decode");
+    const auto* swapped_first = decoded_swapped_links.value().find_control(model::ObjectId{9});
+    const auto* swapped_second = decoded_swapped_links.value().find_control(model::ObjectId{12});
+    expect(swapped_first != nullptr && swapped_second != nullptr &&
+               swapped_first->data_path.has_value() && swapped_second->data_path.has_value() &&
+               swapped_first->data_path->attribute.id() == model::ObjectId{1} &&
+               swapped_second->data_path->attribute.id() == model::ObjectId{7},
         "InputField links must resolve by control ID regardless of table order");
 
     auto wrong_geometry = encoded.value();
@@ -879,11 +978,18 @@ void test_two_input_fields_round_trip() {
     mixed_form.children = {
         model::ControlRef{model::ObjectId{4}}, model::ControlRef{model::ObjectId{5}},
         model::ControlRef{model::ObjectId{6}}, model::ControlRef{model::ObjectId{18}},
-        model::ControlRef{model::ObjectId{21}},
+        model::ControlRef{model::ObjectId{21}}, model::ControlRef{model::ObjectId{8}},
+        model::ControlRef{model::ObjectId{13}}, model::ControlRef{model::ObjectId{24}},
     };
     model::OrdinaryFormDocument mixed_document(std::move(mixed_form));
     mixed_document.add_attribute(model::Attribute{model::ObjectId{1}, "ValueA", string64});
     mixed_document.add_attribute(model::Attribute{model::ObjectId{3}, "ValueB", string64});
+    model::TypeDomainPatternValue boolean_type;
+    model::TypeDomainEntry boolean_entry;
+    boolean_entry.term = model::TypeDomainTerm::boolean;
+    boolean_type.entries.push_back(boolean_entry);
+    mixed_document.add_attribute(model::Attribute{model::ObjectId{5}, "SharedFlag", boolean_type});
+    mixed_document.add_attribute(model::Attribute{model::ObjectId{21}, "SeparateFlag", boolean_type});
     model::ControlNode first_input{model::ObjectId{4}, "InputA", model::InputFieldPayload{}};
     first_input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
     mixed_document.add_control(std::move(first_input));
@@ -899,9 +1005,25 @@ void test_two_input_fields_round_trip() {
     second_button.events.push_back(model::EventRef{model::ObjectId{31}});
     mixed_document.add_event(model::Event{model::ObjectId{31}, "Click", "CancelProbe", model::ControlRef{model::ObjectId{21}}});
     mixed_document.add_control(std::move(second_button));
+    model::ControlNode shared_flag_a{model::ObjectId{8}, "SharedFlagA", model::CheckBoxPayload{}};
+    shared_flag_a.data_path = model::DataPath{model::AttributeRef{model::ObjectId{5}}, {}};
+    shared_flag_a.position.left.set(68);
+    shared_flag_a.position.top.set(82);
+    shared_flag_a.position.width.set(150);
+    shared_flag_a.position.height.set(25);
+    shared_flag_a.properties().set_explicit(model::PropertyId::from_name("Caption"), std::string("Flag A"));
+    mixed_document.add_control(std::move(shared_flag_a));
+    model::ControlNode shared_flag_b{model::ObjectId{13}, "SharedFlagB", model::CheckBoxPayload{}};
+    shared_flag_b.data_path = model::DataPath{model::AttributeRef{model::ObjectId{5}}, {}};
+    shared_flag_b.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    mixed_document.add_control(std::move(shared_flag_b));
+    model::ControlNode separate_flag{model::ObjectId{24}, "SeparateFlag", model::CheckBoxPayload{}};
+    separate_flag.data_path = model::DataPath{model::AttributeRef{model::ObjectId{21}}, {}};
+    mixed_document.add_control(std::move(separate_flag));
 
     const std::vector<model::ObjectId> expected_order{
-        model::ObjectId{4}, model::ObjectId{5}, model::ObjectId{6}, model::ObjectId{18}, model::ObjectId{21}};
+        model::ObjectId{4}, model::ObjectId{5}, model::ObjectId{6}, model::ObjectId{18},
+        model::ObjectId{21}, model::ObjectId{8}, model::ObjectId{13}, model::ObjectId{24}};
     const auto mixed_encoded = form_stream::encode_document(mixed_document);
     expect(mixed_encoded.ok(), "mixed supported controls must encode in ChildItems order");
     const auto& mixed_child_records = mixed_encoded.value().items[1].items[2].items[2];
@@ -917,8 +1039,14 @@ void test_two_input_fields_round_trip() {
             expect(geometry.items[slot].items[1].atom == control_id,
                 "mixed control secondary geometry references must derive from the control ID");
         }
-        expect(geometry.items[21].atom == std::to_string(index) &&
-                   geometry.items[22].atom == std::to_string(index + 1),
+        const auto logical_position = std::ranges::find(
+            expected_order, model::ObjectId{std::stoull(control_id)});
+        expect(logical_position != expected_order.end(),
+            "every stored record must map to a logical ChildItems position");
+        const auto logical_index = static_cast<std::size_t>(
+            std::distance(expected_order.begin(), logical_position));
+        expect(geometry.items[21].atom == std::to_string(logical_index) &&
+                   geometry.items[22].atom == std::to_string(logical_index + 1),
             "mixed control geometry sibling indexes must derive from ChildItems order");
     }
     const auto mixed_decoded = form_stream::decode_document(mixed_encoded.value(), "Mixed");
@@ -931,9 +1059,62 @@ void test_two_input_fields_round_trip() {
     expect(mixed_decoded.value().find_control(model::ObjectId{4})->data_path->attribute.id() == model::ObjectId{1} &&
                mixed_decoded.value().find_control(model::ObjectId{18})->data_path->attribute.id() == model::ObjectId{3},
         "InputField DataPaths must resolve by control ID in mixed order");
+    expect(mixed_decoded.value().find_control(model::ObjectId{8})->data_path->attribute.id() == model::ObjectId{5} &&
+               mixed_decoded.value().find_control(model::ObjectId{13})->data_path->attribute.id() == model::ObjectId{5} &&
+               mixed_decoded.value().find_control(model::ObjectId{24})->data_path->attribute.id() == model::ObjectId{21},
+        "CheckBox links must resolve shared and separate Boolean attributes even when IDs overlap controls");
+    expect(mixed_decoded.value().find_attribute(model::ObjectId{5})->type == boolean_type &&
+               mixed_decoded.value().find_attribute(model::ObjectId{21})->type == boolean_type,
+        "CheckBox Boolean attribute TypeDomain must survive round-trip");
+    expect(mixed_decoded.value().find_control(model::ObjectId{13})->properties().find(
+               model::PropertyId::from_name("Enabled")) != nullptr &&
+               !std::get<bool>(mixed_decoded.value().find_control(model::ObjectId{13})->properties().find(
+                   model::PropertyId::from_name("Enabled"))->value),
+        "CheckBox Enabled must use its proven base property");
     expect(mixed_decoded.value().find_event(mixed_decoded.value().find_control(model::ObjectId{5})->events.front().id())->handler == "RunProbe" &&
                mixed_decoded.value().find_event(mixed_decoded.value().find_control(model::ObjectId{21})->events.front().id())->handler == "CancelProbe",
         "each mixed-order Button handler must remain attached to its owner");
+
+    auto wrong_checkbox_target = mixed_encoded.value();
+    wrong_checkbox_target.items[2].items[3].items[2].items[1].items[1].items[0] =
+        list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(wrong_checkbox_target, "Mixed"),
+        "CheckBox linked to a non-Boolean Attribute must be rejected");
+
+    const auto rejects_checkbox_model = [](model::TypeDomainPatternValue type,
+                                           std::vector<std::string> members = {},
+                                           bool add_unsupported_property = false) {
+        model::Form invalid_form;
+        invalid_form.id = model::ObjectId{1};
+        invalid_form.name = "InvalidCheckBox";
+        invalid_form.children.push_back(model::ControlRef{model::ObjectId{8}});
+        model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+        invalid_document.add_attribute(model::Attribute{model::ObjectId{8}, "Flag", std::move(type)});
+        model::ControlNode invalid_checkbox{model::ObjectId{8}, "Flag", model::CheckBoxPayload{}};
+        invalid_checkbox.data_path = model::DataPath{model::AttributeRef{model::ObjectId{8}}, std::move(members)};
+        if (add_unsupported_property) {
+            invalid_checkbox.properties().set_explicit(
+                model::PropertyId::from_name("ThreeState"), true);
+        }
+        invalid_document.add_control(std::move(invalid_checkbox));
+        return !form_stream::encode_document(invalid_document);
+    };
+    expect(rejects_checkbox_model(string64),
+        "CheckBox must reject a string attribute target");
+    expect(rejects_checkbox_model(boolean_type, {"Nested"}),
+        "CheckBox must reject nested DataPath members");
+    expect(rejects_checkbox_model(boolean_type, {}, true),
+        "CheckBox must reject an unproven property");
+
+    auto unsupported_checkbox_geometry = mixed_encoded.value();
+    const auto check_box_record = std::ranges::find(
+        unsupported_checkbox_geometry.items[1].items[2].items[2].items, std::string("8"),
+        [](const list_stream::ListValue& item) { return item.items.size() > 1 ? item.items[1].atom : std::string{}; });
+    expect(check_box_record != unsupported_checkbox_geometry.items[1].items[2].items[2].items.end(),
+        "mixed stream must contain the CheckBox geometry record");
+    check_box_record->items[3].items[24] = list_stream::ListValue::raw_atom("7");
+    expect(!form_stream::decode_document(unsupported_checkbox_geometry, "Mixed"),
+        "CheckBox must reject unsupported geometry variants");
 
     auto changed_label_reference = mixed_encoded.value();
     changed_label_reference.items[1].items[2].items[2].items[3].items[3].items[13].items[1] =
@@ -1109,6 +1290,7 @@ int main() {
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_button_then_label_decoration_round_trip();
+        test_fresh_checkbox_stream_decode();
         test_button_label_input_field_round_trip();
         test_single_input_field_round_trip();
         test_two_input_fields_round_trip();

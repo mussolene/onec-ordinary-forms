@@ -573,9 +573,10 @@ model::CompositeIdValue parse_composite_id(xmlNodePtr node) {
 }
 
 model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr node) {
-    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 8> terms{{
+    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 9> terms{{
         {"unknown", model::TypeDomainTerm::unknown},
         {"list", model::TypeDomainTerm::list},
+        {"boolean", model::TypeDomainTerm::boolean},
         {"binary", model::TypeDomainTerm::binary},
         {"date", model::TypeDomainTerm::date},
         {"numeric", model::TypeDomainTerm::numeric},
@@ -1515,6 +1516,7 @@ std::string_view type_domain_term_name(model::TypeDomainTerm term) {
     switch (term) {
         case model::TypeDomainTerm::unknown: return "unknown";
         case model::TypeDomainTerm::list: return "list";
+        case model::TypeDomainTerm::boolean: return "boolean";
         case model::TypeDomainTerm::binary: return "binary";
         case model::TypeDomainTerm::date: return "date";
         case model::TypeDomainTerm::numeric: return "numeric";
@@ -1682,6 +1684,8 @@ private:
                     if (entry.type_uuid.has_value()) {
                         attributes.emplace_back("typeUuid", canonical_uuid(entry.type_uuid->canonical));
                     }
+                    break;
+                case model::TypeDomainTerm::boolean:
                     break;
                 case model::TypeDomainTerm::numeric:
                     if (entry.numeric.precision > entry.numeric.length && entry.numeric.length != 0) {

@@ -462,7 +462,7 @@ LV canonical_button_geometry(
     return value;
 }
 
-LV canonical_label_properties(std::string_view caption) {
+LV canonical_label_properties(std::string_view caption, std::int32_t horizontal_align) {
     return list({
         parse_constant(
             "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
@@ -471,7 +471,7 @@ LV canonical_label_properties(std::string_view caption) {
             "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}"),
         raw("11"),
         encoded_localized(caption),
-        raw("0"),
+        raw(std::to_string(horizontal_align)),
         raw("1"),
         raw("0"),
         raw("0"),
@@ -488,7 +488,7 @@ LV canonical_label_properties(std::string_view caption) {
     });
 }
 
-LV canonical_label_geometry(
+LV canonical_standard_control_geometry(
     std::uint64_t control_id,
     std::size_t sibling_index,
     std::int32_t left,
@@ -499,7 +499,7 @@ LV canonical_label_geometry(
     if (width < 0 || height < 0 ||
         left > std::numeric_limits<std::int32_t>::max() - width ||
         top > std::numeric_limits<std::int32_t>::max() - height) {
-        fail("OOF1120", "$/1/2", "non-negative geometry without int32 overflow", "invalid LabelDecoration geometry", "LabelDecoration geometry cannot be represented");
+        fail("OOF1120", "$/1/2", "non-negative standard-control geometry without int32 overflow", "invalid geometry", "Control geometry cannot be represented");
     }
     auto value = parse_constant(
         "{8,0,0,0,0,1,"
@@ -526,6 +526,32 @@ LV canonical_label_geometry(
     value.items[7].items[1].items[3] = raw(std::to_string(height));
     value.items[9].items[1].items[3] = raw(std::to_string(width));
     return value;
+}
+
+LV canonical_check_box_info(bool enabled, std::string_view caption) {
+    return list({
+        raw("1"),
+        list({
+            list({
+                canonical_button_base(enabled),
+                raw("7"),
+                encoded_localized(caption),
+                raw("1"),
+                raw("0"),
+                raw("1"),
+                raw("0"),
+                raw("100"),
+                raw("1"),
+            }),
+            raw("4"),
+            raw("0"),
+            raw("0"),
+            raw("0"),
+            raw("0"),
+            raw("0"),
+        }),
+        list({raw("0")}),
+    });
 }
 
 LV canonical_input_field_info(
@@ -583,6 +609,10 @@ LV canonical_input_field_geometry(
 
 bool is_single_string_type_domain(const model::TypeDomainPatternValue& value) {
     return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::string;
+}
+
+bool is_single_boolean_type_domain(const model::TypeDomainPatternValue& value) {
+    return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::boolean;
 }
 
 LV canonical_event_table(std::optional<std::string_view> handler) {
@@ -848,11 +878,17 @@ model::ControlNode decode_label(const LV& record, std::string_view path, std::si
     require_arity(properties, 21, properties_path);
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
+    const std::int32_t horizontal_align = integer_atom<std::int32_t>(
+        properties.items[3], child_path(properties_path, 3));
+    if (horizontal_align != 0 && horizontal_align != 4) {
+        fail("OOF1122", child_path(properties_path, 3), "HorizontalAlign storage value 0 (Left) or 4 (Auto)",
+            std::to_string(horizontal_align), "LabelDecoration.HorizontalAlign storage value is unsupported");
+    }
     auto normalized_properties = properties;
     normalized_properties.items[2] = encoded_localized(caption);
     require_exact(
         normalized_properties,
-        canonical_label_properties(caption),
+        canonical_label_properties(caption, horizontal_align),
         properties_path,
         "LabelDecoration properties differ from the supported default profile");
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2), "LabelDecoration events are unsupported");
@@ -877,7 +913,7 @@ model::ControlNode decode_label(const LV& record, std::string_view path, std::si
     }
     require_exact(
         geometry,
-        canonical_label_geometry(raw_id, sibling_index, left, top, static_cast<std::int32_t>(width64), static_cast<std::int32_t>(height64), visible),
+        canonical_standard_control_geometry(raw_id, sibling_index, left, top, static_cast<std::int32_t>(width64), static_cast<std::int32_t>(height64), visible),
         geometry_path,
         "LabelDecoration geometry contains unsupported references or storage leaves");
 
@@ -904,6 +940,102 @@ model::ControlNode decode_label(const LV& record, std::string_view path, std::si
     if (!caption.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
+    control.properties().set_explicit(
+        model::PropertyId::from_name("HorizontalAlign"),
+        model::EnumerationValue{
+            "HorizontalAlign", horizontal_align == 4 ? "Auto" : "Left"});
+    if (left != 0) control.position.left.set(left);
+    if (top != 0) control.position.top.set(top);
+    if (width64 != 0) control.position.width.set(static_cast<std::int32_t>(width64));
+    if (height64 != 0) control.position.height.set(static_cast<std::int32_t>(height64));
+    if (!visible) control.position.visible.set(false);
+    return control;
+}
+
+model::ControlNode decode_check_box(
+    const LV& record,
+    std::string_view path,
+    const AttributeRecord& linked_attribute,
+    std::size_t sibling_index) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 CheckBox ID", std::to_string(raw_id), "CheckBox ID is invalid");
+    }
+
+    if (!is_single_boolean_type_domain(linked_attribute.type)) {
+        fail("OOF1122", "$/2/3", "link to a single Boolean Attribute", linked_attribute.name,
+            "CheckBox DataPath must target a Boolean attribute");
+    }
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 3, info_path);
+    require_raw_constant(info.items[0], "1", child_path(info_path, 0));
+    const auto& info_payload = info.items[1];
+    const auto payload_path = child_path(info_path, 1);
+    require_arity(info_payload, 7, payload_path);
+    const auto& properties = info_payload.items[0];
+    const auto properties_path = child_path(payload_path, 0);
+    require_arity(properties, 9, properties_path);
+    const auto& base_properties = properties.items[0];
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(base_properties, 21, base_path);
+    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
+    const std::string caption = decoded_single_language_text(
+        properties.items[2], child_path(properties_path, 2));
+    auto normalized_info = info;
+    normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
+    require_exact(
+        normalized_info,
+        canonical_check_box_info(enabled, caption),
+        info_path,
+        "CheckBox uses an unsupported property, event, or storage variation");
+
+    const auto& geometry = record.items[3];
+    const auto geometry_path = child_path(path, 3);
+    require_arity(geometry, 25, geometry_path);
+    require_raw_constant(geometry.items[0], "8", child_path(geometry_path, 0));
+    const auto left = integer_atom<std::int32_t>(geometry.items[1], child_path(geometry_path, 1));
+    const auto top = integer_atom<std::int32_t>(geometry.items[2], child_path(geometry_path, 2));
+    const auto right = integer_atom<std::int32_t>(geometry.items[3], child_path(geometry_path, 3));
+    const auto bottom = integer_atom<std::int32_t>(geometry.items[4], child_path(geometry_path, 4));
+    const bool visible = bool_atom(geometry.items[5], child_path(geometry_path, 5));
+    if (right < left || bottom < top) {
+        fail("OOF1120", geometry_path, "non-negative CheckBox geometry", describe(geometry), "CheckBox geometry has negative dimensions");
+    }
+    const auto width64 = static_cast<std::int64_t>(right) - left;
+    const auto height64 = static_cast<std::int64_t>(bottom) - top;
+    if (width64 > std::numeric_limits<std::int32_t>::max() || height64 > std::numeric_limits<std::int32_t>::max()) {
+        fail("OOF1120", geometry_path, "int32 CheckBox dimensions", describe(geometry), "CheckBox geometry overflows int32");
+    }
+    require_exact(
+        geometry,
+        canonical_standard_control_geometry(
+            raw_id, sibling_index, left, top, static_cast<std::int32_t>(width64),
+            static_cast<std::int32_t>(height64), visible),
+        geometry_path,
+        "CheckBox Position contains an unsupported storage leaf");
+
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
+    }
+    require_exact(
+        metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path,
+        "CheckBox metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "CheckBox cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::CheckBoxPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     if (left != 0) control.position.left.set(left);
     if (top != 0) control.position.top.set(top);
     if (width64 != 0) control.position.width.set(static_cast<std::int32_t>(width64));
@@ -1163,8 +1295,22 @@ LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
         !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/LabelDecoration", "plain top-level LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
-    require_allowed_properties(control.properties(), {"Caption"}, "$/LabelDecoration");
+    require_allowed_properties(control.properties(), {"Caption", "HorizontalAlign"}, "$/LabelDecoration");
     const std::string caption = explicit_string(control.properties(), "Caption");
+    std::int32_t horizontal_align = 0;
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("HorizontalAlign"))) {
+        if (!std::holds_alternative<model::EnumerationValue>(entry->value)) {
+            fail("OOF1122", "$/LabelDecoration/HorizontalAlign", "EnumerationValue of HorizontalAlign",
+                "non-enumeration", "LabelDecoration.HorizontalAlign has the wrong value type");
+        }
+        const auto& value = std::get<model::EnumerationValue>(entry->value);
+        if (value.type_name != "HorizontalAlign" ||
+            (value.member != "Auto" && value.member != "Left")) {
+            fail("OOF1122", "$/LabelDecoration/HorizontalAlign", "HorizontalAlign Auto or Left",
+                value.type_name + "." + value.member, "LabelDecoration.HorizontalAlign value is unsupported");
+        }
+        horizontal_align = value.member == "Auto" ? 4 : 0;
+    }
     const std::int32_t left = control.position.left.value();
     const std::int32_t top = control.position.top.value();
     const std::int32_t width = control.position.width.value();
@@ -1174,8 +1320,53 @@ LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("3"), canonical_label_properties(caption), list({raw("0")})}),
-        canonical_label_geometry(control.id.value(), sibling_index, left, top, width, height, visible),
+        list({raw("3"), canonical_label_properties(caption, horizontal_align), list({raw("0")})}),
+        canonical_standard_control_geometry(control.id.value(), sibling_index, left, top, width, height, visible),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
+LV encode_check_box(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    std::size_t sibling_index) {
+    if (control.kind() != model::ControlKind::check_box || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "CheckBox with positive int64 ID", control.name, "CheckBox is outside the supported profile");
+    }
+    if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
+        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
+            "CheckBox uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Enabled", "Caption"}, "$/CheckBox");
+    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    if (attribute == nullptr) {
+        fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "CheckBox DataPath does not resolve");
+    }
+    if (!is_single_boolean_type_domain(attribute->type)) {
+        fail("OOF1122", "$/CheckBox/DataPath", "linked Boolean Attribute", attribute->name,
+            "CheckBox DataPath must target a Boolean attribute");
+    }
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string caption = explicit_string(control.properties(), "Caption");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
+    const auto left = control.position.left.value();
+    const auto top = control.position.top.value();
+    const auto width = control.position.width.value();
+    const auto height = control.position.height.value();
+    const bool visible = control.position.visible.value();
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_check_box_info(enabled, caption),
+        canonical_standard_control_geometry(
+            control.id.value(), sibling_index, left, top, width, height, visible),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
@@ -1739,35 +1930,43 @@ Result<model::OrdinaryFormDocument> decode_document(
                 auto decoded = decode_label(child_record, path, logical_index);
                 actual_max_id = std::max(actual_max_id, decoded.id.value());
                 decoded_controls[logical_index].emplace(DecodedControl{std::move(decoded), std::nullopt});
-            } else if (child_guid == input_descriptor.guid) {
+            } else if (child_guid == input_descriptor.guid ||
+                       child_guid == model::metamodel::descriptor_for(model::ControlKind::check_box).guid) {
                 const auto candidate_id = integer_atom<std::uint64_t>(at(child_record, 1, path), child_path(path, 1));
                 if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
-                    fail("OOF1122", child_path(path, 1), "InputField ID representable in an attribute link", std::to_string(candidate_id), "InputField ID cannot be resolved through the attribute-link table");
+                    fail("OOF1122", child_path(path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
+                        "Control ID cannot be resolved through the attribute-link table");
                 }
                 const auto candidate_key = static_cast<std::int64_t>(candidate_id);
                 const auto link_it = links_by_control.find(candidate_key);
                 if (link_it == links_by_control.end()) {
-                    fail("OOF1122", "$/2/3", "DataPath link for each InputField", std::to_string(candidate_id), "InputField has no attribute link");
+                    fail("OOF1122", "$/2/3", "DataPath link for each InputField or CheckBox",
+                        std::to_string(candidate_id), "Linked control has no attribute link");
                 }
                 consumed_link_ids.insert(candidate_key);
                 const auto& link = *link_it->second;
                 if (!link.attribute_id.is_null || link.attribute_id.uuid.canonical != null_uuid) {
-                    fail("OOF1122", "$/2/3", "null-UUID attribute link", describe(child_record), "InputField DataPath link uses an unsupported target");
+                    fail("OOF1122", "$/2/3", "null-UUID attribute link", describe(child_record),
+                        "Control DataPath link uses an unsupported target");
                 }
                 const auto attribute_it = attributes_by_id.find(link.attribute_id.object_id);
                 if (attribute_it == attributes_by_id.end()) {
-                    fail("OOF1122", "$/2/3", "link to an existing Attribute", std::to_string(link.attribute_id.object_id), "InputField DataPath target is unresolved");
+                    fail("OOF1122", "$/2/3", "link to an existing Attribute",
+                        std::to_string(link.attribute_id.object_id), "DataPath target is unresolved");
                 }
                 const auto& attribute = *attribute_it->second;
-                auto input_field = decode_input_field(child_record, path, attribute, logical_index);
-                input_field.data_path = model::DataPath{
+                model::ControlNode linked_control = child_guid == input_descriptor.guid
+                    ? decode_input_field(child_record, path, attribute, logical_index)
+                    : decode_check_box(child_record, path, attribute, logical_index);
+                linked_control.data_path = model::DataPath{
                     model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attribute.id.object_id)}},
                     {},
                 };
-                actual_max_id = std::max(actual_max_id, input_field.id.value());
-                decoded_controls[logical_index].emplace(DecodedControl{std::move(input_field), std::nullopt});
+                actual_max_id = std::max(actual_max_id, linked_control.id.value());
+                decoded_controls[logical_index].emplace(
+                    DecodedControl{std::move(linked_control), std::nullopt});
             } else {
-                fail("OOF1122", path, "supported top-level Button, LabelDecoration, or InputField record", child_guid, "Control payload is unsupported");
+                fail("OOF1122", path, "supported top-level Button, LabelDecoration, InputField, or CheckBox record", child_guid, "Control payload is unsupported");
             }
         }
         for (std::size_t index = 0; index < decoded_controls.size(); ++index) {
@@ -1776,7 +1975,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             }
         }
         if (consumed_link_ids.size() != links_by_control.size()) {
-            fail("OOF1122", "$/2/3", "one matching link per decoded InputField", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
+            fail("OOF1122", "$/2/3", "one matching link per decoded InputField or CheckBox", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
         }
 
         if (actual_max_id >= std::numeric_limits<std::uint32_t>::max()) {
@@ -1911,7 +2110,7 @@ Result<list_stream::ListValue> encode_document(
 
         std::vector<LV> child_records;
         child_records.push_back(raw(std::to_string(document.form().children.size())));
-        std::vector<form_stream::AttributeLink> ordered_input_links;
+        std::vector<form_stream::AttributeLink> ordered_control_links;
         std::uint64_t max_id = document.form().id.value();
         for (std::size_t sibling_index = 0; sibling_index < document.form().children.size(); ++sibling_index) {
             const auto& child = document.form().children[sibling_index];
@@ -1929,12 +2128,19 @@ Result<list_stream::ListValue> encode_document(
                 child_records.push_back(encode_label(*control, sibling_index));
             } else if (control->kind() == model::ControlKind::input_field) {
                 child_records.push_back(encode_input_field(document, *control, sibling_index));
-                ordered_input_links.push_back(form_stream::AttributeLink{
-                    static_cast<std::int64_t>(control->id.value()),
-                    model::CompositeIdValue{static_cast<std::int64_t>(control->data_path->attribute.id().value()), model::UuidValue{std::string(null_uuid)}, true},
-                });
+            } else if (control->kind() == model::ControlKind::check_box) {
+                child_records.push_back(encode_check_box(document, *control, sibling_index));
             } else {
-                fail("OOF1122", "$/Form/ChildItems", "supported top-level Button, LabelDecoration, or InputField", control->name, "Control payload is unsupported");
+                fail("OOF1122", "$/Form/ChildItems", "supported top-level Button, LabelDecoration, InputField, or CheckBox", control->name, "Control payload is unsupported");
+            }
+            if (control->kind() == model::ControlKind::input_field ||
+                control->kind() == model::ControlKind::check_box) {
+                ordered_control_links.push_back(form_stream::AttributeLink{
+                    static_cast<std::int64_t>(control->id.value()),
+                    model::CompositeIdValue{
+                        static_cast<std::int64_t>(control->data_path->attribute.id().value()),
+                        model::UuidValue{std::string(null_uuid)}, true},
+                });
             }
             max_id = std::max(max_id, control_id.value());
         }
@@ -1964,17 +2170,20 @@ Result<list_stream::ListValue> encode_document(
             max_attribute_id = std::max(max_attribute_id, attribute.id.value());
             max_id = std::max(max_id, attribute.id.value());
         }
-        attributes.links = std::move(ordered_input_links);
+        attributes.links = std::move(ordered_control_links);
         std::sort(attributes.links.begin(), attributes.links.end(), [](const auto& left, const auto& right) {
             return left.control_id < right.control_id;
         });
-        std::size_t input_count = 0;
+        std::size_t linked_control_count = 0;
         for (const auto& control : document.collections().controls) {
-            if (control.kind() != model::ControlKind::input_field) continue;
-            ++input_count;
+            if (control.kind() == model::ControlKind::input_field ||
+                control.kind() == model::ControlKind::check_box) {
+                ++linked_control_count;
+            }
         }
-        if (input_count != attributes.links.size()) {
-            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField", std::to_string(input_count), "InputField and DataPath link counts do not match");
+        if (linked_control_count != attributes.links.size()) {
+            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField or CheckBox",
+                std::to_string(linked_control_count), "Linked control and DataPath link counts do not match");
         }
         if (max_id >= std::numeric_limits<std::uint32_t>::max()) {
             fail("OOF1120", "$/Attributes", "object IDs below uint32 max", std::to_string(max_id), "Attribute slot count overflows");
