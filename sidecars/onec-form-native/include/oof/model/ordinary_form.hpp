@@ -342,6 +342,8 @@ struct PictureAsset {
     ObjectId id{};
     std::string relative_path;
     PictureFormat format = PictureFormat::gif;
+    std::vector<std::uint8_t> bytes;
+    bool transparent = false;
 };
 
 struct PictureRef {
@@ -734,6 +736,7 @@ public:
     void set_form(Form form);
     void set_module(FormModule module);
     void add_asset(PictureAsset asset);
+    void set_asset_bytes(ObjectId id, std::vector<std::uint8_t> bytes);
     void add_control(ControlNode control);
     void add_page(Page page);
     void add_attribute(Attribute attribute);

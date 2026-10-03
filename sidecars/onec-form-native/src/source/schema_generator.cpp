@@ -526,6 +526,7 @@ void append_document_types(std::string& output) {
     <xs:attribute name="id" type="ObjectIdType" use="required"/>
     <xs:attribute name="relativePath" type="xs:string" use="required"/>
     <xs:attribute name="format" type="PictureFormatType" use="required"/>
+    <xs:attribute name="transparent" type="xs:boolean" use="optional" default="false"/>
   </xs:complexType>
 
   <xs:complexType name="PictureAssetsType">

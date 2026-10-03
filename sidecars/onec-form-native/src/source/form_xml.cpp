@@ -1244,6 +1244,9 @@ private:
             const std::string id = object_id_text(asset.id);
             asset.relative_path = required_attribute(asset_node, "relativePath", id);
             asset.format = parse_picture_format(required_attribute(asset_node, "format", id), asset_node);
+            if (const auto transparent = optional_attribute(asset_node, "transparent")) {
+                asset.transparent = parse_boolean(*transparent, asset_node, "transparent", id);
+            }
             if (!valid_picture_path(asset.relative_path, asset.format)) {
                 fail(
                     "OOF2003",
@@ -2072,6 +2075,7 @@ private:
                 {"id", id},
                 {"relativePath", asset.relative_path},
                 {"format", std::string(picture_format_name(asset.format))},
+                {"transparent", asset.transparent ? "true" : "false"},
             });
         }
         writer_.close("PictureAssets");

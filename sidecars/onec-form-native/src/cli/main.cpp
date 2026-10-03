@@ -164,6 +164,68 @@ std::filesystem::path module_path_for(const std::filesystem::path& xml_path) {
     return root / "Module.bsl";
 }
 
+std::filesystem::path package_root_for(const std::filesystem::path& xml_path) {
+    auto root = xml_path;
+    root.replace_extension();
+    return root;
+}
+
+bool path_is_within(const std::filesystem::path& root, const std::filesystem::path& path) {
+    const auto relative = path.lexically_relative(root);
+    return !relative.empty() && *relative.begin() != ".." && !relative.is_absolute();
+}
+
+std::filesystem::path checked_asset_path(
+    const std::filesystem::path& package_root,
+    std::string_view relative_path,
+    bool must_exist) {
+    const auto root = std::filesystem::canonical(package_root);
+    const auto candidate = root / std::filesystem::path(relative_path);
+    if (must_exist) {
+        const auto resolved = std::filesystem::canonical(candidate);
+        if (!path_is_within(root, resolved) || !std::filesystem::is_regular_file(resolved)) {
+            throw std::runtime_error("picture asset path escapes the source package or is not a file: " + std::string(relative_path));
+        }
+        return resolved;
+    }
+    const auto proposed_parent = std::filesystem::weakly_canonical(candidate.parent_path());
+    const auto proposed = std::filesystem::weakly_canonical(candidate);
+    if (!path_is_within(root, proposed_parent) || !path_is_within(root, proposed)) {
+        throw std::runtime_error("picture asset output path escapes the source package: " + std::string(relative_path));
+    }
+    if (std::filesystem::is_symlink(std::filesystem::symlink_status(candidate))) {
+        throw std::runtime_error("picture asset output cannot replace a symbolic link: " + std::string(relative_path));
+    }
+    std::filesystem::create_directories(candidate.parent_path());
+    const auto parent = std::filesystem::canonical(candidate.parent_path());
+    const auto resolved = std::filesystem::weakly_canonical(candidate);
+    if (!path_is_within(root, parent) || !path_is_within(root, resolved)) {
+        throw std::runtime_error("picture asset output path escapes the source package: " + std::string(relative_path));
+    }
+    return resolved;
+}
+
+void load_picture_assets(oof::model::OrdinaryFormDocument& document, const std::filesystem::path& xml_path) {
+    if (document.assets().empty()) return;
+    const auto root = package_root_for(xml_path);
+    if (!std::filesystem::is_directory(root)) {
+        throw std::runtime_error("picture source package directory is missing: " + root.string());
+    }
+    for (const auto& asset : document.assets()) {
+        document.set_asset_bytes(asset.id, read_bytes(checked_asset_path(root, asset.relative_path, true)));
+    }
+}
+
+void write_picture_assets(const oof::model::OrdinaryFormDocument& document, const std::filesystem::path& xml_path) {
+    if (document.assets().empty()) return;
+    const auto root = package_root_for(xml_path);
+    std::filesystem::create_directories(root);
+    for (const auto& asset : document.assets()) {
+        if (asset.bytes.empty()) throw std::runtime_error("decoded picture asset has no bytes: " + asset.relative_path);
+        write_bytes(checked_asset_path(root, asset.relative_path, false), asset.bytes);
+    }
+}
+
 int dump_form(
     const std::filesystem::path& input,
     const std::filesystem::path& output,
@@ -180,6 +242,7 @@ int dump_form(
     }
     write_text(output, xml.value());
     write_text(module_path_for(output), loaded.value().module().text);
+    write_picture_assets(loaded.value(), output);
     if (json) {
         std::cout << "{\"ok\":true,\"command\":\"dump\",\"output\":";
         print_json_string(std::cout, output.string());
@@ -195,6 +258,12 @@ int build_form(
     auto parsed = oof::source::parse_form_xml(read_text(input));
     if (!parsed) {
         print_diagnostics(parsed.diagnostics(), json);
+        return 1;
+    }
+    try {
+        load_picture_assets(parsed.value(), input);
+    } catch (const std::exception& error) {
+        print_diagnostics(cli_failure("OOF0006", input.string(), "accessible picture assets inside source package", {}, error.what()), json);
         return 1;
     }
     const auto module_path = module_path_for(input);

@@ -347,6 +347,12 @@ void apply_proven_storage_overrides(
         "RealSize");
     classify_property(
         button,
+        "Picture",
+        StorageCodec::picture_record,
+        DefaultKind::none,
+        "");
+    classify_property(
+        button,
         "BorderColor",
         StorageCodec::control_base,
         DefaultKind::color,

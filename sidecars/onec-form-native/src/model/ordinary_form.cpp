@@ -193,6 +193,16 @@ void OrdinaryFormDocument::add_asset(PictureAsset asset) {
     index_first(assets_.back().id, ObjectCategory::picture_asset, index);
 }
 
+void OrdinaryFormDocument::set_asset_bytes(ObjectId id, std::vector<std::uint8_t> bytes) {
+    const auto found = std::find_if(assets_.begin(), assets_.end(), [id](const PictureAsset& asset) {
+        return asset.id == id;
+    });
+    if (found == assets_.end()) {
+        throw std::invalid_argument("picture asset ID does not exist");
+    }
+    found->bytes = std::move(bytes);
+}
+
 void OrdinaryFormDocument::add_control(ControlNode control) {
     const std::size_t index = collections_.controls.size();
     collections_.controls.push_back(std::move(control));

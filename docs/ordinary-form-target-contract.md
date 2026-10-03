@@ -214,7 +214,7 @@ Module.bsl совпадают; повторная сборка дает иден
 
 Поддержаны Caption, Enabled, MultiLine, ToolTip, HorizontalAlign,
 VerticalAlign, PictureLocation, PictureSize, BorderColor, ButtonTextColor и
-ButtonBackColor и Font, а также Name, Position, подтвержденные Bindings и Click.
+ButtonBackColor, Font и Picture, а также Name, Position, подтвержденные Bindings и Click.
 Выравнивания по умолчанию Center, подсказка пустая. Неподдержанные члены
 перечислений и чужой тип, даже с default member, отвергаются при сборке.
 Именованный XML с Right/Bottom и многострочной подсказкой прошел строгий
@@ -223,11 +223,22 @@ Designer цикл; XML, модуль и повторно собранный би
 
 PictureLocation поддерживает Left и Right, default Left. PictureSize
 поддерживает RealSize, Stretch, Proportionally, Tile, AutoSize и ByFontSize,
-default RealSize. Само свойство Picture и содержимое картинки пока не
-поддержаны. Right и ByFontSize прошли строгий Designer цикл и проверку
+default RealSize. Right и ByFontSize прошли строгий Designer цикл и проверку
 значений через объект кнопки в выполнении. Доказательства:
 `ev_a042ad82e22642eabe0a0c117af4e6c1`,
 `ev_364cb10e1ffd4ee38697aa5f43b6e274`.
+
+Picture является ссылкой на PictureAsset с внешним файлом GIF, PNG, JPEG
+или BMP в Form/Items/<ИмяЭлемента>/Picture.*. Именованный параметр
+transparent задает прозрачный фон; по умолчанию false. CLI build читает
+файл, dump извлекает его без изменения байтов. В XML нет байтов, base64
+или внутреннего дескриптора. Отсутствующая картинка сохраняется без ресурса.
+Стандартная библиотека, общие картинки, коллекции, наборы вариантов и другие
+дескрипторы пока явно отвергаются. Проверка сигнатуры определяет формат,
+но не заменяет полную проверку исправности файла изображения.
+Восемь сочетаний формата и прозрачности прошли выполнение и строгий
+Designer цикл, XML, модуль, картинки и повторная сборка совпали.
+Доказательство: `ev_0dad2a12da664bd1ba19ac13b4a3db68`.
 
 Цвета поддерживают непрозрачный RGB, automatic и именованные ссылки
 StyleColors.ButtonTextColor, StyleColors.ButtonBackColor,
@@ -251,6 +262,6 @@ strikeout сохраняют различие между отсутствием 
 и строгий Designer цикл с совпадением XML, модуля и повторной сборки.
 Доказательство: `ev_5ead98d8bd3f41838b7b9365624bdb14`.
 
-Это 12/16 прямых свойств Button в перечисленных вариантах, не полная
+Это 13/16 прямых свойств Button в перечисленных вариантах, не полная
 поддержка типа. API GetPropVal
 с вычислением default пока остается требованием целевой модели.

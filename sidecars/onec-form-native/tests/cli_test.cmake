@@ -123,4 +123,61 @@ file(WRITE "${empty_module_source}" [=[
 file(WRITE "${test_root}/empty/Form/Module.bsl" "")
 run_cli(0 "empty Module.bsl" build "${empty_module_source}" "${empty_module_bin}")
 
+# Named Button.Picture resolves to bytes under the Form package and dumps them back out.
+set(picture_source "${test_root}/picture/Form.xml")
+set(picture_root "${test_root}/picture/Form")
+set(picture_path "${picture_root}/Items/Logo/Picture.bmp")
+file(MAKE_DIRECTORY "${picture_root}/Items/Logo")
+file(WRITE "${picture_root}/Module.bsl" "")
+file(WRITE "${picture_path}" "BM-test-picture-bytes")
+file(WRITE "${picture_source}" [=[
+<Form id="1" name="PictureForm" ordinaryFormVersion="2.1">
+  <PictureAssets><PictureAsset id="42" relativePath="Items/Logo/Picture.bmp" format="bmp" transparent="true"/></PictureAssets>
+  <ChildItems><Button id="2" name="Logo"><Position/><Picture>42</Picture></Button></ChildItems>
+</Form>
+]=])
+set(picture_bin "${test_root}/picture.bin")
+set(picture_dump "${test_root}/picture-dump/Form.xml")
+run_cli(0 "Button.Picture build" build "${picture_source}" "${picture_bin}" --json)
+run_cli(0 "Button.Picture dump" dump "${picture_bin}" "${picture_dump}" --json)
+require_file_equals("${test_root}/picture-dump/Form/Items/Logo/Picture.bmp" "BM-test-picture-bytes"
+  "picture bytes must be written to the external package")
+file(READ "${picture_dump}" picture_xml)
+require_contains("${picture_xml}" "relativePath=\"Items/Logo/Picture.bmp\"" "dumped asset path")
+require_contains("${picture_xml}" "format=\"bmp\"" "dumped asset format")
+require_contains("${picture_xml}" "transparent=\"true\"" "dumped asset transparency")
+set(picture_rebuild "${test_root}/picture-rebuilt.bin")
+run_cli(0 "Button.Picture rebuilt dump" build "${picture_dump}" "${picture_rebuild}" --json)
+run_cli(0 "Button.Picture rebuilt load" dump "${picture_rebuild}" "${test_root}/picture-rebuilt/Form.xml" --json)
+require_file_equals("${test_root}/picture-rebuilt/Form/Items/Logo/Picture.bmp" "BM-test-picture-bytes"
+  "picture bytes must survive dump and rebuild")
+
+set(outside_picture_dir "${test_root}/outside-picture-dir")
+file(MAKE_DIRECTORY "${outside_picture_dir}")
+set(directory_escape_root "${test_root}/directory-escape/Form")
+file(MAKE_DIRECTORY "${directory_escape_root}")
+file(CREATE_LINK "${outside_picture_dir}" "${directory_escape_root}/Items" SYMBOLIC)
+run_cli(1 "picture dump directory symlink escape" dump "${picture_bin}" "${test_root}/directory-escape/Form.xml" --json)
+require_contains("${CLI_STDOUT}" "OOF0004" "picture dump directory symlink diagnostic")
+if(EXISTS "${outside_picture_dir}/Logo")
+  message(FATAL_ERROR "picture dump created an outside directory before rejecting symlink escape")
+endif()
+
+set(outside_picture_file "${test_root}/outside-picture.bmp")
+file(WRITE "${outside_picture_file}" "BM-preserve")
+set(file_escape_root "${test_root}/file-escape/Form")
+file(MAKE_DIRECTORY "${file_escape_root}/Items/Logo")
+file(CREATE_LINK "${outside_picture_file}" "${file_escape_root}/Items/Logo/Picture.bmp" SYMBOLIC)
+run_cli(1 "picture dump file symlink escape" dump "${picture_bin}" "${test_root}/file-escape/Form.xml" --json)
+require_contains("${CLI_STDOUT}" "OOF0004" "picture dump file symlink diagnostic")
+require_file_equals("${outside_picture_file}" "BM-preserve" "picture dump must not follow an output file symlink")
+
+file(REMOVE "${picture_path}")
+run_cli(1 "missing picture file" build "${picture_source}" "${test_root}/picture-missing.bin" --json)
+require_contains("${CLI_STDOUT}" "OOF0006" "missing picture file diagnostic")
+file(WRITE "${test_root}/outside.bmp" "BM-outside")
+file(CREATE_LINK "${test_root}/outside.bmp" "${picture_path}" SYMBOLIC)
+run_cli(1 "picture symlink escape" build "${picture_source}" "${test_root}/picture-escape.bin" --json)
+require_contains("${CLI_STDOUT}" "OOF0006" "picture symlink escape diagnostic")
+
 message(STATUS "CLI integration: PASS")

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <array>
 #include <initializer_list>
 #include <limits>
 #include <optional>
@@ -1454,10 +1455,158 @@ std::optional<std::string> decode_button_event(const LV& value, std::string_view
     return handler;
 }
 
+struct DecodedPictureDescriptor {
+    std::vector<std::uint8_t> bytes;
+    bool transparent = false;
+    model::PictureFormat format = model::PictureFormat::gif;
+};
+
+LV canonical_button_picture() {
+    return parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}");
+}
+
+std::string_view picture_format_extension(model::PictureFormat format) {
+    switch (format) {
+        case model::PictureFormat::gif: return "gif";
+        case model::PictureFormat::png: return "png";
+        case model::PictureFormat::jpeg: return "jpeg";
+        case model::PictureFormat::bmp: return "bmp";
+    }
+    return {};
+}
+
+std::optional<model::PictureFormat> picture_format_from_bytes(const std::vector<std::uint8_t>& bytes) {
+    constexpr std::array<std::uint8_t, 6> gif87{'G','I','F','8','7','a'};
+    constexpr std::array<std::uint8_t, 6> gif89{'G','I','F','8','9','a'};
+    constexpr std::array<std::uint8_t, 8> png{137,80,78,71,13,10,26,10};
+    if (bytes.size() >= gif87.size() &&
+        (std::equal(gif87.begin(), gif87.end(), bytes.begin()) || std::equal(gif89.begin(), gif89.end(), bytes.begin()))) return model::PictureFormat::gif;
+    if (bytes.size() >= png.size() && std::equal(png.begin(), png.end(), bytes.begin())) return model::PictureFormat::png;
+    if (bytes.size() >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff) return model::PictureFormat::jpeg;
+    if (bytes.size() >= 2 && bytes[0] == 'B' && bytes[1] == 'M') return model::PictureFormat::bmp;
+    return std::nullopt;
+}
+
+std::string encode_base64(std::span<const std::uint8_t> bytes) {
+    static constexpr char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string output;
+    output.reserve(((bytes.size() + 2) / 3) * 4);
+    for (std::size_t index = 0; index < bytes.size(); index += 3) {
+        const std::uint32_t a = bytes[index];
+        const std::uint32_t b = index + 1 < bytes.size() ? bytes[index + 1] : 0;
+        const std::uint32_t c = index + 2 < bytes.size() ? bytes[index + 2] : 0;
+        const std::uint32_t triple = (a << 16) | (b << 8) | c;
+        output.push_back(alphabet[(triple >> 18) & 63]);
+        output.push_back(alphabet[(triple >> 12) & 63]);
+        output.push_back(index + 1 < bytes.size() ? alphabet[(triple >> 6) & 63] : '=');
+        output.push_back(index + 2 < bytes.size() ? alphabet[triple & 63] : '=');
+    }
+    return output;
+}
+
+bool same_list_value(const LV& left, const LV& right) {
+    if (left.is_list != right.is_list || left.atom_kind != right.atom_kind || left.atom != right.atom || left.items.size() != right.items.size()) return false;
+    for (std::size_t index = 0; index < left.items.size(); ++index) {
+        if (!same_list_value(left.items[index], right.items[index])) return false;
+    }
+    return true;
+}
+
+std::vector<std::uint8_t> decode_base64(std::string_view input, std::string_view path) {
+    auto value_of = [](char ch) -> int {
+        if (ch >= 'A' && ch <= 'Z') return ch - 'A';
+        if (ch >= 'a' && ch <= 'z') return ch - 'a' + 26;
+        if (ch >= '0' && ch <= '9') return ch - '0' + 52;
+        if (ch == '+') return 62;
+        if (ch == '/') return 63;
+        return -1;
+    };
+    if (input.empty() || input.size() % 4 != 0) {
+        fail("OOF1114", std::string(path), "valid non-empty base64 picture bytes", "malformed", "Button picture data is malformed");
+    }
+    std::vector<std::uint8_t> output;
+    output.reserve((input.size() / 4) * 3);
+    for (std::size_t index = 0; index < input.size(); index += 4) {
+        const bool last = index + 4 == input.size();
+        const int a = value_of(input[index]);
+        const int b = value_of(input[index + 1]);
+        const int c = input[index + 2] == '=' ? 0 : value_of(input[index + 2]);
+        const int d = input[index + 3] == '=' ? 0 : value_of(input[index + 3]);
+        if (a < 0 || b < 0 || c < 0 || d < 0 || (!last && (input[index + 2] == '=' || input[index + 3] == '=')) ||
+            (input[index + 2] == '=' && input[index + 3] != '=')) {
+            fail("OOF1114", std::string(path), "canonical base64 picture bytes", "malformed", "Button picture data is malformed");
+        }
+        const std::uint32_t triple = (static_cast<std::uint32_t>(a) << 18) |
+            (static_cast<std::uint32_t>(b) << 12) | (static_cast<std::uint32_t>(c) << 6) | static_cast<std::uint32_t>(d);
+        output.push_back(static_cast<std::uint8_t>((triple >> 16) & 0xff));
+        if (input[index + 2] != '=') output.push_back(static_cast<std::uint8_t>((triple >> 8) & 0xff));
+        if (input[index + 3] != '=') output.push_back(static_cast<std::uint8_t>(triple & 0xff));
+    }
+    return output;
+}
+
+LV encode_button_picture(const model::PictureAsset& asset, std::string_view path) {
+    if (asset.bytes.empty()) fail("OOF1122", std::string(path), "non-empty external picture bytes", "empty", "Button picture asset has no bytes");
+    const auto actual_format = picture_format_from_bytes(asset.bytes);
+    if (!actual_format || *actual_format != asset.format) {
+        fail("OOF1122", std::string(path), std::string(picture_format_extension(asset.format)) + " image signature",
+            actual_format ? std::string(picture_format_extension(*actual_format)) : "unknown",
+            "Picture format does not match the image signature");
+    }
+    const std::string base64 = encode_base64(asset.bytes);
+    std::vector<LV> chunks;
+    for (std::size_t begin = 0; begin < base64.size(); begin += 64) {
+        const std::string chunk = base64.substr(begin, std::min<std::size_t>(64, base64.size() - begin));
+        chunks.push_back(raw((begin == 0 ? "#base64:" : "") + chunk));
+    }
+    return list({raw("4"), raw("3"), parse_constant("{0}"), string_value(""), raw("-1"), raw("-1"),
+        raw(asset.transparent ? "1" : "0"), list({list(std::move(chunks))}), raw("0"), string_value("")});
+}
+
+std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, std::string_view path) {
+    if (same_list_value(value, canonical_button_picture())) return std::nullopt;
+    require_arity(value, 10, path);
+    require_raw_constant(value.items[0], "4", child_path(path, 0));
+    require_raw_constant(value.items[1], "3", child_path(path, 1));
+    require_exact(value.items[2], parse_constant("{0}"), child_path(path, 2), "Button picture descriptor is unsupported");
+    require_exact(value.items[3], string_value(""), child_path(path, 3), "Button picture descriptor is unsupported");
+    require_raw_constant(value.items[4], "-1", child_path(path, 4));
+    require_raw_constant(value.items[5], "-1", child_path(path, 5));
+    const auto transparency = integer_atom<std::int32_t>(value.items[6], child_path(path, 6));
+    if (transparency != 0 && transparency != 1) fail("OOF1114", child_path(path, 6), "transparency flag 0 or 1", std::to_string(transparency), "Button picture transparency is unsupported");
+    const auto& outer_chunks = value.items[7];
+    require_list(outer_chunks, child_path(path, 7));
+    require_arity(outer_chunks, 1, child_path(path, 7));
+    const auto& chunks = outer_chunks.items[0];
+    require_list(chunks, child_path(child_path(path, 7), 0));
+    std::string base64;
+    for (std::size_t index = 0; index < chunks.items.size(); ++index) {
+        const auto chunk_path = child_path(child_path(child_path(path, 7), 0), index);
+        const std::string chunk = raw_atom(chunks.items[index], chunk_path);
+        const bool first = index == 0;
+        const std::string_view encoded = first ? std::string_view(chunk).substr(8) : std::string_view(chunk);
+        if ((first && !chunk.starts_with("#base64:")) || (!first && chunk.starts_with("#base64:")) ||
+            encoded.empty() || encoded.size() > 64 || (index + 1 < chunks.items.size() && encoded.size() != 64)) {
+            fail("OOF1114", chunk_path, "canonical 64-character base64 chunk", chunk, "Button picture data is malformed");
+        }
+        base64.append(encoded);
+    }
+    require_raw_constant(value.items[8], "0", child_path(path, 8));
+    require_exact(value.items[9], string_value(""), child_path(path, 9), "Button picture descriptor is unsupported");
+    DecodedPictureDescriptor picture;
+    picture.bytes = decode_base64(base64, child_path(path, 7));
+    picture.transparent = transparency == 1;
+    const auto format = picture_format_from_bytes(picture.bytes);
+    if (!format) fail("OOF1114", child_path(path, 7), "GIF, PNG, JPEG, or BMP image bytes", "unknown signature", "Button picture format is unsupported");
+    picture.format = *format;
+    return picture;
+}
+
 struct DecodedControl {
     model::ControlNode control;
     std::optional<std::string> click_handler;
     IncomingAnchorLists incoming;
+    std::optional<model::PictureAsset> picture_asset;
 };
 
 DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context) {
@@ -1533,8 +1682,10 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     }
     const bool multi_line = bool_atom(
         properties.items[10], child_path(properties_path, 10));
+    const auto picture = decode_button_picture(properties.items[8], child_path(properties_path, 8));
     auto normalized_properties = properties;
     normalized_properties.items[0] = std::move(normalized_base);
+    normalized_properties.items[8] = canonical_button_picture();
     require_exact(
         normalized_properties,
         canonical_button_properties(enabled, caption, horizontal_align, vertical_align, picture_location,
@@ -1553,6 +1704,12 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) {
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
+    }
+    std::optional<model::PictureAsset> picture_asset;
+    if (picture) {
+        picture_asset = model::PictureAsset{
+            {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
+            picture->format, picture->bytes, picture->transparent};
     }
     require_exact(
         metadata,
@@ -1626,7 +1783,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     }
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), click_handler, std::move(decoded_geometry.incoming)};
+    return {std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset)};
 }
 
 DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
@@ -1692,7 +1849,7 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
         model::EnumerationValue{
             "HorizontalAlign", horizontal_align == 4 ? "Auto" : "Left"});
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming)};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt};
 }
 
 DecodedControl decode_check_box(
@@ -1757,7 +1914,7 @@ DecodedControl decode_check_box(
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming)};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt};
 }
 
 DecodedControl decode_input_field(
@@ -1824,7 +1981,7 @@ DecodedControl decode_input_field(
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming)};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt};
 }
 
 bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value) {
@@ -1935,7 +2092,7 @@ LV encode_button(
     }
     require_allowed_properties(control.properties(),
         {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign",
-            "PictureLocation", "PictureSize", "BorderColor", "ButtonTextColor", "ButtonBackColor", "Font"}, "$/Button");
+            "PictureLocation", "PictureSize", "BorderColor", "ButtonTextColor", "ButtonBackColor", "Font", "Picture"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
@@ -1943,6 +2100,16 @@ LV encode_button(
     const auto button_text_color = explicit_button_color(control.properties(), "ButtonTextColor");
     const auto button_back_color = explicit_button_color(control.properties(), "ButtonBackColor");
     const auto font = explicit_button_font(control.properties());
+    const model::PictureAsset* picture_asset = nullptr;
+    if (const auto* picture_entry = control.properties().find(model::PropertyId::from_name("Picture"))) {
+        if (!std::holds_alternative<model::PictureRef>(picture_entry->value)) {
+            fail("OOF1122", "$/Button/Picture", "PictureRef", "different value type", "Button.Picture has the wrong value type");
+        }
+        picture_asset = document.find_asset(std::get<model::PictureRef>(picture_entry->value).asset.id());
+        if (picture_asset == nullptr) {
+            fail("OOF1123", "$/Button/Picture", "existing PictureAsset", "missing", "Button picture reference is dangling");
+        }
+    }
     const auto enum_storage_value = [](const model::PropertySet& values, std::string_view name,
                                        std::string_view expected_type, std::int32_t default_value,
                                        std::initializer_list<std::pair<std::string_view, std::int32_t>> members) {
@@ -1978,14 +2145,16 @@ LV encode_button(
     const bool multi_line = explicit_bool(control.properties(), "MultiLine", false);
     const auto handler = button_click_handler(document, control);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
+    auto button_properties = canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
+        picture_location, picture_size, multi_line, tool_tip,
+        border_color, button_text_color, button_back_color, font);
+    if (picture_asset != nullptr) button_properties.items[8] = encode_button_picture(*picture_asset, "$/Button/Picture");
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         list({
             raw("1"),
-            canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
-                picture_location, picture_size, multi_line, tool_tip,
-                border_color, button_text_color, button_back_color, font),
+            std::move(button_properties),
             canonical_event_table(handler),
         }),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
@@ -2929,7 +3098,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         decode_child_table(at(record, 5, record_path), panel_owner.pages, GeometryOwner{panel_ref},
                             panel_owner.incoming, child_path(record_path, 5));
                         for (auto& page : panel_owner.pages) nested_pages.push_back(std::move(page));
-                        child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming)};
+                        child = DecodedControl{std::move(panel), std::nullopt, std::move(geometry.incoming), std::nullopt};
                     } else {
                         fail("OOF1122", record_path, "supported leaf controls or Panel", guid, "Control payload is unsupported");
                     }
@@ -3037,6 +3206,7 @@ Result<model::OrdinaryFormDocument> decode_document(
 
         std::uint64_t synthetic_event_offset = 0;
         const std::uint64_t event_id_base = std::max(stored_max_id, next_page_id - 1);
+        std::vector<model::PictureAsset> decoded_picture_assets;
         for (auto& decoded_control : pending_controls) {
             if (decoded_control.click_handler) {
                 if (synthetic_event_offset >=
@@ -3052,8 +3222,20 @@ Result<model::OrdinaryFormDocument> decode_document(
                     model::ControlRef{decoded_control.control.id},
                 });
             }
+            if (decoded_control.picture_asset) {
+                if (synthetic_event_offset >= std::numeric_limits<std::uint64_t>::max() - event_id_base) {
+                    fail("OOF1120", "$/1/1/1", "allocatable picture asset ID", "uint64 max", "Synthetic picture asset ID overflows");
+                }
+                const model::ObjectId asset_id{event_id_base + ++synthetic_event_offset};
+                decoded_control.picture_asset->id = asset_id;
+                decoded_control.control.properties().set_explicit(
+                    model::PropertyId::from_name("Picture"),
+                    model::PictureRef{model::PictureAssetRef{asset_id}});
+                decoded_picture_assets.push_back(std::move(*decoded_control.picture_asset));
+            }
             document.add_control(std::move(decoded_control.control));
         }
+        for (auto& asset : decoded_picture_assets) document.add_asset(std::move(asset));
         document.set_form(std::move(form));
 
         const auto report = document.validate();
@@ -3089,14 +3271,26 @@ Result<list_stream::ListValue> encode_document(
                 std::to_string(document.form().id.value()),
                 "Form identity is outside the executable storage slice");
         }
-        if (!document.assets().empty() ||
-            !document.collections().commands.empty() || !document.form().events.empty()) {
+        if (!document.collections().commands.empty() || !document.form().events.empty()) {
             fail(
                 "OOF1122",
                 "$",
-                "no pictures, commands, or form events",
+                "no commands or form events",
                 "unsupported document collections",
                 "Document contains a storage concept without an executable codec");
+        }
+        std::unordered_set<std::uint64_t> referenced_picture_ids;
+        for (const auto& control : document.collections().controls) {
+            const auto* picture = control.properties().find(model::PropertyId::from_name("Picture"));
+            if (picture == nullptr) continue;
+            if (!std::holds_alternative<model::PictureRef>(picture->value)) {
+                fail("OOF1122", "$/Button/Picture", "PictureRef", "different value type", "Button.Picture has the wrong value type");
+            }
+            referenced_picture_ids.insert(std::get<model::PictureRef>(picture->value).asset.id().value());
+        }
+        if (referenced_picture_ids.size() != document.assets().size()) {
+            fail("OOF1122", "$/PictureAssets", "one referenced asset per declared asset", "orphan or duplicate ID",
+                "Picture asset collection contains an unconsumed asset");
         }
         require_allowed_properties(
             document.form().properties,

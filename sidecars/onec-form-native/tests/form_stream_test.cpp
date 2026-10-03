@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -1006,6 +1007,89 @@ void test_button_picture_enums_round_trip_and_validation() {
         list_stream::ListValue::raw_atom("2");
     expect_failure(form_stream::decode_document(invalid_location, "PictureEnums"), "OOF1114",
         "$/1/2/2/1/2/1/6", "unsupported Button.PictureLocation storage values must be rejected");
+}
+
+void test_button_external_picture_assets_round_trip() {
+    const std::vector<std::vector<std::uint8_t>> bytes{
+        {'G','I','F','8','9','a',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62},
+        {137,80,78,71,13,10,26,10,9,8,7,6,5,4},
+        {0xff,0xd8,0xff,1,2,3,4,5},
+        {'B','M',1,2,3,4,5,6},
+    };
+    const std::array<model::PictureFormat, 4> formats{
+        model::PictureFormat::gif, model::PictureFormat::png,
+        model::PictureFormat::jpeg, model::PictureFormat::bmp};
+    const std::array<std::string_view, 4> names{"Gif", "Png", "Jpeg", "Bmp"};
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Pictures";
+    for (std::size_t index = 0; index < formats.size(); ++index) {
+        form.children.push_back(model::ControlRef{model::ObjectId{static_cast<std::uint64_t>(index + 2)}});
+    }
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::size_t index = 0; index < formats.size(); ++index) {
+        const model::ObjectId button_id{static_cast<std::uint64_t>(index + 2)};
+        const model::ObjectId asset_id{static_cast<std::uint64_t>(index + 20)};
+        model::PictureAsset asset{asset_id, "Items/" + std::string(names[index]) + "/Picture." +
+            std::string(formats[index] == model::PictureFormat::jpeg ? "jpeg" :
+                formats[index] == model::PictureFormat::gif ? "gif" :
+                formats[index] == model::PictureFormat::png ? "png" : "bmp"), formats[index], bytes[index], index % 2 == 1};
+        document.add_asset(std::move(asset));
+        model::ControlNode button{button_id, std::string(names[index]), model::ButtonPayload{}};
+        button.properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{asset_id}});
+        document.add_control(std::move(button));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "named external GIF, PNG, JPEG, and BMP assets must encode");
+    const auto decoded = form_stream::decode_document(encoded.value(), "Pictures");
+    expect(decoded.ok(), "external Button picture descriptors must decode");
+    expect(decoded.value().assets().size() == formats.size(), "each decoded button image must materialize one asset");
+    for (std::size_t index = 0; index < formats.size(); ++index) {
+        const auto* button = decoded.value().find_control(model::ObjectId{static_cast<std::uint64_t>(index + 2)});
+        expect(button != nullptr, "picture button identity must survive");
+        const auto* reference = button->properties().find(model::PropertyId::from_name("Picture"));
+        expect(reference && std::holds_alternative<model::PictureRef>(reference->value), "picture must remain a named asset reference");
+        const auto& asset_ref = std::get<model::PictureRef>(reference->value).asset;
+        const auto* asset = decoded.value().find_asset(asset_ref.id());
+        expect(asset && asset->format == formats[index] && asset->bytes == bytes[index] && asset->transparent == (index % 2 == 1),
+            "picture format, bytes, and transparency must survive independently");
+        expect(asset->relative_path == "Items/" + std::string(names[index]) + "/Picture." +
+            std::string(formats[index] == model::PictureFormat::jpeg ? "jpeg" :
+                formats[index] == model::PictureFormat::gif ? "gif" :
+                formats[index] == model::PictureFormat::png ? "png" : "bmp"),
+            "decoded asset must receive its named external package path");
+    }
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "all four external picture descriptors must re-encode without loss");
+
+    auto missing_bytes = document;
+    missing_bytes.set_asset_bytes(model::ObjectId{20}, {});
+    expect_failure(form_stream::encode_document(missing_bytes), "OOF1122", "$/Button/Picture",
+        "empty asset bytes must be rejected");
+    model::Form orphan_form;
+    orphan_form.id = model::ObjectId{1};
+    orphan_form.name = "Orphan";
+    auto orphan = model::OrdinaryFormDocument(std::move(orphan_form));
+    orphan.add_asset(model::PictureAsset{model::ObjectId{20}, "Items/Unused/Picture.gif", model::PictureFormat::gif, bytes[0], false});
+    expect_failure(form_stream::encode_document(orphan), "OOF1122", "$/PictureAssets",
+        "unreferenced external assets must be rejected");
+
+    auto invalid_signature = document;
+    invalid_signature.set_asset_bytes(model::ObjectId{20}, {'n','o','t','a','g','i','f'});
+    expect_failure(form_stream::encode_document(invalid_signature), "OOF1122", "$/Button/Picture",
+        "image signature and declared format must agree");
+    auto invalid_transparency = encoded.value();
+    invalid_transparency.items[1].items[2].items[2].items[1].items[2].items[1].items[8].items[6] =
+        list_stream::ListValue::raw_atom("2");
+    expect_failure(form_stream::decode_document(invalid_transparency, "Pictures"), "OOF1114", "$/1/2/2/1/2/1/8/6",
+        "unknown transparency descriptor value must be rejected");
+    auto invalid_base64 = encoded.value();
+    invalid_base64.items[1].items[2].items[2].items[1].items[2].items[1].items[8].items[7].items[0].items[0] =
+        list_stream::ListValue::raw_atom("#base64:!!!!");
+    expect_failure(form_stream::decode_document(invalid_base64, "Pictures"), "OOF1114", "$/1/2/2/1/2/1/8/7/0/0",
+        "malformed Button image base64 must be rejected");
 }
 
 void test_button_then_label_decoration_round_trip() {
@@ -2810,6 +2894,7 @@ int main() {
         test_button_alignments_and_tooltip_round_trip();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
+        test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
         test_fresh_checkbox_stream_decode();
         test_button_label_input_field_round_trip();
