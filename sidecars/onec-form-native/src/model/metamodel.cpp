@@ -735,6 +735,31 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::boolean,
         "false");
+    classify_property(input_field, "Wrap", StorageCodec::control_info, DefaultKind::boolean, "true");
+    classify_property(input_field, "ChooseType", StorageCodec::control_info, DefaultKind::boolean, "true");
+    classify_property(input_field, "MarkNegatives", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(input_field, "ChoiceButton", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(input_field, "OpenButton", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(input_field, "ClearButton", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(input_field, "SpinButton", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(input_field, "ChoiceListButton", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(input_field, "Transparent", StorageCodec::control_base, DefaultKind::boolean, "false");
+    classify_property(input_field, "MultiLine", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(input_field, "ExtendedEdit", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(input_field, "PasswordMode", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(
+        input_field,
+        "AutoMarkIncomplete",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "false");
+    for (const auto property_name : {"ChoiceIncomplete", "MarkIncomplete"}) {
+        if (const auto property = std::ranges::find(input_field, property_name, &PropertyDescriptor::api_name);
+            property != input_field.end()) {
+            property->persistence = PersistenceClass::runtime_only;
+            property->storage_codec = StorageCodec::none;
+        }
+    }
 
     classify_property(
         panel_placement_properties,

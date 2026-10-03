@@ -343,3 +343,25 @@ InputField.AutoChoiceIncomplete (АвтоВыборНезаполненного)
 формы подтвердил true: `ev_21083e5a888b40a5973ea6f921d64923`.
 Это расширяет текущие Enabled и ReadOnly, но не доказывает полную
 поддержку InputField или остальных типов данных поля.
+
+
+Для строкового InputField текущий сохраняемый логический профиль расширен
+до 16 свойств: Enabled, ReadOnly, AutoChoiceIncomplete, AutoMarkIncomplete,
+Wrap, ChooseType, MarkNegatives, ChoiceButton, OpenButton, ClearButton,
+SpinButton, ChoiceListButton, Transparent, MultiLine, ExtendedEdit и
+PasswordMode. Wrap и ChooseType по умолчанию true; Enabled true;
+остальные свойства по умолчанию false. Каждое новое свойство исследовано
+отдельным изменением, затем проверяется совместный вариант.
+
+ChoiceIncomplete и MarkIncomplete являются состояниями времени исполнения
+и не включены в сохраняемый профиль. TextEdit остается unclassified:
+runtime сериализация сохраняет false, но документ Конфигуратора
+нормализует его до true. Primary encoder отвергает явное TextEdit,
+пока корректное документное сохранение не подтверждено. ListChoiceMode,
+строковые свойства и другие типы реквизитов требуют следующих отдельных
+опытов. Это частичная поддержка InputField, не готовность всего типа.
+
+Подтверждение сохраняемого профиля: strict Designer, побайтные
+XML/Module.bsl/Form.bin и 256 getters PASS,
+`ev_0daca28cc3f34400918867a57ee0c378`. Отличие runtime сериализации TextEdit
+от документного пути: `ev_7182607052084d37bd6a3e4fc26fc8b2`.

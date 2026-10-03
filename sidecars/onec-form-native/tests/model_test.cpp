@@ -301,6 +301,34 @@ void test_help_metamodel() {
             find_property(ControlKind::input_field, "AutoChoiceIncomplete")->default_value.canonical == "false",
         "AutoChoiceIncomplete must have proven Boolean persistence and false default");
     expect(
+        find_property(ControlKind::input_field, "AutoMarkIncomplete")->persistence == PersistenceClass::persisted_editable &&
+            find_property(ControlKind::input_field, "AutoMarkIncomplete")->storage_codec == StorageCodec::control_info &&
+            find_property(ControlKind::input_field, "AutoMarkIncomplete")->default_value.kind == DefaultKind::boolean &&
+            find_property(ControlKind::input_field, "AutoMarkIncomplete")->default_value.canonical == "false",
+        "AutoMarkIncomplete must have proven Boolean persistence and false default");
+    for (const auto& [name, default_value] : std::array<std::pair<std::string_view, std::string_view>, 12>{
+             {{"Wrap", "true"}, {"ChooseType", "true"}, {"MarkNegatives", "false"},
+              {"ChoiceButton", "false"}, {"OpenButton", "false"}, {"ClearButton", "false"},
+              {"SpinButton", "false"}, {"ChoiceListButton", "false"}, {"Transparent", "false"},
+              {"MultiLine", "false"}, {"ExtendedEdit", "false"},
+              {"PasswordMode", "false"}}}) {
+        const auto* descriptor = find_property(ControlKind::input_field, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+                descriptor->storage_codec == (name == "Transparent" ? StorageCodec::control_base : StorageCodec::control_info) &&
+                descriptor->default_value.kind == DefaultKind::boolean &&
+                descriptor->default_value.canonical == default_value,
+            "proven InputField Boolean must have its persisted descriptor and default");
+    }
+    expect(find_property(ControlKind::input_field, "TextEdit")->persistence == PersistenceClass::unclassified &&
+            find_property(ControlKind::input_field, "TextEdit")->storage_codec == StorageCodec::unclassified,
+        "TextEdit must remain unsupported without verified strict persistence");
+    for (const auto name : {"ChoiceIncomplete", "MarkIncomplete"}) {
+        const auto* descriptor = find_property(ControlKind::input_field, name);
+        expect(descriptor && descriptor->persistence == PersistenceClass::runtime_only &&
+                descriptor->storage_codec == StorageCodec::none,
+            "getter-only InputField Boolean must be classified as runtime-only");
+    }
+    expect(
         find_property(ControlKind::input_field, "Border")->value_codec ==
             ValueCodec::unclassified,
         "incomplete Border skeletons must not become product value codecs");

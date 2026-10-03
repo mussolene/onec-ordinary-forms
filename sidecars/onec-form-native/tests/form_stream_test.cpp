@@ -1563,7 +1563,8 @@ void test_button_label_input_field_round_trip() {
     expect(read_only_payload.atom == "1", "InputField ReadOnly must encode at the proven payload slot");
 
     const auto make_input_document = [](std::uint32_t length, bool variable, bool non_string = false, bool mixed = false,
-        bool explicit_read_only_false = false, bool auto_choice_incomplete = false) {
+        bool explicit_read_only_false = false, bool auto_choice_incomplete = false, bool auto_mark_incomplete = false,
+        const std::vector<std::pair<std::string_view, bool>>& extra_flags = {}) {
         model::Form form;
         form.id = model::ObjectId{1};
         form.name = "Main";
@@ -1593,6 +1594,12 @@ void test_button_label_input_field_round_trip() {
         }
         if (auto_choice_incomplete) {
             input_field.properties().set_explicit(model::PropertyId::from_name("AutoChoiceIncomplete"), true);
+        }
+        if (auto_mark_incomplete) {
+            input_field.properties().set_explicit(model::PropertyId::from_name("AutoMarkIncomplete"), true);
+        }
+        for (const auto& [name, value] : extra_flags) {
+            input_field.properties().set_explicit(model::PropertyId::from_name(name), value);
         }
         input_document.add_control(std::move(input_field));
         return input_document;
@@ -1664,6 +1671,86 @@ void test_button_label_input_field_round_trip() {
     expect_failure(form_stream::decode_document(unknown_auto_choice_flag, "Main"), "OOF1105",
         "$/1/2/2/3/2/2/0/36", "unknown AutoChoiceIncomplete flag value must be rejected");
 
+    auto auto_mark_document = make_input_document(10, true, false, false, false, false, true);
+    const auto auto_mark_encoded = form_stream::encode_document(auto_mark_document);
+    expect(auto_mark_encoded.ok(), "InputField AutoMarkIncomplete=true must encode");
+    const auto& auto_mark_payload = auto_mark_encoded.value().items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0];
+    expect(auto_mark_payload.items[35].atom == "1", "AutoMarkIncomplete must encode at payload slot 35");
+    const auto auto_mark_decoded = form_stream::decode_document(auto_mark_encoded.value(), "Main");
+    expect(auto_mark_decoded.ok(), "InputField AutoMarkIncomplete=true must decode");
+    const auto* decoded_auto_mark = auto_mark_decoded.value().find_control(model::ObjectId{9});
+    const auto* auto_mark_property = decoded_auto_mark == nullptr ? nullptr :
+        decoded_auto_mark->properties().find(model::PropertyId::from_name("AutoMarkIncomplete"));
+    expect(auto_mark_property != nullptr && std::get<bool>(auto_mark_property->value),
+        "InputField AutoMarkIncomplete=true must survive round-trip");
+    const auto auto_mark_reencoded = form_stream::encode_document(auto_mark_decoded.value());
+    expect(auto_mark_reencoded.ok() && auto_mark_reencoded.value().items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0].items[35].atom == "1",
+        "AutoMarkIncomplete=true must remain stable after re-encoding");
+    auto unknown_auto_mark_flag = auto_mark_encoded.value();
+    unknown_auto_mark_flag.items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0].items[35] = list_stream::ListValue::raw_atom("2");
+    expect_failure(form_stream::decode_document(unknown_auto_mark_flag, "Main"), "OOF1105",
+        "$/1/2/2/3/2/2/0/35", "unknown AutoMarkIncomplete flag value must be rejected");
+
+    constexpr std::array<std::pair<std::string_view, bool>, 14> input_field_flags{{
+        {"Wrap", true}, {"ChooseType", true}, {"MarkNegatives", false}, {"ChoiceButton", false},
+        {"OpenButton", false}, {"ClearButton", false}, {"SpinButton", false},
+        {"ChoiceListButton", false}, {"Transparent", false},
+        {"MultiLine", false}, {"ExtendedEdit", false}, {"PasswordMode", false},
+        {"AutoMarkIncomplete", false}, {"AutoChoiceIncomplete", false},
+    }};
+    const auto default_flags_encoded = form_stream::encode_document(make_input_document(10, true));
+    expect(default_flags_encoded.ok(), "InputField Boolean defaults must encode");
+    const auto default_flags_decoded = form_stream::decode_document(default_flags_encoded.value(), "Main");
+    expect(default_flags_decoded.ok(), "InputField Boolean defaults must decode");
+    for (const auto& [name, default_value] : input_field_flags) {
+        const auto* default_control = default_flags_decoded.value().find_control(model::ObjectId{9});
+        expect(default_control->properties().find(model::PropertyId::from_name(name)) == nullptr,
+            "InputField Boolean default must decode as implicit");
+        auto toggled_document = make_input_document(10, true, false, false, false, false, false, {{name, !default_value}});
+        const auto toggled_encoded = form_stream::encode_document(toggled_document);
+        expect(toggled_encoded.ok(), "individual InputField Boolean toggle must encode");
+        const auto toggled_decoded = form_stream::decode_document(toggled_encoded.value(), "Main");
+        expect(toggled_decoded.ok(), "individual InputField Boolean toggle must decode");
+        const auto* decoded_control = toggled_decoded.value().find_control(model::ObjectId{9});
+        const auto* property = decoded_control->properties().find(model::PropertyId::from_name(name));
+        expect(property != nullptr && std::get<bool>(property->value) == !default_value,
+            "individual InputField Boolean toggle must survive round-trip");
+        const auto toggled_reencoded = form_stream::encode_document(toggled_decoded.value());
+        expect(toggled_reencoded.ok() &&
+                list_stream::dump_compact(toggled_reencoded.value().items[1].items[2].items[2].items[3]) ==
+                    list_stream::dump_compact(toggled_encoded.value().items[1].items[2].items[2].items[3]),
+            "individual InputField Boolean toggle must preserve its exact control stream");
+    }
+
+    auto mismatched_paired_flag = default_flags_encoded.value();
+    mismatched_paired_flag.items[1].items[2].items[2].items[3].items[2].items[2].items[0].items[26] =
+        list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(mismatched_paired_flag, "Main"), "OOF1122",
+        "$/1/2/2/3/2/2/0/26", "mismatched paired InputField MultiLine flags must be rejected");
+
+    auto malformed_paired_flag = default_flags_encoded.value();
+    malformed_paired_flag.items[1].items[2].items[2].items[3].items[2].items[3] = list_stream::ListValue::raw_atom("0");
+    expect_failure(form_stream::decode_document(malformed_paired_flag, "Main"), "OOF1101",
+        "$/1/2/2/3/2/3", "malformed paired InputField flag structure must be rejected");
+
+    std::vector<std::pair<std::string_view, bool>> mixed_flag_values;
+    for (const auto& [name, default_value] : input_field_flags) {
+        mixed_flag_values.emplace_back(name, !default_value);
+    }
+    auto mixed_flags_document = make_input_document(10, true, false, false, false, false, false, mixed_flag_values);
+    const auto mixed_flags_encoded = form_stream::encode_document(mixed_flags_document);
+    expect(mixed_flags_encoded.ok(), "mixed persisted InputField Boolean flags must encode");
+    const auto mixed_flags_decoded = form_stream::decode_document(mixed_flags_encoded.value(), "Main");
+    expect(mixed_flags_decoded.ok(), "mixed persisted InputField Boolean flags must decode");
+    const auto mixed_flags_reencoded = form_stream::encode_document(mixed_flags_decoded.value());
+    expect(mixed_flags_reencoded.ok() &&
+            list_stream::dump_compact(mixed_flags_reencoded.value().items[1].items[2].items[2].items[3]) ==
+                list_stream::dump_compact(mixed_flags_encoded.value().items[1].items[2].items[2].items[3]),
+        "mixed persisted InputField Boolean flags must preserve the exact control stream");
+
     auto mismatch = encoded.value();
     auto& mismatch_info = mismatch.items[1].items[2].items[2].items[3].items[2];
     mismatch_info.items[1] = list_stream::parse("{\"Pattern\",{\"S\",20,1}}");
@@ -1690,12 +1777,20 @@ void test_button_label_input_field_round_trip() {
     expect_failure(form_stream::decode_document(unsupported_leaf, "Main"), "OOF1114", "$/1/2/2/3/2",
         "unknown InputField info leaf must fail closed");
 
-    auto unknown_read_only_neighbor = encoded.value();
-    auto& payload = unknown_read_only_neighbor.items[1].items[2].items[2].items[3]
+    auto malformed_text_edit = encoded.value();
+    auto& payload = malformed_text_edit.items[1].items[2].items[2].items[3]
         .items[2].items[2].items[0];
     payload.items[12] = list_stream::ListValue::raw_atom("9");
-    expect_failure(form_stream::decode_document(unknown_read_only_neighbor, "Main"), "OOF1114", "$/1/2/2/3/2",
-        "unknown payload field beside ReadOnly must fail closed");
+    expect_failure(form_stream::decode_document(malformed_text_edit, "Main"), "OOF1114", "$/1/2/2/3/2",
+        "unclassified TextEdit slot value must be rejected");
+    auto unsupported_text_edit_flag = encoded.value();
+    unsupported_text_edit_flag.items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0].items[12] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(unsupported_text_edit_flag, "Main"), "OOF1114",
+        "$/1/2/2/3/2", "non-default TextEdit slot value must be rejected");
+    expect_failure(form_stream::encode_document(make_input_document(
+        10, true, false, false, false, false, false, {{"TextEdit", false}})),
+        "OOF1122", "$/InputField", "unsupported explicit TextEdit=false must fail encoding");
 }
 
 void test_single_input_field_round_trip() {

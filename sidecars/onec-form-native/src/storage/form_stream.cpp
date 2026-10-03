@@ -853,11 +853,86 @@ LV canonical_check_box_info(bool enabled, std::string_view caption) {
 }
 
 
+enum class InputFieldFlagScope { payload, base_info, root_info };
+
+struct InputFieldFlagMapping {
+    std::string_view name;
+    InputFieldFlagScope scope;
+    std::size_t slot;
+    bool default_value;
+    std::size_t paired_slot;
+};
+
+constexpr std::size_t no_paired_slot = std::numeric_limits<std::size_t>::max();
+constexpr std::array input_field_flag_mappings{
+    InputFieldFlagMapping{"Wrap", InputFieldFlagScope::payload, 4, true, no_paired_slot},
+    InputFieldFlagMapping{"ChooseType", InputFieldFlagScope::root_info, 6, true, no_paired_slot},
+    InputFieldFlagMapping{"MarkNegatives", InputFieldFlagScope::payload, 27, false, no_paired_slot},
+    InputFieldFlagMapping{"ChoiceButton", InputFieldFlagScope::payload, 7, false, no_paired_slot},
+    InputFieldFlagMapping{"OpenButton", InputFieldFlagScope::payload, 10, false, no_paired_slot},
+    InputFieldFlagMapping{"ClearButton", InputFieldFlagScope::payload, 8, false, no_paired_slot},
+    InputFieldFlagMapping{"SpinButton", InputFieldFlagScope::payload, 9, false, no_paired_slot},
+    InputFieldFlagMapping{"ChoiceListButton", InputFieldFlagScope::payload, 6, false, no_paired_slot},
+    InputFieldFlagMapping{"Transparent", InputFieldFlagScope::base_info, 5, false, no_paired_slot},
+    InputFieldFlagMapping{"MultiLine", InputFieldFlagScope::payload, 26, false, 3},
+    InputFieldFlagMapping{"ExtendedEdit", InputFieldFlagScope::payload, 38, false, 6},
+    InputFieldFlagMapping{"PasswordMode", InputFieldFlagScope::payload, 5, false, 5},
+    InputFieldFlagMapping{"AutoMarkIncomplete", InputFieldFlagScope::payload, 35, false, no_paired_slot},
+    InputFieldFlagMapping{"AutoChoiceIncomplete", InputFieldFlagScope::payload, 36, false, no_paired_slot},
+};
+
+list_stream::ListValue& input_field_flag_value(LV& info, const InputFieldFlagMapping& mapping) {
+    switch (mapping.scope) {
+        case InputFieldFlagScope::payload: return info.items[2].items[0].items[mapping.slot];
+        case InputFieldFlagScope::base_info: return info.items[2].items[0].items[0].items[mapping.slot];
+        case InputFieldFlagScope::root_info: return info.items[mapping.slot];
+    }
+    throw std::logic_error("unknown InputField flag scope");
+}
+
+const list_stream::ListValue& input_field_flag_value(
+    const LV& info, const InputFieldFlagMapping& mapping) {
+    switch (mapping.scope) {
+        case InputFieldFlagScope::payload: return info.items[2].items[0].items[mapping.slot];
+        case InputFieldFlagScope::base_info: return info.items[2].items[0].items[0].items[mapping.slot];
+        case InputFieldFlagScope::root_info: return info.items[mapping.slot];
+    }
+    throw std::logic_error("unknown InputField flag scope");
+}
+
+using InputFieldFlagValues = std::array<bool, input_field_flag_mappings.size()>;
+
+InputFieldFlagValues decode_input_field_flags(const LV& info, std::string_view path) {
+    const auto paired_path = child_path(path, 3);
+    require_arity(info.items[3], 2, paired_path);
+    require_arity(info.items[3].items[1], 2, child_path(paired_path, 1));
+    require_arity(info.items[3].items[1].items[1], 7, child_path(child_path(paired_path, 1), 1));
+    InputFieldFlagValues flags{};
+    for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+        const auto& mapping = input_field_flag_mappings[index];
+        const auto flag_path = mapping.scope == InputFieldFlagScope::root_info ?
+            child_path(path, mapping.slot) : mapping.scope == InputFieldFlagScope::base_info ?
+                child_path(child_path(child_path(child_path(path, 2), 0), 0), mapping.slot) :
+                child_path(child_path(child_path(path, 2), 0), mapping.slot);
+        flags[index] = bool_atom(input_field_flag_value(info, mapping), flag_path);
+        if (mapping.paired_slot != no_paired_slot) {
+            const auto paired_value = bool_atom(
+                info.items[3].items[1].items[1].items[mapping.paired_slot],
+                child_path(child_path(child_path(child_path(path, 3), 1), 1), mapping.paired_slot));
+            if (paired_value != flags[index]) {
+                fail("OOF1122", flag_path, "matching paired InputField Boolean", paired_value ? "1" : "0",
+                    "InputField payload and paired control-info flags disagree");
+            }
+        }
+    }
+    return flags;
+}
+
 LV canonical_input_field_info(
     const model::TypeDomainPatternValue& type,
     bool enabled,
     bool read_only,
-    bool auto_choice_incomplete) {
+    const InputFieldFlagValues& flags) {
     auto value = parse_constant(R"OOF(
 {9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{1,{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{"U"},{"U"},0,"",0,0}}},{0},0,1,0,{1,0},0}
 )OOF");
@@ -869,8 +944,15 @@ LV canonical_input_field_info(
     value.items[1] = encoded_type_domain(type, "$/InputField/TypeDomain");
     value.items[2].items[0].items[0].items[1] = raw(enabled ? "1" : "0");
     value.items[2].items[0].items[13] = raw(read_only ? "1" : "0");
-    value.items[2].items[0].items[36] = raw(auto_choice_incomplete ? "1" : "0");
     value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().string.length));
+    for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+        const auto& mapping = input_field_flag_mappings[index];
+        const bool encoded = flags[index];
+        input_field_flag_value(value, mapping) = raw(encoded ? "1" : "0");
+        if (mapping.paired_slot != no_paired_slot) {
+            value.items[3].items[1].items[1].items[mapping.paired_slot] = raw(encoded ? "1" : "0");
+        }
+    }
     return value;
 }
 
@@ -2345,10 +2427,10 @@ DecodedControl decode_input_field(
     require_arity(base_info, 21, base_info_path);
     const bool enabled = bool_atom(base_info.items[1], child_path(base_info_path, 1));
     const bool read_only = bool_atom(payload.items[13], child_path(payload_path, 13));
-    const bool auto_choice_incomplete = bool_atom(payload.items[36], child_path(payload_path, 36));
+    const auto input_field_flags = decode_input_field_flags(info, info_path);
     require_exact(
         info,
-        canonical_input_field_info(control_type, enabled, read_only, auto_choice_incomplete),
+        canonical_input_field_info(control_type, enabled, read_only, input_field_flags),
         info_path,
         "InputField uses an unsupported property, event, or storage variation");
 
@@ -2372,8 +2454,12 @@ DecodedControl decode_input_field(
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
-    if (auto_choice_incomplete) control.properties().set_explicit(
-        model::PropertyId::from_name("AutoChoiceIncomplete"), true);
+    for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+        if (input_field_flags[index] != input_field_flag_mappings[index].default_value) {
+            control.properties().set_explicit(
+                model::PropertyId::from_name(input_field_flag_mappings[index].name), input_field_flags[index]);
+        }
+    }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2681,7 +2767,10 @@ LV encode_input_field(
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/InputField", "named InputField with direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "ReadOnly", "AutoChoiceIncomplete"}, "$/InputField");
+    require_allowed_properties(control.properties(), {
+        "Enabled", "ReadOnly", "Wrap", "ChooseType", "MarkNegatives", "ChoiceButton", "OpenButton",
+        "ClearButton", "SpinButton", "ChoiceListButton", "Transparent", "MultiLine",
+        "ExtendedEdit", "PasswordMode", "AutoChoiceIncomplete", "AutoMarkIncomplete"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -2691,12 +2780,16 @@ LV encode_input_field(
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", false);
-    const bool auto_choice_incomplete = explicit_bool(control.properties(), "AutoChoiceIncomplete", false);
+    InputFieldFlagValues input_field_flags{};
+    for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+        const auto& mapping = input_field_flag_mappings[index];
+        input_field_flags[index] = explicit_bool(control.properties(), mapping.name, mapping.default_value);
+    }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_input_field_info(attribute->type, enabled, read_only, auto_choice_incomplete),
+        canonical_input_field_info(attribute->type, enabled, read_only, input_field_flags),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

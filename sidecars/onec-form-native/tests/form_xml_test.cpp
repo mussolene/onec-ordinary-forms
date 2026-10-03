@@ -1,8 +1,10 @@
+#include <array>
 #include <exception>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "oof/model/metamodel.hpp"
 #include "oof/source/form_xml.hpp"
@@ -491,6 +493,60 @@ void test_typed_values_and_canonicalization() {
         "named AutoChoiceIncomplete=false must survive XML round-trip");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Bad" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="I"><Position/><AutoChoiceIncomplete>maybe</AutoChoiceIncomplete></InputField></ChildItems></Form>)XML").ok(),
         "invalid AutoChoiceIncomplete Boolean must be rejected");
+    auto auto_mark_true_source = auto_choice_true_source;
+    auto_mark_true_source.replace(auto_mark_true_source.find("<AutoChoiceIncomplete>true</AutoChoiceIncomplete>"),
+        std::string_view{"<AutoChoiceIncomplete>true</AutoChoiceIncomplete>"}.size(),
+        "<AutoMarkIncomplete>true</AutoMarkIncomplete>");
+    auto auto_mark_document = source::parse_form_xml(auto_mark_true_source);
+    expect(auto_mark_document.ok(), "named AutoMarkIncomplete=true must parse");
+    auto auto_mark_xml = source::serialize_form_xml(auto_mark_document.value());
+    expect(auto_mark_xml.ok() && auto_mark_xml.value().find("<AutoMarkIncomplete>true</AutoMarkIncomplete>") != std::string::npos,
+        "named AutoMarkIncomplete=true must serialize");
+    expect(source::parse_form_xml(auto_mark_xml.value()).ok(), "AutoMarkIncomplete=true XML must round-trip");
+    auto auto_mark_false_source = auto_mark_true_source;
+    auto_mark_false_source.replace(auto_mark_false_source.find("<AutoMarkIncomplete>true</AutoMarkIncomplete>"),
+        std::string_view{"<AutoMarkIncomplete>true</AutoMarkIncomplete>"}.size(),
+        "<AutoMarkIncomplete>false</AutoMarkIncomplete>");
+    auto auto_mark_false = source::parse_form_xml(auto_mark_false_source);
+    expect(auto_mark_false.ok(), "named AutoMarkIncomplete=false must parse");
+    auto auto_mark_false_xml = source::serialize_form_xml(auto_mark_false.value());
+    expect(auto_mark_false_xml.ok() && auto_mark_false_xml.value().find("<AutoMarkIncomplete>") == std::string::npos,
+        "default AutoMarkIncomplete=false must serialize as omitted");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Bad" ordinaryFormVersion="2.1"><ChildItems><InputField id="2" name="I"><Position/><AutoMarkIncomplete>maybe</AutoMarkIncomplete></InputField></ChildItems></Form>)XML").ok(),
+        "invalid AutoMarkIncomplete Boolean must be rejected");
+    constexpr std::array<std::pair<std::string_view, bool>, 14> input_field_boolean_defaults{{
+        {"Wrap", true}, {"ChooseType", true}, {"MarkNegatives", false}, {"ChoiceButton", false},
+        {"OpenButton", false}, {"ClearButton", false}, {"SpinButton", false},
+        {"ChoiceListButton", false}, {"Transparent", false},
+        {"MultiLine", false}, {"ExtendedEdit", false}, {"PasswordMode", false},
+        {"AutoMarkIncomplete", false}, {"AutoChoiceIncomplete", false},
+    }};
+    for (const auto& [name, default_value] : input_field_boolean_defaults) {
+        const auto make_property_xml = [&](bool value) {
+            return "<Form id=\"1\" name=\"InputFlags\" ordinaryFormVersion=\"2.1\"><Attributes>"
+                "<Attribute id=\"2\" name=\"Value\"><TypeDomain><Entry term=\"string\" length=\"64\" variable=\"false\"/>"
+                "</TypeDomain></Attribute></Attributes><ChildItems><InputField id=\"3\" name=\"Input\">"
+                "<DataPath attributeId=\"2\"/><Position/><" + std::string(name) + ">" + (value ? "true" : "false") +
+                "</" + std::string(name) + "></InputField></ChildItems></Form>";
+        };
+        const auto property_xml = make_property_xml(!default_value);
+        auto property_document = source::parse_form_xml(property_xml);
+        expect(property_document.ok(), property_document.ok() ? "individual InputField Boolean XML value must parse" :
+            std::string(name) + " XML value rejected: " + property_document.diagnostics().front().code + ": " +
+                property_document.diagnostics().front().message);
+        auto property_serialized = source::serialize_form_xml(property_document.value());
+        expect(property_serialized.ok() && property_serialized.value().find("<" + std::string(name) + ">") != std::string::npos,
+            "individual non-default InputField Boolean XML value must serialize");
+        expect(source::parse_form_xml(property_serialized.value()).ok(),
+            "individual InputField Boolean XML value must round-trip");
+        const auto default_xml = make_property_xml(default_value);
+        auto explicit_default_document = source::parse_form_xml(default_xml);
+        expect(explicit_default_document.ok(), "explicit InputField Boolean default must parse");
+        auto explicit_default_serialized = source::serialize_form_xml(explicit_default_document.value());
+        expect(explicit_default_serialized.ok() &&
+                explicit_default_serialized.value().find("<" + std::string(name) + ">") == std::string::npos,
+            "explicit InputField Boolean default must normalize to omission");
+    }
     expect(serialized.value().find("01234567-89ab-cdef-0123-456789abcdef") != std::string::npos, "UUID output must be lowercase canonical");
     expect(serialized.value().find("styleName=\"StyleFonts.TextFont\"") != std::string::npos &&
                serialized.value().find("mask=") == std::string::npos,
