@@ -584,6 +584,145 @@ void test_button_multiline_round_trip_and_validation() {
         "Button.MultiLine values with a non-Boolean model type must be rejected");
 }
 
+void test_button_alignments_and_tooltip_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {
+        model::ControlRef{model::ObjectId{2}},
+        model::ControlRef{model::ObjectId{7}},
+        model::ControlRef{model::ObjectId{12}},
+    };
+    model::OrdinaryFormDocument document(std::move(form));
+    const auto add_button = [&](std::uint64_t id, std::string name,
+                                std::string horizontal, std::string vertical,
+                                std::string tooltip) {
+        model::ControlNode button{model::ObjectId{id}, std::move(name), model::ButtonPayload{}};
+        button.properties().set_explicit(
+            model::PropertyId::from_name("HorizontalAlign"),
+            model::EnumerationValue{"HorizontalAlign", std::move(horizontal)});
+        button.properties().set_explicit(
+            model::PropertyId::from_name("VerticalAlign"),
+            model::EnumerationValue{"VerticalAlign", std::move(vertical)});
+        button.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::move(tooltip));
+        document.add_control(std::move(button));
+    };
+    add_button(2, "First", "Left", "Top", "Проверка Ω\nВторая строка");
+    add_button(7, "Center", "Center", "Center", "");
+    add_button(12, "Last", "Right", "Bottom", "Подсказка");
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "Button alignment and ToolTip properties must encode");
+    const auto& records = encoded.value().items[1].items[2].items[2].items;
+    const std::int32_t horizontal[] = {0, 1, 2};
+    const std::int32_t vertical[] = {0, 1, 2};
+    for (std::size_t index = 0; index < 3; ++index) {
+        const auto& properties = records[index + 1].items[2].items[1];
+        expect(properties.items[3].atom == std::to_string(horizontal[index]) &&
+                   properties.items[4].atom == std::to_string(vertical[index]),
+            "Button alignment enums must use their observed three-value storage order");
+    }
+    expect(records[1].items[2].items[1].items[0].items[12].is_list,
+        "Button.ToolTip must occupy its localized base slot");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), "Button alignment and ToolTip properties must decode");
+    const auto* first = decoded.value().find_control(model::ObjectId{2});
+    const auto* middle = decoded.value().find_control(model::ObjectId{7});
+    const auto* last = decoded.value().find_control(model::ObjectId{12});
+    expect(first && middle && last, "all Button controls must survive property decoding");
+    expect(!middle->properties().find(model::PropertyId::from_name("HorizontalAlign")) &&
+               !middle->properties().find(model::PropertyId::from_name("VerticalAlign")) &&
+               !middle->properties().find(model::PropertyId::from_name("ToolTip")),
+        "center alignment and empty ToolTip must remain model defaults");
+    const auto* first_tooltip = first->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(first_tooltip && std::get<std::string>(first_tooltip->value) == "Проверка Ω\nВторая строка",
+        "Unicode multiline Button.ToolTip must survive");
+    const auto* last_tooltip = last->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(last_tooltip && std::get<std::string>(last_tooltip->value) == "Подсказка",
+        "Button.ToolTip must remain associated with its owner");
+    expect(std::get<model::EnumerationValue>(first->properties().find(
+               model::PropertyId::from_name("HorizontalAlign"))->value) ==
+               model::EnumerationValue{"HorizontalAlign", "Left"} &&
+               std::get<model::EnumerationValue>(first->properties().find(
+                   model::PropertyId::from_name("VerticalAlign"))->value) ==
+               model::EnumerationValue{"VerticalAlign", "Top"} &&
+               std::get<model::EnumerationValue>(last->properties().find(
+                   model::PropertyId::from_name("HorizontalAlign"))->value) ==
+               model::EnumerationValue{"HorizontalAlign", "Right"} &&
+               std::get<model::EnumerationValue>(last->properties().find(
+                   model::PropertyId::from_name("VerticalAlign"))->value) ==
+               model::EnumerationValue{"VerticalAlign", "Bottom"},
+        "non-default Button alignment enum names must round-trip");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "Button alignment and ToolTip storage must round-trip without drift");
+
+    model::Form invalid_form;
+    invalid_form.id = model::ObjectId{1};
+    invalid_form.name = "Invalid";
+    invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument wrong_type(std::move(invalid_form));
+    model::ControlNode wrong_button{model::ObjectId{2}, "WrongType", model::ButtonPayload{}};
+    wrong_button.properties().set_explicit(model::PropertyId::from_name("HorizontalAlign"),
+        model::EnumerationValue{"VerticalAlign", "Top"});
+    wrong_type.add_control(std::move(wrong_button));
+    expect_failure(form_stream::encode_document(wrong_type), "OOF1122", "$/Button/HorizontalAlign",
+        "foreign Button alignment enum type must be rejected");
+
+    auto invalid_member_form = model::Form{};
+    invalid_member_form.id = model::ObjectId{1};
+    invalid_member_form.name = "InvalidMember";
+    invalid_member_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument invalid_member(std::move(invalid_member_form));
+    model::ControlNode invalid_member_button{model::ObjectId{2}, "InvalidMember", model::ButtonPayload{}};
+    invalid_member_button.properties().set_explicit(model::PropertyId::from_name("VerticalAlign"),
+        model::EnumerationValue{"VerticalAlign", "Middle"});
+    invalid_member.add_control(std::move(invalid_member_button));
+    expect_failure(form_stream::encode_document(invalid_member), "OOF1122", "$/Button/VerticalAlign",
+        "unknown Button alignment enum member must be rejected");
+
+    auto invalid_storage = encoded.value();
+    invalid_storage.items[1].items[2].items[2].items[1].items[2].items[1].items[3] =
+        list_stream::ListValue::raw_atom("3");
+    expect_failure(form_stream::decode_document(invalid_storage, "Main"), "OOF1114",
+        "$/1/2/2/1/2/1/3", "unknown Button alignment storage values must be rejected");
+
+    const auto encode_tooltip = [](std::string text) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "LineEndings";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument tooltip_document(std::move(form));
+        model::ControlNode button{model::ObjectId{2}, "Tip", model::ButtonPayload{}};
+        button.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::move(text));
+        tooltip_document.add_control(std::move(button));
+        return form_stream::encode_document(tooltip_document);
+    };
+    const auto lf = encode_tooltip("first\nsecond");
+    const auto crlf = encode_tooltip("first\r\nsecond");
+    expect(lf.ok() && crlf.ok() && list_stream::dump_compact(lf.value()) ==
+               list_stream::dump_compact(crlf.value()),
+        "LF and CRLF ToolTip text must produce identical localized storage");
+
+    const std::string mixed_model_text = "first\r\nsecond\nthird\rlast";
+    const auto mixed_storage = encode_tooltip(mixed_model_text);
+    expect(mixed_storage.ok(), "mixed ToolTip line endings must encode");
+    const auto mixed_decoded = form_stream::decode_document(mixed_storage.value(), "LineEndings");
+    expect(mixed_decoded.ok(), "mixed ToolTip line endings must decode");
+    const auto* mixed_control = mixed_decoded.value().find_control(model::ObjectId{2});
+    expect(mixed_control != nullptr, "mixed ToolTip control must survive decoding");
+    const auto* mixed_tooltip = mixed_control->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(mixed_tooltip && std::get<std::string>(mixed_tooltip->value) ==
+               "first\nsecond\nthird\rlast",
+        "decode must normalize CRLF to LF while preserving lone CR and the final line");
+    const auto normalized_storage = encode_tooltip("first\nsecond\nthird\rlast");
+    expect(normalized_storage.ok() && list_stream::dump_compact(normalized_storage.value()) ==
+               list_stream::dump_compact(mixed_storage.value()),
+        "normalizing a mixed-ending ToolTip through the model must preserve its storage record");
+}
+
 void test_button_then_label_decoration_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -2383,6 +2522,7 @@ int main() {
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_button_multiline_round_trip_and_validation();
+        test_button_alignments_and_tooltip_round_trip();
         test_button_then_label_decoration_round_trip();
         test_fresh_checkbox_stream_decode();
         test_button_label_input_field_round_trip();

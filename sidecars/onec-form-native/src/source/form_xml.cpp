@@ -927,6 +927,7 @@ bool equals_descriptor_default(
                    std::get<std::string>(value) == canonical;
         case mm::DefaultKind::enumeration:
             return std::holds_alternative<model::EnumerationValue>(value) &&
+                   std::get<model::EnumerationValue>(value).type_name == descriptor.api_name &&
                    std::get<model::EnumerationValue>(value).member == canonical;
     }
     return false;

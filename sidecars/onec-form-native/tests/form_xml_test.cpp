@@ -641,6 +641,26 @@ void test_label_horizontal_align_xml_roundtrip() {
         "canonical LabelDecoration alignment XML must reparse");
 }
 
+void test_button_foreign_enum_default_is_retained() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+  <Button id="2" name="ForeignDefault"><Position/><HorizontalAlign type="VerticalAlign" member="Center"/></Button>
+</ChildItems></Form>
+)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "foreign typed Button default must remain representable for validation");
+    const auto* button = parsed.value().find_control(model::ObjectId{2});
+    const auto* alignment = button == nullptr ? nullptr : button->properties().find(
+        model::PropertyId::from_name("HorizontalAlign"));
+    expect(alignment && std::get<model::EnumerationValue>(alignment->value) ==
+               model::EnumerationValue{"VerticalAlign", "Center"},
+        "a matching member with the wrong enum type must remain explicit");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find(
+               "<HorizontalAlign type=\"VerticalAlign\" member=\"Center\"/>") != std::string::npos,
+        "XML serialization must not silently normalize a foreign typed enum default");
+}
+
 void test_event_owner_invariant() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -678,6 +698,7 @@ int main() {
         test_xml_character_normalization_is_lossless();
         test_strict_rejections();
         test_event_owner_invariant();
+        test_button_foreign_enum_default_is_retained();
         test_label_horizontal_align_xml_roundtrip();
     } catch (const std::exception& error) {
         std::cerr << "form XML tests: FAIL: " << error.what() << '\n';

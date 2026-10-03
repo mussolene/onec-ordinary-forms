@@ -8,6 +8,7 @@
 
 #include "oof/model/metamodel.hpp"
 #include "oof/model/ordinary_form.hpp"
+#include "oof/source/form_xml.hpp"
 
 namespace {
 
@@ -89,6 +90,57 @@ void test_descriptors() {
     expect(
         find_by_russian_name(u8"РамкаГруппы")->kind == ControlKind::usual_group,
         "Russian-name lookup must resolve UsualGroup");
+
+    const auto* horizontal = find_property(ControlKind::button, "HorizontalAlign");
+    const auto* vertical = find_property(ControlKind::button, "VerticalAlign");
+    const auto* tool_tip = find_property(ControlKind::button, "ToolTip");
+    expect(horizontal && horizontal->storage_codec == StorageCodec::control_info &&
+               horizontal->default_value.kind == DefaultKind::enumeration &&
+               horizontal->default_value.canonical == "Center",
+        "Button HorizontalAlign descriptor must declare its encoded Center default");
+    expect(vertical && vertical->storage_codec == StorageCodec::control_info &&
+               vertical->default_value.kind == DefaultKind::enumeration &&
+               vertical->default_value.canonical == "Center",
+        "Button VerticalAlign descriptor must declare its encoded Center default");
+    expect(tool_tip && tool_tip->storage_codec == StorageCodec::control_base &&
+               tool_tip->default_value.kind == DefaultKind::string &&
+               tool_tip->default_value.canonical.empty(),
+        "Button ToolTip descriptor must declare its empty localized default");
+}
+
+void test_button_alignment_xml_defaults() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+  <Button id="2" name="Center"><Position/><VerticalAlign type="VerticalAlign" member="Center"/><HorizontalAlign type="HorizontalAlign" member="Center"/><ToolTip></ToolTip></Button>
+  <Button id="3" name="Right"><Position/><VerticalAlign type="VerticalAlign" member="Bottom"/><HorizontalAlign type="HorizontalAlign" member="Right"/><ToolTip>hint</ToolTip></Button>
+</ChildItems></Form>
+)XML";
+    const auto parsed = oof::source::parse_form_xml(xml);
+    if (!parsed) {
+        throw std::runtime_error("Button alignment XML failed at " + parsed.diagnostics().front().path +
+            ": " + parsed.diagnostics().front().message);
+    }
+    const auto* center = parsed.value().find_control(ObjectId{2});
+    const auto* right = parsed.value().find_control(ObjectId{3});
+    expect(center && !center->properties().find(PropertyId::from_name("HorizontalAlign")) &&
+               !center->properties().find(PropertyId::from_name("VerticalAlign")) &&
+               !center->properties().find(PropertyId::from_name("ToolTip")),
+        "XML Center and empty ToolTip values must normalize to descriptor defaults");
+    expect(right && std::get<EnumerationValue>(right->properties().find(
+               PropertyId::from_name("HorizontalAlign"))->value) ==
+               EnumerationValue{"HorizontalAlign", "Right"} &&
+               std::get<EnumerationValue>(right->properties().find(
+                   PropertyId::from_name("VerticalAlign"))->value) ==
+               EnumerationValue{"VerticalAlign", "Bottom"},
+        "non-default Button alignments must remain explicit in the object model");
+    const auto serialized = oof::source::serialize_form_xml(parsed.value());
+    expect(serialized.ok(), "Button alignment default document must serialize");
+    expect(serialized.value().find("member=\"Center\"") == std::string::npos &&
+               serialized.value().find("member=\"Right\"") != std::string::npos &&
+               serialized.value().find("member=\"Bottom\"") != std::string::npos &&
+               serialized.value().find("<ToolTip>hint</ToolTip>") != std::string::npos &&
+               serialized.value().find("<ToolTip></ToolTip>") == std::string::npos,
+        "XML writer must omit Center and empty ToolTip defaults but retain explicit values");
 }
 
 void test_help_metamodel() {
@@ -690,6 +742,7 @@ void test_page_position_invariants() {
 int main() {
     try {
         test_descriptors();
+        test_button_alignment_xml_defaults();
         test_help_metamodel();
         test_variant_coverage();
         test_property_default_semantics();

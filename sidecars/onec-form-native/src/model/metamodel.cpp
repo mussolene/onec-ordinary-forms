@@ -315,6 +315,24 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::boolean,
         "false");
+    classify_property(
+        button,
+        "HorizontalAlign",
+        StorageCodec::control_info,
+        DefaultKind::enumeration,
+        "Center");
+    classify_property(
+        button,
+        "VerticalAlign",
+        StorageCodec::control_info,
+        DefaultKind::enumeration,
+        "Center");
+    classify_property(
+        button,
+        "ToolTip",
+        StorageCodec::control_base,
+        DefaultKind::string,
+        "");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -321,10 +322,40 @@ void require_exact(
     }
 }
 
+std::string normalize_model_line_endings(std::string_view text) {
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        if (text[index] == '\r' && index + 1 < text.size() && text[index + 1] == '\n') {
+            normalized.push_back('\n');
+            ++index;
+        } else {
+            normalized.push_back(text[index]);
+        }
+    }
+    return normalized;
+}
+
+std::string normalize_storage_line_endings(std::string_view text) {
+    std::string normalized;
+    normalized.reserve(text.size());
+    for (std::size_t index = 0; index < text.size(); ++index) {
+        if (text[index] == '\r' && index + 1 < text.size() && text[index + 1] == '\n') {
+            normalized.append("\r\n");
+            ++index;
+        } else if (text[index] == '\n') {
+            normalized.append("\r\n");
+        } else {
+            normalized.push_back(text[index]);
+        }
+    }
+    return normalized;
+}
+
 LV encoded_localized(std::string_view text) {
     model::LocalizedStringValue value;
     if (!text.empty()) {
-        value.items.push_back({"ru", std::string(text)});
+        value.items.push_back({"ru", normalize_storage_line_endings(text)});
     }
     return list_stream::parse(value_codec::encode_localized_string(value));
 }
@@ -351,7 +382,7 @@ std::string decoded_single_language_text(const LV& value, std::string_view path)
             describe(value),
             "The product slice cannot normalize a multilingual storage title without loss");
     }
-    return decoded.items.empty() ? std::string{} : decoded.items.front().text;
+    return decoded.items.empty() ? std::string{} : normalize_model_line_endings(decoded.items.front().text);
 }
 
 LV canonical_style_record(std::uint32_t version) {
@@ -540,23 +571,30 @@ LV canonical_panel_payload(const std::vector<model::Page>& pages, model::Control
 }
 
 
-LV canonical_button_base(bool enabled) {
+LV canonical_button_base(bool enabled, std::string_view tool_tip = {}) {
     auto value = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
         "{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
     value.items[1] = raw(enabled ? "1" : "0");
+    value.items[12] = encoded_localized(tool_tip);
     return value;
 }
 
-LV canonical_button_properties(bool enabled, std::string_view caption, bool multi_line) {
+LV canonical_button_properties(
+    bool enabled,
+    std::string_view caption,
+    std::int32_t horizontal_align,
+    std::int32_t vertical_align,
+    bool multi_line,
+    std::string_view tool_tip) {
     return list({
-        canonical_button_base(enabled),
+        canonical_button_base(enabled, tool_tip),
         raw("14"),
         encoded_localized(caption),
-        raw("1"),
-        raw("1"),
+        raw(std::to_string(horizontal_align)),
+        raw(std::to_string(vertical_align)),
         raw("0"),
         raw("0"),
         raw("0"),
@@ -1288,6 +1326,8 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     const std::string base_path = child_path(properties_path, 0);
     require_arity(base, 21, base_path);
     const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        base.items[12], child_path(base_path, 12));
     const std::string observed_state = raw_atom(base.items[17], child_path(base_path, 17));
     if (observed_state != "1" && observed_state != "2") {
         fail(
@@ -1303,19 +1343,31 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     normalized_base.items[17] = raw("2");
     require_exact(
         normalized_base,
-        canonical_button_base(enabled),
+        canonical_button_base(enabled, tool_tip),
         base_path,
         "Button base record contains an unsupported property variation");
     const std::string caption = decoded_single_language_text(
         properties.items[2],
         child_path(properties_path, 2));
+    const auto horizontal_align = integer_atom<std::int32_t>(
+        properties.items[3], child_path(properties_path, 3));
+    if (horizontal_align < 0 || horizontal_align > 2) {
+        fail("OOF1114", child_path(properties_path, 3), "HorizontalAlign storage value 0, 1, or 2",
+            std::to_string(horizontal_align), "Button.HorizontalAlign storage value is unsupported");
+    }
+    const auto vertical_align = integer_atom<std::int32_t>(
+        properties.items[4], child_path(properties_path, 4));
+    if (vertical_align < 0 || vertical_align > 2) {
+        fail("OOF1114", child_path(properties_path, 4), "VerticalAlign storage value 0, 1, or 2",
+            std::to_string(vertical_align), "Button.VerticalAlign storage value is unsupported");
+    }
     const bool multi_line = bool_atom(
         properties.items[10], child_path(properties_path, 10));
     auto normalized_properties = properties;
     normalized_properties.items[0] = std::move(normalized_base);
     require_exact(
         normalized_properties,
-        canonical_button_properties(enabled, caption, multi_line),
+        canonical_button_properties(enabled, caption, horizontal_align, vertical_align, multi_line, tool_tip),
         properties_path,
         "Button payload contains an unsupported property variation");
 
@@ -1349,6 +1401,21 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     };
     if (!caption.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    }
+    if (!tool_tip.empty()) {
+        control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    }
+    if (horizontal_align != 1) {
+        static constexpr std::string_view members[] = {"Left", "Center", "Right"};
+        control.properties().set_explicit(
+            model::PropertyId::from_name("HorizontalAlign"),
+            model::EnumerationValue{"HorizontalAlign", std::string(members[horizontal_align])});
+    }
+    if (vertical_align != 1) {
+        static constexpr std::string_view members[] = {"Top", "Center", "Bottom"};
+        control.properties().set_explicit(
+            model::PropertyId::from_name("VerticalAlign"),
+            model::EnumerationValue{"VerticalAlign", std::string(members[vertical_align])});
     }
     if (multi_line) {
         control.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
@@ -1664,9 +1731,40 @@ LV encode_button(
         control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$", "plain Button", control.name, "Button uses a storage concept outside the executable slice");
     }
-    require_allowed_properties(control.properties(), {"Caption", "Enabled", "MultiLine"}, "$/Button");
+    require_allowed_properties(control.properties(),
+        {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto alignment_value = [](const model::PropertySet& values, std::string_view name,
+                                    std::string_view expected_type,
+                                    std::initializer_list<std::string_view> members) {
+        const auto* entry = values.find(model::PropertyId::from_name(name));
+        if (entry == nullptr) return std::int32_t{1};
+        if (!std::holds_alternative<model::EnumerationValue>(entry->value)) {
+            fail("OOF1122", std::string("$/Button/") + std::string(name),
+                "EnumerationValue of " + std::string(expected_type), "non-enumeration",
+                "Button alignment has the wrong value type");
+        }
+        const auto& value = std::get<model::EnumerationValue>(entry->value);
+        if (value.type_name != expected_type) {
+            fail("OOF1122", std::string("$/Button/") + std::string(name),
+                std::string(expected_type) + " enumeration", value.type_name + "." + value.member,
+                "Button alignment enumeration type is unsupported");
+        }
+        std::int32_t index = 0;
+        for (const auto member : members) {
+            if (value.member == member) return index;
+            ++index;
+        }
+        fail("OOF1122", std::string("$/Button/") + std::string(name),
+            std::string(expected_type) + " supported member", value.member,
+            "Button alignment member is unsupported");
+    };
+    const auto horizontal_align = alignment_value(
+        control.properties(), "HorizontalAlign", "HorizontalAlign", {"Left", "Center", "Right"});
+    const auto vertical_align = alignment_value(
+        control.properties(), "VerticalAlign", "VerticalAlign", {"Top", "Center", "Bottom"});
     const bool multi_line = explicit_bool(control.properties(), "MultiLine", false);
     const auto handler = button_click_handler(document, control);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
@@ -1675,7 +1773,7 @@ LV encode_button(
         raw(std::to_string(control.id.value())),
         list({
             raw("1"),
-            canonical_button_properties(enabled, caption, multi_line),
+            canonical_button_properties(enabled, caption, horizontal_align, vertical_align, multi_line, tool_tip),
             canonical_event_table(handler),
         }),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
