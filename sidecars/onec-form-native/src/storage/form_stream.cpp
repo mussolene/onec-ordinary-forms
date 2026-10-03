@@ -526,6 +526,7 @@ LV canonical_input_field_info(
 }
 
 LV canonical_input_field_geometry(
+    std::uint64_t control_id,
     std::int32_t left,
     std::int32_t top,
     std::int32_t width,
@@ -542,6 +543,10 @@ LV canonical_input_field_geometry(
         "{0,{2,4,2,70},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},"
         "{0,{2,-1,6,0},{2,-1,6,0}},1,{0,4,1},0,1,{0,4,3},"
         "0,0,0,0,2,3,0,0}");
+    value.items[7].items[1].items[1] = raw(std::to_string(control_id));
+    value.items[9].items[1].items[1] = raw(std::to_string(control_id));
+    value.items[13].items[1] = raw(std::to_string(control_id));
+    value.items[16].items[1] = raw(std::to_string(control_id));
     value.items[1] = raw(std::to_string(left));
     value.items[2] = raw(std::to_string(top));
     value.items[3] = raw(std::to_string(left + width));
@@ -550,6 +555,10 @@ LV canonical_input_field_geometry(
     value.items[7].items[1].items[3] = raw(std::to_string(height));
     value.items[9].items[1].items[3] = raw(std::to_string(width));
     return value;
+}
+
+bool is_single_string_type_domain(const model::TypeDomainPatternValue& value) {
+    return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::string;
 }
 
 LV canonical_event_table(std::optional<std::string_view> handler) {
@@ -883,8 +892,8 @@ model::ControlNode decode_input_field(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
     const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
-    if (raw_id != 4) {
-        fail("OOF1122", child_path(path, 1), "InputField ID 4 for the observed geometry profile", std::to_string(raw_id), "InputField ID is outside the supported profile");
+    if (raw_id == 0) {
+        fail("OOF1122", child_path(path, 1), "positive InputField ID", "0", "InputField ID is invalid");
     }
 
     const auto& info = record.items[2];
@@ -892,16 +901,11 @@ model::ControlNode decode_input_field(
     require_arity(info, 10, info_path);
     require_raw_constant(info.items[0], "9", child_path(info_path, 0));
     const auto control_type = type_domain(info.items[1], child_path(info_path, 1));
-    model::TypeDomainPatternValue expected_type;
-    model::TypeDomainEntry string_entry;
-    string_entry.term = model::TypeDomainTerm::string;
-    string_entry.string = model::LengthQualifiers{10, true};
-    expected_type.entries.push_back(string_entry);
-    if (control_type != linked_attribute.type || control_type != expected_type) {
+    if (!is_single_string_type_domain(control_type) || control_type != linked_attribute.type) {
         fail(
             "OOF1122",
             child_path(info_path, 1),
-            "InputField TypeDomainPattern matching linked String(10) Attribute",
+            "single-string InputField TypeDomainPattern matching linked Attribute",
             describe(info.items[1]),
             "InputField type must match its linked attribute");
     }
@@ -940,7 +944,7 @@ model::ControlNode decode_input_field(
     }
     require_exact(
         geometry,
-        canonical_input_field_geometry(left, top, static_cast<std::int32_t>(width64), static_cast<std::int32_t>(height64), visible),
+        canonical_input_field_geometry(raw_id, left, top, static_cast<std::int32_t>(width64), static_cast<std::int32_t>(height64), visible),
         geometry_path,
         "InputField Position contains an unsupported storage leaf");
 
@@ -1143,8 +1147,8 @@ LV encode_input_field(
     const model::ControlNode& control,
     std::size_t sibling_index) {
     if (sibling_index != 2 || control.kind() != model::ControlKind::input_field ||
-        control.id.value() != 4) {
-        fail("OOF1122", "$/Form/ChildItems", "InputField ID 4 at sibling index 2", control.name, "InputField is outside the supported Button-Label-InputField profile");
+        control.id.value() == 0) {
+        fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at sibling index 2", control.name, "InputField is outside the supported Button-Label-InputField profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
@@ -1158,13 +1162,8 @@ LV encode_input_field(
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
     }
-    model::TypeDomainPatternValue supported_type;
-    model::TypeDomainEntry string_entry;
-    string_entry.term = model::TypeDomainTerm::string;
-    string_entry.string = model::LengthQualifiers{10, true};
-    supported_type.entries.push_back(string_entry);
-    if (attribute->type != supported_type) {
-        fail("OOF1122", "$/InputField/DataPath", "linked String(10) Attribute", attribute->name, "InputField type is outside the supported profile");
+    if (!is_single_string_type_domain(attribute->type)) {
+        fail("OOF1122", "$/InputField/DataPath", "linked single-string Attribute", attribute->name, "InputField type is outside the supported profile");
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
@@ -1177,7 +1176,7 @@ LV encode_input_field(
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         canonical_input_field_info(attribute->type, enabled),
-        canonical_input_field_geometry(left, top, width, height, visible),
+        canonical_input_field_geometry(control.id.value(), left, top, width, height, visible),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });

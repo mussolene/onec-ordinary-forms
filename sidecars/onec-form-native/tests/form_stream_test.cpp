@@ -528,7 +528,7 @@ void test_button_label_input_field_round_trip() {
     form.children = {
         model::ControlRef{model::ObjectId{2}},
         model::ControlRef{model::ObjectId{3}},
-        model::ControlRef{model::ObjectId{4}},
+        model::ControlRef{model::ObjectId{9}},
     };
     model::OrdinaryFormDocument document(std::move(form));
     model::TypeDomainPatternValue string10;
@@ -539,7 +539,7 @@ void test_button_label_input_field_round_trip() {
     document.add_attribute(model::Attribute{model::ObjectId{1}, "SyntheticValue", string10});
     document.add_control(model::ControlNode{model::ObjectId{2}, "Run", model::ButtonPayload{}});
     document.add_control(model::ControlNode{model::ObjectId{3}, "Label", model::LabelDecorationPayload{}});
-    model::ControlNode input{model::ObjectId{4}, "InputSynthetic", model::InputFieldPayload{}};
+    model::ControlNode input{model::ObjectId{9}, "InputSynthetic", model::InputFieldPayload{}};
     input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
     input.position.left.set(231);
     input.position.top.set(135);
@@ -553,7 +553,7 @@ void test_button_label_input_field_round_trip() {
         encoded.diagnostics().front().code + ":" + encoded.diagnostics().front().path + ":" + encoded.diagnostics().front().message);
     const auto decoded = form_stream::decode_document(encoded.value(), "Main");
     expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
-    const auto* decoded_input = decoded.value().find_control(model::ObjectId{4});
+    const auto* decoded_input = decoded.value().find_control(model::ObjectId{9});
     expect(decoded_input && decoded_input->kind() == model::ControlKind::input_field,
         "InputField identity must survive round-trip");
     expect(decoded_input->name == "InputSynthetic" && decoded_input->data_path &&
@@ -570,8 +570,82 @@ void test_button_label_input_field_round_trip() {
     const auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok(), "decoded InputField document must re-encode");
     const auto redecode = form_stream::decode_document(reencoded.value(), "Main");
-    expect(redecode.ok() && redecode.value().find_control(model::ObjectId{4})->data_path->attribute.id() == model::ObjectId{1},
+    expect(redecode.ok() && redecode.value().find_control(model::ObjectId{9})->data_path->attribute.id() == model::ObjectId{1},
         "InputField DataPath must survive a second decode");
+
+    const auto make_input_document = [](std::uint32_t length, bool variable, bool non_string = false, bool mixed = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "Main";
+        form.children = {
+            model::ControlRef{model::ObjectId{2}},
+            model::ControlRef{model::ObjectId{3}},
+            model::ControlRef{model::ObjectId{9}},
+        };
+        model::OrdinaryFormDocument input_document(std::move(form));
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry entry;
+        entry.term = non_string ? model::TypeDomainTerm::numeric : model::TypeDomainTerm::string;
+        entry.string = model::LengthQualifiers{length, variable};
+        type.entries.push_back(entry);
+        if (mixed) {
+            model::TypeDomainEntry numeric_entry;
+            numeric_entry.term = model::TypeDomainTerm::numeric;
+            type.entries.push_back(numeric_entry);
+        }
+        input_document.add_attribute(model::Attribute{model::ObjectId{1}, "SyntheticValue", type});
+        input_document.add_control(model::ControlNode{model::ObjectId{2}, "Run", model::ButtonPayload{}});
+        input_document.add_control(model::ControlNode{model::ObjectId{3}, "Label", model::LabelDecorationPayload{}});
+        model::ControlNode input_field{model::ObjectId{9}, "InputSynthetic", model::InputFieldPayload{}};
+        input_field.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+        input_document.add_control(std::move(input_field));
+        return input_document;
+    };
+
+    for (const auto length : {0U, 20U, 64U}) {
+        for (const bool variable : {false, true}) {
+            const auto length_encoded = form_stream::encode_document(make_input_document(length, variable));
+            expect(length_encoded.ok(), "single-string InputField qualifiers must encode");
+            const auto length_decoded = form_stream::decode_document(length_encoded.value(), "Main");
+            expect(length_decoded.ok(), "single-string InputField qualifiers must decode");
+            const auto* round_trip_attribute = length_decoded.value().find_attribute(model::ObjectId{1});
+            expect(round_trip_attribute->type.entries.front().string.length == length,
+                "InputField string length must survive round-trip");
+            expect(round_trip_attribute->type.entries.front().string.variable == (length == 0 ? true : variable),
+                "InputField variable length must survive canonical round-trip");
+            expect(length_decoded.value().find_control(model::ObjectId{9})->data_path->attribute.id() == model::ObjectId{1},
+                "InputField DataPath must survive string qualifier round-trip");
+        }
+    }
+
+    auto mismatch = encoded.value();
+    auto& mismatch_info = mismatch.items[1].items[2].items[2].items[3].items[2];
+    mismatch_info.items[1] = list_stream::parse("{\"Pattern\",{\"S\",20,1}}");
+    expect_failure(
+        form_stream::decode_document(mismatch, "Main"),
+        "OOF1122",
+        "$/1/2/2/3/2/1",
+        "InputField type must match its linked Attribute");
+
+    auto wrong_self_reference = encoded.value();
+    auto& input_geometry = wrong_self_reference.items[1].items[2].items[2].items[3].items[3];
+    input_geometry.items[13].items[1] = list_stream::ListValue::raw_atom("10");
+    expect_failure(
+        form_stream::decode_document(wrong_self_reference, "Main"),
+        "OOF1114",
+        "$/1/2/2/3/3",
+        "InputField geometry self references must match the named control ID");
+
+    expect_failure(
+        form_stream::encode_document(make_input_document(10, true, true)),
+        "OOF1122",
+        "$/InputField/DataPath",
+        "non-string InputField attribute types must remain unsupported");
+    expect_failure(
+        form_stream::encode_document(make_input_document(10, true, false, true)),
+        "OOF1122",
+        "$/InputField/DataPath",
+        "mixed InputField attribute types must remain unsupported");
 
     auto unsupported_leaf = encoded.value();
     auto& input_record = unsupported_leaf.items[1].items[2].items[2].items[3];
