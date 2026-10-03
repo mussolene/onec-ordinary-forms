@@ -1353,7 +1353,11 @@ private:
             if (node_name(child) == "Title") {
                 model::LocalizedStringValue title = parse_localized_string(child);
                 if (!title.items.empty()) page.title.set(std::move(title));
-            } else {
+            } else if (node_name(child) == "Visible") {
+                if (!parse_boolean(node_text(child), child, "Visible", id)) page.visible.set(false);
+            } else if (node_name(child) == "Enabled") {
+                if (!parse_boolean(node_text(child), child, "Enabled", id)) page.enabled.set(false);
+            } else if (node_name(child) == "ChildItems") {
                 page.children = parse_child_items(child);
             }
         }
@@ -2124,6 +2128,8 @@ private:
         if (page.title.is_explicit() && !page.title.value().items.empty()) {
             write_localized("Title", page.title.value(), id);
         }
+        if (!page.visible.value()) writer_.text("Visible", "false");
+        if (!page.enabled.value()) writer_.text("Enabled", "false");
         write_child_items(page.children);
         writer_.close("Page");
     }

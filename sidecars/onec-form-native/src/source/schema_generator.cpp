@@ -640,6 +640,8 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "  <xs:complexType name=\"PageType\">\n"
         "    <xs:sequence>\n"
         "      <xs:element name=\"Title\" type=\"LocalizedStringValueType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"Visible\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"Enabled\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"ChildItems\" type=\"ControlChildItemsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "    </xs:sequence>\n"
         "    <xs:attribute name=\"name\" type=\"xs:string\" use=\"required\"/>\n"

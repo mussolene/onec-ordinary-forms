@@ -624,6 +624,8 @@ struct Page {
     ObjectId id{};
     std::string name;
     Property<LocalizedStringValue> title{LocalizedStringValue{}};
+    Property<bool> visible{true};
+    Property<bool> enabled{true};
     std::vector<ChildItemRef> children;
 };
 

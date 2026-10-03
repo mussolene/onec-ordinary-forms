@@ -95,6 +95,7 @@ void test_root_page_tree_xml_roundtrip() {
   <ChildItems>
     <Page name="RootPage">
       <Title><Item language="en">Root tab</Item></Title>
+      <Visible>false</Visible>
       <ChildItems>
         <Button id="3" name="PageButton"><Position/><Caption>Run</Caption></Button>
       </ChildItems>
@@ -104,6 +105,7 @@ void test_root_page_tree_xml_roundtrip() {
       <ChildItems>
         <Page name="PanelPage">
           <Title><Item language="en">Panel tab</Item></Title>
+          <Enabled>false</Enabled>
           <ChildItems>
             <Button id="6" name="PanelPageButton"><Position/><Caption>Open</Caption></Button>
           </ChildItems>
@@ -127,6 +129,7 @@ void test_root_page_tree_xml_roundtrip() {
         "root Page and control order must be retained");
     const auto* page = parsed.value().find_page(model::ObjectId{1});
     expect(page != nullptr && page->title.value().items.front().text == "Root tab" &&
+               !page->visible.value() && page->enabled.value() &&
                page->children.size() == 1 &&
                std::get<model::ControlRef>(page->children.front()).id() == model::ObjectId{3},
         "root Page title and control child must be retained");
@@ -137,6 +140,8 @@ void test_root_page_tree_xml_roundtrip() {
                std::get<model::PageRef>(panel->children[0]).id() == model::ObjectId{2} &&
                std::get<model::ControlRef>(panel->children[1]).id() == model::ObjectId{7},
         "Panel Page and control order must be retained");
+    expect(panel_page != nullptr && panel_page->visible.value() && !panel_page->enabled.value(),
+        "Page visibility and enabled state must be independent");
 
     auto serialized = source::serialize_form_xml(parsed.value());
     expect(serialized.ok(), "root Page tree must serialize to Form.xml");
@@ -157,6 +162,8 @@ void test_root_page_tree_xml_roundtrip() {
                reparsed_panel != nullptr && reparsed_panel->children == panel->children &&
                reparsed_panel_page != nullptr &&
                panel_page != nullptr &&
+               !reparsed.value().find_page(model::ObjectId{1})->visible.value() &&
+               !reparsed_panel_page->enabled.value() &&
                reparsed_panel_page->children == panel_page->children,
         "Form, Page, and Panel references must survive XML round-trip");
 }
@@ -179,6 +186,30 @@ void test_page_internal_ids_do_not_change_xml() {
 
     expect(serialize_page(2) == serialize_page(92),
            "internal Page IDs must not affect public XML");
+}
+
+void test_page_boolean_defaults_and_rejections() {
+    const auto parse_page_properties = [](std::string_view properties) {
+        return source::parse_form_xml(
+            "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+            "<Page name=\"Settings\">" + std::string(properties) +
+            "</Page></ChildItems></Form>");
+    };
+    auto defaults = parse_page_properties("");
+    auto explicit_defaults = parse_page_properties("<Visible>true</Visible><Enabled>1</Enabled>");
+    expect(defaults.ok() && explicit_defaults.ok(), "Page true defaults must parse");
+    const auto* page = explicit_defaults.value().find_page(model::ObjectId{1});
+    expect(page != nullptr && page->visible.value() && page->enabled.value() &&
+               !page->visible.is_explicit() && !page->enabled.is_explicit(),
+        "Page true defaults must normalize to implicit values");
+    auto default_xml = source::serialize_form_xml(defaults.value());
+    auto normalized_xml = source::serialize_form_xml(explicit_defaults.value());
+    expect(default_xml.ok() && normalized_xml.ok() && default_xml.value() == normalized_xml.value(),
+        "Page default values must not produce Git differences");
+    expect_code(parse_page_properties("<Visible>yes</Visible>"), "OOF2002",
+        "invalid Page visibility must be rejected by XSD");
+    expect_code(parse_page_properties("<Enabled>false</Enabled><Enabled>true</Enabled>"), "OOF2002",
+        "duplicate Page enabled state must be rejected by XSD");
 }
 
 void test_all_control_variants() {
@@ -561,6 +592,7 @@ int main() {
         test_complete_document_roundtrip();
         test_root_page_tree_xml_roundtrip();
         test_page_internal_ids_do_not_change_xml();
+        test_page_boolean_defaults_and_rejections();
         test_all_control_variants();
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();

@@ -100,6 +100,12 @@ Control IDs remain platform IDs. A public `Page.id` is rejected rather than
 accepted through a compatibility branch. Current XML identity verification:
 `ev_8340649070f5401787475122583e122c`.
 
+Page `Visible` and `Enabled` are independent Boolean properties with default
+`true`. XML omits default values and writes `false` explicitly. The schema
+permits each property once, between `Title` and `ChildItems`. Verification:
+`ev_df9462158f2a4c42a53b31741b9c99fb`. These XML properties do not imply that
+the Panel/Page binary codec is implemented.
+
 The editable package is:
 
 ```text

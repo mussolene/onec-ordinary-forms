@@ -549,11 +549,15 @@ void test_document_package_types(
 
     const auto page_elements =
         direct_children(sequence_for_type(schema, "PageType"), "element");
-    expect(page_elements.size() == 2, "PageType surface drift");
+    expect(page_elements.size() == 4, "PageType surface drift");
     expect_element_shape(
         page_elements[0], "Title", "LocalizedStringValueType", "0", "1");
     expect_element_shape(
-        page_elements[1], "ChildItems", "ControlChildItemsType", "0", "1");
+        page_elements[1], "Visible", "xs:boolean", "0", "1");
+    expect_element_shape(
+        page_elements[2], "Enabled", "xs:boolean", "0", "1");
+    expect_element_shape(
+        page_elements[3], "ChildItems", "ControlChildItemsType", "0", "1");
     expect_type_attribute(schema, "PageType", "name", "xs:string", "required");
 }
 
