@@ -569,6 +569,7 @@ LV canonical_input_field_info(
     value.items[1] = encoded_type_domain(type, "$/InputField/TypeDomain");
     value.items[2].items[0].items[0].items[1] = raw(enabled ? "1" : "0");
     value.items[2].items[0].items[13] = raw(read_only ? "1" : "0");
+    value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().string.length));
     return value;
 }
 

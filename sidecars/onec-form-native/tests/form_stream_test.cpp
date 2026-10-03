@@ -806,10 +806,16 @@ void test_button_label_input_field_round_trip() {
         return input_document;
     };
 
-    for (const auto length : {0U, 20U, 64U}) {
+    for (const auto length : {0U, 17U, 20U, 37U, 64U}) {
         for (const bool variable : {false, true}) {
             const auto length_encoded = form_stream::encode_document(make_input_document(length, variable));
             expect(length_encoded.ok(), "single-string InputField qualifiers must encode");
+            const auto& input_payload = length_encoded.value().items[1].items[2].items[2]
+                .items[3].items[2].items[2].items[0];
+            expect(input_payload.items[14].atom == std::to_string(length),
+                "InputField String qualifier length must encode at payload slot 14");
+            expect(input_payload.items[13].atom == "0",
+                "InputField ReadOnly must remain unchanged at payload slot 13");
             const auto& default_read_only_payload = length_encoded.value().items[1].items[2].items[2].items[3]
                 .items[2].items[2].items[0].items[13];
             expect(default_read_only_payload.atom == "0", "default InputField ReadOnly must encode as false");
@@ -824,6 +830,16 @@ void test_button_label_input_field_round_trip() {
                 "InputField DataPath must survive string qualifier round-trip");
         }
     }
+
+    auto length_mismatch = form_stream::encode_document(make_input_document(17, true));
+    expect(length_mismatch.ok(), "InputField qualifier mismatch fixture must encode");
+    length_mismatch.value().items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0].items[14] = list_stream::ListValue::raw_atom("64");
+    expect_failure(
+        form_stream::decode_document(length_mismatch.value(), "Main"),
+        "OOF1114",
+        "$/1/2/2/3/2",
+        "InputField payload length that disagrees with its named String type must be rejected");
 
     const auto explicit_false = form_stream::encode_document(make_input_document(10, true, false, false, true));
     expect(explicit_false.ok(), "explicit InputField ReadOnly=false must be accepted");
