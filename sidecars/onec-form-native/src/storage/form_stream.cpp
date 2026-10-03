@@ -511,7 +511,8 @@ LV canonical_label_geometry(
 
 LV canonical_input_field_info(
     const model::TypeDomainPatternValue& type,
-    bool enabled) {
+    bool enabled,
+    bool read_only) {
     auto value = parse_constant(R"OOF(
 {9,{"Pattern",{"S",10,1}},{{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,0,0,0,0,0,1,0,0,10,0,0,4,0,{"U"},{"U"},"",0,1,0,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}},{1,{9a7643d2-19e9-45e2-8893-280bc9195a97,{4,{"U"},{"U"},0,"",0,0}}},{0},0,1,0,{1,0},0}
 )OOF");
@@ -522,6 +523,7 @@ LV canonical_input_field_info(
     }
     value.items[1] = encoded_type_domain(type, "$/InputField/TypeDomain");
     value.items[2].items[0].items[0].items[1] = raw(enabled ? "1" : "0");
+    value.items[2].items[0].items[13] = raw(read_only ? "1" : "0");
     return value;
 }
 
@@ -919,9 +921,10 @@ model::ControlNode decode_input_field(
     const auto base_info_path = child_path(payload_path, 0);
     require_arity(base_info, 21, base_info_path);
     const bool enabled = bool_atom(base_info.items[1], child_path(base_info_path, 1));
+    const bool read_only = bool_atom(payload.items[13], child_path(payload_path, 13));
     require_exact(
         info,
-        canonical_input_field_info(control_type, enabled),
+        canonical_input_field_info(control_type, enabled, read_only),
         info_path,
         "InputField uses an unsupported property, event, or storage variation");
 
@@ -965,6 +968,7 @@ model::ControlNode decode_input_field(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::InputFieldPayload{}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     if (left != 0) control.position.left.set(left);
     if (top != 0) control.position.top.set(top);
     if (width64 != 0) control.position.width.set(static_cast<std::int32_t>(width64));
@@ -1157,7 +1161,7 @@ LV encode_input_field(
         !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/InputField", "named InputField with direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled"}, "$/InputField");
+    require_allowed_properties(control.properties(), {"Enabled", "ReadOnly"}, "$/InputField");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
@@ -1166,6 +1170,7 @@ LV encode_input_field(
         fail("OOF1122", "$/InputField/DataPath", "linked single-string Attribute", attribute->name, "InputField type is outside the supported profile");
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const bool read_only = explicit_bool(control.properties(), "ReadOnly", false);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     const auto left = control.position.left.value();
     const auto top = control.position.top.value();
@@ -1175,7 +1180,7 @@ LV encode_input_field(
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_input_field_info(attribute->type, enabled),
+        canonical_input_field_info(attribute->type, enabled, read_only),
         canonical_input_field_geometry(control.id.value(), left, top, width, height, visible),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

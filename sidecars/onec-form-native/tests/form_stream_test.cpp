@@ -546,6 +546,7 @@ void test_button_label_input_field_round_trip() {
     input.position.width.set(70);
     input.position.height.set(30);
     input.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    input.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
     document.add_control(std::move(input));
 
     const auto encoded = form_stream::encode_document(document);
@@ -565,6 +566,9 @@ void test_button_label_input_field_round_trip() {
     expect(decoded_input->properties().find(model::PropertyId::from_name("Enabled")) != nullptr &&
                !std::get<bool>(decoded_input->properties().find(model::PropertyId::from_name("Enabled"))->value),
         "InputField Enabled must survive round-trip");
+    expect(decoded_input->properties().find(model::PropertyId::from_name("ReadOnly")) != nullptr &&
+               std::get<bool>(decoded_input->properties().find(model::PropertyId::from_name("ReadOnly"))->value),
+        "InputField ReadOnly must survive round-trip");
     expect(decoded.value().find_attribute(model::ObjectId{1})->type == string10,
         "linked Attribute String(10) type must survive round-trip");
     const auto reencoded = form_stream::encode_document(decoded.value());
@@ -572,8 +576,15 @@ void test_button_label_input_field_round_trip() {
     const auto redecode = form_stream::decode_document(reencoded.value(), "Main");
     expect(redecode.ok() && redecode.value().find_control(model::ObjectId{9})->data_path->attribute.id() == model::ObjectId{1},
         "InputField DataPath must survive a second decode");
+    expect(redecode.ok() && std::get<bool>(redecode.value().find_control(model::ObjectId{9})
+        ->properties().find(model::PropertyId::from_name("ReadOnly"))->value),
+        "InputField ReadOnly must survive two round-trips");
+    const auto& read_only_payload = reencoded.value().items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0].items[13];
+    expect(read_only_payload.atom == "1", "InputField ReadOnly must encode at the proven payload slot");
 
-    const auto make_input_document = [](std::uint32_t length, bool variable, bool non_string = false, bool mixed = false) {
+    const auto make_input_document = [](std::uint32_t length, bool variable, bool non_string = false, bool mixed = false,
+        bool explicit_read_only_false = false) {
         model::Form form;
         form.id = model::ObjectId{1};
         form.name = "Main";
@@ -598,6 +609,9 @@ void test_button_label_input_field_round_trip() {
         input_document.add_control(model::ControlNode{model::ObjectId{3}, "Label", model::LabelDecorationPayload{}});
         model::ControlNode input_field{model::ObjectId{9}, "InputSynthetic", model::InputFieldPayload{}};
         input_field.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+        if (explicit_read_only_false) {
+            input_field.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+        }
         input_document.add_control(std::move(input_field));
         return input_document;
     };
@@ -606,6 +620,9 @@ void test_button_label_input_field_round_trip() {
         for (const bool variable : {false, true}) {
             const auto length_encoded = form_stream::encode_document(make_input_document(length, variable));
             expect(length_encoded.ok(), "single-string InputField qualifiers must encode");
+            const auto& default_read_only_payload = length_encoded.value().items[1].items[2].items[2].items[3]
+                .items[2].items[2].items[0].items[13];
+            expect(default_read_only_payload.atom == "0", "default InputField ReadOnly must encode as false");
             const auto length_decoded = form_stream::decode_document(length_encoded.value(), "Main");
             expect(length_decoded.ok(), "single-string InputField qualifiers must decode");
             const auto* round_trip_attribute = length_decoded.value().find_attribute(model::ObjectId{1});
@@ -617,6 +634,12 @@ void test_button_label_input_field_round_trip() {
                 "InputField DataPath must survive string qualifier round-trip");
         }
     }
+
+    const auto explicit_false = form_stream::encode_document(make_input_document(10, true, false, false, true));
+    expect(explicit_false.ok(), "explicit InputField ReadOnly=false must be accepted");
+    const auto& explicit_false_payload = explicit_false.value().items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0].items[13];
+    expect(explicit_false_payload.atom == "0", "explicit InputField ReadOnly=false must encode as false");
 
     auto mismatch = encoded.value();
     auto& mismatch_info = mismatch.items[1].items[2].items[2].items[3].items[2];
@@ -652,6 +675,13 @@ void test_button_label_input_field_round_trip() {
     input_record.items[2].items[2].items[0].items[45] = list_stream::ListValue::raw_atom("9");
     expect_failure(form_stream::decode_document(unsupported_leaf, "Main"), "OOF1114", "$/1/2/2/3/2",
         "unknown InputField info leaf must fail closed");
+
+    auto unknown_read_only_neighbor = encoded.value();
+    auto& payload = unknown_read_only_neighbor.items[1].items[2].items[2].items[3]
+        .items[2].items[2].items[0];
+    payload.items[12] = list_stream::ListValue::raw_atom("9");
+    expect_failure(form_stream::decode_document(unknown_read_only_neighbor, "Main"), "OOF1114", "$/1/2/2/3/2",
+        "unknown payload field beside ReadOnly must fail closed");
 }
 
 void test_two_button_sibling_index() {
