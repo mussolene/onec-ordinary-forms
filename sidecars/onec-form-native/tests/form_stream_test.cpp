@@ -460,7 +460,7 @@ void test_multiple_top_level_buttons_round_trip() {
     expect_failure(
         form_stream::decode_document(wrong_sibling_index, "Main"),
         "OOF1114",
-        "$/1/2/2/2/3",
+        "$/1/2/2/2/3/21",
         "Button geometry with an incorrect sibling index must be rejected");
 }
 
@@ -737,7 +737,7 @@ void test_single_input_field_round_trip() {
     expect_failure(
         form_stream::decode_document(wrong_sibling_reference, "Main"),
         "OOF1114",
-        "$/1/2/2/1/3",
+        "$/1/2/2/1/3/21",
         "single InputField must reject triple-profile geometry references");
 }
 
@@ -877,17 +877,82 @@ void test_two_input_fields_round_trip() {
     mixed_form.id = model::ObjectId{1};
     mixed_form.name = "Mixed";
     mixed_form.children = {
-        model::ControlRef{model::ObjectId{9}},
-        model::ControlRef{model::ObjectId{2}},
+        model::ControlRef{model::ObjectId{4}}, model::ControlRef{model::ObjectId{5}},
+        model::ControlRef{model::ObjectId{6}}, model::ControlRef{model::ObjectId{18}},
+        model::ControlRef{model::ObjectId{21}},
     };
     model::OrdinaryFormDocument mixed_document(std::move(mixed_form));
-    mixed_document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", string64});
-    model::ControlNode mixed_input{model::ObjectId{9}, "Input", model::InputFieldPayload{}};
-    mixed_input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
-    mixed_document.add_control(std::move(mixed_input));
-    mixed_document.add_control(model::ControlNode{model::ObjectId{2}, "Button", model::ButtonPayload{}});
-    expect_failure(form_stream::encode_document(mixed_document), "OOF1122", "$/Form/ChildItems",
-        "mixed InputField and Button composition must remain unsupported");
+    mixed_document.add_attribute(model::Attribute{model::ObjectId{1}, "ValueA", string64});
+    mixed_document.add_attribute(model::Attribute{model::ObjectId{3}, "ValueB", string64});
+    model::ControlNode first_input{model::ObjectId{4}, "InputA", model::InputFieldPayload{}};
+    first_input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+    mixed_document.add_control(std::move(first_input));
+    model::ControlNode first_button{model::ObjectId{5}, "Run", model::ButtonPayload{}};
+    first_button.events.push_back(model::EventRef{model::ObjectId{30}});
+    mixed_document.add_event(model::Event{model::ObjectId{30}, "Click", "RunProbe", model::ControlRef{model::ObjectId{5}}});
+    mixed_document.add_control(std::move(first_button));
+    mixed_document.add_control(model::ControlNode{model::ObjectId{6}, "Label", model::LabelDecorationPayload{}});
+    model::ControlNode second_input{model::ObjectId{18}, "InputB", model::InputFieldPayload{}};
+    second_input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+    mixed_document.add_control(std::move(second_input));
+    model::ControlNode second_button{model::ObjectId{21}, "Cancel", model::ButtonPayload{}};
+    second_button.events.push_back(model::EventRef{model::ObjectId{31}});
+    mixed_document.add_event(model::Event{model::ObjectId{31}, "Click", "CancelProbe", model::ControlRef{model::ObjectId{21}}});
+    mixed_document.add_control(std::move(second_button));
+
+    const std::vector<model::ObjectId> expected_order{
+        model::ObjectId{4}, model::ObjectId{5}, model::ObjectId{6}, model::ObjectId{18}, model::ObjectId{21}};
+    const auto mixed_encoded = form_stream::encode_document(mixed_document);
+    expect(mixed_encoded.ok(), "mixed supported controls must encode in ChildItems order");
+    const auto& mixed_child_records = mixed_encoded.value().items[1].items[2].items[2];
+    for (std::size_t index = 0; index < expected_order.size(); ++index) {
+        const auto& record = mixed_child_records.items[index + 1];
+        const auto& geometry = record.items[3];
+        const auto control_id = record.items[1].atom;
+        for (const std::size_t slot : {7U, 9U}) {
+            expect(geometry.items[slot].items[1].items[1].atom == control_id,
+                "mixed control geometry references must derive from the control ID");
+        }
+        for (const std::size_t slot : {13U, 16U}) {
+            expect(geometry.items[slot].items[1].atom == control_id,
+                "mixed control secondary geometry references must derive from the control ID");
+        }
+        expect(geometry.items[21].atom == std::to_string(index) &&
+                   geometry.items[22].atom == std::to_string(index + 1),
+            "mixed control geometry sibling indexes must derive from ChildItems order");
+    }
+    const auto mixed_decoded = form_stream::decode_document(mixed_encoded.value(), "Mixed");
+    expect(mixed_decoded.ok(), "mixed supported controls and DataPaths must decode");
+    expect(mixed_decoded.value().form().children.size() == expected_order.size(), "all mixed ChildItems must survive");
+    for (std::size_t index = 0; index < expected_order.size(); ++index) {
+        expect(std::get<model::ControlRef>(mixed_decoded.value().form().children[index]).id() == expected_order[index],
+            "mixed ChildItems order must survive round-trip");
+    }
+    expect(mixed_decoded.value().find_control(model::ObjectId{4})->data_path->attribute.id() == model::ObjectId{1} &&
+               mixed_decoded.value().find_control(model::ObjectId{18})->data_path->attribute.id() == model::ObjectId{3},
+        "InputField DataPaths must resolve by control ID in mixed order");
+    expect(mixed_decoded.value().find_event(mixed_decoded.value().find_control(model::ObjectId{5})->events.front().id())->handler == "RunProbe" &&
+               mixed_decoded.value().find_event(mixed_decoded.value().find_control(model::ObjectId{21})->events.front().id())->handler == "CancelProbe",
+        "each mixed-order Button handler must remain attached to its owner");
+
+    auto changed_label_reference = mixed_encoded.value();
+    changed_label_reference.items[1].items[2].items[2].items[3].items[3].items[13].items[1] =
+        list_stream::ListValue::raw_atom("99");
+    expect_failure(form_stream::decode_document(changed_label_reference, "Mixed"), "OOF1114", "$/1/2/2/3/3",
+        "LabelDecoration must reject a geometry reference that differs from its ID");
+
+    auto changed_button_index = mixed_encoded.value();
+    changed_button_index.items[1].items[2].items[2].items[2].items[3].items[22] =
+        list_stream::ListValue::raw_atom("9");
+    expect_failure(form_stream::decode_document(changed_button_index, "Mixed"), "OOF1114", "$/1/2/2/2/3",
+        "Button must reject geometry sibling indexes that differ from ChildItems");
+
+    auto unsupported_action_text = mixed_encoded.value();
+    auto& first_action = unsupported_action_text.items[1].items[2].items[2].items[2]
+        .items[2].items[2].items[1].items[2].items[2];
+    first_action.items[2] = list_stream::parse("{1,1,{\"ru\",\"different presentation\"}}");
+    expect_failure(form_stream::decode_document(unsupported_action_text, "Mixed"), "OOF1114", "$/1/2/2/2/2/2/1/2/2/2",
+        "noncanonical Button action presentation must fail closed");
 }
 
 void test_two_button_sibling_index() {
@@ -914,8 +979,99 @@ void test_two_button_sibling_index() {
     expect_failure(
         form_stream::decode_document(wrong_sibling_index, "Main"),
         "OOF1114",
-        "$/1/2/2/2/3",
+        "$/1/2/2/2/3/21",
         "second Button must reject a sibling index of zero");
+}
+
+void test_six_reordered_controls_use_logical_geometry_ordinals() {
+    model::TypeDomainPatternValue string64;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{64, false};
+    string64.entries.push_back(string_entry);
+
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Reordered";
+    const std::vector<model::ObjectId> logical_order{
+        model::ObjectId{27}, model::ObjectId{18}, model::ObjectId{21},
+        model::ObjectId{15}, model::ObjectId{9}, model::ObjectId{12}};
+    for (const auto id : logical_order) form.children.push_back(model::ControlRef{id});
+    model::OrdinaryFormDocument document(std::move(form));
+    document.add_attribute(model::Attribute{model::ObjectId{3}, "ValueB", string64});
+    document.add_attribute(model::Attribute{model::ObjectId{1}, "ValueA", string64});
+
+    model::ControlNode input18{model::ObjectId{18}, "InputB", model::InputFieldPayload{}};
+    input18.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+    document.add_control(std::move(input18));
+    model::ControlNode button21{model::ObjectId{21}, "Cancel", model::ButtonPayload{}};
+    button21.events.push_back(model::EventRef{model::ObjectId{41}});
+    document.add_event(model::Event{model::ObjectId{41}, "Click", "CancelProbe", model::ControlRef{model::ObjectId{21}}});
+    document.add_control(std::move(button21));
+    document.add_control(model::ControlNode{model::ObjectId{27}, "LabelTop", model::LabelDecorationPayload{}});
+    model::ControlNode input9{model::ObjectId{9}, "InputA", model::InputFieldPayload{}};
+    input9.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+    document.add_control(std::move(input9));
+    model::ControlNode button12{model::ObjectId{12}, "Run", model::ButtonPayload{}};
+    button12.events.push_back(model::EventRef{model::ObjectId{42}});
+    document.add_event(model::Event{model::ObjectId{42}, "Click", "RunProbe", model::ControlRef{model::ObjectId{12}}});
+    document.add_control(std::move(button12));
+    document.add_control(model::ControlNode{model::ObjectId{15}, "LabelBottom", model::LabelDecorationPayload{}});
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "six reordered controls must encode");
+    const auto& children = encoded.value().items[1].items[2].items[2];
+    const std::vector<std::uint64_t> physical_ids{9, 12, 15, 18, 21, 27};
+    const std::vector<std::uint32_t> physical_ordinals{4, 5, 3, 1, 2, 0};
+    for (std::size_t index = 0; index < physical_ids.size(); ++index) {
+        const auto& record = children.items[index + 1];
+        expect(std::stoull(record.items[1].atom) == physical_ids[index],
+            "writer must sort physical control records by numeric ID");
+        expect(record.items[3].items[21].atom == std::to_string(physical_ordinals[index]) &&
+                   record.items[3].items[22].atom == std::to_string(physical_ordinals[index] + 1),
+            "physical control records must retain logical geometry ordinals");
+    }
+    const auto& links = encoded.value().items[2].items[3];
+    expect(links.items[1].items[0].atom == "9" && links.items[2].items[0].atom == "18",
+        "writer must sort InputField links by numeric control ID");
+
+    const auto verify_logical = [&](const auto& storage, std::string_view message) {
+        const auto decoded = form_stream::decode_document(storage, "Reordered");
+        expect(decoded.ok(), decoded ? message : decoded.diagnostics().front().message);
+        expect(decoded.value().form().children.size() == logical_order.size(), message);
+        for (std::size_t index = 0; index < logical_order.size(); ++index) {
+            expect(std::get<model::ControlRef>(decoded.value().form().children[index]).id() == logical_order[index], message);
+        }
+        expect(decoded.value().find_control(model::ObjectId{18})->data_path->attribute.id() == model::ObjectId{3} &&
+                   decoded.value().find_control(model::ObjectId{9})->data_path->attribute.id() == model::ObjectId{1},
+            "sorted InputField links must still resolve by control ID");
+        expect(decoded.value().find_event(decoded.value().find_control(model::ObjectId{21})->events.front().id())->handler == "CancelProbe" &&
+                   decoded.value().find_event(decoded.value().find_control(model::ObjectId{12})->events.front().id())->handler == "RunProbe",
+            "reordered Button handlers must remain with their owners");
+    };
+    verify_logical(encoded.value(), "sorted physical records must decode in logical ChildItems order");
+
+    auto permuted = encoded.value();
+    std::swap(permuted.items[1].items[2].items[2].items[1], permuted.items[1].items[2].items[2].items[6]);
+    verify_logical(permuted, "noncanonical physical record permutation must preserve logical ChildItems order");
+
+    auto duplicate_ordinal = encoded.value();
+    duplicate_ordinal.items[1].items[2].items[2].items[6].items[3].items[21] =
+        list_stream::ListValue::raw_atom("4");
+    expect_failure(form_stream::decode_document(duplicate_ordinal, "Reordered"), "OOF1114", "$/1/2/2/6/3/21",
+        "duplicate geometry ordinals must be rejected");
+
+    auto out_of_range_ordinal = encoded.value();
+    out_of_range_ordinal.items[1].items[2].items[2].items[6].items[3].items[21] =
+        list_stream::ListValue::raw_atom("6");
+    expect_failure(form_stream::decode_document(out_of_range_ordinal, "Reordered"), "OOF1114", "$/1/2/2/6/3/21",
+        "out-of-range geometry ordinals must be rejected");
+
+    auto wrong_next_index = encoded.value();
+    wrong_next_index.items[1].items[2].items[2].items[6].items[3].items[22] =
+        list_stream::ListValue::raw_atom("2");
+    expect_failure(form_stream::decode_document(wrong_next_index, "Reordered"), "OOF1114", "$/1/2/2/6/3",
+        "geometry next index must equal logical ordinal plus one");
 }
 
 void test_platform_empty_document_fixture() {
@@ -956,6 +1112,7 @@ int main() {
         test_button_label_input_field_round_trip();
         test_single_input_field_round_trip();
         test_two_input_fields_round_trip();
+        test_six_reordered_controls_use_logical_geometry_ordinals();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

@@ -417,6 +417,7 @@ LV canonical_button_properties(bool enabled, std::string_view caption) {
 }
 
 LV canonical_button_geometry(
+    std::uint64_t control_id,
     std::int32_t left,
     std::int32_t top,
     std::int32_t width,
@@ -449,6 +450,13 @@ LV canonical_button_geometry(
     value.items[4] = raw(std::to_string(top + height));
     value.items[5] = raw(visible ? "1" : "0");
     value.items[21] = raw(std::to_string(sibling_index));
+    value.items[22] = raw(std::to_string(sibling_index + 1));
+    for (const std::size_t slot : {7U, 9U}) {
+        value.items[slot].items[1].items[1] = raw(std::to_string(control_id));
+    }
+    for (const std::size_t slot : {13U, 16U}) {
+        value.items[slot].items[1] = raw(std::to_string(control_id));
+    }
     value.items[7].items[1].items[3] = raw(std::to_string(height));
     value.items[9].items[1].items[3] = raw(std::to_string(width));
     return value;
@@ -481,6 +489,8 @@ LV canonical_label_properties(std::string_view caption) {
 }
 
 LV canonical_label_geometry(
+    std::uint64_t control_id,
+    std::size_t sibling_index,
     std::int32_t left,
     std::int32_t top,
     std::int32_t width,
@@ -505,6 +515,14 @@ LV canonical_label_geometry(
     value.items[3] = raw(std::to_string(left + width));
     value.items[4] = raw(std::to_string(top + height));
     value.items[5] = raw(visible ? "1" : "0");
+    for (const std::size_t slot : {7U, 9U}) {
+        value.items[slot].items[1].items[1] = raw(std::to_string(control_id));
+    }
+    value.items[21] = raw(std::to_string(sibling_index));
+    value.items[22] = raw(std::to_string(sibling_index + 1));
+    for (const std::size_t slot : {13U, 16U}) {
+        value.items[slot].items[1] = raw(std::to_string(control_id));
+    }
     value.items[7].items[1].items[3] = raw(std::to_string(height));
     value.items[9].items[1].items[3] = raw(std::to_string(width));
     return value;
@@ -536,9 +554,6 @@ LV canonical_input_field_geometry(
     std::int32_t width,
     std::int32_t height,
     bool visible) {
-    if (sibling_index > 2) {
-        fail("OOF1122", "$/Form/ChildItems", "InputField sibling index 0, 1, or 2", std::to_string(sibling_index), "InputField geometry is outside the supported composition");
-    }
     if (width < 0 || height < 0 ||
         left > std::numeric_limits<std::int32_t>::max() - width ||
         top > std::numeric_limits<std::int32_t>::max() - height) {
@@ -661,7 +676,11 @@ std::optional<std::string> decode_button_event(const LV& value, std::string_view
             "Event action handler differs from the event record handler");
     }
     for (std::size_t index = 2; index <= 4; ++index) {
-        static_cast<void>(decoded_single_language_text(action.items[index], child_path(action_path, index)));
+        const std::string presentation = decoded_single_language_text(action.items[index], child_path(action_path, index));
+        if (presentation != handler) {
+            fail("OOF1114", child_path(action_path, index), handler, presentation,
+                "Button event action presentation differs from its handler; action presentation semantics are unsupported");
+        }
     }
     require_exact(
         action.items[5],
@@ -676,12 +695,12 @@ std::optional<std::string> decode_button_event(const LV& value, std::string_view
     return handler;
 }
 
-struct DecodedButton {
+struct DecodedControl {
     model::ControlNode control;
     std::optional<std::string> click_handler;
 };
 
-DecodedButton decode_button(const LV& record, std::string_view path, std::size_t sibling_index) {
+DecodedControl decode_button(const LV& record, std::string_view path, std::size_t sibling_index) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -759,7 +778,7 @@ DecodedButton decode_button(const LV& record, std::string_view path, std::size_t
     const auto height = static_cast<std::int32_t>(height64);
     require_exact(
         geometry,
-        canonical_button_geometry(left, top, width, height, visible, sibling_index),
+        canonical_button_geometry(raw_id, left, top, width, height, visible, sibling_index),
         geometry_path,
         "Button geometry contains unsupported bindings or flags");
 
@@ -811,7 +830,7 @@ DecodedButton decode_button(const LV& record, std::string_view path, std::size_t
     return {std::move(control), click_handler};
 }
 
-model::ControlNode decode_label(const LV& record, std::string_view path) {
+model::ControlNode decode_label(const LV& record, std::string_view path, std::size_t sibling_index) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -858,9 +877,9 @@ model::ControlNode decode_label(const LV& record, std::string_view path) {
     }
     require_exact(
         geometry,
-        canonical_label_geometry(left, top, static_cast<std::int32_t>(width64), static_cast<std::int32_t>(height64), visible),
+        canonical_label_geometry(raw_id, sibling_index, left, top, static_cast<std::int32_t>(width64), static_cast<std::int32_t>(height64), visible),
         geometry_path,
-        "LabelDecoration geometry differs from the supported Button-then-Label profile");
+        "LabelDecoration geometry contains unsupported references or storage leaves");
 
     const auto& metadata = record.items[4];
     const std::string metadata_path = child_path(path, 4);
@@ -1113,6 +1132,7 @@ LV encode_button(
             canonical_event_table(handler),
         }),
         canonical_button_geometry(
+            control.id.value(),
             control.position.left.value(),
             control.position.top.value(),
             control.position.width.value(),
@@ -1132,9 +1152,9 @@ LV encode_button(
 }
 
 LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
-    if (sibling_index != 1 || control.kind() != model::ControlKind::label_decoration ||
+    if (control.kind() != model::ControlKind::label_decoration ||
         control.id.value() == 0 || control.id.value() > std::numeric_limits<std::int64_t>::max()) {
-        fail("OOF1122", "$/Form/ChildItems", "LabelDecoration at sibling index 1 with positive int64 ID", control.name, "LabelDecoration is outside the supported Button-then-Label profile");
+        fail("OOF1122", "$/Form/ChildItems", "LabelDecoration with positive int64 ID", control.name, "LabelDecoration is outside the supported profile");
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
@@ -1155,7 +1175,7 @@ LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         list({raw("3"), canonical_label_properties(caption), list({raw("0")})}),
-        canonical_label_geometry(left, top, width, height, visible),
+        canonical_label_geometry(control.id.value(), sibling_index, left, top, width, height, visible),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
@@ -1165,9 +1185,9 @@ LV encode_input_field(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
     std::size_t sibling_index) {
-    if (sibling_index > 2 || control.kind() != model::ControlKind::input_field ||
+    if (control.kind() != model::ControlKind::input_field ||
         control.id.value() == 0) {
-        fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at sibling index 0, 1, or 2", control.name, "InputField is outside the supported profile");
+        fail("OOF1122", "$/Form/ChildItems", "InputField with positive ID at its ChildItems index", control.name, "InputField is outside the supported profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
@@ -1689,10 +1709,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             }
         }
         std::unordered_set<std::int64_t> consumed_link_ids;
-        std::vector<DecodedButton> decoded_buttons;
-        decoded_buttons.reserve(control_count);
-        std::optional<model::ControlNode> decoded_label;
-        std::vector<model::ControlNode> decoded_input_fields;
+        std::vector<std::optional<DecodedControl>> decoded_controls(control_count);
         const auto& input_descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
         for (std::uint32_t index = 0; index < control_count; ++index) {
             const auto path = child_path("$/1/2/2", static_cast<std::size_t>(index) + 1);
@@ -1700,25 +1717,29 @@ Result<model::OrdinaryFormDocument> decode_document(
             if (!child_record.is_list || child_record.items.empty()) {
                 require_arity(child_record, 1, path);
             }
+            static_cast<void>(raw_atom(at(child_record, 1, path), child_path(path, 1)));
+            const auto geometry_path = child_path(path, 3);
+            const auto& geometry = at(child_record, 3, path);
+            require_arity(geometry, 25, geometry_path);
+            const auto logical_index = integer_atom<std::uint32_t>(geometry.items[21], child_path(geometry_path, 21));
+            if (logical_index >= control_count) {
+                fail("OOF1114", child_path(geometry_path, 21), "ChildItems ordinal below control count", std::to_string(logical_index), "Control geometry ordinal is outside the ChildItems range");
+            }
+            if (decoded_controls[logical_index]) {
+                fail("OOF1114", child_path(geometry_path, 21), "unique ChildItems ordinal", std::to_string(logical_index), "Control geometry ordinal is duplicated");
+            }
             const std::string child_guid = raw_atom(child_record.items[0], child_path(path, 0));
             const auto& button_descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
             const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
-            if (child_guid == button_descriptor.guid && !decoded_label && decoded_input_fields.empty()) {
-                decoded_buttons.push_back(decode_button(child_record, path, index));
-                actual_max_id = std::max(actual_max_id, decoded_buttons.back().control.id.value());
-            } else if (child_guid == label_descriptor.guid && !decoded_label &&
-                       index == 1 && decoded_buttons.size() == 1 &&
-                       (control_count == 2 || control_count == 3)) {
-                decoded_label = decode_label(child_record, path);
-                actual_max_id = std::max(actual_max_id, decoded_label->id.value());
-            } else if (child_guid == input_descriptor.guid &&
-                       ((control_count == 1 && index == 0 && decoded_buttons.empty() && !decoded_label) ||
-                        (control_count == 2 && index < 2 && decoded_buttons.empty() && !decoded_label) ||
-                        (control_count == 3 && index == 2 && decoded_buttons.size() == 1 && decoded_label))) {
-                const std::size_t expected_attribute_count = control_count == 2 ? 2 : 1;
-                if (attributes.attributes.size() != expected_attribute_count) {
-                    fail("OOF1122", "$/2/2", "one Attribute per supported InputField", std::to_string(attributes.attributes.size()), "InputField Attribute count is outside the supported profile");
-                }
+            if (child_guid == button_descriptor.guid) {
+                auto decoded = decode_button(child_record, path, logical_index);
+                actual_max_id = std::max(actual_max_id, decoded.control.id.value());
+                decoded_controls[logical_index].emplace(std::move(decoded));
+            } else if (child_guid == label_descriptor.guid) {
+                auto decoded = decode_label(child_record, path, logical_index);
+                actual_max_id = std::max(actual_max_id, decoded.id.value());
+                decoded_controls[logical_index].emplace(DecodedControl{std::move(decoded), std::nullopt});
+            } else if (child_guid == input_descriptor.guid) {
                 const auto candidate_id = integer_atom<std::uint64_t>(at(child_record, 1, path), child_path(path, 1));
                 if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                     fail("OOF1122", child_path(path, 1), "InputField ID representable in an attribute link", std::to_string(candidate_id), "InputField ID cannot be resolved through the attribute-link table");
@@ -1738,15 +1759,20 @@ Result<model::OrdinaryFormDocument> decode_document(
                     fail("OOF1122", "$/2/3", "link to an existing Attribute", std::to_string(link.attribute_id.object_id), "InputField DataPath target is unresolved");
                 }
                 const auto& attribute = *attribute_it->second;
-                auto input_field = decode_input_field(child_record, path, attribute, index);
+                auto input_field = decode_input_field(child_record, path, attribute, logical_index);
                 input_field.data_path = model::DataPath{
                     model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attribute.id.object_id)}},
                     {},
                 };
                 actual_max_id = std::max(actual_max_id, input_field.id.value());
-                decoded_input_fields.push_back(std::move(input_field));
+                decoded_controls[logical_index].emplace(DecodedControl{std::move(input_field), std::nullopt});
             } else {
-                fail("OOF1122", path, "one InputField alone, two InputFields, or supported Button-Label-InputField order", child_guid, "Control ordering is outside the supported storage slice");
+                fail("OOF1122", path, "supported top-level Button, LabelDecoration, or InputField record", child_guid, "Control payload is unsupported");
+            }
+        }
+        for (std::size_t index = 0; index < decoded_controls.size(); ++index) {
+            if (!decoded_controls[index]) {
+                fail("OOF1114", "$/1/2/2", "permutation of ChildItems ordinals", std::to_string(index), "Control geometry ordinals do not cover every ChildItems position");
             }
         }
         if (consumed_link_ids.size() != links_by_control.size()) {
@@ -1797,31 +1823,24 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
 
         std::uint64_t synthetic_event_offset = 0;
-        for (auto& decoded_button : decoded_buttons) {
-            if (decoded_button.click_handler) {
+        for (auto& decoded_slot : decoded_controls) {
+            auto& decoded_control = *decoded_slot;
+            if (decoded_control.click_handler) {
                 if (synthetic_event_offset >=
                     std::numeric_limits<std::uint64_t>::max() - stored_max_id) {
                     fail("OOF1120", "$/1/1/1", "allocatable event ID", "uint64 max", "Synthetic event ID overflows");
                 }
                 const model::ObjectId event_id{stored_max_id + ++synthetic_event_offset};
-                decoded_button.control.events.push_back(model::EventRef{event_id});
+                decoded_control.control.events.push_back(model::EventRef{event_id});
                 document.add_event(model::Event{
                     event_id,
                     "Click",
-                    *decoded_button.click_handler,
-                    model::ControlRef{decoded_button.control.id},
+                    *decoded_control.click_handler,
+                    model::ControlRef{decoded_control.control.id},
                 });
             }
-            form.children.push_back(model::ControlRef{decoded_button.control.id});
-            document.add_control(std::move(decoded_button.control));
-        }
-        if (decoded_label) {
-            form.children.push_back(model::ControlRef{decoded_label->id});
-            document.add_control(std::move(*decoded_label));
-        }
-        for (auto& decoded_input_field : decoded_input_fields) {
-            form.children.push_back(model::ControlRef{decoded_input_field.id});
-            document.add_control(std::move(decoded_input_field));
+            form.children.push_back(model::ControlRef{decoded_control.control.id});
+            document.add_control(std::move(decoded_control.control));
         }
         document.set_form(std::move(form));
 
@@ -1894,7 +1913,6 @@ Result<list_stream::ListValue> encode_document(
         child_records.push_back(raw(std::to_string(document.form().children.size())));
         std::vector<form_stream::AttributeLink> ordered_input_links;
         std::uint64_t max_id = document.form().id.value();
-        bool has_label = false;
         for (std::size_t sibling_index = 0; sibling_index < document.form().children.size(); ++sibling_index) {
             const auto& child = document.form().children[sibling_index];
             if (!std::holds_alternative<model::ControlRef>(child)) {
@@ -1905,28 +1923,25 @@ Result<list_stream::ListValue> encode_document(
             if (control == nullptr) {
                 fail("OOF1123", "$/Form/ChildItems", "existing control", std::to_string(control_id.value()), "Child reference is dangling");
             }
-            if (control->kind() == model::ControlKind::button && !has_label && ordered_input_links.empty()) {
+            if (control->kind() == model::ControlKind::button) {
                 child_records.push_back(encode_button(document, *control, sibling_index));
-            } else if (control->kind() == model::ControlKind::label_decoration &&
-                       !has_label && ordered_input_links.empty() && sibling_index == 1 &&
-                       (document.form().children.size() == 2 || document.form().children.size() == 3)) {
+            } else if (control->kind() == model::ControlKind::label_decoration) {
                 child_records.push_back(encode_label(*control, sibling_index));
-                has_label = true;
-            } else if (control->kind() == model::ControlKind::input_field &&
-                       ((sibling_index == 0 && document.form().children.size() == 1) ||
-                        (sibling_index < 2 && document.form().children.size() == 2 &&
-                         ordered_input_links.size() == sibling_index) ||
-                        (has_label && sibling_index == 2 && document.form().children.size() == 3))) {
+            } else if (control->kind() == model::ControlKind::input_field) {
                 child_records.push_back(encode_input_field(document, *control, sibling_index));
                 ordered_input_links.push_back(form_stream::AttributeLink{
                     static_cast<std::int64_t>(control->id.value()),
                     model::CompositeIdValue{static_cast<std::int64_t>(control->data_path->attribute.id().value()), model::UuidValue{std::string(null_uuid)}, true},
                 });
             } else {
-                fail("OOF1122", "$/Form/ChildItems", "one InputField alone, two InputFields, or supported Button-Label-InputField order", control->name, "Control ordering is outside the supported storage slice");
+                fail("OOF1122", "$/Form/ChildItems", "supported top-level Button, LabelDecoration, or InputField", control->name, "Control payload is unsupported");
             }
             max_id = std::max(max_id, control_id.value());
         }
+        std::sort(child_records.begin() + 1, child_records.end(), [](const LV& left, const LV& right) {
+            return integer_atom<std::uint64_t>(left.items[1], "$/Form/ChildItems") <
+                   integer_atom<std::uint64_t>(right.items[1], "$/Form/ChildItems");
+        });
 
         AttributesRecord attributes;
         std::uint64_t max_attribute_id = 0;
@@ -1950,21 +1965,16 @@ Result<list_stream::ListValue> encode_document(
             max_id = std::max(max_id, attribute.id.value());
         }
         attributes.links = std::move(ordered_input_links);
+        std::sort(attributes.links.begin(), attributes.links.end(), [](const auto& left, const auto& right) {
+            return left.control_id < right.control_id;
+        });
         std::size_t input_count = 0;
         for (const auto& control : document.collections().controls) {
             if (control.kind() != model::ControlKind::input_field) continue;
             ++input_count;
         }
-        const auto child_count = document.form().children.size();
-        const bool single_input_profile = child_count == 1 && input_count == 1 && attributes.attributes.size() == 1;
-        const bool two_input_profile = child_count == 2 && input_count == 2 && attributes.attributes.size() == 2;
-        const bool button_label_input_profile =
-            child_count == 3 && input_count == 1 && attributes.attributes.size() == 1;
-        if (input_count != attributes.links.size() ||
-            !(single_input_profile || two_input_profile || button_label_input_profile) || max_attribute_id == 0) {
-            if (input_count != 0 || !attributes.links.empty()) {
-                fail("OOF1122", "$/Form/ChildItems", "one standalone InputField, two InputFields, or one Button-Label-InputField profile with matching Attributes", std::to_string(input_count), "InputField collection is outside the supported document profile");
-            }
+        if (input_count != attributes.links.size()) {
+            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField", std::to_string(input_count), "InputField and DataPath link counts do not match");
         }
         if (max_id >= std::numeric_limits<std::uint32_t>::max()) {
             fail("OOF1120", "$/Attributes", "object IDs below uint32 max", std::to_string(max_id), "Attribute slot count overflows");
