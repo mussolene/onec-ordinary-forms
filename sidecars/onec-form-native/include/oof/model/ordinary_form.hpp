@@ -363,11 +363,13 @@ struct ShortcutValue {
 };
 
 enum class CommandBarButtonKind : std::uint8_t { action, submenu, separator };
+enum class CommandBarButtonOrder : std::uint8_t { none, ascending, descending };
 enum class ButtonRepresentation : std::uint8_t { automatic, picture, text, picture_text };
 
 struct CommandBarButton {
     std::string name;
     CommandBarButtonKind type = CommandBarButtonKind::action;
+    CommandBarButtonOrder order = CommandBarButtonOrder::none;
     std::string text;
     std::string explanation;
     std::string tooltip;

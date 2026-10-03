@@ -735,6 +735,8 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     if (item.name.empty() || !names.insert(item.name).second) invalid("button menu item names must be non-empty and unique within each collection");
                     if (item.type == CommandBarButtonKind::action && (!item.action || item.action->empty())) invalid("Action menu item requires a handler");
                     if (item.type != CommandBarButtonKind::action && item.action) invalid("only Action menu items may have a handler");
+                    if (item.order != CommandBarButtonOrder::none && item.order != CommandBarButtonOrder::ascending && item.order != CommandBarButtonOrder::descending) invalid("unknown menu order");
+                    if (item.type != CommandBarButtonKind::submenu && item.order != CommandBarButtonOrder::none) invalid("only Submenu menu items may have an order");
                     if (item.type != CommandBarButtonKind::submenu && !item.buttons.empty()) invalid("only Submenu items may contain buttons");
                     if (item.type == CommandBarButtonKind::separator &&
                         (!item.text.empty() || !item.explanation.empty() || !item.tooltip.empty() || !item.enabled || item.checked || item.changes_data || item.representation != ButtonRepresentation::automatic || item.shortcut != ShortcutValue{} || item.picture || item.action)) invalid("Separator cannot have properties");

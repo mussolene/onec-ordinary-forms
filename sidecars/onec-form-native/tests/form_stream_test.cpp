@@ -1036,13 +1036,23 @@ void test_named_button_menu_round_trip_and_invalid_references() {
     action.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.ActivateTask"}};
     model::CommandBarButton divider; divider.name = "Divider"; divider.type = model::CommandBarButtonKind::separator;
     model::CommandBarButton submenu; submenu.name = "More"; submenu.type = model::CommandBarButtonKind::submenu;
+    submenu.order = model::CommandBarButtonOrder::ascending;
     submenu.text = "Еще"; submenu.buttons = {action, divider};
-    std::get<model::ButtonPayload>(button.payload).buttons = {action, divider, submenu};
+    model::CommandBarButton nested; nested.name = "Nested"; nested.type = model::CommandBarButtonKind::submenu;
+    nested.order = model::CommandBarButtonOrder::descending; nested.buttons = {divider};
+    submenu.buttons.push_back(nested);
+    model::CommandBarButton unordered; unordered.name = "Unordered"; unordered.type = model::CommandBarButtonKind::submenu;
+    unordered.buttons = {divider};
+    std::get<model::ButtonPayload>(button.payload).buttons = {action, divider, submenu, unordered};
     document.add_control(std::move(button));
     const auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), encoded ? "named menu must encode" : encoded.diagnostics().front().message);
     const auto& menu_record = encoded.value().items[1].items[2].items[2].items[1].items[2].items[1].items[12];
-    const auto& complete_action = menu_record.items[9];
+    const auto action_records_end = menu_record.items.begin() + 5 + static_cast<std::ptrdiff_t>(std::stoul(menu_record.items[4].atom));
+    const auto complete_action_it = std::find_if(menu_record.items.begin() + 5, action_records_end,
+        [](const auto& candidate) { return candidate.items.size() > 5 && candidate.items[5].atom == "15"; });
+    expect(complete_action_it != action_records_end, "menu action with all optional flags must exist");
+    const auto& complete_action = *complete_action_it;
     expect(complete_action.items[5].atom == "15" && complete_action.items[6].items[0].atom == "1" &&
         complete_action.items[7].items[0].atom == "1" && complete_action.items[8].items[0].atom == "4" &&
         complete_action.items[9].items[0].atom == "0",
@@ -1052,6 +1062,12 @@ void test_named_button_menu_round_trip_and_invalid_references() {
     expect(std::get<model::ButtonPayload>(decoded.value().find_control(model::ObjectId{2})->payload).buttons ==
         std::get<model::ButtonPayload>(document.find_control(model::ObjectId{2})->payload).buttons,
         "named recursive menu properties and actions must survive independent encoding and decoding");
+    const auto& decoded_buttons = std::get<model::ButtonPayload>(decoded.value().find_control(model::ObjectId{2})->payload).buttons;
+    expect(decoded_buttons[2].order == model::CommandBarButtonOrder::ascending &&
+        decoded_buttons[2].buttons[2].order == model::CommandBarButtonOrder::descending,
+        "each nested submenu order must survive its own footer entry");
+    expect(decoded_buttons[3].order == model::CommandBarButtonOrder::none,
+        "DontOrder must remain the default footer value");
     const auto repeated = form_stream::encode_document(decoded.value());
     expect(repeated.ok() && list_stream::dump_compact(repeated.value()) == list_stream::dump_compact(encoded.value()),
         "menu identity must be derived deterministically without preserving a source payload");
@@ -1066,6 +1082,14 @@ void test_named_button_menu_round_trip_and_invalid_references() {
     auto cycle = encoded.value();
     menu_at(cycle).items[6 + count].items[10].items[7] = list_stream::ListValue::raw_atom("1");
     expect(!form_stream::decode_document(cycle, "Menu"), "inconsistent submenu targets must be rejected");
+    auto empty_order_footer = encoded.value();
+    auto& empty_footer = menu_at(empty_order_footer).items[6 + count].items.back().items[2];
+    empty_footer.items.clear();
+    expect(!form_stream::decode_document(empty_order_footer, "Menu"), "empty menu order footer must be rejected safely");
+    auto huge_order_footer = encoded.value();
+    menu_at(huge_order_footer).items[6 + count].items.back().items[2].items[0] =
+        list_stream::ListValue::raw_atom("18446744073709551615");
+    expect(!form_stream::decode_document(huge_order_footer, "Menu"), "oversized menu order footer count must be rejected");
 }
 
 void test_button_menu_mode_round_trip_and_validation() {

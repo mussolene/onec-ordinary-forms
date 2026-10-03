@@ -667,11 +667,12 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
 
     output += R"XSD(  <xs:simpleType name="CommandBarButtonKindType"><xs:restriction base="xs:string"><xs:enumeration value="Action"/><xs:enumeration value="Submenu"/><xs:enumeration value="Separator"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="ButtonRepresentationType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Picture"/><xs:enumeration value="Text"/><xs:enumeration value="PictureText"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="CommandBarButtonOrderType"><xs:restriction base="xs:string"><xs:enumeration value="DontOrder"/><xs:enumeration value="Ascending"/><xs:enumeration value="Descending"/></xs:restriction></xs:simpleType>
   <xs:complexType name="CommandBarButtonsType"><xs:sequence><xs:element ref="CommandBarButton" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
   <xs:complexType name="CommandBarButtonType"><xs:sequence>
     <xs:element name="Text" type="xs:string" minOccurs="0"/><xs:element name="Explanation" type="xs:string" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0"/>
     <xs:element name="Enabled" type="xs:boolean" minOccurs="0"/><xs:element name="Checked" type="xs:boolean" minOccurs="0"/><xs:element name="ChangesData" type="xs:boolean" minOccurs="0"/>
-    <xs:element name="Representation" type="ButtonRepresentationType" minOccurs="0"/><xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0"/><xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/><xs:element name="Action" type="xs:string" minOccurs="0"/><xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0"/>
+    <xs:element name="Representation" type="ButtonRepresentationType" minOccurs="0"/><xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0"/><xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/><xs:element name="Action" type="xs:string" minOccurs="0"/><xs:element name="Order" type="CommandBarButtonOrderType" minOccurs="0"/><xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0"/>
   </xs:sequence><xs:attribute name="name" type="xs:string" use="required"/><xs:attribute name="type" type="CommandBarButtonKindType" use="required"/></xs:complexType>
   <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
 
@@ -869,7 +870,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"Name\" russianName=\"Имя\"/><Property name=\"Type\" russianName=\"ТипКнопки\"/>\n"
         "          <Property name=\"Text\" russianName=\"Текст\"/><Property name=\"Explanation\" russianName=\"Пояснение\"/><Property name=\"ToolTip\" russianName=\"Подсказка\"/>\n"
         "          <Property name=\"Enabled\" russianName=\"Доступность\"/><Property name=\"Checked\" russianName=\"Пометка\"/><Property name=\"ChangesData\" russianName=\"ИзменяетДанные\"/>\n"
-        "          <Property name=\"Representation\" russianName=\"Отображение\"/><Property name=\"Shortcut\" russianName=\"СочетаниеКлавиш\"/><Property name=\"Picture\" russianName=\"Картинка\"/><Property name=\"Action\" russianName=\"Действие\"/><Property name=\"Buttons\" russianName=\"Кнопки\"/>\n"
+        "          <Property name=\"Representation\" russianName=\"Отображение\"/><Property name=\"Shortcut\" russianName=\"СочетаниеКлавиш\"/><Property name=\"Picture\" russianName=\"Картинка\"/><Property name=\"Action\" russianName=\"Действие\"/><Property name=\"Order\" russianName=\"ПорядокКнопок\"/><Property name=\"Buttons\" russianName=\"Кнопки\"/>\n"
         "        </Properties></NamedConcept>\n"
         "      </Palette>\n"
         "    </xs:appinfo>\n"

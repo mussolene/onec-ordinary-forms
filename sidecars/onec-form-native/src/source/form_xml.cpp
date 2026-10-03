@@ -1548,6 +1548,7 @@ private:
         else if (type == "Separator") item.type = model::CommandBarButtonKind::separator;
         else fail("OOF2003", node, std::string(owner), "type", "Action, Submenu, or Separator", type, "Unknown button menu item type");
         std::set<std::string> seen;
+        bool has_order = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
             if (!seen.insert(name).second) fail("OOF2003", child, std::string(owner), name, "field at most once", name, "Duplicate button menu field");
@@ -1567,6 +1568,14 @@ private:
             } else if (name == "Shortcut") item.shortcut = parse_shortcut(child);
             else if (name == "Picture") item.picture = parse_picture_reference(child, "Picture", owner);
             else if (name == "Action") item.action = node_text(child);
+            else if (name == "Order") {
+                has_order = true;
+                const auto order = node_text(child);
+                if (order == "DontOrder") item.order = model::CommandBarButtonOrder::none;
+                else if (order == "Ascending") item.order = model::CommandBarButtonOrder::ascending;
+                else if (order == "Descending") item.order = model::CommandBarButtonOrder::descending;
+                else fail("OOF2003", child, std::string(owner), name, "DontOrder, Ascending, or Descending", order, "Unknown submenu order");
+            }
             else if (name == "Buttons") item.buttons = parse_command_bar_buttons(child, owner);
             else fail("OOF2003", child, std::string(owner), name, "declared button menu field", name, "Unknown button menu field");
         }
@@ -1574,6 +1583,8 @@ private:
             fail("OOF2003", node, std::string(owner), "Action", "non-empty action handler", "missing", "Action item requires a handler");
         if (item.type != model::CommandBarButtonKind::action && item.action)
             fail("OOF2003", node, std::string(owner), "Action", "Action item only", "present", "Only Action items may declare a handler");
+        if (item.type != model::CommandBarButtonKind::submenu && has_order)
+            fail("OOF2003", node, std::string(owner), "Order", "Submenu only", "present", "Only Submenu items may declare an order");
         if (item.type != model::CommandBarButtonKind::submenu && !item.buttons.empty())
             fail("OOF2003", node, std::string(owner), "Buttons", "Submenu only", "present", "Only Submenu items may contain buttons");
         if (item.type == model::CommandBarButtonKind::separator && seen.size() != 0)
@@ -2382,6 +2393,9 @@ private:
             }
             if (item.picture) write_picture_reference("Picture", *item.picture, owner);
             if (item.action) writer_.text("Action", *item.action);
+            if (item.type == model::CommandBarButtonKind::submenu && item.order != model::CommandBarButtonOrder::none) {
+                writer_.text("Order", item.order == model::CommandBarButtonOrder::ascending ? "Ascending" : "Descending");
+            }
             write_command_bar_buttons(item.buttons, owner);
             writer_.close("CommandBarButton");
         }

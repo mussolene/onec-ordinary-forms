@@ -296,7 +296,7 @@ None без модификаторов является default и опуска�
 
 Buttons содержит именованные CommandBarButton с типом Action, Submenu или
 Separator. Поддержаны Name, Type, Text, Explanation, ToolTip, Enabled,
-Checked, ChangesData, Representation, Shortcut, Picture, Action и вложенные
+Checked, ChangesData, Representation, Shortcut, Picture, Action, Order и вложенные
 Buttons. Action задает обработчик модуля; Separator не имеет дополнительных
 полей, Submenu может содержать рекурсивную коллекцию. Имена уникальны в своей
 коллекции. Это отдельные пункты меню, а не контролы ChildItems или глобальные
@@ -315,8 +315,17 @@ XML, модуль, 16 файлов картинок и повторная Form.b
 Свежие macOS и Linux проверки проходят 11/11:
 `ev_50bee3be5b524b7191ab27622bd9b859`.
 
-Ограничения этого шага явные: DefaultButton и Order пунктов не подтверждены;
-непустое меню при MenuMode DontUse отвергается. Выполнение обработчика через
+Order у Submenu принимает DontOrder, Ascending и Descending. Свойство
+сохраняется в именованной модели и собирается основным кодеком; оно
+недопустимо у Action и Separator. Свежий строгий Designer цикл с разными
+Order у двух вложенных подменю сохранил XML, модуль, 16 файлов картинок
+и Form.bin побайтно: `ev_6edd447ff1d04cc7afb27d6ef5953cd4`.
+
+Ограничения этого шага явные: DefaultButton у Action внутри Button.Buttons
+не меняет сохраняемые данные в повторном платформенном опыте; у отдельной
+CommandBar контекст отличается: `ev_10332bde2d004bfb86df758564d7295c`.
+Непустое меню при MenuMode DontUse отвергается: сама платформа удаляет меню
+и запрещает доступ к Кнопки: `ev_287e571c861d453c82ea61695f1610ce`. Выполнение обработчика через
 нажатие пункта не проверялось, проверялось чтение именованного Действие.
 
 Это 16/16 прямых свойств Button в перечисленных вариантах, не полная

@@ -749,7 +749,7 @@ void test_standard_picture_xml_reference_roundtrip() {
 }
 
 void test_button_menu_model_roundtrip_and_rejections() {
-    constexpr std::string_view xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="run" type="Action"><Text>Run</Text><Shortcut Alt="false" Ctrl="true" Shift="false"><Key>R</Key></Shortcut><Action>RunHandler</Action></CommandBarButton><CommandBarButton name="more" type="Submenu"><Text>More</Text><Buttons><CommandBarButton name="sep" type="Separator"/></Buttons></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="run" type="Action"><Text>Run</Text><Shortcut Alt="false" Ctrl="true" Shift="false"><Key>R</Key></Shortcut><Action>RunHandler</Action></CommandBarButton><CommandBarButton name="more" type="Submenu"><Text>More</Text><Order>Ascending</Order><Buttons><CommandBarButton name="sep" type="Separator"/></Buttons></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
     const auto parsed = source::parse_form_xml(xml);
     expect(parsed.ok(), parsed.diagnostics().empty() ? "typed Button.Buttons tree must parse" : parsed.diagnostics().front().message);
     const auto* button = parsed.value().find_control(model::ObjectId{2});
@@ -765,6 +765,7 @@ void test_button_menu_model_roundtrip_and_rejections() {
     expect(reparsed.ok(), "serialized button menu must parse again");
     const auto* restored = std::get_if<model::ButtonPayload>(&reparsed.value().find_control(model::ObjectId{2})->payload);
     expect(restored && restored->buttons == payload->buttons, "recursive button menu must roundtrip exactly");
+    expect(serialized.value().find("<Order>Ascending</Order>") != std::string::npos, "submenu order must serialize by its named XML value");
     constexpr std::string_view picture_xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><PictureAssets><PictureAsset id="4" relativePath="Items/Run/Buttons/More/Buttons/Item/Picture.gif" format="gif"/></PictureAssets><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Picture>4</Picture><Action>RunHandler</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
     expect(source::parse_form_xml(picture_xml).ok(), "named menu picture paths must parse within source package");
     auto unsafe = std::string(picture_xml);
@@ -776,6 +777,9 @@ void test_button_menu_model_roundtrip_and_rejections() {
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"/></Buttons></Button></ChildItems></Form>)XML").ok(), "Action requires handler");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action>One</Action></CommandBarButton><CommandBarButton name="x" type="Action"><Action>Two</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "duplicate names in a collection must be rejected");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Submenu"><Action>Bad</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "non-Action handler must be rejected");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action>Run</Action><Order>DontOrder</Order></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "Order must be rejected on Action even when it is the default");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Separator"><Order>Ascending</Order></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "Order must be rejected on Separator");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Submenu"><Order>Random</Order></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "unknown submenu order must be rejected");
 }
 
 void test_event_owner_invariant() {

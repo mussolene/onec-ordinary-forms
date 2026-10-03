@@ -1781,7 +1781,8 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
         for (const auto& entry : collection) if (entry.type == model::CommandBarButtonKind::submenu) {
             submenu_refs.push_back(raw(owner));
             submenu_refs.push_back(raw(std::to_string(ids.at(&entry))));
-            submenu_refs.push_back(raw("0"));
+            submenu_refs.push_back(raw(entry.order == model::CommandBarButtonOrder::ascending ? "1" :
+                entry.order == model::CommandBarButtonOrder::descending ? "2" : "0"));
         }
         value.push_back(list({raw("-1"), raw("0"), list(std::move(submenu_refs))}));
         return list(std::move(value));
@@ -1818,6 +1819,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
     if (group_count != menu.items.size() - 6 - action_count || group_count == 0)
         fail("OOF1102", std::string(path), "exact menu collection count", describe(menu), "Menu collection count is inconsistent");
     std::unordered_map<std::uint64_t, const LV*> groups;
+    std::unordered_map<std::uint64_t, std::unordered_map<std::uint64_t, model::CommandBarButtonOrder>> submenu_orders;
     for (std::size_t i = 0; i < group_count; ++i) {
         const auto& group = menu.items[6 + action_count + i];
         require_list(group, path);
@@ -1827,6 +1829,25 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         require_raw_constant(group.items[1], id == 0 ? menu_owner_guid : std::string_view(owner), path);
         require_raw_constant(group.items[3], "0", path);
         if (!groups.emplace(id, &group).second) fail("OOF1114", std::string(path), "unique collections", std::to_string(id), "Duplicate menu collection");
+        const auto& footer = group.items.back();
+        require_arity(footer, 3, path);
+        require_raw_constant(footer.items[0], "-1", path);
+        require_raw_constant(footer.items[1], "0", path);
+        require_list(footer.items[2], path);
+        const auto& refs = footer.items[2];
+        const auto ref_count = integer_atom<std::size_t>(at(refs, 0, path), path);
+        if (ref_count > (refs.items.size() - 1) / 3 || refs.items.size() != 1 + 3 * ref_count)
+            fail("OOF1114", std::string(path), "exact submenu order footer size", describe(refs), "Menu order footer count is inconsistent");
+        auto& orders = submenu_orders[id];
+        for (std::size_t ref = 0; ref < ref_count; ++ref) {
+            const auto base = 1 + ref * 3;
+            require_raw_constant(refs.items[base], owner, path);
+            const auto submenu_id = integer_atom<std::uint64_t>(refs.items[base + 1], path);
+            const auto order = integer_atom<unsigned>(refs.items[base + 2], path);
+            if (submenu_id == 0 || order > 2 || !orders.emplace(submenu_id,
+                order == 1 ? model::CommandBarButtonOrder::ascending : order == 2 ? model::CommandBarButtonOrder::descending : model::CommandBarButtonOrder::none).second)
+                fail("OOF1114", std::string(path), "unique submenu IDs and order 0, 1, or 2", std::to_string(submenu_id), "Menu order footer is invalid");
+        }
     }
     DecodedMenu decoded;
     std::unordered_set<std::uint64_t> consumed_groups, entry_ids;
@@ -1860,6 +1881,13 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto type = integer_atom<unsigned>(props.items[9], path);
             if (type > 2) fail("OOF1114", std::string(path), "Action, Submenu, or Separator", std::to_string(type), "Menu item type is unsupported");
             entry.type = type == 0 ? model::CommandBarButtonKind::action : type == 1 ? model::CommandBarButtonKind::submenu : model::CommandBarButtonKind::separator;
+            if (entry.type == model::CommandBarButtonKind::submenu) {
+                const auto order = submenu_orders[group_id].find(id);
+                if (order == submenu_orders[group_id].end()) fail("OOF1114", std::string(path), "submenu order footer entry", std::to_string(id), "Submenu order is missing");
+                entry.order = order->second;
+            } else if (submenu_orders[group_id].contains(id)) {
+                fail("OOF1114", std::string(path), "submenu order footer entry only", std::to_string(id), "Non-submenu has an order footer entry");
+            }
             const auto representation = integer_atom<unsigned>(props.items[10], path);
             if (representation > 3) fail("OOF1114", std::string(path), "known representation", std::to_string(representation), "Menu representation is unsupported");
             entry.representation = representation == 0 ? model::ButtonRepresentation::automatic : representation == 1 ? model::ButtonRepresentation::text : representation == 2 ? model::ButtonRepresentation::picture : model::ButtonRepresentation::picture_text;
@@ -1904,7 +1932,9 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             require_arity(action, cursor, path);
             if (type == 1) {
                 ++submenu_count;
-                submenu_refs.push_back(raw(owner)); submenu_refs.push_back(raw(std::to_string(id))); submenu_refs.push_back(raw("0"));
+                submenu_refs.push_back(raw(owner)); submenu_refs.push_back(raw(std::to_string(id)));
+                submenu_refs.push_back(raw(entry.order == model::CommandBarButtonOrder::ascending ? "1" :
+                    entry.order == model::CommandBarButtonOrder::descending ? "2" : "0"));
                 entry.buttons = visit(id, asset_path + "/" + entry.name + "/Buttons", depth + 1);
             }
             entries.push_back(std::move(entry));
