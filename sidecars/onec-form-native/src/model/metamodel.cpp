@@ -644,6 +644,12 @@ void apply_proven_storage_overrides(
         "RealSize");
     classify_property(
         button,
+        "MenuMode",
+        StorageCodec::control_info,
+        DefaultKind::enumeration,
+        "DontUse");
+    classify_property(
+        button,
         "Picture",
         StorageCodec::picture_record,
         DefaultKind::none,

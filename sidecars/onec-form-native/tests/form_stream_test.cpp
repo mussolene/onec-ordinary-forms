@@ -1009,6 +1009,112 @@ void test_button_picture_enums_round_trip_and_validation() {
         "$/1/2/2/1/2/1/6", "unsupported Button.PictureLocation storage values must be rejected");
 }
 
+void test_button_menu_mode_round_trip_and_validation() {
+    static constexpr std::string_view members[] = {"DontUse", "Use", "UseExtra"};
+    const std::string menu_block =
+        "{5,53232d71-06b1-4ec1-a94d-77fafadef407,0,1,0,1,"
+        "{5,31946946-0a9b-40a2-95cf-82f200778341,0,0,0,{-1,0,{0}}}}";
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "MenuModes";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{4}},
+                     model::ControlRef{model::ObjectId{6}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::size_t index = 0; index < std::size(members); ++index) {
+        model::ControlNode button{model::ObjectId{static_cast<std::uint64_t>(2 + index * 2)},
+            "Button" + std::to_string(index), model::ButtonPayload{}};
+        button.properties().set_explicit(model::PropertyId::from_name("MenuMode"),
+            model::EnumerationValue{"MenuMode", std::string(members[index])});
+        document.add_control(std::move(button));
+    }
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "all supported Button MenuMode values must encode" :
+        encoded.diagnostics().front().message);
+    const auto& records = encoded.value().items[1].items[2].items[2].items;
+    for (std::size_t index = 0; index < std::size(members); ++index) {
+        const auto& properties = records[index + 1].items[2].items[1];
+        const auto mode = static_cast<std::int32_t>(index);
+        expect(properties.items.size() == (mode == 0 ? 16 : 17) &&
+                   properties.items[5].atom == "0" &&
+                   properties.items[11].atom == std::to_string(mode),
+            "MenuMode must occupy field 11 without disturbing HorizontalAlign or changing the confirmed arity");
+        if (mode == 0) {
+            expect(properties.items[12].atom == "0" && properties.items[13].atom == "0" &&
+                       properties.items[14].atom == "0" && properties.items[15].atom == "1",
+                "DontUse must keep the four canonical trailing values in place");
+        } else {
+            expect(list_stream::dump_compact(properties.items[12]) == menu_block &&
+                       properties.items[13].atom == "0" && properties.items[14].atom == "0" &&
+                       properties.items[15].atom == "0" && properties.items[16].atom == "1",
+                "Use and UseExtra must insert only the confirmed internal menu descriptor before trailing fields");
+        }
+    }
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "MenuModes");
+    expect(decoded.ok(), decoded ? "all supported Button MenuMode values must decode" :
+        decoded.diagnostics().front().message);
+    expect(decoded.value().find_control(model::ObjectId{2})->properties().find(
+               model::PropertyId::from_name("MenuMode")) == nullptr,
+        "default DontUse must normalize to an absent explicit property");
+    for (const auto& [id, member] : {std::pair{4U, std::string_view("Use")},
+                                    std::pair{6U, std::string_view("UseExtra")}}) {
+        const auto* value = decoded.value().find_control(model::ObjectId{id})->properties().find(
+            model::PropertyId::from_name("MenuMode"));
+        expect(value != nullptr && std::get<model::EnumerationValue>(value->value) ==
+                   model::EnumerationValue{"MenuMode", std::string(member)},
+            "non-default MenuMode member must survive decoding as a named enumeration");
+    }
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "all three MenuMode values must encode-decode-encode without storage drift");
+
+    auto wrong_mode = encoded.value();
+    wrong_mode.items[1].items[2].items[2].items[1].items[2].items[1].items[11] =
+        list_stream::ListValue::raw_atom("3");
+    expect_failure(form_stream::decode_document(wrong_mode, "MenuModes"), "OOF1114",
+        "$/1/2/2/1/2/1/11", "unknown MenuMode storage values must fail closed");
+    auto wrong_arity_default = encoded.value();
+    wrong_arity_default.items[1].items[2].items[2].items[1].items[2].items[1].items.push_back(
+        list_stream::ListValue::raw_atom("0"));
+    expect(!form_stream::decode_document(wrong_arity_default, "MenuModes"),
+        "DontUse must reject a 17-field record");
+    auto wrong_arity_enabled = encoded.value();
+    wrong_arity_enabled.items[1].items[2].items[2].items[2].items[2].items[1].items.pop_back();
+    expect(!form_stream::decode_document(wrong_arity_enabled, "MenuModes"),
+        "Use must reject a 16-field record");
+    auto unknown_menu_descriptor = encoded.value();
+    unknown_menu_descriptor.items[1].items[2].items[2].items[2].items[2].items[1].items[12].items[1] =
+        list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000001");
+    expect(!form_stream::decode_document(unknown_menu_descriptor, "MenuModes"),
+        "noncanonical menu descriptor content must be rejected rather than preserved as raw data");
+
+    model::Form invalid_form;
+    invalid_form.id = model::ObjectId{1};
+    invalid_form.name = "InvalidMenuMode";
+    invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument wrong_type(std::move(invalid_form));
+    model::ControlNode wrong_type_button{model::ObjectId{2}, "WrongType", model::ButtonPayload{}};
+    wrong_type_button.properties().set_explicit(model::PropertyId::from_name("MenuMode"),
+        model::EnumerationValue{"PictureSize", "Use"});
+    wrong_type.add_control(std::move(wrong_type_button));
+    expect_failure(form_stream::encode_document(wrong_type), "OOF1122", "$/Button/MenuMode",
+        "foreign MenuMode enum type must be rejected");
+
+    model::Form unknown_form;
+    unknown_form.id = model::ObjectId{1};
+    unknown_form.name = "UnknownMenuMode";
+    unknown_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument unknown(std::move(unknown_form));
+    model::ControlNode unknown_button{model::ObjectId{2}, "Unknown", model::ButtonPayload{}};
+    unknown_button.properties().set_explicit(model::PropertyId::from_name("MenuMode"),
+        model::EnumerationValue{"MenuMode", "Unknown"});
+    unknown.add_control(std::move(unknown_button));
+    expect_failure(form_stream::encode_document(unknown), "OOF1122", "$/Button/MenuMode",
+        "unknown MenuMode enum members must be rejected");
+}
+
 void test_button_external_picture_assets_round_trip() {
     const std::vector<std::vector<std::uint8_t>> bytes{
         {'G','I','F','8','9','a',0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62},
@@ -2963,6 +3069,7 @@ int main() {
         test_button_alignments_and_tooltip_round_trip();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
+        test_button_menu_mode_round_trip_and_validation();
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();

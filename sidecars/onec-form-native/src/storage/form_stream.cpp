@@ -738,13 +738,14 @@ LV canonical_button_properties(
     std::int32_t vertical_align,
     std::int32_t picture_location,
     std::int32_t picture_size,
+    std::int32_t menu_mode,
     bool multi_line,
     std::string_view tool_tip,
     const model::ColorValue& border_color,
     const model::ColorValue& button_text_color,
     const model::ColorValue& button_back_color,
     const model::FontValue& font) {
-    return list({
+    auto properties = list({
         canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font),
         raw("14"),
         encoded_localized(caption),
@@ -756,12 +757,18 @@ LV canonical_button_properties(
         parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"),
         parse_constant("{0,0,0}"),
         raw(multi_line ? "1" : "0"),
-        raw("0"),
+        raw(std::to_string(menu_mode)),
         raw("0"),
         raw("0"),
         raw("0"),
         raw("1"),
     });
+    if (menu_mode != 0) {
+        properties.items.insert(properties.items.begin() + 12, parse_constant(
+            "{5,53232d71-06b1-4ec1-a94d-77fafadef407,0,1,0,1,"
+            "{5,31946946-0a9b-40a2-95cf-82f200778341,0,0,0,{-1,0,{0}}}}"));
+    }
+    return properties;
 }
 
 LV canonical_label_properties(std::string_view caption, std::int32_t horizontal_align) {
@@ -1667,7 +1674,11 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     require_raw_constant(info.items[0], "1", child_path(info_path, 0));
     const auto& properties = info.items[1];
     const std::string properties_path = child_path(info_path, 1);
-    require_arity(properties, 16, properties_path);
+    require_list(properties, properties_path);
+    if (properties.items.size() < 12) {
+        fail("OOF1102", properties_path, "Button properties including MenuMode", describe(properties),
+            "Button property record is too short");
+    }
     const auto& base = properties.items[0];
     const std::string base_path = child_path(properties_path, 0);
     require_arity(base, 21, base_path);
@@ -1723,6 +1734,13 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         fail("OOF1114", child_path(properties_path, 7), "PictureSize storage value 0, 1, 2, 3, 4, or 7",
             std::to_string(picture_size), "Button.PictureSize storage value is unsupported");
     }
+    const auto menu_mode = integer_atom<std::int32_t>(
+        properties.items[11], child_path(properties_path, 11));
+    if (menu_mode < 0 || menu_mode > 2) {
+        fail("OOF1114", child_path(properties_path, 11), "MenuMode storage value 0, 1, or 2",
+            std::to_string(menu_mode), "Button.MenuMode storage value is unsupported");
+    }
+    require_arity(properties, menu_mode == 0 ? 16 : 17, properties_path);
     const bool multi_line = bool_atom(
         properties.items[10], child_path(properties_path, 10));
     const auto picture = decode_button_picture(properties.items[8], child_path(properties_path, 8));
@@ -1732,7 +1750,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     require_exact(
         normalized_properties,
         canonical_button_properties(enabled, caption, horizontal_align, vertical_align, picture_location,
-            picture_size, multi_line, tool_tip, border_color, button_text_color, button_back_color, font),
+            picture_size, menu_mode, multi_line, tool_tip, border_color, button_text_color, button_back_color, font),
         properties_path,
         "Button payload contains an unsupported property variation");
 
@@ -1818,6 +1836,12 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         control.properties().set_explicit(
             model::PropertyId::from_name("PictureSize"),
             model::EnumerationValue{"PictureSize", std::string(member)});
+    }
+    if (menu_mode != 0) {
+        static constexpr std::string_view members[] = {"DontUse", "Use", "UseExtra"};
+        control.properties().set_explicit(
+            model::PropertyId::from_name("MenuMode"),
+            model::EnumerationValue{"MenuMode", std::string(members[menu_mode])});
     }
     if (multi_line) {
         control.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
@@ -2140,7 +2164,7 @@ LV encode_button(
     }
     require_allowed_properties(control.properties(),
         {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign",
-            "PictureLocation", "PictureSize", "BorderColor", "ButtonTextColor", "ButtonBackColor", "Font", "Picture"}, "$/Button");
+            "PictureLocation", "PictureSize", "MenuMode", "BorderColor", "ButtonTextColor", "ButtonBackColor", "Font", "Picture"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
@@ -2205,11 +2229,13 @@ LV encode_button(
     const auto picture_size = enum_storage_value(control.properties(), "PictureSize", "PictureSize", 0,
         {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3},
             {"AutoSize", 4}, {"ByFontSize", 7}});
+    const auto menu_mode = enum_storage_value(control.properties(), "MenuMode", "MenuMode", 0,
+        {{"DontUse", 0}, {"Use", 1}, {"UseExtra", 2}});
     const bool multi_line = explicit_bool(control.properties(), "MultiLine", false);
     const auto handler = button_click_handler(document, control);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
     auto button_properties = canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
-        picture_location, picture_size, multi_line, tool_tip,
+        picture_location, picture_size, menu_mode, multi_line, tool_tip,
         border_color, button_text_color, button_back_color, font);
     if (picture_asset != nullptr) button_properties.items[8] = encode_button_picture(*picture_asset, "$/Button/Picture");
     if (standard_picture != nullptr) button_properties.items[8] = encode_standard_button_picture(*standard_picture);

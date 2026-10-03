@@ -214,7 +214,7 @@ Module.bsl совпадают; повторная сборка дает иден
 
 Поддержаны Caption, Enabled, MultiLine, ToolTip, HorizontalAlign,
 VerticalAlign, PictureLocation, PictureSize, BorderColor, ButtonTextColor и
-ButtonBackColor, Font и Picture, а также Name, Position, подтвержденные Bindings и Click.
+ButtonBackColor, Font, Picture и MenuMode, а также Name, Position, подтвержденные Bindings и Click.
 Выравнивания по умолчанию Center, подсказка пустая. Неподдержанные члены
 перечислений и чужой тип, даже с default member, отвергаются при сборке.
 Именованный XML с Right/Bottom и многострочной подсказкой прошел строгий
@@ -269,6 +269,15 @@ strikeout сохраняют различие между отсутствием 
 и строгий Designer цикл с совпадением XML, модуля и повторной сборки.
 Доказательство: `ev_5ead98d8bd3f41838b7b9365624bdb14`.
 
-Это 13/16 прямых свойств Button в перечисленных вариантах, не полная
+MenuMode поддерживает DontUse (default), Use и UseExtra. Публичный XML
+использует `<MenuMode type="MenuMode" member="UseExtra"/>`.
+Кодек самостоятельно создает внутреннюю структуру пустого меню для двух
+режимов с меню. Состав команд меню является отдельным свойством Buttons
+и пока не поддержан; неизвестная или заполненная структура отвергается.
+Три режима проверены чтением свойства самой платформой и строгим Designer
+циклом с совпадением XML, модуля, файлов картинок и повторной сборки.
+Доказательство: `ev_f1ab4a6da7c24a8f9c601f4810aa0280`.
+
+Это 14/16 прямых свойств Button в перечисленных вариантах, не полная
 поддержка типа. API GetPropVal
 с вычислением default пока остается требованием целевой модели.

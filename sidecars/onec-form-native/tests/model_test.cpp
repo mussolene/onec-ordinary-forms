@@ -96,6 +96,7 @@ void test_descriptors() {
     const auto* tool_tip = find_property(ControlKind::button, "ToolTip");
     const auto* picture_location = find_property(ControlKind::button, "PictureLocation");
     const auto* picture_size = find_property(ControlKind::button, "PictureSize");
+    const auto* menu_mode = find_property(ControlKind::button, "MenuMode");
     expect(horizontal && horizontal->storage_codec == StorageCodec::control_info &&
                horizontal->default_value.kind == DefaultKind::enumeration &&
                horizontal->default_value.canonical == "Center",
@@ -116,6 +117,10 @@ void test_descriptors() {
                picture_size->default_value.kind == DefaultKind::enumeration &&
                picture_size->default_value.canonical == "RealSize",
         "Button PictureSize descriptor must declare RealSize as its default");
+    expect(menu_mode && menu_mode->storage_codec == StorageCodec::control_info &&
+               menu_mode->default_value.kind == DefaultKind::enumeration &&
+               menu_mode->default_value.canonical == "DontUse",
+        "Button MenuMode descriptor must declare DontUse as its encoded default");
 }
 
 void test_standard_picture_descriptor_catalog() {
@@ -170,8 +175,8 @@ void test_button_alignment_xml_defaults() {
         "Button Font must describe its automatic serialized default");
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
-  <Button id="2" name="Center"><Position/><VerticalAlign type="VerticalAlign" member="Center"/><HorizontalAlign type="HorizontalAlign" member="Center"/><ToolTip></ToolTip><PictureLocation type="PictureLocation" member="Left"/><PictureSize type="PictureSize" member="RealSize"/><BorderColor kind="automatic"/><ButtonTextColor kind="styleReference" styleName="StyleColors.ButtonTextColor"/><ButtonBackColor kind="styleReference" styleName="StyleColors.ButtonBackColor"/><Font kind="automatic"/></Button>
-  <Button id="3" name="Right"><Position/><VerticalAlign type="VerticalAlign" member="Bottom"/><HorizontalAlign type="HorizontalAlign" member="Right"/><ToolTip>hint</ToolTip><PictureLocation type="PictureLocation" member="Right"/><PictureSize type="PictureSize" member="ByFontSize"/><BorderColor kind="absolute" red="17" green="83" blue="201" alpha="255"/><ButtonTextColor kind="styleReference" styleName="StyleColors.ButtonBorderColor"/><ButtonBackColor kind="styleReference" styleName="StyleColors.ButtonTextColor"/><Font kind="absolute" faceName="Arial" height="10" bold="false" italic="true" underline="false" strikeout="true" scale="100" scaleOverride="true"/></Button>
+  <Button id="2" name="Center"><Position/><VerticalAlign type="VerticalAlign" member="Center"/><HorizontalAlign type="HorizontalAlign" member="Center"/><ToolTip></ToolTip><PictureLocation type="PictureLocation" member="Left"/><PictureSize type="PictureSize" member="RealSize"/><MenuMode type="MenuMode" member="DontUse"/><BorderColor kind="automatic"/><ButtonTextColor kind="styleReference" styleName="StyleColors.ButtonTextColor"/><ButtonBackColor kind="styleReference" styleName="StyleColors.ButtonBackColor"/><Font kind="automatic"/></Button>
+  <Button id="3" name="Right"><Position/><VerticalAlign type="VerticalAlign" member="Bottom"/><HorizontalAlign type="HorizontalAlign" member="Right"/><ToolTip>hint</ToolTip><PictureLocation type="PictureLocation" member="Right"/><PictureSize type="PictureSize" member="ByFontSize"/><MenuMode type="MenuMode" member="UseExtra"/><BorderColor kind="absolute" red="17" green="83" blue="201" alpha="255"/><ButtonTextColor kind="styleReference" styleName="StyleColors.ButtonBorderColor"/><ButtonBackColor kind="styleReference" styleName="StyleColors.ButtonTextColor"/><Font kind="absolute" faceName="Arial" height="10" bold="false" italic="true" underline="false" strikeout="true" scale="100" scaleOverride="true"/></Button>
 </ChildItems></Form>
 )XML";
     const auto parsed = oof::source::parse_form_xml(xml);
@@ -186,6 +191,7 @@ void test_button_alignment_xml_defaults() {
                !center->properties().find(PropertyId::from_name("ToolTip")) &&
                !center->properties().find(PropertyId::from_name("PictureLocation")) &&
                !center->properties().find(PropertyId::from_name("PictureSize")) &&
+               !center->properties().find(PropertyId::from_name("MenuMode")) &&
                !center->properties().find(PropertyId::from_name("BorderColor")) &&
                !center->properties().find(PropertyId::from_name("ButtonTextColor")) &&
                !center->properties().find(PropertyId::from_name("ButtonBackColor")) &&
@@ -203,6 +209,9 @@ void test_button_alignment_xml_defaults() {
                std::get<EnumerationValue>(right->properties().find(
                    PropertyId::from_name("PictureSize"))->value) ==
                EnumerationValue{"PictureSize", "ByFontSize"} &&
+               std::get<EnumerationValue>(right->properties().find(
+                   PropertyId::from_name("MenuMode"))->value) ==
+               EnumerationValue{"MenuMode", "UseExtra"} &&
                std::get<ColorValue>(right->properties().find(PropertyId::from_name("BorderColor"))->value) ==
                    ColorValue{ColorKind::absolute, 17, 83, 201, 255, std::monostate{}} &&
                std::get<ColorValue>(right->properties().find(PropertyId::from_name("ButtonTextColor"))->value).style ==
@@ -224,6 +233,7 @@ void test_button_alignment_xml_defaults() {
                serialized.value().find("type=\"PictureSize\" member=\"RealSize\"") == std::string::npos &&
                serialized.value().find("type=\"PictureLocation\" member=\"Right\"") != std::string::npos &&
                serialized.value().find("type=\"PictureSize\" member=\"ByFontSize\"") != std::string::npos &&
+               serialized.value().find("type=\"MenuMode\" member=\"UseExtra\"") != std::string::npos &&
                serialized.value().find("<BorderColor kind=\"automatic\"/>") == std::string::npos &&
                serialized.value().find("<ButtonTextColor kind=\"styleReference\" styleName=\"StyleColors.ButtonTextColor\"/>") == std::string::npos &&
                serialized.value().find("<ButtonBackColor kind=\"styleReference\" styleName=\"StyleColors.ButtonBackColor\"/>") == std::string::npos &&
