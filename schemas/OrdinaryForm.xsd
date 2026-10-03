@@ -364,7 +364,6 @@
       <xs:element name="ChildItems" type="ControlChildItemsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>
-    <xs:attribute name="id" type="ObjectIdType" use="required"/>
   </xs:complexType>
   <xs:element name="Page" type="PageType"/>
 

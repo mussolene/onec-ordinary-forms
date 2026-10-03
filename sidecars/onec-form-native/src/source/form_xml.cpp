@@ -1104,6 +1104,8 @@ public:
     }
 
 private:
+    std::uint64_t next_page_id_{1};
+
     std::vector<model::EventRef> parse_form_events(xmlNodePtr node, model::ObjectId owner) {
         std::vector<model::EventRef> references;
         for (xmlNodePtr event_node : element_children(node)) {
@@ -1334,7 +1336,17 @@ private:
 
     model::PageRef parse_page(xmlNodePtr node) {
         model::Page page;
-        page.id = parse_object_id(required_attribute(node, "id"), node);
+        if (optional_attribute(node, "id").has_value()) {
+            fail(
+                "OOF2003",
+                node,
+                {},
+                "id",
+                "Page without an id attribute",
+                "id attribute present",
+                "Page identity is assigned internally and must not appear in Form.xml");
+        }
+        page.id = model::ObjectId{next_page_id_++};
         const std::string id = object_id_text(page.id);
         page.name = required_attribute(node, "name", id);
         for (xmlNodePtr child : element_children(node)) {
@@ -2108,7 +2120,7 @@ private:
 
     void write_page(const model::Page& page) {
         const std::string id = object_id_text(page.id);
-        writer_.open("Page", {{"name", page.name}, {"id", id}});
+        writer_.open("Page", {{"name", page.name}});
         if (page.title.is_explicit() && !page.title.value().items.empty()) {
             write_localized("Title", page.title.value(), id);
         }

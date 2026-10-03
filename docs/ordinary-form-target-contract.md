@@ -94,6 +94,12 @@ release inputs or public XML.
 
 ## Public Package
 
+`Page` is identified in public XML by its name and owning `ChildItems` tree.
+Its typed internal ID is allocated during parsing and is not written to XML.
+Control IDs remain platform IDs. A public `Page.id` is rejected rather than
+accepted through a compatibility branch. Current XML identity verification:
+`ev_8340649070f5401787475122583e122c`.
+
 The editable package is:
 
 ```text

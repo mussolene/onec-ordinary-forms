@@ -93,7 +93,7 @@ void test_root_page_tree_xml_roundtrip() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1">
   <ChildItems>
-    <Page id="2" name="RootPage">
+    <Page name="RootPage">
       <Title><Item language="en">Root tab</Item></Title>
       <ChildItems>
         <Button id="3" name="PageButton"><Position/><Caption>Run</Caption></Button>
@@ -102,7 +102,7 @@ void test_root_page_tree_xml_roundtrip() {
     <Panel id="4" name="TabPanel">
       <Position/>
       <ChildItems>
-        <Page id="5" name="PanelPage">
+        <Page name="PanelPage">
           <Title><Item language="en">Panel tab</Item></Title>
           <ChildItems>
             <Button id="6" name="PanelPageButton"><Position/><Caption>Open</Caption></Button>
@@ -121,37 +121,64 @@ void test_root_page_tree_xml_roundtrip() {
     expect(parsed.value().validate().ok(), "root Page tree must satisfy model invariants");
     expect(parsed.value().form().children.size() == 3 &&
                std::holds_alternative<model::PageRef>(parsed.value().form().children[0]) &&
-               std::get<model::PageRef>(parsed.value().form().children[0]).id() == model::ObjectId{2} &&
+               std::get<model::PageRef>(parsed.value().form().children[0]).id() == model::ObjectId{1} &&
                std::get<model::ControlRef>(parsed.value().form().children[1]).id() == model::ObjectId{4} &&
                std::get<model::ControlRef>(parsed.value().form().children[2]).id() == model::ObjectId{8},
         "root Page and control order must be retained");
-    const auto* page = parsed.value().find_page(model::ObjectId{2});
+    const auto* page = parsed.value().find_page(model::ObjectId{1});
     expect(page != nullptr && page->title.value().items.front().text == "Root tab" &&
                page->children.size() == 1 &&
                std::get<model::ControlRef>(page->children.front()).id() == model::ObjectId{3},
         "root Page title and control child must be retained");
     const auto* panel = parsed.value().find_control(model::ObjectId{4});
-    const auto* panel_page = parsed.value().find_page(model::ObjectId{5});
+    const auto* panel_page = parsed.value().find_page(model::ObjectId{2});
     expect(panel != nullptr && panel->kind() == model::ControlKind::panel && panel->children.size() == 2 &&
                std::holds_alternative<model::PageRef>(panel->children[0]) &&
-               std::get<model::PageRef>(panel->children[0]).id() == model::ObjectId{5} &&
+               std::get<model::PageRef>(panel->children[0]).id() == model::ObjectId{2} &&
                std::get<model::ControlRef>(panel->children[1]).id() == model::ObjectId{7},
         "Panel Page and control order must be retained");
 
     auto serialized = source::serialize_form_xml(parsed.value());
     expect(serialized.ok(), "root Page tree must serialize to Form.xml");
+    expect(serialized.value().find("<Page id=") == std::string::npos,
+           "Page identity must not be emitted in public XML");
+    expect(serialized.value().find("<Button name=\"PageButton\" id=\"3\">") != std::string::npos,
+           "control IDs must remain in public XML");
     auto reparsed = source::parse_form_xml(serialized.value());
     expect(reparsed.ok(), "serialized root Page tree must parse again");
+    auto repeated = source::serialize_form_xml(reparsed.value());
+    expect(repeated.ok() && repeated.value() == serialized.value(),
+           "Page tree XML must reach a byte-canonical round-trip");
     const auto* reparsed_panel = reparsed.value().find_control(model::ObjectId{4});
-    const auto* reparsed_panel_page = reparsed.value().find_page(model::ObjectId{5});
+    const auto* reparsed_panel_page = reparsed.value().find_page(model::ObjectId{2});
     expect(reparsed.value().form().children == parsed.value().form().children &&
-               reparsed.value().find_page(model::ObjectId{2}) != nullptr &&
-               reparsed.value().find_page(model::ObjectId{2})->children == page->children &&
+               reparsed.value().find_page(model::ObjectId{1}) != nullptr &&
+               reparsed.value().find_page(model::ObjectId{1})->children == page->children &&
                reparsed_panel != nullptr && reparsed_panel->children == panel->children &&
                reparsed_panel_page != nullptr &&
                panel_page != nullptr &&
                reparsed_panel_page->children == panel_page->children,
         "Form, Page, and Panel references must survive XML round-trip");
+}
+
+void test_page_internal_ids_do_not_change_xml() {
+    const auto serialize_page = [](std::uint64_t page_id) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "Main";
+        form.children.emplace_back(model::PageRef{model::ObjectId{page_id}});
+        model::OrdinaryFormDocument document(std::move(form));
+        model::Page page;
+        page.id = model::ObjectId{page_id};
+        page.name = "Settings";
+        document.add_page(std::move(page));
+        auto serialized = source::serialize_form_xml(document);
+        expect(serialized.ok(), "internally identified Page must serialize");
+        return serialized.value();
+    };
+
+    expect(serialize_page(2) == serialize_page(92),
+           "internal Page IDs must not affect public XML");
 }
 
 void test_all_control_variants() {
@@ -423,6 +450,12 @@ void test_strict_rejections() {
     expect_code(
         source::parse_form_xml(
             "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+            "<Page id=\"2\" name=\"LegacyPage\"/></ChildItems></Form>"),
+        "OOF2002",
+        "legacy Page id must be rejected");
+    expect_code(
+        source::parse_form_xml(
+            "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
             "<Button id=\"2\" name=\"B\"><Caption>X</Caption><Position/></Button>"
             "</ChildItems></Form>"),
         "OOF2002",
@@ -527,6 +560,7 @@ int main() {
     try {
         test_complete_document_roundtrip();
         test_root_page_tree_xml_roundtrip();
+        test_page_internal_ids_do_not_change_xml();
         test_all_control_variants();
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();

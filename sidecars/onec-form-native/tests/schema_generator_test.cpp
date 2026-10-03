@@ -554,7 +554,6 @@ void test_document_package_types(
         page_elements[0], "Title", "LocalizedStringValueType", "0", "1");
     expect_element_shape(
         page_elements[1], "ChildItems", "ControlChildItemsType", "0", "1");
-    expect_type_attribute(schema, "PageType", "id", "ObjectIdType", "required");
     expect_type_attribute(schema, "PageType", "name", "xs:string", "required");
 }
 
@@ -969,7 +968,7 @@ void test_document_instances(xmlSchemaPtr schema) {
     <Panel id="2" name="Pages">
       <Position/>
       <ChildItems>
-        <Page id="3" name="MainPage">
+        <Page name="MainPage">
           <Title><Item language="en">Main</Item></Title>
         </Page>
       </ChildItems>
@@ -991,8 +990,14 @@ void test_document_instances(xmlSchemaPtr schema) {
         validate_document(
             schema,
             "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\">"
-            "<ChildItems><Page id=\"2\" name=\"RootPage\"/></ChildItems></Form>") == 0,
+            "<ChildItems><Page name=\"RootPage\"/></ChildItems></Form>") == 0,
         "Form root must accept Page");
+    expect(
+        validate_document(
+            schema,
+            "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+            "<Page id=\"2\" name=\"RootPage\"/></ChildItems></Form>") != 0,
+        "Page id must be rejected by the public schema");
 }
 
 void test_schema_structure_coverage_does_not_imply_codec_coverage(
