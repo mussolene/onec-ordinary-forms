@@ -1253,7 +1253,9 @@ LV encode_button(
         !control.children.empty() || control.position.default_control.is_explicit() ||
         control.position.tab_order.is_explicit() || control.position.z_order.is_explicit() ||
         control.position.collapse.is_explicit() || !control.position.bindings.anchors.empty() ||
-        !control.position.bindings.dimensions.empty()) {
+        !control.position.bindings.dimensions.empty() ||
+        control.position.bindings.manual_horizontal.value() ||
+        control.position.bindings.manual_vertical.value()) {
         fail("OOF1122", "$", "plain top-level Button", control.name, "Button uses a storage concept outside the executable slice");
     }
     require_allowed_properties(control.properties(), {"Caption", "Enabled", "MultiLine"}, "$/Button");
@@ -1299,7 +1301,9 @@ LV encode_label(const model::ControlNode& control, std::size_t sibling_index) {
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
-        !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty()) {
+        !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty() ||
+        control.position.bindings.manual_horizontal.value() ||
+        control.position.bindings.manual_vertical.value()) {
         fail("OOF1122", "$/LabelDecoration", "plain top-level LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(control.properties(), {"Caption", "HorizontalAlign"}, "$/LabelDecoration");
@@ -1346,7 +1350,9 @@ LV encode_check_box(
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
-        !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty()) {
+        !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty() ||
+        control.position.bindings.manual_horizontal.value() ||
+        control.position.bindings.manual_vertical.value()) {
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
             "CheckBox uses a storage concept outside the supported profile");
     }
@@ -1391,7 +1397,9 @@ LV encode_input_field(
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
-        !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty()) {
+        !control.position.bindings.anchors.empty() || !control.position.bindings.dimensions.empty() ||
+        control.position.bindings.manual_horizontal.value() ||
+        control.position.bindings.manual_vertical.value()) {
         fail("OOF1122", "$/InputField", "named InputField with direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(), {"Enabled", "ReadOnly"}, "$/InputField");

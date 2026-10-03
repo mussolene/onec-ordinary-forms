@@ -603,10 +603,23 @@ void test_data_path_position_and_bindings(
     expect_type_attribute(
         schema,
         "AnchorBindingType",
+        "targetCoordinate",
+        "BindingCoordinateType",
+        "required");
+    expect_type_attribute(
+        schema,
+        "AnchorBindingType",
         "targetId",
         "ObjectIdType",
         "optional");
     expect_type_attribute(schema, "AnchorBindingType", "offset", "xs:int", "required");
+    expect_type_attribute(schema, "ProportionalBindingType", "targetCoordinate", "BindingCoordinateType", "required");
+    expect_type_attribute(schema, "ProportionalBindingType", "targetId", "ObjectIdType", "optional");
+    expect_type_attribute(schema, "ProportionalBindingType", "offset", "xs:int", "required");
+    const auto proportional_children = direct_children(sequence_for_type(schema, "AnchorBindingType"), "element");
+    expect(proportional_children.size() == 1, "AnchorBindingType child sequence drift");
+    expect_element_shape(
+        proportional_children[0], "ProportionalBinding", "ProportionalBindingType", "0", "1");
     expect_type_attribute(
         schema,
         "DimensionBindingType",
@@ -626,6 +639,8 @@ void test_data_path_position_and_bindings(
         bindings[0], "AnchorBinding", "AnchorBindingType", "0", "unbounded");
     expect_element_shape(
         bindings[1], "DimensionBinding", "DimensionBindingType", "0", "unbounded");
+    expect_type_attribute(schema, "BindingsType", "manualHorizontal", "xs:boolean", "optional");
+    expect_type_attribute(schema, "BindingsType", "manualVertical", "xs:boolean", "optional");
 
     const auto position =
         direct_children(sequence_for_type(schema, "PositionType"), "element");
@@ -934,7 +949,7 @@ void test_document_instances(xmlSchemaPtr schema) {
       <AutoContextMenu>true</AutoContextMenu>
       <Position>
         <Bindings>
-          <AnchorBinding coordinate="left" offset="0"/>
+          <AnchorBinding coordinate="left" targetCoordinate="left" offset="0"/>
           <DimensionBinding dimension="width" value="120"/>
         </Bindings>
       </Position>

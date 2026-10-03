@@ -1238,11 +1238,19 @@ private:
 
     model::Bindings parse_bindings(xmlNodePtr node, std::string_view owner_id) {
         model::Bindings bindings;
+        if (auto manual = optional_attribute(node, "manualHorizontal")) {
+            if (parse_boolean(*manual, node, "manualHorizontal", owner_id)) bindings.manual_horizontal.set(true);
+        }
+        if (auto manual = optional_attribute(node, "manualVertical")) {
+            if (parse_boolean(*manual, node, "manualVertical", owner_id)) bindings.manual_vertical.set(true);
+        }
         for (xmlNodePtr child : element_children(node)) {
             if (node_name(child) == "AnchorBinding") {
                 model::AnchorBinding binding;
                 binding.coordinate = parse_binding_coordinate(
                     required_attribute(child, "coordinate", owner_id), child);
+                binding.target_coordinate = parse_binding_coordinate(
+                    required_attribute(child, "targetCoordinate", owner_id), child);
                 if (auto target = optional_attribute(child, "targetId")) {
                     binding.target = model::ControlRef{
                         parse_object_id(*target, child, "targetId", owner_id)};
@@ -1253,8 +1261,28 @@ private:
                     "offset",
                     owner_id);
                 if (offset != 0) binding.offset.set(offset);
+                xmlNodePtr proportional = nullptr;
+                for (xmlNodePtr nested : element_children(child)) {
+                    if (node_name(nested) == "ProportionalBinding") proportional = nested;
+                }
+                if (proportional != nullptr) {
+                    model::AnchorBindingTarget target;
+                    target.coordinate = parse_binding_coordinate(
+                        required_attribute(proportional, "targetCoordinate", owner_id), proportional);
+                    if (auto id = optional_attribute(proportional, "targetId")) {
+                        target.target = model::ControlRef{
+                            parse_object_id(*id, proportional, "targetId", owner_id)};
+                    }
+                    const auto target_offset = parse_integer<std::int32_t>(
+                        required_attribute(proportional, "offset", owner_id),
+                        proportional,
+                        "offset",
+                        owner_id);
+                    if (target_offset != 0) target.offset.set(target_offset);
+                    binding.proportional = std::move(target);
+                }
                 bindings.anchors.push_back(std::move(binding));
-            } else {
+            } else if (node_name(child) == "DimensionBinding") {
                 model::DimensionBinding binding;
                 binding.dimension = parse_binding_dimension(
                     required_attribute(child, "dimension", owner_id), child);
@@ -2008,17 +2036,34 @@ private:
     }
 
     void write_bindings(const model::Bindings& bindings) {
-        if (bindings.anchors.empty() && bindings.dimensions.empty()) return;
-        writer_.open("Bindings");
+        XmlAttributes binding_attributes;
+        if (bindings.manual_horizontal.value()) binding_attributes.emplace_back("manualHorizontal", "true");
+        if (bindings.manual_vertical.value()) binding_attributes.emplace_back("manualVertical", "true");
+        writer_.open("Bindings", binding_attributes);
         for (const auto& binding : bindings.anchors) {
             XmlAttributes attributes{
                 {"coordinate", std::string(binding_coordinate_name(binding.coordinate))},
+                {"targetCoordinate", std::string(binding_coordinate_name(binding.target_coordinate))},
             };
             if (binding.target.has_value()) {
                 attributes.emplace_back("targetId", object_id_text(binding.target->id()));
             }
             attributes.emplace_back("offset", std::to_string(binding.offset.value()));
-            writer_.empty("AnchorBinding", attributes);
+            if (!binding.proportional.has_value()) {
+                writer_.empty("AnchorBinding", attributes);
+            } else {
+                writer_.open("AnchorBinding", attributes);
+                const auto& target = *binding.proportional;
+                XmlAttributes proportional_attributes{
+                    {"targetCoordinate", std::string(binding_coordinate_name(target.coordinate))},
+                };
+                if (target.target.has_value()) {
+                    proportional_attributes.emplace_back("targetId", object_id_text(target.target->id()));
+                }
+                proportional_attributes.emplace_back("offset", std::to_string(target.offset.value()));
+                writer_.empty("ProportionalBinding", proportional_attributes);
+                writer_.close("AnchorBinding");
+            }
         }
         for (const auto& binding : bindings.dimensions) {
             writer_.empty("DimensionBinding", {
@@ -2040,7 +2085,8 @@ private:
         const bool z_order = position.z_order.is_explicit() && position.z_order.value().has_value();
         const bool collapse = position.collapse.is_explicit() && position.collapse.value().has_value();
         const bool width = position.width.is_explicit() && position.width.value() != 0;
-        const bool bindings = !position.bindings.anchors.empty() || !position.bindings.dimensions.empty();
+        const bool bindings = !position.bindings.anchors.empty() || !position.bindings.dimensions.empty() ||
+            position.bindings.manual_horizontal.value() || position.bindings.manual_vertical.value();
         if (!(default_control || top || visible || height || left || tab_order || z_order ||
               collapse || width || bindings)) {
             writer_.empty("Position");

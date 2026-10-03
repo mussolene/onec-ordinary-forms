@@ -684,6 +684,30 @@ ValidationReport OrdinaryFormDocument::validate() const {
             if (binding.target.has_value()) {
                 require_control(control.id, *binding.target);
             }
+            const auto target_coordinate = static_cast<std::size_t>(binding.target_coordinate);
+            if (target_coordinate >= anchor_coordinates.size()) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    control.id,
+                    {},
+                    "Position contains an invalid target binding coordinate");
+            }
+            if (binding.proportional.has_value()) {
+                const auto& target = *binding.proportional;
+                const auto proportional_coordinate = static_cast<std::size_t>(target.coordinate);
+                if (proportional_coordinate >= anchor_coordinates.size()) {
+                    add_violation(
+                        report,
+                        InvariantCode::invalid_property,
+                        control.id,
+                        {},
+                        "Position contains an invalid proportional target coordinate");
+                }
+                if (target.target.has_value()) {
+                    require_control(control.id, *target.target);
+                }
+            }
         }
         std::array<bool, 5> binding_dimensions{};
         for (const auto& binding : control.position.bindings.dimensions) {

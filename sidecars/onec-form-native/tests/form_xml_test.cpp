@@ -56,7 +56,7 @@ void test_complete_document_roundtrip() {
         <Top>0</Top>
         <Visible>true</Visible>
         <Bindings>
-          <AnchorBinding coordinate="left" offset="0"/>
+          <AnchorBinding coordinate="left" targetCoordinate="left" offset="0"/>
           <DimensionBinding dimension="width" value="120"/>
         </Bindings>
       </Position>
@@ -195,6 +195,74 @@ void test_all_control_variants() {
     auto edited_source = source::serialize_form_xml(edited.value());
     expect(edited_source.ok() && edited_source.value() == edited_xml,
            "renamed XML must remain canonical without losing the edits");
+}
+
+void test_binding_target_and_manual_roundtrip() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+  <Button id="2" name="Run"><Position><Bindings manualHorizontal="true" manualVertical="true">
+    <AnchorBinding coordinate="right" targetCoordinate="left" targetId="3" offset="7">
+      <ProportionalBinding targetCoordinate="bottom" offset="-2"/>
+    </AnchorBinding>
+  </Bindings></Position><Caption>Run</Caption></Button>
+  <LabelDecoration id="3" name="Target"><Position/><Caption>Target</Caption></LabelDecoration>
+</ChildItems></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "primary and proportional anchor targets must parse");
+    const auto* run = parsed.value().find_control(model::ObjectId{2});
+    expect(run != nullptr && run->position.bindings.anchors.size() == 1,
+        "primary anchor must be materialized");
+    const auto& binding = run->position.bindings.anchors.front();
+    expect(binding.coordinate == model::BindingCoordinate::right &&
+               binding.target_coordinate == model::BindingCoordinate::left &&
+               binding.target == model::ControlRef{model::ObjectId{3}} &&
+               binding.offset.value() == 7 && binding.proportional.has_value() &&
+               !binding.proportional->target.has_value() &&
+               binding.proportional->coordinate == model::BindingCoordinate::bottom &&
+               binding.proportional->offset.value() == -2,
+        "anchor edges, offsets, and Form proportional target must be retained");
+    expect(run->position.bindings.manual_horizontal.value() &&
+               run->position.bindings.manual_vertical.value(),
+        "manual flags must be retained");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok(), "anchor bindings must serialize");
+    auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "serialized anchor bindings must reparse");
+    const auto* roundtrip = reparsed.value().find_control(model::ObjectId{2});
+    expect(roundtrip != nullptr && roundtrip->position.bindings.manual_horizontal.value() &&
+               roundtrip->position.bindings.manual_vertical.value() &&
+               roundtrip->position.bindings.anchors.size() == 1 &&
+               roundtrip->position.bindings.anchors.front().coordinate == binding.coordinate &&
+               roundtrip->position.bindings.anchors.front().target_coordinate == binding.target_coordinate &&
+               roundtrip->position.bindings.anchors.front().target == binding.target &&
+               roundtrip->position.bindings.anchors.front().offset.value() == binding.offset.value() &&
+               roundtrip->position.bindings.anchors.front().proportional.has_value() &&
+               roundtrip->position.bindings.anchors.front().proportional->target == binding.proportional->target &&
+               roundtrip->position.bindings.anchors.front().proportional->coordinate == binding.proportional->coordinate &&
+               roundtrip->position.bindings.anchors.front().proportional->offset.value() == binding.proportional->offset.value(),
+        "all binding targets and manual flags must survive XML round-trip");
+
+    constexpr std::string_view manual_only = R"XML(
+<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+  <Button id="2" name="Run"><Position><Bindings manualHorizontal="true"/></Position><Caption>Run</Caption></Button>
+</ChildItems></Form>)XML";
+    auto manual_parsed = source::parse_form_xml(manual_only);
+    expect(manual_parsed.ok(), "manual-only bindings must parse");
+    auto manual_xml = source::serialize_form_xml(manual_parsed.value());
+    expect(manual_xml.ok() && manual_xml.value().find("<Bindings manualHorizontal=\"true\"") != std::string::npos,
+        "manual-only Bindings must be emitted");
+
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Button id=\"2\" name=\"Run\"><Position><Bindings><AnchorBinding coordinate=\"right\" offset=\"0\"/>"
+        "</Bindings></Position><Caption>Run</Caption></Button></ChildItems></Form>"),
+        "OOF2002", "missing targetCoordinate must be rejected by XSD");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Button id=\"2\" name=\"Run\"><Position><Bindings><AnchorBinding coordinate=\"right\" targetCoordinate=\"left\" offset=\"0\">"
+        "<ProportionalBinding targetCoordinate=\"bottom\" targetId=\"99\" offset=\"0\"/>"
+        "</AnchorBinding></Bindings></Position><Caption>Run</Caption></Button></ChildItems></Form>"),
+        "OOF2004", "dangling proportional target must fail model validation");
 }
 
 void test_typed_values_and_canonicalization() {
@@ -460,6 +528,7 @@ int main() {
         test_complete_document_roundtrip();
         test_root_page_tree_xml_roundtrip();
         test_all_control_variants();
+        test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
         test_boolean_type_domain_xml_roundtrip();
         test_inherited_property_has_one_surface();

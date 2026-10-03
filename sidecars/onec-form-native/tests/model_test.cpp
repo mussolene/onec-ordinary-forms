@@ -625,9 +625,21 @@ void test_duplicate_bindings_rejected() {
     OrdinaryFormDocument document(std::move(form));
     ControlNode input{ObjectId{10}, "Input", InputFieldPayload{}};
     input.position.bindings.anchors.push_back(
-        AnchorBinding{BindingCoordinate::left, std::nullopt, Property<std::int32_t>{0}});
+        AnchorBinding{
+            BindingCoordinate::left,
+            std::nullopt,
+            Property<std::int32_t>{0},
+            BindingCoordinate::left,
+            std::nullopt,
+        });
     input.position.bindings.anchors.push_back(
-        AnchorBinding{BindingCoordinate::left, std::nullopt, Property<std::int32_t>{0}});
+        AnchorBinding{
+            BindingCoordinate::left,
+            std::nullopt,
+            Property<std::int32_t>{0},
+            BindingCoordinate::left,
+            std::nullopt,
+        });
     document.add_control(std::move(input));
     expect(
         document.validate().has(InvariantCode::invalid_property),

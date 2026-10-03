@@ -1366,6 +1366,40 @@ void test_six_reordered_controls_use_logical_geometry_ordinals() {
         "geometry next index must equal logical ordinal plus one");
 }
 
+void test_manual_bindings_are_not_silently_discarded() {
+    for (const auto kind : {model::ControlKind::button, model::ControlKind::label_decoration,
+                           model::ControlKind::input_field, model::ControlKind::check_box}) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "ManualBindings";
+        form.children.push_back(model::ControlRef{model::ObjectId{2}});
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode control{model::ObjectId{2}, "Item", model::ButtonPayload{}};
+        if (kind == model::ControlKind::label_decoration) control.payload = model::LabelDecorationPayload{};
+        if (kind == model::ControlKind::input_field) control.payload = model::InputFieldPayload{};
+        if (kind == model::ControlKind::check_box) control.payload = model::CheckBoxPayload{};
+        if (kind == model::ControlKind::input_field || kind == model::ControlKind::check_box) {
+            model::TypeDomainPatternValue type;
+            model::TypeDomainEntry entry;
+            entry.term = kind == model::ControlKind::check_box
+                ? model::TypeDomainTerm::boolean : model::TypeDomainTerm::string;
+            type.entries.push_back(entry);
+            document.add_attribute(model::Attribute{model::ObjectId{3}, "Value", std::move(type)});
+            control.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        }
+        document.add_control(control);
+        expect(form_stream::encode_document(document).ok(), "plain control fixture must encode");
+        for (const bool horizontal : {true, false}) {
+            model::OrdinaryFormDocument manual(document.form());
+            for (const auto& attribute : document.collections().attributes) manual.add_attribute(attribute);
+            control.position.bindings.manual_horizontal.set(horizontal);
+            control.position.bindings.manual_vertical.set(!horizontal);
+            manual.add_control(control);
+            expect(!form_stream::encode_document(manual), "manual binding must not disappear during encoding");
+        }
+    }
+}
+
 void test_platform_empty_document_fixture() {
     constexpr std::string_view fixture = R"OOF(
 {27,{18,{{1,1,{"ru","Form"}},1,4294967295},{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}},{0}},400,300,1,0,1,4,4,3,400,300,96},{{-1},3,{0},{0}},{00000000-0000-0000-0000-000000000000,0},{0},1,4,1,0,0,0,{0},{0},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
@@ -1407,6 +1441,7 @@ int main() {
         test_single_input_field_round_trip();
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
+        test_manual_bindings_are_not_silently_discarded();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

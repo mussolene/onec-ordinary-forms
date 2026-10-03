@@ -450,7 +450,17 @@ void append_document_types(std::string& output) {
   </xs:simpleType>
 
   <xs:complexType name="AnchorBindingType">
+    <xs:sequence>
+      <xs:element name="ProportionalBinding" type="ProportionalBindingType" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
     <xs:attribute name="coordinate" type="BindingCoordinateType" use="required"/>
+    <xs:attribute name="targetCoordinate" type="BindingCoordinateType" use="required"/>
+    <xs:attribute name="targetId" type="ObjectIdType" use="optional"/>
+    <xs:attribute name="offset" type="xs:int" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="ProportionalBindingType">
+    <xs:attribute name="targetCoordinate" type="BindingCoordinateType" use="required"/>
     <xs:attribute name="targetId" type="ObjectIdType" use="optional"/>
     <xs:attribute name="offset" type="xs:int" use="required"/>
   </xs:complexType>
@@ -465,6 +475,8 @@ void append_document_types(std::string& output) {
       <xs:element name="AnchorBinding" type="AnchorBindingType" minOccurs="0" maxOccurs="unbounded"/>
       <xs:element name="DimensionBinding" type="DimensionBindingType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
+    <xs:attribute name="manualHorizontal" type="xs:boolean" use="optional"/>
+    <xs:attribute name="manualVertical" type="xs:boolean" use="optional"/>
   </xs:complexType>
 
   <xs:complexType name="AttributeType">

@@ -418,10 +418,20 @@ enum class BindingDimension : std::uint8_t {
     stretch,
 };
 
+struct AnchorBindingTarget {
+    // An absent target denotes the current Form.
+    std::optional<ControlRef> target;
+    BindingCoordinate coordinate = BindingCoordinate::left;
+    Property<std::int32_t> offset{0};
+};
+
 struct AnchorBinding {
     BindingCoordinate coordinate = BindingCoordinate::left;
+    // An absent target denotes the current Form.
     std::optional<ControlRef> target;
     Property<std::int32_t> offset{0};
+    BindingCoordinate target_coordinate = BindingCoordinate::left;
+    std::optional<AnchorBindingTarget> proportional;
 };
 
 struct DimensionBinding {
@@ -432,6 +442,8 @@ struct DimensionBinding {
 struct Bindings {
     std::vector<AnchorBinding> anchors;
     std::vector<DimensionBinding> dimensions;
+    Property<bool> manual_horizontal{false};
+    Property<bool> manual_vertical{false};
 };
 
 struct Position {
