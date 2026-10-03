@@ -728,7 +728,7 @@ void test_button_colors_round_trip_and_validation() {
     form.id = model::ObjectId{1};
     form.name = "ButtonColors";
     form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{4}},
-        model::ControlRef{model::ObjectId{6}}};
+        model::ControlRef{model::ObjectId{6}}, model::ControlRef{model::ObjectId{8}}};
     model::OrdinaryFormDocument document(std::move(form));
     model::ControlNode rgb{model::ObjectId{2}, "RGB", model::ButtonPayload{}};
     model::ColorValue absolute;
@@ -740,6 +740,16 @@ void test_button_colors_round_trip_and_validation() {
     rgb.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"),
         model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
             model::QualifiedName{"StyleColors.ButtonBackColor"}});
+    model::FontValue full_font;
+    full_font.kind = model::FontKind::absolute;
+    full_font.face_name = "Arial";
+    full_font.height = 12.5;
+    full_font.bold = false;
+    full_font.italic = true;
+    full_font.underline = false;
+    full_font.strikeout = true;
+    full_font.scale = 125;
+    rgb.properties().set_explicit(model::PropertyId::from_name("Font"), full_font);
     document.add_control(std::move(rgb));
     model::ControlNode automatic{model::ObjectId{4}, "Automatic", model::ButtonPayload{}};
     automatic.properties().set_explicit(model::PropertyId::from_name("BorderColor"), model::ColorValue{});
@@ -751,7 +761,19 @@ void test_button_colors_round_trip_and_validation() {
     named_styles.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"),
         model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
             model::QualifiedName{"StyleColors.ButtonBorderColor"}});
+    model::FontValue text_font;
+    text_font.kind = model::FontKind::style_reference;
+    text_font.style = model::QualifiedName{"StyleFonts.TextFont"};
+    named_styles.properties().set_explicit(model::PropertyId::from_name("Font"), text_font);
     document.add_control(std::move(named_styles));
+    model::ControlNode copied_scale_button{model::ObjectId{8}, "CopiedScale", model::ButtonPayload{}};
+    model::FontValue copied_scale_font;
+    copied_scale_font.kind = model::FontKind::absolute;
+    copied_scale_font.face_name = "Arial";
+    copied_scale_font.scale = 125;
+    copied_scale_font.scale_override = true;
+    copied_scale_button.properties().set_explicit(model::PropertyId::from_name("Font"), copied_scale_font);
+    document.add_control(std::move(copied_scale_button));
 
     const auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), "Button absolute, automatic, and style colors must encode");
@@ -762,17 +784,28 @@ void test_button_colors_round_trip_and_validation() {
     expect(rgb_base.items[10].items[2].items[0].atom == "-7" &&
                rgb_base.items[9].items[2].items[0].atom == "-7",
         "Button style colors must use their named platform identifiers independently");
+    expect(list_stream::dump_compact(rgb_base.items[4]) ==
+               "{8,0,63,125,0,0,0,400,1,0,1,0,0,0,0,0,\"Arial\",1,125,0}",
+        "Button.Font must encode explicit false values and named height/scale data");
     const auto& named_base = records[3].items[2].items[1].items[0];
     expect(named_base.items[6].items[2].items[0].atom == "-21" &&
                named_base.items[10].items[2].items[0].atom == "-34",
         "Button BorderColor and ButtonTextColor must retain explicit -21 and -34 named styles");
+    expect(list_stream::dump_compact(named_base.items[4]) == "{8,2,0,{-20},1,100}",
+        "Button.Font must encode the observed TextFont style reference");
+    const auto& copied_scale_base = records[4].items[2].items[1].items[0];
+    expect(list_stream::dump_compact(copied_scale_base.items[4]) ==
+               "{8,0,513,0,0,0,0,400,0,0,0,0,0,0,0,0,\"Arial\",1,125,0}",
+        "Button Font scale override marker must remain independent from the scale");
 
     const auto decoded = form_stream::decode_document(encoded.value(), "ButtonColors");
     expect(decoded.ok(), "Button color values must decode");
     const auto* decoded_rgb = decoded.value().find_control(model::ObjectId{2});
     const auto* decoded_auto = decoded.value().find_control(model::ObjectId{4});
     const auto* decoded_named = decoded.value().find_control(model::ObjectId{6});
-    expect(decoded_rgb && decoded_auto && decoded_named, "Button color owners must survive decoding");
+    const auto* decoded_copy_scale = decoded.value().find_control(model::ObjectId{8});
+    expect(decoded_rgb && decoded_auto && decoded_named && decoded_copy_scale,
+        "Button color and Font owners must survive decoding");
     const auto* border = decoded_rgb->properties().find(model::PropertyId::from_name("BorderColor"));
     const auto* text = decoded_rgb->properties().find(model::PropertyId::from_name("ButtonTextColor"));
     const auto* decoded_style = text ? std::get_if<model::QualifiedName>(
@@ -780,8 +813,13 @@ void test_button_colors_round_trip_and_validation() {
     expect(border && std::get<model::ColorValue>(border->value) == absolute && decoded_style &&
                *decoded_style == model::QualifiedName{"StyleColors.ButtonBackColor"},
         "non-default Button RGB and cross-style reference must round-trip");
+    const auto* decoded_font = decoded_rgb->properties().find(model::PropertyId::from_name("Font"));
+    expect(decoded_font && std::get<model::FontValue>(decoded_font->value) == full_font,
+        "Button Font must preserve explicit false values and each named field");
     expect(!decoded_auto->properties().find(model::PropertyId::from_name("BorderColor")),
         "explicit canonical Button default color must normalize to absent");
+    expect(!decoded_auto->properties().find(model::PropertyId::from_name("Font")),
+        "automatic Button Font must normalize to the descriptor default");
     const auto* named_border = decoded_named->properties().find(model::PropertyId::from_name("BorderColor"));
     const auto* named_text = decoded_named->properties().find(model::PropertyId::from_name("ButtonTextColor"));
     expect(named_border && std::get<model::ColorValue>(named_border->value).style ==
@@ -789,6 +827,12 @@ void test_button_colors_round_trip_and_validation() {
                named_text && std::get<model::ColorValue>(named_text->value).style ==
                model::StyleReference{model::QualifiedName{"StyleColors.ButtonBorderColor"}},
         "all observed named style identifiers must decode to their public names");
+    const auto* decoded_text_font = decoded_named->properties().find(model::PropertyId::from_name("Font"));
+    expect(decoded_text_font && std::get<model::FontValue>(decoded_text_font->value) == text_font,
+        "Button TextFont style must decode to its named model value");
+    const auto* decoded_copy_font = decoded_copy_scale->properties().find(model::PropertyId::from_name("Font"));
+    expect(decoded_copy_font && std::get<model::FontValue>(decoded_copy_font->value) == copied_scale_font,
+        "Button copy-scale marker and value must both survive decoding");
     const auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
                list_stream::dump_compact(encoded.value()),
@@ -844,6 +888,25 @@ void test_button_colors_round_trip_and_validation() {
         list_stream::ListValue::raw_atom("16777216");
     expect_failure(form_stream::decode_document(malformed_storage, "ButtonColors"), "OOF1114",
         "$/1/2/2/1/2/1/0/6/2/0", "out-of-range packed Button RGB must be rejected");
+
+    auto malformed_font = encoded.value();
+    malformed_font.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[4] =
+        list_stream::parse("{8,0,1024,125,0,0,0,400,0,0,0,0,0,0,0,0,\"Arial\",1,125,0}");
+    expect_failure(form_stream::decode_document(malformed_font, "ButtonColors"), "OOF1114",
+        "$/1/2/2/1/2/1/0/4", "unknown Font presence flags must fail through the Button boundary");
+
+    model::Form override_form;
+    override_form.id = model::ObjectId{1};
+    override_form.name = "FontOverride";
+    override_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument font_override(std::move(override_form));
+    model::ControlNode style_override{model::ObjectId{2}, "Text", model::ButtonPayload{}};
+    auto unsupported_style = text_font;
+    unsupported_style.underline = false;
+    style_override.properties().set_explicit(model::PropertyId::from_name("Font"), unsupported_style);
+    font_override.add_control(std::move(style_override));
+    expect_failure(form_stream::encode_document(font_override), "OOF1122", "$/Button/Font",
+        "unobserved style-font overrides must be rejected rather than discarded");
 }
 
 void test_button_picture_enums_round_trip_and_validation() {

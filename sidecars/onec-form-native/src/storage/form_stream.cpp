@@ -683,10 +683,39 @@ model::ColorValue explicit_button_color(const model::PropertySet& properties, st
     return std::get<model::ColorValue>(entry->value);
 }
 
+LV encode_button_font(const model::FontValue& font) {
+    try {
+        return list_stream::parse(value_codec::encode_font(font));
+    } catch (const std::exception& error) {
+        fail("OOF1122", "$/Button/Font", "supported named Font value", error.what(),
+            "Button Font cannot be represented by the supported platform codec");
+    }
+}
+
+model::FontValue decode_button_font(const LV& value, std::string_view path) {
+    try {
+        return value_codec::decode_font(list_stream::dump_compact(value));
+    } catch (const std::exception& error) {
+        fail("OOF1114", std::string(path), "supported canonical Button Font record", error.what(),
+            "Button Font record is malformed or unsupported");
+    }
+}
+
+model::FontValue explicit_button_font(const model::PropertySet& properties) {
+    const auto* entry = properties.find(model::PropertyId::from_name("Font"));
+    if (entry == nullptr) return {};
+    if (!std::holds_alternative<model::FontValue>(entry->value)) {
+        fail("OOF1122", "$/Button/Font", "FontValue", "different value type",
+            "Button Font property has the wrong value type");
+    }
+    return std::get<model::FontValue>(entry->value);
+}
+
 LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
     const model::ColorValue* border_color = nullptr,
     const model::ColorValue* button_text_color = nullptr,
-    const model::ColorValue* button_back_color = nullptr) {
+    const model::ColorValue* button_back_color = nullptr,
+    const model::FontValue* font = nullptr) {
     auto value = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
@@ -694,6 +723,7 @@ LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
     value.items[1] = raw(enabled ? "1" : "0");
     value.items[12] = encoded_localized(tool_tip);
+    if (font != nullptr) value.items[4] = encode_button_font(*font);
     if (border_color != nullptr) value.items[6] = encode_button_color(*border_color, "$/Button/BorderColor");
     if (button_text_color != nullptr) value.items[10] = encode_button_color(*button_text_color, "$/Button/ButtonTextColor");
     if (button_back_color != nullptr) value.items[9] = encode_button_color(*button_back_color, "$/Button/ButtonBackColor");
@@ -711,9 +741,10 @@ LV canonical_button_properties(
     std::string_view tool_tip,
     const model::ColorValue& border_color,
     const model::ColorValue& button_text_color,
-    const model::ColorValue& button_back_color) {
+    const model::ColorValue& button_back_color,
+    const model::FontValue& font) {
     return list({
-        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color),
+        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font),
         raw("14"),
         encoded_localized(caption),
         raw(std::to_string(horizontal_align)),
@@ -1454,6 +1485,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
     const auto button_back_color = decode_button_color(base.items[9], child_path(base_path, 9));
     const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
+    const auto font = decode_button_font(base.items[4], child_path(base_path, 4));
     const std::string observed_state = raw_atom(base.items[17], child_path(base_path, 17));
     if (observed_state != "1" && observed_state != "2") {
         fail(
@@ -1469,7 +1501,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     normalized_base.items[17] = raw("2");
     require_exact(
         normalized_base,
-        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color),
+        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font),
         base_path,
         "Button base record contains an unsupported property variation");
     const std::string caption = decoded_single_language_text(
@@ -1506,7 +1538,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     require_exact(
         normalized_properties,
         canonical_button_properties(enabled, caption, horizontal_align, vertical_align, picture_location,
-            picture_size, multi_line, tool_tip, border_color, button_text_color, button_back_color),
+            picture_size, multi_line, tool_tip, border_color, button_text_color, button_back_color, font),
         properties_path,
         "Button payload contains an unsupported property variation");
 
@@ -1552,6 +1584,9 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     }
     if (button_back_color != button_color_default("ButtonBackColor")) {
         control.properties().set_explicit(model::PropertyId::from_name("ButtonBackColor"), button_back_color);
+    }
+    if (font != model::FontValue{}) {
+        control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
     }
     if (horizontal_align != 1) {
         static constexpr std::string_view members[] = {"Left", "Center", "Right"};
@@ -1900,13 +1935,14 @@ LV encode_button(
     }
     require_allowed_properties(control.properties(),
         {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign",
-            "PictureLocation", "PictureSize", "BorderColor", "ButtonTextColor", "ButtonBackColor"}, "$/Button");
+            "PictureLocation", "PictureSize", "BorderColor", "ButtonTextColor", "ButtonBackColor", "Font"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto border_color = explicit_button_color(control.properties(), "BorderColor");
     const auto button_text_color = explicit_button_color(control.properties(), "ButtonTextColor");
     const auto button_back_color = explicit_button_color(control.properties(), "ButtonBackColor");
+    const auto font = explicit_button_font(control.properties());
     const auto enum_storage_value = [](const model::PropertySet& values, std::string_view name,
                                        std::string_view expected_type, std::int32_t default_value,
                                        std::initializer_list<std::pair<std::string_view, std::int32_t>> members) {
@@ -1949,7 +1985,7 @@ LV encode_button(
             raw("1"),
             canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
                 picture_location, picture_size, multi_line, tool_tip,
-                border_color, button_text_color, button_back_color),
+                border_color, button_text_color, button_back_color, font),
             canonical_event_table(handler),
         }),
         encode_geometry(control.position, context, IncomingAnchorLists{}),

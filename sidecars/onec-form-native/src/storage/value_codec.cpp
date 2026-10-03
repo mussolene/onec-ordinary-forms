@@ -1,6 +1,8 @@
 #include "oof/storage/value_codec.hpp"
 
 #include <cstdint>
+#include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -13,7 +15,6 @@ namespace {
 constexpr std::uint32_t localized_string_version = 1;
 constexpr std::uint32_t formatted_string_version = 1;
 constexpr std::uint32_t color_field_count = 3;
-constexpr std::uint32_t font_field_count = 6;
 constexpr std::string_view type_domain_root = "Pattern";
 constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
 
@@ -102,28 +103,30 @@ std::uint32_t font_kind_code(model::FontKind kind) {
     switch (kind) {
         case model::FontKind::absolute:
             return 0;
-        case model::FontKind::windows_font:
-            return 1;
         case model::FontKind::style_reference:
             return 2;
         case model::FontKind::automatic:
             return 3;
+        case model::FontKind::windows_font:
+            break;
     }
-    throw std::runtime_error("unsupported font kind");
+    if (kind == model::FontKind::windows_font) {
+        throw std::runtime_error("WindowsFont is not supported by the ordinary-form Font codec");
+    }
+    throw std::runtime_error("unknown ordinary-form Font kind " +
+        std::to_string(static_cast<unsigned int>(kind)));
 }
 
 model::FontKind parse_font_kind(std::uint32_t code) {
     switch (code) {
         case 0:
             return model::FontKind::absolute;
-        case 1:
-            return model::FontKind::windows_font;
         case 2:
             return model::FontKind::style_reference;
         case 3:
             return model::FontKind::automatic;
         default:
-            throw std::runtime_error("unsupported font kind " + std::to_string(code));
+            throw std::runtime_error("unsupported ordinary-form Font kind " + std::to_string(code));
     }
 }
 
@@ -435,49 +438,133 @@ model::ColorValue read_color(list_stream::ListInStream& in) {
 }
 
 void write_font(list_stream::ListOutStream& out, const model::FontValue& value) {
-    require_style_reference_consistency(
-        value.kind == model::FontKind::style_reference,
-        value.style,
-        "Font");
+    const auto has_fields = [&] {
+        return value.face_name.has_value() || value.height.has_value() || value.bold.has_value() ||
+            value.italic.has_value() || value.underline.has_value() || value.strikeout.has_value() ||
+            value.scale != 100.0 || value.scale_override;
+    };
+    const bool has_style = !std::holds_alternative<std::monostate>(value.style);
+    const std::uint32_t kind = font_kind_code(value.kind);
+    if (value.kind == model::FontKind::automatic) {
+        if (has_style || has_fields()) throw std::runtime_error("automatic Font cannot carry overrides");
+        out.begin_list(); out.write_uint32(8); out.write_uint32(kind); out.write_uint32(0);
+        out.write_uint32(1); out.write_uint32(100); out.end_list();
+        return;
+    }
+    if (value.kind == model::FontKind::style_reference) {
+        const auto* style = std::get_if<model::QualifiedName>(&value.style);
+        if (style == nullptr || style->value != "StyleFonts.TextFont" || has_fields()) {
+            throw std::runtime_error("only unmodified StyleFonts.TextFont is supported");
+        }
+        out.begin_list(); out.write_uint32(8); out.write_uint32(kind); out.write_uint32(0);
+        out.begin_list(); out.write_int64(-20); out.end_list();
+        out.write_uint32(1); out.write_uint32(100); out.end_list();
+        return;
+    }
+    if (value.kind != model::FontKind::absolute || has_style) {
+        throw std::runtime_error("unsupported Font kind or style reference");
+    }
+    if (!value.face_name || value.face_name->empty()) {
+        throw std::runtime_error("absolute Font requires a non-empty faceName");
+    }
+
+    std::uint32_t flags = 0;
+    if (value.face_name) flags |= 1U;
+    if (value.height) flags |= 2U;
+    if (value.bold) flags |= 4U;
+    if (value.italic) flags |= 8U;
+    if (value.underline) flags |= 16U;
+    if (value.strikeout) flags |= 32U;
+    if (value.scale_override) flags |= 512U;
+    const auto scaled_integer = [](std::optional<double> number, double factor, std::string_view field) {
+        if (!number) return std::uint32_t{};
+        if (!std::isfinite(*number) || *number < 0 || *number * factor > std::numeric_limits<std::int32_t>::max()) {
+            throw std::runtime_error("Font " + std::string(field) + " is outside its supported range");
+        }
+        const double scaled = *number * factor;
+        const double rounded = std::round(scaled);
+        if (std::abs(scaled - rounded) > 1e-9) {
+            throw std::runtime_error("Font " + std::string(field) + " is not representable in storage units");
+        }
+        return static_cast<std::uint32_t>(rounded);
+    };
+    const auto height = scaled_integer(value.height, 10.0, "height");
+    const auto scale = scaled_integer(value.scale, 1.0, "scale");
     out.begin_list();
-    out.write_uint32(font_field_count);
-    out.write_uint32(font_kind_code(value.kind));
-    out.write_uint32(value.mask);
-    write_style_reference(out, value.style);
-    out.write_string(value.face_name);
-    out.write_double(value.height);
-    out.begin_list();
-    out.write_bool(value.bold);
-    out.write_bool(value.italic);
-    out.write_bool(value.underline);
-    out.write_bool(value.strikeout);
-    out.end_list();
+    out.write_uint32(8); out.write_uint32(kind); out.write_uint32(flags); out.write_uint32(height);
+    out.write_uint32(0); out.write_uint32(0); out.write_uint32(0);
+    out.write_uint32(value.bold.value_or(false) ? 700 : 400);
+    out.write_bool(value.italic.value_or(false));
+    out.write_bool(value.underline.value_or(false));
+    out.write_bool(value.strikeout.value_or(false));
+    out.write_uint32(0); out.write_uint32(0); out.write_uint32(0); out.write_uint32(0); out.write_uint32(0);
+    out.write_string(value.face_name.value_or(std::string{}));
+    out.write_uint32(1); out.write_uint32(scale); out.write_uint32(0);
     out.end_list();
 }
 
 model::FontValue read_font(list_stream::ListInStream& in) {
     in.begin_list();
-    const std::uint32_t fields = in.read_uint32();
-    if (fields != font_field_count) {
-        throw std::runtime_error("Font unsupported field count " + std::to_string(fields));
-    }
+    if (in.read_uint32() != 8) throw std::runtime_error("Font version marker is unsupported");
     model::FontValue value;
     value.kind = parse_font_kind(in.read_uint32());
-    value.mask = in.read_uint32();
-    value.style = read_style_reference(in);
-    value.face_name = in.read_string();
-    value.height = in.read_double();
-    in.begin_list();
-    value.bold = in.read_bool();
-    value.italic = in.read_bool();
-    value.underline = in.read_bool();
-    value.strikeout = in.read_bool();
+    if (value.kind == model::FontKind::automatic) {
+        if (in.read_uint32() != 0 || in.read_uint32() != 1 || in.read_uint32() != 100 || in.has_next())
+            throw std::runtime_error("automatic Font record is not canonical");
+        in.end_list();
+        return value;
+    }
+    if (value.kind == model::FontKind::style_reference) {
+        if (in.read_uint32() != 0) throw std::runtime_error("style Font flags are unsupported");
+        in.begin_list();
+        if (in.read_int64() != -20 || in.has_next()) throw std::runtime_error("style Font is not TextFont");
+        in.end_list();
+        if (in.read_uint32() != 1 || in.read_uint32() != 100 || in.has_next())
+            throw std::runtime_error("style Font record is not canonical");
+        value.style = model::QualifiedName{"StyleFonts.TextFont"};
+        in.end_list();
+        return value;
+    }
+    if (value.kind != model::FontKind::absolute) throw std::runtime_error("unsupported Font kind");
+    const std::uint32_t flags = in.read_uint32();
+    constexpr std::uint32_t allowed_flags = 1U | 2U | 4U | 8U | 16U | 32U | 512U;
+    if ((flags & ~allowed_flags) != 0) throw std::runtime_error("Font contains unknown presence flags");
+    const auto height = in.read_uint32();
+    if (height > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
+        throw std::runtime_error("Font height exceeds the supported signed 32-bit storage range");
+    }
+    for (int i = 0; i < 3; ++i) if (in.read_uint32() != 0) throw std::runtime_error("Font reserved field is nonzero");
+    const auto weight = in.read_uint32();
+    const bool italic = in.read_bool();
+    const bool underline = in.read_bool();
+    const bool strikeout = in.read_bool();
+    for (int i = 0; i < 5; ++i) if (in.read_uint32() != 0) throw std::runtime_error("Font reserved field is nonzero");
+    const auto face_name = in.read_string();
+    if (in.read_uint32() != 1) throw std::runtime_error("Font reserved marker is unsupported");
+    const auto scale = in.read_uint32();
+    if (scale > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
+        throw std::runtime_error("Font scale exceeds the supported signed 32-bit storage range");
+    }
+    if (in.read_uint32() != 0 || in.has_next()) throw std::runtime_error("Font trailer is unsupported");
+    if ((flags & 1U) == 0 || face_name.empty()) {
+        throw std::runtime_error("absolute Font requires a non-empty faceName and its presence flag");
+    }
+    value.face_name = face_name;
+    if ((flags & 2U) != 0) value.height = static_cast<double>(height) / 10.0;
+    else if (height != 0) throw std::runtime_error("Font height is present without its flag");
+    if ((flags & 4U) != 0) {
+        if (weight != 400 && weight != 700) throw std::runtime_error("Font weight is unsupported");
+        value.bold = weight == 700;
+    } else if (weight != 400) throw std::runtime_error("Font weight is present without its flag");
+    if ((flags & 8U) != 0) value.italic = italic;
+    else if (italic) throw std::runtime_error("Font italic is present without its flag");
+    if ((flags & 16U) != 0) value.underline = underline;
+    else if (underline) throw std::runtime_error("Font underline is present without its flag");
+    if ((flags & 32U) != 0) value.strikeout = strikeout;
+    else if (strikeout) throw std::runtime_error("Font strikeout is present without its flag");
+    value.scale = scale;
+    value.scale_override = (flags & 512U) != 0;
     in.end_list();
-    in.end_list();
-    require_style_reference_consistency(
-        value.kind == model::FontKind::style_reference,
-        value.style,
-        "Font");
     return value;
 }
 

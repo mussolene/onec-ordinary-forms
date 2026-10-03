@@ -311,14 +311,15 @@ enum class FontKind : std::uint8_t {
 
 struct FontValue {
     FontKind kind = FontKind::automatic;
-    std::uint32_t mask = 0;
     StyleReference style;
-    std::string face_name;
-    double height = 0.0;
-    bool bold = false;
-    bool italic = false;
-    bool underline = false;
-    bool strikeout = false;
+    std::optional<std::string> face_name;
+    std::optional<double> height;
+    std::optional<bool> bold;
+    std::optional<bool> italic;
+    std::optional<bool> underline;
+    std::optional<bool> strikeout;
+    double scale = 100.0;
+    bool scale_override = false;
 
     friend bool operator==(const FontValue&, const FontValue&) = default;
 };

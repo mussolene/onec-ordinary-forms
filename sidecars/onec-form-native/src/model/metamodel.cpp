@@ -363,6 +363,12 @@ void apply_proven_storage_overrides(
         StorageCodec::control_base,
         DefaultKind::color,
         "StyleColors.ButtonBackColor");
+    classify_property(
+        button,
+        "Font",
+        StorageCodec::control_base,
+        DefaultKind::font,
+        "automatic");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(

@@ -400,6 +400,11 @@ void test_binding_target_and_manual_roundtrip() {
 }
 
 void test_typed_values_and_canonicalization() {
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"Mask\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Button id=\"2\" name=\"Legacy\"><Position/><Font kind=\"automatic\" mask=\"0\"/>"
+        "</Button></ChildItems></Form>"), "OOF2002",
+        "removed Font mask must be rejected rather than parsed as an alias");
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Values" ordinaryFormVersion="2.1">
   <Attributes>
@@ -421,7 +426,7 @@ void test_typed_values_and_canonicalization() {
         <Entry term="numeric" length="15" precision="3" nonNegative="true"/>
       </TypeRestriction>
       <BorderColor kind="absolute" red="18" green="52" blue="86" alpha="255"/>
-      <Font kind="styleReference" mask="0" styleName="ui:TextFont"/>
+      <Font kind="styleReference" styleName="StyleFonts.TextFont"/>
     </InputField>
     <CalendarField id="5" name="Calendar">
       <Position/>
@@ -450,7 +455,9 @@ void test_typed_values_and_canonicalization() {
     expect(serialized.ok(), "typed values must serialize");
     expect(serialized.value().find(">12.34</ChoiceListHeight>") != std::string::npos, "decimal output must be canonical");
     expect(serialized.value().find("01234567-89ab-cdef-0123-456789abcdef") != std::string::npos, "UUID output must be lowercase canonical");
-    expect(serialized.value().find("styleName=\"ui:TextFont\"") != std::string::npos, "lexical style name must not require an XML namespace binding");
+    expect(serialized.value().find("styleName=\"StyleFonts.TextFont\"") != std::string::npos &&
+               serialized.value().find("mask=") == std::string::npos,
+        "named Font style must serialize without the removed mask attribute");
     expect(source::parse_form_xml(serialized.value()).ok(), "canonical typed values must validate and reparse");
 }
 

@@ -214,7 +214,7 @@ Module.bsl совпадают; повторная сборка дает иден
 
 Поддержаны Caption, Enabled, MultiLine, ToolTip, HorizontalAlign,
 VerticalAlign, PictureLocation, PictureSize, BorderColor, ButtonTextColor и
-ButtonBackColor, а также Name, Position, подтвержденные Bindings и Click.
+ButtonBackColor и Font, а также Name, Position, подтвержденные Bindings и Click.
 Выравнивания по умолчанию Center, подсказка пустая. Неподдержанные члены
 перечислений и чужой тип, даже с default member, отвергаются при сборке.
 Именованный XML с Right/Bottom и многострочной подсказкой прошел строгий
@@ -239,6 +239,18 @@ StyleColors.ButtonBorderColor. BorderColor по умолчанию automatic, т
 `ev_59bffaa579c3408aa501cc0716a4ae76`,
 `ev_3f6d1fc6961e4480ab402ab91a64649a`.
 
-Это 11/16 прямых свойств Button в перечисленных вариантах, не полная
+Font поддерживает automatic, абсолютный шрифт с непустым faceName и
+StyleFonts.TextFont. Именованные поля height, bold, italic, underline,
+strikeout сохраняют различие между отсутствием и явно заданным значением.
+Масштаб scale и признак его переопределения scaleOverride независимы:
+конструктор по описанию и конструктор по исходному шрифту могут давать
+одинаковый масштаб с разным признаком переопределения. Сырая маска в XML
+не допускается. Поддержаны размер с точностью до десятых и целый масштаб,
+включая 0. WindowsFont, другие ссылки стиля и переопределения automatic
+или стиля пока явно отвергаются. Проверены 11 значений через объект кнопки
+и строгий Designer цикл с совпадением XML, модуля и повторной сборки.
+Доказательство: `ev_5ead98d8bd3f41838b7b9365624bdb14`.
+
+Это 12/16 прямых свойств Button в перечисленных вариантах, не полная
 поддержка типа. API GetPropVal
 с вычислением default пока остается требованием целевой модели.

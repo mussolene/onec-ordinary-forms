@@ -228,29 +228,101 @@ void test_color() {
 void test_font() {
     model::FontValue font;
     font.kind = model::FontKind::absolute;
-    font.mask = 15;
     font.face_name = "Arial";
     font.height = 10.0;
-    font.bold = true;
+    font.bold = false;
+    font.italic = true;
+    font.underline = false;
+    font.strikeout = true;
+    font.scale = 100;
     expect(
-        codec::encode_font(font) == "{6,0,15,{\"none\"},\"Arial\",10,{1,0,0,0}}",
-        "absolute font must match the proven platform fixture");
+        codec::encode_font(font) == "{8,0,63,100,0,0,0,400,1,0,1,0,0,0,0,0,\"Arial\",1,100,0}",
+        "absolute Font must match the named presence and storage tuple");
     expect(codec::decode_font(codec::encode_font(font)) == font, "font must round-trip");
+    model::FontValue copied_scale = font;
+    copied_scale.scale = 125;
+    copied_scale.scale_override = true;
+    expect(codec::encode_font(copied_scale) == "{8,0,575,100,0,0,0,400,1,0,1,0,0,0,0,0,\"Arial\",1,125,0}" &&
+               codec::decode_font(codec::encode_font(copied_scale)) == copied_scale,
+        "copy-scale override must use its named marker independently from scale value");
+    model::FontValue direct_scale = copied_scale;
+    direct_scale.scale_override = false;
+    expect(codec::encode_font(direct_scale) == "{8,0,63,100,0,0,0,400,1,0,1,0,0,0,0,0,\"Arial\",1,125,0}" &&
+               codec::decode_font(codec::encode_font(direct_scale)) == direct_scale,
+        "direct scale parameter must preserve scale without the override marker");
+
+    model::FontValue automatic;
+    expect(codec::encode_font(automatic) == "{8,3,0,1,100}", "automatic Font must match its exact default tuple");
+    expect(codec::decode_font(codec::encode_font(automatic)) == automatic, "automatic Font must round-trip");
+
+    model::FontValue family_only;
+    family_only.kind = model::FontKind::absolute;
+    family_only.face_name = "Arial";
+    expect(codec::encode_font(family_only) == "{8,0,1,0,0,0,0,400,0,0,0,0,0,0,0,0,\"Arial\",1,100,0}",
+        "family-only Font must not invent optional named properties");
+    expect(codec::decode_font(codec::encode_font(family_only)) == family_only,
+        "family-only Font must round-trip with absent optional fields");
 
     model::FontValue style;
     style.kind = model::FontKind::style_reference;
-    style.style = model::QualifiedName{"ui:TextFont"};
+    style.style = model::QualifiedName{"StyleFonts.TextFont"};
+    expect(codec::encode_font(style) == "{8,2,0,{-20},1,100}", "TextFont must use its observed reference tuple");
     expect(codec::decode_font(codec::encode_font(style)) == style, "style font must round-trip");
 
     expect_rejected(
-        [] { static_cast<void>(codec::decode_font("{5,3,0,{\"none\"},\"\",0,{0,0,0,0}}")); },
-        "unknown font field count must be rejected");
+        [] { static_cast<void>(codec::decode_font("{8,0,1024,0,0,0,0,400,0,0,0,0,0,0,0,0,\"Arial\",1,100,0}")); },
+        "unknown Font presence flags must be rejected");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_font("{8,0,0,0,0,0,0,400,0,0,0,0,0,0,0,0,\"\",1,100,0}")); },
+        "absolute Font without a faceName flag must be rejected");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_font("{8,0,1,0,0,0,0,400,0,0,0,0,0,0,0,0,\"\",1,100,0}")); },
+        "flagged empty absolute Font faceName must be rejected");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_font("{8,0,3,2147483648,0,0,0,400,0,0,0,0,0,0,0,0,\"Arial\",1,100,0}")); },
+        "Font height above signed 32-bit range must be rejected");
+    expect_rejected(
+        [] { static_cast<void>(codec::decode_font("{8,0,513,0,0,0,0,400,0,0,0,0,0,0,0,0,\"Arial\",1,2147483648,0}")); },
+        "Font scale above signed 32-bit range must be rejected");
     expect_rejected(
         [] {
-            static_cast<void>(
-                codec::decode_font("{6,2,0,{\"none\"},\"\",0,{0,0,0,0}}"));
+            static_cast<void>(codec::decode_font("{8,2,0,{-21},1,100}"));
         },
-        "style font without a reference must be rejected");
+        "unobserved style fonts must be rejected");
+    expect_rejected(
+        [] {
+            model::FontValue unsupported;
+            unsupported.kind = model::FontKind::windows_font;
+            static_cast<void>(codec::encode_font(unsupported));
+        },
+        "unobserved WindowsFont must be rejected");
+    model::FontValue no_face;
+    no_face.kind = model::FontKind::absolute;
+    expect_rejected([&] { static_cast<void>(codec::encode_font(no_face)); },
+        "absolute Font without faceName must not invent storage values");
+    model::FontValue fractional_height;
+    fractional_height.kind = model::FontKind::absolute;
+    fractional_height.face_name = "Arial";
+    fractional_height.height = 10.01;
+    expect_rejected([&] { static_cast<void>(codec::encode_font(fractional_height)); },
+        "unrepresentable Font height must be rejected");
+    model::FontValue fractional_scale;
+    fractional_scale.kind = model::FontKind::absolute;
+    fractional_scale.face_name = "Arial";
+    fractional_scale.scale = 100.5;
+    expect_rejected([&] { static_cast<void>(codec::encode_font(fractional_scale)); },
+        "unrepresentable Font scale must be rejected");
+    model::FontValue zero_scale;
+    zero_scale.kind = model::FontKind::absolute;
+    zero_scale.face_name = "Arial";
+    zero_scale.scale = 0;
+    expect(codec::encode_font(zero_scale) == "{8,0,1,0,0,0,0,400,0,0,0,0,0,0,0,0,\"Arial\",1,0,0}" &&
+               codec::decode_font(codec::encode_font(zero_scale)) == zero_scale,
+        "observed explicit zero Font scale must remain distinguishable from absence");
+    model::FontValue style_override = style;
+    style_override.bold = false;
+    expect_rejected([&] { static_cast<void>(codec::encode_font(style_override)); },
+        "unobserved style font overrides must be rejected");
 }
 
 }  // namespace

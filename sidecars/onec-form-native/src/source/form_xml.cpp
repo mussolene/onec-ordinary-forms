@@ -808,9 +808,18 @@ model::FontKind parse_font_kind(std::string_view value, xmlNodePtr node) {
 }
 
 model::FontValue parse_font(xmlNodePtr node) {
+    static constexpr std::string_view allowed_attributes[] = {
+        "kind", "styleName", "styleObjectId", "styleUuid", "faceName", "height",
+        "bold", "italic", "underline", "strikeout", "scale", "scaleOverride"};
+    for (xmlAttrPtr attribute = node->properties; attribute != nullptr; attribute = attribute->next) {
+        const std::string_view name(reinterpret_cast<const char*>(attribute->name));
+        if (std::ranges::find(allowed_attributes, name) == std::end(allowed_attributes)) {
+            fail("OOF2003", node, {}, std::string(name), "named Font attribute", "unsupported",
+                "Font contains an unsupported attribute");
+        }
+    }
     model::FontValue value;
     value.kind = parse_font_kind(required_attribute(node, "kind"), node);
-    value.mask = parse_integer<std::uint32_t>(required_attribute(node, "mask"), node, "mask");
     value.style = parse_style_reference(node);
     if (auto face_name = optional_attribute(node, "faceName")) {
         value.face_name = std::move(*face_name);
@@ -830,6 +839,12 @@ model::FontValue parse_font(xmlNodePtr node) {
     if (auto strikeout = optional_attribute(node, "strikeout")) {
         value.strikeout = parse_boolean(*strikeout, node, "strikeout");
     }
+    if (auto scale = optional_attribute(node, "scale")) {
+        value.scale = parse_double(*scale, node, "scale", {});
+    }
+    if (auto scale_override = optional_attribute(node, "scaleOverride")) {
+        value.scale_override = parse_boolean(*scale_override, node, "scaleOverride");
+    }
     const bool has_style = !std::holds_alternative<std::monostate>(value.style);
     if (value.kind == model::FontKind::style_reference && !has_style) {
         fail("OOF2003", node, {}, "kind", "style reference", "missing", "Style font must carry a style reference");
@@ -838,8 +853,8 @@ model::FontValue parse_font(xmlNodePtr node) {
         fail("OOF2003", node, {}, "kind", "font without style reference", "style", "Only a style font may carry a style reference");
     }
     if (value.kind == model::FontKind::automatic &&
-        (!value.face_name.empty() || value.height != 0.0 || value.bold || value.italic ||
-         value.underline || value.strikeout)) {
+        (value.face_name || value.height || value.bold || value.italic ||
+         value.underline || value.strikeout || value.scale != 100.0 || value.scale_override)) {
         fail("OOF2003", node, {}, "kind", "automatic font defaults", "explicit font fields", "Automatic font must not carry absolute font fields");
     }
     return value;
@@ -943,6 +958,9 @@ bool equals_descriptor_default(
             return color.kind == model::ColorKind::style_reference && style != nullptr &&
                 style->value == canonical;
         }
+        case mm::DefaultKind::font:
+            return canonical == "automatic" && std::holds_alternative<model::FontValue>(value) &&
+                std::get<model::FontValue>(value) == model::FontValue{};
     }
     return false;
 }
@@ -1829,7 +1847,6 @@ private:
     ) {
         XmlAttributes attributes{
             {"kind", std::string(font_kind_name(value.kind))},
-            {"mask", std::to_string(value.mask)},
         };
         const bool has_style = !std::holds_alternative<std::monostate>(value.style);
         if ((value.kind == model::FontKind::style_reference) != has_style) {
@@ -1837,21 +1854,28 @@ private:
         }
         if (has_style) append_style_attributes(attributes, value.style, object_id, name);
         if (value.kind == model::FontKind::automatic &&
-            (!value.face_name.empty() || value.height != 0.0 || value.bold || value.italic ||
-             value.underline || value.strikeout)) {
+            (value.face_name || value.height || value.bold || value.italic ||
+             value.underline || value.strikeout || value.scale != 100.0 || value.scale_override)) {
             serialization_fail(std::string(object_id), std::string(name), "automatic font defaults", "explicit font data", "Automatic font carries absolute fields");
         }
-        if (!value.face_name.empty()) attributes.emplace_back("faceName", value.face_name);
-        if (value.height != 0.0) {
-            if (!std::isfinite(value.height)) {
+        if (value.face_name) attributes.emplace_back("faceName", *value.face_name);
+        if (value.height) {
+            if (!std::isfinite(*value.height)) {
                 serialization_fail(std::string(object_id), std::string(name), "finite height", "non-finite", "Font height is not finite");
             }
-            attributes.emplace_back("height", format_double(value.height));
+            attributes.emplace_back("height", format_double(*value.height));
         }
-        if (value.bold) attributes.emplace_back("bold", "true");
-        if (value.italic) attributes.emplace_back("italic", "true");
-        if (value.underline) attributes.emplace_back("underline", "true");
-        if (value.strikeout) attributes.emplace_back("strikeout", "true");
+        if (value.bold) attributes.emplace_back("bold", *value.bold ? "true" : "false");
+        if (value.italic) attributes.emplace_back("italic", *value.italic ? "true" : "false");
+        if (value.underline) attributes.emplace_back("underline", *value.underline ? "true" : "false");
+        if (value.strikeout) attributes.emplace_back("strikeout", *value.strikeout ? "true" : "false");
+        if (value.scale != 100.0 || value.scale_override) {
+            if (!std::isfinite(value.scale)) {
+                serialization_fail(std::string(object_id), std::string(name), "finite scale", "non-finite", "Font scale is not finite");
+            }
+            attributes.emplace_back("scale", format_double(value.scale));
+        }
+        if (value.scale_override) attributes.emplace_back("scaleOverride", "true");
         writer_.empty(name, attributes);
     }
 

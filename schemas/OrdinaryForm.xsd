@@ -133,13 +133,14 @@
 
   <xs:complexType name="FontValueType">
     <xs:attribute name="kind" type="FontKindType" use="required"/>
-    <xs:attribute name="mask" type="xs:unsignedInt" use="required"/>
     <xs:attribute name="faceName" type="xs:string" use="optional"/>
     <xs:attribute name="height" type="xs:double" use="optional"/>
     <xs:attribute name="bold" type="xs:boolean" use="optional"/>
     <xs:attribute name="italic" type="xs:boolean" use="optional"/>
     <xs:attribute name="underline" type="xs:boolean" use="optional"/>
     <xs:attribute name="strikeout" type="xs:boolean" use="optional"/>
+    <xs:attribute name="scale" type="xs:double" use="optional"/>
+    <xs:attribute name="scaleOverride" type="xs:boolean" use="optional"/>
     <xs:attribute name="styleName" type="NonEmptyTokenType" use="optional"/>
     <xs:attribute name="styleObjectId" type="xs:long" use="optional"/>
     <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
