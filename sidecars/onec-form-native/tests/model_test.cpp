@@ -118,6 +118,34 @@ void test_descriptors() {
         "Button PictureSize descriptor must declare RealSize as its default");
 }
 
+void test_standard_picture_descriptor_catalog() {
+    const auto pictures = metamodel::standard_picture_descriptors();
+    expect(pictures.size() == 294, "standard picture catalog must expose all canonical runtime descriptors");
+    std::set<std::string_view> names;
+    std::set<std::string_view> guids;
+    std::set<std::int32_t> storage_ids;
+    for (const auto& picture : pictures) {
+        expect(!picture.runtime_name.empty() && !picture.russian_name.empty(),
+            "standard picture descriptors need public and Russian names");
+        expect(names.insert(picture.runtime_name).second, "standard picture runtime names must be unique");
+        expect(metamodel::find_standard_picture(picture.runtime_name) == &picture,
+            "standard picture names must resolve to their catalog descriptor");
+        if (!picture.guid.empty()) {
+            expect(guids.insert(picture.guid).second && picture.storage_id == 0,
+                "GUID-backed standard pictures must have one identity representation");
+            expect(metamodel::find_standard_picture_by_guid(picture.guid) == &picture,
+                "standard picture GUID lookup must be exact");
+        } else {
+            expect(picture.storage_id < 0 && storage_ids.insert(picture.storage_id).second,
+                "numeric standard picture IDs must be unique negative references");
+            expect(metamodel::find_standard_picture_by_storage_id(picture.storage_id) == &picture,
+                "standard picture numeric ID lookup must be exact");
+        }
+    }
+    expect(guids.size() == 274 && storage_ids.size() == 20,
+        "standard picture catalog must retain GUID and negative-ID identity coverage");
+}
+
 void test_button_alignment_xml_defaults() {
     using namespace oof::model::metamodel;
     const auto* border_descriptor = find_property(ControlKind::button, "BorderColor");
@@ -810,6 +838,7 @@ void test_page_position_invariants() {
 int main() {
     try {
         test_descriptors();
+        test_standard_picture_descriptor_catalog();
         test_button_alignment_xml_defaults();
         test_help_metamodel();
         test_variant_coverage();

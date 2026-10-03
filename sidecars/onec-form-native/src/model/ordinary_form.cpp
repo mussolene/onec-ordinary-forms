@@ -461,6 +461,19 @@ ValidationReport OrdinaryFormDocument::validate() const {
         }
     };
     const auto require_picture = [&](ObjectId source, const PictureRef& reference) {
+        if (reference.standard_name) {
+            if (reference.asset.id() ||
+                metamodel::find_standard_picture(reference.standard_name->value) == nullptr) {
+                add_violation(report, InvariantCode::invalid_property, source, reference.asset.id(),
+                    "standard picture reference must name one known descriptor and no file asset");
+            }
+            return;
+        }
+        if (!reference.asset.id()) {
+            add_violation(report, InvariantCode::dangling_reference, source, reference.asset.id(),
+                "picture reference has neither a file asset nor a standard picture name");
+            return;
+        }
         if (find_asset(reference.asset.id()) == nullptr) {
             add_violation(
                 report,

@@ -146,10 +146,6 @@
     <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
   </xs:complexType>
 
-  <xs:simpleType name="PictureReferenceValueType">
-    <xs:restriction base="ObjectIdType"/>
-  </xs:simpleType>
-
   <xs:simpleType name="ControlReferenceValueType">
     <xs:restriction base="ObjectIdType"/>
   </xs:simpleType>
@@ -169,6 +165,895 @@
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>
+
+  <xs:simpleType name="StandardPictureNameType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="PictureLib.AccountingRegister">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РегистрБухгалтерии" guid="20175a6d-7510-46a8-9077-75a5d0d97802"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AccumulationRegister">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РегистрНакопления" guid="70f51581-87b6-41cb-a21b-c9dcdcc7fa93"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ActivateTask">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="АктивироватьЗадачу" guid="093dd4ed-e03c-4fc6-a95a-01f51379cccf"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ActiveUsers">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="АктивныеПользователи" guid="47f01799-7968-4f44-9acc-fe1bdde8beb2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AddToFavorites">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ДобавитьВИзбранное" guid="1001ae3e-9289-4303-9699-3c0c17e20e61"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceBoxesEmpty">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКвадратыПустые" guid="879ca050-8650-4135-b799-f3ef9e00a65a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceBoxesFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКвадратыЗаполненные" guid="ba592483-bc90-4e26-ba4d-2126359c6529"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceBoxesOneFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКвадратыЗаполненныеОдин" guid="7026a8e6-f973-4fab-88f3-1047734d787f"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceBoxesThreeFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКвадратыЗаполненныеТри" guid="8c18ce73-0840-4f64-b76c-89d2356b1a41"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceBoxesTwoFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКвадратыЗаполненныеДва" guid="f164fa2a-0a20-48df-9816-e2d6cbe0aee9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCheckBox">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеФлажок" guid="7a9cd2fd-6372-4342-9a9e-3ebbd754fd83"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCheckIcon">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеЗнакФлажок" guid="85998f14-805b-4e2b-ba19-9d79b0464042"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCircleBlack">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКругЧерный" guid="cf10e497-9779-44a7-82d8-811b88193215"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCircleEmpty">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКругПустой" guid="2721abfb-fbff-4a3a-98ac-b7c9eb29cd85"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCircleFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКругЗаполненный" guid="788667db-61c9-45f3-9c4f-5f660ecdf3e1"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCircleGreen">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКругЗеленый" guid="71cbcb5c-f3f0-4ffd-a4d0-19b802b5ed6b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCircleOneFourthFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКругЗаполненныйНаОднуЧетверть" guid="fc058833-e57f-4f93-ba7a-803992a65c3e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCircleRed">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКругКрасный" guid="c1a61df2-f280-49d0-a8b3-7e5fc6f56ff7"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCircleThreeFourthFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКругЗаполненныйНаТриЧетверти" guid="08a03482-420e-4faa-af9d-e0138c53bfff"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCircleTwoFourthFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКругЗаполненныйНаДвеЧетверти" guid="dc9b46a9-905b-4baa-9e53-4d824e291a5b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCircleYellow">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКругЖелтый" guid="8d7e5026-9c1c-4542-bec0-2b729c84e139"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCross">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеКрест" guid="b2202798-23e0-4165-9982-24878f432488"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceCrossIcon">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеЗнакКрест" guid="9ef73565-2250-4a35-9fb3-470bd19ca9ca"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceDashYellow">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеДефисЖелтый" guid="e0ad5543-df7f-423c-8f59-8caf200cca0a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceDownArrowGray">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаВнизСерая" guid="e3b29b1d-4694-4f56-8d55-922f83afed7a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceDownArrowRed">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаВнизКрасная" guid="0880808c-5146-42b2-87a3-e5a9693ad256"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceDownInclineArrowGray">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаНаклоннаяВнизСерая" guid="a30ab2ef-6076-457d-9293-44edc7c6767e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceDownInclineArrowRed">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаНаклоннаяВнизКрасная" guid="80a31eac-8df6-49c0-ba84-b53c4631d09f"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceDownInclineArrowYellow">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаНаклоннаяВнизЖелтая" guid="ce1c3d6b-7825-4cac-a58c-58bac18cefc9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceDownTriangleRed">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеТреугольникВнизКрасный" guid="7a2a6f5c-7677-45e1-a2d3-ce2444d99a63"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceExclamationMark">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеВосклицательныйЗнак" guid="501b8c1d-8062-408e-bde8-b6549324713e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceExclamationMarkIcon">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеЗнакВосклицательныйЗнак" guid="b39aa431-a32f-4447-984a-45606474c82d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceFlagGreen">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеФлагЗеленый" guid="bbd37b6b-2742-48f3-9efa-d7c245f125b0"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceFlagRed">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеФлагКрасный" guid="b0dd988f-2d9f-4364-b1f4-a4d5f45ffb78"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceFlagYellow">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеФлагЖелтый" guid="16e4a14a-f38b-453d-908a-41fb9479c3f6"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceRightArrowGray">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаВправоСерая" guid="20b82e97-5fcc-4c68-8e0d-d01060847520"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceRightArrowYellow">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаВправоЖелтая" guid="697e00c5-4a1d-4367-90e8-ddb734069ad5"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceStarEmpty">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеЗвездаПустая" guid="f8d11b3a-a72b-4ee3-ad44-d401472e4b7c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceStarFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеЗвездаЗаполненная" guid="3689585c-a3e2-45d0-a302-caeb31b78835"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceStarHalfFilled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеЗвездаЗаполненнаяНаполовину" guid="26abd244-8dd5-417e-aed0-247a573394ca"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceUpArrowGray">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаВверхСерая" guid="a5d108f7-17d6-42dc-a789-45d71fb50ecd"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceUpArrowGreen">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаВверхЗеленая" guid="87d032df-0956-47e9-bead-4e15330f1983"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceUpInclineArrowGray">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаНаклоннаяВверхСерая" guid="92e24ce1-3917-4ee4-bbde-adce48b6c96b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceUpInclineArrowGreen">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаНаклоннаяВверхЗеленая" guid="0a688f53-2f13-4833-b340-c604cb1d3eb1"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceUpInclineArrowYellow">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеСтрелкаНаклоннаяВверхЖелтая" guid="09547c21-3f15-4a6d-ba87-e5f289dc1a6d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.AppearanceUpTriangleGreen">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОформлениеТреугольникВверхЗеленый" guid="8da615a0-65a5-4511-a8d4-00dc156478fb"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Attach">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Прикрепить" guid="f6e88116-03d8-4400-9d88-791895d7031a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Attribute">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Реквизит" guid="0c1f7756-6143-4903-a94c-8f22c85e44de"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Back">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Назад" guid="3c904ff7-1195-4a7c-9a38-7b1f6ca49cce"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.BusinessProcess">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="БизнесПроцесс" guid="509c4a7f-6406-4388-bb8c-bc81fb5131aa"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.BusinessProcessObject">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="БизнесПроцессОбъект" guid="a24cff7f-a1a5-4403-af82-a7b31852cde9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.BusinessProcessStart">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СтартБизнесПроцесса" guid="9fecbaff-2a05-4da6-9ef1-807e754b928d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CalculationRegister">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РегистрРасчета" guid="f3b8f300-5a54-4eea-8136-5798413a479c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CalculationType">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВидРасчета" guid="80837aab-ad67-4811-9d83-88344439c721"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Calculator">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Калькулятор" guid="fada8a16-8b14-4151-87a9-775099f37832"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Calendar">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Календарь" guid="97c5a6d5-47ed-43f9-8c8c-10e9903c23d2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CancelSearch">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтменитьПоиск" guid="9e808d29-787b-4825-863a-13c6844ce91d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Catalog">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Справочник" guid="069b8324-7c51-4c73-a6a8-c06d4fc383b5"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CatalogObject">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СправочникОбъект" guid="d971ec77-85e4-4e8d-a20a-8b130eedeb29"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Change">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Изменить" guid="97b2cc97-d5c6-45fb-9824-9d6d73db21fe"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Char">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Символ" guid="4781692b-60eb-47e4-acfb-2caf0f49e977"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Chart">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Диаграмма" guid="f3c1376a-d2ee-46c4-9e44-aa2f7dae31c4"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ChartOfAccounts">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПланСчетов" guid="ccb3d8f7-6da2-4c65-aba6-17b2ffbba78c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ChartOfAccountsObject">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПланСчетовОбъект" guid="6d4277ee-b29b-4790-8c3c-c4f868311c96"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ChartOfCalculationTypes">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПланВидовРасчета" guid="b58ea40e-819b-4d07-bd9f-5fbf42e01f55"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ChartOfCalculationTypesObject">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПланВидовРасчетаОбъект" guid="64400154-ca4c-4a05-8028-83434fda5bef"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ChartOfCharacteristicTypes">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПланВидовХарактеристик" guid="2bfafd1e-6d07-4609-8010-6c1c605cefd2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ChartOfCharacteristicTypesObject">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПланВидовХарактеристикОбъект" guid="45921467-71f2-4176-97e8-7df1d31d9e87"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CheckAll">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УстановитьФлажки" storageId="-10"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CheckSyntax">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СинтаксическийКонтроль" guid="dcd23a32-5c7c-43f2-9021-80d98128556f"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ChooseTopLevel">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВыбратьВерхнийУровень" guid="38a5a658-ec2b-4ddf-8088-c6d2169d3181"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ChooseType">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВыбратьТип" storageId="-1400"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ChooseValue">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВыбратьЗначение" guid="2f130057-bb2a-4e22-bba5-e108fac26940"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Clear">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Очистить" storageId="-200"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ClearFilter">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтключитьОтбор" guid="479470e0-ea0f-4266-8549-e2b1e8c06534"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CloneListItem">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СкопироватьЭлементСписка" guid="448d6f55-d885-496c-870d-d1bd78374745"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CloneObject">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СкопироватьОбъект" guid="f6532868-30b9-44ab-803c-78f0f0b06b02"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Close">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Закрыть" guid="1377931c-5744-4948-bade-cb35117b5f63"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CollaborationSystemExternalUser">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВнешнийПользовательСистемыВзаимодействия" guid="66c18df5-d7a6-465e-92b5-bcc6c1032504"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CollaborationSystemIntegrationUser">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПользовательИнтеграцииСистемыВзаимодействия" guid="05b8ccd1-f644-4e2e-87de-9683410c7038"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CollaborationSystemUser">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПользовательСистемыВзаимодействия" guid="a722bc14-4edb-4eed-84b9-5d9b2b443e04"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CollapseAll">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СвернутьВсе" guid="27ee3053-952c-49e5-8261-9215098e0e9c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Constant">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Константа" guid="e93f538e-dfaf-4a91-a9b6-c053555bcf60"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Conversations">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Обсуждения" guid="6a248caf-0a7b-46ad-a595-74890ea202f7"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CreateFolder">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СоздатьГруппу" guid="4ab0e87f-7d9b-4aa8-ac4b-680a78522da8"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CreateInitialImage">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СоздатьНачальныйОбраз" guid="4d2570b5-205f-413c-b4cc-b2097f61684f"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CreateListItem">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СоздатьЭлементСписка" guid="977e831a-0e73-4d60-af51-091a6fa8612e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Credit">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Кредит" guid="55bc1099-a7df-4d0a-b332-a45f0473b368"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CustomExpression">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПроизвольноеВыражение" guid="f695666a-bad9-49f6-ab7c-5198d7ea4739"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CustomizeForm">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ИзменитьФорму" guid="6511326b-20c3-4bf8-8503-c2c2c9072c6c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.CustomizeList">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НастроитьСписок" guid="f04794cb-c198-4172-86c3-649386013c85"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionConditionalAppearance">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УсловноеОформлениеКомпоновкиДанных" guid="984b0a3e-daa2-4a9e-b75c-1f230a6e592a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionConditionalAppearanceDisabled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УсловноеОформлениеКомпоновкиДанныхНедоступное" guid="5ff5bf50-1f3c-46b6-b4ef-a4973dd610aa"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionDataParameters">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПараметрыДанныхКомпоновкиДанных" guid="a075c3ef-bc4e-4c96-bdad-2245ec09c28e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionFilter">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтборКомпоновкиДанных" guid="d90a7482-9a1d-4d3d-ae96-6db440214d96"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionFilterDisabled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтборКомпоновкиДанныхНедоступный" guid="d35bd799-1cc3-44d1-8ae3-09755a09d44b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionGroupFields">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПоляГруппировкиКомпоновкиДанных" guid="ad8cb448-a6bb-43b4-886a-7d6a8367eef2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionGroupFieldsDisabled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПоляГруппировкиКомпоновкиДанныхНедоступные" guid="afbaed82-4b8e-4970-8ac6-97a3bff796d3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionNewChart">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НоваяДиаграммаКомпоновкиДанных" guid="732f9dd3-5baf-47ff-af7b-edfe16dac2a1"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionNewGroup">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НоваяГруппировкаКомпоновкиДанных" guid="77180b5e-8faa-4712-a788-e9f8903e3419"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionNewNestedScheme">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НоваяВложеннаяСхемаКомпоновкиДанных" guid="8ac19694-383a-457a-b050-0a3ee937f5f3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionNewTable">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НоваяТаблицаКомпоновкиДанных" guid="6c2759b1-2b63-4fa5-8d13-75786c7e1e89"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionOrder">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПорядокКомпоновкиДанных" guid="efda7350-6cd7-4416-b188-f5ca9baf66c2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionOrderDisabled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПорядокКомпоновкиДанныхНедоступный" guid="c8923bc1-6ea9-456b-829f-3f979dc98420"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionOutputParameters">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПараметрыВыводаКомпоновкиДанных" guid="ee7c4a5b-2d9b-4087-ae3e-947792085f09"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionOutputParametersDisabled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПараметрыВыводаКомпоновкиДанныхНедоступные" guid="1522a72e-11d1-41e3-ba0e-e0780c4ba543"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionSelection">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВыборКомпоновкиДанных" guid="2c732bfa-f734-48bc-a18b-7554db8a3888"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionSelectionDisabled">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВыборКомпоновкиДанныхНедоступный" guid="a0b879df-db58-4cba-b76e-9bbc4391f3d9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionSettingsWizard">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторНастроекКомпоновкиДанных" guid="affb1617-24bc-4170-9c84-0902cc3ef206"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionStandardSettings">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СтандартнаяНастройкаКомпоновкиДанных" guid="251aaa98-0127-44c3-a163-6f5ab4367ee2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataCompositionUserFields">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПользовательскиеПоляКомпоновкиДанных" guid="b68eb29c-2372-46e1-b84e-13843899ccf6"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataHistory">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ИсторияДанных" guid="e8a49985-fef7-45a9-b6bb-ddd2b9028172"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataProcessor">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Обработка" guid="a6cbfd77-fcf0-40f4-a8de-ee0d3e580fe6"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DataSearch">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПоискДанных" guid="35bc8caa-f7ce-4158-87da-d9bf785afa39"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Debit">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Дебет" guid="196622f7-0941-435b-992b-722f3082adf4"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DebitCredit">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ДебетКредит" guid="ed067d76-b144-4d00-bb36-d1833dd1350c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Delete">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Удалить" guid="08a45a70-c221-4339-b3b1-9f11cb22147d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DeleteDirectly">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УдалитьНепосредственно" guid="60643198-e4b2-4c39-9de1-53cca3fff382"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Dendrogram">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Дендрограмма" guid="4bf9fbb5-53c5-4b09-bab2-d69bbfab945b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DialogExclamation">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ДиалогВосклицание" guid="5289d9a4-b012-4d54-9bce-50473fe29b57"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DialogInformation">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ДиалогИнформация" guid="8bdf1079-8fad-4d21-ad7f-4b2e4ecdce3d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DialogQuestion">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ДиалогВопрос" guid="ef27ae9e-7040-4374-b93c-0d276de2ea23"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DialogStop">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ДиалогСтоп" guid="83db1f8a-41bd-4016-bdb2-a28e3a8d6dcc"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Dimension">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Измерение" guid="c78c9f3d-e92c-4f38-bb72-d8bd7fa5dbe3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Document">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Документ" guid="894afc03-9904-465d-b671-f555ffb9b21c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DocumentJournal">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЖурналДокументов" guid="e51185a4-d915-45b8-b201-1c46cc2d8104"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DocumentObject">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ДокументОбъект" guid="2209b937-6f41-4153-b1ac-ef7e170ad3a7"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DontDisturb">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НеБеспокоить" guid="a55455d6-be06-4da3-9a4f-62fbefd1aded"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.DontNotify">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НеОповещать" guid="517ed1af-55eb-42da-a1d4-a9960ef7c1f3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.EditInDialog">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РедактироватьВДиалоге" guid="021c20a0-071b-4a60-8e44-12487adde0c8"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.EndEdit">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЗакончитьРедактирование" guid="ed0bec43-4633-416c-8c08-0384ca444e32"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Enum">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Перечисление" guid="80d1a756-13a8-4281-86cc-eaaf84da4cf9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.EventLog">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЖурналРегистрации" guid="723765ab-0b92-4745-a621-1ba0f77c92c9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.EventLogByUser">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЖурналРегистрацииПоПользователю" guid="4fddea39-5129-4b4c-83fe-4e443cd61940"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ExchangePlan">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПланОбмена" guid="544fdbe8-5956-4512-bc62-93b4c022d291"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ExchangePlanObject">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПланОбменаОбъект" guid="743cc773-12e6-4ee6-9c57-5f5800bac427"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ExecuteTask">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВыполнитьЗадачу" guid="003024ed-fa25-42ac-9f53-f5014e383801"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ExpandAll">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РазвернутьВсе" guid="fb7e9fb5-110b-41cb-adc6-753969ae1c81"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ExternalDataSource">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВнешнийИсточникДанных" guid="3a32aa35-c679-4c5b-91bd-72ae038e5bb4"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ExternalDataSourceCube">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВнешнийИсточникДанныхКуб" guid="fad46a2b-2e56-47cc-b90c-3c2d4b061937"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ExternalDataSourceCubeDimensionTable">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВнешнийИсточникДанныхКубТаблицаИзмерения" guid="32b63e58-c1fa-4f59-b874-bf4a077f816e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ExternalDataSourceFunction">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВнешнийИсточникДанныхФункция" guid="2954e819-f3fc-40de-9769-292efce9a355"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ExternalDataSourceTable">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВнешнийИсточникДанныхТаблица" guid="5b612c21-e223-4997-9e61-86f7a67ec945"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Favorites">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Избранное" guid="c38cc4cf-111d-4bc8-8dcb-4464e2ddfb25"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FilterAndSort">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтборИСортировка" guid="73af51dd-6cda-48be-a093-5a7161c60c77"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FilterByCurrentValue">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтборПоТекущемуЗначению" guid="b1406535-6cc2-4410-95ea-753556e8460f"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FilterByType">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтборПоВиду" guid="0bac63da-5b4e-48af-b593-7c5d29663e83"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FilterCriterion">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КритерийОтбора" guid="2ef82795-06fe-4365-bd0c-44b486264620"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FilterHistory">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ИсторияОтборов" guid="8729a534-9f88-47b0-8d6b-ec213689580d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Find">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Найти" guid="ffab30f1-da11-44b5-b34c-24da22badcf4"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FindByNumber">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НайтиПоНомеру" guid="4eb938cb-7d69-4f3d-ac17-1f20f1212d49"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FindInList">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НайтиВСписке" guid="c7cdd3c0-3879-436a-b145-5e2615e9b3e1"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FindInTree">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НайтиВДереве" guid="38bbcebe-e456-461b-8457-07c9a72344a3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FindNext">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НайтиСледующий" guid="05612131-3e11-49c0-9592-07e6d9318ef7"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FindPrevious">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НайтиПредыдущий" guid="e3b38083-0191-4a10-8f5b-51571f2419b4"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FixTable">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЗафиксироватьТаблицу" guid="5182f57f-e834-4d11-9c9f-4aedc002b6e9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Form">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Форма" guid="fc34a694-e99b-4d1c-a526-63f5571bdb09"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FormHelp">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СправкаФормы" guid="b7c81c62-d6ad-4eae-9cea-0e203182db67"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FormattedString">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ФорматированнаяСтрока" guid="a636287d-8d6f-4ef3-94bb-a8f986ab52bb"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Forward">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Вперед" guid="f874b0cc-db1d-4577-8c77-d4ba206eb05d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.FunctionMenuCommand">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КомандаМенюФункций" guid="dfcd2d21-24ea-4b27-ab9a-6bf754577536"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GanttChart">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ДиаграммаГанта" guid="fa67cb81-8d56-4534-90bd-b62fb0dbf5f0"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GenerateReport">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СформироватьОтчет" guid="0ce78048-0196-4f80-a781-9829cdb7f43e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GeographicalSchema">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ГеографическаяСхема" guid="a9152be7-62cf-4523-be34-a23f018f497e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GetURL">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПолучитьНавигационнуюСсылку" guid="1a4342a5-fa06-4556-8a85-e8738fc25821"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GoBack">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПерейтиНазад" guid="892196a9-c94f-4e50-8224-3c0cea4ea6b8"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GoForward">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПерейтиВперед" guid="7562cef7-0e57-4f63-a754-b61128a4f3ae"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GoToBegin">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПерейтиКНачалу" guid="85cc7dd0-44fc-41aa-967f-f52f202ee2e6"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GoToEnd">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПерейтиККонцу" guid="14b24498-e49c-4713-be64-75101d0abfb9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GotoExternalURL">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПерейтиПоВнешнейНавигационнойСсылке" guid="31bf709f-3b50-4137-9b51-ebc7fb802a7c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GotoURL">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПерейтиПоНавигационнойСсылке" guid="3b2a508b-f36e-4e0b-9dc0-70b2b56276a9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GraphicalSchema">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ГрафическаяСхема" guid="e96de06b-fa83-48cf-b033-190a249855c9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GrayedAll">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЗатенитьФлажки" storageId="-12"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.GroupConversation">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ГрупповоеОбсуждение" guid="2a7e58e2-a6c5-4387-a459-5249c441947a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Help">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Справка" guid="6ecee038-9722-4d80-bb91-7ee7046ec4c7"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.HidePassword">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СкрытьПароль" guid="0e2da390-5c04-46a2-a74b-1b7e13a40f2b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.HierarchicalView">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ИерархическийПросмотр" guid="a119150f-6c0c-4a94-97b0-5f08d7ebd6f5"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.History">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="История" guid="c283cd1c-3187-451d-8ef2-7df55daeef06"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Information">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Информация" guid="4b54770b-d069-4c0e-9b17-5cc2a01134d9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.InformationRegister">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РегистрСведений" guid="5b87ad1b-d8cc-43c1-b5c4-dc43613c518c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.InformationRegisterRecord">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РегистрСведенийЗапись" guid="4128e6b6-e4ef-48d4-a523-99dc6b613054"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.InputFieldCalculator">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПолеВводаКалькулятор" storageId="-6"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.InputFieldCalendar">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПолеВводаКалендарь" storageId="-5"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.InputFieldChooseType">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПолеВводаВыбратьТип" storageId="-14"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.InputFieldClear">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПолеВводаОчистить" storageId="-2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.InputFieldOpen">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПолеВводаОткрыть" storageId="-7"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.InputFieldSelect">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПолеВводаВыбрать" storageId="-1"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.InputOnBasis">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВводНаОсновании" guid="01ec9d9a-7497-4d88-b93f-066c633a4866"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.LevelDown">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УровеньВниз" guid="01743054-d102-4e7c-bf15-5ed7fd84441b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.LevelUp">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УровеньВверх" guid="cb34c423-3d6a-4202-a809-3b3f45fb14ab"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ListSettings">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НастройкаСписка" guid="31b93f03-0ba2-4631-a171-0d3a3d2ecc48"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ListViewMode">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РежимПросмотраСписка" guid="549a2c45-4fce-493f-94ee-9a3a4f426551"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ListViewModeHierarchicalList">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РежимПросмотраСпискаИерархическийСписок" guid="3d4ad3b1-17de-4cf1-a2e4-0c2c83a5b5c2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ListViewModeList">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РежимПросмотраСпискаСписок" guid="c757209d-a87f-4410-b1a3-76000178f1f0"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ListViewModeTree">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РежимПросмотраСпискаДерево" guid="da9ac044-0ff7-4bcf-a441-3187bd1d951f"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.LoadReportSettings">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЗагрузитьНастройкиОтчета" guid="283ecabd-aaed-41d1-ad46-6cca91c29120"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Magnifier">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Лупа" storageId="-700"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.MarkToDelete">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПометитьНаУдаление" guid="18492a87-2fe4-44af-b218-304897fed020"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Message">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Сообщение" guid="78da2c47-172f-4d57-ab52-a06e40548136"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.MessageHistory">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ИсторияСообщений" guid="d08abfb8-44b6-4b0f-bad2-e235c6a718c3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.MoveDown">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПереместитьВниз" storageId="-4"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.MoveItem">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПеренестиЭлемент" guid="37e91e77-93ce-4c3b-8d30-a9d8cfd3d3b0"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.MoveLeft">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПереместитьВлево" storageId="-8"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.MoveRight">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПереместитьВправо" storageId="-9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.MoveUp">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПереместитьВверх" storageId="-3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.NestedTable">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВложеннаяТаблица" guid="52b637e5-f95f-4c70-9a72-2a4b5a9df449"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.NewConversation">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НовоеОбсуждение" guid="9c7f3c8c-a4b4-4a0a-84c8-d60d9feeca16"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.NewWindow">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НовоеОкно" guid="eb47324b-85f9-4172-9315-bba8015d9970"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Next">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Следующий" guid="9cf611dc-2370-4357-910d-a2b49c7a1ec6"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Notifications">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Оповещения" guid="928075d1-b90b-416c-b0b2-c3104cf084aa"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Notify">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Оповещать" guid="d66b6f73-53b8-49b9-8efc-33c54aa06e3f"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.OpenFile">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОткрытьФайл" guid="785362cb-3756-48ed-87d2-292ded17054a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.OpenFromMainServer">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОткрытьСОсновногоСервера" guid="b4ea245b-70ce-4777-a321-c7eb09839643"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.OpenFromStandaloneServer">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОткрытьСАвтономногоСервера" guid="3bf7bd14-2232-4f53-b3b3-59a8c683f9b0"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.OutputList">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВывестиСписок" guid="c2e2d966-5b7f-4699-903b-28a6f50d5471"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Parameters">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Параметры" guid="835db646-1531-494b-b7c1-3239b0080bcb"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Picture">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Картинка" guid="64837726-d2a2-4682-a788-737423e80013"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.PivotChart">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СводнаяДиаграмма" guid="79bf535f-2256-4ebb-bb8d-c26f3dd1a3de"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Post">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Провести" guid="20ebc47b-f4d9-439c-acd3-fdc624fbac2a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Previous">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Предыдущий" guid="584b470d-ba34-4b25-9620-8de4066ffeaa"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Print">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Печать" storageId="-13"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.PrintImmediately">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПечатьСразу" guid="0abdab67-5c90-4296-8168-239d22024d11"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Properties">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Свойства" guid="b4c7ab2c-bcda-4468-a28f-5fee93838c4e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizard">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапроса" guid="1f046bc2-d6c5-46a3-a459-b2c0508f86fb"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardCreateNestedQuery">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаСоздатьВложенныйЗапрос" guid="18bca3d7-a7a5-41df-a180-4dff9c217f43"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardCreateTempTableDescription">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаСоздатьОписаниеВременнойТаблицы" guid="7604cff7-5cc6-4f88-8d16-504f01b92a3c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardCreateTempTableDropQuery">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаСоздатьЗапросУничтоженияВременнойТаблицы" guid="7df3febb-2640-41b7-ad8b-7a23b7ad4aec"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardNestedQuery">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаВложенныйЗапрос" guid="c5501b77-0070-46e3-8ebd-f04a61eb9a73"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardReplaceTable">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаЗаменитьТаблицу" guid="a9481ba4-dc85-4112-9c50-f9f340a61298"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardShowChangesTables">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаОтображатьТаблицыИзменений" guid="270de5f0-f2df-4845-9fde-30b1ec486217"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardTableParameters">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаПараметрыТаблицы" guid="fe740df0-d828-4241-a12f-7414e12302e8"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardTempTable">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаВременнаяТаблица" guid="64ca52ee-f1a3-468f-8055-311935077515"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardTempTableDescription">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаОписаниеВременнойТаблицы" guid="6b322d7c-3fa2-437d-b311-fd70c4c7ed46"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.QueryWizardTempTablesGroup">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="КонструкторЗапросаГруппаВременныхТаблиц" guid="49369551-39dc-4adb-8795-5ab619c6c2bd"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ReadChanges">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПрочитатьИзменения" guid="83c8f18d-8701-41f3-bef4-53f88adbb868"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Refresh">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Обновить" guid="fc4f29e0-d168-4fe0-8e64-e982fabf2595"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Rename">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Переименовать" guid="c8a269ff-5b6d-4f42-9fa6-369d7b492aa7"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Replace">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Заменить" guid="6cb69e7f-fe19-4f64-bfb5-1a4fad6c2ef9"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Report">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Отчет" guid="db817ee1-fd28-4e7f-bb4a-53686b2b153c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ReportSettings">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НастройкиОтчета" guid="942e0303-a3ec-4fe8-887c-5aea8516d424"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Reread">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Перечитать" guid="8f29e0e2-d5e6-41e8-a34d-9a0288156322"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Resource">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Ресурс" guid="d6eefec0-792a-4720-8933-e2a57f9e312c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.RestoreValues">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ВосстановитьЗначения" guid="a7707ed1-39b0-418f-974d-4d500d27a9c6"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.RotateClockwise">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПовернутьПоЧасовойСтрелке" guid="c7f70aa3-b944-4efe-97e3-0fa3bda3cd88"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.RotateCounterclockwise">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПовернутьПротивЧасовойСтрелки" guid="a43fcd1b-ad8d-4318-9d55-fd1ba086e65b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SaveFile">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СохранитьФайл" guid="818ab7d0-4654-4542-bd5e-fd9d1352b5a1"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SaveReportSettings">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СохранитьНастройкиОтчета" guid="b5a0aaba-3a83-4a71-b6f9-24aae1574681"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SaveValues">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СохранитьЗначения" guid="23f940bf-7381-4c2b-85a1-e541ed428042"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ScheduledJob">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РегламентноеЗадание" guid="1970a480-9b38-405e-9d9e-8209f3fad5f1"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ScheduledJobs">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="РегламентныеЗадания" guid="6206a729-16e5-4e32-b53c-122de4e30c8d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SearchControl">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УправлениеПоиском" guid="fc6a06a8-1308-4385-b1b2-9d302d2054ed"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Select">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Выбрать" storageId="-100"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SendMessage">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтправитьСообщение" guid="be23a908-fe1b-44df-be94-d0f6e8353abe"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SetDateInterval">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УстановитьИнтервал" guid="58174855-39be-462e-8723-cb2d95182146"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SetTime">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УстановитьВремя" guid="55ef0776-5ee4-4daf-9a9b-70d63643ab8d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Setting">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Настройка" guid="caf2e58b-ca3d-4b63-82c9-f21f1c9bc9eb"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SettingsStorage">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ХранилищеНастроек" guid="6b909f65-95a4-4697-8ca0-c8f331227b9a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ShowData">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПоказатьДанные" guid="a064544f-6037-48ca-b19f-8ad63e43af23"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ShowInList">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПоказатьВСписке" guid="9c96aa25-d656-4b3d-ab3e-81d9718da238"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ShowPassword">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПоказатьПароль" guid="97f87955-b88a-4225-a0d8-03af981ecd86"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Sort">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Сортировка" guid="a594c8a1-7218-420a-860f-7b493c5e65c4"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SortList">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СортироватьСписок" guid="fafe4c1f-c265-4220-a0e1-8f82af26b72e"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SortListAsc">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СортироватьСписокПоВозрастанию" guid="91022b99-b610-48ad-954e-a297848081ce"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SortListDesc">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СортироватьСписокПоУбыванию" guid="1fa32fdb-a180-418f-a6eb-db7516b7a30b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SortedAsc">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтсортированоПоВозрастанию" guid="e4c49dfb-ef8e-4f4a-9d01-9536ba61f944"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SortedDesc">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтсортированоПоУбыванию" guid="34c981c1-f0bd-43e0-a0cf-c2a9cd648b91"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SpreadsheetDeleteComment">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ТабличныйДокументУдалитьПримечание" guid="7c75b1df-1fdc-471f-aae6-6b7870318cd4"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SpreadsheetDeletePageBreak">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ТабличныйДокументУдалитьРазрывСтраницы" guid="aa96f4bb-cf28-4dad-bc42-5ed53de95c0c"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SpreadsheetInsertComment">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ТабличныйДокументВставитьПримечание" guid="03665ff1-3a05-41d1-96d3-04bda2d8ede3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SpreadsheetInsertPageBreak">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ТабличныйДокументВставитьРазрывСтраницы" guid="26518e18-e364-475a-8026-e41134658b2a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SpreadsheetReadOnly">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ТабличныйДокументТолькоПросмотр" guid="2846af8d-af84-47e3-82b9-01b01f960426"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SpreadsheetShowComments">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ТабличныйДокументОтображатьПримечания" guid="bc61d1e7-2d40-4e93-8630-cce840bdcf99"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SpreadsheetShowGrid">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ТабличныйДокументОтображатьСетку" guid="3646acb9-a91e-4163-bbe1-2006041cd65d"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SpreadsheetShowGroups">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ТабличныйДокументОтображатьГруппировки" guid="702a9e16-0bb6-4efb-af11-10faf1e6ee87"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SpreadsheetShowHeaders">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ТабличныйДокументОтображатьЗаголовки" guid="46598f81-5f95-4485-9b33-bfe4fd1276d0"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.StartVideoconference">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НачатьВидеоконференцию" guid="e7f605f9-53d4-4e07-b56a-4715dc3a3e50"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Stop">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Остановить" guid="1cd7b762-ec6a-4e92-ac9a-1832be228ec3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SwitchActivity">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПереключитьАктивность" guid="6e3687cf-a8d1-446a-833a-bfaf38516353"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.SyncContents">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="НайтиВСодержании" guid="3bdc16c8-6a96-4467-9442-a8e4804b3fa2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Task">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Задача" guid="37cf7cc0-abad-4385-b597-6fd2d8dc085a"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.TaskObject">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЗадачаОбъект" guid="b9e2dae2-b205-4442-aee5-802cd82f5199"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Today">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Сегодня" guid="6ca1af75-2aa5-48a6-820d-efa0ccb8f4f1"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.UncheckAll">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="СнятьФлажки" storageId="-11"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.UndoPosting">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ОтменаПроведения" guid="8ca4ea33-603d-4992-8a41-c7924b5bd40b"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.User">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Пользователь" guid="6ff3ddbd-56e3-4ddf-a5bf-048c1e2dfb2f"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.UserWithAuthentication">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПользовательСАутентификацией" guid="75a40cc4-c719-4c3f-91ea-fc5787bc34ca"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.UserWithoutNecessaryProperties">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПользовательБезНеобходимыхСвойств" guid="f16ab927-3ac6-4cdd-bcf1-d8acf005a255"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ViewByOwner">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ПросмотрПоВладельцу" guid="683fc04f-e189-49b7-92a9-f835c36f5fb2"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Write">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="Записать" guid="894cf65b-4109-4533-a1d7-c87b1fcc80a3"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.WriteAndClose">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЗаписатьИЗакрыть" guid="e6fc55a0-3d58-4b15-bdd3-717453929598"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.WriteChanges">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ЗаписатьИзменения" guid="f62488ee-f90c-47f7-929d-f42ec11a1e63"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.Zoom">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="ИзменитьМасштаб" guid="b9cb1339-815d-4e11-84d3-aebfa5a58459"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ZoomIn">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УвеличитьМасштаб" storageId="-16"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+      <xs:enumeration value="PictureLib.ZoomOut">
+        <xs:annotation><xs:appinfo><StandardPicture russianName="УменьшитьМасштаб" storageId="-15"/></xs:appinfo></xs:annotation>
+      </xs:enumeration>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="PictureReferenceContentType"><xs:union memberTypes="ObjectIdType"><xs:simpleType><xs:restriction base="xs:string"><xs:enumeration value=""/></xs:restriction></xs:simpleType></xs:union></xs:simpleType>
+  <xs:complexType name="PictureReferenceValueType"><xs:simpleContent><xs:extension base="PictureReferenceContentType"><xs:attribute name="standardName" type="StandardPictureNameType" use="optional"/></xs:extension></xs:simpleContent></xs:complexType>
 
   <xs:complexType name="DataPathType">
     <xs:sequence>

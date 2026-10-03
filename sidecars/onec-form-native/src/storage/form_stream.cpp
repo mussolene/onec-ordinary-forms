@@ -1459,6 +1459,7 @@ struct DecodedPictureDescriptor {
     std::vector<std::uint8_t> bytes;
     bool transparent = false;
     model::PictureFormat format = model::PictureFormat::gif;
+    std::optional<std::string> standard_name;
 };
 
 LV canonical_button_picture() {
@@ -1563,8 +1564,50 @@ LV encode_button_picture(const model::PictureAsset& asset, std::string_view path
         raw(asset.transparent ? "1" : "0"), list({list(std::move(chunks))}), raw("0"), string_value("")});
 }
 
+LV encode_standard_button_picture(const model::metamodel::StandardPictureDescriptor& picture) {
+    LV identity = !picture.guid.empty()
+        ? list({raw("0"), raw(std::string(picture.guid))})
+        : list({raw(std::to_string(picture.storage_id))});
+    return list({raw("4"), raw("1"), std::move(identity), string_value(""),
+        raw("-1"), raw("-1"), raw("0"), raw("0"), string_value("")});
+}
+
 std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, std::string_view path) {
     if (same_list_value(value, canonical_button_picture())) return std::nullopt;
+    if (value.items.size() >= 2 && value.items[0].atom == "4" && value.items[1].atom == "1") {
+        require_arity(value, 9, path);
+        require_raw_constant(value.items[0], "4", child_path(path, 0));
+        require_raw_constant(value.items[1], "1", child_path(path, 1));
+        const auto& identity = value.items[2];
+        const model::metamodel::StandardPictureDescriptor* descriptor = nullptr;
+        if (identity.is_list) {
+            if (identity.items.size() == 1) {
+                const auto storage_id = integer_atom<std::int32_t>(identity.items[0], child_path(child_path(path, 2), 0));
+                descriptor = model::metamodel::find_standard_picture_by_storage_id(storage_id);
+            } else if (identity.items.size() == 2) {
+                require_raw_constant(identity.items[0], "0", child_path(child_path(path, 2), 0));
+                descriptor = model::metamodel::find_standard_picture_by_guid(
+                    raw_atom(identity.items[1], child_path(child_path(path, 2), 1)));
+            } else {
+                fail("OOF1114", child_path(path, 2), "{negativeStorageId} or {0,GUID}",
+                    std::to_string(identity.items.size()) + " identity fields",
+                    "Standard picture identity is malformed");
+            }
+        } else {
+            fail("OOF1114", child_path(path, 2), "list-wrapped standard picture identity", "atom",
+                "Standard picture identity is malformed");
+        }
+        if (descriptor == nullptr) fail("OOF1114", child_path(path, 2), "known standard picture identity", "unknown", "Button standard picture is unsupported");
+        require_exact(value.items[3], string_value(""), child_path(path, 3), "Standard picture descriptor is unsupported");
+        require_raw_constant(value.items[4], "-1", child_path(path, 4));
+        require_raw_constant(value.items[5], "-1", child_path(path, 5));
+        require_raw_constant(value.items[6], "0", child_path(path, 6));
+        require_raw_constant(value.items[7], "0", child_path(path, 7));
+        require_exact(value.items[8], string_value(""), child_path(path, 8), "Standard picture descriptor is unsupported");
+        DecodedPictureDescriptor picture;
+        picture.standard_name = std::string(descriptor->runtime_name);
+        return picture;
+    }
     require_arity(value, 10, path);
     require_raw_constant(value.items[0], "4", child_path(path, 0));
     require_raw_constant(value.items[1], "3", child_path(path, 1));
@@ -1706,7 +1749,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
     }
     std::optional<model::PictureAsset> picture_asset;
-    if (picture) {
+    if (picture && !picture->standard_name) {
         picture_asset = model::PictureAsset{
             {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
             picture->format, picture->bytes, picture->transparent};
@@ -1783,6 +1826,11 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     }
     control.position = std::move(decoded_geometry.position);
+    if (picture && picture->standard_name) {
+        control.properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+                model::QualifiedName{*picture->standard_name}});
+    }
     return {std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset)};
 }
 
@@ -2101,13 +2149,28 @@ LV encode_button(
     const auto button_back_color = explicit_button_color(control.properties(), "ButtonBackColor");
     const auto font = explicit_button_font(control.properties());
     const model::PictureAsset* picture_asset = nullptr;
+    const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
     if (const auto* picture_entry = control.properties().find(model::PropertyId::from_name("Picture"))) {
         if (!std::holds_alternative<model::PictureRef>(picture_entry->value)) {
             fail("OOF1122", "$/Button/Picture", "PictureRef", "different value type", "Button.Picture has the wrong value type");
         }
-        picture_asset = document.find_asset(std::get<model::PictureRef>(picture_entry->value).asset.id());
-        if (picture_asset == nullptr) {
-            fail("OOF1123", "$/Button/Picture", "existing PictureAsset", "missing", "Button picture reference is dangling");
+        const auto& reference = std::get<model::PictureRef>(picture_entry->value);
+        if (reference.standard_name) {
+            if (reference.asset.id().value() != 0) {
+                fail("OOF1122", "$/Button/Picture", "standard picture with empty asset ID",
+                    std::to_string(reference.asset.id().value()), "Picture reference has conflicting targets");
+            }
+            standard_picture = model::metamodel::find_standard_picture(reference.standard_name->value);
+            if (standard_picture == nullptr) fail("OOF1122", "$/Button/Picture", "known PictureLib name",
+                reference.standard_name->value, "Standard picture name is unsupported");
+        } else {
+            if (reference.asset.id().value() == 0) {
+                fail("OOF1122", "$/Button/Picture", "positive asset ID", "0", "Picture asset reference is empty");
+            }
+            picture_asset = document.find_asset(reference.asset.id());
+            if (picture_asset == nullptr) {
+                fail("OOF1123", "$/Button/Picture", "existing PictureAsset", "missing", "Button picture reference is dangling");
+            }
         }
     }
     const auto enum_storage_value = [](const model::PropertySet& values, std::string_view name,
@@ -2149,6 +2212,7 @@ LV encode_button(
         picture_location, picture_size, multi_line, tool_tip,
         border_color, button_text_color, button_back_color, font);
     if (picture_asset != nullptr) button_properties.items[8] = encode_button_picture(*picture_asset, "$/Button/Picture");
+    if (standard_picture != nullptr) button_properties.items[8] = encode_standard_button_picture(*standard_picture);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
@@ -3286,7 +3350,19 @@ Result<list_stream::ListValue> encode_document(
             if (!std::holds_alternative<model::PictureRef>(picture->value)) {
                 fail("OOF1122", "$/Button/Picture", "PictureRef", "different value type", "Button.Picture has the wrong value type");
             }
-            referenced_picture_ids.insert(std::get<model::PictureRef>(picture->value).asset.id().value());
+            const auto& reference = std::get<model::PictureRef>(picture->value);
+            if (reference.standard_name) {
+                if (reference.asset.id().value() != 0 ||
+                    model::metamodel::find_standard_picture(reference.standard_name->value) == nullptr) {
+                    fail("OOF1122", "$/Button/Picture", "known standard picture with empty asset target",
+                        reference.standard_name->value, "Picture reference has inconsistent targets");
+                }
+            } else {
+                if (reference.asset.id().value() == 0) {
+                    fail("OOF1122", "$/Button/Picture", "positive picture asset ID", "0", "Picture asset reference is empty");
+                }
+                referenced_picture_ids.insert(reference.asset.id().value());
+            }
         }
         if (referenced_picture_ids.size() != document.assets().size()) {
             fail("OOF1122", "$/PictureAssets", "one referenced asset per declared asset", "orphan or duplicate ID",

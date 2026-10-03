@@ -1092,6 +1092,75 @@ void test_button_external_picture_assets_round_trip() {
         "malformed Button image base64 must be rejected");
 }
 
+void test_all_standard_button_pictures_round_trip_without_assets() {
+    const auto descriptors = model::metamodel::standard_picture_descriptors();
+    expect(descriptors.size() == 294, "the complete sanitized standard picture catalog must be present");
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "StandardPictures";
+    for (std::size_t index = 0; index < descriptors.size(); ++index) {
+        form.children.push_back(model::ControlRef{model::ObjectId{1000 + index}});
+    }
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::size_t index = 0; index < descriptors.size(); ++index) {
+        const auto id = model::ObjectId{1000 + index};
+        const auto name = "Std" + std::to_string(index);
+        model::ControlNode button{id, name, model::ButtonPayload{}};
+        button.properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+                model::QualifiedName{std::string(descriptors[index].runtime_name)}});
+        document.add_control(std::move(button));
+    }
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "all standard-picture descriptors must encode through Button.Picture");
+    std::vector<std::string> storage_identities;
+    std::function<void(const list_stream::ListValue&)> collect_identities = [&](const auto& value) {
+        if (value.is_list && value.items.size() == 9 && value.items[0].atom == "4" &&
+            value.items[1].atom == "1" && value.items[2].is_list) {
+            storage_identities.push_back(list_stream::dump_compact(value.items[2]));
+        }
+        for (const auto& item : value.items) collect_identities(item);
+    };
+    collect_identities(encoded.value());
+    expect(storage_identities.size() == descriptors.size(),
+        "each standard picture must use the observed list-wrapped identity shape");
+    for (const auto& descriptor : descriptors) {
+        const std::string identity = descriptor.guid.empty()
+            ? "{" + std::to_string(descriptor.storage_id) + "}"
+            : "{0," + std::string(descriptor.guid) + "}";
+        expect(std::find(storage_identities.begin(), storage_identities.end(), identity) != storage_identities.end(),
+            "standard picture descriptor must use its observed GUID or negative-ID list shape");
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "StandardPictures");
+    expect(decoded.ok(), "all standard-picture descriptors must decode through Button.Picture");
+    expect(decoded.value().assets().empty(), "standard pictures must not create external picture assets");
+    for (std::size_t index = 0; index < descriptors.size(); ++index) {
+        const auto* button = decoded.value().find_control(model::ObjectId{1000 + index});
+        const auto* property = button == nullptr ? nullptr : button->properties().find(model::PropertyId::from_name("Picture"));
+        expect(property && std::holds_alternative<model::PictureRef>(property->value),
+            "standard-picture property must remain a typed reference");
+        const auto& reference = std::get<model::PictureRef>(property->value);
+        expect(reference.standard_name == model::QualifiedName{std::string(descriptors[index].runtime_name)} &&
+                   reference.asset.id().value() == 0,
+            "the exact standard descriptor must survive without an asset target");
+    }
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "standard-picture streams must re-encode canonically");
+
+    model::Form bad_form;
+    bad_form.id = model::ObjectId{1};
+    bad_form.name = "UnknownStandard";
+    bad_form.children.push_back(model::ControlRef{model::ObjectId{2}});
+    model::OrdinaryFormDocument bad(std::move(bad_form));
+    model::ControlNode button{model::ObjectId{2}, "Unknown", model::ButtonPayload{}};
+    button.properties().set_explicit(model::PropertyId::from_name("Picture"),
+        model::PictureRef{model::PictureAssetRef{model::ObjectId{0}}, model::QualifiedName{"PictureLib.Unknown"}});
+    bad.add_control(std::move(button));
+    expect_failure(form_stream::encode_document(bad), "OOF1123", "$",
+        "unknown named standard pictures must be rejected");
+}
+
 void test_button_then_label_decoration_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -2894,6 +2963,7 @@ int main() {
         test_button_alignments_and_tooltip_round_trip();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
+        test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
         test_fresh_checkbox_stream_decode();

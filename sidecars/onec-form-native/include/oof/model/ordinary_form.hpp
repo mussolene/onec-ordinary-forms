@@ -342,12 +342,13 @@ struct PictureAsset {
     ObjectId id{};
     std::string relative_path;
     PictureFormat format = PictureFormat::gif;
-    std::vector<std::uint8_t> bytes;
+    std::vector<std::uint8_t> bytes{};
     bool transparent = false;
 };
 
 struct PictureRef {
     PictureAssetRef asset;
+    std::optional<QualifiedName> standard_name = std::nullopt;
 
     friend bool operator==(const PictureRef&, const PictureRef&) = default;
 };

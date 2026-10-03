@@ -189,6 +189,13 @@ struct EventDescriptor {
     std::string_view storage_tag;
 };
 
+struct StandardPictureDescriptor {
+    std::string_view runtime_name;
+    std::u8string_view russian_name;
+    std::string_view guid;
+    std::int32_t storage_id = 0;
+};
+
 struct MetamodelCoverage {
     std::size_t control_count = 0;
     std::size_t control_property_occurrences = 0;
@@ -266,6 +273,10 @@ private:
 [[nodiscard]] std::span<const PropertyDescriptor> property_descriptors(
     ControlKind kind) noexcept;
 [[nodiscard]] std::span<const EventDescriptor> event_descriptors(ControlKind kind) noexcept;
+[[nodiscard]] std::span<const StandardPictureDescriptor> standard_picture_descriptors() noexcept;
+[[nodiscard]] const StandardPictureDescriptor* find_standard_picture(std::string_view runtime_name) noexcept;
+[[nodiscard]] const StandardPictureDescriptor* find_standard_picture_by_guid(std::string_view guid) noexcept;
+[[nodiscard]] const StandardPictureDescriptor* find_standard_picture_by_storage_id(std::int32_t storage_id) noexcept;
 [[nodiscard]] const ControlDescriptor& descriptor_for(ControlKind kind);
 [[nodiscard]] const ControlDescriptor* find_by_guid(std::string_view guid) noexcept;
 [[nodiscard]] const ControlDescriptor* find_by_public_name(std::string_view name) noexcept;

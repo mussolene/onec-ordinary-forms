@@ -394,10 +394,6 @@ void append_value_types(std::string& output) {
     <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
   </xs:complexType>
 
-  <xs:simpleType name="PictureReferenceValueType">
-    <xs:restriction base="ObjectIdType"/>
-  </xs:simpleType>
-
   <xs:simpleType name="ControlReferenceValueType">
     <xs:restriction base="ObjectIdType"/>
   </xs:simpleType>
@@ -418,6 +414,22 @@ void append_value_types(std::string& output) {
     </xs:simpleContent>
   </xs:complexType>
 )XSD";
+
+    const auto pictures = model::metamodel::standard_picture_descriptors();
+    output += "\n  <xs:simpleType name=\"StandardPictureNameType\">\n    <xs:restriction base=\"xs:string\">\n";
+    for (const auto& picture : pictures) {
+        output += "      <xs:enumeration value=\"";
+        append_xml_escaped(output, picture.runtime_name);
+        output += "\">\n        <xs:annotation><xs:appinfo><StandardPicture";
+        append_attribute(output, "russianName", as_utf8(picture.russian_name));
+        if (!picture.guid.empty()) append_attribute(output, "guid", picture.guid);
+        if (picture.storage_id < 0) append_attribute(output, "storageId", std::to_string(picture.storage_id));
+        output += "/></xs:appinfo></xs:annotation>\n      </xs:enumeration>\n";
+    }
+    output +=
+        "    </xs:restriction>\n  </xs:simpleType>\n"
+        "  <xs:simpleType name=\"PictureReferenceContentType\"><xs:union memberTypes=\"ObjectIdType\"><xs:simpleType><xs:restriction base=\"xs:string\"><xs:enumeration value=\"\"/></xs:restriction></xs:simpleType></xs:union></xs:simpleType>\n"
+        "  <xs:complexType name=\"PictureReferenceValueType\"><xs:simpleContent><xs:extension base=\"PictureReferenceContentType\"><xs:attribute name=\"standardName\" type=\"StandardPictureNameType\" use=\"optional\"/></xs:extension></xs:simpleContent></xs:complexType>\n";
 }
 
 void append_document_types(std::string& output) {
@@ -811,8 +823,17 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         output += "            </Events>\n          </Control>\n";
     }
 
+    output += "        </Controls>\n        <StandardPictures>\n";
+    for (const auto& picture : model::metamodel::standard_picture_descriptors()) {
+        output += "          <Picture";
+        append_attribute(output, "name", picture.runtime_name);
+        append_attribute(output, "russianName", as_utf8(picture.russian_name));
+        if (!picture.guid.empty()) append_attribute(output, "guid", picture.guid);
+        if (picture.storage_id < 0) append_attribute(output, "storageId", std::to_string(picture.storage_id));
+        output += "/>\n";
+    }
     output +=
-        "        </Controls>\n"
+        "        </StandardPictures>\n"
         "      </Palette>\n"
         "    </xs:appinfo>\n"
         "  </xs:annotation>\n"

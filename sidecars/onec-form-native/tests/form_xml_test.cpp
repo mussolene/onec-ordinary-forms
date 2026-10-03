@@ -668,6 +668,35 @@ void test_button_foreign_enum_default_is_retained() {
         "XML serialization must not silently normalize a foreign typed enum default");
 }
 
+void test_standard_picture_xml_reference_roundtrip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Pictures";
+    form.children.push_back(model::ControlRef{model::ObjectId{2}});
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode button{model::ObjectId{2}, "Write", model::ButtonPayload{}};
+    button.properties().set_explicit(model::PropertyId::from_name("Picture"),
+        model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+            model::QualifiedName{"PictureLib.Write"}});
+    document.add_control(std::move(button));
+
+    const auto xml = source::serialize_form_xml(document);
+    expect(xml.ok() && xml.value().find("<Picture standardName=\"PictureLib.Write\"/>") != std::string::npos,
+        "standard Button.Picture must use a named XML reference without an internal identity");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "known standard picture XML must parse");
+    const auto* restored = parsed.value().find_control(model::ObjectId{2});
+    const auto* picture = restored == nullptr ? nullptr : restored->properties().find(model::PropertyId::from_name("Picture"));
+    expect(picture && std::get<model::PictureRef>(picture->value).standard_name ==
+               model::QualifiedName{"PictureLib.Write"},
+        "standard picture name must survive XML roundtrip");
+
+    std::string unknown = xml.value();
+    const auto at = unknown.find("PictureLib.Write");
+    unknown.replace(at, std::string("PictureLib.Write").size(), "PictureLib.Unknown");
+    expect(!source::parse_form_xml(unknown).ok(), "unknown standard picture names must be rejected");
+}
+
 void test_event_owner_invariant() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -706,6 +735,7 @@ int main() {
         test_strict_rejections();
         test_event_owner_invariant();
         test_button_foreign_enum_default_is_retained();
+        test_standard_picture_xml_reference_roundtrip();
         test_label_horizontal_align_xml_roundtrip();
     } catch (const std::exception& error) {
         std::cerr << "form XML tests: FAIL: " << error.what() << '\n';

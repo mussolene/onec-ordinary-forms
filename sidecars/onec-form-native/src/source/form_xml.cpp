@@ -860,6 +860,29 @@ model::FontValue parse_font(xmlNodePtr node) {
     return value;
 }
 
+model::PictureRef parse_picture_reference(
+    xmlNodePtr node,
+    std::string_view property,
+    std::string_view object_id
+) {
+    if (const auto standard_name = optional_attribute(node, "standardName")) {
+        const std::string text = node_text(node);
+        if (!text.empty()) {
+            fail("OOF2003", node, std::string(object_id), std::string(property),
+                "empty standard picture reference", text,
+                "A standard picture reference cannot also contain an asset ID");
+        }
+        if (mm::find_standard_picture(*standard_name) == nullptr) {
+            fail("OOF2003", node, std::string(object_id), std::string(property),
+                "known PictureLib name", *standard_name, "Unknown standard picture name");
+        }
+        return model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+            model::QualifiedName{*standard_name}};
+    }
+    return model::PictureRef{model::PictureAssetRef{
+        parse_object_id(node_text(node), node, property, object_id)}, std::nullopt};
+}
+
 model::PropertyValue parse_property_value(
     xmlNodePtr node,
     mm::ValueCodec codec,
@@ -902,8 +925,7 @@ model::PropertyValue parse_property_value(
         case mm::ValueCodec::font:
             return parse_font(node);
         case mm::ValueCodec::picture:
-            return model::PictureRef{model::PictureAssetRef{
-                parse_object_id(node_text(node), node, property, object_id)}};
+            return parse_picture_reference(node, property, object_id);
         case mm::ValueCodec::control_reference:
             return model::ControlRef{parse_object_id(node_text(node), node, property, object_id)};
         case mm::ValueCodec::attribute_reference:
@@ -1229,8 +1251,7 @@ private:
                     const bool value = parse_boolean(node_text(child), child, name, id);
                     if (value) command.changes_data.set(true);
                 } else if (name == "Picture") {
-                    command.picture.set(model::PictureRef{model::PictureAssetRef{
-                        parse_object_id(node_text(child), child, name, id)}});
+                    command.picture.set(parse_picture_reference(child, name, id));
                 }
             }
             objects_.commands.push_back(std::move(command));
@@ -1882,6 +1903,28 @@ private:
         writer_.empty(name, attributes);
     }
 
+    void write_picture_reference(
+        std::string_view element_name,
+        const model::PictureRef& reference,
+        std::string_view object_id
+    ) {
+        if (reference.standard_name) {
+            if (reference.asset.id().value() != 0 ||
+                mm::find_standard_picture(reference.standard_name->value) == nullptr) {
+                serialization_fail(std::string(object_id), std::string(element_name),
+                    "known standard picture name with empty asset target", "invalid target",
+                    "Picture reference has inconsistent targets");
+            }
+            writer_.empty(element_name, {{"standardName", reference.standard_name->value}});
+            return;
+        }
+        if (reference.asset.id().value() == 0) {
+            serialization_fail(std::string(object_id), std::string(element_name),
+                "positive picture asset ID", "0", "Picture asset reference is empty");
+        }
+        writer_.text(element_name, object_id_text(reference.asset.id()));
+    }
+
     void write_property(
         const mm::PropertyDescriptor& descriptor,
         const model::PropertyValue& value,
@@ -1956,8 +1999,11 @@ private:
                 write_font(name, require_value<model::FontValue>(value, object_id, name, "font"), object_id);
                 return;
             case mm::ValueCodec::picture:
-                writer_.text(name, object_id_text(require_value<model::PictureRef>(value, object_id, name, "picture reference").asset.id()));
+            {
+                const auto& reference = require_value<model::PictureRef>(value, object_id, name, "picture reference");
+                write_picture_reference(name, reference, object_id);
                 return;
+            }
             case mm::ValueCodec::control_reference:
                 writer_.text(name, object_id_text(require_value<model::ControlRef>(value, object_id, name, "control reference").id()));
                 return;
@@ -2056,7 +2102,7 @@ private:
                 writer_.text("ChangesData", "true");
             }
             if (command.picture.value().has_value()) {
-                writer_.text("Picture", object_id_text(command.picture.value()->asset.id()));
+                write_picture_reference("Picture", *command.picture.value(), object_id_text(command.id));
             }
             writer_.close("Command");
         }

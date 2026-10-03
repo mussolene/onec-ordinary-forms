@@ -897,6 +897,18 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
             direct_child(control, "Events"),
             metamodel.events_for(descriptor.kind));
     }
+    xmlNodePtr standard_pictures = direct_child(palette, "StandardPictures");
+    const auto standard_picture_nodes = direct_children(standard_pictures, "Picture");
+    const auto standard_picture_descriptors = oof::model::metamodel::standard_picture_descriptors();
+    expect(standard_picture_nodes.size() == standard_picture_descriptors.size(),
+        "palette must expose every canonical standard picture descriptor");
+    for (std::size_t index = 0; index < standard_picture_nodes.size(); ++index) {
+        expect(attribute(standard_picture_nodes[index], "name") == standard_picture_descriptors[index].runtime_name,
+            "standard picture palette order and names must match the descriptor registry");
+        expect(attribute(standard_picture_nodes[index], "russianName") ==
+                   as_utf8(standard_picture_descriptors[index].russian_name),
+            "standard picture Russian annotations must match the descriptor registry");
+    }
 }
 
 void test_forbidden_vocabulary(const GeneratedSchemas& schemas) {
