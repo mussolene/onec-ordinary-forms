@@ -14,12 +14,14 @@
 #include "oof/model/metamodel.hpp"
 #include "oof/source/form_xml.hpp"
 #include "oof/storage/form_stream.hpp"
+#include "oof/storage/value_codec.hpp"
 
 namespace {
 
 namespace form_stream = oof::storage::form_stream;
 namespace list_stream = oof::storage::list_stream;
 namespace model = oof::model;
+namespace value_codec = oof::storage::value_codec;
 
 void expect(bool condition, std::string_view message) {
     if (!condition) {
@@ -1793,6 +1795,118 @@ void test_button_label_input_field_round_trip() {
         "OOF1122", "$/InputField", "unsupported explicit TextEdit=false must fail encoding");
 }
 
+void test_input_field_tooltip_and_format_round_trip() {
+    struct TextProperties {
+        std::optional<std::string> tool_tip;
+        std::optional<std::string> format;
+        bool with_flags = false;
+    };
+    const auto make_document = [](const TextProperties& text) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "InputStrings";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry type_entry;
+        type_entry.term = model::TypeDomainTerm::string;
+        type_entry.string = model::LengthQualifiers{64, false};
+        type.entries.push_back(type_entry);
+        document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", type});
+        model::ControlNode input{model::ObjectId{2}, "Input", model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+        if (text.tool_tip.has_value()) {
+            input.properties().set_explicit(model::PropertyId::from_name("ToolTip"), *text.tool_tip);
+        }
+        if (text.format.has_value()) {
+            input.properties().set_explicit(model::PropertyId::from_name("Format"), *text.format);
+        }
+        if (text.with_flags) {
+            input.properties().set_explicit(model::PropertyId::from_name("AutoMarkIncomplete"), true);
+            input.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
+            input.properties().set_explicit(model::PropertyId::from_name("PasswordMode"), true);
+        }
+        document.add_control(std::move(input));
+        return document;
+    };
+    const auto input_record = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1];
+    };
+    const auto expect_round_trip = [&](const TextProperties& values, std::string_view case_name) {
+        const auto encoded = form_stream::encode_document(make_document(values));
+        expect(encoded.ok(), "InputField localized string case must encode");
+        const auto decoded = form_stream::decode_document(encoded.value(), "InputStrings");
+        expect(decoded.ok(), "InputField localized string case must decode");
+        const auto* input = decoded.value().find_control(model::ObjectId{2});
+        expect(input != nullptr, "InputField localized string case must resolve");
+        const auto* tool_tip = input->properties().find(model::PropertyId::from_name("ToolTip"));
+        const auto* format = input->properties().find(model::PropertyId::from_name("Format"));
+        if (values.tool_tip.has_value() && !values.tool_tip->empty()) {
+            expect(tool_tip && std::get<std::string>(tool_tip->value) == *values.tool_tip,
+                "InputField ToolTip must round-trip Unicode and XML-sensitive text");
+        } else {
+            expect(tool_tip == nullptr, "empty InputField ToolTip must normalize to its default");
+        }
+        if (values.format.has_value() && !values.format->empty()) {
+            expect(format && std::get<std::string>(format->value) == *values.format,
+                "InputField Format must round-trip Unicode and punctuation");
+        } else {
+            expect(format == nullptr, "empty InputField Format must normalize to its default");
+        }
+        if (values.with_flags) {
+            expect(input->properties().find(model::PropertyId::from_name("AutoMarkIncomplete")) != nullptr &&
+                    input->properties().find(model::PropertyId::from_name("MultiLine")) != nullptr &&
+                    input->properties().find(model::PropertyId::from_name("PasswordMode")) != nullptr,
+                "InputField localized strings must coexist with independent and paired flags");
+        }
+        const auto reencoded = form_stream::encode_document(decoded.value());
+        expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+                list_stream::dump_compact(encoded.value()),
+            case_name);
+        return encoded.value();
+    };
+
+    const auto empty = expect_round_trip(TextProperties{std::string{}, std::string{}, false},
+        "empty InputField ToolTip and Format must retain canonical storage");
+    expect(input_record(empty).items[2].items[2].items[0].items[34].is_list &&
+            input_record(empty).items[2].items[2].items[0].items[0].items[12].is_list,
+        "empty InputField localized properties must use typed empty localization records");
+
+    const std::string tool_tip_text = "Подсказка Ω <важно> & \"цитата\"";
+    const std::string format_text = "Л=ru_RU; NFD=2; ЧРГ='Ω & <>'";
+    const auto tool_tip_only = expect_round_trip(TextProperties{tool_tip_text, std::nullopt, false},
+        "InputField ToolTip-only storage must be stable");
+    expect(list_stream::dump_compact(input_record(tool_tip_only).items[2].items[2].items[0].items[0].items[12]) ==
+            value_codec::encode_localized_string(model::LocalizedStringValue{{{"ru", tool_tip_text}}}),
+        "InputField ToolTip must occupy its proven localized base-info slot");
+    const auto format_only = expect_round_trip(TextProperties{std::nullopt, format_text, false},
+        "InputField Format-only storage must be stable");
+    expect(list_stream::dump_compact(input_record(format_only).items[2].items[2].items[0].items[34]) ==
+            value_codec::encode_localized_string(model::LocalizedStringValue{{{"ru", format_text}}}),
+        "InputField Format must occupy its proven localized control-info slot");
+    const auto combined = expect_round_trip(TextProperties{tool_tip_text, format_text, true},
+        "both InputField strings and Boolean flags must preserve exact storage");
+
+    const auto set_localized_record = [](list_stream::ListValue& encoded, bool tool_tip, list_stream::ListValue value) {
+        auto& payload = encoded.items[1].items[2].items[2].items[1].items[2].items[2].items[0];
+        if (tool_tip) payload.items[0].items[12] = std::move(value);
+        else payload.items[34] = std::move(value);
+    };
+    for (const bool tool_tip : {true, false}) {
+        const auto property_name = tool_tip ? "ToolTip" : "Format";
+        const auto property_path = tool_tip ? "$/1/2/2/1/2/2/0/0/12" : "$/1/2/2/1/2/2/0/34";
+        auto malformed = combined;
+        set_localized_record(malformed, tool_tip, list_stream::ListValue::raw_atom("malformed"));
+        expect_failure(form_stream::decode_document(malformed, "InputStrings"), "OOF1108", property_path,
+            std::string("malformed InputField ") + property_name + " localization must be rejected");
+        auto multilingual = combined;
+        set_localized_record(multilingual, tool_tip, list_stream::parse(value_codec::encode_localized_string(
+            model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}})));
+        expect_failure(form_stream::decode_document(multilingual, "InputStrings"), "OOF1115", property_path,
+            std::string("multilingual InputField ") + property_name + " must be rejected without loss");
+    }
+}
+
 void test_single_input_field_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -3282,6 +3396,7 @@ int main() {
         test_button_then_label_decoration_round_trip();
         test_fresh_checkbox_stream_decode();
         test_button_label_input_field_round_trip();
+        test_input_field_tooltip_and_format_round_trip();
         test_single_input_field_round_trip();
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();

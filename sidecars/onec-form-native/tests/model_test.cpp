@@ -300,6 +300,18 @@ void test_help_metamodel() {
             find_property(ControlKind::input_field, "AutoChoiceIncomplete")->default_value.kind == DefaultKind::boolean &&
             find_property(ControlKind::input_field, "AutoChoiceIncomplete")->default_value.canonical == "false",
         "AutoChoiceIncomplete must have proven Boolean persistence and false default");
+    const auto* input_tool_tip = find_property(ControlKind::input_field, "ToolTip");
+    const auto* input_format = find_property(ControlKind::input_field, "Format");
+    expect(input_tool_tip && input_tool_tip->persistence == PersistenceClass::persisted_editable &&
+            input_tool_tip->storage_codec == StorageCodec::control_base &&
+            input_tool_tip->default_value.kind == DefaultKind::string &&
+            input_tool_tip->default_value.canonical.empty(),
+        "InputField ToolTip must declare its empty base-string default");
+    expect(input_format && input_format->persistence == PersistenceClass::persisted_editable &&
+            input_format->storage_codec == StorageCodec::control_info &&
+            input_format->default_value.kind == DefaultKind::string &&
+            input_format->default_value.canonical.empty(),
+        "InputField Format must declare its empty info-string default");
     expect(
         find_property(ControlKind::input_field, "AutoMarkIncomplete")->persistence == PersistenceClass::persisted_editable &&
             find_property(ControlKind::input_field, "AutoMarkIncomplete")->storage_codec == StorageCodec::control_info &&

@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 
 #include "oof/model/metamodel.hpp"
@@ -554,6 +555,73 @@ void test_typed_values_and_canonicalization() {
     expect(source::parse_form_xml(serialized.value()).ok(), "canonical typed values must validate and reparse");
 }
 
+void test_input_field_tooltip_and_format_xml_round_trip() {
+    const auto make_document = [](std::string tool_tip, std::string format, bool with_flags) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "InputStrings";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::string;
+        entry.string = model::LengthQualifiers{64, false};
+        type.entries.push_back(entry);
+        document.add_attribute(model::Attribute{model::ObjectId{1}, "Value", type});
+        model::ControlNode input{model::ObjectId{2}, "Input", model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{1}}, {}};
+        input.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::move(tool_tip));
+        input.properties().set_explicit(model::PropertyId::from_name("Format"), std::move(format));
+        if (with_flags) {
+            input.properties().set_explicit(model::PropertyId::from_name("AutoMarkIncomplete"), true);
+            input.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
+        }
+        document.add_control(std::move(input));
+        return document;
+    };
+    const auto serialized_empty = source::serialize_form_xml(make_document("", "", false));
+    expect(serialized_empty.ok() && serialized_empty.value().find("<ToolTip>") == std::string::npos &&
+            serialized_empty.value().find("<Format>") == std::string::npos,
+        "empty InputField ToolTip and Format must serialize as omitted defaults");
+    const auto empty_reparsed = source::parse_form_xml(serialized_empty.value());
+    expect(empty_reparsed.ok(), "empty InputField string defaults must parse after serialization");
+
+    const std::string tool_tip = "Подсказка Ω <важно> & \"цитата\"";
+    const std::string format = "Л=en_US; NFD=2; ЧРГ='Ω & <>'";
+    for (const auto& [tool_tip_value, format_value, with_flags] : {
+             std::tuple<std::string, std::string, bool>{tool_tip, "", false},
+             std::tuple<std::string, std::string, bool>{"", format, false},
+             std::tuple<std::string, std::string, bool>{tool_tip, format, true}}) {
+        const auto serialized = source::serialize_form_xml(make_document(tool_tip_value, format_value, with_flags));
+        expect(serialized.ok(), "InputField ToolTip and Format must serialize");
+        if (!tool_tip_value.empty()) {
+            expect(serialized.value().find("<ToolTip>Подсказка Ω &lt;важно&gt; &amp; \"цитата\"</ToolTip>") != std::string::npos,
+                "InputField ToolTip XML must escape markup and preserve Unicode");
+        }
+        if (!format_value.empty()) {
+            expect(serialized.value().find("<Format>Л=en_US; NFD=2; ЧРГ='Ω &amp; &lt;&gt;'</Format>") != std::string::npos,
+                "InputField Format XML must escape markup and preserve Unicode");
+        }
+        const auto reparsed = source::parse_form_xml(serialized.value());
+        expect(reparsed.ok(), "InputField ToolTip and Format XML must parse after serialization");
+        const auto* input = reparsed.value().find_control(model::ObjectId{2});
+        expect(input != nullptr, "InputField string XML control must resolve");
+        const auto* parsed_tool_tip = input->properties().find(model::PropertyId::from_name("ToolTip"));
+        const auto* parsed_format = input->properties().find(model::PropertyId::from_name("Format"));
+        expect((tool_tip_value.empty() && parsed_tool_tip == nullptr) ||
+                (parsed_tool_tip && std::get<std::string>(parsed_tool_tip->value) == tool_tip_value),
+            "InputField ToolTip XML value must round-trip independently");
+        expect((format_value.empty() && parsed_format == nullptr) ||
+                (parsed_format && std::get<std::string>(parsed_format->value) == format_value),
+            "InputField Format XML value must round-trip independently");
+        if (with_flags) {
+            expect(input->properties().find(model::PropertyId::from_name("AutoMarkIncomplete")) != nullptr &&
+                    input->properties().find(model::PropertyId::from_name("MultiLine")) != nullptr,
+                "InputField strings must coexist with persisted Boolean flags in XML");
+        }
+    }
+}
+
 void test_button_shortcut_xml() {
     constexpr std::string_view xml =
         "<Form id=\"1\" name=\"Shortcuts\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -907,6 +975,7 @@ int main() {
         test_all_control_variants();
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
+        test_input_field_tooltip_and_format_xml_round_trip();
         test_button_shortcut_xml();
         test_boolean_type_domain_xml_roundtrip();
         test_inherited_property_has_one_surface();

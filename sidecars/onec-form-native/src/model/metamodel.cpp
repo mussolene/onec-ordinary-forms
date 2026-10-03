@@ -729,6 +729,8 @@ void apply_proven_storage_overrides(
         "");
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
+    classify_property(input_field, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    classify_property(input_field, "Format", StorageCodec::control_info, DefaultKind::string, "");
     classify_property(
         input_field,
         "AutoChoiceIncomplete",
