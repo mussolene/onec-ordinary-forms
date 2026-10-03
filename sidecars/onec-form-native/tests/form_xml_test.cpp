@@ -212,6 +212,82 @@ void test_page_boolean_defaults_and_rejections() {
         "duplicate Page enabled state must be rejected by XSD");
 }
 
+void test_page_position_roundtrip_and_rejections() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+  <Page name="RootPage">
+    <Position><Top>6</Top><Height>80</Height><Left>5</Left><Width>120</Width>
+      <Bindings manualHorizontal="true">
+        <AnchorBinding coordinate="right" targetCoordinate="right" targetId="2" offset="3"/>
+        <DimensionBinding dimension="width" value="120"/>
+      </Bindings>
+    </Position>
+    <ChildItems><Button id="2" name="RootButton"><Position/><Caption>Run</Caption></Button></ChildItems>
+  </Page>
+  <Panel id="3" name="Tabs"><Position/><ChildItems>
+    <Page name="NestedPage">
+      <Position><Top>8</Top><Height>60</Height><Left>7</Left><Width>90</Width>
+        <Bindings><AnchorBinding coordinate="left" targetCoordinate="left" targetId="4" offset="-1"/></Bindings>
+      </Position>
+      <ChildItems><Button id="4" name="NestedButton"><Position/><Caption>Open</Caption></Button></ChildItems>
+    </Page>
+  </ChildItems></Panel>
+</ChildItems></Form>
+)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "root and nested Page.Position must parse");
+    const auto* root_page = parsed.value().find_page(model::ObjectId{1});
+    const auto* nested_page = parsed.value().find_page(model::ObjectId{2});
+    expect(root_page != nullptr && root_page->position.is_explicit() &&
+               root_page->position.value().left.value() == 5 &&
+               root_page->position.value().top.value() == 6 &&
+               root_page->position.value().width.value() == 120 &&
+               root_page->position.value().height.value() == 80 &&
+               root_page->position.value().bindings.manual_horizontal.value() &&
+               root_page->position.value().bindings.anchors.size() == 1 &&
+               root_page->position.value().bindings.anchors.front().target == model::ControlRef{model::ObjectId{2}} &&
+               root_page->position.value().bindings.dimensions.size() == 1,
+        "root Page Position coordinates and bindings must materialize");
+    expect(nested_page != nullptr && nested_page->position.is_explicit() &&
+               nested_page->position.value().left.value() == 7 &&
+               nested_page->position.value().top.value() == 8 &&
+               nested_page->position.value().width.value() == 90 &&
+               nested_page->position.value().height.value() == 60 &&
+               nested_page->position.value().bindings.anchors.size() == 1 &&
+               nested_page->position.value().bindings.anchors.front().target == model::ControlRef{model::ObjectId{4}},
+        "nested Page Position coordinates and bindings must materialize");
+
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Width>120</Width>") != std::string::npos,
+        "explicit root and nested Page Position must serialize");
+    auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "serialized Page Position must validate and parse");
+    auto repeated = source::serialize_form_xml(reparsed.value());
+    expect(repeated.ok() && repeated.value() == serialized.value(),
+        "Page Position and Bindings must round-trip canonically");
+
+    auto implicit = source::parse_form_xml(
+        "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Page name=\"Default\"/></ChildItems></Form>");
+    expect(implicit.ok(), "Page without Position must remain valid");
+    const auto* implicit_page = implicit.value().find_page(model::ObjectId{1});
+    auto implicit_xml = source::serialize_form_xml(implicit.value());
+    expect(implicit_page != nullptr && !implicit_page->position.is_explicit() &&
+               implicit_xml.ok() && implicit_xml.value().find("<Position") == std::string::npos,
+        "implicit Page Position must not add XML output");
+
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Page name=\"BadTarget\"><Position><Bindings><AnchorBinding coordinate=\"left\" targetCoordinate=\"left\" targetId=\"99\" offset=\"0\"/>"
+        "</Bindings></Position></Page></ChildItems></Form>"),
+        "OOF2004", "Page Position binding must reject a dangling control target");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<Page name=\"BadSize\"><Position><Width>-1</Width></Position></Page>"
+        "</ChildItems></Form>"),
+        "OOF2004", "Page Position must reject negative dimensions");
+}
+
 void test_all_control_variants() {
     std::string xml = "<Form id=\"1\" name=\"All\" ordinaryFormVersion=\"2.1\"><ChildItems>";
     std::uint64_t id = 2;
@@ -593,6 +669,7 @@ int main() {
         test_root_page_tree_xml_roundtrip();
         test_page_internal_ids_do_not_change_xml();
         test_page_boolean_defaults_and_rejections();
+        test_page_position_roundtrip_and_rejections();
         test_all_control_variants();
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();

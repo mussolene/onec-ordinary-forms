@@ -372,16 +372,28 @@ LV canonical_root_panel_payload(std::int32_t width, std::int32_t height) {
             "The platform root panel requires non-negative inner dimensions");
     }
     auto value = parse_constant(R"OOF(
-{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}}
+{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}}
 )OOF");
     if (!value.is_list || value.items.size() != 3 ||
-        !value.items[1].is_list || value.items[1].items.size() != 31 ||
-        !value.items[1].items[18].is_list || value.items[1].items[18].items.size() < 2 ||
-        !value.items[1].items[19].is_list || value.items[1].items[19].items.size() < 2) {
+        !value.items[1].is_list || value.items[1].items.size() != 27) {
         throw std::logic_error("canonical root-panel codec template is malformed");
     }
-    value.items[1].items[18].items[1] = raw(std::to_string(width - 8));
-    value.items[1].items[19].items[1] = raw(std::to_string(height - 8));
+    model::Position position;
+    position.left.set(8);
+    position.top.set(8);
+    position.width.set(width - 16);
+    position.height.set(height - 16);
+    for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+        model::AnchorBinding binding;
+        binding.coordinate = edge;
+        binding.target_coordinate = edge;
+        binding.offset.set(-8);
+        position.bindings.anchors.push_back(std::move(binding));
+    }
+    auto boundaries = encode_page_position(position, 0);
+    if (!boundaries) throw DecodeFailure(boundaries.diagnostics().front());
+    value.items[1].items.insert(value.items[1].items.begin() + 16,
+        boundaries.value().items.begin(), boundaries.value().items.end());
     return value;
 }
 
@@ -1514,6 +1526,117 @@ LV encode_input_field(
 }
 
 }  // namespace
+
+Result<model::Position> decode_page_position(
+    const LV& boundaries,
+    std::uint32_t page_index,
+    std::optional<model::ControlRef> owner) {
+    return capture_decode_failure<model::Position>([&] {
+        require_arity(boundaries, 4, "$/Page/Position");
+        std::array<std::int32_t, 4> coordinates{};
+        std::array<std::int32_t, 4> margins{};
+        for (std::size_t edge = 0; edge < 4; ++edge) {
+            const auto path = child_path("$/Page/Position", edge);
+            const auto& row = boundaries.items[edge];
+            require_arity(row, 9, path);
+            require_raw_constant(row.items[0], "2", child_path(path, 0));
+            coordinates[edge] = integer_atom<std::int32_t>(row.items[1], child_path(path, 1));
+            require_raw_constant(row.items[2], edge % 2 == 0 ? "1" : "0", child_path(path, 2));
+            require_raw_constant(row.items[3], "1", child_path(path, 3));
+            require_raw_constant(row.items[4], std::to_string(edge + 1), child_path(path, 4));
+            require_raw_constant(row.items[5], std::to_string(page_index), child_path(path, 5));
+            require_raw_constant(row.items[6], "0", child_path(path, 6));
+            margins[edge] = integer_atom<std::int32_t>(row.items[7], child_path(path, 7));
+            require_raw_constant(row.items[8], "0", child_path(path, 8));
+            if (edge < 2 && margins[edge] != 0) {
+                fail("OOF1122", child_path(path, 7), "fixed Left/Top boundary", std::to_string(margins[edge]),
+                    "Page Left/Top constraints are not established");
+            }
+            if (margins[edge] == std::numeric_limits<std::int32_t>::min()) {
+                fail("OOF1120", child_path(path, 7), "representable signed binding offset", std::to_string(margins[edge]),
+                    "Page boundary offset overflows int32");
+            }
+        }
+        const auto width = static_cast<std::int64_t>(coordinates[2]) - coordinates[0];
+        const auto height = static_cast<std::int64_t>(coordinates[3]) - coordinates[1];
+        if (width < 0 || height < 0 || width > std::numeric_limits<std::int32_t>::max() ||
+            height > std::numeric_limits<std::int32_t>::max()) {
+            fail("OOF1120", "$/Page/Position", "non-negative int32 dimensions", "invalid rectangle",
+                "Page boundary coordinates cannot be represented by Position");
+        }
+        model::Position position;
+        position.left.set(coordinates[0]);
+        position.top.set(coordinates[1]);
+        position.width.set(static_cast<std::int32_t>(width));
+        position.height.set(static_cast<std::int32_t>(height));
+        for (std::size_t edge = 2; edge < 4; ++edge) {
+            model::AnchorBinding binding;
+            binding.coordinate = edge == 2 ? model::BindingCoordinate::right : model::BindingCoordinate::bottom;
+            binding.target_coordinate = binding.coordinate;
+            binding.target = owner;
+            binding.offset.set(-margins[edge]);
+            position.bindings.anchors.push_back(std::move(binding));
+        }
+        return position;
+    });
+}
+
+Result<LV> encode_page_position(
+    const model::Position& position,
+    std::uint32_t page_index,
+    std::optional<model::ControlRef> owner) {
+    return capture_decode_failure<LV>([&] {
+        if (position.default_control.value().has_value() || position.tab_order.value().has_value() ||
+            position.z_order.value().has_value() || position.collapse.value().has_value() ||
+            !position.visible.value() || !position.bindings.dimensions.empty() ||
+            position.bindings.manual_horizontal.value() || position.bindings.manual_vertical.value()) {
+            fail("OOF1122", "$/Page/Position", "page rectangle with Right/Bottom owner constraints", "control-only position values",
+                "Page position contains properties without an established boundary codec");
+        }
+        const auto left = position.left.value();
+        const auto top = position.top.value();
+        const auto width = position.width.value();
+        const auto height = position.height.value();
+        if (width < 0 || height < 0 || left > std::numeric_limits<std::int32_t>::max() - width ||
+            top > std::numeric_limits<std::int32_t>::max() - height) {
+            fail("OOF1120", "$/Page/Position", "non-negative geometry without int32 overflow", "invalid rectangle",
+                "Page position cannot be represented by the platform boundary coordinates");
+        }
+        std::array<std::optional<std::int32_t>, 2> margins;
+        for (const auto& binding : position.bindings.anchors) {
+            const bool right = binding.coordinate == model::BindingCoordinate::right;
+            const bool bottom = binding.coordinate == model::BindingCoordinate::bottom;
+            if (!(right || bottom) || binding.target_coordinate != binding.coordinate || binding.target != owner ||
+                binding.proportional.has_value()) {
+                fail("OOF1122", "$/Page/Position/Bindings", "Right/Bottom constraints to the owning Form or Panel", "unsupported binding",
+                    "Page boundary binding has no established storage representation");
+            }
+            const std::size_t slot = right ? 0 : 1;
+            if (margins[slot].has_value()) {
+                fail("OOF1122", "$/Page/Position/Bindings", "unique Right/Bottom constraints", "duplicate binding",
+                    "Page boundary source edge is duplicated");
+            }
+            if (binding.offset.value() == std::numeric_limits<std::int32_t>::min()) {
+                fail("OOF1120", "$/Page/Position/Bindings", "representable platform boundary offset", "int32 minimum",
+                    "Negating the Page binding offset overflows int32");
+            }
+            margins[slot] = -binding.offset.value();
+        }
+        if (!margins[0].has_value() || !margins[1].has_value()) {
+            fail("OOF1122", "$/Page/Position/Bindings", "explicit Right and Bottom owner constraints", "missing binding",
+                "Page boundary constraints cannot be inferred from coordinates alone");
+        }
+        const std::array<std::int32_t, 4> coordinates{left, top, left + width, top + height};
+        std::vector<LV> boundaries;
+        for (std::size_t edge = 0; edge < 4; ++edge) {
+            boundaries.push_back(list({raw("2"), raw(std::to_string(coordinates[edge])),
+                raw(edge % 2 == 0 ? "1" : "0"), raw("1"), raw(std::to_string(edge + 1)),
+                raw(std::to_string(page_index)), raw("0"),
+                raw(std::to_string(edge < 2 ? 0 : *margins[edge - 2])), raw("0")}));
+        }
+        return list(std::move(boundaries));
+    });
+}
 
 Result<RuntimeEnvelope> decode_runtime_envelope(std::string_view text) {
     return capture_decode_failure<RuntimeEnvelope>([text] {

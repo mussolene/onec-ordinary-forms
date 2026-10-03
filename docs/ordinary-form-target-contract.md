@@ -106,6 +106,24 @@ permits each property once, between `Title` and `ChildItems`. Verification:
 `ev_df9462158f2a4c42a53b31741b9c99fb`. These XML properties do not imply that
 the Panel/Page binary codec is implemented.
 
+Page has an optional named `Position`, using the existing rectangle and
+`Bindings` vocabulary. Absence remains implicit; an explicit position survives
+XML serialization. The internal boundary codec currently supports fixed
+Left/Top and explicit Right/Bottom constraints to the owning Form or Panel.
+Width and Height are differences between endpoint coordinates. Missing owner
+constraints, other targets, proportional constraints and unsupported flags
+are rejected instead of reconstructed from a baseline stream.
+
+Changing the observed Right constraint changes the runtime width of a bound
+child while its saved rectangle remains fixed. This establishes a layout
+effect, not the complete formula for every page variant. Bottom has storage
+roundtrip coverage but no independent runtime formula proof. The root writer
+now uses this named boundary encoder. Verification:
+`ev_d8864750203a47bfa4413ae13c294c97`,
+`ev_d1df9f1b84274f029da48a13d8776302`,
+`ev_e2fddecde6c9498c8f119fd3d812cc7b`.
+Whole recursive Panel/Page document serialization remains incomplete.
+
 The editable package is:
 
 ```text

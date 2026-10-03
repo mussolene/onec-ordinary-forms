@@ -512,6 +512,72 @@ ValidationReport OrdinaryFormDocument::validate() const {
         });
     };
 
+    const auto validate_position = [&](ObjectId source, const Position& position) {
+        if (position.width.value() < 0 || position.height.value() < 0) {
+            add_violation(
+                report,
+                InvariantCode::invalid_property,
+                source,
+                {},
+                "Position dimensions must be non-negative");
+        }
+        std::array<bool, 6> anchor_coordinates{};
+        for (const auto& binding : position.bindings.anchors) {
+            const auto coordinate = static_cast<std::size_t>(binding.coordinate);
+            if (coordinate >= anchor_coordinates.size() || anchor_coordinates[coordinate]) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    source,
+                    {},
+                    "Position contains a duplicate binding coordinate");
+            } else {
+                anchor_coordinates[coordinate] = true;
+            }
+            if (binding.target.has_value()) {
+                require_control(source, *binding.target);
+            }
+            const auto target_coordinate = static_cast<std::size_t>(binding.target_coordinate);
+            if (target_coordinate >= anchor_coordinates.size()) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    source,
+                    {},
+                    "Position contains an invalid target binding coordinate");
+            }
+            if (binding.proportional.has_value()) {
+                const auto& target = *binding.proportional;
+                const auto proportional_coordinate = static_cast<std::size_t>(target.coordinate);
+                if (proportional_coordinate >= anchor_coordinates.size()) {
+                    add_violation(
+                        report,
+                        InvariantCode::invalid_property,
+                        source,
+                        {},
+                        "Position contains an invalid proportional target coordinate");
+                }
+                if (target.target.has_value()) {
+                    require_control(source, *target.target);
+                }
+            }
+        }
+        std::array<bool, 5> binding_dimensions{};
+        for (const auto& binding : position.bindings.dimensions) {
+            const auto dimension = static_cast<std::size_t>(binding.dimension);
+            if (dimension >= binding_dimensions.size() || binding_dimensions[dimension]) {
+                add_violation(
+                    report,
+                    InvariantCode::invalid_property,
+                    source,
+                    {},
+                    "Position contains a duplicate dimension binding");
+            } else {
+                binding_dimensions[dimension] = true;
+            }
+        }
+    };
+
     const auto child_id = [](const ChildItemRef& child) {
         return std::visit([](const auto& reference) { return reference.id(); }, child);
     };
@@ -668,61 +734,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     "event name occurs more than once for the same owner");
             }
         }
-        std::array<bool, 6> anchor_coordinates{};
-        for (const auto& binding : control.position.bindings.anchors) {
-            const auto coordinate = static_cast<std::size_t>(binding.coordinate);
-            if (coordinate >= anchor_coordinates.size() || anchor_coordinates[coordinate]) {
-                add_violation(
-                    report,
-                    InvariantCode::invalid_property,
-                    control.id,
-                    {},
-                    "Position contains a duplicate binding coordinate");
-            } else {
-                anchor_coordinates[coordinate] = true;
-            }
-            if (binding.target.has_value()) {
-                require_control(control.id, *binding.target);
-            }
-            const auto target_coordinate = static_cast<std::size_t>(binding.target_coordinate);
-            if (target_coordinate >= anchor_coordinates.size()) {
-                add_violation(
-                    report,
-                    InvariantCode::invalid_property,
-                    control.id,
-                    {},
-                    "Position contains an invalid target binding coordinate");
-            }
-            if (binding.proportional.has_value()) {
-                const auto& target = *binding.proportional;
-                const auto proportional_coordinate = static_cast<std::size_t>(target.coordinate);
-                if (proportional_coordinate >= anchor_coordinates.size()) {
-                    add_violation(
-                        report,
-                        InvariantCode::invalid_property,
-                        control.id,
-                        {},
-                        "Position contains an invalid proportional target coordinate");
-                }
-                if (target.target.has_value()) {
-                    require_control(control.id, *target.target);
-                }
-            }
-        }
-        std::array<bool, 5> binding_dimensions{};
-        for (const auto& binding : control.position.bindings.dimensions) {
-            const auto dimension = static_cast<std::size_t>(binding.dimension);
-            if (dimension >= binding_dimensions.size() || binding_dimensions[dimension]) {
-                add_violation(
-                    report,
-                    InvariantCode::invalid_property,
-                    control.id,
-                    {},
-                    "Position contains a duplicate dimension binding");
-            } else {
-                binding_dimensions[dimension] = true;
-            }
-        }
+        validate_position(control.id, control.position);
         if (control.data_path.has_value()) {
             require_attribute(control.id, control.data_path->attribute);
         }
@@ -744,6 +756,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
     }
 
     for (const auto& page : collections_.pages) {
+        validate_position(page.id, page.position.value());
         for (const ChildItemRef& child : page.children) {
             require_child(page.id, child);
             if (std::holds_alternative<PageRef>(child)) {

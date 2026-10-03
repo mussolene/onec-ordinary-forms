@@ -646,6 +646,45 @@ void test_duplicate_bindings_rejected() {
         "duplicate binding coordinates must be rejected");
 }
 
+void test_page_position_invariants() {
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(PageRef{ObjectId{2}});
+    OrdinaryFormDocument dangling(std::move(form));
+    Page page;
+    page.id = ObjectId{2};
+    page.name = "Settings";
+    Position dangling_position;
+    dangling_position.bindings.anchors.push_back(
+        AnchorBinding{
+            BindingCoordinate::left,
+            ControlRef{ObjectId{99}},
+            Property<std::int32_t>{0},
+            BindingCoordinate::left,
+            std::nullopt,
+        });
+    page.position.set(std::move(dangling_position));
+    dangling.add_page(std::move(page));
+    expect(
+        dangling.validate().has(InvariantCode::dangling_reference),
+        "Page Position binding targets must resolve to controls");
+
+    Form negative_form;
+    negative_form.id = ObjectId{1};
+    negative_form.children.push_back(PageRef{ObjectId{2}});
+    OrdinaryFormDocument negative(std::move(negative_form));
+    Page negative_page;
+    negative_page.id = ObjectId{2};
+    negative_page.name = "Negative";
+    Position negative_position;
+    negative_position.height.set(-1);
+    negative_page.position.set(std::move(negative_position));
+    negative.add_page(std::move(negative_page));
+    expect(
+        negative.validate().has(InvariantCode::invalid_property),
+        "Page Position dimensions must be non-negative");
+}
+
 }  // namespace
 
 int main() {
@@ -666,6 +705,7 @@ int main() {
         test_property_applicability_and_type_validation();
         test_event_sequence_invariants();
         test_duplicate_bindings_rejected();
+        test_page_position_invariants();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';
         return 1;

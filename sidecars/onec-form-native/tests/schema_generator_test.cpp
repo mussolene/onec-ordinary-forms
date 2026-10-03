@@ -549,7 +549,7 @@ void test_document_package_types(
 
     const auto page_elements =
         direct_children(sequence_for_type(schema, "PageType"), "element");
-    expect(page_elements.size() == 4, "PageType surface drift");
+    expect(page_elements.size() == 5, "PageType surface drift");
     expect_element_shape(
         page_elements[0], "Title", "LocalizedStringValueType", "0", "1");
     expect_element_shape(
@@ -557,7 +557,9 @@ void test_document_package_types(
     expect_element_shape(
         page_elements[2], "Enabled", "xs:boolean", "0", "1");
     expect_element_shape(
-        page_elements[3], "ChildItems", "ControlChildItemsType", "0", "1");
+        page_elements[3], "Position", "PositionType", "0", "1");
+    expect_element_shape(
+        page_elements[4], "ChildItems", "ControlChildItemsType", "0", "1");
     expect_type_attribute(schema, "PageType", "name", "xs:string", "required");
 }
 
@@ -969,11 +971,15 @@ void test_document_instances(xmlSchemaPtr schema) {
     constexpr std::string_view panel_page = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1">
   <ChildItems>
+    <Page name="RootPage">
+      <Position><Top>2</Top><Height>80</Height><Left>1</Left><Width>120</Width><Bindings><DimensionBinding dimension="width" value="120"/></Bindings></Position>
+    </Page>
     <Panel id="2" name="Pages">
       <Position/>
       <ChildItems>
         <Page name="MainPage">
           <Title><Item language="en">Main</Item></Title>
+          <Position><Top>4</Top><Height>60</Height><Left>3</Left><Width>90</Width></Position>
         </Page>
       </ChildItems>
     </Panel>

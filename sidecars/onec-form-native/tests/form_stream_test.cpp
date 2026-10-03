@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "oof/model/metamodel.hpp"
+#include "oof/source/form_xml.hpp"
 #include "oof/storage/form_stream.hpp"
 
 namespace {
@@ -1662,6 +1663,91 @@ void test_center_target_coordinates() {
     }
 }
 
+void test_page_boundary_position_codec() {
+    const auto boundaries = list_stream::parse(
+        "{{2,6,1,1,1,0,0,0,0},{2,6,0,1,2,0,0,0,0},"
+        "{2,296,1,1,3,0,0,40,0},{2,197,0,1,4,0,0,2,0}}");
+    const model::ControlRef owner{model::ObjectId{2}};
+    auto decoded = form_stream::decode_page_position(boundaries, 0, owner);
+    expect(decoded.ok(), "proven Page boundary shape must decode to named Position");
+    const auto& position = decoded.value();
+    expect(position.left.value() == 6 && position.top.value() == 6 &&
+               position.width.value() == 290 && position.height.value() == 191,
+        "Page right/bottom coordinates must become dimensions, not be mislabeled as width/height");
+    expect(position.bindings.anchors.size() == 2 &&
+               position.bindings.anchors[0].target == owner &&
+               position.bindings.anchors[0].coordinate == model::BindingCoordinate::right &&
+               position.bindings.anchors[0].offset.value() == -40 &&
+               position.bindings.anchors[1].coordinate == model::BindingCoordinate::bottom &&
+               position.bindings.anchors[1].offset.value() == -2,
+        "Page runtime constraints must be distinct from static rectangle coordinates");
+    auto rebuilt = form_stream::encode_page_position(position, 0, owner);
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(boundaries),
+        "named Page Position must rebuild the proven boundary records without retained source bytes");
+
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "PageBoundary";
+    form.children.emplace_back(owner);
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode panel{owner.id(), "Tabs", model::PanelPayload{}};
+    panel.children.emplace_back(model::PageRef{model::ObjectId{1}});
+    document.add_control(std::move(panel));
+    model::Page page;
+    page.id = model::ObjectId{1};
+    page.name = "First";
+    page.position.set(position);
+    document.add_page(std::move(page));
+    auto xml = oof::source::serialize_form_xml(document);
+    expect(xml.ok(), "named Page boundary model must serialize as public XML");
+    auto reparsed = oof::source::parse_form_xml(xml.value());
+    expect(reparsed.ok(), "named Page boundary XML must parse independently");
+    auto xml_rebuilt = form_stream::encode_page_position(
+        reparsed.value().find_page(model::ObjectId{1})->position.value(), 0, owner);
+    expect(xml_rebuilt.ok() && list_stream::dump_compact(xml_rebuilt.value()) == list_stream::dump_compact(boundaries),
+        "Page boundaries must survive model -> XML -> model -> codec without source storage");
+    const std::string original_offset = "offset=\"-40\"";
+    const auto offset_at = xml.value().find(original_offset);
+    expect(offset_at != std::string::npos, "Page runtime constraint must be a named editable XML offset");
+    auto edited_xml = xml.value();
+    edited_xml.replace(offset_at, original_offset.size(), "offset=\"-4\"");
+    auto xml_edit = oof::source::parse_form_xml(edited_xml);
+    expect(xml_edit.ok(), "editing the named Page offset must remain valid XML");
+    auto edited_boundaries = form_stream::encode_page_position(
+        xml_edit.value().find_page(model::ObjectId{1})->position.value(), 0, owner);
+    expect(edited_boundaries.ok() && edited_boundaries.value().items[2].items[7].atom == "4" &&
+               edited_boundaries.value().items[2].items[1].atom == "296",
+        "named Page offset editing must preserve independent static coordinates");
+    expect(!form_stream::encode_page_position(position, 0),
+        "nested Page bindings must not silently become Form bindings");
+    expect(!form_stream::decode_page_position(boundaries, 1, owner),
+        "Page index mismatch must be rejected");
+
+    auto invalid = boundaries;
+    invalid.items[2].items[1] = list_stream::ListValue::raw_atom("5");
+    expect(!form_stream::decode_page_position(invalid, 0, owner),
+        "inverted Page rectangle must be rejected");
+    invalid = boundaries;
+    invalid.items[0].items[7] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_page_position(invalid, 0, owner),
+        "unproven Left constraint must be rejected");
+    invalid = boundaries;
+    invalid.items[2].items[7] = list_stream::ListValue::raw_atom("-2147483648");
+    expect(!form_stream::decode_page_position(invalid, 0, owner),
+        "Page offset negation overflow must be rejected");
+
+    auto edited = position;
+    edited.width.set(330);
+    edited.bindings.anchors[0].offset.set(-4);
+    auto encoded_edit = form_stream::encode_page_position(edited, 0, owner);
+    expect(encoded_edit.ok() && encoded_edit.value().items[2].items[1].atom == "336" &&
+               encoded_edit.value().items[2].items[7].atom == "4",
+        "editing named static width and runtime offset must affect independent boundary values");
+    edited.bindings.anchors.clear();
+    expect(!form_stream::encode_page_position(edited, 0, owner),
+        "missing Page constraints must not be inferred from coordinates");
+}
+
 }  // namespace
 
 int main() {
@@ -1685,6 +1771,7 @@ int main() {
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();
         test_center_target_coordinates();
+        test_page_boundary_position_codec();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -79,6 +80,17 @@ struct AttributesRecord {
     std::string_view path = "$/2");
 [[nodiscard]] Result<list_stream::ListValue> encode_attributes(
     const AttributesRecord& record);
+
+// Page boundary constraints are distinct from ordinary-control geometry.
+// The owner is Form for root pages and the containing Panel for nested pages.
+[[nodiscard]] Result<model::Position> decode_page_position(
+    const list_stream::ListValue& boundaries,
+    std::uint32_t page_index,
+    std::optional<model::ControlRef> owner = std::nullopt);
+[[nodiscard]] Result<list_stream::ListValue> encode_page_position(
+    const model::Position& position,
+    std::uint32_t page_index,
+    std::optional<model::ControlRef> owner = std::nullopt);
 
 // Product storage boundary. The current executable slice accepts the proven
 // 8.5 section-18 layout and fails closed on storage concepts not represented
