@@ -501,7 +501,7 @@ constexpr std::array<model::BindingCoordinate, 6> geometry_coordinates{
     model::BindingCoordinate::horizontal_center,
 };
 
-std::int32_t platform_edge(model::BindingCoordinate coordinate, std::string_view path) {
+std::int32_t source_platform_edge(model::BindingCoordinate coordinate, std::string_view path) {
     switch (coordinate) {
         case model::BindingCoordinate::top: return 0;
         case model::BindingCoordinate::bottom: return 1;
@@ -509,21 +509,46 @@ std::int32_t platform_edge(model::BindingCoordinate coordinate, std::string_view
         case model::BindingCoordinate::right: return 3;
         case model::BindingCoordinate::vertical_center:
         case model::BindingCoordinate::horizontal_center:
-            fail("OOF1122", std::string(path), "supported Top, Bottom, Left, or Right edge", "center coordinate",
-                "Center-edge binding storage has not been established");
+            fail("OOF1122", std::string(path), "source edge Top, Bottom, Left, or Right", "center coordinate",
+                "Center coordinates are supported only as binding targets");
     }
     fail("OOF1122", std::string(path), "valid binding coordinate", "out of range", "Binding coordinate is invalid");
 }
 
-model::BindingCoordinate model_coordinate(std::int32_t edge, std::string_view path) {
+std::int32_t target_platform_edge(model::BindingCoordinate coordinate, std::string_view path) {
+    switch (coordinate) {
+        case model::BindingCoordinate::top: return 0;
+        case model::BindingCoordinate::bottom: return 1;
+        case model::BindingCoordinate::left: return 2;
+        case model::BindingCoordinate::right: return 3;
+        case model::BindingCoordinate::vertical_center: return 4;
+        case model::BindingCoordinate::horizontal_center: return 5;
+    }
+    fail("OOF1122", std::string(path), "valid target coordinate", "out of range", "Binding target coordinate is invalid");
+}
+
+model::BindingCoordinate model_target_coordinate(std::int32_t edge, std::string_view path) {
     switch (edge) {
         case 0: return model::BindingCoordinate::top;
         case 1: return model::BindingCoordinate::bottom;
         case 2: return model::BindingCoordinate::left;
         case 3: return model::BindingCoordinate::right;
+        case 4: return model::BindingCoordinate::vertical_center;
+        case 5: return model::BindingCoordinate::horizontal_center;
         default:
-            fail("OOF1114", std::string(path), "platform edge 0..3", std::to_string(edge),
-                "Center-edge binding storage has not been established");
+            fail("OOF1114", std::string(path), "platform target edge 0..5", std::to_string(edge),
+                "Binding target edge is unsupported");
+    }
+}
+
+std::size_t target_dependency_bucket(std::int32_t edge, std::string_view path) {
+    static_cast<void>(model_target_coordinate(edge, path));
+    switch (edge) {
+        case 0: return 0;
+        case 1: case 4: return 1;
+        case 2: return 2;
+        case 3: case 5: return 3;
+        default: throw std::logic_error("validated target edge is outside dependency buckets");
     }
 }
 
@@ -552,7 +577,10 @@ std::pair<std::uint64_t, std::int32_t> decode_incoming_anchor(
             "Incoming anchor source ID is invalid");
     }
     const auto source_edge = integer_atom<std::int32_t>(tuple.items[2], child_path(path, 2));
-    static_cast<void>(model_coordinate(source_edge, child_path(path, 2)));
+    if (source_edge < 0 || source_edge > 3) {
+        fail("OOF1114", child_path(path, 2), "incoming source edge 0..3", std::to_string(source_edge),
+            "Incoming anchor source edge is unsupported");
+    }
     return {source_id, source_edge};
 }
 
@@ -635,7 +663,7 @@ DecodedGeometry decode_geometry(
             }
             model::AnchorBinding binding;
             binding.coordinate = geometry_coordinates[slot];
-            binding.target_coordinate = model_coordinate(target_edge, child_path(primary_path, 2));
+            binding.target_coordinate = model_target_coordinate(target_edge, child_path(primary_path, 2));
             if (target_id != 0) binding.target = model::ControlRef{model::ObjectId{static_cast<std::uint64_t>(target_id)}};
             if (offset != 0) binding.offset.set(offset);
             binding_value = std::move(binding);
@@ -660,7 +688,7 @@ DecodedGeometry decode_geometry(
                     "Proportional binding target ID is invalid");
             }
             model::AnchorBindingTarget target;
-            target.coordinate = model_coordinate(secondary_edge, child_path(secondary_path, 2));
+            target.coordinate = model_target_coordinate(secondary_edge, child_path(secondary_path, 2));
             if (secondary_id != 0) target.target = model::ControlRef{model::ObjectId{static_cast<std::uint64_t>(secondary_id)}};
             if (secondary_offset != 0) target.offset.set(secondary_offset);
             binding_value->proportional = std::move(target);
@@ -748,8 +776,8 @@ LV encode_geometry(
         if (primary[slot].has_value()) {
             fail("OOF1122", "$/Position/Bindings", "unique source edge", "duplicate", "Duplicate primary binding coordinate");
         }
-        static_cast<void>(platform_edge(binding.coordinate, "$/Position/Bindings/coordinate"));
-        const auto target_edge = platform_edge(binding.target_coordinate, "$/Position/Bindings/targetCoordinate");
+        static_cast<void>(source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate"));
+        const auto target_edge = target_platform_edge(binding.target_coordinate, "$/Position/Bindings/targetCoordinate");
         const std::uint64_t target_id = binding.target.has_value() ? binding.target->id().value() : 0;
         if (target_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
             fail("OOF1122", "$/Position/Bindings/targetId", "Form or positive int64 target ID", std::to_string(target_id),
@@ -758,7 +786,7 @@ LV encode_geometry(
         LV secondary = parse_constant("{2,-1,6,0}");
         if (binding.proportional.has_value()) {
             const auto& target = *binding.proportional;
-            const auto proportional_edge = platform_edge(target.coordinate, "$/Position/Bindings/ProportionalBinding/targetCoordinate");
+            const auto proportional_edge = target_platform_edge(target.coordinate, "$/Position/Bindings/ProportionalBinding/targetCoordinate");
             const std::uint64_t proportional_id = target.target.has_value() ? target.target->id().value() : 0;
             if (proportional_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                 fail("OOF1122", "$/Position/Bindings/ProportionalBinding/targetId", "Form or positive int64 target ID", std::to_string(proportional_id),
@@ -2072,10 +2100,11 @@ Result<model::OrdinaryFormDocument> decode_document(
         for (const auto& decoded_slot : decoded_controls) {
             const auto source_id = decoded_slot->control.id.value();
             for (const auto& binding : decoded_slot->control.position.bindings.anchors) {
-                const auto source_edge = platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
+                const auto source_edge = source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
                 const auto append_target = [&](const std::optional<model::ControlRef>& target, model::BindingCoordinate coordinate) {
-                    const auto target_edge = static_cast<std::size_t>(platform_edge(
-                        coordinate, "$/Position/Bindings/targetCoordinate"));
+                    const auto target_edge = target_dependency_bucket(
+                        target_platform_edge(coordinate, "$/Position/Bindings/targetCoordinate"),
+                        "$/Position/Bindings/targetCoordinate");
                     if (!target.has_value()) {
                         expected_form_incoming[target_edge].emplace_back(source_id, source_edge);
                         return;
@@ -2285,10 +2314,11 @@ Result<list_stream::ListValue> encode_document(
                 fail("OOF1123", "$/Form/ChildItems", "existing control", std::to_string(control_id.value()), "Child reference is dangling");
             }
             for (const auto& binding : control->position.bindings.anchors) {
-                const auto source_edge = platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
+                const auto source_edge = source_platform_edge(binding.coordinate, "$/Position/Bindings/coordinate");
                 const auto append_target = [&](const std::optional<model::ControlRef>& target, model::BindingCoordinate coordinate) {
-                    const auto target_edge = static_cast<std::size_t>(platform_edge(
-                        coordinate, "$/Position/Bindings/targetCoordinate"));
+                    const auto target_edge = target_dependency_bucket(
+                        target_platform_edge(coordinate, "$/Position/Bindings/targetCoordinate"),
+                        "$/Position/Bindings/targetCoordinate");
                     if (!target.has_value()) {
                         form_incoming[target_edge].emplace_back(control_id.value(), source_edge);
                         return;

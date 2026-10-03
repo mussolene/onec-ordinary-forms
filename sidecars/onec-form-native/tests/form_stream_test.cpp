@@ -1525,11 +1525,20 @@ void test_anchor_bindings_round_trip_and_fanout() {
         list_stream::ListValue::raw_atom("77");
     expect(!form_stream::decode_document(dangling_target, "Bindings"),
         "primary target IDs absent from the form graph must be rejected");
-    auto out_of_range_edge = encoded.value();
-    out_of_range_edge.items[1].items[2].items[2].items[1].items[3].items[9].items[1].items[2] =
-        list_stream::ListValue::raw_atom("5");
-    expect(!form_stream::decode_document(out_of_range_edge, "Bindings"),
-        "unproven center target coordinates must be rejected");
+    auto unknown_target_edge = encoded.value();
+    unknown_target_edge.items[1].items[2].items[2].items[1].items[3].items[9].items[1].items[2] =
+        list_stream::ListValue::raw_atom("6");
+    expect(!form_stream::decode_document(unknown_target_edge, "Bindings"),
+        "unknown target edge 6 must be rejected");
+    model::OrdinaryFormDocument centered_source(document.form());
+    for (const auto& source_control : document.collections().controls) {
+        auto centered_control = source_control;
+        if (centered_control.id == model::ObjectId{2}) {
+            centered_control.position.bindings.anchors.front().coordinate = model::BindingCoordinate::horizontal_center;
+        }
+        centered_source.add_control(std::move(centered_control));
+    }
+    expect(!form_stream::encode_document(centered_source), "center coordinates must remain unsupported as sources");
     auto orphan_proportional = encoded.value();
     orphan_proportional.items[1].items[2].items[2].items[1].items[3].items[9].items[1] =
         list_stream::parse("{2,-1,6,0}");
@@ -1559,6 +1568,100 @@ void test_platform_empty_document_fixture() {
         "platform empty-form storage must canonicalize without semantic drift");
 }
 
+void test_center_target_coordinates() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "CenterTargets";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{9}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode run{model::ObjectId{2}, "Run", model::ButtonPayload{}};
+    model::AnchorBinding binding;
+    binding.coordinate = model::BindingCoordinate::right;
+    binding.target_coordinate = model::BindingCoordinate::horizontal_center;
+    model::AnchorBindingTarget proportional;
+    proportional.coordinate = model::BindingCoordinate::vertical_center;
+    binding.proportional = proportional;
+    run.position.bindings.anchors.push_back(binding);
+    document.add_control(std::move(run));
+    model::ControlNode label{model::ObjectId{9}, "Label", model::ButtonPayload{}};
+    model::AnchorBinding control_binding;
+    control_binding.coordinate = model::BindingCoordinate::left;
+    control_binding.target = model::ControlRef{model::ObjectId{2}};
+    control_binding.target_coordinate = model::BindingCoordinate::vertical_center;
+    model::AnchorBindingTarget control_proportional;
+    control_proportional.target = model::ControlRef{model::ObjectId{2}};
+    control_proportional.coordinate = model::BindingCoordinate::horizontal_center;
+    control_binding.proportional = control_proportional;
+    label.position.bindings.anchors.push_back(control_binding);
+    document.add_control(std::move(label));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "center targets must encode" : encoded.diagnostics().front().message);
+    const auto& children = encoded.value().items[1].items[2].items[2];
+    const auto& geometry = children.items[1].items[3];
+    expect(list_stream::dump_compact(geometry.items[9]) == "{0,{2,0,5,0},{2,0,4,0}}",
+        "horizontal and vertical center targets must encode as platform edges 5 and 4");
+    expect(list_stream::dump_compact(children.items[2].items[3].items[8]) == "{0,{2,2,4,0},{2,2,5,0}}",
+        "control targets and proportional control targets must encode center edges 4 and 5");
+    const auto& root_body = encoded.value().items[1].items[2].items[1].items[1];
+    const auto root_text = list_stream::dump_compact(root_body);
+    expect(root_text.find("},26,0,1,{0,2,3},0,1,{0,2,3},0,0,") != std::string::npos,
+        "vertical center edge 4 and horizontal center edge 5 must populate incoming buckets 1 and 3: " + root_text);
+    const auto decoded = form_stream::decode_document(encoded.value(), "CenterTargets");
+    expect(decoded.ok(), decoded ? "center targets must decode" : decoded.diagnostics().front().message);
+    const auto* roundtrip = decoded.value().find_control(model::ObjectId{2});
+    expect(roundtrip != nullptr && roundtrip->position.bindings.anchors.size() == 1 &&
+               roundtrip->position.bindings.anchors.front().target_coordinate == model::BindingCoordinate::horizontal_center &&
+               roundtrip->position.bindings.anchors.front().proportional.has_value() &&
+               roundtrip->position.bindings.anchors.front().proportional->coordinate == model::BindingCoordinate::vertical_center,
+        "both center target enum values must round-trip independently");
+    const auto* roundtrip_label = decoded.value().find_control(model::ObjectId{9});
+    expect(roundtrip_label != nullptr && roundtrip_label->position.bindings.anchors.front().target_coordinate == model::BindingCoordinate::vertical_center &&
+               roundtrip_label->position.bindings.anchors.front().proportional->coordinate == model::BindingCoordinate::horizontal_center,
+        "center targets on controls must round-trip independently");
+
+    model::OrdinaryFormDocument centered_source(document.form());
+    for (const auto& source_control : document.collections().controls) {
+        auto centered_control = source_control;
+        if (centered_control.id == model::ObjectId{2}) {
+            centered_control.position.bindings.anchors.front().coordinate = model::BindingCoordinate::vertical_center;
+        }
+        centered_source.add_control(std::move(centered_control));
+    }
+    expect_failure(form_stream::encode_document(centered_source), "OOF1122", "$/Position/Bindings/coordinate",
+        "center coordinates must remain unsupported as sources");
+
+    auto encoded_center_source = encoded.value();
+    auto& center_source_geometry = encoded_center_source.items[1].items[2].items[2].items[1].items[3];
+    center_source_geometry.items[11] = center_source_geometry.items[9];
+    center_source_geometry.items[9] = list_stream::parse("{0,{2,-1,6,0},{2,-1,6,0}}");
+    expect_failure(form_stream::decode_document(encoded_center_source, "CenterTargets"), "OOF1122",
+        "$/Position/Bindings/coordinate", "center coordinates must remain unsupported as decoded sources");
+
+    auto invalid_incoming = encoded.value();
+    bool changed = false;
+    std::string bad_source_edge;
+    const auto corrupt_source_edge = [&](auto&& self, list_stream::ListValue& value) -> void {
+        if (value.is_list && value.items.size() == 3 && !value.items[0].is_list && value.items[0].atom == "0" &&
+            !value.items[1].is_list && value.items[1].atom == "2" && !value.items[2].is_list && value.items[2].atom == "3") {
+            value.items[2] = list_stream::ListValue::raw_atom(bad_source_edge);
+            changed = true;
+            return;
+        }
+        for (auto& item : value.items) self(self, item);
+    };
+    for (const auto source_edge : {"4", "5"}) {
+        changed = false;
+        bad_source_edge = source_edge;
+        invalid_incoming = encoded.value();
+        auto& root_body = invalid_incoming.items[1].items[2].items[1].items[1];
+        corrupt_source_edge(corrupt_source_edge, root_body);
+        expect(changed, "test fixture must contain an incoming source edge tuple");
+        expect(!form_stream::decode_document(invalid_incoming, "CenterTargets"),
+            std::string("incoming source edge ") + source_edge + " must be rejected");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -1581,6 +1684,7 @@ int main() {
         test_six_reordered_controls_use_logical_geometry_ordinals();
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();
+        test_center_target_coordinates();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';
