@@ -94,6 +94,8 @@ void test_descriptors() {
     const auto* horizontal = find_property(ControlKind::button, "HorizontalAlign");
     const auto* vertical = find_property(ControlKind::button, "VerticalAlign");
     const auto* tool_tip = find_property(ControlKind::button, "ToolTip");
+    const auto* picture_location = find_property(ControlKind::button, "PictureLocation");
+    const auto* picture_size = find_property(ControlKind::button, "PictureSize");
     expect(horizontal && horizontal->storage_codec == StorageCodec::control_info &&
                horizontal->default_value.kind == DefaultKind::enumeration &&
                horizontal->default_value.canonical == "Center",
@@ -106,13 +108,21 @@ void test_descriptors() {
                tool_tip->default_value.kind == DefaultKind::string &&
                tool_tip->default_value.canonical.empty(),
         "Button ToolTip descriptor must declare its empty localized default");
+    expect(picture_location && picture_location->storage_codec == StorageCodec::control_info &&
+               picture_location->default_value.kind == DefaultKind::enumeration &&
+               picture_location->default_value.canonical == "Left",
+        "Button PictureLocation descriptor must declare Left as its default");
+    expect(picture_size && picture_size->storage_codec == StorageCodec::control_info &&
+               picture_size->default_value.kind == DefaultKind::enumeration &&
+               picture_size->default_value.canonical == "RealSize",
+        "Button PictureSize descriptor must declare RealSize as its default");
 }
 
 void test_button_alignment_xml_defaults() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
-  <Button id="2" name="Center"><Position/><VerticalAlign type="VerticalAlign" member="Center"/><HorizontalAlign type="HorizontalAlign" member="Center"/><ToolTip></ToolTip></Button>
-  <Button id="3" name="Right"><Position/><VerticalAlign type="VerticalAlign" member="Bottom"/><HorizontalAlign type="HorizontalAlign" member="Right"/><ToolTip>hint</ToolTip></Button>
+  <Button id="2" name="Center"><Position/><VerticalAlign type="VerticalAlign" member="Center"/><HorizontalAlign type="HorizontalAlign" member="Center"/><ToolTip></ToolTip><PictureLocation type="PictureLocation" member="Left"/><PictureSize type="PictureSize" member="RealSize"/></Button>
+  <Button id="3" name="Right"><Position/><VerticalAlign type="VerticalAlign" member="Bottom"/><HorizontalAlign type="HorizontalAlign" member="Right"/><ToolTip>hint</ToolTip><PictureLocation type="PictureLocation" member="Right"/><PictureSize type="PictureSize" member="ByFontSize"/></Button>
 </ChildItems></Form>
 )XML";
     const auto parsed = oof::source::parse_form_xml(xml);
@@ -124,23 +134,35 @@ void test_button_alignment_xml_defaults() {
     const auto* right = parsed.value().find_control(ObjectId{3});
     expect(center && !center->properties().find(PropertyId::from_name("HorizontalAlign")) &&
                !center->properties().find(PropertyId::from_name("VerticalAlign")) &&
-               !center->properties().find(PropertyId::from_name("ToolTip")),
-        "XML Center and empty ToolTip values must normalize to descriptor defaults");
+               !center->properties().find(PropertyId::from_name("ToolTip")) &&
+               !center->properties().find(PropertyId::from_name("PictureLocation")) &&
+               !center->properties().find(PropertyId::from_name("PictureSize")),
+        "XML Button defaults must normalize to descriptor defaults");
     expect(right && std::get<EnumerationValue>(right->properties().find(
                PropertyId::from_name("HorizontalAlign"))->value) ==
                EnumerationValue{"HorizontalAlign", "Right"} &&
                std::get<EnumerationValue>(right->properties().find(
                    PropertyId::from_name("VerticalAlign"))->value) ==
-               EnumerationValue{"VerticalAlign", "Bottom"},
-        "non-default Button alignments must remain explicit in the object model");
+               EnumerationValue{"VerticalAlign", "Bottom"} &&
+               std::get<EnumerationValue>(right->properties().find(
+                   PropertyId::from_name("PictureLocation"))->value) ==
+               EnumerationValue{"PictureLocation", "Right"} &&
+               std::get<EnumerationValue>(right->properties().find(
+                   PropertyId::from_name("PictureSize"))->value) ==
+               EnumerationValue{"PictureSize", "ByFontSize"},
+        "non-default Button enum values must remain explicit in the object model");
     const auto serialized = oof::source::serialize_form_xml(parsed.value());
     expect(serialized.ok(), "Button alignment default document must serialize");
     expect(serialized.value().find("member=\"Center\"") == std::string::npos &&
                serialized.value().find("member=\"Right\"") != std::string::npos &&
                serialized.value().find("member=\"Bottom\"") != std::string::npos &&
+               serialized.value().find("type=\"PictureLocation\" member=\"Left\"") == std::string::npos &&
+               serialized.value().find("type=\"PictureSize\" member=\"RealSize\"") == std::string::npos &&
+               serialized.value().find("type=\"PictureLocation\" member=\"Right\"") != std::string::npos &&
+               serialized.value().find("type=\"PictureSize\" member=\"ByFontSize\"") != std::string::npos &&
                serialized.value().find("<ToolTip>hint</ToolTip>") != std::string::npos &&
                serialized.value().find("<ToolTip></ToolTip>") == std::string::npos,
-        "XML writer must omit Center and empty ToolTip defaults but retain explicit values");
+        "XML writer must omit defaults but retain explicit Button enum values");
 }
 
 void test_help_metamodel() {

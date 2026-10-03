@@ -333,6 +333,18 @@ void apply_proven_storage_overrides(
         StorageCodec::control_base,
         DefaultKind::string,
         "");
+    classify_property(
+        button,
+        "PictureLocation",
+        StorageCodec::control_info,
+        DefaultKind::enumeration,
+        "Left");
+    classify_property(
+        button,
+        "PictureSize",
+        StorageCodec::control_info,
+        DefaultKind::enumeration,
+        "RealSize");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(

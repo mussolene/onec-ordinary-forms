@@ -212,13 +212,22 @@ Module.bsl совпадают; повторная сборка дает иден
 
 ## Текущий исполняемый набор свойств Button
 
-Поддержаны Caption, Enabled, MultiLine, ToolTip, HorizontalAlign и
-VerticalAlign, а также Name, Position, подтвержденные Bindings и Click.
+Поддержаны Caption, Enabled, MultiLine, ToolTip, HorizontalAlign,
+VerticalAlign, PictureLocation и PictureSize, а также Name, Position,
+подтвержденные Bindings и Click.
 Выравнивания по умолчанию Center, подсказка пустая. Неподдержанные члены
 перечислений и чужой тип, даже с default member, отвергаются при сборке.
 Именованный XML с Right/Bottom и многострочной подсказкой прошел строгий
 Designer цикл; XML, модуль и повторно собранный бинарник совпали.
 Доказательство: `ev_ac8d0f224078451688420991ae1a0f4f`.
 
-Это 6/16 прямых свойств Button, не полная поддержка типа. API GetPropVal
+PictureLocation поддерживает Left и Right, default Left. PictureSize
+поддерживает RealSize, Stretch, Proportionally, Tile, AutoSize и ByFontSize,
+default RealSize. Само свойство Picture и содержимое картинки пока не
+поддержаны. Right и ByFontSize прошли строгий Designer цикл и проверку
+значений через объект кнопки в выполнении. Доказательства:
+`ev_a042ad82e22642eabe0a0c117af4e6c1`,
+`ev_364cb10e1ffd4ee38697aa5f43b6e274`.
+
+Это 8/16 прямых свойств Button, не полная поддержка типа. API GetPropVal
 с вычислением default пока остается требованием целевой модели.

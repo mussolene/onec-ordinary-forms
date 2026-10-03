@@ -587,6 +587,8 @@ LV canonical_button_properties(
     std::string_view caption,
     std::int32_t horizontal_align,
     std::int32_t vertical_align,
+    std::int32_t picture_location,
+    std::int32_t picture_size,
     bool multi_line,
     std::string_view tool_tip) {
     return list({
@@ -596,8 +598,8 @@ LV canonical_button_properties(
         raw(std::to_string(horizontal_align)),
         raw(std::to_string(vertical_align)),
         raw("0"),
-        raw("0"),
-        raw("0"),
+        raw(std::to_string(picture_location)),
+        raw(std::to_string(picture_size)),
         parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"),
         parse_constant("{0,0,0}"),
         raw(multi_line ? "1" : "0"),
@@ -1361,13 +1363,26 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         fail("OOF1114", child_path(properties_path, 4), "VerticalAlign storage value 0, 1, or 2",
             std::to_string(vertical_align), "Button.VerticalAlign storage value is unsupported");
     }
+    const auto picture_location = integer_atom<std::int32_t>(
+        properties.items[6], child_path(properties_path, 6));
+    if (picture_location < 0 || picture_location > 1) {
+        fail("OOF1114", child_path(properties_path, 6), "PictureLocation storage value 0 or 1",
+            std::to_string(picture_location), "Button.PictureLocation storage value is unsupported");
+    }
+    const auto picture_size = integer_atom<std::int32_t>(
+        properties.items[7], child_path(properties_path, 7));
+    if (picture_size < 0 || picture_size > 7 || picture_size == 5 || picture_size == 6) {
+        fail("OOF1114", child_path(properties_path, 7), "PictureSize storage value 0, 1, 2, 3, 4, or 7",
+            std::to_string(picture_size), "Button.PictureSize storage value is unsupported");
+    }
     const bool multi_line = bool_atom(
         properties.items[10], child_path(properties_path, 10));
     auto normalized_properties = properties;
     normalized_properties.items[0] = std::move(normalized_base);
     require_exact(
         normalized_properties,
-        canonical_button_properties(enabled, caption, horizontal_align, vertical_align, multi_line, tool_tip),
+        canonical_button_properties(enabled, caption, horizontal_align, vertical_align, picture_location,
+            picture_size, multi_line, tool_tip),
         properties_path,
         "Button payload contains an unsupported property variation");
 
@@ -1416,6 +1431,25 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         control.properties().set_explicit(
             model::PropertyId::from_name("VerticalAlign"),
             model::EnumerationValue{"VerticalAlign", std::string(members[vertical_align])});
+    }
+    if (picture_location != 0) {
+        control.properties().set_explicit(
+            model::PropertyId::from_name("PictureLocation"),
+            model::EnumerationValue{"PictureLocation", "Right"});
+    }
+    if (picture_size != 0) {
+        std::string_view member;
+        switch (picture_size) {
+            case 1: member = "Stretch"; break;
+            case 2: member = "Proportionally"; break;
+            case 3: member = "Tile"; break;
+            case 4: member = "AutoSize"; break;
+            case 7: member = "ByFontSize"; break;
+            default: break;
+        }
+        control.properties().set_explicit(
+            model::PropertyId::from_name("PictureSize"),
+            model::EnumerationValue{"PictureSize", std::string(member)});
     }
     if (multi_line) {
         control.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
@@ -1732,39 +1766,43 @@ LV encode_button(
         fail("OOF1122", "$", "plain Button", control.name, "Button uses a storage concept outside the executable slice");
     }
     require_allowed_properties(control.properties(),
-        {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign"}, "$/Button");
+        {"Caption", "Enabled", "MultiLine", "ToolTip", "HorizontalAlign", "VerticalAlign",
+            "PictureLocation", "PictureSize"}, "$/Button");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
-    const auto alignment_value = [](const model::PropertySet& values, std::string_view name,
-                                    std::string_view expected_type,
-                                    std::initializer_list<std::string_view> members) {
+    const auto enum_storage_value = [](const model::PropertySet& values, std::string_view name,
+                                       std::string_view expected_type, std::int32_t default_value,
+                                       std::initializer_list<std::pair<std::string_view, std::int32_t>> members) {
         const auto* entry = values.find(model::PropertyId::from_name(name));
-        if (entry == nullptr) return std::int32_t{1};
+        if (entry == nullptr) return default_value;
         if (!std::holds_alternative<model::EnumerationValue>(entry->value)) {
             fail("OOF1122", std::string("$/Button/") + std::string(name),
                 "EnumerationValue of " + std::string(expected_type), "non-enumeration",
-                "Button alignment has the wrong value type");
+                "Button enumeration has the wrong value type");
         }
         const auto& value = std::get<model::EnumerationValue>(entry->value);
         if (value.type_name != expected_type) {
             fail("OOF1122", std::string("$/Button/") + std::string(name),
                 std::string(expected_type) + " enumeration", value.type_name + "." + value.member,
-                "Button alignment enumeration type is unsupported");
+                "Button enumeration type is unsupported");
         }
-        std::int32_t index = 0;
-        for (const auto member : members) {
-            if (value.member == member) return index;
-            ++index;
+        for (const auto& [member, storage_value] : members) {
+            if (value.member == member) return storage_value;
         }
         fail("OOF1122", std::string("$/Button/") + std::string(name),
             std::string(expected_type) + " supported member", value.member,
-            "Button alignment member is unsupported");
+            "Button enum member is unsupported");
     };
-    const auto horizontal_align = alignment_value(
-        control.properties(), "HorizontalAlign", "HorizontalAlign", {"Left", "Center", "Right"});
-    const auto vertical_align = alignment_value(
-        control.properties(), "VerticalAlign", "VerticalAlign", {"Top", "Center", "Bottom"});
+    const auto horizontal_align = enum_storage_value(control.properties(), "HorizontalAlign",
+        "HorizontalAlign", 1, {{"Left", 0}, {"Center", 1}, {"Right", 2}});
+    const auto vertical_align = enum_storage_value(control.properties(), "VerticalAlign",
+        "VerticalAlign", 1, {{"Top", 0}, {"Center", 1}, {"Bottom", 2}});
+    const auto picture_location = enum_storage_value(control.properties(), "PictureLocation",
+        "PictureLocation", 0, {{"Left", 0}, {"Right", 1}});
+    const auto picture_size = enum_storage_value(control.properties(), "PictureSize", "PictureSize", 0,
+        {{"RealSize", 0}, {"Stretch", 1}, {"Proportionally", 2}, {"Tile", 3},
+            {"AutoSize", 4}, {"ByFontSize", 7}});
     const bool multi_line = explicit_bool(control.properties(), "MultiLine", false);
     const auto handler = button_click_handler(document, control);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
@@ -1773,7 +1811,8 @@ LV encode_button(
         raw(std::to_string(control.id.value())),
         list({
             raw("1"),
-            canonical_button_properties(enabled, caption, horizontal_align, vertical_align, multi_line, tool_tip),
+            canonical_button_properties(enabled, caption, horizontal_align, vertical_align,
+                picture_location, picture_size, multi_line, tool_tip),
             canonical_event_table(handler),
         }),
         encode_geometry(control.position, context, IncomingAnchorLists{}),

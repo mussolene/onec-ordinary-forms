@@ -723,6 +723,105 @@ void test_button_alignments_and_tooltip_round_trip() {
         "normalizing a mixed-ending ToolTip through the model must preserve its storage record");
 }
 
+void test_button_picture_enums_round_trip_and_validation() {
+    static constexpr std::string_view size_names[] = {
+        "RealSize", "Stretch", "Proportionally", "Tile", "AutoSize", "ByFontSize"};
+    static constexpr std::int32_t size_values[] = {0, 1, 2, 3, 4, 7};
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "PictureEnums";
+    for (std::size_t index = 0; index < std::size(size_names); ++index) {
+        form.children.push_back(model::ControlRef{
+            model::ObjectId{static_cast<std::uint64_t>(2 + index * 2)}});
+    }
+    model::OrdinaryFormDocument document(std::move(form));
+    for (std::size_t index = 0; index < std::size(size_names); ++index) {
+        const model::ObjectId id{static_cast<std::uint64_t>(2 + index * 2)};
+        model::ControlNode button{id, "Button" + std::to_string(index), model::ButtonPayload{}};
+        const bool right = (index % 2) != 0;
+        button.properties().set_explicit(model::PropertyId::from_name("PictureLocation"),
+            model::EnumerationValue{"PictureLocation", right ? "Right" : "Left"});
+        button.properties().set_explicit(model::PropertyId::from_name("PictureSize"),
+            model::EnumerationValue{"PictureSize", std::string(size_names[index])});
+        document.add_control(std::move(button));
+    }
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "all observed Button PictureLocation and PictureSize values must encode");
+    const auto& records = encoded.value().items[1].items[2].items[2].items;
+    for (std::size_t index = 0; index < std::size(size_names); ++index) {
+        const auto& properties = records[index + 1].items[2].items[1];
+        expect(properties.items[6].atom == std::to_string(index % 2) &&
+                   properties.items[7].atom == std::to_string(size_values[index]),
+            "Button picture properties must use their independent storage slots and observed enum codes");
+    }
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "PictureEnums");
+    expect(decoded.ok(), "all observed Button picture enum values must decode");
+    for (std::size_t index = 0; index < std::size(size_names); ++index) {
+        const auto* button = decoded.value().find_control(
+            model::ObjectId{static_cast<std::uint64_t>(2 + index * 2)});
+        expect(button != nullptr, "Button picture enum control must survive decoding");
+        const auto* location = button->properties().find(model::PropertyId::from_name("PictureLocation"));
+        if (index % 2 == 0) {
+            expect(location == nullptr, "default Left picture location must normalize to absent");
+        } else {
+            expect(location && std::get<model::EnumerationValue>(location->value) ==
+                       model::EnumerationValue{"PictureLocation", "Right"},
+                "Right picture location must remain explicit");
+        }
+        const auto* size = button->properties().find(model::PropertyId::from_name("PictureSize"));
+        if (index == 0) {
+            expect(size == nullptr, "default RealSize must normalize to absent");
+        } else {
+            expect(size && std::get<model::EnumerationValue>(size->value) ==
+                       model::EnumerationValue{"PictureSize", std::string(size_names[index])},
+                "each non-default picture size must remain explicit and independent");
+        }
+    }
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "Button picture enums must re-encode without changing either property");
+
+    model::Form foreign_form;
+    foreign_form.id = model::ObjectId{1};
+    foreign_form.name = "ForeignEnums";
+    foreign_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument foreign_document(std::move(foreign_form));
+    model::ControlNode foreign_button{model::ObjectId{2}, "Foreign", model::ButtonPayload{}};
+    foreign_button.properties().set_explicit(model::PropertyId::from_name("PictureLocation"),
+        model::EnumerationValue{"PictureSize", "Right"});
+    foreign_document.add_control(std::move(foreign_button));
+    expect_failure(form_stream::encode_document(foreign_document), "OOF1122", "$/Button/PictureLocation",
+        "foreign PictureLocation enum type must be rejected");
+
+    model::Form unknown_form;
+    unknown_form.id = model::ObjectId{1};
+    unknown_form.name = "UnknownEnums";
+    unknown_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument unknown_document(std::move(unknown_form));
+    model::ControlNode unknown_button{model::ObjectId{2}, "Unknown", model::ButtonPayload{}};
+    unknown_button.properties().set_explicit(model::PropertyId::from_name("PictureSize"),
+        model::EnumerationValue{"PictureSize", "Unsupported"});
+    unknown_document.add_control(std::move(unknown_button));
+    expect_failure(form_stream::encode_document(unknown_document), "OOF1122", "$/Button/PictureSize",
+        "unsupported PictureSize enum member must be rejected");
+
+    for (const std::int32_t unsupported : {5, 6, 8}) {
+        auto invalid = encoded.value();
+        invalid.items[1].items[2].items[2].items[1].items[2].items[1].items[7] =
+            list_stream::ListValue::raw_atom(std::to_string(unsupported));
+        expect_failure(form_stream::decode_document(invalid, "PictureEnums"), "OOF1114",
+            "$/1/2/2/1/2/1/7", "unsupported Button.PictureSize storage values must be rejected");
+    }
+    auto invalid_location = encoded.value();
+    invalid_location.items[1].items[2].items[2].items[1].items[2].items[1].items[6] =
+        list_stream::ListValue::raw_atom("2");
+    expect_failure(form_stream::decode_document(invalid_location, "PictureEnums"), "OOF1114",
+        "$/1/2/2/1/2/1/6", "unsupported Button.PictureLocation storage values must be rejected");
+}
+
 void test_button_then_label_decoration_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -2523,6 +2622,7 @@ int main() {
         test_multiple_top_level_buttons_round_trip();
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
+        test_button_picture_enums_round_trip_and_validation();
         test_button_then_label_decoration_round_trip();
         test_fresh_checkbox_stream_decode();
         test_button_label_input_field_round_trip();
