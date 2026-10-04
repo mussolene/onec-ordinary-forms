@@ -90,6 +90,16 @@ void test_platform_utf16_string_segments() {
         "platform surrogate pair must decode to the original non-BMP string");
     expect(equal(actual, list_stream::parse(list_stream::dump_compact(actual))),
         "platform string must survive canonical UTF-8 serialization");
+    // Three independent ValueToStringInternal receipts from a cold platform process.
+    for (const auto& [serialized, expected] : {
+        std::pair{R"({"S","A"\d83c"\df0dB"})", "A🌍B"},
+        std::pair{R"({"S",""\d83c"\df0dx"\d83c"\df0d"})", "🌍x🌍"},
+        std::pair{R"({"S",""\d83c"\df0d""tail"})", "🌍\"tail"}}) {
+        const auto decoded = list_stream::parse(serialized);
+        expect(decoded.items[1].atom == expected, "actual platform suffix must decode exactly");
+        expect(equal(decoded, list_stream::parse(list_stream::dump_compact(decoded))),
+            "suffix, repeated escapes and following quotes must roundtrip canonically");
+    }
     expect(list_stream::parse(R"({""\0041"})").items[0].atom == "A",
         "quoted BMP code unit must decode exactly");
     expect(list_stream::parse(R"({""\d800"\dc00"\dbff"\dfff"})").items[0].atom ==
@@ -97,8 +107,8 @@ void test_platform_utf16_string_segments() {
     for (const auto invalid : {
         R"({"x"\df0d"})", R"({"x"\d83c"})", R"({"x"\d83c"\0041"})",
         R"({"x"\d83c"\d800"})", R"({"x"\d83c"\df0})", R"({"x"\d83c"\zzzz"})",
-        R"({"x"\0041"bad})", R"({"x"\12345"})", R"({"x"\12"})", R"({"x"\d83c"\df0d})",
-        R"("x"\)", R"("x"\d)", R"("x"\d83c")"}) {
+        R"({"x"\0041"bad})", R"({"x"\zzzz"})", R"({"x"\12"})", R"({"x"\d83c"\df0d})",
+        R"("x"\)", R"("x"\d)", R"("x"\d83c")", R"({"x"\d83c"\df0dB})"}) {
         expect_rejected([&] { list_stream::parse(invalid); },
             "malformed or unpaired UTF-16 string continuation must be rejected");
     }
