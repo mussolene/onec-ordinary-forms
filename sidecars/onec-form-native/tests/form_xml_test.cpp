@@ -774,6 +774,10 @@ void test_spreadsheet_document_cells_xml_round_trip() {
     auto generic_number = typed_cell(6, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"1.2345"});
     generic_number.typed_value->type.entries.front().numeric = {12, 4, false};
     cells.push_back(std::move(generic_number));
+    for (std::size_t index = 2; index < cells.size(); ++index) {
+        cells[index].control.emplace();
+        cells[index].control->properties.set_explicit(model::PropertyId::from_name("ReadOnly"), index % 2 == 0);
+    }
     document.add_control(std::move(field));
     const auto serialized = source::serialize_form_xml(document);
     expect(serialized.ok(), serialized.ok() ? "" : serialized.diagnostics().front().message);
@@ -790,6 +794,20 @@ void test_spreadsheet_document_cells_xml_round_trip() {
         serialized.value().find("<Value>false</Value>") != std::string::npos &&
         serialized.value().find("<Value>2026-10-04T12:30:45</Value>") != std::string::npos,
         "typed Spreadsheet Document cells must serialize named values and qualifiers");
+    expect(serialized.value().find("<Control type=\"InputField\">") != std::string::npos &&
+        serialized.value().find("<ReadOnly>false</ReadOnly>") != std::string::npos,
+        "Cell.Control must preserve the named editor and explicit false property");
+    for (const std::string_view bad : {"<Control type=\"CheckBox\"><ReadOnly>true</ReadOnly></Control>",
+        "<Control type=\"InputField\"><Enabled>false</Enabled></Control>",
+        "<Control type=\"InputField\"><ReadOnly>true</ReadOnly><ReadOnly>false</ReadOnly></Control>",
+        "<Control type=\"InputField\"><ReadOnly>2</ReadOnly></Control>",
+        "<Control type=\"InputField\" raw=\"x\"/>"}) {
+        std::string invalid = serialized.value();
+        const auto begin = invalid.find("<Control type=\"InputField\">");
+        const auto end = invalid.find("</Control>", begin) + std::string_view("</Control>").size();
+        invalid.replace(begin, end - begin, bad);
+        expect(!source::parse_form_xml(invalid), "XML parser must reject unsupported Cell.Control kind, property, Boolean, duplicates, and attributes");
+    }
     const auto parsed = source::parse_form_xml(serialized.value());
     expect(parsed.ok(), parsed.ok() ? "" : parsed.diagnostics().front().message);
     const auto* restored_control = parsed.value().find_control(model::ObjectId{2});

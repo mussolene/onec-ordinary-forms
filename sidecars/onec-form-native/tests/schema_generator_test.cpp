@@ -886,15 +886,22 @@ void test_spreadsheet_document_schema(xmlNodePtr schema) {
         "Spreadsheet Cell must choose between text and typed value representations");
     const auto typed_sequence = direct_child(choice, "sequence");
     const auto typed_elements = direct_children(typed_sequence, "element");
-    expect(typed_elements.size() == 3 && attribute(typed_elements[0], "name") == "ContainsValue" &&
+    expect(typed_elements.size() == 4 && attribute(typed_elements[0], "name") == "ContainsValue" &&
         attribute(typed_elements[0], "fixed") == "true" && attribute(typed_elements[1], "name") == "ValueType" &&
         attribute(typed_elements[1], "type") == "TypeDomainValueType" && attribute(typed_elements[2], "name") == "Value",
         "typed Spreadsheet Cell must expose named ContainsValue, ValueType, and Value");
+    expect_element_shape(typed_elements.at(3), "Control", "SpreadsheetDocumentCellControlType", "0", "");
+    expect_type_attribute(schema, "SpreadsheetDocumentCellControlType", "type", "SpreadsheetDocumentCellControlKindType", "required");
     expect_type_attribute(schema, "SpreadsheetDocumentCellType", "row", "SpreadsheetCoordinateType", "required");
     expect_type_attribute(schema, "SpreadsheetDocumentCellType", "column", "SpreadsheetCoordinateType", "required");
 }
 
 void test_spreadsheet_document_instances(xmlSchemaPtr schema) {
+    constexpr std::string_view cell_control = R"XML(<Form id="1" name="Spreadsheet" ordinaryFormVersion="2.1"><ChildItems><SpreadsheetDocumentField id="2" name="Sheet"><Position/><Document><Cell row="1" column="1"><ContainsValue>true</ContainsValue><ValueType><Entry term="boolean"/></ValueType><Control type="InputField"><ReadOnly>true</ReadOnly></Control></Cell></Document></SpreadsheetDocumentField></ChildItems></Form>)XML";
+    expect(validate_document(schema, cell_control) == 0, "XSD must accept named Cell.Control on a typed default value");
+    std::string bad_control(cell_control);
+    bad_control.replace(bad_control.find("InputField"), 10, "CheckBox");
+    expect(validate_document(schema, bad_control) != 0, "XSD must reject unsupported Cell.Control kind");
     constexpr std::string_view typed_cell = R"XML(<Form id="1" name="Spreadsheet" ordinaryFormVersion="2.1"><ChildItems><SpreadsheetDocumentField id="2" name="Sheet"><Position/><Document><Cell row="1" column="1"><ContainsValue>true</ContainsValue><ValueType><Entry term="boolean"/></ValueType><Value>false</Value></Cell></Document></SpreadsheetDocumentField></ChildItems></Form>)XML";
     constexpr std::string_view false_contains_value = R"XML(<Form id="1" name="Spreadsheet" ordinaryFormVersion="2.1"><ChildItems><SpreadsheetDocumentField id="2" name="Sheet"><Position/><Document><Cell row="1" column="1"><ContainsValue>false</ContainsValue><ValueType><Entry term="boolean"/></ValueType><Value>false</Value></Cell></Document></SpreadsheetDocumentField></ChildItems></Form>)XML";
     expect(validate_document(schema, typed_cell) == 0,
