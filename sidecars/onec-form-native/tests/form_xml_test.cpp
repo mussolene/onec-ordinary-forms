@@ -314,12 +314,21 @@ void test_page_position_roundtrip_and_rejections() {
 }
 
 void test_all_control_variants() {
-    std::string xml = "<Form id=\"1\" name=\"All\" ordinaryFormVersion=\"2.1\"><ChildItems>";
+    std::string xml = "<Form id=\"1\" name=\"All\" ordinaryFormVersion=\"2.1\"><Attributes>"
+        "<Attribute id=\"100\" name=\"Rows\"><TypeDomain><Entry term=\"valueTable\"/>"
+        "</TypeDomain></Attribute></Attributes><ChildItems>";
     std::uint64_t id = 2;
     for (const auto& descriptor : model::metamodel::control_descriptors()) {
         xml += "<" + std::string(descriptor.public_name) + " id=\"" +
-               std::to_string(id) + "\" name=\"C" + std::to_string(id) +
-               "\"><Position/></" + std::string(descriptor.public_name) + ">";
+               std::to_string(id) + "\" name=\"C" + std::to_string(id) + "\">";
+        if (descriptor.kind == model::ControlKind::table) {
+            xml += "<DataPath attributeId=\"100\"/><Position/><Columns><Column name=\"Code\">"
+                   "<DataPath>Code</DataPath><Header><Item language=\"en\">Code</Item></Header>"
+                   "<Control type=\"InputField\"/></Column></Columns></" +
+                   std::string(descriptor.public_name) + ">";
+        } else {
+            xml += "<Position/></" + std::string(descriptor.public_name) + ">";
+        }
         ++id;
     }
     xml += "</ChildItems></Form>";
@@ -1048,6 +1057,81 @@ void test_value_list_type_domain_xml_roundtrip() {
         "OOF2003", "ValueList term must reject string qualifiers");
 }
 
+void test_value_table_type_domain_xml_roundtrip() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="ValueTable" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "named ValueTable TypeDomain must parse");
+    const auto& entry = parsed.value().collections().attributes.front().type.entries.front();
+    expect(entry.term == model::TypeDomainTerm::value_table && !entry.type_uuid,
+        "ValueTable XML term must not expose its platform UUID");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Entry term=\"valueTable\"/>") != std::string::npos,
+        "ValueTable TypeDomain must retain its named XML term");
+    expect(source::parse_form_xml(serialized.value()).ok(),
+        "serialized ValueTable TypeDomain must parse again");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueTable\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Rows\"><TypeDomain><Entry term=\"valueTable\" typeUuid=\"d47d59f8-73f0-481c-8b5e-f6384c0a4804\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueTable term must reject caller-supplied UUIDs");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueTable\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Rows\"><TypeDomain><Entry term=\"valueTable\" length=\"64\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueTable term must reject qualifiers");
+}
+
+void test_table_columns_named_profile() {
+    constexpr std::string_view valid = R"XML(
+<Form id="1" name="RowsForm" ordinaryFormVersion="2.1">
+  <Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
+  <ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns>
+    <Column name="Code"><DataPath>Code</DataPath><Header><Item language="ru">Код</Item></Header>
+      <Control type="InputField"><Enabled>true</Enabled><ReadOnly>false</ReadOnly></Control>
+    </Column>
+    <Column name="CodeCopy"><DataPath>Code</DataPath><Header><Item language="en">Code copy</Item></Header>
+      <Control type="InputField"/>
+    </Column>
+  </Columns></Table></ChildItems>
+</Form>)XML";
+    auto parsed = source::parse_form_xml(valid);
+    expect(parsed.ok(), "named Table with repeated source DataPath and typed InputField columns must parse");
+    const auto* table = parsed.value().find_control(model::ObjectId{3});
+    expect(table != nullptr && std::get<model::TablePayload>(table->payload).columns.size() == 2,
+        "Table must own its ordered typed Columns");
+    const auto& columns = std::get<model::TablePayload>(table->payload).columns;
+    expect(columns[0].data_path == columns[1].data_path && columns[0].control.properties.empty(),
+        "duplicate DataPath is allowed and explicit default editor flags normalize away");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Columns>") != std::string::npos,
+        "named Table Columns must serialize as editable XML");
+    auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && reparsed.value().collections().controls.size() == 1,
+        "Table Column XML must survive a source roundtrip");
+
+    std::string duplicate_name(valid);
+    const auto duplicate_pos = duplicate_name.find("name=\"CodeCopy\"");
+    duplicate_name.replace(duplicate_pos, std::string("name=\"CodeCopy\"").size(), "name=\"Code\"");
+    expect(!source::parse_form_xml(duplicate_name).ok(), "duplicate Table Column names must fail");
+
+    std::string unsupported_editor(valid);
+    const auto editor_pos = unsupported_editor.find("type=\"InputField\"");
+    unsupported_editor.replace(editor_pos, std::string("type=\"InputField\"").size(),
+        "type=\"SpreadsheetDocumentField\"");
+    expect(!source::parse_form_xml(unsupported_editor).ok(), "unsupported Table Column editor kind must fail");
+
+    std::string nondefault_editor(valid);
+    const auto enabled_pos = nondefault_editor.find("<Enabled>true</Enabled>");
+    nondefault_editor.replace(enabled_pos, std::string("<Enabled>true</Enabled>").size(), "<Enabled>false</Enabled>");
+    expect(!source::parse_form_xml(nondefault_editor).ok(), "unverified persisted editor Enabled=false must fail closed");
+
+    std::string wrong_source(valid);
+    const auto type_pos = wrong_source.find("term=\"valueTable\"");
+    wrong_source.replace(type_pos, std::string("term=\"valueTable\"").size(), "term=\"string\"");
+    expect(!source::parse_form_xml(wrong_source).ok(), "Table source must reject a non-ValueTable type");
+
+    std::string dangling_source(valid);
+    const auto attribute_pos = dangling_source.find("attributeId=\"2\"");
+    dangling_source.replace(attribute_pos, std::string("attributeId=\"2\"").size(), "attributeId=\"99\"");
+    expect(!source::parse_form_xml(dangling_source).ok(), "Table source must reject a dangling attribute link");
+}
+
 void test_inherited_property_has_one_surface() {
     constexpr std::string_view xml =
         "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -1493,6 +1577,8 @@ int main() {
         test_button_shortcut_xml();
         test_boolean_type_domain_xml_roundtrip();
         test_value_list_type_domain_xml_roundtrip();
+        test_value_table_type_domain_xml_roundtrip();
+        test_table_columns_named_profile();
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();
         test_strict_rejections();

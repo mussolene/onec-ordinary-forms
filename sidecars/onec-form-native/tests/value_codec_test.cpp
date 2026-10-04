@@ -134,6 +134,40 @@ void test_type_domain() {
         expect(other_platform_term.entries.front().term != model::TypeDomainTerm::value_list,
             "ValueList recognition must be limited to the proven # type token");
     }
+
+    model::TypeDomainEntry value_table_entry;
+    value_table_entry.term = model::TypeDomainTerm::value_table;
+    const model::TypeDomainPatternValue value_table_fixture{{value_table_entry}};
+    constexpr std::string_view value_table_pattern =
+        "{\"Pattern\",{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663}}";
+    expect(codec::encode_type_domain(value_table_fixture) == value_table_pattern,
+        "ValueTable term must emit its independently proven fixed platform descriptor");
+    expect(codec::decode_type_domain(value_table_pattern) == value_table_fixture,
+        "ValueTable platform descriptor must decode as the named term");
+    for (const auto token : {"T", "R", "L"}) {
+        const auto other_platform_term = codec::decode_type_domain(
+            std::string("{\"Pattern\",{\"") + token +
+            "\",acf6192e-81ca-46ef-93a6-5a6968b78663}}");
+        expect(other_platform_term.entries.front().term != model::TypeDomainTerm::value_table,
+            "ValueTable recognition must be limited to the proven # type token");
+    }
+    expect(codec::decode_type_domain(
+        "{\"Pattern\",{\"#\",d47d59f8-73f0-481c-8b5e-f6384c0a4804}}")
+        .entries.front().term == model::TypeDomainTerm::unknown,
+        "unrelated unknown type UUID must not normalize to ValueTable");
+    model::TypeDomainEntry invalid_value_table = value_table_entry;
+    invalid_value_table.type_uuid = model::UuidValue{"d47d59f8-73f0-481c-8b5e-f6384c0a4804"};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_table}})); },
+        "ValueTable must reject an overriding type UUID");
+    invalid_value_table = value_table_entry;
+    invalid_value_table.numeric = {8, 2, false};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_table}})); },
+        "ValueTable must reject type qualifiers");
+
     model::TypeDomainEntry invalid_value_list = value_list_entry;
     invalid_value_list.type_uuid = model::UuidValue{"d47d59f8-73f0-481c-8b5e-f6384c0a4804"};
     expect_rejected(

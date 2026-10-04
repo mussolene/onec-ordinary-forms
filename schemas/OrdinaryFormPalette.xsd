@@ -1039,6 +1039,14 @@
           <Property name="Enabled" russianName="Доступность"/><Property name="Checked" russianName="Пометка"/><Property name="ChangesData" russianName="ИзменяетДанные"/>
           <Property name="Representation" russianName="Отображение"/><Property name="Shortcut" russianName="СочетаниеКлавиш"/><Property name="Picture" russianName="Картинка"/><Property name="Action" russianName="Действие"/><Property name="Order" russianName="ПорядокКнопок"/><Property name="Buttons" russianName="Кнопки"/>
         </Properties></NamedConcept>
+        <NamedConcept name="TableColumn" russianName="КолонкаТабличногоПоля"><Properties>
+          <Property name="Name" russianName="Имя"/><Property name="DataPath" russianName="Данные"/>
+          <Property name="Header" russianName="ТекстШапки"/><Property name="Control" russianName="ЭлементУправления"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="TableColumnControl" russianName="ЭлементУправленияКолонкиТабличногоПоля"><Properties>
+          <Property name="Type" russianName="ВидРедактора"/><Property name="Enabled" russianName="Доступность"/>
+          <Property name="ReadOnly" russianName="ТолькоПросмотр"/>
+        </Properties></NamedConcept>
       </Palette>
     </xs:appinfo>
   </xs:annotation>

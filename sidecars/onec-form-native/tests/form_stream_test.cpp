@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include <zlib.h>
+
 #include "oof/model/metamodel.hpp"
 #include "oof/source/form_xml.hpp"
 #include "oof/storage/form_stream.hpp"
@@ -108,6 +110,255 @@ list_stream::ListValue* find_usual_group_record(list_stream::ListValue& value) {
         if (auto* found = find_usual_group_record(item)) return found;
     }
     return nullptr;
+}
+
+list_stream::ListValue* find_record_with_guid(list_stream::ListValue& value, std::string_view guid) {
+    if (value.is_list && value.items.size() == 6 && !value.items[0].is_list && value.items[0].atom == guid) {
+        return &value;
+    }
+    if (!value.is_list) return nullptr;
+    for (auto& item : value.items) {
+        if (auto* found = find_record_with_guid(item, guid)) return found;
+    }
+    return nullptr;
+}
+
+list_stream::ListValue& captured_column_packet(list_stream::ListValue& payload) {
+    auto* table = find_record_with_guid(
+        payload, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table != nullptr, "captured full form must contain Table record");
+    return table->items[2].items[2].items[1].items[23].items[1].items[1].items[1].items[1].items[39];
+}
+
+std::vector<std::uint8_t> test_base64_decode(std::string_view text) {
+    const auto value = [](char ch) -> int {
+        if (ch >= 'A' && ch <= 'Z') return ch - 'A';
+        if (ch >= 'a' && ch <= 'z') return ch - 'a' + 26;
+        if (ch >= '0' && ch <= '9') return ch - '0' + 52;
+        if (ch == '+') return 62;
+        if (ch == '/') return 63;
+        return -1;
+    };
+    std::vector<std::uint8_t> bytes;
+    for (std::size_t pos = 0; pos < text.size(); pos += 4) {
+        const int a = value(text[pos]);
+        const int b = value(text[pos + 1]);
+        const int c = text[pos + 2] == '=' ? 0 : value(text[pos + 2]);
+        const int d = text[pos + 3] == '=' ? 0 : value(text[pos + 3]);
+        expect(a >= 0 && b >= 0 && c >= 0 && d >= 0, "captured packet base64 must be valid");
+        const auto bits = (static_cast<std::uint32_t>(a) << 18) | (static_cast<std::uint32_t>(b) << 12) |
+            (static_cast<std::uint32_t>(c) << 6) | static_cast<std::uint32_t>(d);
+        bytes.push_back(static_cast<std::uint8_t>(bits >> 16));
+        if (text[pos + 2] != '=') bytes.push_back(static_cast<std::uint8_t>(bits >> 8));
+        if (text[pos + 3] != '=') bytes.push_back(static_cast<std::uint8_t>(bits));
+    }
+    return bytes;
+}
+
+std::string test_base64_encode(const std::vector<std::uint8_t>& bytes) {
+    constexpr std::string_view alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string output;
+    for (std::size_t pos = 0; pos < bytes.size(); pos += 3) {
+        const std::uint32_t a = bytes[pos];
+        const std::uint32_t b = pos + 1 < bytes.size() ? bytes[pos + 1] : 0;
+        const std::uint32_t c = pos + 2 < bytes.size() ? bytes[pos + 2] : 0;
+        const std::uint32_t bits = (a << 16) | (b << 8) | c;
+        output.push_back(alphabet[(bits >> 18) & 63]);
+        output.push_back(alphabet[(bits >> 12) & 63]);
+        output.push_back(pos + 1 < bytes.size() ? alphabet[(bits >> 6) & 63] : '=');
+        output.push_back(pos + 2 < bytes.size() ? alphabet[bits & 63] : '=');
+    }
+    return output;
+}
+
+std::vector<std::uint8_t> test_raw_inflate(const std::vector<std::uint8_t>& packet) {
+    z_stream stream{};
+    expect(inflateInit2(&stream, -MAX_WBITS) == Z_OK, "test raw inflate must initialize");
+    std::vector<std::uint8_t> output(8192);
+    stream.next_in = const_cast<Bytef*>(packet.data() + 18);
+    stream.avail_in = static_cast<uInt>(packet.size() - 18);
+    stream.next_out = output.data();
+    stream.avail_out = static_cast<uInt>(output.size());
+    const int result = inflate(&stream, Z_FINISH);
+    const auto size = stream.total_out;
+    inflateEnd(&stream);
+    expect(result == Z_STREAM_END, "captured packet raw DEFLATE must inflate");
+    output.resize(size);
+    return output;
+}
+
+std::vector<std::uint8_t> test_raw_deflate(const std::vector<std::uint8_t>& input, int level) {
+    z_stream stream{};
+    expect(deflateInit2(&stream, level, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY) == Z_OK,
+        "test raw deflate must initialize");
+    std::vector<std::uint8_t> output(compressBound(static_cast<uLong>(input.size())));
+    stream.next_in = const_cast<Bytef*>(input.data());
+    stream.avail_in = static_cast<uInt>(input.size());
+    stream.next_out = output.data();
+    stream.avail_out = static_cast<uInt>(output.size());
+    const int result = deflate(&stream, Z_FINISH);
+    const auto size = stream.total_out;
+    deflateEnd(&stream);
+    expect(result == Z_STREAM_END, "test raw DEFLATE must complete");
+    output.resize(size);
+    return output;
+}
+
+void set_captured_packet(list_stream::ListValue& payload, const std::vector<std::uint8_t>& packet) {
+    auto& chunks = captured_column_packet(payload).items[0].items;
+    chunks.clear();
+    const auto encoded = test_base64_encode(packet);
+    for (std::size_t pos = 0; pos < encoded.size(); pos += 64) {
+        chunks.push_back(list_stream::ListValue::raw_atom(
+            (pos == 0 ? "#base64:" : "") + encoded.substr(pos, std::min<std::size_t>(64, encoded.size() - pos))));
+    }
+}
+
+list_stream::ListValue captured_table_payload() {
+    constexpr std::string_view captured_text =
+#include "fixtures/table-after-create-columns.inc"
+        ;
+    const auto envelope = form_stream::decode_runtime_envelope(captured_text);
+    expect(envelope.ok(), "captured full form envelope must decode");
+    return envelope.value().payload;
+}
+
+void test_captured_table_column_record() {
+    constexpr std::string_view captured_text =
+#include "fixtures/table-after-create-columns.inc"
+        ;
+    auto envelope = form_stream::decode_runtime_envelope(captured_text);
+    expect(envelope.ok(), "independent captured full form envelope must decode");
+    auto captured_payload = envelope.value().payload;
+    const auto* captured_table_record = find_record_with_guid(
+        captured_payload, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(captured_table_record != nullptr, "captured full form must contain a Table record");
+
+    const auto decoded = form_stream::decode_document(envelope.value().payload, "CapturedTable");
+    expect(decoded.ok(), decoded ? "captured Table must decode" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message +
+            " expected=" + decoded.diagnostics().front().expected +
+            " actual=" + decoded.diagnostics().front().actual);
+    const auto table = std::find_if(decoded.value().collections().controls.begin(),
+        decoded.value().collections().controls.end(), [](const auto& control) {
+            return control.kind() == model::ControlKind::table;
+        });
+    expect(table != decoded.value().collections().controls.end(), "captured model must expose named Table");
+    const auto& payload = std::get<model::TablePayload>(table->payload);
+    expect(payload.columns.size() == 1 && payload.columns[0].name == "Code" &&
+            payload.columns[0].data_path == "Code" && payload.columns[0].control.kind == model::ControlKind::input_field,
+        "captured Column must expose its name, DataPath, and typed InputField");
+
+    const auto encoded = form_stream::encode_document(decoded.value());
+    expect(encoded.ok(), encoded ? "captured Table must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    auto expected = *captured_table_record;
+    auto encoded_payload = encoded.value();
+    const auto* encoded_table_record = find_record_with_guid(
+        encoded_payload,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(encoded_table_record != nullptr, "re-encoded form must contain its Table record");
+    auto& expected_packet = expected.items[2].items[2].items[1].items[23].items[1].items[1].items[1].items[1].items[39];
+    const auto& encoded_packet = encoded_table_record->items[2].items[2].items[1].items[23].items[1].items[1].items[1].items[1].items[39];
+    expected_packet = encoded_packet;
+    expect(list_stream::dump_compact(expected) == list_stream::dump_compact(*encoded_table_record),
+        "independent captured Table/Column record must re-encode exactly apart from recompressed editor bytes");
+}
+
+void expect_captured_table_rejected(list_stream::ListValue payload, std::string_view message) {
+    expect(!form_stream::decode_document(payload, "CapturedTable"), message);
+}
+
+std::vector<std::uint8_t> compressed_capture_packet(const std::vector<std::uint8_t>& envelope, int level) {
+    auto payload = captured_table_payload();
+    auto packet = test_base64_decode(captured_column_packet(payload).items[0].items[0].atom.substr(8));
+    packet.resize(18);
+    const auto compressed = test_raw_deflate(envelope, level);
+    packet.insert(packet.end(), compressed.begin(), compressed.end());
+    return packet;
+}
+
+void test_captured_table_packet_rejections_and_alternate_deflate() {
+    auto baseline = captured_table_payload();
+    const auto encoded_chunks = captured_column_packet(baseline).items[0].items;
+    std::string encoded;
+    for (std::size_t index = 0; index < encoded_chunks.size(); ++index) {
+        encoded += index == 0 ? encoded_chunks[index].atom.substr(8) : encoded_chunks[index].atom;
+    }
+    const auto packet = test_base64_decode(encoded);
+    const auto envelope = test_raw_inflate(packet);
+
+    auto alternate = captured_table_payload();
+    const auto alternate_packet = compressed_capture_packet(envelope, Z_BEST_SPEED);
+    expect(alternate_packet != packet, "alternate compressor must produce different captured packet bytes");
+    set_captured_packet(alternate, alternate_packet);
+    expect(form_stream::decode_document(alternate, "CapturedTable").ok(),
+        "same nested InputField semantics with independent valid DEFLATE bytes must decode");
+
+    auto bad_header = captured_table_payload();
+    auto changed_packet = packet;
+    changed_packet[0] ^= 1;
+    set_captured_packet(bad_header, changed_packet);
+    expect_captured_table_rejected(std::move(bad_header), "wrong editor packet header must fail");
+
+    auto bad_deflate = captured_table_payload();
+    changed_packet = packet;
+    changed_packet[18 + 3] ^= 0xff;
+    set_captured_packet(bad_deflate, changed_packet);
+    expect_captured_table_rejected(std::move(bad_deflate), "corrupt editor DEFLATE data must fail");
+
+    auto truncated = captured_table_payload();
+    changed_packet = packet;
+    changed_packet.pop_back();
+    set_captured_packet(truncated, changed_packet);
+    expect_captured_table_rejected(std::move(truncated), "truncated editor DEFLATE data must fail");
+
+    auto trailing = captured_table_payload();
+    changed_packet = packet;
+    changed_packet.push_back(0);
+    set_captured_packet(trailing, changed_packet);
+    expect_captured_table_rejected(std::move(trailing), "trailing bytes after editor DEFLATE stream must fail");
+
+    auto wrong_length = envelope;
+    wrong_length[0] ^= 1;
+    auto bad_length_payload = captured_table_payload();
+    set_captured_packet(bad_length_payload, compressed_capture_packet(wrong_length, Z_DEFAULT_COMPRESSION));
+    expect_captured_table_rejected(std::move(bad_length_payload), "incorrect editor envelope length must fail");
+
+    auto wrong_bom = envelope;
+    wrong_bom[8] ^= 1;
+    auto bad_bom_payload = captured_table_payload();
+    set_captured_packet(bad_bom_payload, compressed_capture_packet(wrong_bom, Z_DEFAULT_COMPRESSION));
+    expect_captured_table_rejected(std::move(bad_bom_payload), "incorrect editor envelope BOM must fail");
+
+    auto unsupported_pair = envelope;
+    const std::string_view editor_text(reinterpret_cast<const char*>(unsupported_pair.data() + 11),
+        unsupported_pair.size() - 11);
+    auto editor = list_stream::parse(editor_text);
+    editor.items[3] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")});
+    const std::string changed_text = list_stream::dump_listout(editor);
+    const std::size_t text_size = changed_text.size();
+    const std::uint64_t envelope_size = static_cast<std::uint64_t>(text_size) + 3;
+    unsupported_pair.resize(sizeof(std::uint64_t));
+    for (std::size_t i = 0; i < sizeof(std::uint64_t); ++i) {
+        unsupported_pair[i] = static_cast<std::uint8_t>(envelope_size >> (i * 8));
+    }
+    unsupported_pair.insert(unsupported_pair.end(), {0xef, 0xbb, 0xbf});
+    unsupported_pair.insert(unsupported_pair.end(), changed_text.begin(), changed_text.end());
+    auto bad_pair_payload = captured_table_payload();
+    set_captured_packet(bad_pair_payload, compressed_capture_packet(unsupported_pair, Z_DEFAULT_COMPRESSION));
+    expect_captured_table_rejected(std::move(bad_pair_payload), "unsupported paired InputField editor data must fail");
+
+    auto bad_packet_field = captured_table_payload();
+    captured_column_packet(bad_packet_field).items[1] = list_stream::ListValue::raw_atom("1");
+    expect_captured_table_rejected(std::move(bad_packet_field), "unsupported second packet field must fail");
+
+    auto bad_count = captured_table_payload();
+    auto* table = find_record_with_guid(
+        bad_count, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table != nullptr, "captured Table must resolve for count mutation");
+    table->items[2].items[2].items[1].items[23].items[0] = list_stream::ListValue::raw_atom("2");
+    expect_captured_table_rejected(std::move(bad_count), "Column collection count mismatch must fail");
 }
 
 void test_outer_format_probe() {
@@ -6198,6 +6449,8 @@ int main() {
         test_empty_attributes_allocator_header();
         test_attribute_allocator_is_separate_from_control_ids();
         test_usual_group_named_record_round_trip_and_rejections();
+        test_captured_table_column_record();
+        test_captured_table_packet_rejections_and_alternate_deflate();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_button_multiline_round_trip_and_validation();
