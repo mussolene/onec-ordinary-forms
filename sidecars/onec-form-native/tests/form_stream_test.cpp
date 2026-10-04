@@ -2203,6 +2203,110 @@ void test_fresh_checkbox_stream_decode() {
         "fresh CheckBox linked Attribute must decode exact Boolean token");
 }
 
+void test_radio_button_basic_observed_record_and_rejections() {
+    const auto make_document = [](std::string caption = {}, bool enabled = true, std::string tool_tip = {}) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "RadioButtonCodec";
+        for (std::uint64_t id = 100; id <= 103; ++id) form.children.push_back(model::ControlRef{model::ObjectId{id}});
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_control(model::ControlNode{model::ObjectId{100}, "CalendarFieldDefault", model::CalendarFieldPayload{}});
+        document.add_control(model::ControlNode{model::ObjectId{101}, "CalendarFieldDisabled", model::CalendarFieldPayload{}});
+        document.add_control(model::ControlNode{model::ObjectId{102}, "CalendarFieldHidden", model::CalendarFieldPayload{}});
+        model::ControlNode radio{model::ObjectId{103}, "RadioRuntime", model::RadioButtonPayload{}};
+        if (!caption.empty()) radio.properties().set_explicit(model::PropertyId::from_name("Caption"), std::move(caption));
+        if (!enabled) radio.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        if (!tool_tip.empty()) radio.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::move(tool_tip));
+        document.add_control(std::move(radio));
+        return document;
+    };
+    constexpr std::string_view observed_radio_control_record = R"RAW(
+{782e569a-79a7-4a4f-a936-b48d013936ec,103,
+{4,{"Pattern"},
+{{
+{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},7,{1,0},1,0,1,0,100,1},4,0,0,0,0},0,{"U"},{0}},
+{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,3,4,0,0},
+{14,"RadioRuntime",4294967295,0,0,0},{0}}
+)RAW";
+    const auto expected_observed_record = list_stream::parse(observed_radio_control_record);
+    const auto default_encoded = form_stream::encode_document(make_document());
+    expect(default_encoded.ok(), "default RadioButton from the observed unbound profile must encode");
+    const auto& default_records = default_encoded.value().items[1].items[2].items[2].items;
+    expect(default_records.size() == 5 &&
+               list_stream::dump_compact(default_records[4]) == list_stream::dump_compact(expected_observed_record),
+        "RadioButton writer must reproduce the full observed default control record");
+    const auto default_decoded = form_stream::decode_document(default_encoded.value(), "RadioButtonCodec");
+    expect(default_decoded.ok(), "full observed default RadioButton must decode");
+    const auto* default_radio = default_decoded.value().find_control(model::ObjectId{103});
+    expect(default_radio && default_radio->kind() == model::ControlKind::radio_button &&
+               default_radio->name == "RadioRuntime" && default_radio->position.visible.value() &&
+               default_radio->properties().find(model::PropertyId::from_name("Enabled")) == nullptr &&
+               default_radio->properties().find(model::PropertyId::from_name("Caption")) == nullptr &&
+               default_radio->properties().find(model::PropertyId::from_name("ToolTip")) == nullptr,
+        "RadioButton identity, Visible, and implicit Caption/Enabled/ToolTip defaults must decode by name");
+    const auto default_reencoded = form_stream::encode_document(default_decoded.value());
+    expect(default_reencoded.ok() && list_stream::dump_compact(default_reencoded.value()) ==
+               list_stream::dump_compact(default_encoded.value()),
+        "default RadioButton document must round-trip canonically");
+
+    const std::string caption = "Radio Ω <tag> & текст";
+    const std::string tool_tip = "Radio hint Ω <tag> & текст";
+    const auto changed_encoded = form_stream::encode_document(make_document(caption, false, tool_tip));
+    expect(changed_encoded.ok(), "RadioButton Caption, Enabled, and ToolTip must encode");
+    const auto& changed_records = changed_encoded.value().items[1].items[2].items[2].items;
+    const auto& changed_info = changed_records[4].items[2];
+    const auto& changed_properties = changed_info.items[2].items[0];
+    expect(changed_properties.items[0].items[1].atom == "0" &&
+               list_stream::dump_compact(changed_properties.items[2]) == value_codec::encode_localized_string(
+                   model::LocalizedStringValue{{{"ru", caption}}}) &&
+               list_stream::dump_compact(changed_properties.items[0].items[12]) == value_codec::encode_localized_string(
+                   model::LocalizedStringValue{{{"ru", tool_tip}}}),
+        "RadioButton properties must occupy the observed Enabled, Caption, and ToolTip slots");
+    const auto changed_decoded = form_stream::decode_document(changed_encoded.value(), "RadioButtonCodec");
+    expect(changed_decoded.ok(), "RadioButton Caption, Enabled, and ToolTip must decode");
+    const auto* decoded_radio = changed_decoded.value().find_control(model::ObjectId{103});
+    const auto* decoded_enabled = decoded_radio == nullptr ? nullptr :
+        decoded_radio->properties().find(model::PropertyId::from_name("Enabled"));
+    const auto* decoded_caption = decoded_radio == nullptr ? nullptr :
+        decoded_radio->properties().find(model::PropertyId::from_name("Caption"));
+    const auto* decoded_tool_tip = decoded_radio == nullptr ? nullptr :
+        decoded_radio->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(decoded_radio && decoded_enabled && decoded_caption && decoded_tool_tip &&
+               !std::get<bool>(decoded_enabled->value) &&
+               std::get<std::string>(decoded_caption->value) == caption &&
+               std::get<std::string>(decoded_tool_tip->value) == tool_tip,
+        "RadioButton properties must round-trip their runtime-set values");
+    const auto changed_reencoded = form_stream::encode_document(changed_decoded.value());
+    expect(changed_reencoded.ok() && list_stream::dump_compact(changed_reencoded.value()) ==
+               list_stream::dump_compact(changed_encoded.value()),
+        "changed RadioButton document must round-trip without drift");
+
+    auto data_path_document = make_document();
+    model::TypeDomainPatternValue string_type;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_type.entries.push_back(string_entry);
+    data_path_document.add_attribute(model::Attribute{model::ObjectId{200}, "Pattern", string_type});
+    auto* radio_with_data = const_cast<model::ControlNode*>(data_path_document.find_control(model::ObjectId{103}));
+    radio_with_data->data_path = model::DataPath{model::AttributeRef{model::ObjectId{200}}, {}};
+    expect_failure(form_stream::encode_document(data_path_document), "OOF1122", "$/RadioButton",
+        "RadioButton DataPath must be explicitly rejected outside the proven profile");
+
+    auto unsupported_default = default_encoded.value();
+    auto& unsupported_data_header = unsupported_default.items[1].items[2].items[2].items[4].items[2].items[1];
+    unsupported_data_header = list_stream::ListValue::list({list_stream::ListValue::string_atom("Unobserved")});
+    expect(!form_stream::decode_document(unsupported_default, "RadioButtonCodec"),
+        "unobserved RadioButton data header must fail closed");
+
+    auto multilingual = changed_encoded.value();
+    auto& multilingual_caption = multilingual.items[1].items[2].items[2].items[4]
+        .items[2].items[2].items[0].items[2];
+    multilingual_caption = list_stream::parse(value_codec::encode_localized_string(
+        model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
+    expect(!form_stream::decode_document(multilingual, "RadioButtonCodec"),
+        "multilingual RadioButton Caption must be rejected without loss");
+}
+
 void test_calendar_field_enabled_round_trip_and_rejections() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -4714,6 +4818,7 @@ int main() {
         test_label_enabled_and_tooltip_round_trip();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
         test_fresh_checkbox_stream_decode();
+        test_radio_button_basic_observed_record_and_rejections();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();

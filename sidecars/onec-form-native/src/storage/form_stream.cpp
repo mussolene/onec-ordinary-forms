@@ -843,6 +843,28 @@ LV canonical_label_properties(
 }
 
 
+LV canonical_radio_button_info(bool enabled, std::string_view caption, std::string_view tool_tip) {
+    const auto properties = list({
+        canonical_button_base(enabled, tool_tip),
+        raw("7"),
+        encoded_localized(caption),
+        raw("1"),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        raw("100"),
+        raw("1"),
+    });
+    return list({
+        raw("4"),
+        list({string_value("Pattern")}),
+        list({std::move(properties), raw("4"), raw("0"), raw("0"), raw("0"), raw("0")}),
+        raw("0"),
+        list({string_value("U")}),
+        list({raw("0")}),
+    });
+}
+
 LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_view tool_tip,
     const model::FontValue* font = nullptr) {
     return list({
@@ -2409,6 +2431,73 @@ DecodedControl decode_picture_decoration(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::move(picture_asset), {}};
 }
 
+DecodedControl decode_radio_button(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 RadioButton ID", std::to_string(raw_id),
+            "RadioButton ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 6, info_path);
+    require_raw_constant(info.items[0], "4", child_path(info_path, 0));
+    require_exact(info.items[1], list({string_value("Pattern")}), child_path(info_path, 1),
+        "RadioButton data header is outside the observed unbound profile");
+    const auto& control_info = info.items[2];
+    const auto control_info_path = child_path(info_path, 2);
+    require_arity(control_info, 6, control_info_path);
+    const auto& properties = control_info.items[0];
+    const auto properties_path = child_path(control_info_path, 0);
+    require_arity(properties, 9, properties_path);
+    const auto& base_properties = properties.items[0];
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(base_properties, 21, base_path);
+    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        base_properties.items[12], child_path(base_path, 12));
+    const std::string caption = decoded_single_language_text(
+        properties.items[2], child_path(properties_path, 2));
+    auto normalized_info = info;
+    auto normalized_properties = properties;
+    auto normalized_base = base_properties;
+    normalized_base.items[12] = encoded_localized(tool_tip);
+    normalized_properties.items[0] = std::move(normalized_base);
+    normalized_properties.items[2] = encoded_localized(caption);
+    normalized_info.items[2].items[0] = std::move(normalized_properties);
+    require_exact(normalized_info, canonical_radio_button_info(enabled, caption, tool_tip), info_path,
+        "RadioButton contains a property, binding, event, or storage variation outside the observed basic profile");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+            "Control name is required");
+    }
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "RadioButton metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "RadioButton cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::RadioButtonPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
 DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
@@ -3243,6 +3332,35 @@ LV encode_check_box(
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         canonical_check_box_info(enabled, caption, tool_tip, &font),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
+LV encode_radio_button(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::radio_button || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "RadioButton with positive int64 ID", control.name,
+            "RadioButton is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/RadioButton", "named unbound RadioButton with plain Position", control.name,
+            "RadioButton uses a storage concept outside the supported basic profile");
+    }
+    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip"}, "$/RadioButton");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string caption = explicit_string(control.properties(), "Caption");
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_radio_button_info(enabled, caption, tool_tip),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -4101,6 +4219,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
                     if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid)
+                        child = decode_radio_button(record, record_path, context);
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
@@ -4487,6 +4607,8 @@ Result<list_stream::ListValue> encode_document(
                 LV record;
                 if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
+                } else if (control->kind() == model::ControlKind::radio_button) {
+                    record = encode_radio_button(*control, context);
                 } else if (control->kind() == model::ControlKind::picture_decoration) {
                     record = encode_picture_decoration(*control, document, context);
                 } else if (control->kind() == model::ControlKind::label_decoration) {
@@ -4515,7 +4637,7 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "Button, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, or Panel", control->name,
                         "Control payload is unsupported");
                 }
                 if (control->data_path) {
