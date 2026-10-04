@@ -106,7 +106,7 @@ constexpr std::array<ControlIdentity, control_kind_count> control_identities{{
     {ControlKind::pivot_chart, "a26da99e-184a-4823-b0d6-62816d38dc4e", "", all_versions, ClassificationStatus::platform_ui_guid_table_backed, ChildPolicy::forbidden},
     {ControlKind::gantt_chart, "e5fdc112-5c84-4a16-9728-72b85692b6e2", "gchrt", all_versions, ClassificationStatus::corpus_xsd_correlated, ChildPolicy::forbidden},
     {ControlKind::dendrogram, "984981b1-622d-4ebc-94f7-885f0cdfb59a", "dndrgm", all_versions, ClassificationStatus::corpus_xsd_correlated, ChildPolicy::forbidden},
-    {ControlKind::html_document_field, "d92a805c-98ae-4750-9158-d9ce7cec2f20", "html", all_versions, ClassificationStatus::platform_resource_backed_windows_oracle_pending, ChildPolicy::forbidden},
+    {ControlKind::html_document_field, "d92a805c-98ae-4750-9158-d9ce7cec2f20", "html", all_versions, ClassificationStatus::platform_resource_backed, ChildPolicy::forbidden},
     {ControlKind::list_box, "19f8b798-314e-4b4e-8121-905b2a7a03f5", "txt", all_versions, ClassificationStatus::corpus_xsd_resource_correlated, ChildPolicy::forbidden},
     {ControlKind::progress_bar, "b1db1f86-abbb-4cf0-8852-fe6ae21650c2", "prgb", all_versions, ClassificationStatus::corpus_xsd_resource_correlated, ChildPolicy::forbidden},
     {ControlKind::track_bar, "6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef", "trckb", all_versions, ClassificationStatus::corpus_xsd_resource_correlated, ChildPolicy::forbidden},
@@ -719,6 +719,14 @@ void apply_proven_storage_overrides(
     classify_property(radio_button, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(radio_button, "Caption", StorageCodec::control_info, DefaultKind::string, "");
     classify_property(radio_button, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+
+    auto& html_document_field = properties[static_cast<std::size_t>(ControlKind::html_document_field)];
+    classify_property(
+        html_document_field,
+        "Output",
+        StorageCodec::control_info,
+        DefaultKind::enumeration,
+        "Auto");
 
     auto& picture_decoration = properties[static_cast<std::size_t>(ControlKind::picture_decoration)];
     classify_property(

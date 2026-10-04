@@ -24,6 +24,7 @@ namespace {
 namespace form_stream = oof::storage::form_stream;
 namespace list_stream = oof::storage::list_stream;
 namespace model = oof::model;
+namespace source = oof::source;
 namespace value_codec = oof::storage::value_codec;
 
 void expect(bool condition, std::string_view message) {
@@ -2624,6 +2625,97 @@ void test_fresh_checkbox_stream_decode() {
     boolean_type.entries.push_back(boolean_entry);
     expect(decoded.value().find_attribute(model::ObjectId{3})->type == boolean_type,
         "fresh CheckBox linked Attribute must decode exact Boolean token");
+}
+
+void test_html_document_field_output_platform_record_and_guards() {
+    const auto make_document = [](std::optional<model::EnumerationValue> output,
+                                  const std::function<void(model::ControlNode&)>& configure = {}) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "HtmlOutput";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode field{model::ObjectId{2}, "HtmlProbe", model::HtmlDocumentFieldPayload{}};
+        if (output) field.properties().set_explicit(model::PropertyId::from_name("Output"), *output);
+        if (configure) configure(field);
+        document.add_control(std::move(field));
+        return document;
+    };
+
+    const auto actual_platform_data = list_stream::parse("{5,0,{0},{4,4,{0},4},{3,1,{-18},0,0,0},1,0}");
+    const auto auto_stream = form_stream::encode_document(make_document(std::nullopt));
+    expect(auto_stream.ok(), "HTMLDocumentField with default Auto must encode");
+    const auto html_record_path = auto_stream.value().items[1].items[2].items[2].items[1];
+    expect(list_stream::dump_compact(html_record_path.items[2]) ==
+                   list_stream::dump_compact(actual_platform_data),
+        "canonical HTMLDocumentField data must match the literal platform Add readback tuple");
+    const auto auto_decoded = form_stream::decode_document(auto_stream.value(), "HtmlOutput");
+    expect(auto_decoded.ok() &&
+               auto_decoded.value().find_control(model::ObjectId{2})->kind() == model::ControlKind::html_document_field,
+        "platform-shaped HTMLDocumentField record must decode as the named control");
+    expect(!auto_decoded.value().find_control(model::ObjectId{2})->properties().find(
+               model::PropertyId::from_name("Output")),
+        "platform default Auto must normalize to an implicit model default");
+
+    for (const auto& [member, storage] : std::array<std::pair<std::string_view, std::string_view>, 2>{
+             std::pair{"Enable", "1"}, std::pair{"Disable", "2"}}) {
+        const auto encoded = form_stream::encode_document(make_document(model::EnumerationValue{"Output", std::string(member)}));
+        expect(encoded.ok(), "supported HTMLDocumentField Output values must encode");
+        const auto& record = encoded.value().items[1].items[2].items[2].items[1];
+        expect(record.items[2].items[6].atom == storage,
+            "HTMLDocumentField Output member must occupy only its observed tuple slot");
+        const auto decoded = form_stream::decode_document(encoded.value(), "HtmlOutput");
+        expect(decoded.ok() && std::get<model::EnumerationValue>(
+                   decoded.value().find_control(model::ObjectId{2})->properties().find(
+                       model::PropertyId::from_name("Output"))->value) == model::EnumerationValue{"Output", std::string(member)},
+            "HTMLDocumentField Output member must decode to its named public enum");
+        const auto repeated = form_stream::encode_document(decoded.value());
+        expect(repeated.ok() && list_stream::dump_compact(repeated.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "HTMLDocumentField Output must round-trip without changing other storage slots");
+    }
+
+    auto invalid_output = auto_stream.value();
+    invalid_output.items[1].items[2].items[2].items[1].items[2].items[6] = list_stream::ListValue::raw_atom("3");
+    expect_failure(form_stream::decode_document(invalid_output, "HtmlOutput"), "OOF1114",
+        "$/1/2/2/1/2/6", "unknown HTMLDocumentField Output storage values must be rejected");
+    auto invalid_data_slot = auto_stream.value();
+    invalid_data_slot.items[1].items[2].items[2].items[1].items[2].items[1] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(invalid_data_slot, "HtmlOutput"), "OOF1114",
+        "$/1/2/2/1/2", "unproven HTMLDocumentField data variations must be rejected");
+    auto invalid_metadata = auto_stream.value();
+    invalid_metadata.items[1].items[2].items[2].items[1].items[4].items[2] = list_stream::ListValue::raw_atom("7");
+    expect_failure(form_stream::decode_document(invalid_metadata, "HtmlOutput"), "OOF1114",
+        "$/1/2/2/1/4", "unproven HTMLDocumentField metadata variations must be rejected");
+
+    for (const auto property : {"Border", "BorderColor", "Document", "Content"}) {
+        auto unsupported = make_document(std::nullopt, [property](model::ControlNode& field) {
+            field.properties().set_explicit(model::PropertyId::from_name(property), std::string("unsupported"));
+        });
+        expect(!form_stream::encode_document(unsupported),
+            "unproven HTMLDocumentField properties must fail closed");
+    }
+    auto unsupported_event = make_document(std::nullopt, [](model::ControlNode& field) {
+        field.events.push_back(model::EventRef{model::ObjectId{9}});
+    });
+    expect(!form_stream::encode_document(unsupported_event),
+        "unproven HTMLDocumentField events must fail closed");
+    auto unsupported_child = make_document(std::nullopt, [](model::ControlNode& field) {
+        field.children.push_back(model::ControlRef{model::ObjectId{3}});
+    });
+    expect(!form_stream::encode_document(unsupported_child),
+        "unproven HTMLDocumentField child storage must fail closed");
+    auto wrong_enum_type = make_document(model::EnumerationValue{"UseOutput", "Enable"});
+    expect(!form_stream::encode_document(wrong_enum_type),
+        "platform enum name must not be accepted as an incidental public XML alias");
+    const auto wrong_type_xml = source::parse_form_xml(
+        R"XML(<Form id="1" name="Html" ordinaryFormVersion="2.1"><ChildItems><HTMLDocumentField id="2" name="HtmlProbe"><Position/><Output type="UseOutput" member="Enable"/></HTMLDocumentField></ChildItems></Form>)XML");
+    expect(wrong_type_xml.ok() && !form_stream::encode_document(wrong_type_xml.value()),
+        "XML type UseOutput must not alias the public Output enumeration on build");
+    const auto wrong_member_xml = source::parse_form_xml(
+        R"XML(<Form id="1" name="Html" ordinaryFormVersion="2.1"><ChildItems><HTMLDocumentField id="2" name="HtmlProbe"><Position/><Output type="Output" member="Allowed"/></HTMLDocumentField></ChildItems></Form>)XML");
+    expect(wrong_member_xml.ok() && !form_stream::encode_document(wrong_member_xml.value()),
+        "unknown HTMLDocumentField Output enum members must fail at storage encoding");
 }
 
 void test_radio_button_basic_observed_record_and_rejections() {
@@ -5896,6 +5988,7 @@ int main() {
         test_splitter_observed_record_and_named_codec();
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();
+        test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_text_document_field_persisted_profile_and_rejections();
         test_calendar_field_begin_display_period();
