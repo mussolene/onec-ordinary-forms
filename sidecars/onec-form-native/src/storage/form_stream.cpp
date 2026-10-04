@@ -1935,6 +1935,50 @@ bool is_single_value_table_type_domain(const model::TypeDomainPatternValue& valu
     return value.entries.size() == 1 && value.entries.front() == expected;
 }
 
+enum class ActionMetadataPolicy { handler_derived, empty };
+
+LV encode_action(std::string_view handler, ActionMetadataPolicy policy, std::string_view path) {
+    if (handler.empty()) {
+        fail("OOF1122", std::string(path), "non-empty Action handler", "empty", "Action handler cannot be empty");
+    }
+    const auto name = policy == ActionMetadataPolicy::handler_derived ? handler : std::string_view{};
+    const auto presentation = encoded_localized(name);
+    return list({raw("3"), string_value(std::string(handler)), list({
+        raw("1"), string_value(std::string(name)), presentation, presentation, presentation,
+        parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"), parse_constant("{0,0,0}")})});
+}
+
+std::string decode_action(const LV& payload, ActionMetadataPolicy policy, std::string_view path) {
+    require_arity(payload, 3, path);
+    require_raw_constant(payload.items[0], "3", child_path(path, 0));
+    const auto handler = string_atom(payload.items[1], child_path(path, 1));
+    if (handler.empty()) {
+        fail("OOF1115", child_path(path, 1), "non-empty Action handler", "empty", "Action handler cannot be empty");
+    }
+    const auto& metadata = payload.items[2];
+    const auto metadata_path = child_path(path, 2);
+    require_arity(metadata, 7, metadata_path);
+    // Build the exact defaults through the same invariant boundary used by the writer.
+    const auto expected = encode_action(handler, policy, path).items[2];
+    require_exact(metadata.items[0], expected.items[0], child_path(metadata_path, 0), "Action metadata version is unsupported");
+    require_exact(metadata.items[1], expected.items[1], child_path(metadata_path, 1), "Action name differs from its metadata policy");
+    for (std::size_t index = 2; index <= 4; ++index) {
+        const auto field_path = child_path(metadata_path, index);
+        if (policy == ActionMetadataPolicy::handler_derived) {
+            // Preserve the existing localized-string reader and its line-ending normalization.
+            const auto presentation = decoded_single_language_text(metadata.items[index], field_path);
+            if (presentation != handler) {
+                fail("OOF1114", field_path, handler, presentation, "Action presentation differs from its handler");
+            }
+        } else {
+            require_exact(metadata.items[index], expected.items[index], field_path, "Action presentation must be empty");
+        }
+    }
+    require_exact(metadata.items[5], expected.items[5], child_path(metadata_path, 5), "Action style record is unsupported");
+    require_exact(metadata.items[6], expected.items[6], child_path(metadata_path, 6), "Action tail record is unsupported");
+    return handler;
+}
+
 LV canonical_event_table(std::optional<std::string_view> handler) {
     if (!handler) {
         return list({raw("0")});
@@ -1943,27 +1987,8 @@ LV canonical_event_table(std::optional<std::string_view> handler) {
     if (descriptor == nullptr || descriptor->storage_tag.empty()) {
         throw std::logic_error("Button.Click has no executable storage tag");
     }
-    const LV presentation = encoded_localized(*handler);
-    return list({
-        raw("1"),
-        list({
-            raw("0"),
-            raw(std::string(descriptor->storage_tag)),
-            list({
-                raw("3"),
-                string_value(std::string(*handler)),
-                list({
-                    raw("1"),
-                    string_value(std::string(*handler)),
-                    presentation,
-                    presentation,
-                    presentation,
-                    parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"),
-                    parse_constant("{0,0,0}"),
-                }),
-            }),
-        }),
-    });
+    return list({raw("1"), list({raw("0"), raw(std::string(descriptor->storage_tag)),
+        encode_action(*handler, ActionMetadataPolicy::handler_derived, "$/Button/Events/Click")})});
 }
 
 std::optional<std::string> decode_button_event(const LV& value, std::string_view path) {
@@ -1998,51 +2023,7 @@ std::optional<std::string> decode_button_event(const LV& value, std::string_view
         descriptor->storage_tag,
         child_path(event_path, 1));
 
-    const auto& payload = event_record.items[2];
-    const std::string payload_path = child_path(event_path, 2);
-    require_arity(payload, 3, payload_path);
-    require_raw_constant(payload.items[0], "3", child_path(payload_path, 0));
-    const std::string handler = string_atom(payload.items[1], child_path(payload_path, 1));
-    if (handler.empty()) {
-        fail(
-            "OOF1115",
-            child_path(payload_path, 1),
-            "non-empty event handler",
-            "empty",
-            "Button.Click handler cannot be empty");
-    }
-
-    const auto& action = payload.items[2];
-    const std::string action_path = child_path(payload_path, 2);
-    require_arity(action, 7, action_path);
-    require_raw_constant(action.items[0], "1", child_path(action_path, 0));
-    const std::string action_handler = string_atom(action.items[1], child_path(action_path, 1));
-    if (action_handler != handler) {
-        fail(
-            "OOF1114",
-            child_path(action_path, 1),
-            handler,
-            action_handler,
-            "Event action handler differs from the event record handler");
-    }
-    for (std::size_t index = 2; index <= 4; ++index) {
-        const std::string presentation = decoded_single_language_text(action.items[index], child_path(action_path, index));
-        if (presentation != handler) {
-            fail("OOF1114", child_path(action_path, index), handler, presentation,
-                "Button event action presentation differs from its handler; action presentation semantics are unsupported");
-        }
-    }
-    require_exact(
-        action.items[5],
-        parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"),
-        child_path(action_path, 5),
-        "Button event style record is unsupported");
-    require_exact(
-        action.items[6],
-        parse_constant("{0,0,0}"),
-        child_path(action_path, 6),
-        "Button event tail record is unsupported");
-    return handler;
+    return decode_action(event_record.items[2], ActionMetadataPolicy::handler_derived, child_path(event_path, 2));
 }
 
 LV encode_form_close_events(const model::OrdinaryFormDocument& document) {
@@ -2059,8 +2040,7 @@ LV encode_form_close_events(const model::OrdinaryFormDocument& document) {
     if (descriptor == nullptr || descriptor->storage_codec != model::metamodel::StorageCodec::event_record || descriptor->storage_tag.empty())
         throw std::logic_error("Form.OnClose has no executable storage descriptor");
     return list({raw("1"), list({raw("70003"), raw(std::string(descriptor->storage_tag)),
-        list({raw("3"), string_value(event->handler),
-            parse_constant("{1,\"\",{1,0},{1,0},{1,0},{4,0,{0},\"\",-1,-1,1,0,\"\"},{0,0,0}}")})})});
+        encode_action(event->handler, ActionMetadataPolicy::empty, "$/Form/Events/OnClose")})});
 }
 
 std::optional<std::string> decode_form_close_events(const LV& value, std::string_view path) {
@@ -2077,14 +2057,7 @@ std::optional<std::string> decode_form_close_events(const LV& value, std::string
     if (descriptor == nullptr || descriptor->storage_codec != model::metamodel::StorageCodec::event_record || descriptor->storage_tag.empty())
         throw std::logic_error("Form.OnClose has no executable storage descriptor");
     require_raw_constant(event.items[1], descriptor->storage_tag, child_path(event_path, 1));
-    const auto& action = event.items[2]; const auto action_path = child_path(event_path, 2);
-    require_arity(action, 3, action_path);
-    require_raw_constant(action.items[0], "3", child_path(action_path, 0));
-    const auto handler = string_atom(action.items[1], child_path(action_path, 1));
-    if (handler.empty()) fail("OOF1115", child_path(action_path, 1), "non-empty Form.OnClose handler", "empty", "Form.OnClose handler cannot be empty");
-    require_exact(action.items[2], parse_constant("{1,\"\",{1,0},{1,0},{1,0},{4,0,{0},\"\",-1,-1,1,0,\"\"},{0,0,0}}"),
-        child_path(action_path, 2), "Form.OnClose action name, presentations, style or defaults are unsupported");
-    return handler;
+    return decode_action(event.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2));
 }
 
 struct DecodedPictureDescriptor {
@@ -2702,11 +2675,6 @@ LV menu_entry_properties(const model::CommandBarButton& entry, std::string_view 
         raw(entry.type == model::CommandBarButtonKind::separator ? "0" : "1"), raw("0"), raw("0")});
 }
 
-LV menu_handler(std::string_view handler) {
-    return list({raw("3"), string_value(std::string(handler)), parse_constant(
-        "{1,\"\",{1,0},{1,0},{1,0},{4,0,{0},\"\",-1,-1,1,0,\"\"},{0,0,0}}")});
-}
-
 LV menu_picture(const model::PictureRef& reference, const model::OrdinaryFormDocument& document) {
     if (reference.standard_name) {
         const auto* descriptor = model::metamodel::find_standard_picture(reference.standard_name->value);
@@ -2746,7 +2714,7 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const auto& entry = *it->entry;
         LV action = entry.type == model::CommandBarButtonKind::action
-            ? menu_handler(*entry.action)
+            ? encode_action(*entry.action, ActionMetadataPolicy::empty, "$/Button/Buttons/Action")
             : entry.type == model::CommandBarButtonKind::submenu
                 ? list({raw("1"), raw(owner), raw(std::to_string(it->id))})
                 : parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}");
@@ -2915,10 +2883,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             require_raw_constant(action.items[0], "8", path); require_raw_constant(action.items[2], "1", path);
             require_raw_constant(action.items[3], type == 0 ? menu_action_guid : menu_reference_guid, path);
             if (type == 0) {
-                require_arity(action.items[4], 3, path);
-                entry.action = string_atom(action.items[4].items[1], path);
-                if (entry.action->empty()) fail("OOF1114", std::string(path), "nonempty handler", "empty", "Menu action has no handler");
-                require_exact(action.items[4], menu_handler(*entry.action), path, "Menu handler metadata is unsupported");
+                entry.action = decode_action(action.items[4], ActionMetadataPolicy::empty, path);
             } else {
                 require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
                     parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"), path, "Menu action target is unsupported");
