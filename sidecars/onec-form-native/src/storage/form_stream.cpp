@@ -910,6 +910,18 @@ LV canonical_radio_button_info(bool enabled, std::string_view caption, std::stri
     });
 }
 
+LV canonical_html_document_field_data(std::int32_t output) {
+    return list({
+        raw("5"),
+        raw("0"),
+        list({raw("0")}),
+        list({raw("4"), raw("4"), list({raw("0")}), raw("4")}),
+        list({raw("3"), raw("1"), list({raw("-18")}), raw("0"), raw("0"), raw("0")}),
+        raw("1"),
+        raw(std::to_string(output)),
+    });
+}
+
 LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_view tool_tip,
     const model::FontValue* font = nullptr) {
     return list({
@@ -2640,6 +2652,59 @@ DecodedControl decode_radio_button(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
+DecodedControl decode_html_document_field(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::html_document_field);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 HTMLDocumentField ID", std::to_string(raw_id),
+            "HTMLDocumentField ID is invalid");
+    }
+
+    const auto& data = record.items[2];
+    const auto data_path = child_path(path, 2);
+    require_arity(data, 7, data_path);
+    const auto output = integer_atom<std::int32_t>(data.items[6], child_path(data_path, 6));
+    if (output < 0 || output > 2) {
+        fail("OOF1114", child_path(data_path, 6), "UseOutput storage value 0, 1, or 2",
+            std::to_string(output), "HTMLDocumentField.Output storage value is unsupported");
+    }
+    auto normalized_data = data;
+    normalized_data.items[6] = raw("0");
+    require_exact(normalized_data, canonical_html_document_field_data(0), data_path,
+        "HTMLDocumentField contains an unproven property or storage variation");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+            "Control name is required");
+    }
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "HTMLDocumentField metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "HTMLDocumentField cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::HtmlDocumentFieldPayload{}};
+    static constexpr std::array<std::string_view, 3> members{"Auto", "Enable", "Disable"};
+    if (output != 0) {
+        control.properties().set_explicit(
+            model::PropertyId::from_name("Output"),
+            model::EnumerationValue{"Output", std::string(members[static_cast<std::size_t>(output)])});
+    }
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
 DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
@@ -3531,6 +3596,35 @@ LV encode_radio_button(const model::ControlNode& control, const GeometryContext&
     });
 }
 
+LV encode_html_document_field(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::html_document_field || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "HTMLDocumentField with positive int64 ID", control.name,
+            "HTMLDocumentField is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/HTMLDocumentField", "named HTMLDocumentField with plain Position and no DataPath, Events, extensions, or children",
+            control.name, "HTMLDocumentField uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Output"}, "$/HTMLDocumentField");
+    const auto output = explicit_enum_storage_value(
+        control.properties(), "HTMLDocumentField", "Output", "Output", 0,
+        {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}});
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::html_document_field);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_html_document_field_data(output),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
 LV encode_calendar_field(const model::ControlNode& control, const GeometryContext& context) {
     if (control.kind() != model::ControlKind::calendar_field || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
@@ -4387,6 +4481,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid)
                         child = decode_radio_button(record, record_path, context);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::html_document_field).guid)
+                        child = decode_html_document_field(record, record_path, context);
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
@@ -4779,6 +4875,8 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_button(document, *control, context);
                 } else if (control->kind() == model::ControlKind::radio_button) {
                     record = encode_radio_button(*control, context);
+                } else if (control->kind() == model::ControlKind::html_document_field) {
+                    record = encode_html_document_field(*control, context);
                 } else if (control->kind() == model::ControlKind::picture_decoration) {
                     record = encode_picture_decoration(*control, document, context);
                 } else if (control->kind() == model::ControlKind::label_decoration) {
@@ -4807,7 +4905,7 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "Button, RadioButton, HTMLDocumentField, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, or Panel", control->name,
                         "Control payload is unsupported");
                 }
                 if (control->data_path) {

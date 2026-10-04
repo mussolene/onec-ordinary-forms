@@ -376,6 +376,40 @@ void test_calendar_field_enabled_xml_roundtrip() {
         "CalendarField named values must survive XML source round-trip");
 }
 
+void test_html_document_field_output_xml_roundtrip() {
+    for (const std::string_view member : {"Auto", "Enable", "Disable"}) {
+        const std::string xml =
+            "<Form id=\"1\" name=\"HtmlForm\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+            "<HTMLDocumentField id=\"2\" name=\"Html\"><Position/>"
+            "<Output type=\"Output\" member=\"" + std::string(member) + "\"/>"
+            "</HTMLDocumentField></ChildItems></Form>";
+        auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), "supported HTMLDocumentField.Output enum must parse");
+        const auto* field = parsed.value().find_control(model::ObjectId{2});
+        expect(field != nullptr && field->kind() == model::ControlKind::html_document_field,
+            "HTMLDocumentField public name must materialize the typed control payload");
+        const auto* output = field->properties().find(model::PropertyId::from_name("Output"));
+        if (member == "Auto") {
+            expect(output == nullptr, "HTMLDocumentField Output Auto must normalize to its implicit default");
+        } else {
+            expect(output != nullptr &&
+                       std::get<model::EnumerationValue>(output->value) == model::EnumerationValue{"Output", std::string(member)},
+                "HTMLDocumentField.Output must materialize a named enumeration");
+        }
+        auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok(), "HTMLDocumentField.Output source must serialize");
+        if (member == "Auto") {
+            expect(serialized.value().find("<Output") == std::string::npos,
+                "implicit Auto default must be omitted from canonical XML");
+        } else {
+            expect(serialized.value().find("<Output type=\"Output\" member=\"" + std::string(member) + "\"/>") != std::string::npos,
+                "non-default Output must serialize with the public property name and enum member");
+        }
+        auto reparsed = source::parse_form_xml(serialized.value());
+        expect(reparsed.ok(), "canonical HTMLDocumentField.Output XML must reparse");
+    }
+}
+
 void test_binding_target_and_manual_roundtrip() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
@@ -1363,6 +1397,7 @@ int main() {
         test_page_position_roundtrip_and_rejections();
         test_all_control_variants();
         test_calendar_field_enabled_xml_roundtrip();
+        test_html_document_field_output_xml_roundtrip();
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
