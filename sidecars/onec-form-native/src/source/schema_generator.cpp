@@ -355,6 +355,7 @@ void append_value_types(std::string& output) {
       <xs:enumeration value="string"/>
       <xs:enumeration value="type"/>
       <xs:enumeration value="valueList"/>
+      <xs:enumeration value="valueTable"/>
     </xs:restriction>
   </xs:simpleType>
 

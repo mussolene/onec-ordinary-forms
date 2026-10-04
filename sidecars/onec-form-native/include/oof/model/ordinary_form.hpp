@@ -237,6 +237,7 @@ enum class TypeDomainTerm : std::uint8_t {
     string,
     type,
     value_list,
+    value_table,
 };
 
 struct NumericQualifiers {

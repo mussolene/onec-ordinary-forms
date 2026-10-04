@@ -574,7 +574,7 @@ model::CompositeIdValue parse_composite_id(xmlNodePtr node) {
 }
 
 model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr node) {
-    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 10> terms{{
+    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 11> terms{{
         {"unknown", model::TypeDomainTerm::unknown},
         {"list", model::TypeDomainTerm::list},
         {"boolean", model::TypeDomainTerm::boolean},
@@ -585,6 +585,7 @@ model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr 
         {"string", model::TypeDomainTerm::string},
         {"type", model::TypeDomainTerm::type},
         {"valueList", model::TypeDomainTerm::value_list},
+        {"valueTable", model::TypeDomainTerm::value_table},
     }};
     const auto found = std::ranges::find(terms, value, &decltype(terms)::value_type::first);
     if (found == terms.end()) {
@@ -1755,6 +1756,7 @@ std::string_view type_domain_term_name(model::TypeDomainTerm term) {
         case model::TypeDomainTerm::string: return "string";
         case model::TypeDomainTerm::type: return "type";
         case model::TypeDomainTerm::value_list: return "valueList";
+        case model::TypeDomainTerm::value_table: return "valueTable";
     }
     return "unknown";
 }
@@ -1926,6 +1928,17 @@ private:
                         serialization_fail(std::string(object_id), std::string(name),
                             "unqualified ValueList descriptor", "UUID or qualifiers",
                             "ValueList type-domain entry cannot carry UUID or qualifiers");
+                    }
+                    break;
+                case model::TypeDomainTerm::value_table:
+                    if (entry.type_uuid.has_value() ||
+                        entry.numeric != model::NumericQualifiers{} ||
+                        entry.string != model::LengthQualifiers{} ||
+                        entry.binary != model::LengthQualifiers{} ||
+                        entry.date != model::DateQualifiers{}) {
+                        serialization_fail(std::string(object_id), std::string(name),
+                            "unqualified ValueTable descriptor", "UUID or qualifiers",
+                            "ValueTable type-domain entry cannot carry UUID or qualifiers");
                     }
                     break;
                 case model::TypeDomainTerm::boolean:
