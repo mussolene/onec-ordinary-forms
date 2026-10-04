@@ -73,6 +73,8 @@ std::string_view xsd_type(ValueCodec codec) {
     switch (codec) {
         case ValueCodec::command_bar_buttons:
             return "CommandBarButtonsType";
+        case ValueCodec::owned_panel:
+            return "FormPanelType";
         case ValueCodec::dendrogram_items:
             return "DendrogramItemsType";
         case ValueCodec::dendrogram_links:
@@ -782,6 +784,13 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             metamodel.events_for(control.kind));
     }
 
+    output += "  <xs:complexType name=\"FormPanelType\"><xs:sequence>\n";
+    std::vector<model::metamodel::PropertyDescriptor> main_panel_properties;
+    for (const auto& property : metamodel.properties_for(model::ControlKind::panel))
+        if (property.surface == model::metamodel::PropertySurface::control_payload &&
+            property.persistence == model::metamodel::PersistenceClass::persisted_editable) main_panel_properties.push_back(property);
+    append_property_elements(output, main_panel_properties);
+    output += "  </xs:sequence></xs:complexType>\n";
     output += "  <xs:complexType name=\"FormType\">\n    <xs:sequence>\n";
     append_property_elements(output, metamodel.form_properties());
     output += "      <xs:element name=\"MainAttribute\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"ObjectIdType\" use=\"required\"/></xs:complexType></xs:element>\n";

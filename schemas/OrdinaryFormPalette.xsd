@@ -22,7 +22,7 @@
             <Property name="ModalMode" apiName="ModalMode" russianName="МодальныйРежим" russianType="Булево" valueCodec="boolean"/>
             <Property name="Modified" apiName="Modified" russianName="Модифицированность" russianType="Булево" valueCodec="boolean"/>
             <Property name="ChoiceInitialValue" apiName="ChoiceInitialValue" russianName="НачальноеЗначениеВыбора" russianType="Произвольный" valueCodec="unclassified"/>
-            <Property name="Panel" apiName="Panel" russianName="Панель" russianType="Панель" valueCodec="unclassified"/>
+            <Property name="Panel" apiName="Panel" russianName="Панель" russianType="Панель" valueCodec="owned-panel"/>
             <Property name="EnterKeyBehavior" apiName="EnterKeyBehavior" russianName="ПоведениеКлавишиEnter" russianType="ТипПоведенияКлавишиEnter" valueCodec="enumeration"/>
             <Property name="WindowLocation" apiName="WindowLocation" russianName="ПоложениеОкна" russianType="ВариантПоложенияОкна" valueCodec="enumeration"/>
             <Property name="WindowDockLocation" apiName="WindowDockLocation" russianName="ПоложениеПрикрепленногоОкна" russianType="ВариантПрикрепленияОкна" valueCodec="enumeration"/>

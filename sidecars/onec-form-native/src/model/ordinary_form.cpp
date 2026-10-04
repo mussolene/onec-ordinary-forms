@@ -717,6 +717,11 @@ ValidationReport OrdinaryFormDocument::validate() const {
             return descriptor.surface == metamodel::PropertySurface::form;
         });
 
+    validate_property_set(form_.id, form_.panel.properties,
+        [](PropertyId id) { return metamodel::find_property(ControlKind::panel, id); },
+        [](const metamodel::PropertyDescriptor& descriptor) { return descriptor.surface == metamodel::PropertySurface::control_payload &&
+            descriptor.persistence == metamodel::PersistenceClass::persisted_editable; });
+
     for (const auto& command : collections_.commands) {
         if (const auto& picture = command.picture.value(); picture.has_value()) {
             require_picture(command.id, *picture);

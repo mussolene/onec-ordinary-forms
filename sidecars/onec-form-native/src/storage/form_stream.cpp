@@ -802,6 +802,7 @@ LV encode_button_color(const model::ColorValue& color, std::string_view path) {
     if (name->value == "StyleColors.ButtonTextColor") style_id = -21;
     else if (name->value == "StyleColors.ButtonBackColor") style_id = -7;
     else if (name->value == "StyleColors.ButtonBorderColor") style_id = -34;
+    else if (name->value == "StyleColors.BorderColor") style_id = -22;
     else fail("OOF1122", std::string(path), "known Button StyleColors property", name->value,
         "Button color style reference is unsupported");
     return list({raw("4"), raw("3"), list({raw(std::to_string(style_id))}), raw("3")});
@@ -839,6 +840,7 @@ model::ColorValue decode_button_color(const LV& value, std::string_view path) {
         if (style_id == -21) style_name = "StyleColors.ButtonTextColor";
         else if (style_id == -7) style_name = "StyleColors.ButtonBackColor";
         else if (style_id == -34) style_name = "StyleColors.ButtonBorderColor";
+        else if (style_id == -22) style_name = "StyleColors.BorderColor";
         else fail("OOF1114", child_path(path, 2) + "/0", "known Button StyleColors ID",
             std::to_string(style_id), "Button color style identifier is unsupported");
         model::ColorValue color;
@@ -1819,9 +1821,16 @@ void insert_incoming_anchor_lists(LV& value, const IncomingAnchorLists& incoming
     value.items.insert(value.items.begin() + static_cast<std::ptrdiff_t>(prefix_count), records.begin(), records.end());
 }
 
+bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value);
+void require_allowed_properties(
+    const model::PropertySet& properties,
+    std::initializer_list<std::string_view> allowed,
+    std::string_view path);
+
 struct DecodedOwnerPages {
     std::vector<model::Page> pages;
     IncomingAnchorLists incoming;
+    model::PanelPayload panel;
 };
 
 DecodedOwnerPages decode_owner_pages(
@@ -1868,14 +1877,35 @@ DecodedOwnerPages decode_owner_pages(
         canonical_root_panel_payload(8, 8, pages, owner);
     expected.items[1].items.erase(expected.items[1].items.begin() + 2,
         expected.items[1].items.begin() + 8);
-    require_exact(normalized, expected.items[1], path,
-        "Owner page properties contain an unsupported variation");
+    const auto auto_tab_order = bool_atom(normalized.items[7], child_path(child_path(path, 1), 7 + incoming_end - 2));
+    expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
+    model::PanelPayload decoded_panel;
+    if (!auto_tab_order) decoded_panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
+    require_arity(normalized.items[0], expected.items[1].items[0].items.size(), child_path(child_path(path, 1), 0));
+    for (const auto& [name, slot] : std::array<std::pair<std::string_view, std::size_t>, 3>{{
+        {"BorderColor", 6}, {"TextColor", 3}, {"BackColor", 2}}}) {
+        const auto color_path = child_path(child_path(child_path(path, 1), 0), slot);
+        const auto color = decode_button_color(normalized.items[0].items[slot], color_path);
+        if (color != model::ColorValue{}) decoded_panel.properties.set_explicit(model::PropertyId::from_name(name), color);
+        expected.items[1].items[0].items[slot] = encode_button_color(color, color_path);
+        if (name == "BackColor") expected.items[1].items[expected.items[1].items.size() - 6] = encode_button_color(color, color_path);
+    }
+    const auto mismatch = std::mismatch(normalized.items.begin(), normalized.items.end(),
+        expected.items[1].items.begin(), expected.items[1].items.end(), [](const auto& left, const auto& right) {
+            return list_stream::dump_compact(left) == list_stream::dump_compact(right);
+        });
+    if (mismatch.first != normalized.items.end() || mismatch.second != expected.items[1].items.end()) {
+        const auto index = static_cast<std::size_t>(mismatch.first - normalized.items.begin());
+        const auto original_index = index < 2 ? index : index + incoming_end - 2;
+        fail("OOF1114", child_path(child_path(path, 1), original_index), "supported named owner property",
+            "changed owner property", "Owner page property contains an unsupported variation");
+    }
     if (pages.size() > std::numeric_limits<std::uint64_t>::max() - next_page_id) {
         fail("OOF1122", std::string(path), "Page IDs within uint64 range", std::to_string(pages.size()),
             "Page ID allocation overflows uint64");
     }
     next_page_id += pages.size();
-    return DecodedOwnerPages{std::move(pages), std::move(incoming)};
+    return DecodedOwnerPages{std::move(pages), std::move(incoming), std::move(decoded_panel)};
 }
 
 LV encode_owner_pages(
@@ -1884,9 +1914,19 @@ LV encode_owner_pages(
     bool panel,
     std::optional<model::ControlRef> owner = std::nullopt,
     std::int32_t width = 8,
-    std::int32_t height = 8) {
+    std::int32_t height = 8,
+    const model::PropertySet& properties = {}) {
     auto envelope = panel ? canonical_panel_payload(pages, *owner) :
         canonical_root_panel_payload(width, height, pages, owner);
+    require_allowed_properties(properties, {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, "$/Panel");
+    envelope.items[1].items[13] = raw(explicit_bool(properties, "AutoTabOrder", true) ? "1" : "0");
+    for (const auto& [name, slot] : std::array<std::pair<std::string_view, std::size_t>, 3>{{
+        {"BorderColor", 6}, {"TextColor", 3}, {"BackColor", 2}}}) {
+        const auto color = properties.contains(model::PropertyId::from_name(name)) ? explicit_button_color(properties, name) : model::ColorValue{};
+        const auto encoded_color = encode_button_color(color, std::string("$/Panel/") + std::string(name));
+        envelope.items[1].items[0].items[slot] = encoded_color;
+        if (name == "BackColor") envelope.items[1].items[envelope.items[1].items.size() - 6] = encoded_color;
+    }
     insert_incoming_anchor_lists(envelope.items[1], incoming, 2);
     return envelope;
 }
@@ -2464,15 +2504,10 @@ LV encode_table_column_editor_packet(const LV& info, std::string_view path) {
     return list({list(std::move(chunks)), raw("0")});
 }
 
-bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value);
 std::string explicit_string(
     const model::PropertySet& properties,
     std::string_view name,
     std::string_view default_value = {});
-void require_allowed_properties(
-    const model::PropertySet& properties,
-    std::initializer_list<std::string_view> allowed,
-    std::string_view path);
 
 LV canonical_table_column_editor_info(const model::TableColumnControl& control) {
     constexpr std::string_view path = "$/Table/Columns/Column/Control";
@@ -8091,6 +8126,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         if (attributes.main_attribute)
             form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
+        form.panel = std::move(root_owner.panel);
         if (!caption.empty()) {
             form.properties.set_explicit(model::PropertyId::from_name("Caption"), caption);
         }
@@ -8353,6 +8389,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                             child_path(record_path, 2));
                         model::ControlNode panel{panel_ref.id(), name, model::PanelPayload{}};
                         panel.position = std::move(geometry.position);
+                        panel.payload = std::move(panel_owner.panel);
                         for (const auto& page : panel_owner.pages) panel.children.push_back(model::PageRef{page.id});
                         decode_child_table(at(record, 5, record_path), panel_owner.pages, GeometryOwner{panel_ref},
                             panel_owner.incoming, child_path(record_path, 5));
@@ -8779,11 +8816,12 @@ Result<list_stream::ListValue> encode_document(
                         fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",
                             control->name, "Panel uses a storage concept outside the supported profile");
                     }
-                    require_allowed_properties(control->properties(), {}, child_path(path, ordinal) + "/Panel");
+                    require_allowed_properties(control->properties(), {"AutoTabOrder", "BorderColor", "TextColor", "BackColor"}, child_path(path, ordinal) + "/Panel");
                     const model::ControlRef panel_ref{control->id};
                     auto panel_owner = encode_owner(control->children, GeometryOwner{panel_ref}, true,
                         child_path(path, ordinal) + "/Panel/ChildItems");
-                    auto panel_properties = encode_owner_pages(panel_owner.pages, panel_owner.incoming, true, panel_ref);
+                    auto panel_properties = encode_owner_pages(panel_owner.pages, panel_owner.incoming, true, panel_ref, 8, 8,
+                        control->properties());
                     const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
                     const auto info = list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
                     record = list({raw(std::string(panel_descriptor.guid)), raw(std::to_string(control->id.value())),
@@ -8940,7 +8978,8 @@ Result<list_stream::ListValue> encode_document(
             throw DecodeFailure(encoded_attributes_result.diagnostics().front());
         }
 
-        auto root_panel_payload = encode_owner_pages(root_pages, form_incoming, false, std::nullopt, width, height);
+        auto root_panel_payload = encode_owner_pages(root_pages, form_incoming, false, std::nullopt, width, height,
+            document.form().panel.properties);
         const auto root_control_count = child_records.items.size() - 1;
         const auto root_panel = list({
             raw(std::string(root_panel_guid)),

@@ -645,6 +645,16 @@ void apply_proven_storage_overrides(
     auto& button = properties[static_cast<std::size_t>(ControlKind::button)];
     classify_property(button, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
     std::ranges::find(button, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
+    classify_property(properties[static_cast<std::size_t>(ControlKind::panel)], "AutoTabOrder",
+        StorageCodec::control_info, DefaultKind::boolean, "true");
+    for (const auto name : {"BorderColor", "TextColor", "BackColor"})
+        classify_property(properties[static_cast<std::size_t>(ControlKind::panel)], name,
+            StorageCodec::control_base, DefaultKind::color, "automatic");
+    auto main_panel = std::ranges::find(form_properties, "Panel", &PropertyDescriptor::api_name);
+    if (main_panel == form_properties.end()) throw std::logic_error("missing Form.Panel descriptor");
+    main_panel->value_codec = ValueCodec::owned_panel;
+    main_panel->persistence = PersistenceClass::persisted_editable;
+    main_panel->storage_codec = StorageCodec::root_record;
     auto& command_bar = properties[static_cast<std::size_t>(ControlKind::command_bar)];
     classify_property(command_bar, "Secondary", StorageCodec::control_info, DefaultKind::boolean, "true");
     classify_property(command_bar, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
@@ -1608,6 +1618,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
     switch (codec) {
         case ValueCodec::command_bar_buttons:
             return "command-bar-buttons";
+        case ValueCodec::owned_panel:
+            return "owned-panel";
         case ValueCodec::dendrogram_items:
             return "dendrogram-items";
         case ValueCodec::dendrogram_links:

@@ -1640,6 +1640,12 @@
     </xs:sequence>
   </xs:complexType>
 
+  <xs:complexType name="FormPanelType"><xs:sequence>
+      <xs:element name="AutoTabOrder" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+  </xs:sequence></xs:complexType>
   <xs:complexType name="FormType">
     <xs:sequence>
       <xs:element name="AutoTitle" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -1658,7 +1664,7 @@
       <xs:element name="ModalMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Modified" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChoiceInitialValue" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Panel" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Panel" type="FormPanelType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnterKeyBehavior" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="WindowDockLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
