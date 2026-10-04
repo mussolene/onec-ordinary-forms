@@ -678,6 +678,12 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
 
 )XSD";
 
+    output += R"XSD(  <xs:simpleType name="SpreadsheetCoordinateType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="4294967295"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:element name="Text" type="xs:string" minOccurs="1" maxOccurs="1"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+
+)XSD";
+
     const auto controls = metamodel.controls();
     append_child_item_type(output, "ControlChildItemsType", controls, false);
     append_child_item_type(output, "PanelChildItemsType", controls, true);
@@ -733,6 +739,10 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             metamodel.control_extension_properties());
         output +=
             "      <xs:element name=\"Position\" type=\"PositionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+        if (control.kind == model::ControlKind::spreadsheet_document_field) {
+            output +=
+                "      <xs:element name=\"Document\" type=\"SpreadsheetDocumentType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+        }
         append_property_elements(output, metamodel.properties_for(control.kind));
 
         output += "      <xs:element name=\"Events\" type=\"";

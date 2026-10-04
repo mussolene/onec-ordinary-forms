@@ -1284,6 +1284,10 @@
   </xs:sequence><xs:attribute name="name" type="xs:string" use="required"/><xs:attribute name="type" type="CommandBarButtonKindType" use="required"/></xs:complexType>
   <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
 
+  <xs:simpleType name="SpreadsheetCoordinateType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="4294967295"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:element name="Text" type="xs:string" minOccurs="1" maxOccurs="1"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+
   <xs:complexType name="ControlChildItemsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element ref="Panel"/>
@@ -2499,6 +2503,7 @@
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Document" type="SpreadsheetDocumentType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="VerticalScrollBar" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalScrollBar" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>

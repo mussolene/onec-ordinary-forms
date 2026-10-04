@@ -8,6 +8,7 @@
 #include <functional>
 #include <initializer_list>
 #include <limits>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -358,6 +359,62 @@ LV encoded_localized(std::string_view text) {
         value.items.push_back({"ru", normalize_storage_line_endings(text)});
     }
     return list_stream::parse(value_codec::encode_localized_string(value));
+}
+
+LV canonical_spreadsheet_field_info(
+    const model::SpreadsheetDocumentFieldPayload& payload,
+    bool fresh_add_default = false) {
+    LV info = list_stream::parse(R"LS({18,0,0,0,0,5,5,1,1,{4,4,{0},4},{3,1,{-18},0,0,0},{8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,0,{0,0,00000000-0000-0000-0000-000000000000,0},0,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0},0,1,{3,0,0,100,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"ru",0,0,0,0,0,0,0},1,1,{0},0,0,0,0,0,1,0,1,1,0,0,0,0,1,1})LS");
+    auto& document_info = info.items.at(11);
+    auto& view_info = info.items.at(14);
+    if (info.items.size() != 33 || !document_info.is_list || document_info.items.size() != 65 ||
+        raw_atom(document_info.items.at(14), "$") != "2" || !view_info.is_list ||
+        view_info.items.size() != 29) {
+        throw std::logic_error("invalid SpreadsheetDocumentField canonical info descriptor");
+    }
+    std::map<std::uint32_t, std::vector<const model::SpreadsheetDocumentCell*>> rows;
+    for (const auto& cell : payload.cells) rows[cell.row - 1].push_back(&cell);
+    std::vector<LV> row_items;
+    for (auto& [row, cells] : rows) {
+        std::sort(cells.begin(), cells.end(), [](const auto* left, const auto* right) {
+            return left->column < right->column;
+        });
+        row_items.push_back(raw(std::to_string(row)));
+        row_items.push_back(raw("0"));
+        row_items.push_back(raw(std::to_string(cells.size())));
+        for (const auto* cell : cells) {
+            row_items.push_back(raw(std::to_string(cell->column - 1)));
+            const auto value = cell->text.empty()
+                ? list({raw("1"), raw("0")})
+                : encoded_localized(cell->text);
+            row_items.push_back(list({raw("16"), raw("0"), value, raw("0")}));
+        }
+    }
+    document_info.items.insert(document_info.items.begin() + 16, row_items.begin(), row_items.end());
+    document_info.items[15] = raw(std::to_string(rows.size()));
+    std::uint32_t columns = 0;
+    std::uint32_t row_extent = 0;
+    for (const auto& cell : payload.cells) {
+        columns = std::max(columns, cell.column);
+        row_extent = std::max(row_extent, cell.row);
+    }
+    const auto composite_index = 16 + row_items.size();
+    document_info.items[composite_index] = list({raw(std::to_string(columns)), raw("0"),
+        raw("00000000-0000-0000-0000-000000000000"), raw("0")});
+    document_info.items[composite_index + 1] = raw(std::to_string(row_extent));
+
+    if (fresh_add_default) {
+        view_info.items[1] = raw("0");
+        view_info.items[2] = raw("0");
+        view_info.items[23] = raw("0");
+        return info;
+    }
+    view_info.items[1] = raw("0");
+    view_info.items[2] = raw("0");
+    view_info.items[23] = raw("1");
+    view_info.items.insert(view_info.items.begin() + 24,
+        list({raw("3"), raw("0"), raw("0"), raw("0"), raw("0"), raw("00000000-0000-0000-0000-000000000000")}));
+    return info;
 }
 
 std::string decoded_single_language_text(const LV& value, std::string_view path) {
@@ -2955,6 +3012,119 @@ DecodedControl decode_calendar_field(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
+DecodedControl decode_spreadsheet_document_field(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::spreadsheet_document_field);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        fail("OOF1122", child_path(path, 1), "positive int64 SpreadsheetDocumentField ID", std::to_string(raw_id), "Control ID is invalid");
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 33, info_path);
+    const auto& document_info = at(info, 11, info_path);
+    const auto document_path = child_path(info_path, 11);
+    require_list(document_info, document_path);
+    if (document_info.items.size() < 65) fail("OOF1102", document_path, "complete SpreadsheetDocumentField info", describe(document_info), "Document info is incomplete");
+    require_raw_constant(document_info.items[14], "2", child_path(document_path, 14));
+    const auto row_count = integer_atom<std::uint32_t>(document_info.items[15], child_path(document_path, 15));
+    if (document_info.items.size() < 65 + static_cast<std::size_t>(row_count) * 3)
+        fail("OOF1114", child_path(document_path, 15), "row count matching bounded row records", std::to_string(row_count), "Spreadsheet Document row count is invalid");
+    model::SpreadsheetDocumentFieldPayload payload;
+    std::size_t cursor = 16;
+    std::uint32_t previous_row = 0;
+    bool first_row = true;
+    for (std::uint32_t row_number = 0; row_number < row_count; ++row_number) {
+        const auto row_path = child_path(document_path, cursor);
+        const auto row_index = integer_atom<std::uint32_t>(at(document_info, cursor, document_path), row_path);
+        ++cursor;
+        if (row_index == std::numeric_limits<std::uint32_t>::max() || (!first_row && row_index <= previous_row))
+            fail("OOF1114", row_path, "strictly increasing supported row indices", std::to_string(row_index), "Spreadsheet row index is invalid");
+        require_raw_constant(at(document_info, cursor, document_path), "0", child_path(document_path, cursor));
+        ++cursor;
+        const auto cell_count = integer_atom<std::uint32_t>(at(document_info, cursor, document_path), child_path(document_path, cursor));
+        ++cursor;
+        if (cell_count == 0 || cursor + static_cast<std::size_t>(cell_count) * 2 > document_info.items.size())
+            fail("OOF1114", child_path(document_path, cursor - 1), "nonempty row with matching cell records", std::to_string(cell_count), "Spreadsheet row cell count is invalid");
+        std::uint32_t previous_column = 0;
+        bool first_column = true;
+        for (std::uint32_t cell_index = 0; cell_index < cell_count; ++cell_index) {
+            const auto item_index = cursor++;
+            const auto column = integer_atom<std::uint32_t>(at(document_info, item_index, document_path), child_path(document_path, item_index));
+            if (column == std::numeric_limits<std::uint32_t>::max() || (!first_column && column <= previous_column))
+                fail("OOF1114", child_path(document_path, item_index), "strictly increasing supported column indices", std::to_string(column), "Spreadsheet column index is invalid");
+            const auto value_index = cursor++;
+            const auto& value = at(document_info, value_index, document_path);
+            require_arity(value, 4, child_path(document_path, value_index));
+            require_raw_constant(value.items[0], "16", child_path(child_path(document_path, value_index), 0));
+            require_raw_constant(value.items[1], "0", child_path(child_path(document_path, value_index), 1));
+            const auto text = decoded_single_language_text(value.items[2], child_path(child_path(document_path, value_index), 2));
+            require_raw_constant(value.items[3], "0", child_path(child_path(document_path, value_index), 3));
+            payload.cells.push_back({row_index + 1, column + 1, text});
+            previous_column = column;
+            first_column = false;
+        }
+        previous_row = row_index;
+        first_row = false;
+    }
+    const auto view_path = child_path(info_path, 14);
+    const auto& view_info = at(info, 14, info_path);
+    require_list(view_info, view_path);
+    if (view_info.items.size() != 29 && view_info.items.size() != 30)
+        fail("OOF1114", view_path, "fresh Add or normalized R1C1 default envelope", describe(view_info),
+            "SpreadsheetDocumentField cannot persist nondefault view settings");
+    const auto area_count = integer_atom<std::uint32_t>(view_info.items.at(23), child_path(view_path, 23));
+    if (view_info.items.size() == 29 && area_count == 0) {
+        require_exact(info, canonical_spreadsheet_field_info(payload, true), info_path,
+            "SpreadsheetDocumentField fresh Add record contains unsupported settings or storage variation");
+    } else if (view_info.items.size() == 30 && area_count == 1) {
+        require_exact(info, canonical_spreadsheet_field_info(payload), info_path,
+            "SpreadsheetDocumentField contains unsupported nondefault view data or storage variation");
+    } else {
+        fail("OOF1114", view_path, "fresh Add or normalized R1C1 default view envelope",
+            std::to_string(view_info.items.size()) + " fields with " + std::to_string(area_count) + " areas",
+            "SpreadsheetDocumentField cannot persist nondefault view settings");
+    }
+
+    auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "SpreadsheetDocumentField metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "SpreadsheetDocumentField cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::SpreadsheetDocumentFieldPayload{}};
+    std::get<model::SpreadsheetDocumentFieldPayload>(control.payload) = std::move(payload);
+    control.position = std::move(geometry.position);
+    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
+}
+
+LV encode_spreadsheet_document_field(
+    const model::ControlNode& control,
+    const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::spreadsheet_document_field || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
+        !control.events.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty()) {
+        fail("OOF1122", "$", "plain SpreadsheetDocumentField with no events, binding, extensions, or children",
+            control.name, "Control uses an unsupported storage concept");
+    }
+    if (!control.properties().empty())
+        fail("OOF1122", "$/SpreadsheetDocumentField", "no additional control properties", "present", "SpreadsheetDocumentField property is outside the supported profile");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::spreadsheet_document_field);
+    const auto info = canonical_spreadsheet_field_info(std::get<model::SpreadsheetDocumentFieldPayload>(control.payload));
+    const auto metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())), info,
+        encode_geometry(control.position, context, IncomingAnchorLists{}), metadata, list({raw("0")})});
+}
+
 DecodedControl decode_input_field(
     const LV& record,
     std::string_view path,
@@ -4313,6 +4483,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& picture_descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
         const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
         const auto& calendar_descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
+        const auto& spreadsheet_descriptor = model::metamodel::descriptor_for(model::ControlKind::spreadsheet_document_field);
         const auto& input_descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
         const auto& checkbox_descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
         const auto& progress_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
@@ -4390,6 +4561,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
+                    else if (guid == spreadsheet_descriptor.guid) child = decode_spreadsheet_document_field(record, record_path, context);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
                              guid == progress_bar_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -4785,6 +4957,8 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_label(*control, context);
                 } else if (control->kind() == model::ControlKind::calendar_field) {
                     record = encode_calendar_field(*control, context);
+                } else if (control->kind() == model::ControlKind::spreadsheet_document_field) {
+                    record = encode_spreadsheet_document_field(*control, context);
                 } else if (control->kind() == model::ControlKind::input_field) {
                     record = encode_input_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::check_box) {

@@ -676,6 +676,9 @@ void test_control_surfaces_and_property_order(
             }
         }
         expect_element_shape(elements[cursor++], "Position", "PositionType", "1", "1");
+        if (control.kind == oof::model::ControlKind::spreadsheet_document_field) {
+            expect_element_shape(elements[cursor++], "Document", "SpreadsheetDocumentType", "0", "1");
+        }
         cursor = expect_property_sequence(
             metamodel.properties_for(control.kind),
             elements,
@@ -706,6 +709,19 @@ void test_control_surfaces_and_property_order(
             }),
             "reserved Name/Data must not be control property elements");
     }
+}
+
+void test_spreadsheet_document_schema(xmlNodePtr schema) {
+    expect(schema_component(schema, "complexType", "SpreadsheetDocumentType") != nullptr,
+        "named SpreadsheetDocument type must exist");
+    expect(schema_component(schema, "complexType", "SpreadsheetDocumentCellType") != nullptr,
+        "named SpreadsheetDocument Cell type must exist");
+    const auto cells = direct_children(sequence_for_type(schema, "SpreadsheetDocumentType"), "element");
+    expect_element_shape(cells.at(0), "Cell", "SpreadsheetDocumentCellType", "0", "unbounded");
+    const auto text = direct_children(sequence_for_type(schema, "SpreadsheetDocumentCellType"), "element");
+    expect_element_shape(text.at(0), "Text", "xs:string", "1", "1");
+    expect_type_attribute(schema, "SpreadsheetDocumentCellType", "row", "SpreadsheetCoordinateType", "required");
+    expect_type_attribute(schema, "SpreadsheetDocumentCellType", "column", "SpreadsheetCoordinateType", "required");
 }
 
 void test_event_surfaces(const Metamodel& metamodel, xmlNodePtr schema) {
@@ -1134,6 +1150,7 @@ int main() {
         test_document_package_types(metamodel, form_schema);
         test_data_path_position_and_bindings(metamodel, form_schema);
         test_control_surfaces_and_property_order(metamodel, form_schema);
+        test_spreadsheet_document_schema(form_schema);
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);

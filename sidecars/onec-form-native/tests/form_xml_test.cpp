@@ -675,6 +675,67 @@ void test_input_field_tooltip_and_format_xml_round_trip() {
     }
 }
 
+void test_spreadsheet_document_cells_xml_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Spreadsheet";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    auto& payload = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload);
+    auto& cells = payload.cells;
+    cells = {{1, 3, " Ω <текст> & \"цитата\" "}, {2, 1, ""}};
+    document.add_control(std::move(field));
+    const auto serialized = source::serialize_form_xml(document);
+    expect(serialized.ok(), serialized.ok() ? "" : serialized.diagnostics().front().message);
+    expect(serialized.value().find("<Cell row=\"1\" column=\"3\">") != std::string::npos &&
+        serialized.value().find("Ω &lt;текст&gt; &amp; \"цитата\"") != std::string::npos,
+        "named Spreadsheet Document cell must preserve Unicode, whitespace, and XML escaping");
+    expect(serialized.value().find("<Cell row=\"2\" column=\"1\">") != std::string::npos &&
+        serialized.value().find("<Text></Text>") != std::string::npos,
+        "explicitly empty Spreadsheet Document cell must remain present");
+    const auto parsed = source::parse_form_xml(serialized.value());
+    expect(parsed.ok(), parsed.ok() ? "" : parsed.diagnostics().front().message);
+    const auto* restored_control = parsed.value().find_control(model::ObjectId{2});
+    expect(restored_control != nullptr, "SpreadsheetDocumentField must resolve after XML parsing");
+    const auto* restored = std::get_if<model::SpreadsheetDocumentFieldPayload>(&restored_control->payload);
+    expect(restored && restored->cells.size() == 2 && restored->cells[0].row == 1 &&
+        restored->cells[0].column == 3 && restored->cells[0].text == " Ω <текст> & \"цитата\" " &&
+        restored->cells[1].row == 2 && restored->cells[1].column == 1 && restored->cells[1].text.empty(),
+        "named Spreadsheet Document cells and explicit empty text must round-trip");
+
+    const auto wrap_cells = [](std::string_view items) {
+        return std::string("<Form id=\"1\" name=\"Spreadsheet\" ordinaryFormVersion=\"2.1\"><ChildItems><SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/><Document>") +
+            std::string(items) + "</Document></SpreadsheetDocumentField></ChildItems></Form>";
+    };
+    for (const auto invalid : {
+        "<Cell row=\"0\" column=\"1\"><Text/></Cell>",
+        "<Cell row=\"1\" column=\"4294967296\"><Text/></Cell>",
+        "<Cell row=\"1\" column=\"1\"><Text>A</Text></Cell><Cell row=\"1\" column=\"1\"><Text>B</Text></Cell>",
+        "<Cell row=\"1\" column=\"1\"/>",
+        "<Cell row=\"1\" column=\"1\"><Text><Nested/></Text></Cell>"}) {
+        expect(!source::parse_form_xml(wrap_cells(invalid)).ok(),
+            "invalid Spreadsheet Document coordinates or Cell content must be rejected");
+    }
+    const auto unordered = source::parse_form_xml(wrap_cells(
+        "<Cell row=\"2\" column=\"1\"><Text>B</Text></Cell><Cell row=\"1\" column=\"3\"><Text>A</Text></Cell>"));
+    expect(unordered.ok(), "unordered Spreadsheet XML cells must parse");
+    const auto normalized = source::serialize_form_xml(unordered.value());
+    expect(normalized.ok(), "unordered Spreadsheet XML cells must serialize");
+    expect(normalized.value().find("<Cell row=\"1\" column=\"3\">") <
+        normalized.value().find("<Cell row=\"2\" column=\"1\">"),
+        "Spreadsheet XML cells must serialize in row and column order");
+
+    const auto authored_view_settings = source::parse_form_xml(
+        "<Form id=\"1\" name=\"Spreadsheet\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/>"
+        "<ViewSettings currentRow=\"2\" currentColumn=\"3\"><SelectionArea row=\"1\" "
+        "column=\"1\" endRow=\"1\" endColumn=\"1\"/></ViewSettings>"
+        "</SpreadsheetDocumentField></ChildItems></Form>");
+    expect(!authored_view_settings.ok(),
+        "unpersisted SpreadsheetDocumentField ViewSettings must be rejected as authored XML");
+}
+
 void test_check_box_tooltip_xml_round_trip() {
     const auto make_document = [](std::string tool_tip) {
         model::Form form;
@@ -1366,6 +1427,7 @@ int main() {
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
+        test_spreadsheet_document_cells_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
         test_check_box_font_xml_round_trip();
         test_input_field_layout_xml_round_trip();
