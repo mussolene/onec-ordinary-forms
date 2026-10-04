@@ -8,6 +8,10 @@
 
 namespace oof::storage::value_codec {
 
+// Calendar dates use 1C's local, second-precision YYYYMMDDHHMMSS atoms.
+[[nodiscard]] std::string date_to_platform(std::string_view canonical);
+[[nodiscard]] std::string date_from_platform(std::string_view atom);
+
 void write_localized_string(
     list_stream::ListOutStream& out,
     const model::LocalizedStringValue& value);

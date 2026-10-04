@@ -937,9 +937,9 @@ LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_
     });
 }
 
-// These fixed CalendarField values come from one controlled synthetic Add sample.
-// Their domain meanings are unknown; only Enabled is editable in this profile.
-LV canonical_calendar_field_info(bool enabled) {
+// The remaining fixed CalendarField values come from one controlled synthetic Add sample.
+// Their domain meanings are unknown; this profile exposes only Enabled and BeginOfDisplayPeriod.
+LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "00010101000000") {
     const LV zero_record = list({raw("0")});
     const LV canonical_4_4_record = list({raw("4"), raw("4"), zero_record, raw("4")});
     const LV canonical_neg7_record = list({raw("4"), raw("3"), list({raw("-7")}), raw("3")});
@@ -957,7 +957,7 @@ LV canonical_calendar_field_info(bool enabled) {
         list({raw("4"), raw("3"), list({raw("-16")}), raw("3")}),
         list({raw("4"), raw("3"), list({raw("-14")}), raw("3")}),
         list({raw("4"), raw("3"), list({raw("-15")}), raw("3")}),
-        raw("00010101000000"), raw("00010101000000"),
+        raw(std::string(begin_period)), raw("00010101000000"),
         raw("1"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"),
     });
     return list({raw("1"), properties, zero_record});
@@ -2758,6 +2758,29 @@ LV canonical_progress_bar_info(
         raw(std::to_string(max_value)), raw(std::to_string(step)), raw("1"), raw("0"), raw("2")});
 }
 
+LV canonical_track_bar_properties(bool enabled, std::string_view tool_tip) {
+    auto properties = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
+        "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
+        "{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    properties.items[1] = raw(enabled ? "1" : "0");
+    properties.items[12] = encoded_localized(tool_tip);
+    return properties;
+}
+
+LV canonical_track_bar_info(
+    bool enabled,
+    std::string_view tool_tip,
+    std::int32_t min_value = 0,
+    std::int32_t max_value = 100,
+    std::int32_t step = 1) {
+    return list({raw("1"),
+        list({canonical_track_bar_properties(enabled, tool_tip), raw("5"), raw(std::to_string(min_value)),
+            raw(std::to_string(max_value)), raw(std::to_string(step)), raw("10"), raw("2"), raw("2"),
+            raw("5"), raw("100")}),
+        list({raw("0")})});
+}
+
 DecodedControl decode_progress_bar(
     const LV& record,
     std::string_view path,
@@ -2834,6 +2857,90 @@ DecodedControl decode_progress_bar(
         model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
     if (linked_attribute) control.data_path = model::DataPath{
         model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+DecodedControl decode_track_bar(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const std::uint64_t raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 TrackBar ID", std::to_string(raw_id),
+            "TrackBar ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 3, info_path);
+    require_raw_constant(info.items[0], "1", child_path(info_path, 0));
+    const auto& info_payload = info.items[1];
+    const auto payload_path = child_path(info_path, 1);
+    require_arity(info_payload, 10, payload_path);
+    const auto& properties = info_payload.items[0];
+    const auto properties_path = child_path(payload_path, 0);
+    require_arity(properties, 21, properties_path);
+    const bool enabled = bool_atom(properties.items[1], child_path(properties_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        properties.items[12], child_path(properties_path, 12));
+    const std::int32_t min_value = integer_atom<std::int32_t>(
+        info_payload.items[2], child_path(payload_path, 2));
+    const std::int32_t max_value = integer_atom<std::int32_t>(
+        info_payload.items[3], child_path(payload_path, 3));
+    const std::int32_t step = integer_atom<std::int32_t>(
+        info_payload.items[4], child_path(payload_path, 4));
+    if (max_value < 0) {
+        fail("OOF1122", child_path(payload_path, 3), "non-negative TrackBar MaxValue",
+            std::to_string(max_value), "TrackBar MaxValue below zero was clamped by the platform runtime");
+    }
+    if (min_value < 0) {
+        fail("OOF1122", child_path(payload_path, 2), "non-negative TrackBar MinValue",
+            std::to_string(min_value), "TrackBar MinValue below zero was not accepted by the platform runtime");
+    }
+    if (step <= 0) {
+        fail("OOF1122", child_path(payload_path, 4), "positive TrackBar Step", std::to_string(step),
+            "TrackBar Step at or below zero was not accepted by the platform runtime");
+    }
+
+    auto normalized_info = info;
+    normalized_info.items[1].items[0].items[1] = raw("1");
+    normalized_info.items[1].items[0].items[12] = encoded_localized("");
+    normalized_info.items[1].items[2] = raw("0");
+    normalized_info.items[1].items[3] = raw("100");
+    normalized_info.items[1].items[4] = raw("1");
+    require_exact(normalized_info, canonical_track_bar_info(true, ""), info_path,
+        "TrackBar contains a property outside the supported profile");
+
+    const auto geometry_path = child_path(path, 3);
+    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+            "Control name is required");
+    }
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "TrackBar metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "TrackBar cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::TrackBarPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    if (max_value != 100) control.properties().set_explicit(
+        model::PropertyId::from_name("MaxValue"), static_cast<std::int64_t>(max_value));
+    if (min_value != 0) control.properties().set_explicit(
+        model::PropertyId::from_name("MinValue"), static_cast<std::int64_t>(min_value));
+    if (step != 1) control.properties().set_explicit(
+        model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2972,9 +3079,20 @@ DecodedControl decode_calendar_field(
     const auto& base_properties = properties.items[0];
     require_arity(base_properties, 21, child_path(properties_path, 0));
     const bool enabled = bool_atom(base_properties.items[1], child_path(child_path(properties_path, 0), 1));
+    require_arity(properties, 14, properties_path);
+    const auto begin_path = child_path(properties_path, 5);
+    const auto begin_atom = raw_atom(properties.items[5], begin_path);
+    if (begin_atom != "00010101000000") {
+        try {
+            (void)value_codec::date_from_platform(begin_atom);
+        } catch (const std::exception& error) {
+            fail("OOF1122", begin_path, "local Gregorian date atom YYYYMMDDHHMMSS", begin_atom,
+                std::string("CalendarField BeginOfDisplayPeriod is invalid: ") + error.what());
+        }
+    }
     require_exact(
         info,
-        canonical_calendar_field_info(enabled),
+        canonical_calendar_field_info(enabled, begin_atom),
         info_path,
         "CalendarField contains an unsupported property or storage variation");
 
@@ -2999,6 +3117,11 @@ DecodedControl decode_calendar_field(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CalendarFieldPayload{}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (begin_atom != "00010101000000") {
+        control.properties().set_explicit(
+            model::PropertyId::from_name("BeginOfDisplayPeriod"),
+            model::DateValue{value_codec::date_from_platform(begin_atom)});
+    }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -3509,6 +3632,49 @@ LV encode_progress_bar(
     });
 }
 
+LV encode_track_bar(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::track_bar || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "TrackBar with positive int64 ID", control.name,
+            "TrackBar is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/TrackBar", "named TrackBar without DataPath, Events, or storage children",
+            control.name, "TrackBar uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(
+        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step"}, "$/TrackBar");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const std::int32_t max_value = explicit_integer(
+        control.properties(), "MaxValue", 100, "$/TrackBar/MaxValue");
+    const std::int32_t min_value = explicit_integer(
+        control.properties(), "MinValue", 0, "$/TrackBar/MinValue");
+    const std::int32_t step = explicit_integer(control.properties(), "Step", 1, "$/TrackBar/Step");
+    if (max_value < 0) {
+        fail("OOF1122", "$/TrackBar/MaxValue", "non-negative TrackBar MaxValue", std::to_string(max_value),
+            "TrackBar MaxValue below zero was clamped by the platform runtime");
+    }
+    if (min_value < 0) {
+        fail("OOF1122", "$/TrackBar/MinValue", "non-negative TrackBar MinValue", std::to_string(min_value),
+            "TrackBar MinValue values below zero were not accepted by the platform runtime");
+    }
+    if (step <= 0) {
+        fail("OOF1122", "$/TrackBar/Step", "positive TrackBar Step", std::to_string(step),
+            "TrackBar Step values at or below zero were not accepted by the platform runtime");
+    }
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        canonical_track_bar_info(enabled, tool_tip, min_value, max_value, step),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")})});
+}
+
 LV encode_check_box(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
@@ -3612,13 +3778,28 @@ LV encode_calendar_field(const model::ControlNode& control, const GeometryContex
         fail("OOF1122", "$/CalendarField", "named CalendarField with plain Position", control.name,
             "CalendarField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled"}, "$/CalendarField");
+    require_allowed_properties(control.properties(), {"Enabled", "BeginOfDisplayPeriod"}, "$/CalendarField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    std::string begin_period = "00010101000000";
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("BeginOfDisplayPeriod"))) {
+        if (std::holds_alternative<model::UndefinedValue>(entry->value)) {
+            begin_period = "00010101000000";
+        } else if (const auto* date = std::get_if<model::DateValue>(&entry->value)) {
+            begin_period = value_codec::date_to_platform(date->canonical);
+            if (begin_period == "00010101000000") {
+                fail("OOF1122", "$/CalendarField/BeginOfDisplayPeriod", "date distinct from Undefined sentinel",
+                    date->canonical, "CalendarField date collides with the Undefined storage sentinel");
+            }
+        } else {
+            fail("OOF1122", "$/CalendarField/BeginOfDisplayPeriod", "Date or Undefined", "different value kind",
+                "CalendarField BeginOfDisplayPeriod has the wrong value type");
+        }
+    }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_calendar_field_info(enabled),
+        canonical_calendar_field_info(enabled, begin_period),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -4384,6 +4565,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& input_descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
         const auto& checkbox_descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
         const auto& progress_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
+        const auto& track_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
         const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
         using DecodeChildTable = std::function<void(
             const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&, std::string_view)>;
@@ -4499,6 +4681,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                         } else {
                             child = decode_progress_bar(record, record_path, context, linked_attribute);
                         }
+                    } else if (guid == track_bar_descriptor.guid) {
+                        child = decode_track_bar(record, record_path, context);
                     } else if (guid == panel_descriptor.guid) {
                         require_arity(record, 6, record_path);
                         const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -4862,6 +5046,8 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_check_box(document, *control, context);
                 } else if (control->kind() == model::ControlKind::progress_bar) {
                     record = encode_progress_bar(document, *control, context);
+                } else if (control->kind() == model::ControlKind::track_bar) {
+                    record = encode_track_bar(*control, context);
                 } else if (control->kind() == model::ControlKind::panel) {
                     if (!control->events.empty() || control->data_path || !control->extension_properties.empty()) {
                         fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",
@@ -4878,7 +5064,7 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, TrackBar, or Panel", control->name,
                         "Control payload is unsupported");
                 }
                 if (control->data_path) {
