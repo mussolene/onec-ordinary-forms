@@ -435,6 +435,27 @@ void test_platform_date_codec() {
     }
 }
 
+void test_canonical_decimal() {
+    expect(codec::canonical_decimal("  +00012.37500\n") == "12.375",
+        "shared decimal canonicalization must preserve arbitrary precision and normalize lexical form");
+    expect(codec::canonical_decimal("-0.000") == "0",
+        "negative zero must normalize to zero as before");
+    expect(codec::canonical_decimal("1.") == "1",
+        "existing decimal normalization must continue to accept a trailing decimal point");
+    expect(codec::canonical_decimal("123456789012345678901234567890.125") ==
+               "123456789012345678901234567890.125",
+        "decimal canonicalization must not pass through binary floating point");
+    for (const std::string_view invalid : {"", ".", "1.2.3", "--1", "1e3", "NaN"}) {
+        bool rejected = false;
+        try {
+            static_cast<void>(codec::canonical_decimal(invalid));
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        expect(rejected, "invalid xs:decimal lexical values must be rejected");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -448,6 +469,7 @@ int main() {
         test_font();
         test_shortcut();
         test_platform_date_codec();
+        test_canonical_decimal();
     } catch (const std::exception& error) {
         std::cerr << "value codec tests: FAIL: " << error.what() << '\n';
         return 1;

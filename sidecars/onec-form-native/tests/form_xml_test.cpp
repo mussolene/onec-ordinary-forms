@@ -1215,6 +1215,28 @@ void test_inherited_property_has_one_surface() {
         "FirstInGroup must not be duplicated in RadioButton payload");
     expect(source::serialize_form_xml(parsed.value()).ok(), "canonical inherited property must serialize");
 
+    constexpr std::string_view numeric_group_xml = R"XML(
+<Form id="1" name="RadioGroup" ordinaryFormVersion="2.1">
+  <Attributes><Attribute id="10" name="Choice"><TypeDomain><Entry term="numeric" length="10" precision="0" nonNegative="true"/></TypeDomain></Attribute></Attributes>
+  <ChildItems>
+    <RadioButton id="20" name="Head"><DataPath attributeId="10"/><FirstInGroup>true</FirstInGroup>
+      <ValueType><Entry term="numeric" length="10" precision="0" nonNegative="true"/></ValueType>
+      <Position/><SelectionValue>1</SelectionValue>
+    </RadioButton>
+    <RadioButton id="21" name="Member"><Position/><SelectionValue>0</SelectionValue></RadioButton>
+  </ChildItems>
+</Form>)XML";
+    const auto numeric_group = source::parse_form_xml(numeric_group_xml);
+    expect(numeric_group.ok(), "numeric SelectionValue and linked RadioButton group must parse as named properties");
+    const auto* numeric_head = numeric_group.value().find_control(model::ObjectId{20});
+    const auto* selected_value = numeric_head == nullptr ? nullptr :
+        numeric_head->properties().find(model::PropertyId::from_name("SelectionValue"));
+    expect(selected_value && std::get<model::DecimalValue>(selected_value->value).canonical == "1",
+        "RadioButton SelectionValue must use the existing DecimalValue model");
+    const auto canonical_group = source::serialize_form_xml(numeric_group.value());
+    expect(canonical_group.ok() && canonical_group.value().find("<SelectionValue>1</SelectionValue>") != std::string::npos,
+        "RadioButton SelectionValue must serialize as named xs:decimal text");
+
     expect_code(
         source::parse_form_xml(
             "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
