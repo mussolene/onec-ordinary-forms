@@ -3662,7 +3662,13 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
     const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
     const auto border = decode_control_border(base.items[11], child_path(base_path, 11));
+    const auto runtime_state = raw_atom(base.items[17], child_path(base_path, 17));
+    if (runtime_state != "1" && runtime_state != "2")
+        fail("OOF1114", child_path(base_path, 17), "observed CommandBar state 1 or 2", runtime_state,
+            "CommandBar base record contains an unsupported state");
     auto normalized_base = base;
+    // Платформа при загрузке переводит наблюденное состояние создания 1 в 2.
+    normalized_base.items[17] = raw("2");
     normalized_base.items[12] = encoded_localized(tool_tip);
     normalized_base.items[11] = encode_control_border(border, child_path(base_path, 11));
     require_raw_constant(properties.items[8], command_bar_root_marker, child_path(properties_path, 8));
