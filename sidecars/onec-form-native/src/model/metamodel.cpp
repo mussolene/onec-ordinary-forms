@@ -659,6 +659,10 @@ void apply_proven_storage_overrides(
     classify_property(command_bar, "Secondary", StorageCodec::control_info, DefaultKind::boolean, "true");
     classify_property(command_bar, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(command_bar, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    for (const auto name : {"BorderColor", "BackColor"})
+        classify_property(command_bar, name, StorageCodec::control_base, DefaultKind::color, "automatic");
+    classify_property(command_bar, "ButtonTextColor", StorageCodec::control_base,
+        DefaultKind::color, "StyleColors.ButtonTextColor");
     classify_property(command_bar, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
     std::ranges::find(command_bar, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
     classify_property(
