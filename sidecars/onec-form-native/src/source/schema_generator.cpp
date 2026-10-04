@@ -607,9 +607,14 @@ void append_property_element(
 void append_property_elements(
     std::string& output,
     std::span<const PropertyDescriptor> properties,
-    std::string_view indent = "      "
+    std::string_view indent = "      ",
+    bool include_runtime_only = true
 ) {
     for (const auto& property : properties) {
+        if (!include_runtime_only &&
+            property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+            continue;
+        }
         append_property_element(output, property, indent);
     }
 }
@@ -757,7 +762,8 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             metamodel.control_extension_properties());
         output +=
             "      <xs:element name=\"Position\" type=\"PositionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
-        append_property_elements(output, metamodel.properties_for(control.kind));
+        append_property_elements(output, metamodel.properties_for(control.kind), "      ",
+            control.kind != model::ControlKind::choice_field);
 
         output += "      <xs:element name=\"Events\" type=\"";
         append_xml_escaped(output, control.public_name);

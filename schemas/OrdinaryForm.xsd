@@ -1859,7 +1859,6 @@
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChoiceList" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>

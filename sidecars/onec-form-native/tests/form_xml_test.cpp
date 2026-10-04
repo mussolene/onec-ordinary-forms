@@ -721,6 +721,49 @@ void test_check_box_tooltip_xml_round_trip() {
         "CheckBox ToolTip XML must serialize canonically after parsing");
 }
 
+void test_choice_field_static_xml_profile_and_runtime_list_rejection() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="ChoiceField" ordinaryFormVersion="2.1">
+  <Attributes>
+    <Attribute id="3" name="Choice">
+      <TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain>
+    </Attribute>
+  </Attributes>
+  <ChildItems>
+    <ChoiceField id="2" name="ChoiceField">
+      <DataPath attributeId="3"/>
+      <Position/>
+      <Enabled>false</Enabled>
+      <ToolTip>Выберите Ω &amp; &lt;значение&gt;</ToolTip>
+    </ChoiceField>
+  </ChildItems>
+</Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto* choice = parsed.value().find_control(model::ObjectId{2});
+    expect(choice && choice->kind() == model::ControlKind::choice_field && choice->data_path &&
+               choice->data_path->attribute.id() == model::ObjectId{3} &&
+               !std::get<bool>(choice->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+               std::get<std::string>(choice->properties().find(model::PropertyId::from_name("ToolTip"))->value) ==
+                   "Выберите Ω & <значение>",
+        "ChoiceField XML must expose a named string DataPath and observed static properties");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<DataPath attributeId=\"3\"/>") != std::string::npos &&
+               serialized.value().find("<ChoiceList") == std::string::npos,
+        "ChoiceField XML must serialize the typed binding without pretending to persist ChoiceList");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && reparsed.value().find_control(model::ObjectId{2}) != nullptr,
+        "ChoiceField named static XML must round-trip");
+
+    constexpr std::string_view runtime_list_xml = R"XML(<Form id="1" name="ChoiceField" ordinaryFormVersion="2.1">
+      <Attributes><Attribute id="3" name="Choice"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute></Attributes>
+      <ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><ChoiceList/></ChoiceField></ChildItems>
+    </Form>)XML";
+    const auto runtime_list = source::parse_form_xml(runtime_list_xml);
+    expect_code(runtime_list, "OOF2002",
+        "runtime-only ChoiceList must be rejected from the persisted XML object model");
+}
+
 void test_check_box_font_xml_round_trip() {
     const auto make_document = [](std::optional<model::FontValue> font) {
         model::Form form;
@@ -1367,6 +1410,7 @@ int main() {
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
+        test_choice_field_static_xml_profile_and_runtime_list_rejection();
         test_check_box_font_xml_round_trip();
         test_input_field_layout_xml_round_trip();
         test_button_shortcut_xml();

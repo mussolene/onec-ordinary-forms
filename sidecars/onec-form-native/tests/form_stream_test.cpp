@@ -802,6 +802,144 @@ void test_check_box_tooltip_round_trip_and_validation() {
         "multilingual CheckBox ToolTip must be rejected without loss");
 }
 
+void test_choice_field_static_profile_round_trip_and_validation() {
+    static constexpr std::string_view observed_choice_field_info = R"OOF({2,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,1,0,0,0,0,1,0,0,255,0,0,4,0,{"U"},{"U"},"",0,1,1,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0},{0}})OOF";
+    const auto make_document = [](std::optional<std::string> tool_tip,
+                                  bool enabled = true,
+                                  bool boolean_attribute = false,
+                                  bool with_data_path = true,
+                                  bool with_unmapped_property = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "ChoiceFieldProfile";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue value_type;
+        model::TypeDomainEntry value_entry;
+        value_entry.term = boolean_attribute ? model::TypeDomainTerm::boolean : model::TypeDomainTerm::string;
+        if (!boolean_attribute) {
+            value_entry.string.length = 64;
+            value_entry.string.variable = false;
+        }
+        value_type.entries.push_back(value_entry);
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Choice", value_type});
+        model::ControlNode choice_field{model::ObjectId{2}, "ChoiceField", model::ChoiceFieldPayload{}};
+        if (with_data_path) {
+            choice_field.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        }
+        if (!enabled) {
+            choice_field.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        }
+        if (tool_tip.has_value()) {
+            choice_field.properties().set_explicit(model::PropertyId::from_name("ToolTip"), *tool_tip);
+        }
+        if (with_unmapped_property) {
+            choice_field.properties().set_explicit(
+                model::PropertyId::from_name("ReadOnly"), false);
+        }
+        document.add_control(std::move(choice_field));
+        return document;
+    };
+    const auto choice_record = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1];
+    };
+
+    const auto default_encoded = form_stream::encode_document(make_document(std::nullopt));
+    const auto explicit_empty_encoded = form_stream::encode_document(make_document(std::string{}));
+    expect(default_encoded.ok() && explicit_empty_encoded.ok(),
+        "default and explicit empty ChoiceField ToolTip must encode");
+    expect(list_stream::dump_compact(choice_record(default_encoded.value()).items[2]) == observed_choice_field_info,
+        "ChoiceField writer must match the independent Designer-native 46-field info record");
+    auto captured_default = default_encoded.value();
+    captured_default.items[1].items[2].items[2].items[1].items[2] = list_stream::parse(observed_choice_field_info);
+    const auto captured_decoded = form_stream::decode_document(captured_default, "ChoiceFieldNativeInfo");
+    expect(captured_decoded.ok(), captured_decoded ? "" :
+        "independent Designer-native ChoiceField info must decode: " + captured_decoded.diagnostics().front().path +
+        ": " + captured_decoded.diagnostics().front().message);
+    expect(list_stream::dump_compact(default_encoded.value()) ==
+               list_stream::dump_compact(explicit_empty_encoded.value()),
+        "explicit empty ChoiceField ToolTip must normalize to the default storage");
+    const auto default_decoded = form_stream::decode_document(default_encoded.value(), "ChoiceFieldProfile");
+    expect(default_decoded.ok(), "default ChoiceField storage must decode");
+    const auto* default_choice = default_decoded.value().find_control(model::ObjectId{2});
+    expect(default_choice && default_choice->data_path &&
+               default_choice->data_path->attribute.id() == model::ObjectId{3} &&
+               !default_choice->properties().find(model::PropertyId::from_name("ToolTip")),
+        "default ChoiceField must preserve direct DataPath and omit empty ToolTip");
+
+    auto unbound_encoded = form_stream::encode_document(make_document(std::nullopt, true, false, false));
+    expect(unbound_encoded.ok(), "unbound ChoiceField default profile must encode");
+    auto independent_unbound = unbound_encoded.value();
+    auto& independent_unbound_record = independent_unbound.items[1].items[2].items[2].items[1];
+    independent_unbound_record.items[2] = list_stream::parse(observed_choice_field_info);
+    expect(independent_unbound.items[2].items[3].items.size() == 1 &&
+               independent_unbound.items[2].items[3].items[0].atom == "0",
+        "unbound Designer-native ChoiceField fixture must have an empty attribute-link table");
+    const auto independent_unbound_decoded = form_stream::decode_document(
+        independent_unbound, "ChoiceFieldUnboundNativeDefault");
+    expect(independent_unbound_decoded.ok(), independent_unbound_decoded ? "" :
+        "independent unbound ChoiceField default record must decode: " +
+            independent_unbound_decoded.diagnostics().front().path + ": " +
+            independent_unbound_decoded.diagnostics().front().message);
+    const auto* unbound_choice = independent_unbound_decoded.value().find_control(model::ObjectId{2});
+    expect(unbound_choice && !unbound_choice->data_path,
+        "unbound Designer-native ChoiceField must remain unbound after decode");
+    const auto unbound_reencoded = form_stream::encode_document(independent_unbound_decoded.value());
+    expect(unbound_reencoded.ok() && unbound_reencoded.value().items[2].items[3].items.size() == 1 &&
+               unbound_reencoded.value().items[2].items[3].items[0].atom == "0",
+        "independent unbound ChoiceField must re-encode without an invented DataPath");
+
+    const std::string tool_tip = "Выберите Ω <вариант> & \"значение\"\nВторая строка";
+    const auto encoded = form_stream::encode_document(make_document(tool_tip, false));
+    expect(encoded.ok(), "ChoiceField with disabled state and Unicode multiline ToolTip must encode");
+    const auto& record = choice_record(encoded.value());
+    const auto& info = record.items[2];
+    expect(info.items.size() == 3 && info.items[0].atom == "2" && info.items[1].items.size() == 46 &&
+               info.items[1].items[0].items[1].atom == "0" &&
+               list_stream::dump_compact(info.items[2]) == "{0}",
+        "ChoiceField must use the observed 46-field control-info profile and preserve disabled state");
+    const auto& stored_tool_tip = info.items[1].items[0].items[12];
+    expect(list_stream::dump_compact(stored_tool_tip) == value_codec::encode_localized_string(
+               model::LocalizedStringValue{{{"ru", "Выберите Ω <вариант> & \"значение\"\r\nВторая строка"}}}),
+        "ChoiceField ToolTip must use the observed localized base slot and canonical line endings");
+    const auto decoded = form_stream::decode_document(encoded.value(), "ChoiceFieldProfile");
+    expect(decoded.ok(), "ChoiceField ToolTip and Enabled must decode");
+    const auto* choice_field = decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_tool_tip = choice_field == nullptr ? nullptr :
+        choice_field->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(choice_field && choice_field->data_path &&
+               choice_field->data_path->attribute.id() == model::ObjectId{3} &&
+               decoded_tool_tip && std::get<std::string>(decoded_tool_tip->value) == tool_tip &&
+               std::get<bool>(choice_field->properties().find(model::PropertyId::from_name("Enabled"))->value) == false,
+        "ChoiceField named properties and String DataPath must round-trip");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "ChoiceField profile must round-trip without storage drift");
+
+    auto unsupported_property = make_document(std::nullopt, true, false, true, true);
+    expect_failure(form_stream::encode_document(unsupported_property), "OOF1122", "$/ChoiceField",
+        "unmapped ChoiceField properties must not enter persisted XML or storage");
+
+    auto wrong_type = make_document(std::nullopt, true, true);
+    expect_failure(form_stream::encode_document(wrong_type), "OOF1122", "$/ChoiceField/DataPath",
+        "ChoiceField must reject non-string DataPath attributes");
+    auto wrong_type_unbound = form_stream::encode_document(make_document(std::nullopt, true, true, false));
+    expect(wrong_type_unbound.ok(), "unbound ChoiceField can coexist with an unrelated Boolean Attribute");
+    auto wrong_type_bound_stream = wrong_type_unbound.value();
+    wrong_type_bound_stream.items[2].items[3] = default_encoded.value().items[2].items[3];
+    const auto wrong_type_bound = form_stream::decode_document(wrong_type_bound_stream, "ChoiceFieldBooleanLink");
+    expect(!wrong_type_bound && wrong_type_bound.diagnostics().front().code == "OOF1122" &&
+               wrong_type_bound.diagnostics().front().path == "$/2/3",
+        "a linked ChoiceField must reject an independently encoded non-String Attribute link");
+
+    auto malformed = encoded.value();
+    malformed.items[1].items[2].items[2].items[1].items[2].items[1].items[13] =
+        list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(malformed, "ChoiceFieldProfile"), "OOF1114",
+        "$/1/2/2/1/2", "unmapped ChoiceField base flags must fail closed");
+}
+
 void test_check_box_font_round_trip_and_validation() {
     const auto make_document = [](std::optional<model::FontValue> font) {
         model::Form form;
@@ -5321,6 +5459,7 @@ int main() {
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
         test_check_box_tooltip_round_trip_and_validation();
+        test_choice_field_static_profile_round_trip_and_validation();
         test_check_box_font_round_trip_and_validation();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
