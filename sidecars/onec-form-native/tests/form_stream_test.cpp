@@ -99,6 +99,16 @@ std::string runtime_envelope_text(const list_stream::ListValue& payload) {
     }));
 }
 
+list_stream::ListValue* find_usual_group_record(list_stream::ListValue& value) {
+    constexpr std::string_view guid = "90db814a-c75f-4b54-bc96-df62e554d67d";
+    if (value.is_list && value.items.size() == 6 && !value.items[0].is_list && value.items[0].atom == guid) return &value;
+    if (!value.is_list) return nullptr;
+    for (auto& item : value.items) {
+        if (auto* found = find_usual_group_record(item)) return found;
+    }
+    return nullptr;
+}
+
 void test_outer_format_probe() {
     const auto format27 = form_stream::probe_outer_format(list_stream::parse("{27}"));
     expect(
@@ -408,6 +418,119 @@ void test_attribute_allocator_is_separate_from_control_ids() {
         "OOF1114",
         "$/2/1",
         "nonempty attribute slot count must be checked in its own ID space");
+}
+
+void test_usual_group_named_record_round_trip_and_rejections() {
+    model::Form fresh_form;
+    fresh_form.id = model::ObjectId{1};
+    fresh_form.name = "Fresh";
+    fresh_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument fresh_document(std::move(fresh_form));
+    fresh_document.add_control(model::ControlNode{model::ObjectId{2}, "FreshGroup", model::UsualGroupPayload{}});
+    const auto fresh_encoded = form_stream::encode_document(fresh_document);
+    expect(fresh_encoded.ok(), "fresh default UsualGroup must encode");
+    auto fresh_payload = fresh_encoded.value();
+    const auto* fresh_record = find_usual_group_record(fresh_payload);
+    const auto independent_add_record = list_stream::parse(
+        R"({90db814a-c75f-4b54-bc96-df62e554d67d,2,{0,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,4,700,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},8,{1,0},{3,0,{0},6,1,0,cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2},0}},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,0,1,0,0},{14,"FreshGroup",4294967295,0,0,0},{0}})");
+    expect(fresh_record && list_stream::dump_compact(*fresh_record) == list_stream::dump_compact(independent_add_record),
+        "full canonical record must match independent fresh runtime Add capture");
+
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode defaults{model::ObjectId{2}, "DefaultGroup", model::UsualGroupPayload{}};
+    defaults.position.left.set(10);
+    defaults.position.top.set(12);
+    defaults.position.width.set(140);
+    defaults.position.height.set(60);
+    document.add_control(std::move(defaults));
+    model::ControlNode custom{model::ObjectId{3}, "CustomGroup", model::UsualGroupPayload{}};
+    custom.properties().set_explicit(model::PropertyId::from_name("Caption"), std::string("Группа Ω"));
+    custom.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    custom.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Подсказка"));
+    custom.position.left.set(20);
+    custom.position.top.set(30);
+    custom.position.width.set(150);
+    custom.position.height.set(70);
+    custom.position.visible.set(false);
+    document.add_control(std::move(custom));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "named UsualGroup default and Unicode properties must encode");
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), "named UsualGroup records must decode");
+    const auto& controls = decoded.value().collections().controls;
+    expect(controls.size() == 2 && controls[0].kind() == model::ControlKind::usual_group &&
+        controls[1].kind() == model::ControlKind::usual_group, "both records must materialize as UsualGroup");
+    expect(controls[0].properties().find(model::PropertyId::from_name("Caption")) == nullptr &&
+        controls[0].properties().find(model::PropertyId::from_name("Enabled")) == nullptr &&
+        controls[0].properties().find(model::PropertyId::from_name("ToolTip")) == nullptr,
+        "default UsualGroup properties must stay implicit");
+    const auto* caption = controls[1].properties().find(model::PropertyId::from_name("Caption"));
+    const auto* enabled = controls[1].properties().find(model::PropertyId::from_name("Enabled"));
+    const auto* tool_tip = controls[1].properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(caption && std::get<std::string>(caption->value) == "Группа Ω" && enabled && !std::get<bool>(enabled->value) &&
+        tool_tip && std::get<std::string>(tool_tip->value) == "Подсказка", "named properties must survive round-trip");
+    expect(controls[1].position.left.value() == 20 && controls[1].position.width.value() == 150 &&
+        !controls[1].position.visible.value(), "Position and Visible must survive round-trip");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "full UsualGroup records must round-trip without drift");
+
+    for (const auto mutation : {0, 1, 2, 3, 4, 5}) {
+        auto invalid = encoded.value();
+        auto* record = find_usual_group_record(invalid);
+        expect(record != nullptr, "encoded UsualGroup record must be locatable");
+        if (mutation == 0) record->items[2].items[0] = list_stream::ListValue::raw_atom("1");
+        if (mutation == 1) record->items[2].items[1].items[1] = list_stream::ListValue::raw_atom("9");
+        if (mutation == 2) record->items[2].items[1].items[3] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("0")});
+        if (mutation == 3) record->items[5] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")});
+        if (mutation == 4) record->items[2].items[1].items[0].items[0] = list_stream::ListValue::raw_atom("18");
+        if (mutation == 5) record->items[2].items[1].items[4] = list_stream::ListValue::raw_atom("1");
+        expect(!form_stream::decode_document(invalid, "Main"), "unknown UsualGroup record variants must fail closed");
+    }
+
+    model::Form nested_form;
+    nested_form.id = model::ObjectId{1};
+    nested_form.name = "Nested";
+    nested_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument nested(std::move(nested_form));
+    model::ControlNode group{model::ObjectId{2}, "Group", model::UsualGroupPayload{}};
+    group.children.push_back(model::ControlRef{model::ObjectId{3}});
+    nested.add_control(std::move(group));
+    nested.add_control(model::ControlNode{model::ObjectId{3}, "Child", model::ButtonPayload{}});
+    expect(!form_stream::encode_document(nested), "unverified UsualGroup nesting must be rejected");
+
+    model::Form event_form;
+    event_form.id = model::ObjectId{1}; event_form.name = "Event";
+    event_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument event_document(std::move(event_form));
+    model::ControlNode event_group{model::ObjectId{2}, "Group", model::UsualGroupPayload{}};
+    event_group.events.push_back(model::EventRef{model::ObjectId{3}});
+    event_document.add_control(std::move(event_group));
+    event_document.add_event(model::Event{model::ObjectId{3}, "Unknown", "Handler", model::ControlRef{model::ObjectId{2}}});
+    expect(!form_stream::encode_document(event_document), "unverified UsualGroup events must be rejected");
+
+    model::Form property_form;
+    property_form.id = model::ObjectId{1}; property_form.name = "Property";
+    property_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument property_document(std::move(property_form));
+    model::ControlNode property_group{model::ObjectId{2}, "Group", model::UsualGroupPayload{}};
+    property_group.properties().set_explicit(model::PropertyId::from_name("Transparent"), true);
+    property_document.add_control(std::move(property_group));
+    expect(!form_stream::encode_document(property_document), "unverified UsualGroup properties must be rejected");
+
+    model::Form id_form;
+    id_form.id = model::ObjectId{1}; id_form.name = "InvalidGroupId";
+    const auto invalid_id = static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) + 1;
+    id_form.children = {model::ControlRef{model::ObjectId{invalid_id}}};
+    model::OrdinaryFormDocument id_document(std::move(id_form));
+    id_document.add_control(model::ControlNode{model::ObjectId{invalid_id}, "Group", model::UsualGroupPayload{}});
+    expect_failure(form_stream::encode_document(id_document), "OOF1122", "$/UsualGroup/ID",
+        "UsualGroup IDs above int64 range must be rejected by the control encoder");
 }
 
 void test_multiple_top_level_buttons_round_trip() {
@@ -5565,6 +5688,7 @@ int main() {
         test_attribute_encode_validation();
         test_empty_attributes_allocator_header();
         test_attribute_allocator_is_separate_from_control_ids();
+        test_usual_group_named_record_round_trip_and_rejections();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_button_multiline_round_trip_and_validation();
