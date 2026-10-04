@@ -242,6 +242,9 @@ inline std::vector<Token> tokenize(std::string_view text) {
                     tokens.push_back({Token::Kind::string_atom, value, start, preceded_by_whitespace});
                     goto next_token;
                 }
+                if (current == '\r' && index < text.size() && text[index] == '\n') {
+                    continue;
+                }
                 value += current;
             }
             throw std::runtime_error("ListInStream unterminated string at offset " + std::to_string(start));

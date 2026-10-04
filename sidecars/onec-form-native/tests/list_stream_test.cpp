@@ -108,6 +108,32 @@ void test_logical_line_endings_use_utf16_continuations() {
     }
 }
 
+void test_platform_literal_line_endings() {
+    // Независимые пары atom/# из strict dump опыта 59782 и его точных runtime guards.
+    for (const auto& [physical, logical] : std::vector<std::pair<std::string, std::string>>{
+        {R"("Север: ""Первая"" & <10>")", R"(Север: "Первая" & <10>)"},
+        {std::string{R"("Вторая: Ёжик, 東京 ""20"")"} + "\r\r\n" + R"(Строка 2")",
+            std::string{R"(Вторая: Ёжик, 東京 "20")"} + "\r\nСтрока 2"},
+        {"\"CR\rДалее\"", "CR\rДалее"},
+        {"\"LF\r\nДалее\"", "LF\nДалее"},
+        {"\"Повтор\r\r\n\r\r\n\r\n\rКонец\"", "Повтор\r\n\r\n\n\rКонец"},
+        {std::string{R"("Смешано ""Ёжик 東京"" \000D)"} + "\r\r\n" + R"(\tail")",
+            std::string{R"(Смешано "Ёжик 東京" \000D)"} + "\r\n" + R"(\tail)"},
+        {std::string{R"("Границы)"} + "\r\r\r\n\r\n" + R"(""конец""\000A")",
+            std::string{"Границы\r\r\n\n"} + R"("конец"\000A)"},
+        {std::string{R"("a)"} + "\r\n" + R"(b"\000D"\000Ac"\000D)" + "\r\n" + R"(d")",
+            "a\nb\r\nc\r\nd"}}) {
+        const auto decoded = list_stream::parse(physical);
+        expect(decoded.atom == logical,
+            "literal physical CRLF must decode as LF while lone CR and explicit UTF16 units remain exact");
+        expect(list_stream::parse(list_stream::dump_compact(decoded)).atom == logical,
+            "observed physical strings must canonicalize without changing their logical value");
+        const auto nested = list_stream::ListValue::list({list_stream::ListValue::list({decoded})});
+        expect(equal(nested, list_stream::parse(list_stream::dump_listout(nested))),
+            "observed literal line endings must survive nested ListOut canonical rebuild");
+    }
+}
+
 void test_platform_utf16_string_segments() {
     // Independent literal emitted by strict Designer export for the synthetic cell.
     const auto actual = list_stream::parse(R"({"S","Unicode Привет 世界 "\d83c"\df0d"})");
@@ -318,6 +344,7 @@ int main() {
         test_empty_and_nested_lists();
         test_quoted_strings();
         test_logical_line_endings_use_utf16_continuations();
+        test_platform_literal_line_endings();
         test_platform_utf16_string_segments();
         test_bool_codec();
         test_integer_codecs();
