@@ -506,8 +506,8 @@
             <Properties>
               <Property name="LargeStep" apiName="LargeStep" russianName="БольшойШаг" russianType="Число" valueCodec="decimal"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
-              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="decimal"/>
-              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="integer32"/>
+              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Число" valueCodec="integer32"/>
               <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
               <Property name="MarkingAppearance" apiName="MarkingAppearance" russianName="ОтображениеРазметки" russianType="ОтображениеРазметкиПолосыРегулирования" valueCodec="enumeration"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
@@ -517,7 +517,7 @@
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
               <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
-              <Property name="Step" apiName="Step" russianName="Шаг" russianType="Число" valueCodec="decimal"/>
+              <Property name="Step" apiName="Step" russianName="Шаг" russianType="Число" valueCodec="integer32"/>
               <Property name="MarkingStep" apiName="MarkingStep" russianName="ШагРазметки" russianType="Число" valueCodec="decimal"/>
             </Properties>
             <Events>
