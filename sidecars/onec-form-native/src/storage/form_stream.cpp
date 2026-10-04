@@ -937,9 +937,9 @@ LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_
     });
 }
 
-// These fixed CalendarField values come from one controlled synthetic Add sample.
-// Their domain meanings are unknown; only Enabled is editable in this profile.
-LV canonical_calendar_field_info(bool enabled) {
+// The remaining fixed CalendarField values come from one controlled synthetic Add sample.
+// Their domain meanings are unknown; this profile exposes only Enabled and BeginOfDisplayPeriod.
+LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "00010101000000") {
     const LV zero_record = list({raw("0")});
     const LV canonical_4_4_record = list({raw("4"), raw("4"), zero_record, raw("4")});
     const LV canonical_neg7_record = list({raw("4"), raw("3"), list({raw("-7")}), raw("3")});
@@ -957,7 +957,7 @@ LV canonical_calendar_field_info(bool enabled) {
         list({raw("4"), raw("3"), list({raw("-16")}), raw("3")}),
         list({raw("4"), raw("3"), list({raw("-14")}), raw("3")}),
         list({raw("4"), raw("3"), list({raw("-15")}), raw("3")}),
-        raw("00010101000000"), raw("00010101000000"),
+        raw(std::string(begin_period)), raw("00010101000000"),
         raw("1"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"),
     });
     return list({raw("1"), properties, zero_record});
@@ -2924,9 +2924,20 @@ DecodedControl decode_calendar_field(
     const auto& base_properties = properties.items[0];
     require_arity(base_properties, 21, child_path(properties_path, 0));
     const bool enabled = bool_atom(base_properties.items[1], child_path(child_path(properties_path, 0), 1));
+    require_arity(properties, 14, properties_path);
+    const auto begin_path = child_path(properties_path, 5);
+    const auto begin_atom = raw_atom(properties.items[5], begin_path);
+    if (begin_atom != "00010101000000") {
+        try {
+            (void)value_codec::date_from_platform(begin_atom);
+        } catch (const std::exception& error) {
+            fail("OOF1122", begin_path, "local Gregorian date atom YYYYMMDDHHMMSS", begin_atom,
+                std::string("CalendarField BeginOfDisplayPeriod is invalid: ") + error.what());
+        }
+    }
     require_exact(
         info,
-        canonical_calendar_field_info(enabled),
+        canonical_calendar_field_info(enabled, begin_atom),
         info_path,
         "CalendarField contains an unsupported property or storage variation");
 
@@ -2951,6 +2962,11 @@ DecodedControl decode_calendar_field(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CalendarFieldPayload{}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (begin_atom != "00010101000000") {
+        control.properties().set_explicit(
+            model::PropertyId::from_name("BeginOfDisplayPeriod"),
+            model::DateValue{value_codec::date_from_platform(begin_atom)});
+    }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -3545,13 +3561,28 @@ LV encode_calendar_field(const model::ControlNode& control, const GeometryContex
         fail("OOF1122", "$/CalendarField", "named CalendarField with plain Position", control.name,
             "CalendarField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled"}, "$/CalendarField");
+    require_allowed_properties(control.properties(), {"Enabled", "BeginOfDisplayPeriod"}, "$/CalendarField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    std::string begin_period = "00010101000000";
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("BeginOfDisplayPeriod"))) {
+        if (std::holds_alternative<model::UndefinedValue>(entry->value)) {
+            begin_period = "00010101000000";
+        } else if (const auto* date = std::get_if<model::DateValue>(&entry->value)) {
+            begin_period = value_codec::date_to_platform(date->canonical);
+            if (begin_period == "00010101000000") {
+                fail("OOF1122", "$/CalendarField/BeginOfDisplayPeriod", "date distinct from Undefined sentinel",
+                    date->canonical, "CalendarField date collides with the Undefined storage sentinel");
+            }
+        } else {
+            fail("OOF1122", "$/CalendarField/BeginOfDisplayPeriod", "Date or Undefined", "different value kind",
+                "CalendarField BeginOfDisplayPeriod has the wrong value type");
+        }
+    }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_calendar_field_info(enabled),
+        canonical_calendar_field_info(enabled, begin_period),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
