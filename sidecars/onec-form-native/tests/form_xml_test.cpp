@@ -93,6 +93,27 @@ void test_complete_document_roundtrip() {
     expect(repeated.value() == serialized.value(), "Form.xml serialization must be deterministic");
 }
 
+void test_usual_group_named_xml_round_trip() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Groups" ordinaryFormVersion="2.1"><ChildItems>
+      <UsualGroup id="2" name="DefaultGroup"><Position/></UsualGroup>
+      <UsualGroup id="3" name="CustomGroup"><Position><Top>30</Top><Visible>false</Visible><Height>70</Height><Left>20</Left><Width>150</Width></Position><Enabled>false</Enabled><Caption>Группа Ω</Caption><ToolTip>Подсказка</ToolTip></UsualGroup>
+    </ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed.ok() ? "UsualGroup named XML must parse" :
+        parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto* custom = parsed.value().find_control(model::ObjectId{3});
+    expect(custom && custom->kind() == model::ControlKind::usual_group && custom->position.left.value() == 20 &&
+        custom->position.width.value() == 150 && !custom->position.visible.value(),
+        "UsualGroup Position and Visible must be typed");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<UsualGroup") != std::string::npos &&
+        serialized.value().find("Группа Ω") != std::string::npos && serialized.value().find("<Visible>false</Visible>") != std::string::npos,
+        "UsualGroup named properties must serialize in public XML");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && source::serialize_form_xml(reparsed.value()).value() == serialized.value(),
+        "UsualGroup XML must reach a deterministic named round-trip");
+}
+
 void test_root_page_tree_xml_roundtrip() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1">
@@ -1391,6 +1412,7 @@ void test_command_bar_buttons_xml_only_contract() {
 int main() {
     try {
         test_complete_document_roundtrip();
+        test_usual_group_named_xml_round_trip();
         test_root_page_tree_xml_roundtrip();
         test_page_internal_ids_do_not_change_xml();
         test_page_boolean_defaults_and_rejections();
