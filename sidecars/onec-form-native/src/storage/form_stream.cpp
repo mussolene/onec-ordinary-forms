@@ -758,6 +758,51 @@ LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
     return value;
 }
 
+constexpr std::string_view command_bar_root_marker = "b78f2e80-ec68-11d4-9dcf-0050bae2bc79";
+
+LV canonical_command_bar_base(bool enabled, std::string_view tool_tip) {
+    auto value = parse_constant(R"OOF({19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}})OOF");
+    value.items[1] = raw(enabled ? "1" : "0");
+    value.items[12] = encoded_localized(tool_tip);
+    return value;
+}
+
+LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
+                      const model::OrdinaryFormDocument& document, std::uint64_t control_id,
+                      std::string_view root_marker, std::uint64_t root_group_id);
+
+LV canonical_command_bar_properties(bool enabled, std::string_view tool_tip,
+                                     const std::vector<model::CommandBarButton>& buttons,
+                                     const model::OrdinaryFormDocument& document, std::uint64_t control_id) {
+    std::vector<LV> properties(14, raw("0"));
+    properties[0] = canonical_command_bar_base(enabled, tool_tip);
+    // Slot 1 observed canonical default.
+    properties[1] = raw("9");
+    // Slot 2 observed canonical default.
+    properties[2] = raw("2");
+    // Slot 3 observed canonical default.
+    properties[3] = raw("0");
+    // Slot 4 observed canonical default.
+    properties[4] = raw("0");
+    // Slot 5 observed canonical default.
+    properties[5] = raw("1");
+    // Slot 6 observed canonical default.
+    properties[6] = raw("1");
+    // Slot 10 observed canonical default.
+    properties[10] = raw("9d0a2e40-b978-11d4-84b6-008048da06df");
+    // Slot 11 observed canonical default.
+    properties[11] = raw("0");
+    // Slot 12 observed canonical default.
+    properties[12] = raw("0");
+    // Slot 13 observed canonical default.
+    properties[13] = raw("0");
+    // Slot 8 is the observed stable root-owner marker.
+    properties[8] = raw("b78f2e80-ec68-11d4-9dcf-0050bae2bc79");
+    properties[7] = encode_button_menu(buttons, document, control_id, command_bar_root_marker, control_id);
+    properties[9] = raw(std::to_string(control_id));
+    return list(std::move(properties));
+}
+
 LV canonical_picture_properties(bool enabled, std::string_view tool_tip = {}) {
     auto properties = parse_constant(
         R"({{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},20,0,0,{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,2,0,0,1,2},{0,0,0},1,1,0,0,{1,0},0,1,1,1})");
@@ -1895,8 +1940,13 @@ LV menu_picture(const model::PictureRef& reference, const model::OrdinaryFormDoc
     return encode_button_picture(*asset, "$/Button/Buttons/Picture");
 }
 
+std::string menu_group_key(std::string_view marker, std::uint64_t id) {
+    return std::string(marker) + ":" + std::to_string(id);
+}
+
 LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
-                      const model::OrdinaryFormDocument& document, std::uint64_t control_id) {
+                      const model::OrdinaryFormDocument& document, std::uint64_t control_id,
+                      std::string_view root_marker = menu_owner_guid, std::uint64_t root_group_id = 0) {
     const auto owner = menu_identity(control_id | 0x8000000000000000ULL, 0);
     struct Item { const model::CommandBarButton* entry; std::uint64_t id; std::string action_id; };
     std::vector<Item> items;
@@ -1912,7 +1962,8 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
         }
     };
     collect(entries, 0);
-    std::vector<LV> result{raw("5"), raw(owner), raw(std::to_string(items.size())), raw("1"), raw(std::to_string(items.size()))};
+    const auto max_id = static_cast<std::uint64_t>(items.size());
+    std::vector<LV> result{raw("5"), raw(owner), raw(std::to_string(max_id)), raw("1"), raw(std::to_string(items.size()))};
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const auto& entry = *it->entry;
         LV action = entry.type == model::CommandBarButtonKind::action
@@ -1935,8 +1986,8 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
     result.push_back(raw(std::to_string(1 + std::count_if(items.begin(), items.end(), [](const auto& item) {
         return item.entry->type == model::CommandBarButtonKind::submenu;
     }))));
-    const auto group = [&](const auto& collection, std::uint64_t id) {
-        std::vector<LV> value{raw("5"), raw(id == 0 ? std::string(menu_owner_guid) : owner), raw(std::to_string(id)),
+    const auto group = [&](const auto& collection, std::string_view marker, std::uint64_t id) {
+        std::vector<LV> value{raw("5"), raw(std::string(marker)), raw(std::to_string(id)),
             raw("0"), raw(std::to_string(collection.size()))};
         for (const auto& entry : collection) {
             const auto entry_id = ids.at(&entry);
@@ -1955,9 +2006,9 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
         value.push_back(list({raw("-1"), raw("0"), list(std::move(submenu_refs))}));
         return list(std::move(value));
     };
-    result.push_back(group(entries, 0));
+    result.push_back(group(entries, root_marker, root_group_id));
     for (const auto& item : items) if (item.entry->type == model::CommandBarButtonKind::submenu)
-        result.push_back(group(item.entry->buttons, item.id));
+        result.push_back(group(item.entry->buttons, owner, item.id));
     return list(std::move(result));
 }
 
@@ -1966,7 +2017,8 @@ struct DecodedMenu {
     std::vector<model::PictureAsset> assets;
 };
 
-DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::string_view control_name) {
+DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::string_view control_name,
+                               std::string_view root_marker = menu_owner_guid, std::uint64_t root_group_id = 0) {
     require_list(menu, path);
     if (menu.items.size() < 7) fail("OOF1102", std::string(path), "menu header and collections", describe(menu), "Menu is incomplete");
     require_raw_constant(menu.items[0], "5", path);
@@ -1986,17 +2038,20 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
     const auto group_count = integer_atom<std::size_t>(menu.items[5 + action_count], path);
     if (group_count != menu.items.size() - 6 - action_count || group_count == 0)
         fail("OOF1102", std::string(path), "exact menu collection count", describe(menu), "Menu collection count is inconsistent");
-    std::unordered_map<std::uint64_t, const LV*> groups;
-    std::unordered_map<std::uint64_t, std::unordered_map<std::uint64_t, model::CommandBarButtonOrder>> submenu_orders;
+    std::unordered_map<std::string, const LV*> groups;
+    std::unordered_map<std::string, std::unordered_map<std::uint64_t, model::CommandBarButtonOrder>> submenu_orders;
     for (std::size_t i = 0; i < group_count; ++i) {
         const auto& group = menu.items[6 + action_count + i];
         require_list(group, path);
         if (group.items.size() < 6) fail("OOF1102", std::string(path), "collection header", describe(group), "Menu collection is incomplete");
         require_raw_constant(group.items[0], "5", path);
         const auto id = integer_atom<std::uint64_t>(group.items[2], path);
-        require_raw_constant(group.items[1], id == 0 ? menu_owner_guid : std::string_view(owner), path);
+        const auto marker = uuid_atom(group.items[1], path).canonical;
+        const bool root_group = marker == root_marker && id == root_group_id;
+        if (!root_group) require_raw_constant(group.items[1], owner, path);
         require_raw_constant(group.items[3], "0", path);
-        if (!groups.emplace(id, &group).second) fail("OOF1114", std::string(path), "unique collections", std::to_string(id), "Duplicate menu collection");
+        const auto key = menu_group_key(marker, id);
+        if (!groups.emplace(key, &group).second) fail("OOF1114", std::string(path), "unique owner/ID collection pairs", std::to_string(id), "Duplicate menu collection");
         const auto& footer = group.items.back();
         require_arity(footer, 3, path);
         require_raw_constant(footer.items[0], "-1", path);
@@ -2006,7 +2061,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         const auto ref_count = integer_atom<std::size_t>(at(refs, 0, path), path);
         if (ref_count > (refs.items.size() - 1) / 3 || refs.items.size() != 1 + 3 * ref_count)
             fail("OOF1114", std::string(path), "exact submenu order footer size", describe(refs), "Menu order footer count is inconsistent");
-        auto& orders = submenu_orders[id];
+        auto& orders = submenu_orders[key];
         for (std::size_t ref = 0; ref < ref_count; ++ref) {
             const auto base = 1 + ref * 3;
             require_raw_constant(refs.items[base], owner, path);
@@ -2018,13 +2073,15 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         }
     }
     DecodedMenu decoded;
-    std::unordered_set<std::uint64_t> consumed_groups, entry_ids;
+    std::unordered_set<std::string> consumed_groups;
+    std::unordered_set<std::uint64_t> entry_ids;
     std::unordered_set<std::string> consumed_actions;
-    std::function<std::vector<model::CommandBarButton>(std::uint64_t, std::string, std::size_t)> visit;
-    visit = [&](std::uint64_t group_id, std::string asset_path, std::size_t depth) {
-        if (depth > 256 || !consumed_groups.insert(group_id).second || !groups.contains(group_id))
+    std::function<std::vector<model::CommandBarButton>(std::string, std::uint64_t, std::string, std::size_t)> visit;
+    visit = [&](std::string group_marker, std::uint64_t group_id, std::string asset_path, std::size_t depth) {
+        const auto group_key = menu_group_key(group_marker, group_id);
+        if (depth > 256 || !consumed_groups.insert(group_key).second || !groups.contains(group_key))
             fail("OOF1114", std::string(path), "existing acyclic owned collections", std::to_string(group_id), "Menu ownership is invalid");
-        const auto& group = *groups.at(group_id);
+        const auto& group = *groups.at(group_key);
         const auto count = integer_atom<std::size_t>(group.items[4], path);
         if (count > (group.items.size() - 6) / 2 || group.items.size() != 6 + 2 * count)
             fail("OOF1102", std::string(path), "exact collection size", describe(group), "Menu item count is inconsistent");
@@ -2050,10 +2107,10 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             if (type > 2) fail("OOF1114", std::string(path), "Action, Submenu, or Separator", std::to_string(type), "Menu item type is unsupported");
             entry.type = type == 0 ? model::CommandBarButtonKind::action : type == 1 ? model::CommandBarButtonKind::submenu : model::CommandBarButtonKind::separator;
             if (entry.type == model::CommandBarButtonKind::submenu) {
-                const auto order = submenu_orders[group_id].find(id);
-                if (order == submenu_orders[group_id].end()) fail("OOF1114", std::string(path), "submenu order footer entry", std::to_string(id), "Submenu order is missing");
+                const auto order = submenu_orders[group_key].find(id);
+                if (order == submenu_orders[group_key].end()) fail("OOF1114", std::string(path), "submenu order footer entry", std::to_string(id), "Submenu order is missing");
                 entry.order = order->second;
-            } else if (submenu_orders[group_id].contains(id)) {
+            } else if (submenu_orders[group_key].contains(id)) {
                 fail("OOF1114", std::string(path), "submenu order footer entry only", std::to_string(id), "Non-submenu has an order footer entry");
             }
             const auto representation = integer_atom<unsigned>(props.items[10], path);
@@ -2065,7 +2122,16 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             normalized.items[8] = raw("1e2");
             if (raw_atom(props.items[8], path) != "1e2" && raw_atom(props.items[8], path) != "100")
                 fail("OOF1114", std::string(path), "scale 100", describe(props.items[8]), "Menu scale is unsupported");
-            require_exact(normalized, menu_entry_properties(entry, owner, id), path, "Menu item property is unsupported");
+            const auto expected_properties = menu_entry_properties(entry, owner, id);
+            const auto mismatch = std::mismatch(normalized.items.begin(), normalized.items.end(),
+                expected_properties.items.begin(), expected_properties.items.end(), [](const auto& left, const auto& right) {
+                    return list_stream::dump_compact(left) == list_stream::dump_compact(right);
+                });
+            if (mismatch.first != normalized.items.end()) {
+                const auto index = static_cast<std::size_t>(mismatch.first - normalized.items.begin());
+                fail("OOF1114", child_path(path, index), "canonical menu item property",
+                    describe(normalized.items.at(index)), "Menu item property is unsupported");
+            }
             const auto& action = *actions.at(guid);
             require_raw_constant(action.items[0], "8", path); require_raw_constant(action.items[2], "1", path);
             require_raw_constant(action.items[3], type == 0 ? menu_action_guid : menu_reference_guid, path);
@@ -2103,7 +2169,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 submenu_refs.push_back(raw(owner)); submenu_refs.push_back(raw(std::to_string(id)));
                 submenu_refs.push_back(raw(entry.order == model::CommandBarButtonOrder::ascending ? "1" :
                     entry.order == model::CommandBarButtonOrder::descending ? "2" : "0"));
-                entry.buttons = visit(id, asset_path + "/" + entry.name + "/Buttons", depth + 1);
+                entry.buttons = visit(owner, id, asset_path + "/" + entry.name + "/Buttons", depth + 1);
             }
             entries.push_back(std::move(entry));
         }
@@ -2112,7 +2178,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             path, "Menu submenu references are inconsistent");
         return entries;
     };
-    decoded.entries = visit(0, "Items/" + std::string(control_name) + "/Buttons", 0);
+    decoded.entries = visit(std::string(root_marker), root_group_id, "Items/" + std::string(control_name) + "/Buttons", 0);
     if (consumed_groups.size() != groups.size() || consumed_actions.size() != actions.size())
         fail("OOF1114", std::string(path), "all owned menu objects consumed", "orphan", "Menu has unconsumed objects");
     return decoded;
@@ -2125,6 +2191,82 @@ struct DecodedControl {
     std::optional<model::PictureAsset> picture_asset;
     std::vector<model::PictureAsset> menu_assets;
 };
+
+DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        fail("OOF1105", child_path(path, 1), "positive int64 CommandBar ID", std::to_string(raw_id), "CommandBar ID is invalid");
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 2, info_path);
+    require_raw_constant(info.items[0], "2", child_path(info_path, 0));
+    const auto properties_path = child_path(info_path, 1);
+    const auto& properties = info.items[1];
+    require_arity(properties, 14, properties_path);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
+    const auto& base = properties.items[0];
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(base, 21, base_path);
+    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
+    const auto tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
+    auto normalized_base = base;
+    normalized_base.items[12] = encoded_localized(tool_tip);
+    require_raw_constant(properties.items[8], command_bar_root_marker, child_path(properties_path, 8));
+    const auto root_group_id = integer_atom<std::uint64_t>(properties.items[9], child_path(properties_path, 9));
+    if (root_group_id != raw_id)
+        fail("OOF1114", child_path(properties_path, 9), "root group ID matching CommandBar owner ID",
+            std::to_string(root_group_id), "CommandBar root-group identity is inconsistent");
+    auto menu = decode_button_menu(properties.items[7], child_path(properties_path, 7), name,
+        command_bar_root_marker, root_group_id);
+
+    model::Form empty_form;
+    empty_form.id = model::ObjectId{1};
+    empty_form.name = "CommandBarDefault";
+    model::OrdinaryFormDocument empty_document(std::move(empty_form));
+    auto normalized = properties;
+    normalized.items[0] = std::move(normalized_base);
+    normalized.items[7] = encode_button_menu({}, empty_document, raw_id, command_bar_root_marker, root_group_id);
+    const auto expected = canonical_command_bar_properties(enabled, tool_tip, {}, empty_document, raw_id);
+    const auto& expected_base = expected.items[0];
+    const auto base_mismatch = std::mismatch(normalized.items[0].items.begin(), normalized.items[0].items.end(),
+        expected_base.items.begin(), expected_base.items.end(), [](const auto& left, const auto& right) {
+            return list_stream::dump_compact(left) == list_stream::dump_compact(right);
+        });
+    if (base_mismatch.first != normalized.items[0].items.end()) {
+        const auto index = static_cast<std::size_t>(base_mismatch.first - normalized.items[0].items.begin());
+        fail("OOF1114", child_path(child_path(properties_path, 0), index), "observed canonical CommandBar base default",
+            "changed base default", "CommandBar differs from the observed canonical default profile");
+    }
+    const auto default_mismatch = std::mismatch(normalized.items.begin(), normalized.items.end(),
+        expected.items.begin(), expected.items.end(), [](const auto& left, const auto& right) {
+            return list_stream::dump_compact(left) == list_stream::dump_compact(right);
+        });
+    if (default_mismatch.first != normalized.items.end()) {
+        const auto index = static_cast<std::size_t>(default_mismatch.first - normalized.items.begin());
+        fail("OOF1114", child_path(properties_path, index), "observed canonical CommandBar default profile",
+            "changed default slot", "CommandBar differs from the observed canonical default profile");
+    }
+
+    const auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "CommandBar metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "CommandBar cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::CommandBarPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    std::get<model::CommandBarPayload>(control.payload).buttons = std::move(menu.entries);
+    control.position = geometry.position;
+    return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, std::move(menu.assets)};
+}
 
 DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context) {
     require_arity(record, 6, path);
@@ -3156,6 +3298,28 @@ LV encode_button(
     });
 }
 
+LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::ControlNode& control,
+                      const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::command_bar || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        fail("OOF1122", "$/CommandBar", "CommandBar with positive int64 ID", std::to_string(control.id.value()),
+            "Unsupported CommandBar record");
+    if (!control.events.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty())
+        fail("OOF1122", "$/CommandBar", "CommandBar without events, DataPath, extensions, or child controls",
+            control.name, "CommandBar uses a storage concept outside the supported profile");
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip"}, "$/CommandBar");
+    const auto* payload = std::get_if<model::CommandBarPayload>(&control.payload);
+    if (payload == nullptr) fail("OOF1122", "$/CommandBar", "CommandBarPayload", "different payload", "CommandBar payload is invalid");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const auto tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto properties = canonical_command_bar_properties(enabled, tool_tip, payload->buttons, document, control.id.value());
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
+    const auto info = list({raw("2"), properties});
+    const auto metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())), info,
+        encode_geometry(control.position, context, IncomingAnchorLists{}), metadata, list({raw("0")})});
+}
+
 LV encode_picture_decoration(
     const model::ControlNode& control,
     const model::OrdinaryFormDocument& document,
@@ -4176,6 +4340,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         std::vector<DecodedControl> pending_controls;
         std::vector<model::Page> nested_pages;
         const auto& button_descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
+        const auto& command_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
         const auto& picture_descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
         const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
         const auto& calendar_descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
@@ -4250,6 +4415,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
                     if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
+                    else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid)
                         child = decode_radio_button(record, record_path, context);
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
@@ -4471,7 +4637,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                         update(entry.buttons);
                     }
                 };
-                update(std::get<model::ButtonPayload>(decoded_control.control.payload).buttons);
+                if (auto* button = std::get_if<model::ButtonPayload>(&decoded_control.control.payload)) update(button->buttons);
+                else if (auto* command_bar = std::get_if<model::CommandBarPayload>(&decoded_control.control.payload)) update(command_bar->buttons);
             }
             document.add_control(std::move(decoded_control.control));
         }
@@ -4541,7 +4708,7 @@ Result<list_stream::ListValue> encode_document(
             }
         }
         for (const auto& control : document.collections().controls) {
-            if (control.kind() != model::ControlKind::button) continue;
+            if (control.kind() != model::ControlKind::button && control.kind() != model::ControlKind::command_bar) continue;
             std::function<void(const std::vector<model::CommandBarButton>&)> collect_pictures;
             collect_pictures = [&](const auto& entries) {
                 for (const auto& entry : entries) {
@@ -4549,7 +4716,8 @@ Result<list_stream::ListValue> encode_document(
                     collect_pictures(entry.buttons);
                 }
             };
-            collect_pictures(std::get<model::ButtonPayload>(control.payload).buttons);
+            if (const auto* button = std::get_if<model::ButtonPayload>(&control.payload)) collect_pictures(button->buttons);
+            if (const auto* command_bar = std::get_if<model::CommandBarPayload>(&control.payload)) collect_pictures(command_bar->buttons);
         }
         if (referenced_picture_ids.size() != document.assets().size()) {
             fail("OOF1122", "$/PictureAssets", "one referenced asset per declared asset", "orphan or duplicate ID",
@@ -4636,7 +4804,9 @@ Result<list_stream::ListValue> encode_document(
                     "page-local ordinal within uint32 range", std::to_string(ordinal), "Child ordinal overflows");
                 const GeometryContext context{owner, page_index, static_cast<std::uint32_t>(ordinal)};
                 LV record;
-                if (control->kind() == model::ControlKind::button) {
+                if (control->kind() == model::ControlKind::command_bar) {
+                    record = encode_command_bar(document, *control, context);
+                } else if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
                 } else if (control->kind() == model::ControlKind::radio_button) {
                     record = encode_radio_button(*control, context);

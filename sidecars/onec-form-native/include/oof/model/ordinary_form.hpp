@@ -570,7 +570,9 @@ struct TypedControlPayload {
 };
 
 struct PanelPayload final : TypedControlPayload<ControlKind::panel> {};
-struct CommandBarPayload final : TypedControlPayload<ControlKind::command_bar> {};
+struct CommandBarPayload final : TypedControlPayload<ControlKind::command_bar> {
+    std::vector<CommandBarButton> buttons;
+};
 struct ButtonPayload final : TypedControlPayload<ControlKind::button> {
     std::vector<CommandBarButton> buttons;
 };

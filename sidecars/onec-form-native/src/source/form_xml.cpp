@@ -1494,9 +1494,9 @@ private:
         bool position_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
-            if (descriptor->kind == model::ControlKind::button && name == "Buttons") {
-                auto* payload = std::get_if<model::ButtonPayload>(&control.payload);
-                payload->buttons = parse_command_bar_buttons(child, id_text);
+            if (name == "Buttons" && (descriptor->kind == model::ControlKind::button || descriptor->kind == model::ControlKind::command_bar)) {
+                if (auto* payload = std::get_if<model::ButtonPayload>(&control.payload)) payload->buttons = parse_command_bar_buttons(child, id_text);
+                else std::get<model::CommandBarPayload>(control.payload).buttons = parse_command_bar_buttons(child, id_text);
             } else if (name == "DataPath") {
                 control.data_path = parse_data_path(child, id_text);
             } else if (name == "Position") {
@@ -2419,9 +2419,12 @@ private:
             id,
             true);
         write_position(control.position);
-        if (const auto* button = std::get_if<model::ButtonPayload>(&control.payload)) {
+        const std::vector<model::CommandBarButton>* owned_buttons = nullptr;
+        if (const auto* button = std::get_if<model::ButtonPayload>(&control.payload)) owned_buttons = &button->buttons;
+        if (const auto* command_bar = std::get_if<model::CommandBarPayload>(&control.payload)) owned_buttons = &command_bar->buttons;
+        if (owned_buttons != nullptr) {
             for (const auto& property : metamodel_.properties_for(control.kind())) {
-                if (property.api_name == "Buttons") write_command_bar_buttons(button->buttons, id);
+                if (property.api_name == "Buttons") write_command_bar_buttons(*owned_buttons, id);
                 else if (const auto* entry = control.properties().find(property.id);
                     entry != nullptr && !equals_descriptor_default(property, entry->value))
                     write_property(property, entry->value, id);

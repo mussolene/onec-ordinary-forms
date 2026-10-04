@@ -116,7 +116,7 @@
               <Property name="Secondary" apiName="Secondary" russianName="Вспомогательная" russianType="Булево" valueCodec="boolean"/>
               <Property name="ButtonsAlignment" apiName="ButtonsAlignment" russianName="ВыравниваниеКнопок" russianType="ВыравниваниеКнопокКоманднойПанели" valueCodec="enumeration"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Buttons" apiName="Buttons" russianName="Кнопки" russianType="КнопкиКоманднойПанели" valueCodec="unclassified"/>
+              <Property name="Buttons" apiName="Buttons" russianName="Кнопки" russianType="КнопкиКоманднойПанели" valueCodec="command-bar-buttons"/>
               <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>

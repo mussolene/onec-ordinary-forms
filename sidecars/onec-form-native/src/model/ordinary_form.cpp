@@ -719,7 +719,10 @@ ValidationReport OrdinaryFormDocument::validate() const {
     }
 
     for (const auto& control : collections_.controls) {
-        if (const auto* button = std::get_if<ButtonPayload>(&control.payload)) {
+        const std::vector<CommandBarButton>* owned_buttons = nullptr;
+        if (const auto* button = std::get_if<ButtonPayload>(&control.payload)) owned_buttons = &button->buttons;
+        if (const auto* command_bar = std::get_if<CommandBarPayload>(&control.payload)) owned_buttons = &command_bar->buttons;
+        if (owned_buttons != nullptr) {
             const auto validate_buttons = [&](const auto& self, const std::vector<CommandBarButton>& items, std::size_t depth) -> void {
                 if (depth > 256) {
                     add_violation(report, InvariantCode::invalid_property, control.id, {}, "button menu nesting is too deep");
@@ -745,7 +748,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     self(self, item.buttons, depth + 1);
                 }
             };
-            validate_buttons(validate_buttons, button->buttons, 0);
+            validate_buttons(validate_buttons, *owned_buttons, 0);
         }
         const auto& descriptor = metamodel::descriptor_for(control.kind());
         if (!control.children.empty() && descriptor.child_policy == metamodel::ChildPolicy::forbidden) {
