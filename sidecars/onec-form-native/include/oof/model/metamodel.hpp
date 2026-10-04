@@ -73,6 +73,7 @@ enum class ValueKind : std::uint8_t {
 enum class ValueCodec : std::uint8_t {
     unclassified,
     command_bar_buttons,
+    owned_panel,
     dendrogram_items,
     dendrogram_links,
     boolean,

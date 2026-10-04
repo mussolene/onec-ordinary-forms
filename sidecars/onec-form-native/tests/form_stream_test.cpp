@@ -7813,6 +7813,127 @@ void test_root_pages_round_trip_with_page_local_control_order() {
     expect(!form_stream::encode_document(document).ok(), "TabOrder must be bounded by its own Page rather than total owner count");
 }
 
+void test_owned_panel_colors_and_repeated_background() {
+    const auto parsed = oof::source::parse_form_xml(R"XML(<Form id="1" name="PanelColors" ordinaryFormVersion="2.1">
+      <Panel><AutoTabOrder>false</AutoTabOrder><BorderColor kind="absolute" red="11" green="22" blue="33"/>
+        <TextColor kind="absolute" red="44" green="55" blue="66"/><BackColor kind="absolute" red="77" green="88" blue="99"/></Panel>
+      <ChildItems><Panel id="2" name="Nested"><Position/><AutoTabOrder>false</AutoTabOrder>
+        <BorderColor kind="absolute" red="101" green="102" blue="103"/>
+        <TextColor kind="absolute" red="104" green="105" blue="106"/><BackColor kind="absolute" red="107" green="108" blue="109"/>
+        <ChildItems><Page name="NestedPage"><Position><Width>100</Width><Bindings>
+          <AnchorBinding coordinate="right" targetCoordinate="right" targetId="2" offset="0"/>
+          <AnchorBinding coordinate="bottom" targetCoordinate="bottom" targetId="2" offset="0"/>
+        </Bindings></Position></Page></ChildItems></Panel></ChildItems></Form>)XML");
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "PanelColors");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    for (const auto name : {"BorderColor", "TextColor", "BackColor"}) {
+        const auto id = model::PropertyId::from_name(name);
+        expect(decoded.value().form().panel.properties.find(id)->value == parsed.value().form().panel.properties.find(id)->value,
+            "main Panel colors must round-trip through named properties");
+        expect(decoded.value().find_control(model::ObjectId{2})->properties().find(id)->value ==
+            parsed.value().find_control(model::ObjectId{2})->properties().find(id)->value,
+            "nested Panel colors must remain independent from main Panel colors");
+    }
+    auto styled_form = parsed.value().form();
+    model::ColorValue border_style; border_style.kind = model::ColorKind::style_reference;
+    border_style.style = model::QualifiedName{"StyleColors.BorderColor"};
+    styled_form.panel.properties.set_explicit(model::PropertyId::from_name("BorderColor"), border_style);
+    model::OrdinaryFormDocument styled_document(std::move(styled_form));
+    for (const auto& page : parsed.value().collections().pages) styled_document.add_page(page);
+    for (const auto& control : parsed.value().collections().controls) styled_document.add_control(control);
+    const auto styled_encoded = form_stream::encode_document(styled_document);
+    expect(styled_encoded.ok() && styled_encoded.value().items[1].items[2].items[1].items[1].items[0].items[6].items[2].items[0].atom == "-22",
+        "named BorderColor style must use the native observed style descriptor");
+    const auto styled_decoded = form_stream::decode_document(styled_encoded.value(), "StyledPanel");
+    expect(styled_decoded.ok() && styled_decoded.value().form().panel.properties.find(model::PropertyId::from_name("BorderColor"))->value == model::PropertyValue{border_style},
+        "style identity must survive without exposing a numeric style ID");
+    auto paged_form = parsed.value().form();
+    paged_form.children = {model::PageRef{model::ObjectId{10}}, model::PageRef{model::ObjectId{11}}};
+    model::OrdinaryFormDocument paged_document(std::move(paged_form));
+    for (const auto& page : parsed.value().collections().pages) paged_document.add_page(page);
+    for (const auto& control : parsed.value().collections().controls) {
+        auto bound_control = control;
+        model::AnchorBinding binding; binding.coordinate = model::BindingCoordinate::right;
+        binding.target_coordinate = model::BindingCoordinate::right;
+        bound_control.position.bindings.anchors.push_back(std::move(binding));
+        paged_document.add_control(std::move(bound_control));
+    }
+    for (const auto id : {10, 11}) {
+        model::Page page; page.id = model::ObjectId{static_cast<std::uint64_t>(id)}; page.name = "RootPage" + std::to_string(id);
+        model::Position position; position.width.set(300); position.height.set(200);
+        for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+            model::AnchorBinding binding; binding.coordinate = edge; binding.target_coordinate = edge;
+            position.bindings.anchors.push_back(std::move(binding));
+        }
+        page.position.set(std::move(position));
+        if (id == 10) page.children = {model::ControlRef{model::ObjectId{2}}};
+        paged_document.add_page(std::move(page));
+    }
+    const auto paged_encoded = form_stream::encode_document(paged_document);
+    expect(paged_encoded.ok(), paged_encoded ? "" : paged_encoded.diagnostics().front().message);
+    const auto paged_decoded = form_stream::decode_document(paged_encoded.value(), "PagedColors");
+    expect(paged_decoded.ok() && paged_decoded.value().form().panel.properties.find(model::PropertyId::from_name("BackColor"))->value ==
+        parsed.value().form().panel.properties.find(model::PropertyId::from_name("BackColor"))->value,
+        "repeated background must remain stable when page boundaries and markers grow");
+    auto invalid = encoded.value();
+    auto& owner = invalid.items[1].items[2].items[1].items[1];
+    owner.items[owner.items.size() - 6] = list_stream::parse("{4,4,{0},4}");
+    expect(!form_stream::decode_document(invalid, "InconsistentBackground"),
+        "background copy must agree with the named BackColor rather than being normalized away");
+    auto invalid_form = parsed.value().form();
+    model::ColorValue transparent{model::ColorKind::absolute, 11, 22, 33, 128, std::monostate{}};
+    invalid_form.panel.properties.set_explicit(model::PropertyId::from_name("BorderColor"), transparent);
+    model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+    for (const auto& page : parsed.value().collections().pages) invalid_document.add_page(page);
+    for (const auto& control : parsed.value().collections().controls) invalid_document.add_control(control);
+    expect(!form_stream::encode_document(invalid_document), "unsupported alpha must be rejected instead of losing transparency");
+}
+
+void test_owned_panel_auto_tab_order_round_trip() {
+    for (const auto root_auto : {true, false}) for (const auto nested_auto : {true, false}) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "AutoTraversal";
+        if (!root_auto) form.panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode panel{model::ObjectId{2}, "Nested", model::PanelPayload{}};
+        panel.children = {model::PageRef{model::ObjectId{3}}};
+        if (!nested_auto) panel.properties().set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
+        model::Page page; page.id = model::ObjectId{3}; page.name = "NestedPage";
+        model::Position page_position;
+        page_position.width.set(100); page_position.height.set(80);
+        for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+            model::AnchorBinding binding; binding.coordinate = edge; binding.target_coordinate = edge;
+            binding.target = model::ControlRef{model::ObjectId{2}};
+            page_position.bindings.anchors.push_back(std::move(binding));
+        }
+        page.position.set(std::move(page_position));
+        document.add_control(std::move(panel)); document.add_page(std::move(page));
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+        expect(encoded.value().items[1].items[2].items[1].items[1].items[13].atom == (root_auto ? "1" : "0"),
+            "main Panel traversal must be written independently");
+        const auto decoded = form_stream::decode_document(encoded.value(), "AutoTraversal");
+        expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+        const auto* root_entry = decoded.value().form().panel.properties.find(model::PropertyId::from_name("AutoTabOrder"));
+        expect(root_auto ? root_entry == nullptr : root_entry != nullptr && !std::get<bool>(root_entry->value),
+            "main Panel traversal default must be implicit, false explicit");
+        const auto* nested_entry = decoded.value().find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name("AutoTabOrder"));
+        expect(nested_auto ? nested_entry == nullptr : nested_entry != nullptr && !std::get<bool>(nested_entry->value),
+            "nested Panel traversal must not leak into the main Panel");
+        const auto rebuilt = form_stream::encode_document(decoded.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "traversal flags and ownership must survive fresh named-model rebuild");
+        auto invalid = encoded.value();
+        invalid.items[1].items[2].items[1].items[1].items[13] = list_stream::ListValue::raw_atom("2");
+        const auto invalid_result = form_stream::decode_document(invalid, "InvalidTraversal");
+        expect(!invalid_result && invalid_result.diagnostics().front().path == "$/1/2/1/1/13",
+            "nonboolean traversal must identify the original field path");
+    }
+}
+
 void test_recursive_panel_pages_keep_owner_geometry_separate() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -9179,6 +9300,8 @@ int main() {
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
         test_root_pages_round_trip_with_page_local_control_order();
+        test_owned_panel_colors_and_repeated_background();
+        test_owned_panel_auto_tab_order_round_trip();
         test_recursive_panel_pages_keep_owner_geometry_separate();
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();

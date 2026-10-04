@@ -1778,6 +1778,35 @@ void test_data_processor_form_extension_xml_contract() {
     expect(!source::serialize_form_xml(document).ok(), "Unknown extension kinds must fail explicit serialization");
 }
 
+void test_main_panel_typed_xml_contract() {
+    const std::string xml = R"XML(<Form id="1" name="Traversal" ordinaryFormVersion="2.1"><Panel><AutoTabOrder>false</AutoTabOrder></Panel></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    expect(!std::get<bool>(parsed.value().form().panel.properties.find(model::PropertyId::from_name("AutoTabOrder"))->value),
+        "main Panel must be a typed object containing its explicit traversal property");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Panel>") != std::string::npos && source::parse_form_xml(serialized.value()).ok(),
+        "typed main Panel must round-trip without another control ID or child collection");
+    for (const auto body : {"<AutoTabOrder>2</AutoTabOrder>", "<AutoTabOrder>false</AutoTabOrder><AutoTabOrder>true</AutoTabOrder>",
+        "<ChildItems/>", "<Unknown>false</Unknown>"}) {
+        const auto invalid = std::string(R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><Panel>)XML") + body + "</Panel></Form>";
+        expect(!source::parse_form_xml(invalid), "unsupported main Panel content must be rejected by its schema");
+    }
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><Panel id="2"/></Form>)XML"),
+        "main Panel must not declare a separate control ID");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Invalid" ordinaryFormVersion="2.1"><Panel/><Panel/></Form>)XML"),
+        "duplicate main Panel must be rejected");
+    const auto defaults = source::parse_form_xml(R"XML(<Form id="1" name="Default" ordinaryFormVersion="2.1"><Panel><AutoTabOrder>true</AutoTabOrder></Panel></Form>)XML");
+    expect(defaults.ok(), defaults ? "" : defaults.diagnostics().front().message);
+    const auto implicit = source::serialize_form_xml(defaults.value());
+    expect(implicit.ok() && implicit.value().find("<Panel>") == std::string::npos, "default traversal must not create an explicit panel value");
+    auto invalid_form = parsed.value().form();
+    invalid_form.panel.properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
+    model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+    expect(!invalid_document.validate().ok() && !source::serialize_form_xml(invalid_document),
+        "unimplemented main Panel properties must not be silently lost");
+}
+
 void test_command_bar_default_button_xml_contract() {
     const std::string xml = R"XML(<Form id="1" name="DefaultAction" ordinaryFormVersion="2.1"><ChildItems>
       <CommandBar id="4" name="Tools"><Position/><Secondary>false</Secondary><Buttons>
@@ -1863,6 +1892,7 @@ int main() {
         test_progress_bar_xml_only_contract();
         test_command_bar_buttons_xml_only_contract();
         test_command_bar_default_button_xml_contract();
+        test_main_panel_typed_xml_contract();
         test_picture_decoration_enabled_tooltip_xml_roundtrip();
         test_picture_decoration_standard_picture_xml_roundtrip();
     } catch (const std::exception& error) {

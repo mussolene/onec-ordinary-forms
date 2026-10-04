@@ -806,6 +806,7 @@ struct Form {
     std::vector<ChildItemRef> children;
     std::optional<FormExtensionKind> extension;
     AttributeRef main_attribute;
+    PanelPayload panel;
 };
 
 struct FormModule {

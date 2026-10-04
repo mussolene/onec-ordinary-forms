@@ -887,6 +887,8 @@ model::PropertyValue parse_property_value(
 ) {
     const std::string property = node_name(node);
     switch (codec) {
+        case mm::ValueCodec::owned_panel:
+            fail("OOF2003", node, std::string(object_id), property, "typed Form.Panel", "scalar", "Owned Panel is not a scalar property");
         case mm::ValueCodec::unclassified:
             fail("OOF2003", node, std::string(object_id), property, "classified value codec", "unclassified", "Unclassified properties are not admitted to the product model");
         case mm::ValueCodec::boolean:
@@ -1154,6 +1156,17 @@ public:
                 form.main_attribute = model::AttributeRef{parse_object_id(required_attribute(child, "attributeId"), child)};
             } else if (name == mm::data_processor_form_extension.xml_name) {
                 form.extension = mm::data_processor_form_extension.kind;
+            } else if (name == "Panel") {
+                for (xmlNodePtr property : element_children(child)) {
+                    const auto property_name = node_name(property);
+                    const auto* descriptor = metamodel_.property(model::ControlKind::panel, property_name);
+                    if (descriptor == nullptr || descriptor->surface != mm::PropertySurface::control_payload ||
+                        descriptor->persistence != mm::PersistenceClass::persisted_editable)
+                        fail("OOF2003", property, form_id, property_name, "supported main Panel property", property_name, "Unsupported main Panel property");
+                    auto value = parse_property_value(property, descriptor->value_codec, form_id);
+                    if (!equals_descriptor_default(*descriptor, value))
+                        form.panel.properties.set_explicit(descriptor->id, std::move(value));
+                }
             } else if (name == "Events") {
                 form.events = parse_form_events(child, form.id);
             } else if (name == "Attributes") {
@@ -2562,6 +2575,8 @@ private:
     ) {
         const std::string_view name = descriptor.xml_name;
         switch (descriptor.value_codec) {
+            case mm::ValueCodec::owned_panel:
+                serialization_fail(std::string(object_id), std::string(name), "typed Form.Panel", "scalar", "Owned Panel is not a scalar property");
             case mm::ValueCodec::unclassified:
                 serialization_fail(std::string(object_id), std::string(name), "classified codec", "unclassified", "Unclassified property cannot be serialized");
             case mm::ValueCodec::boolean:
@@ -2677,6 +2692,20 @@ private:
         bool skip_reserved_extensions = false
     ) {
         for (const auto& descriptor : descriptors) {
+            if (descriptor.value_codec == mm::ValueCodec::owned_panel) {
+                const auto& properties = document_.form().panel.properties;
+                bool explicit_panel = false;
+                properties.for_each_explicit([&](const model::PropertyEntry& entry) {
+                    const auto* property = metamodel_.property(model::ControlKind::panel, entry.id);
+                    if (property != nullptr && !equals_descriptor_default(*property, entry.value)) explicit_panel = true;
+                });
+                if (explicit_panel) {
+                    writer_.open(descriptor.xml_name);
+                    write_property_set(properties, metamodel_.properties_for(model::ControlKind::panel), object_id);
+                    writer_.close(descriptor.xml_name);
+                }
+                continue;
+            }
             if (skip_reserved_extensions &&
                 (descriptor.api_name == "Name" || descriptor.api_name == "Data")) {
                 continue;
