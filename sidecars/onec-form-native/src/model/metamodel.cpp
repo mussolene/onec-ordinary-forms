@@ -798,6 +798,11 @@ void apply_proven_storage_overrides(
         DefaultKind::undefined,
         "undefined");
 
+    auto& text_document_field = properties[static_cast<std::size_t>(ControlKind::text_document_field)];
+    classify_property(text_document_field, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(text_document_field, "BorderColor", StorageCodec::control_base, DefaultKind::color, "automatic");
+    classify_property(text_document_field, "Font", StorageCodec::control_base, DefaultKind::font, "automatic");
+
     auto& progress_bar = properties[static_cast<std::size_t>(ControlKind::progress_bar)];
     classify_property(
         progress_bar,
