@@ -3585,9 +3585,6 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     normalized_base.items[12] = encoded_localized(tool_tip);
     require_raw_constant(properties.items[8], command_bar_root_marker, child_path(properties_path, 8));
     const auto root_group_id = integer_atom<std::uint64_t>(properties.items[9], child_path(properties_path, 9));
-    if (root_group_id != raw_id)
-        fail("OOF1114", child_path(properties_path, 9), "root group ID matching CommandBar owner ID",
-            std::to_string(root_group_id), "CommandBar root-group identity is inconsistent");
     const bool secondary = bool_atom(properties.items[5], child_path(properties_path, 5));
     const auto default_owner = uuid_atom(properties.items[10], child_path(properties_path, 10)).canonical;
     const auto default_id = integer_atom<std::uint64_t>(properties.items[11], child_path(properties_path, 11));
@@ -3603,7 +3600,10 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     model::OrdinaryFormDocument empty_document(std::move(empty_form));
     auto normalized = properties;
     normalized.items[0] = std::move(normalized_base);
-    normalized.items[7] = encode_button_menu({}, empty_document, raw_id, command_bar_root_marker, root_group_id);
+    // Native forms keep a separate root collection identity. After resolving
+    // the actual marker/ID pair, rebuild that identity from the named owner.
+    normalized.items[7] = encode_button_menu({}, empty_document, raw_id, command_bar_root_marker, raw_id);
+    normalized.items[9] = raw(std::to_string(raw_id));
     // Designer relocates the selected action source UUID on load. The public model owns
     // the named action selection, not the transient source identity.
     normalized.items[10] = raw("9d0a2e40-b978-11d4-84b6-008048da06df");

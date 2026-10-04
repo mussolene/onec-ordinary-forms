@@ -2388,7 +2388,23 @@ void test_command_bar_owner_pair_and_strict_profile() {
     wrong_root_id.items[1].items[2].items[2].items[1].items[2].items[1].items[9] =
         list_stream::ListValue::raw_atom("2");
     expect(!form_stream::decode_document(wrong_root_id, "CommandBarWrongRootId"),
-        "root group ID that differs from control ID must be rejected");
+        "root group reference without a matching collection must be rejected");
+    auto separate_root_id = encoded.value();
+    auto& separate_properties = separate_root_id.items[1].items[2].items[2].items[1].items[2].items[1];
+    separate_properties.items[9] = list_stream::ListValue::raw_atom("17");
+    auto& separate_menu = separate_properties.items[7];
+    const auto action_count = static_cast<std::size_t>(std::stoul(separate_menu.items[4].atom));
+    separate_menu.items[6 + action_count].items[2] = list_stream::ListValue::raw_atom("17");
+    const auto separate_decoded = form_stream::decode_document(separate_root_id, "CommandBarSeparateRootId");
+    expect(separate_decoded.ok(), separate_decoded ? "separate root group identity must decode" :
+        separate_decoded.diagnostics().front().message);
+    expect(std::get<model::CommandBarPayload>(separate_decoded.value().find_control(model::ObjectId{1})->payload).buttons ==
+        std::get<model::CommandBarPayload>(document.find_control(model::ObjectId{1})->payload).buttons,
+        "separate root group identity must preserve nested named actions");
+    const auto separate_rebuilt = form_stream::encode_document(separate_decoded.value());
+    expect(separate_rebuilt.ok() && list_stream::dump_compact(separate_rebuilt.value()) ==
+        list_stream::dump_compact(encoded.value()),
+        "fresh serializer must derive menu group identity without retaining source records");
     auto unsupported_base_leaf = encoded.value();
     unsupported_base_leaf.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[20] =
         list_stream::ListValue::raw_atom("1");
