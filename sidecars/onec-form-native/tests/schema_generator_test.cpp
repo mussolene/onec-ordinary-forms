@@ -27,6 +27,7 @@ using oof::model::metamodel::ChildPolicy;
 using oof::model::metamodel::ControlDescriptor;
 using oof::model::metamodel::EventDescriptor;
 using oof::model::metamodel::Metamodel;
+using oof::model::metamodel::PersistenceClass;
 using oof::model::metamodel::PropertyDescriptor;
 using oof::model::metamodel::ValueCodec;
 using oof::source::GeneratedSchemas;
@@ -528,15 +529,16 @@ void test_date_values(xmlSchemaPtr schema) {
 std::size_t expect_property_sequence(
     std::span<const PropertyDescriptor> properties,
     const std::vector<xmlNodePtr>& elements,
-    std::size_t offset = 0
+    std::size_t offset = 0,
+    bool omit_runtime_only = false
 ) {
-    expect(
-        elements.size() >= offset + properties.size(),
-        "property sequence is incomplete");
-    for (std::size_t index = 0; index < properties.size(); ++index) {
-        expect_property_element(properties[index], elements[offset + index]);
+    std::size_t cursor = offset;
+    for (const auto& property : properties) {
+        if (omit_runtime_only && property.persistence == PersistenceClass::runtime_only) continue;
+        expect(cursor < elements.size(), "property sequence is incomplete");
+        expect_property_element(property, elements[cursor++]);
     }
-    return offset + properties.size();
+    return cursor;
 }
 
 void test_document_package_types(
@@ -761,7 +763,8 @@ void test_control_surfaces_and_property_order(
         cursor = expect_property_sequence(
             metamodel.properties_for(control.kind),
             elements,
-            cursor);
+            cursor,
+            control.kind == oof::model::ControlKind::choice_field);
         expect_element_shape(
             elements[cursor++],
             "Events",
@@ -788,6 +791,22 @@ void test_control_surfaces_and_property_order(
             }),
             "reserved Name/Data must not be control property elements");
     }
+    const auto choice_fields = direct_children(sequence_for_type(schema, "ChoiceFieldType"), "element");
+    expect(std::ranges::none_of(choice_fields, [](xmlNodePtr element) {
+        return attribute(element, "name") == "ChoiceList";
+    }), "runtime-only ChoiceList must not appear in the persisted ChoiceField schema");
+}
+
+void test_choice_field_schema_contract(xmlSchemaPtr schema) {
+    constexpr std::string_view unbound_choice = R"XML(<Form id="1" name="Choice" ordinaryFormVersion="2.1"><ChildItems><ChoiceField id="2" name="ChoiceField"><Position/></ChoiceField></ChildItems></Form>)XML";
+    constexpr std::string_view runtime_list = R"XML(<Form id="1" name="Choice" ordinaryFormVersion="2.1"><ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><ChoiceList/></ChoiceField></ChildItems></Form>)XML";
+    constexpr std::string_view valid_static = R"XML(<Form id="1" name="Choice" ordinaryFormVersion="2.1"><ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><Enabled>false</Enabled></ChoiceField></ChildItems></Form>)XML";
+    expect(validate_document(schema, unbound_choice) == 0,
+        "unbound ChoiceField must satisfy the public XSD");
+    expect(validate_document(schema, runtime_list) != 0,
+        "runtime-only ChoiceList must fail the public ChoiceField XSD");
+    expect(validate_document(schema, valid_static) == 0,
+        "named ChoiceField DataPath and proven Boolean properties must satisfy the XSD");
 }
 
 void test_event_surfaces(const Metamodel& metamodel, xmlNodePtr schema) {
@@ -1216,6 +1235,7 @@ int main() {
         test_document_package_types(metamodel, form_schema);
         test_data_path_position_and_bindings(metamodel, form_schema);
         test_control_surfaces_and_property_order(metamodel, form_schema);
+        test_choice_field_schema_contract(compiled_form.get());
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);

@@ -960,6 +960,19 @@ LV canonical_radio_button_info(bool enabled, std::string_view caption, std::stri
     });
 }
 
+LV canonical_control_base_properties(bool enabled, std::string_view tool_tip);
+
+LV canonical_choice_field_info(bool enabled, std::string_view tool_tip) {
+    auto properties = parse_constant(R"OOF(
+{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,1,0,0,0,0,1,0,0,255,0,0,4,0,{"U"},{"U"},"",0,1,1,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
+)OOF");
+    if (properties.items.size() != 46 || properties.items[0].items.size() != 21) {
+        throw std::logic_error("canonical ChoiceField info profile is malformed");
+    }
+    properties.items[0] = canonical_control_base_properties(enabled, tool_tip);
+    return list({raw("2"), std::move(properties), list({raw("0")})});
+}
+
 LV canonical_html_document_field_data(std::int32_t output) {
     return list({
         raw("5"),
@@ -2975,7 +2988,7 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
-LV canonical_progress_bar_properties(bool enabled, std::string_view tool_tip) {
+LV canonical_control_base_properties(bool enabled, std::string_view tool_tip) {
     auto properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
         "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
@@ -2991,7 +3004,7 @@ LV canonical_progress_bar_info(
     std::int32_t max_value = 100,
     std::int32_t min_value = 0,
     std::int32_t step = 1) {
-    return list({canonical_progress_bar_properties(enabled, tool_tip), raw("3"), raw(std::to_string(min_value)),
+    return list({canonical_control_base_properties(enabled, tool_tip), raw("3"), raw(std::to_string(min_value)),
         raw(std::to_string(max_value)), raw(std::to_string(step)), raw("1"), raw("0"), raw("2")});
 }
 
@@ -3368,6 +3381,65 @@ DecodedControl decode_check_box(
     if (font != model::FontValue{}) {
         control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
     }
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+DecodedControl decode_choice_field(
+    const LV& record,
+    std::string_view path,
+    const AttributeRecord* linked_attribute,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 ChoiceField ID", std::to_string(raw_id),
+            "ChoiceField ID is invalid");
+    }
+    if (linked_attribute != nullptr && !is_single_string_type_domain(linked_attribute->type)) {
+        fail("OOF1122", "$/2/3", "link to a single String Attribute", linked_attribute->name,
+            "ChoiceField DataPath must target a single String attribute");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 3, info_path);
+    require_raw_constant(info.items[0], "2", child_path(info_path, 0));
+    const auto& info_properties = info.items[1];
+    const auto info_properties_path = child_path(info_path, 1);
+    require_arity(info_properties, 46, info_properties_path);
+    const auto& base_properties = info_properties.items[0];
+    const auto base_path = child_path(info_properties_path, 0);
+    require_arity(base_properties, 21, base_path);
+    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        base_properties.items[12], child_path(base_path, 12));
+    auto normalized_info = info;
+    normalized_info.items[1].items[0].items[12] = encoded_localized(tool_tip);
+    require_exact(normalized_info, canonical_choice_field_info(enabled, tool_tip), info_path,
+        "ChoiceField contains a property, event, or storage variation outside the observed basic profile");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+            "ChoiceField name is required");
+    }
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "ChoiceField metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "ChoiceField cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::ChoiceFieldPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -4143,6 +4215,48 @@ LV encode_check_box(
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         canonical_check_box_info(enabled, caption, tool_tip, &font),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
+LV encode_choice_field(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::choice_field || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "ChoiceField with positive int64 ID", control.name,
+            "ChoiceField is outside the supported profile");
+    }
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
+        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
+            "ChoiceField uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip"}, "$/ChoiceField");
+    if (control.data_path) {
+        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        if (attribute == nullptr) {
+            fail("OOF1123", "$/ChoiceField/DataPath", "existing linked Attribute",
+                std::to_string(control.data_path->attribute.id().value()), "ChoiceField DataPath does not resolve");
+        }
+        if (!is_single_string_type_domain(attribute->type)) {
+            fail("OOF1122", "$/ChoiceField/DataPath", "linked String Attribute", attribute->name,
+                "ChoiceField DataPath must target a single String attribute");
+        }
+    }
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_choice_field_info(enabled, tool_tip),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -5112,6 +5226,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
                     else if (guid == text_document_descriptor.guid) child = decode_text_document_field(record, record_path, context);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
+                             guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid ||
                              guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
@@ -5120,7 +5235,9 @@ Result<model::OrdinaryFormDocument> decode_document(
                         }
                         const auto candidate_key = static_cast<std::int64_t>(candidate_id);
                         const auto link_it = links_by_control.find(candidate_key);
-                        const bool required_link = guid != progress_bar_descriptor.guid;
+                        const bool choice_field_guid =
+                            guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid;
+                        const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid;
                         if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
                             "DataPath link for each InputField, CheckBox, or ListBox", std::to_string(candidate_id),
                             "Linked control has no attribute link");
@@ -5140,7 +5257,13 @@ Result<model::OrdinaryFormDocument> decode_document(
                                 "DataPath target is unresolved");
                             linked_attribute = attribute_it->second;
                         }
-                        if (guid == input_descriptor.guid) {
+                        if (choice_field_guid) {
+                            child = decode_choice_field(record, record_path, linked_attribute, context);
+                            if (linked_attribute != nullptr) {
+                                child.control.data_path = model::DataPath{model::AttributeRef{
+                                    model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                            }
+                        } else if (guid == input_descriptor.guid) {
                             child = decode_input_field(record, record_path, *linked_attribute, context);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
@@ -5547,6 +5670,8 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_input_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::check_box) {
                     record = encode_check_box(document, *control, context);
+                } else if (control->kind() == model::ControlKind::choice_field) {
+                    record = encode_choice_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::progress_bar) {
                     record = encode_progress_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::track_bar) {
@@ -5569,7 +5694,7 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "UsualGroup, Button, RadioButton, HTMLDocumentField, TextDocumentField, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, TrackBar, ListBox, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "UsualGroup, Button, RadioButton, HTMLDocumentField, TextDocumentField, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ChoiceField, ProgressBar, TrackBar, ListBox, or Panel", control->name,
                         "Control payload is unsupported");
                 }
                 if (control->data_path) {
