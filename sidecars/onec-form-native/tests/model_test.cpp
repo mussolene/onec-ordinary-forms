@@ -623,6 +623,11 @@ void test_help_metamodel() {
     expect(
         find_event(ControlKind::input_field, "OnChange") != nullptr,
         "InputField OnChange event must be executable metamodel data");
+    const auto* form_close = find_form_event("OnClose");
+    expect(form_close != nullptr && form_close->persistence == PersistenceClass::persisted_editable &&
+        form_close->storage_codec == StorageCodec::event_record &&
+        form_close->storage_tag == "e1692cc2-605b-4535-84dd-28440238746c",
+        "Form.OnClose must expose its proven action descriptor");
     const auto* button_click = find_event(ControlKind::button, "Click");
     expect(
         button_click != nullptr &&

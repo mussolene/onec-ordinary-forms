@@ -1109,12 +1109,14 @@ void test_multiple_top_level_buttons_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
     form.name = "Main";
+    form.events = {model::EventRef{model::ObjectId{22}}};
     form.children = {
         model::ControlRef{model::ObjectId{2}},
         model::ControlRef{model::ObjectId{7}},
         model::ControlRef{model::ObjectId{12}},
     };
     model::OrdinaryFormDocument document(std::move(form));
+    document.add_event(model::Event{model::ObjectId{22}, "OnClose", "ПробноеЗакрытие", model::FormRef{model::ObjectId{1}}});
 
     model::ControlNode first{model::ObjectId{2}, "Run", model::ButtonPayload{}};
     first.properties().set_explicit(model::PropertyId::from_name("Caption"), std::string("Запуск"));
@@ -1146,9 +1148,16 @@ void test_multiple_top_level_buttons_round_trip() {
     document.add_control(std::move(third));
 
     const auto encoded = form_stream::encode_document(document);
-    expect(encoded.ok(), "two named top-level Buttons must encode");
+    expect(encoded.ok(), encoded.ok() ? "two named top-level Buttons must encode" : encoded.diagnostics().front().message);
 
-    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    // Independent literal from the single-setter platform oracle, evidence ev_b8c9b9931be1473193bac9c86ee1717d.
+    const auto observed = list_stream::parse(
+        R"({1,{70003,e1692cc2-605b-4535-84dd-28440238746c,{3,"ПробноеЗакрытие",{1,"",{1,0},{1,0},{1,0},{4,0,{0},"",-1,-1,1,0,""},{0,0,0}}}}})");
+    expect(list_stream::dump_compact(encoded.value().items[4]) == list_stream::dump_compact(observed),
+        "Form.OnClose must match the entire independently observed action table");
+    auto captured = encoded.value();
+    captured.items[4] = observed;
+    const auto decoded = form_stream::decode_document(captured, "Main");
     expect(decoded.ok(), "three top-level Buttons must decode");
     const auto& controls = decoded.value().collections().controls;
     expect(controls.size() == 3, "all Buttons must materialize as named controls");
@@ -1175,6 +1184,22 @@ void test_multiple_top_level_buttons_round_trip() {
     expect(decoded.value().find_event(controls[0].events.front().id())->handler == "RunHandler" &&
         decoded.value().find_event(controls[1].events.front().id())->handler == "CancelHandler",
         "each Button Click handler must remain attached to its owner");
+    const auto close_id = decoded.value().form().events.front().id();
+    const auto* close_event = decoded.value().find_event(close_id);
+    expect(close_id != controls[0].events.front().id() && close_id != controls[1].events.front().id() &&
+        close_event->name == "OnClose" && close_event->handler == "ПробноеЗакрытие" &&
+        std::get<model::FormRef>(close_event->owner).id() == decoded.value().form().id &&
+        std::get<model::ControlRef>(decoded.value().find_event(controls[0].events.front().id())->owner).id() == controls[0].id &&
+        std::get<model::ControlRef>(decoded.value().find_event(controls[1].events.front().id())->owner).id() == controls[1].id,
+        "Form.OnClose and Button.Click must retain distinct IDs and exact owner references");
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<OnClose") != std::string::npos,
+        "Form.OnClose must serialize as a named public XML event");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named event XML must parse without a baseline");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(captured),
+        "fresh named XML must rebuild the complete stream with both event owners");
     const auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok(), "decoded two-Button model must re-encode");
     expect(list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
@@ -1188,6 +1213,53 @@ void test_multiple_top_level_buttons_round_trip() {
         "OOF1114",
         "$/1/2/2/2/3/19",
         "Button geometry with an incorrect sibling index must be rejected");
+}
+
+void test_form_close_strict_action_guards() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "CloseProbe";
+    model::OrdinaryFormDocument empty(form);
+    const auto zero = form_stream::encode_document(empty);
+    expect(zero.ok() && list_stream::dump_compact(zero.value().items[4]) == "{0}", "absent form events must preserve the zero table");
+    const auto zero_decoded = form_stream::decode_document(zero.value(), "CloseProbe");
+    expect(zero_decoded.ok() && zero_decoded.value().form().events.empty(), "zero table must not invent a handler");
+    form.events = {model::EventRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(form);
+    document.add_event(model::Event{model::ObjectId{2}, "OnClose", "CloseHandler", model::FormRef{model::ObjectId{1}}});
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "single owned OnClose must encode");
+    const std::vector<std::string> rejected_tables{
+        "{}", "{2}", "{0,{0}}",
+        R"({1,{70004,e1692cc2-605b-4535-84dd-28440238746c,{3,"CloseHandler",{0}}}})",
+        R"({1,{70003,00000000-0000-0000-0000-000000000000,{3,"CloseHandler",{0}}}})",
+        R"({1,{70003,e1692cc2-605b-4535-84dd-28440238746c,{4,"CloseHandler",{0}}}})",
+        R"({1,{70003,e1692cc2-605b-4535-84dd-28440238746c,{3,"",{0}}}})",
+        R"({1,{70003,e1692cc2-605b-4535-84dd-28440238746c,{3,123,{0}}}})"};
+    for (const auto& table : rejected_tables) {
+        auto bad = encoded.value(); bad.items[4] = list_stream::parse(table);
+        expect(!form_stream::decode_document(bad, "CloseProbe"), "unknown, multiple, malformed or invalid handler records must reject");
+    }
+    for (const auto index : {0u, 1u, 2u, 3u, 4u, 5u, 6u}) {
+        auto bad = encoded.value();
+        bad.items[4].items[1].items[2].items[2].items[index] = list_stream::ListValue::raw_atom("999");
+        expect(!form_stream::decode_document(bad, "CloseProbe"), "every unsupported action default slot must reject");
+    }
+    auto overflow = encoded.value();
+    overflow.items[1].items[1].items[1] = list_stream::ListValue::raw_atom("18446744073709551615");
+    expect_failure(form_stream::decode_document(overflow, "CloseProbe"), "OOF1120", "$/4", "event ID boundary must reject before unsigned allocation wraps");
+    for (const auto& event : std::vector<model::Event>{
+        {model::ObjectId{2}, "OnOpen", "OpenHandler", model::FormRef{model::ObjectId{1}}},
+        {model::ObjectId{2}, "OnClose", "", model::FormRef{model::ObjectId{1}}},
+        {model::ObjectId{2}, "OnClose", "CloseHandler", model::FormRef{model::ObjectId{99}}},
+        {model::ObjectId{2}, "OnClose", "CloseHandler", model::ControlRef{model::ObjectId{1}}}}) {
+        model::OrdinaryFormDocument invalid(form); invalid.add_event(event);
+        expect(!form_stream::encode_document(invalid), "unsupported name, empty handler and nonowned events must reject");
+    }
+    form.events.push_back(model::EventRef{model::ObjectId{3}});
+    model::OrdinaryFormDocument multiple(form);
+    multiple.add_event(model::Event{model::ObjectId{2}, "OnClose", "CloseHandler", model::FormRef{model::ObjectId{1}}});
+    multiple.add_event(model::Event{model::ObjectId{3}, "OnClose", "OtherHandler", model::FormRef{model::ObjectId{1}}});
+    expect(!form_stream::encode_document(multiple), "multiple form handlers must reject");
 }
 
 void test_button_multiline_round_trip_and_validation() {
@@ -8613,6 +8685,7 @@ int main() {
         test_captured_table_packet_rejections_and_alternate_deflate();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
+        test_form_close_strict_action_guards();
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
         test_check_box_tooltip_round_trip_and_validation();
