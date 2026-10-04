@@ -30,6 +30,7 @@
 
 #include "oof/model/metamodel.hpp"
 #include "oof/source/schema_generator.hpp"
+#include "oof/storage/value_codec.hpp"
 
 namespace oof::source {
 namespace {
@@ -954,8 +955,9 @@ model::PropertyValue parse_property_value(
             return parse_formatted_string(node);
         case mm::ValueCodec::date: {
             const std::string text(trim_ascii(node_text(node)));
-            return text == "undefined" ? model::PropertyValue{model::UndefinedValue{}}
-                                       : model::PropertyValue{model::DateValue{text}};
+            if (text == "undefined") return model::UndefinedValue{};
+            (void)storage::value_codec::date_to_platform(text);
+            return model::DateValue{text};
         }
         case mm::ValueCodec::uuid:
             return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(node))))};
@@ -994,6 +996,8 @@ bool equals_descriptor_default(
         case mm::DefaultKind::unknown:
         case mm::DefaultKind::none:
             return false;
+        case mm::DefaultKind::undefined:
+            return canonical == "undefined" && std::holds_alternative<model::UndefinedValue>(value);
         case mm::DefaultKind::boolean:
             return std::holds_alternative<bool>(value) &&
                    std::get<bool>(value) == (canonical == "true" || canonical == "1");
@@ -2098,7 +2102,9 @@ private:
                 if (std::holds_alternative<model::UndefinedValue>(value)) {
                     writer_.text(name, "undefined");
                 } else {
-                    writer_.text(name, require_value<model::DateValue>(value, object_id, name, "Date or Undefined").canonical);
+                    const auto& date = require_value<model::DateValue>(value, object_id, name, "Date or Undefined");
+                    (void)storage::value_codec::date_to_platform(date.canonical);
+                    writer_.text(name, date.canonical);
                 }
                 return;
             case mm::ValueCodec::uuid:

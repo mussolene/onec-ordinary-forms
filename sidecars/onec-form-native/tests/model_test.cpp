@@ -35,6 +35,13 @@ void test_descriptors() {
 
     const auto descriptors = control_descriptors();
     expect(descriptors.size() == 26, "metamodel must contain exactly 26 descriptors");
+    const auto* begin_period = find_property(ControlKind::calendar_field, "BeginOfDisplayPeriod");
+    expect(begin_period != nullptr && begin_period->value_codec == ValueCodec::date &&
+               begin_period->persistence == PersistenceClass::persisted_editable &&
+               begin_period->storage_codec == StorageCodec::control_info &&
+               begin_period->default_value.kind == DefaultKind::undefined &&
+               begin_period->default_value.canonical == "undefined",
+        "CalendarField BeginOfDisplayPeriod must be a classified Date property with Undefined default");
 
     std::set<std::string_view> guids;
     std::set<std::string_view> public_names;
