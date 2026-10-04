@@ -28,8 +28,8 @@ Form.xml + Form/Module.bsl -> OrdinaryForm -> Form.bin
 ## Измеряемый прогресс
 
 На 2026-10-04 бинарный цикл чтения, изменения именованного XML и сборки без
-исходного Form.bin подтвержден для 11 из 25 типов: 44% по охвату типов.
-Все одиннадцать имеют частичную поддержку свойств и составов. Ни один тип пока не
+исходного Form.bin подтвержден для 14 из 25 типов: 56% по охвату типов.
+Все четырнадцать имеют частичную поддержку свойств и составов. Ни один тип пока не
 объявлен полностью покрытым по всем свойствам и событиям. Этот процент не
 является оценкой общей готовности продукта.
 
@@ -37,16 +37,16 @@ Form.xml + Form/Module.bsl -> OrdinaryForm -> Form.bin
 | --- | --- | --- | --- | --- | --- | --- |
 | `Button` | Кнопка | Нет | Click -> событие элемента; DataPath бинарно не поддержан | **PARTIAL** | ID, имя, Caption, Enabled, Position, Visible, Click handler; отличающиеся представления действия явно отклоняются | Интегратор |
 | `CalendarField` | ПолеКалендаря | Нет | DataPath и события не поддержаны | **PARTIAL** | ID, имя, Enabled, Position, Visible, BeginOfDisplayPeriod Date/Undefined; CurrentDate меняет только runtime; EndOfDisplayPeriod и SelectedDates требуют исследования | Интегратор |
-| `Chart` | Диаграмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить типизированный источник данных и базовые значения; не выводить из help | `agent/chart-controls` (активна) |
+| `Chart` | Диаграмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Снятие образца штатного контейнера ожидает выполнения; бинарный кодек не подтвержден | `agent/chart-controls` |
 | `PivotChart` | СводнаяДиаграмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить тип и значения после независимого сохранения Designer | `matvienko/pivot-controls` (активна) |
 | `CheckBox` | Флажок | Нет | DataPath -> Boolean Attribute; события бинарно не поддержаны | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Font, Position, Visible, Boolean DataPath; остальные свойства и события не поддержаны | Интегратор |
-| `ChoiceField` | ПолеВыбора | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить ChoiceList и связанный вариант отдельно | `agent/choicefield-controls` (группа основного агента, активна) |
+| `ChoiceField` | ПолеВыбора | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Строгая загрузка Designer завершилась `Ошибка формата потока`, в том числе с пустым Module.bsl и DataPath по умолчанию (`ev_2d86efd0e685437a98a7276f4a98bfde`). В кандидате остаются 8 незакоммиченных файлов, они не включены в принятую базу | `agent/choicefield-controls` |
 | `CommandBar` | КоманднаяПанель | Нет | Типизированные Buttons и Action на кнопке | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, вложенные меню, сохранение Action и вызов прямым щелчком; вложенный вызов не проверен | Интегратор |
 | `Dendrogram` | Дендрограмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Создать в Designer, сверить доступность по версии и свойства | `matvienko/dendrogram-controls` (активна) |
 | `GeographicalSchemaField` | ПолеГеографическойСхемы | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить требуемую объектную модель и ссылочные значения | `matvienko/geographical-controls` (активна) |
-| `GraphicalSchemaField` | ПолеГрафическойСхемы | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить CurrentItem и зависимости диаграммы | `matvienko/graphical-schema-controls` (активна) |
-| `UsualGroup` | РамкаГруппы | Контролы | ChildPolicy допускает упорядоченные контролы; runtime не проверен | **NOT_SUPPORTED** | Проверить вложенность и порядок детей | `agent/group-frame-controls` (активна) |
-| `HTMLDocumentField` | ПолеHTMLДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | В Linux вызовы Add и OutputEnum с результатами 0/2/0 прошли; содержимое не проверено. Следующий опыт SetText/GetText; до кодека, строгой проверки Designer и холодной проверки тип не поддержан (`ev_b2b0cd3296714c49a4f178fa75664b3d`) | `agent/html-document-field-controls` (активна) |
+| `GraphicalSchemaField` | ПолеГрафическойСхемы | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Непустой синтетический образец не получен; способ его создания не подтвержден. Отдельная проверка Designer закрыта | `matvienko/graphical-schema-controls` |
+| `UsualGroup` | РамкаГруппы | Контролы | DataPath, ChildItems и события не поддержаны | **PARTIAL** | Caption, Enabled, ToolTip, Position и Visible; дочерние элементы, события и остальные свойства не поддержаны. Совместная XML-only форма с 12 типами прошла строгую проверку Designer и холодную проверку: `ev_45d9b595b9f74b8f893b564230df21c6` | Интегратор |
+| `HTMLDocumentField` | ПолеHTMLДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Кандидат PR #10 проверил непустой HTML, SetText/GetText, строгую проверку Designer, холодную проверку и совпадение XML, Module.bsl и повторной сборки: `ev_e223733cd3e24abdb8c080fe4c7777a7`. PR еще не вошел в текущую интеграцию | PR #10, кандидат, не объединен |
 | `InputField` | ПолеВвода | Нет | DataPath -> Attribute/TypeDomain; события владельца элемента не проверялись | **PARTIAL** | ID, имя, Position, Visible, DataPath; 21 подтвержденное сохраняемое свойство строкового профиля; другие типы и события не поддержаны | Интегратор |
 | `LabelDecoration` | Надпись | Нет | Click указан в каталоге, бинарно не проверен; DataPath не проверен | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Position, Visible, HorizontalAlign Auto/Left/Center/Right; события и остальные свойства не поддержаны | Интегратор |
 | `ListBox` | ПолеСписка | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить список значений и связь с реквизитом отдельно | `agent/listbox-controls` (активна) |
@@ -54,16 +54,16 @@ Form.xml + Form/Module.bsl -> OrdinaryForm -> Form.bin
 | `PictureDecoration` | ПолеКартинки | Нет | Стандартный и внешний Picture поддержаны; события не поддержаны | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible, PictureLib reference и внешние PictureAsset; остальные свойства и события не поддержаны | Интегратор |
 | `ProgressBar` | Индикатор | Нет | Прямой DataPath к локальному числовому реквизиту; синхронизация при открытии проверена | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible, MaxValue/MinValue/Step int32, необязательный числовой DataPath; события и остальные типы связей не поддержаны | Группа ProgressBar |
 | `RadioButton` | Переключатель | Нет | DataPath, выбор группы и события не поддержаны | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Position, Visible; требуется исследование значения и связи группы | Интегратор: исследование |
-| `Splitter` | Разделитель | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить пару связанных областей и геометрию | `agent/splitter-controls` (активна) |
-| `SpreadsheetDocumentField` | ПолеТабличногоДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | GUID коррелирован, сборка не подтверждена; проверить содержимое отдельно | `matvienko/spreadsheet-document-controls` (активна) |
-| `Table` | ТабличноеПоле | Нет | Колонки/строки и привязки не подтверждены бинарно | **NOT_SUPPORTED** | Проверить колонки, реквизит-источник и вложенные поля | `agent/table-controls` (активна) |
-| `TextDocumentField` | ПолеТекстовогоДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить значение документа и типизированную запись | `agent/text-document-controls` (активна) |
-| `GanttChart` | ДиаграммаГанта | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить серии, строки и редактируемые события | `agent/gantt-chart-controls` (активна) |
+| `Splitter` | Разделитель | Нет | DataPath и события не подтверждены | **PARTIAL** | Enabled, ToolTip, Orientation Auto/Vertical/Horizontal, RGB и automatic для BorderColor/BackColor, Position/Visible. Перетаскивание, связанные области, Border и события не подтверждены. Совместная XML-only сцена 13 типов прошла строгую проверку Designer и холодную проверку: `ev_bbb97371248e4a419f8d6e7d94da5f49` | Интегратор |
+| `SpreadsheetDocumentField` | ПолеТабличногоДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Нативные тесты и сравнение записи проходят; прежние отказы получены устаревшим CLI и не доказывают ошибку текущего кодека. Свежая строгая проверка ожидается | `matvienko/spreadsheet-document-controls` |
+| `Table` | ТабличноеПоле | Нет | Привязки не подтверждены бинарно | **NOT_SUPPORTED** | Открытая форма показала одну колонку; изменение и восстановление заголовка прошли на открытой форме (`ev_6d9b5a89489b44ce902f8329542e660e`). Проверка нативного кодека ожидается | `agent/table-controls` |
+| `TextDocumentField` | ПолеТекстовогоДокумента | Нет | Текст задается штатными методами в сохраненном Module.bsl; DataPath и события не поддержаны | **PARTIAL** | Enabled, BorderColor, Font, Position/Visible; непустой текст и совместная форма 14 типов проверены (`ev_18244213ca9747dd94cbb440f4256807`). Border и статическое содержимое в XML не поддержаны | Интегратор, PR #12 принят |
+| `GanttChart` | ДиаграммаГанта | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Снятие образца штатного контейнера ожидает выполнения; бинарный кодек не подтвержден | `agent/gantt-chart-controls` |
 | `TrackBar` | ПолосаРегулирования | Нет | DataPath и события не поддержаны | **PARTIAL** | Enabled, ToolTip, Position/Visible, MaxValue и MinValue int32 >= 0, Step int32 > 0; MaxValue < MinValue поддержан. Верхняя граница GUI не подтверждена | Интегратор (PR #7) |
 
 Столбец вложенности показывает только политику объектного дескриптора: у Panel допускаются упорядоченные контролы и страницы, у UsualGroup упорядоченные контролы, у остальных запрещены дочерние контролы. Это не бинарное доказательство. Связь Button.Click принадлежит Button; связь `InputField.DataPath -> Attributes.Attribute -> TypeDomain` подтверждена для строковых реквизитов, `CheckBox.DataPath` для булевых. `DataPath` необязателен в XSD и это не доказывает поведение контрола без реквизита. Designer подтвердил `B` без квалификаторов как Boolean. Прежнее соответствие BinaryData удалено; бинарная запись BinaryData явно отклоняется до отдельного доказательства.
 
-`PARTIAL` по бинарному циклу: 11/25 типов, 44%. Остальные 14 имеют публичные XML-типы, но не подтвержденную запись. Нет типов с полной поддержкой всех свойств и событий. Следующая историческая таблица описывает ранние проверки четырех типов. Текущий охват отражен в основной таблице выше и последующих разделах.
+`PARTIAL` по бинарному циклу: 14/25 типов, 56%. Остальные 11 имеют публичные XML-типы, но не подтвержденную запись. Нет типов с полной поддержкой всех свойств и событий. Следующая историческая таблица описывает ранние проверки четырех типов. Текущий охват отражен в основной таблице выше и последующих разделах.
 
 | Тип | Подтвержденные свойства и формы | Свидетельство |
 | --- | --- | --- |
@@ -128,7 +128,7 @@ Enabled, ReadOnly и строковые квалификаторы реквиз�
 
 Текущие команды CLI и границы валидации описаны в [README](../README.md), ответственность модулей в [архитектуре](architecture.md), цикл правки в [разработке](development.md). Продуктовый контракт остаётся в [ordinary-form-target-contract.md](ordinary-form-target-contract.md).
 
-## Сверка текущего покрытия, 2026-10-04
+## Историческая сверка покрытия, 2026-10-04
 
 Сводный счетчик исправлен с исторических 4/25 на 5/25 PARTIAL (20%),
 0 FULL. Panel входит в основной рекурсивный кодек; доказательство
@@ -151,23 +151,23 @@ LabelDecoration дополнен Enabled и ToolTip, CheckBox дополнен T
 собственной ветке/worktree и готовит ограниченный PR. Интегратор проверяет
 изменение и факты; root принимает и объединяет PR по очереди. После разрешения
 конфликтов повторяются затронутые проверки. Открытые ветки и PR не увеличивают
-счетчик 11/25 PARTIAL; выпуск закрыт до выполнения полного целевого контракта.
+счетчик 14/25 PARTIAL; выпуск закрыт до выполнения полного целевого контракта.
 
 | Контролы | Группа и ветка | Этап | PR и ограничение |
 | --- | --- | --- | --- |
 | RadioButton | Интегратор; отдельная ветка не указана | Исследование TypeValue отклонено (`ev_3ef843311b504c26acb620ffc3ccb1ff`) | Не заявлять поддержку значения выбора и SelectionValue |
-| Splitter | `agent/splitter-controls` | Активная работа | Проверить пару областей и геометрию |
-| TextDocumentField | `agent/text-document-controls` | Активная работа | Проверить значение и типизированную запись |
-| Table, ListBox | `agent/table-controls`, `agent/listbox-controls` | Активная работа, GPT-6 Luna medium | Колонки, строки, список и связь с реквизитом не подтверждены |
+| Splitter | Интегратор | PR #11 принят, интеграция `cc56a85` | Enabled, ToolTip, Orientation Auto/Vertical/Horizontal, RGB и automatic BorderColor/BackColor, Position/Visible; перетаскивание, связанные области, Border и события не подтверждены. CI `37186034702` успешно завершился |
+| TextDocumentField | Интегратор | PR #12 принят | Общая форма 14 типов прошла строгую/холодную проверку текста, RGB, Verdana 20 bold, модуля и повторной сборки; CI `37186573039` PASS (`ev_18244213ca9747dd94cbb440f4256807`). Border, DataPath и события не поддержаны |
+| Table, ListBox | `agent/table-controls`, `agent/listbox-controls` | Активная работа, GPT-6 Luna medium | Table: одна колонка и изменение/восстановление заголовка на открытой форме подтверждены; нативный кодек ожидается. ListBox: статическая связь после открытия подтверждена, окончательное ревью ожидается |
 | ChoiceField | `agent/choicefield-controls`, группа основного агента | Исследование свойств и сохранения списка | ChoiceList и связанный вариант пока не подтверждены |
-| TrackBar | Интегратор, PR #7 | Совместная сцена 11 типов прошла Designer и холодные проверки | DataPath, события и верхняя граница GUI не подтверждены |
+| TrackBar | Интегратор, принят до UsualGroup | Совместная сцена 11 типов прошла Designer и холодные проверки | DataPath, события и верхняя граница GUI не подтверждены |
 | PivotChart | `matvienko/pivot-controls` | Активная работа, GPT-6 Luna medium | Тип и значения требуют независимого сохранения Designer |
 | Dendrogram | `matvienko/dendrogram-controls` | Активная работа, GPT-6 Luna medium | Проверить доступность по версии и свойства |
 | GeographicalSchemaField | `matvienko/geographical-controls` | Активная работа, GPT-6 Luna medium | Проверить объектную модель и ссылочные значения |
-| UsualGroup | `agent/group-frame-controls` | Активная работа | Сначала разрешить противоречие политики `ChildItems` и владельца динамического элемента; не уплощать в Panel |
-| GraphicalSchemaField | `matvienko/graphical-schema-controls` | Активная работа | Проверить `CurrentItem` и зависимости диаграммы |
-| SpreadsheetDocumentField | `matvienko/spreadsheet-document-controls` | Активная работа | GUID сопоставлен, содержимое и сборка не подтверждены |
-| Chart, GanttChart, HTMLDocumentField | `agent/chart-controls`, `agent/gantt-chart-controls`, `agent/html-document-field-controls` | Активная работа, GPT-6 Luna medium | Проверить объектные модели; для HTMLDocumentField изучить SetText/GetText и содержимое |
+| GraphicalSchemaField | `matvienko/graphical-schema-controls` | Заблокирована | Непустой синтетический образец не получен, способ создания не подтвержден; отдельная проверка Designer закрыта |
+| SpreadsheetDocumentField | `matvienko/spreadsheet-document-controls` | Ожидает проверки в Designer | Runtime-запись совпала с образцом и 11 нативных проверок прошли; загрузка только из XML завершилась ошибкой формата потока |
+| HTMLDocumentField | PR #10 | Кандидат, не объединен | Непустой HTML, SetText/GetText, строгая и холодная проверки, совпадение XML, Module.bsl и повторной сборки прошли (`ev_e223733cd3e24abdb8c080fe4c7777a7`); ожидается интеграция |
+| Chart, GanttChart | `agent/chart-controls`, `agent/gantt-chart-controls` | Ожидают снятия образцов штатных контейнеров | Бинарные кодеки не подтверждены |
 
 CommandBar поддержан частично: `Action` сохраняется, один прямой щелчок вызвал
 обработчик в общей сцене (`ev_6f4d03968e5f410a85dec37706f26ee9`); вложенный
@@ -175,10 +175,8 @@ CommandBar поддержан частично: `Action` сохраняется,
 RadioButton и Splitter остаются работой интегратора. Панель и группа картинок
 проверяются только в очерченных пределах основной таблицы.
 
-Все оставшиеся типы распределены: 14 исполнителей работают в пяти группах,
-TrackBar прошел приемку у интегратора. PR #2, #3, #4, #5, #6 и #8 приняты.
-PR #1 остается основным черновиком; PR #7 завершает интеграцию TrackBar. Объединяйте задачи последовательно; после каждого принятого PR
-пересчитывайте только типы с завершенным кодеком и текущими доказательствами.
+Открытые PR не увеличивают счетчик 14/25. Совместная сцена 11 типов и 98
+функций-сценариев ниже остается историческим результатом итерации TrackBar.
 
 Для новых рабочих задач используется GPT-6 Luna medium.
 Порядок готовности: именованная модель, основной кодек, нативные тесты,
@@ -388,5 +386,40 @@ TrackBar 321/17/25 и остальные свойства сцены. Отдел
 Работа GUI при MaxValue=2147483647 не подтверждена: опыт достиг
 тайм-аута с кодом 137. Точная сериализация int32 проверена отдельно
 и не доказывает безопасную работу GUI во всем диапазоне. Тип остается
-PARTIAL. Текущий охват 11/25 (44%), 0 FULL; это не общая готовность
-продукта. В трех наборах модель/поток/XML 21+49+28 = 98 сценариев.
+PARTIAL. На момент этой итерации охват был 11/25 (44%), 0 FULL; это не общая
+готовность продукта. В трех наборах модель/поток/XML было 21+49+28 = 98 сценариев.
+
+## UsualGroup и совместная сцена 12 типов, 2026-10-04
+
+UsualGroup сохраняет Caption, Enabled, ToolTip, Position и Visible. Запись
+дочерних элементов, событий и остальных свойств не поддержана. Совместная
+XML-only форма с 12 типами прошла строгую проверку Designer и холодную проверку;
+свидетельство: `ev_45d9b595b9f74b8f893b564230df21c6`. CI
+`37185649605` завершился успешно. В трех наборах модель/поток/XML находится
+100 именованных функций-сценариев: 21/50/29. На тот момент охват составлял
+12/25 PARTIAL (48%), 13 NOT_SUPPORTED и 0 FULL.
+
+## Splitter и совместная сцена 13 типов, 2026-10-04
+
+Splitter сохраняет Enabled, ToolTip, Orientation Auto/Vertical/Horizontal,
+RGB и automatic для BorderColor и BackColor, Position и Visible.
+Перетаскивание, связанные области, Border и события не подтверждены.
+Совместная XML-only сцена с 13 типами прошла строгую проверку Designer,
+холодную проверку и сравнение XML, Module.bsl, GIF и пересобранного Form.bin:
+`ev_bbb97371248e4a419f8d6e7d94da5f49`. CI `37186034702` успешно завершился.
+В трех наборах модель/поток/XML находится 101 именованная функция-сценарий:
+21/51/29. На момент итерации охват составлял 13/25 PARTIAL (52%), 12 NOT_SUPPORTED
+и 0 FULL.
+
+## TextDocumentField и совместная сцена 14 типов, 2026-10-04
+
+PR #12 принят после CI `37186573039`. Именованные Enabled, BorderColor,
+Font и Position/Visible проверены вместе с сохраненным модулем, который
+устанавливает и читает непустой текст штатными методами платформы.
+Общая XML-only форма из 14 типов прошла строгую выгрузку Designer, холодное
+чтение, сравнение именованного XML, Module.bsl, внешнего GIF и повторной
+бинарной сборки: `ev_18244213ca9747dd94cbb440f4256807`.
+Border, DataPath, события и статическое содержимое в XML не поддержаны.
+Текущий охват: 14/25 PARTIAL (56%), 11 NOT_SUPPORTED, 0 FULL.
+В трех профильных наборах 102 именованные тестовые функции: 21/52/29;
+число наборов CTest остается 11.

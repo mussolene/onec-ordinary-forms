@@ -1013,6 +1013,20 @@ LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "
     return list({raw("1"), properties, zero_record});
 }
 
+LV canonical_text_document_field_info(bool enabled, const model::ColorValue& border_color,
+                                      const model::FontValue& font) {
+    auto base = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
+        "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
+        "{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
+        "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    base.items[1] = raw(enabled ? "1" : "0");
+    base.items[4] = encode_control_font(font, "$/TextDocumentField/Font");
+    base.items[6] = encode_button_color(border_color, "$/TextDocumentField/BorderColor");
+    return list({std::move(base), raw("6"), raw("1"),
+        raw("00000000-0000-0000-0000-000000000000"), list({raw("0")}), raw("0"), raw("0")});
+}
+
 
 enum class InputFieldFlagScope { payload, base_info, root_info };
 
@@ -3293,6 +3307,40 @@ DecodedControl decode_check_box(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
+DecodedControl decode_text_document_field(
+    const LV& record, std::string_view path, const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        fail("OOF1122", child_path(path, 1), "positive int64 TextDocumentField ID", std::to_string(raw_id), "TextDocumentField ID is invalid");
+    const auto& info = record.items[2];
+    require_arity(info, 7, child_path(path, 2));
+    const auto& base = info.items[0];
+    require_arity(base, 21, child_path(child_path(path, 2), 0));
+    const bool enabled = bool_atom(base.items[1], child_path(child_path(path, 2), 0) + "/1");
+    const auto border_color = decode_button_color(base.items[6], child_path(child_path(path, 2), 0) + "/6");
+    const auto font = decode_control_font(base.items[4], child_path(child_path(path, 2), 0) + "/4");
+    require_exact(info, canonical_text_document_field_info(enabled, border_color, font), child_path(path, 2),
+        "TextDocumentField contains an unsupported persisted property or record variant");
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    require_arity(metadata, 6, child_path(path, 4));
+    require_raw_constant(metadata.items[0], "14", child_path(child_path(path, 4), 0));
+    const auto name = string_atom(metadata.items[1], child_path(child_path(path, 4), 1));
+    if (name.empty()) fail("OOF1115", child_path(path, 4), "non-empty control name", "empty", "Control name is required");
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        child_path(path, 4), "TextDocumentField metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "TextDocumentField cannot contain storage children");
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::TextDocumentFieldPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+    if (font != model::FontValue{}) control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
 DecodedControl decode_calendar_field(
     const LV& record,
     std::string_view path,
@@ -4063,6 +4111,25 @@ LV encode_radio_button(const model::ControlNode& control, const GeometryContext&
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
+}
+
+LV encode_text_document_field(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::text_document_field || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        fail("OOF1122", "$/Form/ChildItems", "TextDocumentField with positive int64 ID", control.name, "TextDocumentField is outside the supported profile");
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() || control.position.z_order.is_explicit() ||
+        control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty())
+        fail("OOF1122", "$/TextDocumentField", "named unbound TextDocumentField with plain Position", control.name, "TextDocumentField uses an unsupported storage concept");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Font"}, "$/TextDocumentField");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const auto border_color = explicit_button_color(control.properties(), "BorderColor");
+    const auto font = explicit_control_font(control.properties(), "$/TextDocumentField/Font");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        canonical_text_document_field_info(enabled, border_color, font),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}), list({raw("0")})});
 }
 
 LV encode_calendar_field(const model::ControlNode& control, const GeometryContext& context) {
@@ -4862,6 +4929,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& picture_descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
         const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
         const auto& calendar_descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
+        const auto& text_document_descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
         const auto& input_descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
         const auto& checkbox_descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
         const auto& progress_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
@@ -4946,6 +5014,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         child = decode_splitter(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
+                    else if (guid == text_document_descriptor.guid) child = decode_text_document_field(record, record_path, context);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
                              guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -5374,6 +5443,8 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_label(*control, context);
                 } else if (control->kind() == model::ControlKind::calendar_field) {
                     record = encode_calendar_field(*control, context);
+                } else if (control->kind() == model::ControlKind::text_document_field) {
+                    record = encode_text_document_field(*control, context);
                 } else if (control->kind() == model::ControlKind::input_field) {
                     record = encode_input_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::check_box) {
