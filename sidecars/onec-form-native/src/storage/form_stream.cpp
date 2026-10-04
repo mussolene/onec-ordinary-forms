@@ -758,6 +758,13 @@ LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
     return value;
 }
 
+LV canonical_picture_properties(bool enabled, std::string_view tool_tip = {}) {
+    auto properties = parse_constant(
+        R"({{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},20,0,0,{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,2,0,0,1,2},{0,0,0},1,1,0,0,{1,0},0,1,1,1})");
+    properties.items[0] = canonical_button_base(enabled, tool_tip);
+    return properties;
+}
+
 LV canonical_button_properties(
     bool enabled,
     std::string_view caption,
@@ -860,6 +867,32 @@ LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_
         }),
         list({raw("0")}),
     });
+}
+
+// These fixed CalendarField values come from one controlled synthetic Add sample.
+// Their domain meanings are unknown; only Enabled is editable in this profile.
+LV canonical_calendar_field_info(bool enabled) {
+    const LV zero_record = list({raw("0")});
+    const LV canonical_4_4_record = list({raw("4"), raw("4"), zero_record, raw("4")});
+    const LV canonical_neg7_record = list({raw("4"), raw("3"), list({raw("-7")}), raw("3")});
+    const LV canonical_neg21_record = list({raw("4"), raw("3"), list({raw("-21")}), raw("3")});
+    const LV canonical_neg18_record = list({raw("3"), raw("1"), list({raw("-18")}), raw("0"), raw("0"), raw("0")});
+    const LV base_properties = list({
+        raw("19"), raw(enabled ? "1" : "0"), canonical_4_4_record, canonical_4_4_record,
+        list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), raw("0"),
+        canonical_4_4_record, canonical_4_4_record, canonical_4_4_record, canonical_neg7_record, canonical_neg21_record,
+        canonical_neg18_record, list({raw("1"), raw("0")}), raw("0"), raw("0"), raw("100"),
+        raw("2"), raw("2"), raw("1"), raw("2"), canonical_4_4_record,
+    });
+    const LV properties = list({
+        base_properties, raw("9"),
+        list({raw("4"), raw("3"), list({raw("-16")}), raw("3")}),
+        list({raw("4"), raw("3"), list({raw("-14")}), raw("3")}),
+        list({raw("4"), raw("3"), list({raw("-15")}), raw("3")}),
+        raw("00010101000000"), raw("00010101000000"),
+        raw("1"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"),
+    });
+    return list({raw("1"), properties, zero_record});
 }
 
 
@@ -2287,6 +2320,77 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     return {std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset), std::move(menu.assets)};
 }
 
+DecodedControl decode_picture_decoration(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const std::uint64_t raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 PictureDecoration ID",
+            std::to_string(raw_id), "PictureDecoration ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const std::string info_path = child_path(path, 2);
+    require_arity(info, 3, info_path);
+    require_raw_constant(info.items[0], "1", child_path(info_path, 0));
+    const auto& picture_properties = info.items[1];
+    const std::string properties_path = child_path(info_path, 1);
+    require_arity(picture_properties, 15, properties_path);
+    const auto& base_properties = picture_properties.items[0];
+    const std::string base_path = child_path(properties_path, 0);
+    require_arity(base_properties, 21, base_path);
+    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        base_properties.items[12], child_path(base_path, 12));
+    auto normalized_properties = picture_properties;
+    auto normalized_base = base_properties;
+    normalized_base.items[12] = encoded_localized(tool_tip);
+    normalized_properties.items[0] = std::move(normalized_base);
+    require_exact(
+        normalized_properties,
+        canonical_picture_properties(enabled, tool_tip),
+        properties_path,
+        "PictureDecoration base record differs from the supported default profile");
+    require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
+        "PictureDecoration events are unsupported");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const std::string metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+            "Control name is required");
+    }
+    require_exact(
+        metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path,
+        "PictureDecoration metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "PictureDecoration cannot contain storage children");
+
+    model::ControlNode control{
+        model::ObjectId{raw_id},
+        name,
+        model::PictureDecorationPayload{},
+    };
+    if (!enabled) {
+        control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    }
+    if (!tool_tip.empty()) {
+        control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    }
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
 DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
@@ -2368,6 +2472,77 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
+LV canonical_progress_bar_properties(bool enabled, std::string_view tool_tip) {
+    auto properties = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
+        "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
+        "{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    properties.items[1] = raw(enabled ? "1" : "0");
+    properties.items[12] = encoded_localized(tool_tip);
+    return properties;
+}
+
+LV canonical_progress_bar_info(bool enabled, std::string_view tool_tip) {
+    return list({canonical_progress_bar_properties(enabled, tool_tip), raw("3"), raw("0"), raw("100"),
+        raw("1"), raw("1"), raw("0"), raw("2")});
+}
+
+DecodedControl decode_progress_bar(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const std::uint64_t raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 ProgressBar ID", std::to_string(raw_id),
+            "ProgressBar ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 2, info_path);
+    require_raw_constant(info.items[0], "0", child_path(info_path, 0));
+    const auto& info_list = info.items[1];
+    const auto info_list_path = child_path(info_path, 1);
+    require_arity(info_list, 8, info_list_path);
+    const auto& properties = info_list.items[0];
+    const auto properties_path = child_path(info_list_path, 0);
+    require_arity(properties, 21, properties_path);
+    const bool enabled = bool_atom(properties.items[1], child_path(properties_path, 1));
+    const std::string tool_tip = decoded_single_language_text(properties.items[12], child_path(properties_path, 12));
+    auto normalized_properties = properties;
+    normalized_properties.items[1] = raw("1");
+    normalized_properties.items[12] = encoded_localized("");
+    auto normalized_info = info_list;
+    normalized_info.items[0] = std::move(normalized_properties);
+    require_exact(normalized_info, canonical_progress_bar_info(true, ""), info_list_path,
+        "ProgressBar contains a property outside the supported profile");
+
+    const auto geometry_path = child_path(path, 3);
+    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
+    }
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "ProgressBar metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "ProgressBar cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::ProgressBarPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
 DecodedControl decode_check_box(
     const LV& record,
     std::string_view path,
@@ -2433,6 +2608,64 @@ DecodedControl decode_check_box(
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+DecodedControl decode_calendar_field(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 CalendarField ID", std::to_string(raw_id),
+            "CalendarField ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 3, info_path);
+    require_raw_constant(info.items[0], "1", child_path(info_path, 0));
+    const auto& properties = info.items[1];
+    const auto properties_path = child_path(info_path, 1);
+    require_list(properties, properties_path);
+    if (properties.items.empty() || !properties.items[0].is_list) {
+        fail("OOF1102", properties_path, "CalendarField base properties", describe(properties),
+            "CalendarField property record is incomplete");
+    }
+    const auto& base_properties = properties.items[0];
+    require_arity(base_properties, 21, child_path(properties_path, 0));
+    const bool enabled = bool_atom(base_properties.items[1], child_path(child_path(properties_path, 0), 1));
+    require_exact(
+        info,
+        canonical_calendar_field_info(enabled),
+        info_path,
+        "CalendarField contains an unsupported property or storage variation");
+
+    const auto geometry_path = child_path(path, 3);
+    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+            "Control name is required");
+    }
+    require_exact(
+        metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path,
+        "CalendarField metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "CalendarField cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::CalendarFieldPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2764,6 +2997,36 @@ LV encode_button(
     });
 }
 
+LV encode_picture_decoration(
+    const model::ControlNode& control,
+    const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::picture_decoration || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "PictureDecoration with positive int64 ID", control.name,
+            "PictureDecoration is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/PictureDecoration", "plain PictureDecoration", control.name,
+            "PictureDecoration uses a storage concept outside the executable slice");
+    }
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip"}, "$/PictureDecoration");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        list({raw("1"), canonical_picture_properties(enabled, tool_tip), list({raw("0")})}),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
 LV encode_label(const model::ControlNode& control, const GeometryContext& context) {
     if (control.kind() != model::ControlKind::label_decoration ||
         control.id.value() == 0 || control.id.value() > std::numeric_limits<std::int64_t>::max()) {
@@ -2806,6 +3069,34 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
     });
 }
 
+LV encode_progress_bar(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::progress_bar || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "ProgressBar with positive int64 ID", control.name,
+            "ProgressBar is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/ProgressBar", "named ProgressBar without DataPath, ValueType, Events, or storage children",
+            control.name, "ProgressBar uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip"}, "$/ProgressBar");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        list({raw("0"), canonical_progress_bar_info(enabled, tool_tip)}),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
 LV encode_check_box(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
@@ -2840,6 +3131,33 @@ LV encode_check_box(
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         canonical_check_box_info(enabled, caption, tool_tip),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
+LV encode_calendar_field(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::calendar_field || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "CalendarField with positive int64 ID", control.name,
+            "CalendarField is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/CalendarField", "named CalendarField with plain Position", control.name,
+            "CalendarField uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Enabled"}, "$/CalendarField");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_calendar_field_info(enabled),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -3597,9 +3915,12 @@ Result<model::OrdinaryFormDocument> decode_document(
         std::vector<DecodedControl> pending_controls;
         std::vector<model::Page> nested_pages;
         const auto& button_descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
+        const auto& picture_descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
         const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
+        const auto& calendar_descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
         const auto& input_descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
         const auto& checkbox_descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
+        const auto& progress_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
         const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
         using DecodeChildTable = std::function<void(
             const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&, std::string_view)>;
@@ -3668,7 +3989,9 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
                     if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
+                    else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
+                    else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
@@ -3693,6 +4016,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                             : decode_check_box(record, record_path, *attribute_it->second, context);
                         child.control.data_path = model::DataPath{
                             model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attribute_it->second->id.object_id)}}, {}};
+                    } else if (guid == progress_bar_descriptor.guid) {
+                        child = decode_progress_bar(record, record_path, context);
                     } else if (guid == panel_descriptor.guid) {
                         require_arity(record, 6, record_path);
                         const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -4036,12 +4361,18 @@ Result<list_stream::ListValue> encode_document(
                 LV record;
                 if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
+                } else if (control->kind() == model::ControlKind::picture_decoration) {
+                    record = encode_picture_decoration(*control, context);
                 } else if (control->kind() == model::ControlKind::label_decoration) {
                     record = encode_label(*control, context);
+                } else if (control->kind() == model::ControlKind::calendar_field) {
+                    record = encode_calendar_field(*control, context);
                 } else if (control->kind() == model::ControlKind::input_field) {
                     record = encode_input_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::check_box) {
                     record = encode_check_box(document, *control, context);
+                } else if (control->kind() == model::ControlKind::progress_bar) {
+                    record = encode_progress_bar(*control, context);
                 } else if (control->kind() == model::ControlKind::panel) {
                     if (!control->events.empty() || control->data_path || !control->extension_properties.empty()) {
                         fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",
@@ -4058,7 +4389,7 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "Button, LabelDecoration, InputField, CheckBox, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "Button, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, or Panel", control->name,
                         "Control payload is unsupported");
                 }
                 if (control->kind() == model::ControlKind::input_field || control->kind() == model::ControlKind::check_box) {

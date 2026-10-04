@@ -141,6 +141,20 @@ void test_descriptors() {
                label_tool_tip->default_value.kind == DefaultKind::string &&
                label_tool_tip->default_value.canonical.empty(),
         "LabelDecoration ToolTip must declare its editable empty string default");
+    const auto* picture_enabled = find_property(ControlKind::picture_decoration, "Enabled");
+    const auto* picture_tool_tip = find_property(ControlKind::picture_decoration, "ToolTip");
+    expect(picture_enabled && picture_enabled->persistence == PersistenceClass::persisted_editable &&
+               picture_enabled->storage_codec == StorageCodec::control_base &&
+               picture_enabled->value_codec == ValueCodec::boolean &&
+               picture_enabled->default_value.kind == DefaultKind::boolean &&
+               picture_enabled->default_value.canonical == "true",
+        "PictureDecoration Enabled must declare its editable Boolean true default");
+    expect(picture_tool_tip && picture_tool_tip->persistence == PersistenceClass::persisted_editable &&
+               picture_tool_tip->storage_codec == StorageCodec::control_base &&
+               picture_tool_tip->value_codec == ValueCodec::string &&
+               picture_tool_tip->default_value.kind == DefaultKind::string &&
+               picture_tool_tip->default_value.canonical.empty(),
+        "PictureDecoration ToolTip must declare its editable empty string default");
 }
 
 void test_standard_picture_descriptor_catalog() {
@@ -269,6 +283,22 @@ void test_button_alignment_xml_defaults() {
         "XML writer must omit defaults but retain explicit Button enum values");
 }
 
+void test_progress_bar_storage_descriptors() {
+    using namespace oof::model::metamodel;
+    const auto* enabled = find_property(ControlKind::progress_bar, "Enabled");
+    const auto* tool_tip = find_property(ControlKind::progress_bar, "ToolTip");
+    expect(enabled && enabled->persistence == PersistenceClass::persisted_editable &&
+               enabled->storage_codec == StorageCodec::control_info &&
+               enabled->default_value.kind == DefaultKind::boolean &&
+               enabled->default_value.canonical == "true",
+        "ProgressBar Enabled must have its observed control-info codec and true default");
+    expect(tool_tip && tool_tip->persistence == PersistenceClass::persisted_editable &&
+               tool_tip->storage_codec == StorageCodec::control_info &&
+               tool_tip->default_value.kind == DefaultKind::string &&
+               tool_tip->default_value.canonical.empty(),
+        "ProgressBar ToolTip must have its observed control-info codec and empty default");
+}
+
 void test_help_metamodel() {
     using namespace oof::model::metamodel;
 
@@ -391,6 +421,23 @@ void test_help_metamodel() {
         find_property(ControlKind::input_field, "Visible")->surface ==
             PropertySurface::panel_placement,
         "Visible must come from the panel-placement extension");
+    const auto* calendar = find_by_public_name("CalendarField");
+    const auto* calendar_enabled = find_property(ControlKind::calendar_field, "Enabled");
+    expect(calendar != nullptr && calendar->guid == "e3c063d8-ef92-41be-9c89-b70290b5368b",
+        "CalendarField must use its existing control descriptor GUID");
+    expect(calendar_enabled != nullptr &&
+               calendar_enabled->persistence == PersistenceClass::persisted_editable &&
+               calendar_enabled->storage_codec == StorageCodec::control_base &&
+               calendar_enabled->value_codec == ValueCodec::boolean &&
+               calendar_enabled->default_value.kind == DefaultKind::boolean &&
+               calendar_enabled->default_value.canonical == "true",
+        "CalendarField Enabled must use its typed Boolean descriptor and verified default");
+    expect(find_property(ControlKind::calendar_field, "Visible") != nullptr &&
+               find_property(ControlKind::calendar_field, "Visible")->surface == PropertySurface::panel_placement,
+        "CalendarField Visible must remain on the shared Position surface");
+    expect(find_property(ControlKind::calendar_field, "CurrentDate")->persistence == PersistenceClass::unclassified &&
+               find_property(ControlKind::calendar_field, "CurrentDate")->storage_codec == StorageCodec::unclassified,
+        "CalendarField CurrentDate must remain outside this persisted property slice");
     expect(
         find_property(ControlKind::input_field, "Top")->value_codec == ValueCodec::integer32,
         "typed Position coordinates must be 32-bit integer codecs in the metamodel");
@@ -935,6 +982,7 @@ int main() {
         test_descriptors();
         test_standard_picture_descriptor_catalog();
         test_button_alignment_xml_defaults();
+        test_progress_bar_storage_descriptors();
         test_help_metamodel();
         test_variant_coverage();
         test_property_default_semantics();

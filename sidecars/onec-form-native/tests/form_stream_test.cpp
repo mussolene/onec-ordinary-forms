@@ -1614,6 +1614,171 @@ void test_label_enabled_and_tooltip_round_trip() {
         "LabelDecoration ToolTip must reject multiple localized values");
 }
 
+void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections() {
+    const auto make_document = [](bool explicit_defaults, bool enabled, std::string tool_tip) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "PictureDecorationCodec";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode picture{
+            model::ObjectId{2}, "Picture", model::PictureDecorationPayload{}};
+        if (explicit_defaults || !enabled) {
+            picture.properties().set_explicit(model::PropertyId::from_name("Enabled"), enabled);
+        }
+        if (explicit_defaults || !tool_tip.empty()) {
+            picture.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::move(tool_tip));
+        }
+        picture.position.left.set(27);
+        picture.position.top.set(18);
+        picture.position.width.set(96);
+        picture.position.height.set(44);
+        picture.position.visible.set(false);
+        document.add_control(std::move(picture));
+        return document;
+    };
+    const auto picture_record = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1];
+    };
+    const auto mutable_picture_record = [](list_stream::ListValue& encoded) -> list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1];
+    };
+    const auto picture_base = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1].items[2].items[1].items[0];
+    };
+    const auto mutable_picture_base = [](list_stream::ListValue& encoded) -> list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1].items[2].items[1].items[0];
+    };
+
+    constexpr std::string_view observed_control_record = R"RAW(
+{151ef23e-6bb2-4681-83d0-35bc2217230c,2,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},20,0,0,{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,2,0,0,1,2},{0,0,0},1,1,0,0,{1,0},0,1,1,1},{0}},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,1,2,0,0},{14,"Picture",4294967295,0,0,0},{0}}
+)RAW";
+    const auto captured_picture_record = list_stream::parse(observed_control_record);
+    const auto& captured_picture_info = captured_picture_record.items[2];
+    const auto& captured_picture_base = captured_picture_info.items[1].items[0];
+    const auto implicit_default = form_stream::encode_document(make_document(false, true, ""));
+    const auto explicit_default = form_stream::encode_document(make_document(true, true, ""));
+    expect(implicit_default.ok() && explicit_default.ok(),
+        "default PictureDecoration must encode from a named model without a Form.bin fixture");
+    expect(list_stream::dump_compact(implicit_default.value()) ==
+               list_stream::dump_compact(explicit_default.value()),
+        "explicit default PictureDecoration Enabled and ToolTip must normalize to omitted defaults");
+
+    const auto& default_record = picture_record(implicit_default.value());
+    const auto& default_info = default_record.items[2];
+    const auto& default_base = picture_base(implicit_default.value());
+    expect(default_record.items[0].atom == "151ef23e-6bb2-4681-83d0-35bc2217230c" &&
+               default_info.items[0].atom == "1" && default_base.items.size() == 21 &&
+               list_stream::dump_compact(default_base) == list_stream::dump_compact(captured_picture_base) &&
+               list_stream::dump_compact(default_info.items[1]) ==
+                   list_stream::dump_compact(captured_picture_info.items[1]) &&
+               list_stream::dump_compact(default_info.items[2]) == "{0}",
+        "PictureDecoration must use the observed v1 info record, exact default base, and empty event table");
+    model::Form raw_form;
+    raw_form.id = model::ObjectId{1};
+    raw_form.name = "PictureDecorationObserved";
+    raw_form.children = {model::ControlRef{model::ObjectId{3}}, model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument raw_document(std::move(raw_form));
+    raw_document.add_control(model::ControlNode{
+        model::ObjectId{3}, "BeforePicture", model::ButtonPayload{}});
+    raw_document.add_control(model::ControlNode{
+        model::ObjectId{2}, "Picture", model::PictureDecorationPayload{}});
+    auto raw_envelope = form_stream::encode_document(raw_document);
+    expect(raw_envelope.ok(), "named PictureDecoration envelope must be available for captured record test");
+    mutable_picture_record(raw_envelope.value()) = captured_picture_record;
+    const auto raw_decoded = form_stream::decode_document(raw_envelope.value(), "ObservedPictureDecoration");
+    expect(raw_decoded.ok(), raw_decoded ? "actual PictureDecoration control record must decode" :
+        raw_decoded.diagnostics().front().path + ": " + raw_decoded.diagnostics().front().message);
+    const auto canonical_raw_roundtrip = form_stream::encode_document(raw_decoded.value());
+    expect(canonical_raw_roundtrip.ok() &&
+               list_stream::dump_compact(picture_record(canonical_raw_roundtrip.value())) ==
+                   list_stream::dump_compact(captured_picture_record),
+        "actual captured PictureDecoration control record must encode back canonically");
+
+    const auto default_decoded = form_stream::decode_document(implicit_default.value(), "PictureDecorationCodec");
+    expect(default_decoded.ok(), "default PictureDecoration record must decode");
+    const auto* default_picture = default_decoded.value().find_control(model::ObjectId{2});
+    expect(default_picture && default_picture->kind() == model::ControlKind::picture_decoration &&
+               default_picture->name == "Picture" &&
+               !default_picture->properties().find(model::PropertyId::from_name("Enabled")) &&
+               !default_picture->properties().find(model::PropertyId::from_name("ToolTip")),
+        "default PictureDecoration identity and implicit property defaults must decode by name");
+    expect(default_picture->position.left.value() == 27 && default_picture->position.top.value() == 18 &&
+               default_picture->position.width.value() == 96 && default_picture->position.height.value() == 44 &&
+               !default_picture->position.visible.value(),
+        "PictureDecoration Position and Visible must use the existing named geometry model");
+
+    const std::string tool_tip = "Подсказка Ω <важно> & \"цитата\"\nВторая\rстрока";
+    const auto changed = form_stream::encode_document(make_document(false, false, tool_tip));
+    expect(changed.ok(), changed ? "PictureDecoration Enabled and ToolTip must encode" :
+        changed.diagnostics().front().path + ": " + changed.diagnostics().front().message);
+    const auto& changed_base = picture_base(changed.value());
+    expect(changed_base.items[1].atom == "0" &&
+               list_stream::dump_compact(changed_base.items[12]) == value_codec::encode_localized_string(
+                   model::LocalizedStringValue{{{"ru", "Подсказка Ω <важно> & \"цитата\"\r\nВторая\rстрока"}}}),
+        "PictureDecoration Enabled and ToolTip must occupy the observed base slots and canonicalize line endings");
+    const auto decoded = form_stream::decode_document(changed.value(), "PictureDecorationCodec");
+    expect(decoded.ok(), "PictureDecoration Enabled and ToolTip must decode");
+    const auto* picture = decoded.value().find_control(model::ObjectId{2});
+    const auto* enabled = picture == nullptr ? nullptr :
+        picture->properties().find(model::PropertyId::from_name("Enabled"));
+    const auto* decoded_tool_tip = picture == nullptr ? nullptr :
+        picture->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(enabled && !std::get<bool>(enabled->value) && decoded_tool_tip &&
+               std::get<std::string>(decoded_tool_tip->value) == tool_tip,
+        "PictureDecoration named properties must round-trip Unicode and mixed line endings");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(changed.value()),
+        "PictureDecoration named properties must re-encode canonically");
+
+    constexpr std::string_view properties_path = "$/1/2/2/1/2/1";
+    constexpr std::string_view tool_tip_path = "$/1/2/2/1/2/1/0/12";
+    auto malformed = changed.value();
+    mutable_picture_base(malformed).items[12] = list_stream::ListValue::raw_atom("malformed");
+    expect_failure(form_stream::decode_document(malformed, "PictureDecorationCodec"), "OOF1108",
+        tool_tip_path, "malformed PictureDecoration ToolTip localization must be rejected");
+
+    auto multilingual = changed.value();
+    mutable_picture_base(multilingual).items[12] = list_stream::parse(value_codec::encode_localized_string(
+        model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
+    expect_failure(form_stream::decode_document(multilingual, "PictureDecorationCodec"), "OOF1115",
+        tool_tip_path, "multilingual PictureDecoration ToolTip must be rejected without loss");
+
+    auto unsupported_leaf = implicit_default.value();
+    mutable_picture_base(unsupported_leaf).items[5] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(unsupported_leaf, "PictureDecorationCodec"), "OOF1114",
+        properties_path, "non-default unimplemented PictureDecoration base data must fail closed");
+
+    auto unsupported_picture_tail = implicit_default.value();
+    unsupported_picture_tail.items[1].items[2].items[2].items[1].items[2].items[1].items[1] =
+        list_stream::ListValue::raw_atom("19");
+    expect_failure(form_stream::decode_document(unsupported_picture_tail, "PictureDecorationCodec"), "OOF1114",
+        "$/1/2/2/1/2/1", "non-default unimplemented PictureDecoration tuple data must fail closed");
+
+    auto picture_property_document = make_document(false, true, "");
+    const_cast<model::ControlNode*>(picture_property_document.find_control(model::ObjectId{2}))
+        ->properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+                model::QualifiedName{"PictureLib.ExecuteTask"}});
+    expect_failure(form_stream::encode_document(picture_property_document), "OOF1122",
+        "$/PictureDecoration", "unimplemented Picture must not be silently discarded");
+
+    auto unknown_property_document = make_document(false, true, "");
+    const_cast<model::ControlNode*>(unknown_property_document.find_control(model::ObjectId{2}))
+        ->properties().set_explicit(model::PropertyId::from_name("Transparent"), true);
+    expect_failure(form_stream::encode_document(unknown_property_document), "OOF1122",
+        "$/PictureDecoration", "unimplemented non-default picture formatting must be rejected");
+
+    auto event_document = make_document(false, true, "");
+    auto* event_picture = const_cast<model::ControlNode*>(event_document.find_control(model::ObjectId{2}));
+    event_picture->events.push_back(model::EventRef{model::ObjectId{3}});
+    event_document.add_event(model::Event{
+        model::ObjectId{3}, "Click", "PictureClick", model::ControlRef{model::ObjectId{2}}});
+    expect_failure(form_stream::encode_document(event_document), "OOF1122", "$/PictureDecoration",
+        "unimplemented PictureDecoration events must be rejected");
+}
+
 void test_fresh_checkbox_stream_decode() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -1644,6 +1809,269 @@ void test_fresh_checkbox_stream_decode() {
     boolean_type.entries.push_back(boolean_entry);
     expect(decoded.value().find_attribute(model::ObjectId{3})->type == boolean_type,
         "fresh CheckBox linked Attribute must decode exact Boolean token");
+}
+
+void test_calendar_field_enabled_round_trip_and_rejections() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "CalendarForm";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    document.add_control(model::ControlNode{model::ObjectId{2}, "BeforeCalendar", model::ButtonPayload{}});
+    model::ControlNode calendar{model::ObjectId{3}, "Calendar", model::CalendarFieldPayload{}};
+    calendar.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    calendar.position.left.set(24);
+    calendar.position.top.set(32);
+    calendar.position.width.set(180);
+    calendar.position.height.set(140);
+    calendar.position.visible.set(false);
+    document.add_control(std::move(calendar));
+
+    const auto* enabled_descriptor = model::metamodel::find_property(model::ControlKind::calendar_field, "Enabled");
+    expect(enabled_descriptor != nullptr &&
+               enabled_descriptor->persistence == model::metamodel::PersistenceClass::persisted_editable &&
+               enabled_descriptor->storage_codec == model::metamodel::StorageCodec::control_base,
+        "CalendarField Enabled must route through its typed persisted descriptor");
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "mixed Button and CalendarField must encode" :
+        encoded.diagnostics().front().code + ":" + encoded.diagnostics().front().path + ":" +
+            encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "CalendarForm");
+    expect(decoded.ok(), "mixed Button and CalendarField must decode");
+    expect(decoded.value().form().children.size() == 2 &&
+               std::get<model::ControlRef>(decoded.value().form().children[0]).id() == model::ObjectId{2} &&
+               std::get<model::ControlRef>(decoded.value().form().children[1]).id() == model::ObjectId{3},
+        "mixed owner child order and ordinals must survive CalendarField round-trip");
+    const auto* decoded_calendar = decoded.value().find_control(model::ObjectId{3});
+    const auto* enabled = decoded_calendar == nullptr ? nullptr : decoded_calendar->properties().find(
+        model::PropertyId::from_name("Enabled"));
+    expect(decoded_calendar != nullptr && decoded_calendar->kind() == model::ControlKind::calendar_field &&
+               decoded_calendar->name == "Calendar" && enabled != nullptr && !std::get<bool>(enabled->value),
+        "CalendarField identity and explicit Enabled=false must survive storage round-trip");
+    expect(decoded_calendar->position.left.value() == 24 && decoded_calendar->position.top.value() == 32 &&
+               decoded_calendar->position.width.value() == 180 && decoded_calendar->position.height.value() == 140 &&
+               !decoded_calendar->position.visible.value(),
+        "CalendarField Position and Visible must survive storage round-trip in the sibling owner context");
+
+    model::Form unsupported_form;
+    unsupported_form.id = model::ObjectId{1};
+    unsupported_form.name = "UnsupportedCalendar";
+    unsupported_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument unsupported_document(std::move(unsupported_form));
+    model::ControlNode unsupported_calendar{
+        model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}};
+    unsupported_calendar.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("unproven"));
+    unsupported_document.add_control(std::move(unsupported_calendar));
+    expect_failure(form_stream::encode_document(unsupported_document), "OOF1122", "$/CalendarField",
+        "unproven CalendarField ToolTip must fail closed");
+
+    auto changed_date_atom = encoded.value();
+    auto& calendar_record = changed_date_atom.items[1].items[2].items[2].items[2];
+    calendar_record.items[2].items[1].items[5] = list_stream::ListValue::raw_atom("00010101000001");
+    expect_failure(form_stream::decode_document(changed_date_atom, "CalendarForm"), "OOF1114",
+        "$/1/2/2/2/2", "unmapped CalendarField date-like leaf variation must fail closed");
+
+    auto changed_flag_atom = encoded.value();
+    auto& changed_flag_properties = changed_flag_atom.items[1].items[2].items[2].items[2]
+        .items[2].items[1].items[0];
+    changed_flag_properties.items[13] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(changed_flag_atom, "CalendarForm"), "OOF1114",
+        "$/1/2/2/2/2", "unmapped CalendarField flag-like leaf variation must fail closed");
+}
+
+void test_fresh_progress_bar_runtime_record_and_rejections() {
+    constexpr std::string_view xml =
+        R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><ChildItems><ProgressBar id="4" name="ProgressResearch"><Position/></ProgressBar></ChildItems></Form>)OOF";
+    const auto parsed = oof::source::parse_form_xml(xml);
+    expect(parsed.ok(), "ProgressBar XML-only source must parse before native encoding");
+    auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "ProgressBar must encode from its named XML object model");
+
+    constexpr std::string_view runtime_record = R"OOF({b1db1f86-abbb-4cf0-8852-fe6ae21650c2,4,{0,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},3,0,100,1,1,0,2}},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,1,2,0,0},{14,"ProgressResearch",4294967295,0,0,0},{0}})OOF";
+    auto observed = list_stream::parse(runtime_record);
+    auto* generated_record = static_cast<list_stream::ListValue*>(nullptr);
+    const auto find_progress = [&](auto&& self, list_stream::ListValue& value) -> list_stream::ListValue* {
+        if (!value.is_list) return nullptr;
+        if (value.items.size() == 6 && !value.items[0].is_list &&
+            value.items[0].atom == "b1db1f86-abbb-4cf0-8852-fe6ae21650c2") return &value;
+        for (auto& item : value.items) if (auto* found = self(self, item)) return found;
+        return nullptr;
+    };
+    generated_record = find_progress(find_progress, encoded.value());
+    expect(generated_record != nullptr, "fresh ProgressBar output must contain a named child record");
+    observed.items[3] = generated_record->items[3];
+    *generated_record = observed;
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "Progress");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* progress = decoded.value().find_control(model::ObjectId{4});
+    expect(progress && progress->kind() == model::ControlKind::progress_bar && progress->name == "ProgressResearch" &&
+               progress->properties().find(model::PropertyId::from_name("Enabled")) == nullptr,
+        "observed native ProgressBar record must decode to named identity and Enabled=true");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "observed native ProgressBar default record must re-encode without drift");
+
+    model::Form changed_form;
+    changed_form.id = model::ObjectId{1};
+    changed_form.name = "Progress";
+    changed_form.children = {model::ControlRef{model::ObjectId{4}}};
+    model::OrdinaryFormDocument changed(std::move(changed_form));
+    model::ControlNode changed_progress{model::ObjectId{4}, "ProgressResearch", model::ProgressBarPayload{}};
+    changed_progress.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    changed_progress.position.visible.set(false);
+    changed_progress.properties().set_explicit(model::PropertyId::from_name("ToolTip"), "Прогресс Ω & <тег>");
+    changed.add_control(std::move(changed_progress));
+    const auto changed_stream = form_stream::encode_document(changed);
+    expect(changed_stream.ok(), "ProgressBar Enabled, Visible, and confirmed ToolTip changes must encode");
+    const auto changed_decoded = form_stream::decode_document(changed_stream.value(), "Progress");
+    expect(changed_decoded.ok(), "changed ProgressBar stream must decode fresh");
+    const auto* changed_readback = changed_decoded.value().find_control(model::ObjectId{4});
+    expect(changed_readback && !std::get<bool>(changed_readback->properties().find(
+               model::PropertyId::from_name("Enabled"))->value) && !changed_readback->position.visible.value() &&
+               std::get<std::string>(changed_readback->properties().find(
+                   model::PropertyId::from_name("ToolTip"))->value) == "Прогресс Ω & <тег>",
+        "named ProgressBar changes must survive fresh decode");
+
+    auto unsupported_leaf = encoded.value();
+    auto* unsupported_record = find_progress(find_progress, unsupported_leaf);
+    unsupported_record->items[2].items[1].items[0].items[15] = list_stream::ListValue::raw_atom("1");
+    const auto unsupported_decode = form_stream::decode_document(unsupported_leaf, "Progress");
+    expect(!unsupported_decode && unsupported_decode.diagnostics().front().code == "OOF1114",
+        unsupported_decode ? "unclassified ProgressBar leaf unexpectedly decoded" :
+            "unclassified ProgressBar leaf diagnostic was " + unsupported_decode.diagnostics().front().code +
+                " at " + unsupported_decode.diagnostics().front().path);
+
+    constexpr std::string_view unsupported_property_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><ChildItems><ProgressBar id="4" name="P"><Position/><MaxValue>100</MaxValue></ProgressBar></ChildItems></Form>)OOF";
+    const auto unsupported_property = oof::source::parse_form_xml(unsupported_property_xml);
+    expect(unsupported_property.ok(), "unclassified ProgressBar property must remain readable XML");
+    const auto unsupported_encode = form_stream::encode_document(unsupported_property.value());
+    expect(!unsupported_encode && unsupported_encode.diagnostics().front().code == "OOF1122",
+        "unclassified ProgressBar MaxValue must fail closed on encode");
+
+    constexpr std::string_view data_path_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Amount"><TypeDomain><Entry term="string" length="64"/></TypeDomain></Attribute></Attributes><ChildItems><ProgressBar id="4" name="P"><DataPath attributeId="3"/><Position/></ProgressBar></ChildItems></Form>)OOF";
+    const auto data_path = oof::source::parse_form_xml(data_path_xml);
+    expect(data_path.ok() && !form_stream::encode_document(data_path.value()),
+        "unobserved ProgressBar DataPath must stay unsupported by the primary codec");
+
+    model::Form overflow_form;
+    overflow_form.id = model::ObjectId{1};
+    overflow_form.name = "Progress";
+    constexpr auto overflow_id = std::numeric_limits<std::uint64_t>::max();
+    overflow_form.children = {model::ControlRef{model::ObjectId{overflow_id}}};
+    model::OrdinaryFormDocument overflow(std::move(overflow_form));
+    overflow.add_control(model::ControlNode{model::ObjectId{overflow_id}, "P", model::ProgressBarPayload{}});
+    const auto overflow_result = form_stream::encode_document(overflow);
+    expect(!overflow_result && overflow_result.diagnostics().front().code == "OOF1122",
+        "ProgressBar ID above int64 must be rejected before encoding");
+}
+
+void test_calendar_field_observed_record_decode() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "ObservedCalendar";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{4}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    document.add_control(model::ControlNode{model::ObjectId{2}, "BeforeCalendar", model::ButtonPayload{}});
+    document.add_control(model::ControlNode{model::ObjectId{4}, "CalendarResearch", model::CalendarFieldPayload{}});
+    auto stream = form_stream::encode_document(document);
+    expect(stream.ok(), "seed stream must encode before inserting the complete observed CalendarField record");
+    stream.value().items[1].items[2].items[2].items[2] = list_stream::parse(R"OOF(
+{e3c063d8-ef92-41be-9c89-b70290b5368b,4,
+{1,
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,1,
+{-18},0,0,0},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},9,
+{4,3,
+{-16},3},
+{4,3,
+{-14},3},
+{4,3,
+{-15},3},00010101000000,00010101000000,1,1,0,0,0,0,1},
+{0}
+},
+{8,0,0,0,0,1,
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},0,0,0,0,0,0,0,1,2,0,0},
+{14,"CalendarResearch",4294967295,0,0,0},
+{0}
+}
+)OOF");
+
+    const auto decoded = form_stream::decode_document(stream.value(), "ObservedCalendar");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* calendar = decoded.value().find_control(model::ObjectId{4});
+    expect(calendar != nullptr && calendar->kind() == model::ControlKind::calendar_field &&
+               calendar->name == "CalendarResearch",
+        "observed CalendarField identity, ID, and metadata name must decode");
+    expect(calendar->properties().find(model::PropertyId::from_name("Enabled")) == nullptr,
+        "observed default Enabled=true must remain implicit");
+
+    auto changed_enabled = stream.value();
+    auto& enabled_slot = changed_enabled.items[1].items[2].items[2].items[2]
+        .items[2].items[1].items[0].items[1];
+    enabled_slot = list_stream::ListValue::raw_atom("0");
+    const auto disabled = form_stream::decode_document(changed_enabled, "ObservedCalendar");
+    expect(disabled.ok(), "observed CalendarField Enabled=false variation must decode");
+    const auto* disabled_calendar = disabled.value().find_control(model::ObjectId{4});
+    const auto* enabled = disabled_calendar == nullptr ? nullptr : disabled_calendar->properties().find(
+        model::PropertyId::from_name("Enabled"));
+    expect(enabled != nullptr && !std::get<bool>(enabled->value),
+        "observed Enabled=false must become an explicit named property");
+
+    auto changed_date = stream.value();
+    auto& date_slot = changed_date.items[1].items[2].items[2].items[2].items[2].items[1].items[5];
+    date_slot = list_stream::ListValue::raw_atom("00010101000001");
+    expect_failure(form_stream::decode_document(changed_date, "ObservedCalendar"), "OOF1114",
+        "$/1/2/2/2/2", "unmapped observed CalendarField date variation must fail closed");
+
+    auto changed_events = stream.value();
+    auto& events_slot = changed_events.items[1].items[2].items[2].items[2].items[2].items[2];
+    events_slot = list_stream::parse("{1}");
+    expect_failure(form_stream::decode_document(changed_events, "ObservedCalendar"), "OOF1114",
+        "$/1/2/2/2/2", "unsupported observed CalendarField event variation must fail closed");
 }
 
 void test_button_label_input_field_round_trip() {
@@ -3718,7 +4146,11 @@ int main() {
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
         test_label_enabled_and_tooltip_round_trip();
+        test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
         test_fresh_checkbox_stream_decode();
+        test_calendar_field_enabled_round_trip_and_rejections();
+        test_calendar_field_observed_record_decode();
+        test_fresh_progress_bar_runtime_record_and_rejections();
         test_button_label_input_field_round_trip();
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();

@@ -335,6 +335,47 @@ void test_all_control_variants() {
            "renamed XML must remain canonical without losing the edits");
 }
 
+void test_calendar_field_enabled_xml_roundtrip() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="CalendarForm" ordinaryFormVersion="2.1">
+  <ChildItems>
+    <CalendarField id="2" name="Calendar">
+      <Position><Top>32</Top><Visible>false</Visible><Left>24</Left></Position>
+      <Enabled>false</Enabled>
+    </CalendarField>
+  </ChildItems>
+</Form>
+)XML";
+
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed.ok() ? "CalendarField parse result must be inspected" :
+        parsed.diagnostics().front().code + ":" + parsed.diagnostics().front().path + ":" +
+            parsed.diagnostics().front().message);
+    const auto* calendar = parsed.value().find_control(model::ObjectId{2});
+    expect(calendar != nullptr && calendar->kind() == model::ControlKind::calendar_field &&
+               calendar->name == "Calendar",
+        "CalendarField identity and public XML name must remain typed");
+    const auto* enabled = calendar->properties().find(model::PropertyId::from_name("Enabled"));
+    expect(enabled != nullptr && std::get<bool>(enabled->value) == false,
+        "CalendarField Enabled=false must materialize as a Boolean property");
+    expect(calendar->position.left.value() == 24 && calendar->position.top.value() == 32 &&
+               !calendar->position.visible.value(),
+        "CalendarField Position and Visible must materialize through the shared placement model");
+
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<CalendarField") != std::string::npos &&
+               serialized.value().find("<Enabled>false</Enabled>") != std::string::npos &&
+               serialized.value().find("<Visible>false</Visible>") != std::string::npos,
+        "CalendarField Enabled and Visible must serialize under their public names");
+    auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "canonical CalendarField XML must reparse");
+    const auto* round_trip = reparsed.value().find_control(model::ObjectId{2});
+    expect(round_trip != nullptr && round_trip->kind() == model::ControlKind::calendar_field &&
+               std::get<bool>(round_trip->properties().find(model::PropertyId::from_name("Enabled"))->value) == false &&
+               !round_trip->position.visible.value() && round_trip->position.left.value() == 24,
+        "CalendarField named values must survive XML source round-trip");
+}
+
 void test_binding_target_and_manual_roundtrip() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
@@ -1034,6 +1075,52 @@ void test_label_enabled_tooltip_xml_roundtrip() {
         "explicit LabelDecoration Enabled=true and empty ToolTip must be omitted from public XML");
 }
 
+void test_picture_decoration_enabled_tooltip_xml_roundtrip() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+  <PictureDecoration id="3" name="Illustration"><Position/><Enabled>false</Enabled><ToolTip>Подсказка Ω &amp; &lt;важно&gt; "цитата"
+Вторая строка</ToolTip></PictureDecoration>
+</ChildItems></Form>
+)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "PictureDecoration Enabled and ToolTip XML must parse");
+    const auto* picture = parsed.value().find_control(model::ObjectId{3});
+    expect(picture && picture->kind() == model::ControlKind::picture_decoration,
+        "PictureDecoration must resolve by its named XML type");
+    const auto* enabled = picture->properties().find(model::PropertyId::from_name("Enabled"));
+    const auto* tool_tip = picture->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(enabled && !std::get<bool>(enabled->value), "PictureDecoration Enabled=false must parse as Boolean");
+    expect(tool_tip && std::get<std::string>(tool_tip->value) ==
+               "Подсказка Ω & <важно> \"цитата\"\nВторая строка",
+        "PictureDecoration ToolTip must preserve Unicode, escaped punctuation, and newline text");
+
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Enabled>false</Enabled>") != std::string::npos &&
+               serialized.value().find("&amp;") != std::string::npos &&
+               serialized.value().find("&lt;важно&gt;") != std::string::npos,
+        "PictureDecoration properties must serialize as named escaped XML values");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "serialized PictureDecoration XML must reparse");
+    const auto* reparsed_picture = reparsed.value().find_control(model::ObjectId{3});
+    const auto* reparsed_tool_tip = reparsed_picture == nullptr ? nullptr : reparsed_picture->properties().find(
+        model::PropertyId::from_name("ToolTip"));
+    expect(reparsed_tool_tip && std::get<std::string>(reparsed_tool_tip->value) ==
+               "Подсказка Ω & <важно> \"цитата\"\nВторая строка",
+        "PictureDecoration ToolTip must survive XML serialization and reparsing");
+
+    constexpr std::string_view defaults_xml = R"XML(
+<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+  <PictureDecoration id="3" name="Illustration"><Position/><Enabled>true</Enabled><ToolTip></ToolTip></PictureDecoration>
+</ChildItems></Form>
+)XML";
+    const auto defaults = source::parse_form_xml(defaults_xml);
+    expect(defaults.ok(), "explicit PictureDecoration defaults must parse");
+    const auto defaults_serialized = source::serialize_form_xml(defaults.value());
+    expect(defaults_serialized.ok() && defaults_serialized.value().find("<Enabled>") == std::string::npos &&
+               defaults_serialized.value().find("<ToolTip>") == std::string::npos,
+        "explicit PictureDecoration Enabled=true and empty ToolTip must be omitted from public XML");
+}
+
 void test_button_foreign_enum_default_is_retained() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
@@ -1137,6 +1224,29 @@ void test_event_owner_invariant() {
         "event listed by a different owner must not be silently projected");
 }
 
+void test_progress_bar_xml_only_contract() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><ChildItems>
+      <ProgressBar id="4" name="ProgressResearch"><Position><Top>12</Top><Visible>false</Visible><Height>20</Height><Left>8</Left><Width>180</Width></Position><Enabled>false</Enabled><ToolTip>Прогресс Ω &amp; &lt;тег&gt;</ToolTip></ProgressBar>
+    </ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto* progress = parsed.value().find_control(model::ObjectId{4});
+    expect(progress && progress->kind() == model::ControlKind::progress_bar &&
+               progress->name == "ProgressResearch" && !progress->position.visible.value(),
+        "ProgressBar identity and Visible must become named object-model fields");
+    expect(!std::get<bool>(progress->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+               std::get<std::string>(progress->properties().find(model::PropertyId::from_name("ToolTip"))->value) ==
+                   "Прогресс Ω & <тег>",
+        "ProgressBar Enabled and ToolTip must become named properties");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<ProgressBar name=\"ProgressResearch\" id=\"4\">") !=
+               std::string::npos && serialized.value().find("<Enabled>false</Enabled>") != std::string::npos,
+        "ProgressBar XML must serialize its named identity and changed property");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && reparsed.value().find_control(model::ObjectId{4}) != nullptr,
+        "ProgressBar XML-only object model must round-trip");
+}
+
 }  // namespace
 
 int main() {
@@ -1147,6 +1257,7 @@ int main() {
         test_page_boolean_defaults_and_rejections();
         test_page_position_roundtrip_and_rejections();
         test_all_control_variants();
+        test_calendar_field_enabled_xml_roundtrip();
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
@@ -1163,6 +1274,8 @@ int main() {
         test_button_menu_model_roundtrip_and_rejections();
         test_label_horizontal_align_xml_roundtrip();
         test_label_enabled_tooltip_xml_roundtrip();
+        test_progress_bar_xml_only_contract();
+        test_picture_decoration_enabled_tooltip_xml_roundtrip();
     } catch (const std::exception& error) {
         std::cerr << "form XML tests: FAIL: " << error.what() << '\n';
         return 1;

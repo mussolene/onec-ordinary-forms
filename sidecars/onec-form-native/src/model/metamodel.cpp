@@ -706,6 +706,20 @@ void apply_proven_storage_overrides(
         DefaultKind::shortcut,
         "None");
 
+    auto& picture_decoration = properties[static_cast<std::size_t>(ControlKind::picture_decoration)];
+    classify_property(
+        picture_decoration,
+        "Enabled",
+        StorageCodec::control_base,
+        DefaultKind::boolean,
+        "true");
+    classify_property(
+        picture_decoration,
+        "ToolTip",
+        StorageCodec::control_base,
+        DefaultKind::string,
+        "");
+
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(
         label_decoration,
@@ -740,6 +754,28 @@ void apply_proven_storage_overrides(
         DefaultKind::string,
         "");
     classify_property(check_box, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+
+    auto& calendar_field = properties[static_cast<std::size_t>(ControlKind::calendar_field)];
+    classify_property(
+        calendar_field,
+        "Enabled",
+        StorageCodec::control_base,
+        DefaultKind::boolean,
+        "true");
+
+    auto& progress_bar = properties[static_cast<std::size_t>(ControlKind::progress_bar)];
+    classify_property(
+        progress_bar,
+        "Enabled",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "true");
+    classify_property(
+        progress_bar,
+        "ToolTip",
+        StorageCodec::control_info,
+        DefaultKind::string,
+        "");
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
     classify_property(input_field, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
