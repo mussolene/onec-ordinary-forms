@@ -644,10 +644,17 @@ struct GeographicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::geographical_schema_field> {};
 struct GraphicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::graphical_schema_field> {};
+struct SpreadsheetDocumentCellValue final {
+    TypeDomainPatternValue type;
+    PropertyValue value;
+
+    friend bool operator==(const SpreadsheetDocumentCellValue&, const SpreadsheetDocumentCellValue&) = default;
+};
 struct SpreadsheetDocumentCell final {
     std::uint32_t row{};
     std::uint32_t column{};
     std::string text;
+    std::optional<SpreadsheetDocumentCellValue> typed_value;
     friend bool operator==(const SpreadsheetDocumentCell&, const SpreadsheetDocumentCell&) = default;
 };
 struct TableColumnControl {

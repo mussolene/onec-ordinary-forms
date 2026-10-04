@@ -1534,18 +1534,113 @@ private:
                     if (!coordinates.emplace(row, column).second)
                         fail("OOF2003", cell_node, id_text, "coordinate", "unique row and column pair", "duplicate", "Spreadsheet Document contains a duplicate Cell coordinate");
                     bool text_seen = false;
+                    bool contains_value_seen = false;
+                    bool value_type_seen = false;
+                    bool value_seen = false;
                     std::string text;
+                    std::optional<model::TypeDomainPatternValue> value_type;
+                    std::optional<model::PropertyValue> typed_value;
+                    unsigned int content_stage = 0;
                     for (xmlNodePtr value_node : element_children(cell_node)) {
-                        if (node_name(value_node) != "Text" || text_seen)
-                            fail("OOF2003", value_node, id_text, node_name(value_node), "one Text child", node_name(value_node), "Spreadsheet Cell requires exactly one Text child");
-                        if (value_node->properties != nullptr || !element_children(value_node).empty())
-                            fail("OOF2003", value_node, id_text, "Text", "text content without attributes or nested elements", "structured content", "Spreadsheet Cell Text must be plain text");
-                        text_seen = true;
-                        text = node_text(value_node);
+                        const auto name = node_name(value_node);
+                        if (name == "Text") {
+                            if (text_seen || content_stage != 0)
+                                fail("OOF2003", value_node, id_text, "Text", "one standalone Text child", "duplicate or mixed content", "Spreadsheet Cell Text cannot be combined with a typed value");
+                            if (value_node->properties != nullptr || !element_children(value_node).empty())
+                                fail("OOF2003", value_node, id_text, "Text", "text content without attributes or nested elements", "structured content", "Spreadsheet Cell Text must be plain text");
+                            text_seen = true;
+                            content_stage = 1;
+                            text = node_text(value_node);
+                            continue;
+                        }
+                        if (name == "ContainsValue") {
+                            if (contains_value_seen || content_stage != 0)
+                                fail("OOF2003", value_node, id_text, "ContainsValue", "first typed-cell child", "duplicate or out of order", "Spreadsheet Cell typed children are out of order");
+                            if (value_node->properties != nullptr || !element_children(value_node).empty())
+                                fail("OOF2003", value_node, id_text, "ContainsValue", "plain Boolean", "structured content", "Spreadsheet Cell ContainsValue must be plain text");
+                            if (!parse_boolean(node_text(value_node), value_node, "ContainsValue", id_text))
+                                fail("OOF2003", value_node, id_text, "ContainsValue", "true for typed cells", "false", "Text cells omit ContainsValue");
+                            contains_value_seen = true;
+                            content_stage = 2;
+                            continue;
+                        }
+                        if (name == "ValueType") {
+                            if (!contains_value_seen || value_type_seen || content_stage != 2)
+                                fail("OOF2003", value_node, id_text, "ValueType", "after ContainsValue", "duplicate or out of order", "Spreadsheet Cell typed children are out of order");
+                            if (value_node->properties != nullptr)
+                                fail("OOF2003", value_node, id_text, "ValueType", "no attributes", "present", "Spreadsheet Cell ValueType does not accept attributes");
+                            for (xmlNodePtr entry_node : element_children(value_node)) {
+                                if (node_name(entry_node) != "Entry")
+                                    fail("OOF2003", entry_node, id_text, node_name(entry_node), "Entry", node_name(entry_node), "Unknown Spreadsheet Cell ValueType item");
+                                static constexpr std::array<std::string_view, 8> allowed{
+                                    "term", "typeUuid", "length", "precision", "nonNegative", "variable", "date", "time"};
+                                for (xmlAttrPtr attribute = entry_node->properties; attribute != nullptr; attribute = attribute->next) {
+                                    if (std::ranges::find(allowed, std::string_view(reinterpret_cast<const char*>(attribute->name))) == allowed.end())
+                                        fail("OOF2003", entry_node, id_text, std::string(reinterpret_cast<const char*>(attribute->name)), "named type qualifier", "unsupported", "Spreadsheet Cell ValueType contains an unsupported qualifier");
+                                }
+                            }
+                            value_type = parse_type_domain(value_node);
+                            value_type_seen = true;
+                            content_stage = 3;
+                            continue;
+                        }
+                        if (name == "Value") {
+                            if (!contains_value_seen || !value_type_seen || value_seen || content_stage != 3)
+                                fail("OOF2003", value_node, id_text, "Value", "after ContainsValue and ValueType", "duplicate or out of order", "Spreadsheet Cell typed children are out of order");
+                            if (value_node->properties != nullptr || !element_children(value_node).empty())
+                                fail("OOF2003", value_node, id_text, "Value", "plain scalar text", "structured content", "Spreadsheet Cell Value must be plain text");
+                            if (value_type->entries.size() != 1)
+                                fail("OOF2003", value_node, id_text, "ValueType", "one supported type entry", std::to_string(value_type->entries.size()), "Spreadsheet Cell ValueType must contain exactly one type");
+                            const auto term = value_type->entries.front().term;
+                            const auto codec = term == model::TypeDomainTerm::string ? mm::ValueCodec::string :
+                                term == model::TypeDomainTerm::numeric ? mm::ValueCodec::decimal :
+                                term == model::TypeDomainTerm::boolean ? mm::ValueCodec::boolean :
+                                term == model::TypeDomainTerm::date ? mm::ValueCodec::date : mm::ValueCodec::unclassified;
+                            if (codec == mm::ValueCodec::unclassified)
+                                fail("OOF2003", value_node, id_text, "ValueType", "String, Number, Boolean, or Date", "unsupported type entry", "Spreadsheet Cell typed value kind is unsupported");
+                            typed_value = parse_property_value(value_node, codec, id_text);
+                            if (std::holds_alternative<model::UndefinedValue>(*typed_value))
+                                fail("OOF2003", value_node, id_text, "Value", "defined String, Number, Boolean, or Date", "undefined", "Undefined Spreadsheet Cell values are unsupported");
+                            value_seen = true;
+                            content_stage = 4;
+                            continue;
+                        }
+                        fail("OOF2003", value_node, id_text, name, "Text or typed-cell children", name, "Unknown Spreadsheet Cell item");
                     }
-                    if (!text_seen)
-                        fail("OOF2003", cell_node, id_text, "Text", "required Text child", "missing", "Spreadsheet Cell requires a Text child");
-                    cells.push_back({row, column, std::move(text)});
+                    std::optional<model::SpreadsheetDocumentCellValue> typed;
+                    if (contains_value_seen) {
+                        if (!value_type_seen || !value_type.has_value())
+                            fail("OOF2003", cell_node, id_text, "ValueType", "one type after ContainsValue", "missing", "Typed Spreadsheet Cell requires ValueType");
+                        if (value_type->entries.size() != 1)
+                            fail("OOF2003", cell_node, id_text, "ValueType", "one supported type entry", std::to_string(value_type->entries.size()), "Spreadsheet Cell ValueType must contain exactly one type");
+                        model::PropertyValue effective_value = model::UndefinedValue{};
+                        if (value_seen) {
+                            effective_value = std::move(*typed_value);
+                        } else {
+                            switch (value_type->entries.front().term) {
+                                case model::TypeDomainTerm::string:
+                                    effective_value = std::string{};
+                                    break;
+                                case model::TypeDomainTerm::numeric:
+                                    effective_value = model::DecimalValue{"0"};
+                                    break;
+                                case model::TypeDomainTerm::boolean:
+                                    effective_value = false;
+                                    break;
+                                case model::TypeDomainTerm::date:
+                                    if (value_type->entries.front().date != model::DateQualifiers{true, true})
+                                        fail("OOF2003", cell_node, id_text, "Value", "known DateTime default", "unverified date qualifiers", "Spreadsheet Cell omitted Value has an unsupported Date default");
+                                    effective_value = model::DateValue{"0001-01-01T00:00:00"};
+                                    break;
+                                default:
+                                    fail("OOF2003", cell_node, id_text, "Value", "known String, Number, Boolean, or Date default", "unsupported type entry", "Spreadsheet Cell omitted Value has an unsupported default");
+                            }
+                        }
+                        typed = model::SpreadsheetDocumentCellValue{std::move(*value_type), std::move(effective_value)};
+                    } else if (!text_seen) {
+                        fail("OOF2003", cell_node, id_text, "Text", "required Text child", "missing", "Spreadsheet Cell requires Text or a typed value");
+                    }
+                    cells.push_back({row, column, std::move(text), std::move(typed)});
                 }
                 std::sort(cells.begin(), cells.end(), [](const auto& left, const auto& right) {
                     return std::tie(left.row, left.column) < std::tie(right.row, right.column);
@@ -2765,7 +2860,38 @@ private:
             writer_.open("Document");
             for (const auto& cell : spreadsheet->cells) {
                 writer_.open("Cell", {{"row", std::to_string(cell.row)}, {"column", std::to_string(cell.column)}});
-                writer_.text("Text", cell.text);
+                if (!cell.typed_value.has_value()) {
+                    writer_.text("Text", cell.text);
+                } else {
+                    if (!cell.text.empty())
+                        serialization_fail(id, "Document/Cell", "Text-only or typed value", "both", "Spreadsheet Cell cannot persist Text and a typed Value together");
+                    const auto& typed = *cell.typed_value;
+                    writer_.text("ContainsValue", "true");
+                    write_type_domain("ValueType", typed.type, id);
+                    {
+                        const auto& type = typed.type.entries.front();
+                        if (const auto* value = std::get_if<std::string>(&typed.value)) {
+                            if (type.term != model::TypeDomainTerm::string)
+                                serialization_fail(id, "Document/Cell/Value", "String matching ValueType", "mismatched value", "Spreadsheet Cell Value does not match ValueType");
+                            writer_.text("Value", *value);
+                        } else if (const auto* value = std::get_if<model::DecimalValue>(&typed.value)) {
+                            if (type.term != model::TypeDomainTerm::numeric)
+                                serialization_fail(id, "Document/Cell/Value", "Number matching ValueType", "mismatched value", "Spreadsheet Cell Value does not match ValueType");
+                            writer_.text("Value", canonical_decimal(value->canonical, nullptr, "Value", id));
+                        } else if (const auto* value = std::get_if<bool>(&typed.value)) {
+                            if (type.term != model::TypeDomainTerm::boolean)
+                                serialization_fail(id, "Document/Cell/Value", "Boolean matching ValueType", "mismatched value", "Spreadsheet Cell Value does not match ValueType");
+                            writer_.text("Value", *value ? "true" : "false");
+                        } else if (const auto* value = std::get_if<model::DateValue>(&typed.value)) {
+                            if (type.term != model::TypeDomainTerm::date)
+                                serialization_fail(id, "Document/Cell/Value", "Date matching ValueType", "mismatched value", "Spreadsheet Cell Value does not match ValueType");
+                            (void)storage::value_codec::date_to_platform(value->canonical);
+                            writer_.text("Value", value->canonical);
+                        } else {
+                            serialization_fail(id, "Document/Cell/Value", "String, Number, Boolean, or Date", "unsupported value", "Spreadsheet Cell Value kind is unsupported");
+                        }
+                    }
+                }
                 writer_.close("Cell");
             }
             writer_.close("Document");

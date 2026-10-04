@@ -753,7 +753,27 @@ void test_spreadsheet_document_cells_xml_round_trip() {
     model::ControlNode field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
     auto& payload = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload);
     auto& cells = payload.cells;
-    cells = {{1, 3, " Ω <текст> & \"цитата\" "}, {2, 1, ""}};
+    cells = {{1, 3, " Ω <текст> & \"цитата\" ", std::nullopt}, {2, 1, "", std::nullopt}};
+    const auto typed_cell = [](std::uint32_t row, std::uint32_t column, model::TypeDomainTerm term,
+                               model::PropertyValue value) {
+        model::TypeDomainEntry entry;
+        entry.term = term;
+        if (term == model::TypeDomainTerm::string) entry.string = {100, true};
+        if (term == model::TypeDomainTerm::numeric) entry.numeric = {15, 3, false};
+        if (term == model::TypeDomainTerm::date) entry.date = {true, true};
+        return model::SpreadsheetDocumentCell{row, column, {},
+            model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{{entry}}, std::move(value)}};
+    };
+    cells.push_back(typed_cell(4, 1, model::TypeDomainTerm::string, std::string("Unicode Привет 世界")));
+    cells.push_back(typed_cell(4, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"-12.375"}));
+    cells.push_back(typed_cell(4, 3, model::TypeDomainTerm::boolean, false));
+    cells.push_back(typed_cell(4, 4, model::TypeDomainTerm::date, model::DateValue{"2026-10-04T12:30:45"}));
+    auto generic_string = typed_cell(6, 1, model::TypeDomainTerm::string, std::string("x"));
+    generic_string.typed_value->type.entries.front().string.length = 37;
+    cells.push_back(std::move(generic_string));
+    auto generic_number = typed_cell(6, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"1.2345"});
+    generic_number.typed_value->type.entries.front().numeric = {12, 4, false};
+    cells.push_back(std::move(generic_number));
     document.add_control(std::move(field));
     const auto serialized = source::serialize_form_xml(document);
     expect(serialized.ok(), serialized.ok() ? "" : serialized.diagnostics().front().message);
@@ -763,15 +783,35 @@ void test_spreadsheet_document_cells_xml_round_trip() {
     expect(serialized.value().find("<Cell row=\"2\" column=\"1\">") != std::string::npos &&
         serialized.value().find("<Text></Text>") != std::string::npos,
         "explicitly empty Spreadsheet Document cell must remain present");
+    expect(serialized.value().find("<ContainsValue>true</ContainsValue>") != std::string::npos &&
+        serialized.value().find("<Entry term=\"string\" length=\"100\"/>") != std::string::npos &&
+        serialized.value().find("<Value>Unicode Привет 世界</Value>") != std::string::npos &&
+        serialized.value().find("<Value>-12.375</Value>") != std::string::npos &&
+        serialized.value().find("<Value>false</Value>") != std::string::npos &&
+        serialized.value().find("<Value>2026-10-04T12:30:45</Value>") != std::string::npos,
+        "typed Spreadsheet Document cells must serialize named values and qualifiers");
     const auto parsed = source::parse_form_xml(serialized.value());
     expect(parsed.ok(), parsed.ok() ? "" : parsed.diagnostics().front().message);
     const auto* restored_control = parsed.value().find_control(model::ObjectId{2});
     expect(restored_control != nullptr, "SpreadsheetDocumentField must resolve after XML parsing");
     const auto* restored = std::get_if<model::SpreadsheetDocumentFieldPayload>(&restored_control->payload);
-    expect(restored && restored->cells.size() == 2 && restored->cells[0].row == 1 &&
+    expect(restored && restored->cells.size() == 8 && restored->cells[0].row == 1 &&
         restored->cells[0].column == 3 && restored->cells[0].text == " Ω <текст> & \"цитата\" " &&
         restored->cells[1].row == 2 && restored->cells[1].column == 1 && restored->cells[1].text.empty(),
         "named Spreadsheet Document cells and explicit empty text must round-trip");
+    expect(restored && restored->cells[2].typed_value &&
+        std::get<std::string>(restored->cells[2].typed_value->value) == "Unicode Привет 世界" &&
+        restored->cells[2].typed_value->type.entries.front().string.length == 100 &&
+        restored->cells[3].typed_value && std::get<model::DecimalValue>(restored->cells[3].typed_value->value).canonical == "-12.375" &&
+        restored->cells[4].typed_value && !std::get<bool>(restored->cells[4].typed_value->value) &&
+        restored->cells[5].typed_value &&
+        std::get<model::DateValue>(restored->cells[5].typed_value->value).canonical == "2026-10-04T12:30:45",
+        "typed Spreadsheet Document values and qualifiers must survive XML round-trip");
+    expect(restored && restored->cells[6].typed_value &&
+        restored->cells[6].typed_value->type.entries.front().string.length == 37 &&
+        restored->cells[7].typed_value &&
+        restored->cells[7].typed_value->type.entries.front().numeric == model::NumericQualifiers{12, 4, false},
+        "Spreadsheet Document must retain supported non-default String and Number qualifiers");
 
     const auto wrap_cells = [](std::string_view items) {
         return std::string("<Form id=\"1\" name=\"Spreadsheet\" ordinaryFormVersion=\"2.1\"><ChildItems><SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/><Document>") +
@@ -782,7 +822,10 @@ void test_spreadsheet_document_cells_xml_round_trip() {
         "<Cell row=\"1\" column=\"4294967296\"><Text/></Cell>",
         "<Cell row=\"1\" column=\"1\"><Text>A</Text></Cell><Cell row=\"1\" column=\"1\"><Text>B</Text></Cell>",
         "<Cell row=\"1\" column=\"1\"/>",
-        "<Cell row=\"1\" column=\"1\"><Text><Nested/></Text></Cell>"}) {
+        "<Cell row=\"1\" column=\"1\"><Text><Nested/></Text></Cell>",
+        "<Cell row=\"1\" column=\"1\"><ContainsValue>false</ContainsValue><ValueType><Entry term=\"boolean\"/></ValueType><Value>false</Value></Cell>",
+        "<Cell row=\"1\" column=\"1\"><Text>x</Text><ContainsValue>true</ContainsValue><ValueType><Entry term=\"boolean\"/></ValueType><Value>false</Value></Cell>",
+        "<Cell row=\"1\" column=\"1\"><ContainsValue>true</ContainsValue><ValueType><Entry term=\"binary\"/></ValueType><Value>x</Value></Cell>"}) {
         expect(!source::parse_form_xml(wrap_cells(invalid)).ok(),
             "invalid Spreadsheet Document coordinates or Cell content must be rejected");
     }

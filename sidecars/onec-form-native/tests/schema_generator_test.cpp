@@ -865,10 +865,29 @@ void test_spreadsheet_document_schema(xmlNodePtr schema) {
         "named SpreadsheetDocument Cell type must exist");
     const auto cells = direct_children(sequence_for_type(schema, "SpreadsheetDocumentType"), "element");
     expect_element_shape(cells.at(0), "Cell", "SpreadsheetDocumentCellType", "0", "unbounded");
-    const auto text = direct_children(sequence_for_type(schema, "SpreadsheetDocumentCellType"), "element");
-    expect_element_shape(text.at(0), "Text", "xs:string", "1", "1");
+    const auto cell_type = schema_component(schema, "complexType", "SpreadsheetDocumentCellType");
+    const auto choice = direct_child(cell_type, "choice");
+    const auto alternatives = direct_children(choice, "element");
+    expect(alternatives.size() == 1 && attribute(alternatives[0], "name") == "Text" &&
+        attribute(alternatives[0], "type") == "xs:string",
+        "Spreadsheet Cell must choose between text and typed value representations");
+    const auto typed_sequence = direct_child(choice, "sequence");
+    const auto typed_elements = direct_children(typed_sequence, "element");
+    expect(typed_elements.size() == 3 && attribute(typed_elements[0], "name") == "ContainsValue" &&
+        attribute(typed_elements[0], "fixed") == "true" && attribute(typed_elements[1], "name") == "ValueType" &&
+        attribute(typed_elements[1], "type") == "TypeDomainValueType" && attribute(typed_elements[2], "name") == "Value",
+        "typed Spreadsheet Cell must expose named ContainsValue, ValueType, and Value");
     expect_type_attribute(schema, "SpreadsheetDocumentCellType", "row", "SpreadsheetCoordinateType", "required");
     expect_type_attribute(schema, "SpreadsheetDocumentCellType", "column", "SpreadsheetCoordinateType", "required");
+}
+
+void test_spreadsheet_document_instances(xmlSchemaPtr schema) {
+    constexpr std::string_view typed_cell = R"XML(<Form id="1" name="Spreadsheet" ordinaryFormVersion="2.1"><ChildItems><SpreadsheetDocumentField id="2" name="Sheet"><Position/><Document><Cell row="1" column="1"><ContainsValue>true</ContainsValue><ValueType><Entry term="boolean"/></ValueType><Value>false</Value></Cell></Document></SpreadsheetDocumentField></ChildItems></Form>)XML";
+    constexpr std::string_view false_contains_value = R"XML(<Form id="1" name="Spreadsheet" ordinaryFormVersion="2.1"><ChildItems><SpreadsheetDocumentField id="2" name="Sheet"><Position/><Document><Cell row="1" column="1"><ContainsValue>false</ContainsValue><ValueType><Entry term="boolean"/></ValueType><Value>false</Value></Cell></Document></SpreadsheetDocumentField></ChildItems></Form>)XML";
+    expect(validate_document(schema, typed_cell) == 0,
+        "named typed Spreadsheet Cell must satisfy the public XSD");
+    expect(validate_document(schema, false_contains_value) != 0,
+        "typed Spreadsheet Cell must require ContainsValue=true in the public XSD");
 }
 
 void test_event_surfaces(const Metamodel& metamodel, xmlNodePtr schema) {
@@ -1322,6 +1341,7 @@ int main() {
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
         test_document_instances(compiled_form.get());
+        test_spreadsheet_document_instances(compiled_form.get());
         test_date_values(compiled_form.get());
         test_schema_structure_coverage_does_not_imply_codec_coverage(
             metamodel,
