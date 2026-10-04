@@ -1356,6 +1356,66 @@ void test_multiple_top_level_buttons_round_trip() {
         "Button geometry with an incorrect sibling index must be rejected");
 }
 
+void test_shared_action_metadata_policies_and_rejections() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "Actions";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    form.events = {model::EventRef{model::ObjectId{3}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    document.add_event(model::Event{model::ObjectId{3}, "OnClose", "Handler", model::FormRef{model::ObjectId{1}}});
+    model::ControlNode button{model::ObjectId{2}, "Run", model::ButtonPayload{}};
+    button.events = {model::EventRef{model::ObjectId{4}}};
+    document.add_event(model::Event{model::ObjectId{4}, "Click", "Handler", model::ControlRef{model::ObjectId{2}}});
+    button.properties().set_explicit(model::PropertyId::from_name("MenuMode"), model::EnumerationValue{"MenuMode", "UseExtra"});
+    model::CommandBarButton command; command.name = "Command"; command.action = "Handler";
+    std::get<model::ButtonPayload>(button.payload).buttons = {command};
+    document.add_control(std::move(button));
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "coexisting form, button and menu actions must encode");
+    const auto derived = list_stream::parse(
+        R"({3,"Handler",{1,"Handler",{1,1,{"ru","Handler"}},{1,1,{"ru","Handler"}},{1,1,{"ru","Handler"}},{4,0,{0},"",-1,-1,1,0,""},{0,0,0}}})");
+    const auto empty = list_stream::parse(
+        R"({3,"Handler",{1,"",{1,0},{1,0},{1,0},{4,0,{0},"",-1,-1,1,0,""},{0,0,0}}})");
+    // The independent action literals must stay distinct even for identical handlers.
+    for (unsigned owner = 0; owner < 3; ++owner) {
+        const auto action_at = [owner](auto& root) -> auto& {
+            if (owner == 0) return root.items[4].items[1].items[2];
+            auto& payload = root.items[1].items[2].items[2].items[1].items[2];
+            if (owner == 1) return payload.items[2].items[1].items[2];
+            return payload.items[1].items[12].items[5].items[4];
+        };
+        expect(list_stream::dump_compact(action_at(encoded.value())) ==
+            list_stream::dump_compact(owner == 1 ? derived : empty),
+            "each owner must retain its exact independent Action literal");
+        auto cross_policy = encoded.value();
+        action_at(cross_policy).items[2] = (owner == 1 ? empty : derived).items[2];
+        expect(!form_stream::decode_document(cross_policy, "Actions"), "metadata from another owner policy must reject");
+        for (unsigned field = 0; field < 7; ++field) {
+            auto bad = encoded.value();
+            action_at(bad).items[2].items[field] = list_stream::ListValue::raw_atom("999");
+            expect(!form_stream::decode_document(bad, "Actions"), "every metadata field must be checked for every owner");
+        }
+        for (unsigned variation = 0; variation < 7; ++variation) {
+            auto bad = encoded.value(); auto& action = action_at(bad);
+            switch (variation) {
+                case 0: action.items[0] = list_stream::ListValue::raw_atom("4"); break;
+                case 1: action.items[1] = list_stream::ListValue::string_atom(""); break;
+                case 2: action.items[1] = list_stream::ListValue::raw_atom("123"); break;
+                case 3: action.items.pop_back(); break;
+                case 4: action.items.push_back(list_stream::ListValue::raw_atom("0")); break;
+                case 5: action.items[2].items.pop_back(); break;
+                case 6: action.items[2].items.push_back(list_stream::ListValue::raw_atom("0")); break;
+            }
+            expect(!form_stream::decode_document(bad, "Actions"), "tag, handler and arity guards must apply to all action owners");
+        }
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "Actions");
+    expect(decoded.ok(), "all three exact Action profiles must decode together");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "the combined form, button and menu stream must round-trip without drift");
+}
+
 void test_form_close_strict_action_guards() {
     model::Form form;
     form.id = model::ObjectId{1}; form.name = "CloseProbe";
@@ -8829,6 +8889,7 @@ int main() {
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_form_close_strict_action_guards();
+        test_shared_action_metadata_policies_and_rejections();
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
         test_check_box_tooltip_round_trip_and_validation();
