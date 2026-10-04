@@ -586,10 +586,52 @@ struct RadioButtonPayload final : TypedControlPayload<ControlKind::radio_button>
 struct InputFieldPayload final : TypedControlPayload<ControlKind::input_field> {};
 struct UsualGroupPayload final : TypedControlPayload<ControlKind::usual_group> {};
 struct SplitterPayload final : TypedControlPayload<ControlKind::splitter> {};
-struct ChartPayload final : TypedControlPayload<ControlKind::chart> {};
+struct ChartSeries {
+    ObjectId id{};
+    std::string text;
+    ColorValue color;
+    EnumerationValue marker;
+};
+
+struct ChartPoint {
+    ObjectId id{};
+    std::string text;
+    ColorValue color;
+};
+
+struct ChartValue {
+    ObjectId series_ref{};
+    ObjectId point_ref{};
+    std::variant<DecimalValue, UndefinedValue> value{DecimalValue{}};
+};
+
+struct ChartPayload final : TypedControlPayload<ControlKind::chart> {
+    std::vector<ChartSeries> series;
+    std::vector<ChartPoint> points;
+    std::vector<ChartValue> values;
+};
 struct PivotChartPayload final : TypedControlPayload<ControlKind::pivot_chart> {};
 struct GanttChartPayload final : TypedControlPayload<ControlKind::gantt_chart> {};
-struct DendrogramPayload final : TypedControlPayload<ControlKind::dendrogram> {};
+struct DendrogramItem {
+    std::string value;
+    LocalizedStringValue text;
+
+    friend bool operator==(const DendrogramItem&, const DendrogramItem&) = default;
+};
+
+struct DendrogramLink {
+    std::string first_item;
+    std::string second_item;
+    LocalizedStringValue title;
+    DecimalValue distance{"0"};
+
+    friend bool operator==(const DendrogramLink&, const DendrogramLink&) = default;
+};
+
+struct DendrogramPayload final : TypedControlPayload<ControlKind::dendrogram> {
+    std::vector<DendrogramItem> items;
+    std::vector<DendrogramLink> links;
+};
 struct HtmlDocumentFieldPayload final
     : TypedControlPayload<ControlKind::html_document_field> {};
 struct ListBoxPayload final : TypedControlPayload<ControlKind::list_box> {};

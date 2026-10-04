@@ -719,6 +719,8 @@ void apply_proven_storage_overrides(
     classify_property(radio_button, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(radio_button, "Caption", StorageCodec::control_info, DefaultKind::string, "");
     classify_property(radio_button, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    classify_property(radio_button, "SelectionValue", StorageCodec::control_info, DefaultKind::undefined, "undefined");
+    std::ranges::find(radio_button, "SelectionValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::decimal;
 
     auto& html_document_field = properties[static_cast<std::size_t>(ControlKind::html_document_field)];
     classify_property(
@@ -1027,6 +1029,28 @@ struct Metamodel::Impl {
         for (auto descriptor : make_control_property_descriptors()) {
             properties[static_cast<std::size_t>(descriptor.control_kind)].push_back(descriptor);
         }
+        auto& dendrogram_properties = properties[static_cast<std::size_t>(ControlKind::dendrogram)];
+        dendrogram_properties.push_back(PropertyDescriptor{
+            PropertyId::from_name("Items"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::dendrogram, 998,
+            "Items", "Items", u8"Элементы", u8"ЭлементыДендрограммы",
+            ValueKind::collection, ValueCodec::dendrogram_items, ApiAccess::read_write,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::collection_record, {DefaultKind::none, ""}});
+        dendrogram_properties.push_back(PropertyDescriptor{
+            PropertyId::from_name("Links"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::dendrogram, 999,
+            "Links", "Links", u8"Связи", u8"СвязиДендрограммы",
+            ValueKind::collection, ValueCodec::dendrogram_links, ApiAccess::read_write,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::collection_record, {DefaultKind::none, ""}});
+        dendrogram_properties.push_back(PropertyDescriptor{
+            PropertyId::from_name("Orientation"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::dendrogram, 1000,
+            "Orientation", "Orientation", u8"Ориентация", u8"ОриентацияДендрограммы",
+            ValueKind::enumeration, ValueCodec::enumeration, ApiAccess::read_write,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::value_record, {DefaultKind::enumeration, "DendrogramOrientation.Up"}});
         for (auto descriptor : make_control_event_descriptors()) {
             events[static_cast<std::size_t>(descriptor.control_kind)].push_back(descriptor);
         }
@@ -1040,6 +1064,15 @@ struct Metamodel::Impl {
             panel_placement_properties,
             form_properties,
             events);
+        auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
+        // Публичное Title отображает путь Диаграмма.ОбластьЗаголовка.Текст, а не отдельное свойство диаграммы.
+        chart_properties.push_back({
+            PropertyId::from_name("Title"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::chart, chart_properties.size(), "Title", "TitleArea.Text",
+            u8"ОбластьЗаголовка.Текст", u8"Строка", ValueKind::string, ValueCodec::string,
+            ApiAccess::read_write, VersionMask::platform_8_5,
+            PersistenceClass::persisted_editable, StorageCodec::control_info,
+            {DefaultKind::string, ""}});
 
         // Help may repeat an inherited extension property on one concrete control.
         // The executable model keeps the shared extension as the single owner.
@@ -1538,6 +1571,10 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
     switch (codec) {
         case ValueCodec::command_bar_buttons:
             return "command-bar-buttons";
+        case ValueCodec::dendrogram_items:
+            return "dendrogram-items";
+        case ValueCodec::dendrogram_links:
+            return "dendrogram-links";
         case ValueCodec::unclassified:
             return "unclassified";
         case ValueCodec::boolean:

@@ -432,10 +432,10 @@ void test_help_metamodel() {
     const MetamodelCoverage& coverage = metamodel_coverage();
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 416,
-        "executable metamodel must collapse one inherited property duplicate");
+        coverage.control_property_occurrences == 420,
+        "executable metamodel must include Chart and spreadsheet properties");
     expect(
-        coverage.unique_control_property_names == 200,
+        coverage.unique_control_property_names == 203,
         "type-specific metamodel must exclude the inherited property duplicate");
     expect(
         coverage.control_event_occurrences == 79,
@@ -487,6 +487,20 @@ void test_help_metamodel() {
     expect(
         find_property(ControlKind::input_field, "ReadOnly")->value_codec == ValueCodec::boolean,
         "safe Boolean help types must receive the Boolean domain codec");
+    const auto* dendrogram_items = find_property(ControlKind::dendrogram, "Items");
+    const auto* dendrogram_links = find_property(ControlKind::dendrogram, "Links");
+    const auto* dendrogram_orientation = find_property(ControlKind::dendrogram, "Orientation");
+    expect(dendrogram_items && dendrogram_items->value_codec == ValueCodec::dendrogram_items &&
+            dendrogram_items->storage_codec == StorageCodec::collection_record &&
+            dendrogram_items->persistence == PersistenceClass::persisted_editable &&
+            dendrogram_links && dendrogram_links->value_codec == ValueCodec::dendrogram_links &&
+            dendrogram_links->storage_codec == StorageCodec::collection_record &&
+            dendrogram_links->persistence == PersistenceClass::persisted_editable,
+        "Dendrogram Items and Links must be named typed owned collections");
+    expect(dendrogram_orientation && dendrogram_orientation->value_codec == ValueCodec::enumeration &&
+            dendrogram_orientation->default_value.kind == DefaultKind::enumeration &&
+            dendrogram_orientation->default_value.canonical == "DendrogramOrientation.Up",
+        "Dendrogram Orientation must retain its documented enum type and implicit Up default");
     expect(
         find_property(ControlKind::input_field, "AutoChoiceIncomplete")->persistence == PersistenceClass::persisted_editable &&
             find_property(ControlKind::input_field, "AutoChoiceIncomplete")->storage_codec == StorageCodec::control_info &&
@@ -1118,6 +1132,30 @@ void test_page_position_invariants() {
         "Page Position dimensions must be non-negative");
 }
 
+void test_chart_number_lexical_validation() {
+    using namespace oof::model;
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(ControlRef{ObjectId{2}});
+    OrdinaryFormDocument document(std::move(form));
+    ChartPayload chart;
+    ChartSeries series;
+    series.id = ObjectId{2};
+    series.color.kind = ColorKind::absolute;
+    series.color.red = 255;
+    series.marker = {"ChartMarkerType", "Auto"};
+    chart.series.push_back(series);
+    ChartPoint point;
+    point.id = ObjectId{1};
+    point.color.kind = ColorKind::absolute;
+    point.color.blue = 128;
+    chart.points.push_back(point);
+    chart.values.push_back({ObjectId{2}, ObjectId{1}, DecimalValue{"NaN"}});
+    document.add_control(ControlNode{ObjectId{2}, "Chart", std::move(chart)});
+    expect(document.validate().has(InvariantCode::invalid_property),
+        "Chart model validation must reject non-decimal numeric values such as NaN");
+}
+
 }  // namespace
 
 int main() {
@@ -1143,6 +1181,7 @@ int main() {
         test_event_sequence_invariants();
         test_duplicate_bindings_rejected();
         test_page_position_invariants();
+        test_chart_number_lexical_validation();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';
         return 1;
