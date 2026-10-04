@@ -806,6 +806,13 @@ void apply_proven_storage_overrides(
         DefaultKind::undefined,
         "undefined");
 
+    auto& list_box = properties[static_cast<std::size_t>(ControlKind::list_box)];
+    classify_property(list_box, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(list_box, "ShowPicture", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(list_box, "ShowCheckBox", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(list_box, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    classify_property(list_box, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
+
     auto& text_document_field = properties[static_cast<std::size_t>(ControlKind::text_document_field)];
     classify_property(text_document_field, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(text_document_field, "BorderColor", StorageCodec::control_base, DefaultKind::color, "automatic");

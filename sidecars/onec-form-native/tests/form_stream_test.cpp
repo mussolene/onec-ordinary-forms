@@ -3465,6 +3465,97 @@ void test_track_bar_observed_record_and_named_round_trip() {
         "mixed Button and TrackBar records must decode in named control order");
 }
 
+void test_list_box_value_list_data_path_and_supported_properties() {
+    constexpr std::string_view xml = R"OOF(<Form id="1" name="ListBoxForm" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"/><Position><Top>12</Top><Visible>false</Visible><Height>45</Height><Left>23</Left><Width>234</Width></Position><Enabled>false</Enabled><ShowPicture>true</ShowPicture><ShowCheckBox>true</ShowCheckBox><ToolTip>Список проверки</ToolTip><ReadOnly>false</ReadOnly></ListBox></ChildItems></Form>)OOF";
+    auto parsed = oof::source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "named ListBox with ValueList DataPath and proven properties must encode");
+    const auto decoded = form_stream::decode_document(encoded.value(), "ListBoxRoundTrip");
+    expect(decoded.ok(), "named ListBox with ValueList DataPath must decode");
+    const auto* control = decoded.value().find_control(model::ObjectId{7});
+    expect(control && control->kind() == model::ControlKind::list_box && control->data_path &&
+               control->data_path->attribute.id() == model::ObjectId{5},
+        "ListBox DataPath must resolve to the named ValueList attribute");
+    const auto* attribute = decoded.value().find_attribute(model::ObjectId{5});
+    expect(attribute && attribute->type.entries.size() == 1 &&
+               attribute->type.entries.front().term == model::TypeDomainTerm::value_list,
+        "ListBox source type must survive stream decoding as named ValueList");
+    const auto property = [&](std::string_view name) { return control->properties().find(model::PropertyId::from_name(name)); };
+    expect(property("Enabled") && !std::get<bool>(property("Enabled")->value) &&
+               property("ShowPicture") && std::get<bool>(property("ShowPicture")->value) &&
+               property("ShowCheckBox") && std::get<bool>(property("ShowCheckBox")->value) &&
+               property("ToolTip") && std::get<std::string>(property("ToolTip")->value) == "Список проверки" &&
+               property("ReadOnly") && !std::get<bool>(property("ReadOnly")->value),
+        "ListBox supported base and display properties must decode by their named descriptors");
+    expect(control->position.top.value() == 12 && control->position.left.value() == 23 &&
+               control->position.width.value() == 234 && control->position.height.value() == 45 &&
+               !control->position.visible.value(),
+        "ListBox Position and Visible must survive stream decoding");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "ListBox ValueList link, properties, and geometry must round-trip exactly");
+
+    const auto rejects = [](std::string_view source) {
+        const auto candidate = oof::source::parse_form_xml(source);
+        return !candidate || !form_stream::encode_document(candidate.value());
+    };
+    constexpr std::string_view wrong_type = R"OOF(<Form id="1" name="WrongType" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="string"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"/><Position/></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(wrong_type), "ListBox DataPath must reject a non-ValueList attribute");
+    constexpr std::string_view dangling = R"OOF(<Form id="1" name="Dangling" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="9"/><Position/></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(dangling), "ListBox DataPath must reject a dangling Attribute reference");
+    constexpr std::string_view nested = R"OOF(<Form id="1" name="Nested" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"><Member>Nested</Member></DataPath><Position/></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(nested), "ListBox DataPath must reject nested members outside the tested profile");
+    constexpr std::string_view events = R"OOF(<Form id="1" name="Events" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"/><Position/><Events><OnActivateRow>HandleRow</OnActivateRow></Events></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(events), "ListBox event storage must remain rejected until its record is proven");
+    constexpr std::string_view persisted_value = R"OOF(<Form id="1" name="PersistedValue" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"/><Position/><Value>alpha</Value></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(persisted_value), "runtime Value items must not enter persisted ListBox XML");
+}
+
+void test_list_box_captured_runtime_record_roundtrip() {
+    constexpr std::string_view observed_record = R"CAPTURED(
+{19f8b798-314e-4b4e-8121-905b2a7a03f5,201,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},{23,100743712,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,0,{12741203},0},{4,3,{-15},3},{4,3,{-13},3},2,2,0,0,0,1,0,1,1,{8,2,0,{-20},1,100},{8,2,0,{-20},1,100},0,0,1,0,0,0,0,0,0,0,100,1,2,2,2,0,0,2},6,0,0,0,0},{0}},{8,0,0,0,0,0,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,4,5,0,0},{14,"ПолеСпискаТипизированнаяСвязь",4294967295,0,0,0},{0}}
+)CAPTURED";
+    const auto captured_control = list_stream::parse(observed_record);
+    constexpr std::string_view linked_form_xml =
+        R"OOF(<Form id="1" name="CapturedListBox" ordinaryFormVersion="2.1"><Attributes><Attribute id="200" name="ЗначенияСписка"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><Button id="100" name="Подготовка1"><Position/></Button><Button id="101" name="Подготовка2"><Position/></Button><Button id="102" name="Подготовка3"><Position/></Button><Button id="103" name="Подготовка4"><Position/></Button><ListBox id="201" name="ПолеСпискаТипизированнаяСвязь"><DataPath attributeId="200"/><Position/></ListBox></ChildItems></Form>)OOF";
+    const auto parsed = oof::source::parse_form_xml(linked_form_xml);
+    expect(parsed.ok(), "captured ListBox fixture model with ValueList link must parse");
+    auto stream = form_stream::encode_document(parsed.value());
+    expect(stream.ok(), "captured ListBox fixture carrier must encode with a distinct AttributeLink");
+    auto& records = stream.value().items[1].items[2].items[2].items;
+    const auto record = std::find_if(records.begin(), records.end(), [](const auto& candidate) {
+        return candidate.is_list && candidate.items.size() > 1 && !candidate.items[1].is_list &&
+            candidate.items[1].atom == "201";
+    });
+    expect(record != records.end(), "captured ListBox control slot must be present in its stream carrier");
+    *record = captured_control;
+
+    const auto decoded = form_stream::decode_document(stream.value(), "CapturedListBox");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* control = decoded.value().find_control(model::ObjectId{201});
+    const auto* attribute = decoded.value().find_attribute(model::ObjectId{200});
+    expect(control && control->kind() == model::ControlKind::list_box && control->name == "ПолеСпискаТипизированнаяСвязь" &&
+               control->data_path && control->data_path->attribute.id() == model::ObjectId{200},
+        "captured ListBox record must decode with the separate AttributeLink to the named source");
+    expect(attribute && attribute->type.entries.size() == 1 &&
+               attribute->type.entries.front().term == model::TypeDomainTerm::value_list &&
+               !attribute->type.entries.front().type_uuid,
+        "captured ListBox fixture must keep its independently typed ValueList Attribute");
+
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok(), "captured ListBox control must re-encode in the supported named profile");
+    const auto& reencoded_records = reencoded.value().items[1].items[2].items[2].items;
+    const auto reencoded_record = std::find_if(reencoded_records.begin(), reencoded_records.end(), [](const auto& candidate) {
+        return candidate.is_list && candidate.items.size() > 1 && !candidate.items[1].is_list &&
+            candidate.items[1].atom == "201";
+    });
+    expect(reencoded_record != reencoded_records.end() &&
+               list_stream::dump_compact(*reencoded_record) == list_stream::dump_compact(captured_control),
+        "ListBox writer must reproduce the independently captured runtime control record exactly");
+}
+
 void test_calendar_field_captured_begin_period_record_decode() {
     constexpr std::string_view captured = R"CAPTURED({"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,
 {27,
@@ -5996,6 +6087,8 @@ int main() {
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();
         test_track_bar_observed_record_and_named_round_trip();
+        test_list_box_value_list_data_path_and_supported_properties();
+        test_list_box_captured_runtime_record_roundtrip();
         test_progress_data_path_mixed_with_existing_links();
         test_button_label_input_field_round_trip();
         test_input_field_tooltip_and_format_round_trip();
