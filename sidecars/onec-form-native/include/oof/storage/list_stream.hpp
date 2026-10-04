@@ -177,6 +177,52 @@ inline std::vector<Token> tokenize(std::string_view text) {
                         ++index;
                         continue;
                     }
+                    while (index < text.size() && text[index] == '\\') {
+                        // Platform strings continue with a quoted UTF-16 code unit.
+                        const auto read_code_unit = [&]() -> std::uint32_t {
+                            if (text.size() - index < 6 || text[index] != '\\' ||
+                                text[index + 5] != '"') {
+                                throw std::runtime_error("ListInStream truncated UTF-16 string escape");
+                            }
+                            std::uint32_t unit = 0;
+                            for (std::size_t digit = 1; digit <= 4; ++digit) {
+                                const char ch = text[index + digit];
+                                if (!is_ascii_hex_digit(ch)) {
+                                    throw std::runtime_error("ListInStream invalid UTF-16 string escape");
+                                }
+                                unit = (unit << 4) | static_cast<std::uint32_t>(
+                                    ch <= '9' ? ch - '0' :
+                                    ch <= 'F' ? ch - 'A' + 10 : ch - 'a' + 10);
+                            }
+                            index += 6;
+                            return unit;
+                        };
+                        std::uint32_t code_point = read_code_unit();
+                        if (code_point >= 0xd800 && code_point <= 0xdbff) {
+                            const auto low = read_code_unit();
+                            if (low < 0xdc00 || low > 0xdfff) {
+                                throw std::runtime_error("ListInStream invalid UTF-16 surrogate pair");
+                            }
+                            code_point = 0x10000 + ((code_point - 0xd800) << 10) + (low - 0xdc00);
+                        } else if (code_point >= 0xdc00 && code_point <= 0xdfff) {
+                            throw std::runtime_error("ListInStream unpaired UTF-16 low surrogate");
+                        }
+                        if (code_point < 0x80) {
+                            value += static_cast<char>(code_point);
+                        } else if (code_point < 0x800) {
+                            value += static_cast<char>(0xc0 | (code_point >> 6));
+                            value += static_cast<char>(0x80 | (code_point & 0x3f));
+                        } else if (code_point < 0x10000) {
+                            value += static_cast<char>(0xe0 | (code_point >> 12));
+                            value += static_cast<char>(0x80 | ((code_point >> 6) & 0x3f));
+                            value += static_cast<char>(0x80 | (code_point & 0x3f));
+                        } else {
+                            value += static_cast<char>(0xf0 | (code_point >> 18));
+                            value += static_cast<char>(0x80 | ((code_point >> 12) & 0x3f));
+                            value += static_cast<char>(0x80 | ((code_point >> 6) & 0x3f));
+                            value += static_cast<char>(0x80 | (code_point & 0x3f));
+                        }
+                    }
                     if (index < text.size()) {
                         const unsigned char next = static_cast<unsigned char>(text[index]);
                         if (!std::isspace(next) && !is_token_separator(text[index])) {
