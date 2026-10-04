@@ -2458,6 +2458,67 @@ void test_command_bar_owner_pair_and_strict_profile() {
         "zero footer must remain unsupported for a nonempty collection");
 }
 
+void test_command_bar_colors_named_round_trip_and_guards() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "CommandBarColors";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
+    const auto make_document = [&](model::ControlNode colored) {
+        model::OrdinaryFormDocument result(form);
+        result.add_control(std::move(colored));
+        result.add_control(model::ControlNode{model::ObjectId{3}, "Default", model::CommandBarPayload{}});
+        return result;
+    };
+    model::ControlNode colored{model::ObjectId{2}, "Colored", model::CommandBarPayload{}};
+    const std::array<std::pair<std::string_view, model::ColorValue>, 3> colors{{
+        {"BorderColor", model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+            model::QualifiedName{"StyleColors.BorderColor"}}},
+        {"ButtonTextColor", model::ColorValue{model::ColorKind::absolute, 44, 55, 66, 255, std::monostate{}}},
+        {"BackColor", model::ColorValue{model::ColorKind::absolute, 77, 88, 99, 255, std::monostate{}}}}};
+    for (const auto& [name, color] : colors)
+        colored.properties().set_explicit(model::PropertyId::from_name(name), color);
+    const auto document = make_document(colored);
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "CommandBar colors must encode" : encoded.diagnostics().front().message);
+    const auto& base = encoded.value().items[1].items[2].items[2].items[1].items[2].items[1].items[0];
+    expect(base.items[6].items[2].items[0].atom == "-22" &&
+        base.items[10].items[2].items[0].atom == "4339500" && base.items[2].items[2].items[0].atom == "6510669",
+        "independently observed native color slots must contain the matching named values");
+    const auto decoded = form_stream::decode_document(encoded.value(), "CommandBarColors");
+    expect(decoded.ok(), decoded ? "CommandBar colors must decode" : decoded.diagnostics().front().message);
+    for (const auto& [name, color] : colors) {
+        const auto* entry = decoded.value().find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name(name));
+        expect(entry != nullptr && std::get<model::ColorValue>(entry->value) == color,
+            "each CommandBar color must retain its own value");
+        expect(!decoded.value().find_control(model::ObjectId{3})->properties().contains(model::PropertyId::from_name(name)),
+            "default sibling colors must stay implicit and independent");
+    }
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<ButtonTextColor") != std::string::npos &&
+        xml.value().find("<TextColor") == std::string::npos,
+        "CommandBar XML must use the platform ButtonTextColor name");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "named CommandBar color XML must parse");
+    const auto rebuilt = form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "named XML must independently rebuild all three colors");
+    auto automatic_text = colored;
+    automatic_text.properties().set_explicit(
+        model::PropertyId::from_name("ButtonTextColor"), model::ColorValue{});
+    const auto automatic_encoded = form_stream::encode_document(make_document(automatic_text));
+    expect(automatic_encoded.ok(), "automatic text is distinct from the style default");
+    const auto automatic_decoded = form_stream::decode_document(automatic_encoded.value(), "AutomaticText");
+    expect(automatic_decoded.ok() && automatic_decoded.value().find_control(model::ObjectId{2})->properties().contains(
+        model::PropertyId::from_name("ButtonTextColor")), "explicit automatic text must not collapse into style default");
+    auto alpha = colored; auto transparent = colors[2].second; transparent.alpha = 128;
+    alpha.properties().set_explicit(model::PropertyId::from_name("BackColor"), transparent);
+    expect(!form_stream::encode_document(make_document(alpha)), "unsupported alpha must be rejected");
+    auto unknown = colored; auto style = colors[0].second; style.style = model::QualifiedName{"StyleColors.Unknown"};
+    unknown.properties().set_explicit(model::PropertyId::from_name("BorderColor"), style);
+    expect(!form_stream::encode_document(make_document(unknown)), "unknown color style must be rejected");
+    auto wrong_type = colored;
+    wrong_type.properties().set_explicit(model::PropertyId::from_name("BackColor"), false);
+    expect(!form_stream::encode_document(make_document(wrong_type)), "color property with Boolean value must be rejected");
+}
+
 void test_command_bar_default_button_round_trip_and_guards() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "DefaultAction";
     form.children = {model::ControlRef{model::ObjectId{4}}};
@@ -9270,6 +9331,7 @@ int main() {
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
         test_command_bar_owner_pair_and_strict_profile();
+        test_command_bar_colors_named_round_trip_and_guards();
         test_command_bar_default_button_round_trip_and_guards();
         test_captured_command_bar_control_record_literal();
         test_outer_format_probe();
