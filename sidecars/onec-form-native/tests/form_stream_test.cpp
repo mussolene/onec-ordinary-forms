@@ -6,13 +6,15 @@
 #include <iostream>
 #include <limits>
 #include <optional>
-#include <limits>
+#include <map>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
+
+#include <zlib.h>
 
 #include "oof/model/metamodel.hpp"
 #include "oof/source/form_xml.hpp"
@@ -24,6 +26,7 @@ namespace {
 namespace form_stream = oof::storage::form_stream;
 namespace list_stream = oof::storage::list_stream;
 namespace model = oof::model;
+namespace source = oof::source;
 namespace value_codec = oof::storage::value_codec;
 
 void expect(bool condition, std::string_view message) {
@@ -107,6 +110,433 @@ list_stream::ListValue* find_usual_group_record(list_stream::ListValue& value) {
         if (auto* found = find_usual_group_record(item)) return found;
     }
     return nullptr;
+}
+
+list_stream::ListValue* find_chart_record(list_stream::ListValue& value) {
+    constexpr std::string_view guid = "a8b97779-1a4b-4059-b09c-807f86d2a461";
+    if (value.is_list && value.items.size() == 7 && !value.items[0].is_list && value.items[0].atom == guid) return &value;
+    if (!value.is_list) return nullptr;
+    for (auto& item : value.items) {
+        if (auto* found = find_chart_record(item)) return found;
+    }
+    return nullptr;
+}
+
+list_stream::ListValue* find_record_with_guid(list_stream::ListValue& value, std::string_view guid) {
+    if (value.is_list && value.items.size() == 6 && !value.items[0].is_list && value.items[0].atom == guid) {
+        return &value;
+    }
+    if (!value.is_list) return nullptr;
+    for (auto& item : value.items) {
+        if (auto* found = find_record_with_guid(item, guid)) return found;
+    }
+    return nullptr;
+}
+
+list_stream::ListValue& captured_column_packet(list_stream::ListValue& payload) {
+    auto* table = find_record_with_guid(
+        payload, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table != nullptr, "captured full form must contain Table record");
+    return table->items[2].items[2].items[1].items[23].items[1].items[1].items[1].items[1].items[39];
+}
+
+std::vector<std::uint8_t> test_base64_decode(std::string_view text) {
+    const auto value = [](char ch) -> int {
+        if (ch >= 'A' && ch <= 'Z') return ch - 'A';
+        if (ch >= 'a' && ch <= 'z') return ch - 'a' + 26;
+        if (ch >= '0' && ch <= '9') return ch - '0' + 52;
+        if (ch == '+') return 62;
+        if (ch == '/') return 63;
+        return -1;
+    };
+    std::vector<std::uint8_t> bytes;
+    for (std::size_t pos = 0; pos < text.size(); pos += 4) {
+        const int a = value(text[pos]);
+        const int b = value(text[pos + 1]);
+        const int c = text[pos + 2] == '=' ? 0 : value(text[pos + 2]);
+        const int d = text[pos + 3] == '=' ? 0 : value(text[pos + 3]);
+        expect(a >= 0 && b >= 0 && c >= 0 && d >= 0, "captured packet base64 must be valid");
+        const auto bits = (static_cast<std::uint32_t>(a) << 18) | (static_cast<std::uint32_t>(b) << 12) |
+            (static_cast<std::uint32_t>(c) << 6) | static_cast<std::uint32_t>(d);
+        bytes.push_back(static_cast<std::uint8_t>(bits >> 16));
+        if (text[pos + 2] != '=') bytes.push_back(static_cast<std::uint8_t>(bits >> 8));
+        if (text[pos + 3] != '=') bytes.push_back(static_cast<std::uint8_t>(bits));
+    }
+    return bytes;
+}
+
+std::string test_base64_encode(const std::vector<std::uint8_t>& bytes) {
+    constexpr std::string_view alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string output;
+    for (std::size_t pos = 0; pos < bytes.size(); pos += 3) {
+        const std::uint32_t a = bytes[pos];
+        const std::uint32_t b = pos + 1 < bytes.size() ? bytes[pos + 1] : 0;
+        const std::uint32_t c = pos + 2 < bytes.size() ? bytes[pos + 2] : 0;
+        const std::uint32_t bits = (a << 16) | (b << 8) | c;
+        output.push_back(alphabet[(bits >> 18) & 63]);
+        output.push_back(alphabet[(bits >> 12) & 63]);
+        output.push_back(pos + 1 < bytes.size() ? alphabet[(bits >> 6) & 63] : '=');
+        output.push_back(pos + 2 < bytes.size() ? alphabet[bits & 63] : '=');
+    }
+    return output;
+}
+
+std::vector<std::uint8_t> test_raw_inflate(const std::vector<std::uint8_t>& packet) {
+    z_stream stream{};
+    expect(inflateInit2(&stream, -MAX_WBITS) == Z_OK, "test raw inflate must initialize");
+    std::vector<std::uint8_t> output(8192);
+    stream.next_in = const_cast<Bytef*>(packet.data() + 18);
+    stream.avail_in = static_cast<uInt>(packet.size() - 18);
+    stream.next_out = output.data();
+    stream.avail_out = static_cast<uInt>(output.size());
+    const int result = inflate(&stream, Z_FINISH);
+    const auto size = stream.total_out;
+    inflateEnd(&stream);
+    expect(result == Z_STREAM_END, "captured packet raw DEFLATE must inflate");
+    output.resize(size);
+    return output;
+}
+
+std::vector<std::uint8_t> test_raw_deflate(const std::vector<std::uint8_t>& input, int level) {
+    z_stream stream{};
+    expect(deflateInit2(&stream, level, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY) == Z_OK,
+        "test raw deflate must initialize");
+    std::vector<std::uint8_t> output(compressBound(static_cast<uLong>(input.size())));
+    stream.next_in = const_cast<Bytef*>(input.data());
+    stream.avail_in = static_cast<uInt>(input.size());
+    stream.next_out = output.data();
+    stream.avail_out = static_cast<uInt>(output.size());
+    const int result = deflate(&stream, Z_FINISH);
+    const auto size = stream.total_out;
+    deflateEnd(&stream);
+    expect(result == Z_STREAM_END, "test raw DEFLATE must complete");
+    output.resize(size);
+    return output;
+}
+
+void set_captured_packet(list_stream::ListValue& payload, const std::vector<std::uint8_t>& packet) {
+    auto& chunks = captured_column_packet(payload).items[0].items;
+    chunks.clear();
+    const auto encoded = test_base64_encode(packet);
+    for (std::size_t pos = 0; pos < encoded.size(); pos += 64) {
+        chunks.push_back(list_stream::ListValue::raw_atom(
+            (pos == 0 ? "#base64:" : "") + encoded.substr(pos, std::min<std::size_t>(64, encoded.size() - pos))));
+    }
+}
+
+list_stream::ListValue captured_table_payload() {
+    constexpr std::string_view captured_text =
+#include "fixtures/table-after-create-columns.inc"
+        ;
+    const auto envelope = form_stream::decode_runtime_envelope(captured_text);
+    expect(envelope.ok(), "captured full form envelope must decode");
+    return envelope.value().payload;
+}
+
+void test_captured_table_column_record() {
+    constexpr std::string_view captured_text =
+#include "fixtures/table-after-create-columns.inc"
+        ;
+    auto envelope = form_stream::decode_runtime_envelope(captured_text);
+    expect(envelope.ok(), "independent captured full form envelope must decode");
+    auto captured_payload = envelope.value().payload;
+    const auto* captured_table_record = find_record_with_guid(
+        captured_payload, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(captured_table_record != nullptr, "captured full form must contain a Table record");
+
+    const auto decoded = form_stream::decode_document(envelope.value().payload, "CapturedTable");
+    expect(decoded.ok(), decoded ? "captured Table must decode" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message +
+            " expected=" + decoded.diagnostics().front().expected +
+            " actual=" + decoded.diagnostics().front().actual);
+    const auto table = std::find_if(decoded.value().collections().controls.begin(),
+        decoded.value().collections().controls.end(), [](const auto& control) {
+            return control.kind() == model::ControlKind::table;
+        });
+    expect(table != decoded.value().collections().controls.end(), "captured model must expose named Table");
+    const auto& payload = std::get<model::TablePayload>(table->payload);
+    expect(payload.columns.size() == 1 && payload.columns[0].name == "Code" &&
+            payload.columns[0].data_path == "Code" && payload.columns[0].control.kind == model::ControlKind::input_field,
+        "captured Column must expose its name, DataPath, and typed InputField");
+
+    const auto encoded = form_stream::encode_document(decoded.value());
+    expect(encoded.ok(), encoded ? "captured Table must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    auto expected = *captured_table_record;
+    auto encoded_payload = encoded.value();
+    const auto* encoded_table_record = find_record_with_guid(
+        encoded_payload,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(encoded_table_record != nullptr, "re-encoded form must contain its Table record");
+    auto& expected_packet = expected.items[2].items[2].items[1].items[23].items[1].items[1].items[1].items[1].items[39];
+    const auto& encoded_packet = encoded_table_record->items[2].items[2].items[1].items[23].items[1].items[1].items[1].items[1].items[39];
+    expected_packet = encoded_packet;
+    expect(list_stream::dump_compact(expected) == list_stream::dump_compact(*encoded_table_record),
+        "independent captured Table/Column record must re-encode exactly apart from recompressed editor bytes");
+}
+
+void test_table_read_only_runtime_flags() {
+    for (const bool read_only : {true, false}) {
+        auto literal = captured_table_payload();
+        auto* record = find_record_with_guid(literal,
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(record != nullptr, "captured fixture must contain Table");
+        // Независимый опыт true/false/true меняет только этот флаг Table на 0x400.
+        const auto expected_flags = read_only ? "117643809" : "117644833";
+        record->items[2].items[2].items[1].items[1] = list_stream::ListValue::raw_atom(expected_flags);
+        auto decoded = form_stream::decode_document(literal, "LiteralTableReadOnly");
+        expect(decoded.ok(), "independent literal Table ReadOnly flags must decode");
+        const auto table = std::find_if(decoded.value().collections().controls.begin(),
+            decoded.value().collections().controls.end(), [](const auto& control) {
+                return control.kind() == model::ControlKind::table;
+            });
+        expect(table != decoded.value().collections().controls.end(), "literal Table must retain its named model");
+        const auto* property = table->properties().find(model::PropertyId::from_name("ReadOnly"));
+        expect(read_only ? property == nullptr : property != nullptr && !std::get<bool>(property->value),
+            "Table ReadOnly=true must remain the profile default and false must be explicit");
+        auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), xml ? "named Table ReadOnly must serialize to XML" :
+            xml.diagnostics().front().path + ": " + xml.diagnostics().front().message);
+        expect((xml.value().find("<ReadOnly>false</ReadOnly>") != std::string::npos) == !read_only,
+            "nondefault Table ReadOnly=false must be public XML");
+        auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "named Table ReadOnly XML must parse");
+        auto encoded = form_stream::encode_document(parsed.value());
+        expect(encoded.ok(), "Table ReadOnly must survive XML and storage roundtrip");
+        const auto* encoded_record = find_record_with_guid(encoded.value(),
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(encoded_record != nullptr && encoded_record->items[2].items[2].items[1].items[1].atom == expected_flags,
+            "writer must use the independent true/false literal flags");
+        if (read_only) {
+            const_cast<model::ControlNode&>(*table).properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+            auto explicit_true = form_stream::encode_document(decoded.value());
+            expect(explicit_true.ok(), "explicit Table ReadOnly=true must be supported");
+            const auto* explicit_record = find_record_with_guid(explicit_true.value(),
+                model::metamodel::descriptor_for(model::ControlKind::table).guid);
+            expect(explicit_record != nullptr &&
+                list_stream::dump_compact(*explicit_record) == list_stream::dump_compact(*encoded_record),
+                "explicit and omitted ReadOnly=true must have identical Table records");
+        }
+    }
+    auto unknown_flag = captured_table_payload();
+    auto* record = find_record_with_guid(unknown_flag,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    record->items[2].items[2].items[1].items[1] = list_stream::ListValue::raw_atom("117644835");
+    expect(!form_stream::decode_document(unknown_flag, "UnknownTableFlag"),
+        "changing any unproven Table flag must fail strict canonical validation");
+}
+
+void test_table_column_name_and_data_path_runtime_slots() {
+    auto literal = captured_table_payload();
+    auto* table_record = find_record_with_guid(
+        literal, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table_record != nullptr, "independent captured fixture must contain Table");
+    auto& column_body = table_record->items[2].items[2].items[1].items[23].items[1].items[1];
+    auto& column_properties = column_body.items[1].items[1];
+    // Независимые чтения свойств платформой дают Name=Code и Data=Choice для этих позиций.
+    column_properties.items[30] = list_stream::ListValue::string_atom("Code");
+    column_body.items[2] = list_stream::ListValue::string_atom("Choice");
+    auto decoded = form_stream::decode_document(literal, "LiteralTableColumnSlots");
+    expect(decoded.ok(), "getter-derived literal Name/Data slots must decode independently of the writer");
+    auto table = std::find_if(decoded.value().collections().controls.begin(),
+        decoded.value().collections().controls.end(), [](const auto& control) {
+            return control.kind() == model::ControlKind::table;
+        });
+    expect(table != decoded.value().collections().controls.end(), "literal model must retain its Table");
+    auto& named_column = std::get<model::TablePayload>(const_cast<model::ControlNode&>(*table).payload).columns.front();
+    expect(named_column.name == "Code" && named_column.data_path == "Choice",
+        "Column Name must decode from property slot 30 and DataPath from outer body slot 2");
+
+    named_column.name = "Choice";
+    named_column.data_path = "Code";
+    auto encoded = form_stream::encode_document(decoded.value());
+    expect(encoded.ok(), "independent named Column alias must serialize");
+    table_record = find_record_with_guid(
+        encoded.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table_record != nullptr, "serialized alias must retain its Table");
+    const auto& encoded_body = table_record->items[2].items[2].items[1].items[23].items[1].items[1];
+    const auto& encoded_name = encoded_body.items[1].items[1].items[30];
+    const auto& encoded_data_path = encoded_body.items[2];
+    expect(!encoded_name.is_list && encoded_name.atom_kind == list_stream::ListValue::AtomKind::string &&
+               encoded_name.atom == "Choice",
+        "writer must put the independently named Column in property slot 30");
+    expect(!encoded_data_path.is_list && encoded_data_path.atom_kind == list_stream::ListValue::AtomKind::string &&
+               encoded_data_path.atom == "Code",
+        "writer must put the source DataPath in outer body slot 2 without replacing the alias");
+}
+
+void test_table_column_choice_and_check_box_profiles() {
+    const auto make_document = [](model::ControlKind invalid_kind = model::ControlKind::input_field,
+                                  bool mismatched_property = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "TableEditors";
+        form.children = {model::ControlRef{model::ObjectId{3}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue value_table_type;
+        model::TypeDomainEntry value_table_entry;
+        value_table_entry.term = model::TypeDomainTerm::value_table;
+        value_table_type.entries.push_back(value_table_entry);
+        document.add_attribute(model::Attribute{model::ObjectId{2}, "Rows", value_table_type});
+        model::ControlNode table{model::ObjectId{3}, "Rows", model::TablePayload{}};
+        table.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {}};
+        auto& columns = std::get<model::TablePayload>(table.payload).columns;
+        const auto add_column = [&](std::string name, model::ControlKind kind) {
+            model::TableColumn column;
+            column.name = std::move(name);
+            column.data_path = "Code";
+            column.header.items.push_back({"en", column.name});
+            column.control.kind = kind;
+            columns.push_back(std::move(column));
+        };
+        add_column("InputCode", model::ControlKind::input_field);
+        add_column("ChoiceCode", model::ControlKind::choice_field);
+        add_column("CheckCode", model::ControlKind::check_box);
+        if (mismatched_property) {
+            columns[1].control.properties.set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+        }
+        if (invalid_kind != model::ControlKind::input_field) columns[0].control.kind = invalid_kind;
+        document.add_control(std::move(table));
+        return document;
+    };
+
+    const auto document = make_document();
+    auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "three named default Table editors must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    auto roundtrip = form_stream::decode_document(encoded.value(), "TableEditorProfiles");
+    expect(roundtrip.ok(), roundtrip ? "three named default Table editors must decode" :
+        roundtrip.diagnostics().front().path + ": " + roundtrip.diagnostics().front().message);
+    const auto table_after = std::find_if(roundtrip.value().collections().controls.begin(),
+        roundtrip.value().collections().controls.end(), [](const auto& control) {
+            return control.kind() == model::ControlKind::table;
+        });
+    expect(table_after != roundtrip.value().collections().controls.end(), "roundtrip must retain Table");
+    const auto& columns_after = std::get<model::TablePayload>(table_after->payload).columns;
+    expect(columns_after.size() == 3 && columns_after[0].control.kind == model::ControlKind::input_field &&
+               columns_after[1].control.kind == model::ControlKind::choice_field &&
+               columns_after[2].control.kind == model::ControlKind::check_box,
+        "Table Column editor GUID and typed payload must roundtrip for all supported kinds");
+
+    auto mismatched_guid = encoded.value();
+    auto* table_record = find_record_with_guid(
+        mismatched_guid, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table_record != nullptr, "encoded form must contain Table record for mismatch checks");
+    auto& first_column = table_record->items[2].items[2].items[1].items[23].items[1];
+    first_column.items[1].items[1].items[1].items[38] = list_stream::ListValue::raw_atom(
+        std::string(model::metamodel::descriptor_for(model::ControlKind::check_box).guid));
+    expect(!form_stream::decode_document(mismatched_guid, "MismatchedTableEditor").ok(),
+        "editor GUID must reject a packet whose nested payload belongs to a different kind");
+
+    auto unknown_kind = encoded.value();
+    table_record = find_record_with_guid(
+        unknown_kind, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    auto& unknown_column = table_record->items[2].items[2].items[1].items[23].items[1];
+    unknown_column.items[1].items[1].items[1].items[38] = list_stream::ListValue::raw_atom(
+        "00000000-0000-4000-8000-000000000000");
+    expect(!form_stream::decode_document(unknown_kind, "UnknownTableEditor").ok(),
+        "unknown Table Column editor GUID must fail closed");
+
+    expect(!form_stream::encode_document(make_document(model::ControlKind::input_field, true)).ok(),
+        "ChoiceField must reject a mismatched InputField property even at its default value");
+    expect(!form_stream::encode_document(make_document(model::ControlKind::spreadsheet_document_field)).ok(),
+        "unsupported Table Column editor kind must fail closed");
+}
+
+void expect_captured_table_rejected(list_stream::ListValue payload, std::string_view message) {
+    expect(!form_stream::decode_document(payload, "CapturedTable"), message);
+}
+
+std::vector<std::uint8_t> compressed_capture_packet(const std::vector<std::uint8_t>& envelope, int level) {
+    auto payload = captured_table_payload();
+    auto packet = test_base64_decode(captured_column_packet(payload).items[0].items[0].atom.substr(8));
+    packet.resize(18);
+    const auto compressed = test_raw_deflate(envelope, level);
+    packet.insert(packet.end(), compressed.begin(), compressed.end());
+    return packet;
+}
+
+void test_captured_table_packet_rejections_and_alternate_deflate() {
+    auto baseline = captured_table_payload();
+    const auto encoded_chunks = captured_column_packet(baseline).items[0].items;
+    std::string encoded;
+    for (std::size_t index = 0; index < encoded_chunks.size(); ++index) {
+        encoded += index == 0 ? encoded_chunks[index].atom.substr(8) : encoded_chunks[index].atom;
+    }
+    const auto packet = test_base64_decode(encoded);
+    const auto envelope = test_raw_inflate(packet);
+
+    auto alternate = captured_table_payload();
+    const auto alternate_packet = compressed_capture_packet(envelope, Z_BEST_SPEED);
+    expect(alternate_packet != packet, "alternate compressor must produce different captured packet bytes");
+    set_captured_packet(alternate, alternate_packet);
+    expect(form_stream::decode_document(alternate, "CapturedTable").ok(),
+        "same nested InputField semantics with independent valid DEFLATE bytes must decode");
+
+    auto bad_header = captured_table_payload();
+    auto changed_packet = packet;
+    changed_packet[0] ^= 1;
+    set_captured_packet(bad_header, changed_packet);
+    expect_captured_table_rejected(std::move(bad_header), "wrong editor packet header must fail");
+
+    auto bad_deflate = captured_table_payload();
+    changed_packet = packet;
+    changed_packet[18 + 3] ^= 0xff;
+    set_captured_packet(bad_deflate, changed_packet);
+    expect_captured_table_rejected(std::move(bad_deflate), "corrupt editor DEFLATE data must fail");
+
+    auto truncated = captured_table_payload();
+    changed_packet = packet;
+    changed_packet.pop_back();
+    set_captured_packet(truncated, changed_packet);
+    expect_captured_table_rejected(std::move(truncated), "truncated editor DEFLATE data must fail");
+
+    auto trailing = captured_table_payload();
+    changed_packet = packet;
+    changed_packet.push_back(0);
+    set_captured_packet(trailing, changed_packet);
+    expect_captured_table_rejected(std::move(trailing), "trailing bytes after editor DEFLATE stream must fail");
+
+    auto wrong_length = envelope;
+    wrong_length[0] ^= 1;
+    auto bad_length_payload = captured_table_payload();
+    set_captured_packet(bad_length_payload, compressed_capture_packet(wrong_length, Z_DEFAULT_COMPRESSION));
+    expect_captured_table_rejected(std::move(bad_length_payload), "incorrect editor envelope length must fail");
+
+    auto wrong_bom = envelope;
+    wrong_bom[8] ^= 1;
+    auto bad_bom_payload = captured_table_payload();
+    set_captured_packet(bad_bom_payload, compressed_capture_packet(wrong_bom, Z_DEFAULT_COMPRESSION));
+    expect_captured_table_rejected(std::move(bad_bom_payload), "incorrect editor envelope BOM must fail");
+
+    auto unsupported_pair = envelope;
+    const std::string_view editor_text(reinterpret_cast<const char*>(unsupported_pair.data() + 11),
+        unsupported_pair.size() - 11);
+    auto editor = list_stream::parse(editor_text);
+    editor.items[3] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")});
+    const std::string changed_text = list_stream::dump_listout(editor);
+    const std::size_t text_size = changed_text.size();
+    const std::uint64_t envelope_size = static_cast<std::uint64_t>(text_size) + 3;
+    unsupported_pair.resize(sizeof(std::uint64_t));
+    for (std::size_t i = 0; i < sizeof(std::uint64_t); ++i) {
+        unsupported_pair[i] = static_cast<std::uint8_t>(envelope_size >> (i * 8));
+    }
+    unsupported_pair.insert(unsupported_pair.end(), {0xef, 0xbb, 0xbf});
+    unsupported_pair.insert(unsupported_pair.end(), changed_text.begin(), changed_text.end());
+    auto bad_pair_payload = captured_table_payload();
+    set_captured_packet(bad_pair_payload, compressed_capture_packet(unsupported_pair, Z_DEFAULT_COMPRESSION));
+    expect_captured_table_rejected(std::move(bad_pair_payload), "unsupported paired InputField editor data must fail");
+
+    auto bad_packet_field = captured_table_payload();
+    captured_column_packet(bad_packet_field).items[1] = list_stream::ListValue::raw_atom("1");
+    expect_captured_table_rejected(std::move(bad_packet_field), "unsupported second packet field must fail");
+
+    auto bad_count = captured_table_payload();
+    auto* table = find_record_with_guid(
+        bad_count, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table != nullptr, "captured Table must resolve for count mutation");
+    table->items[2].items[2].items[1].items[23].items[0] = list_stream::ListValue::raw_atom("2");
+    expect_captured_table_rejected(std::move(bad_count), "Column collection count mismatch must fail");
 }
 
 void test_outer_format_probe() {
@@ -1066,6 +1496,144 @@ void test_check_box_tooltip_round_trip_and_validation() {
         model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
     expect_failure(form_stream::decode_document(multilingual, "CheckBoxToolTip"), "OOF1115", tooltip_path,
         "multilingual CheckBox ToolTip must be rejected without loss");
+}
+
+void test_choice_field_static_profile_round_trip_and_validation() {
+    static constexpr std::string_view observed_choice_field_info = R"OOF({2,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,1,0,0,0,0,1,0,0,255,0,0,4,0,{"U"},{"U"},"",0,1,1,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0},{0}})OOF";
+    const auto make_document = [](std::optional<std::string> tool_tip,
+                                  bool enabled = true,
+                                  bool boolean_attribute = false,
+                                  bool with_data_path = true,
+                                  bool with_unmapped_property = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "ChoiceFieldProfile";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue value_type;
+        model::TypeDomainEntry value_entry;
+        value_entry.term = boolean_attribute ? model::TypeDomainTerm::boolean : model::TypeDomainTerm::string;
+        if (!boolean_attribute) {
+            value_entry.string.length = 64;
+            value_entry.string.variable = false;
+        }
+        value_type.entries.push_back(value_entry);
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Choice", value_type});
+        model::ControlNode choice_field{model::ObjectId{2}, "ChoiceField", model::ChoiceFieldPayload{}};
+        if (with_data_path) {
+            choice_field.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        }
+        if (!enabled) {
+            choice_field.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        }
+        if (tool_tip.has_value()) {
+            choice_field.properties().set_explicit(model::PropertyId::from_name("ToolTip"), *tool_tip);
+        }
+        if (with_unmapped_property) {
+            choice_field.properties().set_explicit(
+                model::PropertyId::from_name("ReadOnly"), false);
+        }
+        document.add_control(std::move(choice_field));
+        return document;
+    };
+    const auto choice_record = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1];
+    };
+
+    const auto default_encoded = form_stream::encode_document(make_document(std::nullopt));
+    const auto explicit_empty_encoded = form_stream::encode_document(make_document(std::string{}));
+    expect(default_encoded.ok() && explicit_empty_encoded.ok(),
+        "default and explicit empty ChoiceField ToolTip must encode");
+    expect(list_stream::dump_compact(choice_record(default_encoded.value()).items[2]) == observed_choice_field_info,
+        "ChoiceField writer must match the independent Designer-native 46-field info record");
+    auto captured_default = default_encoded.value();
+    captured_default.items[1].items[2].items[2].items[1].items[2] = list_stream::parse(observed_choice_field_info);
+    const auto captured_decoded = form_stream::decode_document(captured_default, "ChoiceFieldNativeInfo");
+    expect(captured_decoded.ok(), captured_decoded ? "" :
+        "independent Designer-native ChoiceField info must decode: " + captured_decoded.diagnostics().front().path +
+        ": " + captured_decoded.diagnostics().front().message);
+    expect(list_stream::dump_compact(default_encoded.value()) ==
+               list_stream::dump_compact(explicit_empty_encoded.value()),
+        "explicit empty ChoiceField ToolTip must normalize to the default storage");
+    const auto default_decoded = form_stream::decode_document(default_encoded.value(), "ChoiceFieldProfile");
+    expect(default_decoded.ok(), "default ChoiceField storage must decode");
+    const auto* default_choice = default_decoded.value().find_control(model::ObjectId{2});
+    expect(default_choice && default_choice->data_path &&
+               default_choice->data_path->attribute.id() == model::ObjectId{3} &&
+               !default_choice->properties().find(model::PropertyId::from_name("ToolTip")),
+        "default ChoiceField must preserve direct DataPath and omit empty ToolTip");
+
+    auto unbound_encoded = form_stream::encode_document(make_document(std::nullopt, true, false, false));
+    expect(unbound_encoded.ok(), "unbound ChoiceField default profile must encode");
+    auto independent_unbound = unbound_encoded.value();
+    auto& independent_unbound_record = independent_unbound.items[1].items[2].items[2].items[1];
+    independent_unbound_record.items[2] = list_stream::parse(observed_choice_field_info);
+    expect(independent_unbound.items[2].items[3].items.size() == 1 &&
+               independent_unbound.items[2].items[3].items[0].atom == "0",
+        "unbound Designer-native ChoiceField fixture must have an empty attribute-link table");
+    const auto independent_unbound_decoded = form_stream::decode_document(
+        independent_unbound, "ChoiceFieldUnboundNativeDefault");
+    expect(independent_unbound_decoded.ok(), independent_unbound_decoded ? "" :
+        "independent unbound ChoiceField default record must decode: " +
+            independent_unbound_decoded.diagnostics().front().path + ": " +
+            independent_unbound_decoded.diagnostics().front().message);
+    const auto* unbound_choice = independent_unbound_decoded.value().find_control(model::ObjectId{2});
+    expect(unbound_choice && !unbound_choice->data_path,
+        "unbound Designer-native ChoiceField must remain unbound after decode");
+    const auto unbound_reencoded = form_stream::encode_document(independent_unbound_decoded.value());
+    expect(unbound_reencoded.ok() && unbound_reencoded.value().items[2].items[3].items.size() == 1 &&
+               unbound_reencoded.value().items[2].items[3].items[0].atom == "0",
+        "independent unbound ChoiceField must re-encode without an invented DataPath");
+
+    const std::string tool_tip = "Выберите Ω <вариант> & \"значение\"\nВторая строка";
+    const auto encoded = form_stream::encode_document(make_document(tool_tip, false));
+    expect(encoded.ok(), "ChoiceField with disabled state and Unicode multiline ToolTip must encode");
+    const auto& record = choice_record(encoded.value());
+    const auto& info = record.items[2];
+    expect(info.items.size() == 3 && info.items[0].atom == "2" && info.items[1].items.size() == 46 &&
+               info.items[1].items[0].items[1].atom == "0" &&
+               list_stream::dump_compact(info.items[2]) == "{0}",
+        "ChoiceField must use the observed 46-field control-info profile and preserve disabled state");
+    const auto& stored_tool_tip = info.items[1].items[0].items[12];
+    expect(list_stream::dump_compact(stored_tool_tip) == value_codec::encode_localized_string(
+               model::LocalizedStringValue{{{"ru", "Выберите Ω <вариант> & \"значение\"\r\nВторая строка"}}}),
+        "ChoiceField ToolTip must use the observed localized base slot and canonical line endings");
+    const auto decoded = form_stream::decode_document(encoded.value(), "ChoiceFieldProfile");
+    expect(decoded.ok(), "ChoiceField ToolTip and Enabled must decode");
+    const auto* choice_field = decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_tool_tip = choice_field == nullptr ? nullptr :
+        choice_field->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(choice_field && choice_field->data_path &&
+               choice_field->data_path->attribute.id() == model::ObjectId{3} &&
+               decoded_tool_tip && std::get<std::string>(decoded_tool_tip->value) == tool_tip &&
+               std::get<bool>(choice_field->properties().find(model::PropertyId::from_name("Enabled"))->value) == false,
+        "ChoiceField named properties and String DataPath must round-trip");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "ChoiceField profile must round-trip without storage drift");
+
+    auto unsupported_property = make_document(std::nullopt, true, false, true, true);
+    expect_failure(form_stream::encode_document(unsupported_property), "OOF1122", "$/ChoiceField",
+        "unmapped ChoiceField properties must not enter persisted XML or storage");
+
+    auto wrong_type = make_document(std::nullopt, true, true);
+    expect_failure(form_stream::encode_document(wrong_type), "OOF1122", "$/ChoiceField/DataPath",
+        "ChoiceField must reject non-string DataPath attributes");
+    auto wrong_type_unbound = form_stream::encode_document(make_document(std::nullopt, true, true, false));
+    expect(wrong_type_unbound.ok(), "unbound ChoiceField can coexist with an unrelated Boolean Attribute");
+    auto wrong_type_bound_stream = wrong_type_unbound.value();
+    wrong_type_bound_stream.items[2].items[3] = default_encoded.value().items[2].items[3];
+    const auto wrong_type_bound = form_stream::decode_document(wrong_type_bound_stream, "ChoiceFieldBooleanLink");
+    expect(!wrong_type_bound && wrong_type_bound.diagnostics().front().code == "OOF1122" &&
+               wrong_type_bound.diagnostics().front().path == "$/2/3",
+        "a linked ChoiceField must reject an independently encoded non-String Attribute link");
+
+    auto malformed = encoded.value();
+    malformed.items[1].items[2].items[2].items[1].items[2].items[1].items[13] =
+        list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(malformed, "ChoiceFieldProfile"), "OOF1114",
+        "$/1/2/2/1/2", "unmapped ChoiceField base flags must fail closed");
 }
 
 void test_check_box_font_round_trip_and_validation() {
@@ -2841,7 +3409,103 @@ void test_fresh_checkbox_stream_decode() {
         "fresh CheckBox linked Attribute must decode exact Boolean token");
 }
 
+void test_html_document_field_output_platform_record_and_guards() {
+    const auto make_document = [](std::optional<model::EnumerationValue> output,
+                                  const std::function<void(model::ControlNode&)>& configure = {}) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "HtmlOutput";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode field{model::ObjectId{2}, "HtmlProbe", model::HtmlDocumentFieldPayload{}};
+        if (output) field.properties().set_explicit(model::PropertyId::from_name("Output"), *output);
+        if (configure) configure(field);
+        document.add_control(std::move(field));
+        return document;
+    };
+
+    const auto actual_platform_data = list_stream::parse("{5,0,{0},{4,4,{0},4},{3,1,{-18},0,0,0},1,0}");
+    const auto auto_stream = form_stream::encode_document(make_document(std::nullopt));
+    expect(auto_stream.ok(), "HTMLDocumentField with default Auto must encode");
+    const auto html_record_path = auto_stream.value().items[1].items[2].items[2].items[1];
+    expect(list_stream::dump_compact(html_record_path.items[2]) ==
+                   list_stream::dump_compact(actual_platform_data),
+        "canonical HTMLDocumentField data must match the literal platform Add readback tuple");
+    const auto auto_decoded = form_stream::decode_document(auto_stream.value(), "HtmlOutput");
+    expect(auto_decoded.ok() &&
+               auto_decoded.value().find_control(model::ObjectId{2})->kind() == model::ControlKind::html_document_field,
+        "platform-shaped HTMLDocumentField record must decode as the named control");
+    expect(!auto_decoded.value().find_control(model::ObjectId{2})->properties().find(
+               model::PropertyId::from_name("Output")),
+        "platform default Auto must normalize to an implicit model default");
+
+    for (const auto& [member, storage] : std::array<std::pair<std::string_view, std::string_view>, 2>{
+             std::pair{"Enable", "1"}, std::pair{"Disable", "2"}}) {
+        const auto encoded = form_stream::encode_document(make_document(model::EnumerationValue{"Output", std::string(member)}));
+        expect(encoded.ok(), "supported HTMLDocumentField Output values must encode");
+        const auto& record = encoded.value().items[1].items[2].items[2].items[1];
+        expect(record.items[2].items[6].atom == storage,
+            "HTMLDocumentField Output member must occupy only its observed tuple slot");
+        const auto decoded = form_stream::decode_document(encoded.value(), "HtmlOutput");
+        expect(decoded.ok() && std::get<model::EnumerationValue>(
+                   decoded.value().find_control(model::ObjectId{2})->properties().find(
+                       model::PropertyId::from_name("Output"))->value) == model::EnumerationValue{"Output", std::string(member)},
+            "HTMLDocumentField Output member must decode to its named public enum");
+        const auto repeated = form_stream::encode_document(decoded.value());
+        expect(repeated.ok() && list_stream::dump_compact(repeated.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "HTMLDocumentField Output must round-trip without changing other storage slots");
+    }
+
+    auto invalid_output = auto_stream.value();
+    invalid_output.items[1].items[2].items[2].items[1].items[2].items[6] = list_stream::ListValue::raw_atom("3");
+    expect_failure(form_stream::decode_document(invalid_output, "HtmlOutput"), "OOF1114",
+        "$/1/2/2/1/2/6", "unknown HTMLDocumentField Output storage values must be rejected");
+    auto invalid_data_slot = auto_stream.value();
+    invalid_data_slot.items[1].items[2].items[2].items[1].items[2].items[1] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(invalid_data_slot, "HtmlOutput"), "OOF1114",
+        "$/1/2/2/1/2", "unproven HTMLDocumentField data variations must be rejected");
+    auto invalid_metadata = auto_stream.value();
+    invalid_metadata.items[1].items[2].items[2].items[1].items[4].items[2] = list_stream::ListValue::raw_atom("7");
+    expect_failure(form_stream::decode_document(invalid_metadata, "HtmlOutput"), "OOF1114",
+        "$/1/2/2/1/4", "unproven HTMLDocumentField metadata variations must be rejected");
+
+    for (const auto property : {"Border", "BorderColor", "Document", "Content"}) {
+        auto unsupported = make_document(std::nullopt, [property](model::ControlNode& field) {
+            field.properties().set_explicit(model::PropertyId::from_name(property), std::string("unsupported"));
+        });
+        expect(!form_stream::encode_document(unsupported),
+            "unproven HTMLDocumentField properties must fail closed");
+    }
+    auto unsupported_event = make_document(std::nullopt, [](model::ControlNode& field) {
+        field.events.push_back(model::EventRef{model::ObjectId{9}});
+    });
+    expect(!form_stream::encode_document(unsupported_event),
+        "unproven HTMLDocumentField events must fail closed");
+    auto unsupported_child = make_document(std::nullopt, [](model::ControlNode& field) {
+        field.children.push_back(model::ControlRef{model::ObjectId{3}});
+    });
+    expect(!form_stream::encode_document(unsupported_child),
+        "unproven HTMLDocumentField child storage must fail closed");
+    auto wrong_enum_type = make_document(model::EnumerationValue{"UseOutput", "Enable"});
+    expect(!form_stream::encode_document(wrong_enum_type),
+        "platform enum name must not be accepted as an incidental public XML alias");
+    const auto wrong_type_xml = source::parse_form_xml(
+        R"XML(<Form id="1" name="Html" ordinaryFormVersion="2.1"><ChildItems><HTMLDocumentField id="2" name="HtmlProbe"><Position/><Output type="UseOutput" member="Enable"/></HTMLDocumentField></ChildItems></Form>)XML");
+    expect(wrong_type_xml.ok() && !form_stream::encode_document(wrong_type_xml.value()),
+        "XML type UseOutput must not alias the public Output enumeration on build");
+    const auto wrong_member_xml = source::parse_form_xml(
+        R"XML(<Form id="1" name="Html" ordinaryFormVersion="2.1"><ChildItems><HTMLDocumentField id="2" name="HtmlProbe"><Position/><Output type="Output" member="Allowed"/></HTMLDocumentField></ChildItems></Form>)XML");
+    expect(wrong_member_xml.ok() && !form_stream::encode_document(wrong_member_xml.value()),
+        "unknown HTMLDocumentField Output enum members must fail at storage encoding");
+}
+
 void test_radio_button_basic_observed_record_and_rejections() {
+    const auto append_child_ref = [](model::OrdinaryFormDocument& document, model::ObjectId id) {
+        auto form = document.form();
+        form.children.push_back(model::ControlRef{id});
+        document.set_form(std::move(form));
+    };
     const auto make_document = [](std::string caption = {}, bool enabled = true, std::string tool_tip = {}) {
         model::Form form;
         form.id = model::ObjectId{1};
@@ -2887,6 +3551,23 @@ void test_radio_button_basic_observed_record_and_rejections() {
                list_stream::dump_compact(default_encoded.value()),
         "default RadioButton document must round-trip canonically");
 
+    auto adjacent_defaults = make_document();
+    for (const auto [id, name] : {std::pair{104ULL, "RadioDefault2"}, std::pair{105ULL, "RadioDefault3"}}) {
+        append_child_ref(adjacent_defaults, model::ObjectId{id});
+        adjacent_defaults.add_control(model::ControlNode{model::ObjectId{id}, name, model::RadioButtonPayload{}});
+    }
+    append_child_ref(adjacent_defaults, model::ObjectId{106});
+    adjacent_defaults.add_control(model::ControlNode{model::ObjectId{106}, "Separator", model::LabelDecorationPayload{}});
+    append_child_ref(adjacent_defaults, model::ObjectId{107});
+    adjacent_defaults.add_control(model::ControlNode{model::ObjectId{107}, "RadioAfterLabel", model::RadioButtonPayload{}});
+    const auto adjacent_encoded = form_stream::encode_document(adjacent_defaults);
+    expect(adjacent_encoded.ok(), "adjacent default RadioButtons and one after a Label must remain independent controls");
+    const auto adjacent_decoded = form_stream::decode_document(adjacent_encoded.value(), "AdjacentDefaultRadios");
+    expect(adjacent_decoded.ok() && adjacent_decoded.value().find_control(model::ObjectId{104}) != nullptr &&
+               adjacent_decoded.value().find_control(model::ObjectId{105}) != nullptr &&
+               adjacent_decoded.value().find_control(model::ObjectId{107}) != nullptr,
+        "adjacent ungrouped RadioButtons must decode independently across a Label boundary");
+
     const std::string caption = "Radio Ω <tag> & текст";
     const std::string tool_tip = "Radio hint Ω <tag> & текст";
     const auto changed_encoded = form_stream::encode_document(make_document(caption, false, tool_tip));
@@ -2927,8 +3608,81 @@ void test_radio_button_basic_observed_record_and_rejections() {
     data_path_document.add_attribute(model::Attribute{model::ObjectId{200}, "Pattern", string_type});
     auto* radio_with_data = const_cast<model::ControlNode*>(data_path_document.find_control(model::ObjectId{103}));
     radio_with_data->data_path = model::DataPath{model::AttributeRef{model::ObjectId{200}}, {}};
-    expect_failure(form_stream::encode_document(data_path_document), "OOF1122", "$/RadioButton",
+    expect_failure(form_stream::encode_document(data_path_document), "OOF1122", "$/Form/ChildItems/3",
         "RadioButton DataPath must be explicitly rejected outside the proven profile");
+
+    auto numeric_group = make_document();
+    auto* numeric_head = const_cast<model::ControlNode*>(numeric_group.find_control(model::ObjectId{103}));
+    numeric_head->extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+    model::TypeDomainPatternValue numeric_type;
+    model::TypeDomainEntry numeric_entry;
+    numeric_entry.term = model::TypeDomainTerm::numeric;
+    numeric_entry.numeric = {10, 0, true};
+    numeric_type.entries.push_back(numeric_entry);
+    numeric_head->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), numeric_type);
+    numeric_head->properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"1"});
+    numeric_group.add_attribute(model::Attribute{model::ObjectId{200}, "Choice", numeric_type});
+    numeric_head->data_path = model::DataPath{model::AttributeRef{model::ObjectId{200}}, {}};
+    auto numeric_form = numeric_group.form();
+    numeric_form.children.push_back(model::ControlRef{model::ObjectId{104}});
+    numeric_group.set_form(std::move(numeric_form));
+    model::ControlNode numeric_member{model::ObjectId{104}, "RadioMember", model::RadioButtonPayload{}};
+    numeric_member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
+    numeric_group.add_control(std::move(numeric_member));
+    append_child_ref(numeric_group, model::ObjectId{105});
+    model::ControlNode numeric_member_three{model::ObjectId{105}, "RadioMemberThree", model::RadioButtonPayload{}};
+    numeric_member_three.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
+    numeric_group.add_control(std::move(numeric_member_three));
+    append_child_ref(numeric_group, model::ObjectId{106});
+    numeric_group.add_control(model::ControlNode{model::ObjectId{106}, "GroupSeparator", model::LabelDecorationPayload{}});
+    append_child_ref(numeric_group, model::ObjectId{107});
+    model::ControlNode second_head{model::ObjectId{107}, "FractionalGroupHead", model::RadioButtonPayload{}};
+    second_head.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+    model::TypeDomainEntry fractional_numeric_entry;
+    fractional_numeric_entry.term = model::TypeDomainTerm::numeric;
+    fractional_numeric_entry.numeric = {15, 3, false};
+    const model::TypeDomainPatternValue fractional_numeric_type{{fractional_numeric_entry}};
+    second_head.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), fractional_numeric_type);
+    second_head.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"-12.375"});
+    numeric_group.add_attribute(model::Attribute{model::ObjectId{201}, "FractionalChoice", fractional_numeric_type});
+    second_head.data_path = model::DataPath{model::AttributeRef{model::ObjectId{201}}, {}};
+    numeric_group.add_control(std::move(second_head));
+    for (const auto [id, name] : {std::pair{108ULL, "FractionalMember2"},
+                                  std::pair{109ULL, "FractionalMember3"},
+                                  std::pair{110ULL, "FractionalMember4"}}) {
+        append_child_ref(numeric_group, model::ObjectId{id});
+        model::ControlNode member{model::ObjectId{id}, name, model::RadioButtonPayload{}};
+        member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
+        numeric_group.add_control(std::move(member));
+    }
+    const auto numeric_encoded = form_stream::encode_document(numeric_group);
+    expect(numeric_encoded.ok(), "named integer and fractional RadioButton groups must encode with independent numeric qualifiers");
+    const auto numeric_decoded = form_stream::decode_document(numeric_encoded.value(), "RadioButtonNumericGroup");
+    expect(numeric_decoded.ok(), "named integer and fractional RadioButton groups must decode");
+    const auto* decoded_head = numeric_decoded.value().find_control(model::ObjectId{103});
+    const auto* decoded_member = numeric_decoded.value().find_control(model::ObjectId{104});
+    expect(decoded_head && decoded_head->data_path && decoded_head->extension_properties.find(
+               model::PropertyId::from_name("FirstInGroup")) && decoded_member &&
+               decoded_member->properties().find(model::PropertyId::from_name("SelectionValue")) &&
+               std::get<model::DecimalValue>(decoded_member->properties().find(
+                   model::PropertyId::from_name("SelectionValue"))->value).canonical == "0",
+        "RadioButton group head binding and contextual zero remain named model properties");
+    const auto numeric_reencoded = form_stream::encode_document(numeric_decoded.value());
+    expect(numeric_reencoded.ok() && list_stream::dump_compact(numeric_reencoded.value()) ==
+               list_stream::dump_compact(numeric_encoded.value()),
+        "named integer and fractional RadioButton groups must round-trip without stream drift");
+    auto wrong_group_selection = numeric_group;
+    auto* wrong_member = const_cast<model::ControlNode*>(wrong_group_selection.find_control(model::ObjectId{104}));
+    wrong_member->properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"-1"});
+    expect_failure(form_stream::encode_document(wrong_group_selection), "OOF1122", "$/Form/ChildItems/6",
+        "RadioButton member selection outside the inherited nonnegative qualifiers must fail closed");
+    auto wrong_group_type = numeric_group;
+    auto* wrong_head = const_cast<model::ControlNode*>(wrong_group_type.find_control(model::ObjectId{103}));
+    numeric_entry.numeric.precision = 1;
+    wrong_head->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"),
+        model::TypeDomainPatternValue{{numeric_entry}});
+    expect_failure(form_stream::encode_document(wrong_group_type), "OOF1122", "$/Form/ChildItems/6",
+        "RadioButton head ValueType must match its linked Attribute qualifiers");
 
     auto unsupported_default = default_encoded.value();
     auto& unsupported_data_header = unsupported_default.items[1].items[2].items[2].items[4].items[2].items[1];
@@ -2943,6 +3697,138 @@ void test_radio_button_basic_observed_record_and_rejections() {
         model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
     expect(!form_stream::decode_document(multilingual, "RadioButtonCodec"),
         "multilingual RadioButton Caption must be rejected without loss");
+}
+
+void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() {
+    const auto numeric_type = [](std::uint32_t digits, std::uint32_t fraction, bool non_negative) {
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::numeric;
+        entry.numeric = {digits, fraction, non_negative};
+        return model::TypeDomainPatternValue{{entry}};
+    };
+    const auto add_head = [&](model::OrdinaryFormDocument& document, std::uint64_t id,
+                              std::uint64_t attribute_id, std::string name, std::string attribute_name,
+                              const model::TypeDomainPatternValue& type, std::string selection) {
+        document.add_attribute(model::Attribute{model::ObjectId{attribute_id}, std::move(attribute_name), type});
+        model::ControlNode head{model::ObjectId{id}, std::move(name), model::RadioButtonPayload{}};
+        head.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+        head.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), type);
+        head.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{std::move(selection)});
+        head.data_path = model::DataPath{model::AttributeRef{model::ObjectId{attribute_id}}, {}};
+        document.add_control(std::move(head));
+    };
+    const auto add_member = [](model::OrdinaryFormDocument& document, std::uint64_t id,
+                               std::string name, std::string selection) {
+        model::ControlNode member{model::ObjectId{id}, std::move(name), model::RadioButtonPayload{}};
+        member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"),
+            model::DecimalValue{std::move(selection)});
+        document.add_control(std::move(member));
+    };
+    const auto add_label = [](model::OrdinaryFormDocument& document, std::uint64_t id, std::string name) {
+        document.add_control(model::ControlNode{model::ObjectId{id}, std::move(name), model::LabelDecorationPayload{}});
+    };
+    const auto make_form = [](std::vector<model::ChildItemRef> children) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "RadioGroupOrder";
+        form.children = std::move(children);
+        return form;
+    };
+
+    const auto signed_fractional_type = numeric_type(10, 2, false);
+    model::OrdinaryFormDocument ordered(make_form({
+        model::ControlRef{model::ObjectId{901}},
+        model::ControlRef{model::ObjectId{17}},
+        model::ControlRef{model::ObjectId{70}},
+    }));
+    add_head(ordered, 901, 1001, "HeadLaterId", "Choice", signed_fractional_type, "1.25");
+    add_member(ordered, 17, "MemberEarlierId", "-12.34");
+    add_label(ordered, 70, "BoundaryLabel");
+
+    const auto ordered_encoded = form_stream::encode_document(ordered);
+    expect(ordered_encoded.ok(),
+        "ChildItems order must bind a lower-ID member to the preceding numeric head and accept an in-range decimal");
+    const auto ordered_decoded = form_stream::decode_document(ordered_encoded.value(), "RadioGroupOrder");
+    expect(ordered_decoded.ok(), "ordered numeric group with inherited member type must decode");
+    const auto& decoded_children = ordered_decoded.value().form().children;
+    expect(decoded_children.size() == 3 &&
+               std::get<model::ControlRef>(decoded_children[0]).id() == model::ObjectId{901} &&
+               std::get<model::ControlRef>(decoded_children[1]).id() == model::ObjectId{17} &&
+               std::get<model::ControlRef>(decoded_children[2]).id() == model::ObjectId{70},
+        "decoded ChildItems order must remain head then member despite the higher head ObjectId");
+    const auto* decoded_member = ordered_decoded.value().find_control(model::ObjectId{17});
+    const auto* decoded_selection = decoded_member == nullptr ? nullptr : decoded_member->properties().find(
+        model::PropertyId::from_name("SelectionValue"));
+    expect(decoded_selection && std::get<model::DecimalValue>(decoded_selection->value).canonical == "-12.34" &&
+               decoded_member->extension_properties.find(model::PropertyId::from_name("ValueType")) == nullptr,
+        "decoded member must preserve its named DecimalValue without materializing inherited ValueType locally");
+    const auto ordered_reencoded = form_stream::encode_document(ordered_decoded.value());
+    expect(ordered_reencoded.ok() && list_stream::dump_compact(ordered_reencoded.value()) ==
+               list_stream::dump_compact(ordered_encoded.value()),
+        "inherited member decimal selection must round-trip without normalization or drift");
+
+    auto reordered = ordered;
+    auto reordered_form = reordered.form();
+    std::swap(reordered_form.children[0], reordered_form.children[1]);
+    reordered.set_form(std::move(reordered_form));
+    expect_failure(form_stream::encode_document(reordered), "OOF1122", "$/Form/ChildItems/0",
+        "moving the selected member before its head must change its group assignment and reject its unbound nonzero value");
+
+    auto out_of_range = ordered;
+    auto* too_precise = const_cast<model::ControlNode*>(out_of_range.find_control(model::ObjectId{17}));
+    too_precise->properties().set_explicit(model::PropertyId::from_name("SelectionValue"),
+        model::DecimalValue{"-12.345"});
+    expect_failure(form_stream::encode_document(out_of_range), "OOF1122", "$/Form/ChildItems/2",
+        "inherited member decimal must respect the head precision without coercion");
+
+    auto oversized_stream = ordered_encoded.value();
+    auto& member_record = oversized_stream.items[1].items[2].items[2].items[1];
+    member_record.items[2].items[4] = list_stream::ListValue::list({
+        list_stream::ListValue::string_atom("N"), list_stream::ListValue::raw_atom("123456789")});
+    expect(!form_stream::decode_document(oversized_stream, "RadioGroupOrder"),
+        "decoder must reject member selection outside the inherited head precision");
+
+    model::Page nested_page;
+    nested_page.id = model::ObjectId{400};
+    nested_page.name = "NestedPage";
+    model::Position page_bounds;
+    for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+        model::AnchorBinding binding;
+        binding.coordinate = edge;
+        binding.target_coordinate = edge;
+        binding.target = model::ControlRef{model::ObjectId{300}};
+        page_bounds.bindings.anchors.push_back(std::move(binding));
+    }
+    nested_page.position.set(page_bounds);
+    nested_page.children = {model::ControlRef{model::ObjectId{901}}, model::ControlRef{model::ObjectId{17}}};
+    model::ControlNode nested_panel{model::ObjectId{300}, "NestedPanel", model::PanelPayload{}};
+    nested_panel.children = {model::PageRef{model::ObjectId{400}}};
+    model::OrdinaryFormDocument page_group(make_form({model::ControlRef{model::ObjectId{300}}}));
+    add_head(page_group, 901, 1001, "PageHead", "Choice", signed_fractional_type, "1.25");
+    add_member(page_group, 17, "PageMember", "-12.34");
+    page_group.add_page(std::move(nested_page));
+    page_group.add_control(std::move(nested_panel));
+    const auto page_group_encoded = form_stream::encode_document(page_group);
+    expect(page_group_encoded.ok(),
+        "RadioButton group context must be scoped to and preserved within a Panel page" +
+            (page_group_encoded ? std::string{} : ": " + page_group_encoded.diagnostics().front().path + " " +
+                page_group_encoded.diagnostics().front().message));
+
+    model::Page split_page;
+    split_page.id = model::ObjectId{400};
+    split_page.name = "SplitPage";
+    split_page.position.set(page_bounds);
+    split_page.children = {model::ControlRef{model::ObjectId{17}}};
+    model::ControlNode boundary_panel{model::ObjectId{300}, "BoundaryPanel", model::PanelPayload{}};
+    boundary_panel.children = {model::PageRef{model::ObjectId{400}}};
+    model::OrdinaryFormDocument split_by_page(make_form({
+        model::ControlRef{model::ObjectId{901}}, model::ControlRef{model::ObjectId{300}}}));
+    add_head(split_by_page, 901, 1001, "OuterPageHead", "Choice", signed_fractional_type, "1.25");
+    add_member(split_by_page, 17, "InnerPageMember", "-12.34");
+    split_by_page.add_page(std::move(split_page));
+    split_by_page.add_control(std::move(boundary_panel));
+    expect(!form_stream::encode_document(split_by_page),
+        "a RadioButton group must not cross from the form into a nested Panel page");
 }
 
 void test_text_document_field_persisted_profile_and_rejections() {
@@ -3406,6 +4292,622 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
         "ProgressBar ID above int64 must be rejected before encoding");
 }
 
+void test_dendrogram_orientation_named_codec() {
+    constexpr std::string_view xml =
+        R"OOF(<Form id="1" name="DendrogramForm" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="4" name="Hierarchy"><Position/><Orientation type="DendrogramOrientation" member="Down"/></Dendrogram></ChildItems></Form>)OOF";
+    const auto parsed = oof::source::parse_form_xml(xml);
+    expect(parsed.ok(), "Dendrogram Orientation XML must parse as a named enumeration");
+    auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "Dendrogram Orientation must encode from named XML");
+    auto encoded_stream = encoded.value();
+    auto* control_record_pointer = static_cast<list_stream::ListValue*>(nullptr);
+    const auto find_dendrogram = [&](const auto& self, auto& value) -> void {
+        if (value.is_list && value.items.size() == 6 && !value.items.empty() &&
+            !value.items[0].is_list && value.items[0].atom ==
+                oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid) {
+            control_record_pointer = &value;
+            return;
+        }
+        for (auto& item : value.items) {
+            if (control_record_pointer == nullptr) self(self, item);
+        }
+    };
+    find_dendrogram(find_dendrogram, encoded_stream);
+    expect(control_record_pointer != nullptr, "Dendrogram record must be present in the encoded stream");
+    const auto& control_record = *control_record_pointer;
+    expect(control_record.items[2].items[4].atom == "1",
+        "Down Orientation must use the observed runtime storage value 1");
+    const auto decoded = form_stream::decode_document(encoded_stream, "DendrogramForm");
+    expect(decoded.ok(), "Dendrogram Orientation native record must decode");
+    const auto* dendrogram = decoded.value().find_control(model::ObjectId{4});
+    expect(dendrogram != nullptr &&
+               std::get<model::EnumerationValue>(dendrogram->properties().find(
+                   model::PropertyId::from_name("Orientation"))->value) ==
+                   model::EnumerationValue{"DendrogramOrientation", "Down"},
+        "Down Orientation must round-trip as a named model property");
+    const auto serialized = oof::source::serialize_form_xml(decoded.value());
+    expect(serialized.ok() && serialized.value().find(
+               "<Orientation type=\"DendrogramOrientation\" member=\"Down\"/>") != std::string::npos,
+        "decoded Orientation must remain visible as named XML");
+
+    constexpr std::string_view explicit_up_xml =
+        R"OOF(<Form id="1" name="DendrogramForm" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="4" name="Hierarchy"><Position/><Orientation type="DendrogramOrientation" member="Up"/></Dendrogram></ChildItems></Form>)OOF";
+    const auto explicit_up = oof::source::parse_form_xml(explicit_up_xml);
+    expect(explicit_up.ok(), "explicit Up Orientation must parse");
+    const auto explicit_up_serialized = oof::source::serialize_form_xml(explicit_up.value());
+    expect(explicit_up_serialized.ok() && explicit_up_serialized.value().find("<Orientation") == std::string::npos,
+        "explicit default Up Orientation must be omitted by the named XML writer");
+    const auto up_record = form_stream::encode_document(explicit_up.value());
+    expect(up_record.ok(), "explicit Up Orientation must encode as canonical storage default");
+    const auto up_decoded = form_stream::decode_document(up_record.value(), "DendrogramForm");
+    expect(up_decoded.ok(), "canonical Up Orientation record must decode");
+    const auto up_xml = oof::source::serialize_form_xml(up_decoded.value());
+    expect(up_xml.ok() && up_xml.value().find("<Orientation") == std::string::npos,
+        "decoded default Up Orientation must remain implicit in the public XML model");
+
+    constexpr std::string_view unsupported_xml =
+        R"OOF(<Form id="1" name="DendrogramForm" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="4" name="Hierarchy"><Position/><Orientation type="DendrogramOrientation" member="Right"/></Dendrogram></ChildItems></Form>)OOF";
+    const auto unsupported = oof::source::parse_form_xml(unsupported_xml);
+    expect(unsupported.ok(), "syntactically valid but unproven enum member must parse for codec rejection");
+    expect_failure(form_stream::encode_document(unsupported.value()), "OOF1122", "$/Dendrogram/Orientation",
+        "unproven Dendrogram orientation enum member must fail closed");
+
+    auto changed_tree = encoded_stream;
+    control_record_pointer = nullptr;
+    find_dendrogram(find_dendrogram, changed_tree);
+    expect(control_record_pointer != nullptr, "encoded graph fixture must contain Dendrogram");
+    control_record_pointer->items[2].items[1].items[0] =
+        list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(changed_tree, "DendrogramForm"), "OOF1114",
+        "$/1/2/2/1/2", "nondefault graph data must be rejected by the Orientation-only profile");
+}
+
+
+void test_dendrogram_strict_native_fixture() {
+    constexpr std::string_view carrier_xml =
+        R"OOF(<Form id="1" name="NativeFixture" ordinaryFormVersion="2.1"><ChildItems><LabelDecoration id="4" name="Carrier"><Position/></LabelDecoration></ChildItems></Form>)OOF";
+    const auto carrier = oof::source::parse_form_xml(carrier_xml);
+    expect(carrier.ok(), carrier ? "" : carrier.diagnostics().front().path + ": " + carrier.diagnostics().front().message);
+    auto stream_result = form_stream::encode_document(carrier.value());
+    expect(stream_result.ok(), "native fixture carrier must establish an ordinary-form envelope");
+    auto stream = stream_result.value();
+    list_stream::ListValue* carrier_record = nullptr;
+    std::function<void(list_stream::ListValue&, std::string_view)> find_record = [&](list_stream::ListValue& value, std::string_view guid) {
+        if (value.is_list && value.items.size() == 6 && !value.items.empty() &&
+            value.items[0].atom == guid) {
+            carrier_record = &value;
+            return;
+        }
+        for (auto& item : value.items) if (carrier_record == nullptr) find_record(item, guid);
+    };
+    find_record(stream, oof::model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    expect(carrier_record != nullptr, "fixture carrier record must be present");
+    const auto geometry = carrier_record->items[3];
+    // Captured from a strict Designer 8.5.1.1343 dump of a synthetic empty Dendrogram (Form.bin SHA-256 1a510dcc13b1f4f49a8540afb95d1d036c419b5d2936ca962790358ade665fa3). The record ID, name, and geometry are adapted to the test carrier.
+    constexpr std::string_view strict_native_record = R"NATIVE(
+{984981b1-622d-4ebc-94f7-885f0cdfb59a,4,{0,{0,{11},{75,1,0,1,0,{4,0,{11837108},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},1,{1,1,{"ru","Сводная"}},0,0,0,1,{"U"},{"U"},0,1,0,-1,0,4,0,", ",4,{1,0},{1,0},{4,3,{-3},3},0,0,{1,0},1,0,{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},0,{4,3,{-1},3},1,{4,3,{-1},3},1,{4,3,{-1},3},0,{4,0,{16777215},0},{4,3,{-3},3},{4,3,{-3},3},{4,3,{-3},3},{8,3,0,1,100},{8,3,0,1,100},{8,3,0,1,100},1,1,1,1,1,{1,0},0,{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},{4,4,{0},4},1,1,0,4,30,1,0,0,0,0,1,0,0,0,0,1,1,2,{1,0},1,0,0,0,{4,0,{169},0},0,0,{1,0,0,0},0,180,5,1,0,4,{4,0,{11119017},0},1,0,1,0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"",0,1,14,2,{8,3,0,1,100},1,{4,4,{0},4},{3,0,{0},1,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},1,1,1,0,0,95,1e-1,1e-1,3e-2,{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},{4,0,{0},0},2,255,0,0,00000000-0000-0000-0000-000000000000,0,{0,0},0,{0,0,{0,1,0,1,0},0,0},{0,0,{0,1,0,1,0},0,0},0,0,2,-2,1,10,1,20,0,0,{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},0,0,{4,4,{0},4},{4,4,{0},4},0,{{4,4,{0},4},4,0,0,0,"",{1,0},{1,0},{1,0},0},0,0,0,0,0,0,1,1,0,0,1,1,0,6,0,0,0,0.17,0,0.83,0.08,0,0,0.83,0,0,0.92,{0,0},{0,0},{0,0},{0,0},{0,14,{4,4,{0},4},{4,4,{0},4},0,0},{0,14,{4,4,{0},4},{4,4,{0},4},0,0},0,0,{0,0,0,0,0},{0,0,0,0},0,,60,{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{0,0,{0,1,0,1,0},0,0},0,0,0,0,0,0,0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4}}},{0,{3,0,1,0,{0,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761}},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},{0,{3,0,1,0,{0,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761},0,0,0},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},1,1,6,12,{4,0,{8388608},0},{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},0},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,0,2,0,0},{14,"DendrogramProduct",4294967295,0,0,0},{0}}
+)NATIVE";
+    auto native_record = list_stream::parse(strict_native_record);
+    native_record.items[1] = list_stream::ListValue::raw_atom("15");
+    native_record.items[3] = geometry;
+    native_record.items[4].items[1] = list_stream::ListValue::string_atom("NativeDendrogram");
+    *carrier_record = std::move(native_record);
+    stream.items[1].items[1].items[1] = list_stream::ListValue::raw_atom("15");
+    stream.items[2].items[1] = list_stream::ListValue::raw_atom("16");
+
+    const auto decoded = form_stream::decode_document(stream, "NativeFixture");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message + " expected " + decoded.diagnostics().front().expected + " actual " + decoded.diagnostics().front().actual);
+    const auto* dendrogram = decoded.value().find_control(model::ObjectId{15});
+    expect(dendrogram != nullptr && dendrogram->kind() == model::ControlKind::dendrogram &&
+               dendrogram->name == "NativeDendrogram",
+        "native fixture must produce its adapted named Dendrogram");
+    const auto* orientation = dendrogram->properties().find(model::PropertyId::from_name("Orientation"));
+    expect(orientation != nullptr && std::get<model::EnumerationValue>(orientation->value) ==
+               model::EnumerationValue{"DendrogramOrientation", "Down"},
+        "strict native fixture must retain Down orientation");
+
+    auto malformed = stream;
+    carrier_record = nullptr;
+    find_record(malformed, oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid);
+    expect(carrier_record != nullptr, "malformed fixture record must be present");
+    carrier_record->items.pop_back();
+    expect_failure(form_stream::decode_document(malformed, "NativeFixture"), "OOF1102",
+        "$/1/2/2/1", "malformed Dendrogram control arity must be rejected");
+
+    auto short_payload = stream;
+    carrier_record = nullptr;
+    find_record(short_payload, oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid);
+    carrier_record->items[2].items.pop_back();
+    expect_failure(form_stream::decode_document(short_payload, "NativeFixture"), "OOF1102",
+        "$/1/2/2/1/2", "short Dendrogram data record must be rejected");
+
+    auto invalid_id = stream;
+    carrier_record = nullptr;
+    find_record(invalid_id, oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid);
+    carrier_record->items[1] = list_stream::ListValue::raw_atom("0");
+    expect_failure(form_stream::decode_document(invalid_id, "NativeFixture"), "OOF1122",
+        "$/1/2/2/1/1", "invalid Dendrogram ID must be rejected");
+
+    auto unknown_orientation = stream;
+    carrier_record = nullptr;
+    find_record(unknown_orientation, oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid);
+    carrier_record->items[2].items[4] = list_stream::ListValue::raw_atom("2");
+    expect_failure(form_stream::decode_document(unknown_orientation, "NativeFixture"), "OOF1122",
+        "$/1/2/2/1/2/4", "unknown Dendrogram orientation must be rejected");
+
+    constexpr std::string_view linked_carrier_xml = R"OOF(<Form id="1" name="LinkedFixture" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Text"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="4" name="Carrier"><DataPath attributeId="3"/><Position/></InputField></ChildItems></Form>)OOF";
+    const auto linked_carrier = oof::source::parse_form_xml(linked_carrier_xml);
+    expect(linked_carrier.ok(), linked_carrier ? "" : linked_carrier.diagnostics().front().message);
+    auto linked_stream_result = form_stream::encode_document(linked_carrier.value());
+    expect(linked_stream_result.ok(), "linked InputField carrier must establish a real DataPath link");
+    auto linked_stream = linked_stream_result.value();
+    carrier_record = nullptr;
+    find_record(linked_stream, oof::model::metamodel::descriptor_for(model::ControlKind::input_field).guid);
+    expect(carrier_record != nullptr, "linked carrier control record must be present");
+    auto linked_native_record = list_stream::parse(strict_native_record);
+    linked_native_record.items[1] = list_stream::ListValue::raw_atom("4");
+    linked_native_record.items[3] = carrier_record->items[3];
+    linked_native_record.items[4].items[1] = list_stream::ListValue::string_atom("LinkedDendrogram");
+    *carrier_record = std::move(linked_native_record);
+    expect_failure(form_stream::decode_document(linked_stream, "LinkedFixture"), "OOF1122", "$/2/3",
+        "Dendrogram must reject a linked DataPath instead of dropping it");
+}
+
+void test_dendrogram_named_graph_candidate_roundtrip() {
+    constexpr std::string_view xml = R"OOF(<Form id="1" name="DendrogramGraph" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="2" name="Tree"><Position/><Items><Item><Value>node-C</Value><Text><Item language="ru">Узел C</Item></Text></Item><Item><Value>node-A</Value><Text><Item language="ru">Узел A</Item></Text></Item><Item><Value>node-B</Value><Text><Item language="ru">Узел B</Item></Text></Item></Items><Links><Link><FirstItem>node-C</FirstItem><SecondItem>node-A</SecondItem><Title><Item language="ru">Связь C-A</Item></Title><Distance>1.5</Distance></Link><Link><FirstItem>node-B</FirstItem><SecondItem>node-A</SecondItem><Title><Item language="ru">Связь B-A</Item></Title></Link></Links></Dendrogram></ChildItems></Form>)OOF";
+    const auto parsed = oof::source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    if (!parsed.ok()) return;
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    if (!encoded.ok()) return;
+    auto stream = encoded.value();
+    const auto decoded = form_stream::decode_document(stream, "DendrogramGraph");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    if (!decoded.ok()) return;
+    const auto* dendrogram = decoded.value().find_control(model::ObjectId{2});
+    const auto* graph = dendrogram == nullptr ? nullptr : std::get_if<model::DendrogramPayload>(&dendrogram->payload);
+    expect(graph != nullptr && graph->items.size() == 3 && graph->links.size() == 2,
+        "named Items and Links must round-trip through typed model records");
+    if (graph == nullptr) return;
+    expect(graph->items[0].value == "node-C" && graph->items[0].text.items.front().text == "Узел C" &&
+           graph->items[2].value == "node-B" && graph->links[0].first_item == "node-C" &&
+           graph->links[0].second_item == "node-A" && graph->links[0].distance.canonical == "1.5" &&
+           graph->links[1].first_item == "node-B" && graph->links[1].second_item == "node-A",
+        "named values, localized text, distance, and endpoint references must survive the codec");
+    const auto xml_roundtrip = oof::source::serialize_form_xml(decoded.value());
+    expect(xml_roundtrip.ok() && xml_roundtrip.value().find("<Items>") != std::string::npos &&
+           xml_roundtrip.value().find("<FirstItem>node-C</FirstItem>") != std::string::npos,
+        "source writer must emit named Dendrogram concepts");
+    const auto encoded_again = form_stream::encode_document(decoded.value());
+    expect(encoded_again.ok() && list_stream::dump_compact(encoded_again.value()) == list_stream::dump_compact(encoded.value()),
+        "bounded default-cache candidate must round-trip deterministically");
+
+    auto find_dendrogram_record = [](list_stream::ListValue& root) -> list_stream::ListValue* {
+        list_stream::ListValue* found = nullptr;
+        std::function<void(list_stream::ListValue&)> visit = [&](list_stream::ListValue& value) {
+            if (!found && value.is_list && value.items.size() == 6 &&
+                value.items[0].atom == oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid) {
+                found = &value;
+                return;
+            }
+            for (auto& child : value.items) if (!found) visit(child);
+        };
+        visit(root);
+        return found;
+    };
+    auto unknown_cache = encoded.value();
+    auto* cache_control = find_dendrogram_record(unknown_cache);
+    expect(cache_control != nullptr, "encoded Dendrogram must be locatable for strict negative checks");
+    if (cache_control != nullptr) {
+        auto& elements = cache_control->items[2].items[2].items[1];
+        elements.items[elements.items.size() - 3] = list_stream::parse("{0,1,{0,{4,0,{204},0},{4,0,{0},0}}}");
+        expect(!form_stream::decode_document(unknown_cache, "DendrogramGraph"),
+            "unproven appearance cache data must fail closed");
+    }
+    auto unsupported_details = encoded.value();
+    auto* details_control = find_dendrogram_record(unsupported_details);
+    if (details_control != nullptr) {
+        auto& row = details_control->items[2].items[2].items[1].items[4].items[1];
+        row.items[8] = list_stream::parse("{\"S\",\"unsupported details\"}");
+        expect(!form_stream::decode_document(unsupported_details, "DendrogramGraph"),
+            "unmodeled node Details must fail closed");
+    }
+    auto malformed_row = encoded.value();
+    auto* arity_control = find_dendrogram_record(malformed_row);
+    if (arity_control != nullptr) {
+        arity_control->items[2].items[2].items[1].items[4].items[1].items.pop_back();
+        expect(!form_stream::decode_document(malformed_row, "DendrogramGraph"),
+            "malformed Dendrogram node record arity must fail closed");
+    }
+
+    const auto make_document = [](model::DendrogramPayload payload) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "DendrogramGraph";
+        form.children.push_back(model::ControlRef{model::ObjectId{2}});
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Tree", std::move(payload)});
+        return document;
+    };
+    auto invalid_graph = *graph;
+    invalid_graph.links[1].second_item = "missing";
+    expect(!form_stream::encode_document(make_document(invalid_graph)), "unresolved graph references must fail closed");
+    invalid_graph = *graph;
+    invalid_graph.links[1] = invalid_graph.links[0];
+    expect(!form_stream::encode_document(make_document(invalid_graph)), "duplicate graph edges must fail closed");
+    invalid_graph = *graph;
+    invalid_graph.links[0].distance.canonical = "NaN";
+    expect(!form_stream::encode_document(make_document(invalid_graph)), "non-finite distance must fail closed");
+}
+
+void test_dendrogram_native_three_item_two_link_cursor_fixture() {
+    constexpr std::string_view carrier_xml =
+        R"OOF(<Form id="1" name="NativeGraphFixture" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="2" name="Tree"><Position/></Dendrogram></ChildItems></Form>)OOF";
+    const auto parsed = oof::source::parse_form_xml(carrier_xml);
+    expect(parsed.ok(), "native graph fixture carrier must parse");
+    if (!parsed.ok()) return;
+    auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "native graph fixture carrier must encode");
+    if (!encoded.ok()) return;
+    auto stream = encoded.value();
+    list_stream::ListValue* record = nullptr;
+    std::function<void(list_stream::ListValue&)> find_record = [&](list_stream::ListValue& value) {
+        if (!record && value.is_list && value.items.size() == 6 && !value.items[0].is_list &&
+            value.items[0].atom == oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid) {
+            record = &value;
+            return;
+        }
+        for (auto& child : value.items) if (!record && child.is_list) find_record(child);
+    };
+    find_record(stream);
+    expect(record != nullptr, "native graph fixture must locate the Dendrogram record");
+    if (!record) return;
+
+    // Extracted from strict Designer 8.5.1.1343 run11 Form.bin SHA-256
+    // d869b334e2fd31bdd31306dac11b09218f1455bcc3e9f3b994d72b3ef2eef40b.
+    // Only cache keys and appearance-cache rows are normalized below because
+    // this test covers the independently observed collection cursor grammar.
+    auto native_items = list_stream::parse(R"NATIVE({0,{3,0,4,1,{0,{8,1,0,0,2,0,{"S","node-C"},{1,1,{"ru","Узел C"}},{"U"},2,0}},2,{0,{8,2,0,0,3,0,{"S","node-A"},{1,1,{"ru","Узел A"}},{"U"},4,0}},3,{0,{8,3,0,0,0,0,{"S","node-B"},{1,1,{"ru","Узел B"}},{"U"},6,0}},0,{0,{8,0,0,1,0,3,{"U"},{1,0},{"U"},0,4294901761}},{0,7,{0,{4,0,{0},0},{4,0,{0},0}},{0,{4,0,{204},0},{4,0,{0},0}},{0,{4,0,{204},0},{4,0,{6723840},0}},{0,{4,0,{10053120},0},{4,0,{0},0}},{0,{4,0,{10053120},0},{4,0,{52479},0}},{0,{4,0,{13434624},0},{4,0,{0},0}},{0,{4,0,{13434624},0},{4,0,{10053375},0}}},1,0}})NATIVE");
+    auto native_links = list_stream::parse(R"NATIVE({0,{3,0,3,1,{0,{8,1,0,0,2,0,{"U"},{1,1,{"ru","Связь 1"}},{"U"},2,0},1,2,0},2,{0,{8,2,0,0,0,0,{"U"},{1,1,{"ru","Связь 2"}},{"U"},4,0},3,2,0},0,{0,{8,0,0,1,0,2,{"U"},{1,0},{"U"},0,4294901761},0,0,0},{0,5,{0,{4,0,{0},0},{4,0,{0},0}},{0,{4,0,{204},0},{4,0,{0},0}},{0,{4,0,{204},0},{4,0,{6723840},0}},{0,{4,0,{10053120},0},{4,0,{0},0}},{0,{4,0,{10053120},0},{4,0,{52479},0}}},1,0}})NATIVE");
+
+    expect(native_items.items[1].items.size() == 14 && native_items.items[1].items[3].atom == "1" &&
+               native_items.items[1].items[4].is_list && native_items.items[1].items[5].atom == "2" &&
+               native_items.items[1].items[6].is_list && native_items.items[1].items[7].atom == "3" &&
+               native_items.items[1].items[8].is_list,
+        "independent native Items fixture must use first key in header and subsequent key-row pairs");
+    expect(native_links.items[1].items.size() == 12 && native_links.items[1].items[3].atom == "1" &&
+               native_links.items[1].items[4].items.size() == 5 && native_links.items[1].items[4].items[1].items.size() == 11 &&
+               native_links.items[1].items[4].items[2].atom == "1" && native_links.items[1].items[4].items[3].atom == "2" &&
+               native_links.items[1].items[6].items[2].atom == "3" && native_links.items[1].items[6].items[3].atom == "2",
+        "independent native Links fixture must keep endpoints and Distance outside each 11-field row");
+
+    auto normalize_cache_profile = [](list_stream::ListValue& wrapper,
+                                      const list_stream::ListValue& default_cache) {
+        auto& sequence = wrapper.items[1];
+        const std::size_t row_count = static_cast<std::size_t>(std::stoul(sequence.items[2].atom)) - 1;
+        for (std::size_t index = 0; index < row_count; ++index) {
+            auto& row = sequence.items[4 + index * 2].items[1];
+            row.items[9] = list_stream::ListValue::raw_atom("0");
+        }
+        sequence.items[sequence.items.size() - 3] = default_cache;
+    };
+    const auto item_default_cache = record->items[2].items[2].items[1].items[5];
+    const auto link_default_cache = record->items[2].items[3].items[1].items[5];
+    normalize_cache_profile(native_items, item_default_cache);
+    normalize_cache_profile(native_links, link_default_cache);
+    record->items[2].items[2] = std::move(native_items);
+    record->items[2].items[3] = std::move(native_links);
+
+    const auto decoded = form_stream::decode_document(stream, "NativeGraphFixture");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    if (!decoded.ok()) return;
+    const auto* dendrogram = decoded.value().find_control(model::ObjectId{2});
+    const auto* graph = dendrogram == nullptr ? nullptr : std::get_if<model::DendrogramPayload>(&dendrogram->payload);
+    expect(graph != nullptr && graph->items.size() == 3 && graph->links.size() == 2,
+        "native collection cursor must decode three items and two links");
+    if (graph == nullptr) return;
+    expect(graph->items[0].value == "node-C" && graph->items[1].value == "node-A" && graph->items[2].value == "node-B" &&
+               graph->links[0].first_item == "node-C" && graph->links[0].second_item == "node-A" &&
+               graph->links[0].distance.canonical == "0" && graph->links[1].first_item == "node-B" &&
+               graph->links[1].second_item == "node-A" && graph->links[1].distance.canonical == "0",
+        "native keys and outer link endpoint/distance fields must map to named graph semantics");
+
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok(), "decoded native graph must encode through the named writer");
+    if (reencoded.ok()) {
+        list_stream::ListValue* reencoded_record = nullptr;
+        std::function<void(list_stream::ListValue&)> find_reencoded = [&](list_stream::ListValue& value) {
+            if (!reencoded_record && value.is_list && value.items.size() == 6 && !value.items[0].is_list &&
+                value.items[0].atom == oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid) {
+                reencoded_record = &value;
+                return;
+            }
+            for (auto& child : value.items) if (!reencoded_record && child.is_list) find_reencoded(child);
+        };
+        auto reencoded_stream = reencoded.value();
+        find_reencoded(reencoded_stream);
+        expect(reencoded_record != nullptr &&
+                   list_stream::dump_compact(reencoded_record->items[2].items[2]) == list_stream::dump_compact(record->items[2].items[2]) &&
+                   list_stream::dump_compact(reencoded_record->items[2].items[3]) == list_stream::dump_compact(record->items[2].items[3]),
+            "writer must reproduce the normalized independent native Items and Links cursor structures");
+    }
+
+    // Exact collection slices from strict run13, whose Form.bin SHA-256 is
+    // d6bc32f901213b881c13a955ed7d969d1b574854873cea8491bec38cd2bcfbdb.
+    // Designer persisted physical rows in descending key order while each
+    // sentinel and next-key chain retained the logical source order.
+    auto strict_native_stream = encoded.value();
+    record = nullptr;
+    find_record(strict_native_stream);
+    expect(record != nullptr, "run13 fixture carrier must locate the Dendrogram record");
+    if (!record) return;
+    auto strict_items = list_stream::parse(R"NATIVE({0,{3,0,4,3,{0,{8,3,0,0,0,0,{"S","xml-B"},{1,1,{"ru","Из XML B"}},{"U"},0,0}},2,{0,{8,2,0,0,3,0,{"S","xml-A"},{1,1,{"ru","Из XML A"}},{"U"},0,0}},1,{0,{8,1,0,0,2,0,{"S","xml-C"},{1,1,{"ru","Из XML C"}},{"U"},0,0}},0,{0,{8,0,0,1,0,3,{"U"},{1,0},{"U"},0,4294901761}},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}})NATIVE");
+    auto strict_links = list_stream::parse(R"NATIVE({0,{3,0,3,2,{0,{8,2,0,0,0,0,{"U"},{1,1,{"ru","Связь A-B из XML"}},{"U"},0,0},2,3,0},1,{0,{8,1,0,0,2,0,{"U"},{1,1,{"ru","Связь C-B из XML"}},{"U"},0,0},1,3,1.5},0,{0,{8,0,0,1,0,2,{"U"},{1,0},{"U"},0,4294901761},0,0,0},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}})NATIVE");
+    expect(strict_items.items[1].items[3].atom == "3" && strict_items.items[1].items[5].atom == "2" &&
+               strict_items.items[1].items[7].atom == "1" && strict_links.items[1].items[3].atom == "2" &&
+               strict_links.items[1].items[5].atom == "1",
+        "run13 fixture must retain the actual strict Designer physical key order");
+    record->items[2].items[2] = std::move(strict_items);
+    record->items[2].items[3] = std::move(strict_links);
+    const auto strict_native_decoded = form_stream::decode_document(strict_native_stream, "NativeGraphFixture");
+    expect(strict_native_decoded.ok(), strict_native_decoded ? "" : strict_native_decoded.diagnostics().front().path + ": " + strict_native_decoded.diagnostics().front().message);
+    if (!strict_native_decoded.ok()) return;
+    const auto* strict_native_control = strict_native_decoded.value().find_control(model::ObjectId{2});
+    const auto* strict_graph = strict_native_control == nullptr ? nullptr : std::get_if<model::DendrogramPayload>(&strict_native_control->payload);
+    expect(strict_graph != nullptr && strict_graph->items.size() == 3 && strict_graph->links.size() == 2 &&
+               strict_graph->items[0].value == "xml-C" && strict_graph->items[1].value == "xml-A" && strict_graph->items[2].value == "xml-B" &&
+               strict_graph->links[0].first_item == "xml-C" && strict_graph->links[0].second_item == "xml-B" &&
+               strict_graph->links[0].distance.canonical == "1.5" && strict_graph->links[1].first_item == "xml-A" &&
+               strict_graph->links[1].second_item == "xml-B" && strict_graph->links[1].distance.canonical == "0",
+        "strict run13 physical rows must decode in sentinel/next-key logical order with endpoints resolved by key");
+    if (!strict_graph) return;
+    const auto strict_public_xml = oof::source::serialize_form_xml(strict_native_decoded.value());
+    expect(strict_public_xml.ok() && strict_public_xml.value().find("<Value>xml-C</Value>") < strict_public_xml.value().find("<Value>xml-A</Value>") &&
+               strict_public_xml.value().find("<FirstItem>xml-C</FirstItem>") != std::string::npos,
+        "strict run13 native data must become logical named public XML");
+    if (!strict_public_xml.ok()) return;
+    const auto strict_reparsed = oof::source::parse_form_xml(strict_public_xml.value());
+    expect(strict_reparsed.ok(), "public XML from strict run13 must parse for fresh encoding");
+    if (!strict_reparsed.ok()) return;
+    auto strict_fresh_stream = form_stream::encode_document(strict_reparsed.value());
+    expect(strict_fresh_stream.ok(), "public XML from strict run13 must fresh-encode");
+    if (!strict_fresh_stream.ok()) return;
+    const auto strict_fresh_decoded = form_stream::decode_document(strict_fresh_stream.value(), "NativeGraphFixture");
+    expect(strict_fresh_decoded.ok(), "freshly encoded strict run13 graph must decode");
+    if (!strict_fresh_decoded.ok()) return;
+    const auto* fresh_control = strict_fresh_decoded.value().find_control(model::ObjectId{2});
+    const auto* fresh_graph = fresh_control == nullptr ? nullptr : std::get_if<model::DendrogramPayload>(&fresh_control->payload);
+    expect(fresh_graph != nullptr && fresh_graph->items.size() == strict_graph->items.size() &&
+               fresh_graph->links.size() == strict_graph->links.size() && fresh_graph->items[0].value == "xml-C" &&
+               fresh_graph->links[0].first_item == "xml-C" && fresh_graph->links[0].second_item == "xml-B" &&
+               fresh_graph->links[0].distance.canonical == "1.5" && fresh_graph->links[1].first_item == "xml-A" &&
+               fresh_graph->links[1].second_item == "xml-B" && fresh_graph->links[1].distance.canonical == "0",
+        "strict native to named XML to fresh Form.bin must preserve graph semantics");
+
+    auto duplicate_key = strict_native_stream;
+    record = nullptr;
+    find_record(duplicate_key);
+    auto& duplicate_items = record->items[2].items[2].items[1];
+    duplicate_items.items[5] = list_stream::ListValue::raw_atom("3");
+    duplicate_items.items[6].items[1].items[1] = list_stream::ListValue::raw_atom("3");
+    expect(!form_stream::decode_document(duplicate_key, "NativeGraphFixture"),
+        "duplicate native physical item keys must fail closed");
+
+    auto missing_key = strict_native_stream;
+    record = nullptr;
+    find_record(missing_key);
+    auto& missing_items = record->items[2].items[2].items[1];
+    missing_items.items[5] = list_stream::ListValue::raw_atom("4");
+    missing_items.items[6].items[1].items[1] = list_stream::ListValue::raw_atom("4");
+    expect(!form_stream::decode_document(missing_key, "NativeGraphFixture"),
+        "out-of-range physical item key leaving a missing key must fail closed");
+
+    auto cyclic_chain = strict_native_stream;
+    record = nullptr;
+    find_record(cyclic_chain);
+    record->items[2].items[2].items[1].items[4].items[1].items[4] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(cyclic_chain, "NativeGraphFixture"),
+        "cycle in native item next-key chain must fail closed");
+
+    auto bad_sentinel_marker = strict_native_stream;
+    record = nullptr;
+    find_record(bad_sentinel_marker);
+    auto& marker_items = record->items[2].items[2].items[1];
+    marker_items.items[marker_items.items.size() - 4].items[0] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(bad_sentinel_marker, "NativeGraphFixture"),
+        "nonzero Items sentinel wrapper marker must fail closed");
+
+    auto bad_tail = strict_native_stream;
+    record = nullptr;
+    find_record(bad_tail);
+    auto& tail_items = record->items[2].items[2].items[1];
+    tail_items.items[tail_items.items.size() - 4].items[1].items[5] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(bad_tail, "NativeGraphFixture"),
+        "native sentinel tail key mismatch must fail closed");
+
+    auto bad_head = strict_native_stream;
+    record = nullptr;
+    find_record(bad_head);
+    auto& head_items = record->items[2].items[2].items[1];
+    head_items.items[head_items.items.size() - 4].items[1].items[3] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(bad_head, "NativeGraphFixture"),
+        "native sentinel head key mismatch must fail closed");
+
+    auto missing_chain_key = strict_native_stream;
+    record = nullptr;
+    find_record(missing_chain_key);
+    auto& broken_chain_items = record->items[2].items[2].items[1];
+    broken_chain_items.items[8].items[1].items[4] = list_stream::ListValue::raw_atom("0");
+    expect(!form_stream::decode_document(missing_chain_key, "NativeGraphFixture"),
+        "native chain that skips stored item rows must fail closed");
+
+    auto malformed_value_tag = strict_native_stream;
+    record = nullptr;
+    find_record(malformed_value_tag);
+    auto& value_row = record->items[2].items[2].items[1].items[4].items[1];
+    value_row.items[6].items[0] = list_stream::ListValue::raw_atom("S");
+    expect(!form_stream::decode_document(malformed_value_tag, "NativeGraphFixture"),
+        "raw atom in typed Dendrogram string Value must fail closed");
+
+    auto unresolved_native_link = strict_native_stream;
+    record = nullptr;
+    find_record(unresolved_native_link);
+    record->items[2].items[3].items[1].items[6].items[3] = list_stream::ListValue::raw_atom("9");
+    expect(!form_stream::decode_document(unresolved_native_link, "NativeGraphFixture"),
+        "native link endpoint key absent from the item key map must fail closed");
+
+    auto wrong_external_key = stream;
+    record = nullptr;
+    find_record(wrong_external_key);
+    record->items[2].items[2].items[1].items[5] = list_stream::ListValue::raw_atom("7");
+    expect_failure(form_stream::decode_document(wrong_external_key, "NativeGraphFixture"), "OOF1114",
+        "$/1/2/2/1/2/2/6", "nonascending external Dendrogram item key must fail closed");
+
+    auto wrong_link_key = stream;
+    record = nullptr;
+    find_record(wrong_link_key);
+    record->items[2].items[3].items[1].items[5] = list_stream::ListValue::raw_atom("7");
+    expect_failure(form_stream::decode_document(wrong_link_key, "NativeGraphFixture"), "OOF1114",
+        "$/1/2/2/1/2/3/6", "nonascending external Dendrogram link key must fail closed");
+
+    constexpr std::string_view two_one_xml =
+        R"OOF(<Form id="1" name="TwoOneGraph" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="2" name="Tree"><Position/><Items><Item><Value>A</Value><Text><Item language="ru">А</Item></Text></Item><Item><Value>B</Value><Text><Item language="ru">Б</Item></Text></Item></Items><Links><Link><FirstItem>A</FirstItem><SecondItem>B</SecondItem><Title><Item language="ru">A-B</Item></Title></Link></Links></Dendrogram></ChildItems></Form>)OOF";
+    const auto two_one_document = oof::source::parse_form_xml(two_one_xml);
+    expect(two_one_document.ok(), "two-item one-link graph must parse");
+    if (!two_one_document.ok()) return;
+    auto two_one_stream = form_stream::encode_document(two_one_document.value());
+    expect(two_one_stream.ok(), "two-item one-link graph must encode");
+    if (!two_one_stream.ok()) return;
+    record = nullptr;
+    list_stream::ListValue* two_one_record = nullptr;
+    find_record(two_one_stream.value());
+    two_one_record = record;
+    expect(two_one_record != nullptr, "two-item one-link record must be present");
+    if (!two_one_record) return;
+    const auto& two_items = two_one_record->items[2].items[2].items[1];
+    const auto& one_link = two_one_record->items[2].items[3].items[1];
+    const auto item_sentinel_index = two_items.items.size() - 5;
+    const auto link_sentinel_index = one_link.items.size() - 5;
+    expect(two_items.items[item_sentinel_index + 1].items[1].items[5].atom == "2" &&
+               one_link.items[link_sentinel_index + 1].items[1].items[5].atom == "1",
+        "nonempty sentinels must reference the last allocated key for their own collection size");
+    expect(form_stream::decode_document(two_one_stream.value(), "TwoOneGraph").ok(),
+        "two-item one-link candidate must decode with cardinality-specific sentinels");
+}
+
+void test_dendrogram_unbounded_branching_graph_round_trip() {
+    constexpr std::string_view xml =
+        R"OOF(<Form id="1" name="BranchingGraph" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="2" name="Tree"><Position/><Items><Item><Value>node-A</Value><Text><Item language="ru">Узел А</Item></Text></Item><Item><Value>node-B</Value><Text><Item language="ru">Узел Б</Item></Text></Item><Item><Value>node-C</Value><Text><Item language="ru">Узел В</Item></Text></Item><Item><Value>node-D</Value><Text><Item language="ru">Узел Г</Item></Text></Item><Item><Value>node-E</Value><Text><Item language="ru">Узел Д</Item></Text></Item></Items><Links><Link><FirstItem>node-A</FirstItem><SecondItem>node-C</SecondItem><Title><Item language="ru">А-В</Item></Title><Distance>1.25</Distance></Link><Link><FirstItem>node-A</FirstItem><SecondItem>node-B</SecondItem><Title><Item language="ru">А-Б</Item></Title></Link><Link><FirstItem>node-B</FirstItem><SecondItem>node-E</SecondItem><Title><Item language="ru">Б-Д</Item></Title><Distance>2</Distance></Link><Link><FirstItem>node-B</FirstItem><SecondItem>node-D</SecondItem><Title><Item language="ru">Б-Г</Item></Title><Distance>3.5</Distance></Link></Links></Dendrogram></ChildItems></Form>)OOF";
+    const auto parsed = oof::source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    if (!parsed.ok()) return;
+    const auto* source_control = parsed.value().find_control(model::ObjectId{2});
+    const auto* source_graph = source_control == nullptr ? nullptr : std::get_if<model::DendrogramPayload>(&source_control->payload);
+    const std::vector<model::DendrogramItem> expected_items{
+        {"node-A", {{{"ru", "Узел А"}}}}, {"node-B", {{{"ru", "Узел Б"}}}},
+        {"node-C", {{{"ru", "Узел В"}}}}, {"node-D", {{{"ru", "Узел Г"}}}},
+        {"node-E", {{{"ru", "Узел Д"}}}},
+    };
+    const std::vector<model::DendrogramLink> expected_links{
+        {"node-A", "node-C", {{{"ru", "А-В"}}}, {"1.25"}},
+        {"node-A", "node-B", {{{"ru", "А-Б"}}}, {"0"}},
+        {"node-B", "node-E", {{{"ru", "Б-Д"}}}, {"2"}},
+        {"node-B", "node-D", {{{"ru", "Б-Г"}}}, {"3.5"}},
+    };
+    expect(source_graph != nullptr && source_graph->items == expected_items && source_graph->links == expected_links,
+        "named XML parser must retain all five values/texts and four branching links");
+
+    const auto public_xml = oof::source::serialize_form_xml(parsed.value());
+    expect(public_xml.ok(), "five-item four-link graph must serialize to named XML");
+    if (!public_xml.ok()) return;
+    const auto reparsed = oof::source::parse_form_xml(public_xml.value());
+    expect(reparsed.ok(), "unbounded named graph XML must parse after source serialization");
+    if (!reparsed.ok()) return;
+    auto encoded = form_stream::encode_document(reparsed.value());
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    if (!encoded.ok()) return;
+
+    auto find_record = [](list_stream::ListValue& root) -> list_stream::ListValue* {
+        list_stream::ListValue* found = nullptr;
+        std::function<void(list_stream::ListValue&)> visit = [&](list_stream::ListValue& value) {
+            if (!found && value.is_list && value.items.size() == 6 && !value.items[0].is_list &&
+                value.items[0].atom == oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid) {
+                found = &value;
+                return;
+            }
+            for (auto& child : value.items) if (!found && child.is_list) visit(child);
+        };
+        visit(root);
+        return found;
+    };
+    auto physical_stream = encoded.value();
+    auto* physical_record = find_record(physical_stream);
+    expect(physical_record != nullptr, "encoded branching graph must have a Dendrogram control record");
+    if (!physical_record) return;
+
+    const auto reorder_collection = [](list_stream::ListValue& wrapper, const std::vector<std::uint32_t>& key_order) {
+        auto& sequence = wrapper.items.at(1);
+        const auto row_count = static_cast<std::size_t>(std::stoul(sequence.items.at(2).atom)) - 1;
+        expect(key_order.size() == row_count, "physical key permutation must cover every graph row");
+        std::map<std::uint32_t, std::pair<list_stream::ListValue, list_stream::ListValue>> rows_by_key;
+        for (std::size_t index = 0; index < row_count; ++index) {
+            const auto key = static_cast<std::uint32_t>(std::stoul(sequence.items.at(3 + index * 2).atom));
+            rows_by_key.emplace(key, std::make_pair(sequence.items.at(3 + index * 2), sequence.items.at(4 + index * 2)));
+        }
+        std::vector<list_stream::ListValue> fields(sequence.items.begin(), sequence.items.begin() + 3);
+        for (const auto key : key_order) {
+            const auto row = rows_by_key.find(key);
+            expect(row != rows_by_key.end(), "physical key permutation must reference an existing row");
+            fields.push_back(row->second.first);
+            fields.push_back(row->second.second);
+        }
+        const auto suffix = sequence.items.size() - 5;
+        fields.insert(fields.end(), sequence.items.begin() + static_cast<std::ptrdiff_t>(suffix), sequence.items.end());
+        sequence = list_stream::ListValue::list(std::move(fields));
+    };
+    reorder_collection(physical_record->items[2].items[2], {3, 1, 5, 2, 4});
+    reorder_collection(physical_record->items[2].items[3], {3, 1, 4, 2});
+
+    auto oversized_count = physical_stream;
+    auto* oversized_record = find_record(oversized_count);
+    oversized_record->items[2].items[2].items[1].items[2] = list_stream::ListValue::raw_atom("4294967295");
+    expect(!form_stream::decode_document(oversized_count, "BranchingGraph"),
+        "oversized declared collection count must fail before indexing or allocation");
+
+    auto exponent_distance = physical_stream;
+    auto* exponent_record = find_record(exponent_distance);
+    exponent_record->items[2].items[3].items[1].items[4].items[4] = list_stream::ListValue::raw_atom("1e2");
+    expect_failure(form_stream::decode_document(exponent_distance, "BranchingGraph"), "OOF1122",
+        "$/1/2/2/1/2/3/8", "native exponent Distance must be rejected because public xs:decimal cannot serialize it");
+
+    const auto decoded = form_stream::decode_document(physical_stream, "BranchingGraph");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    if (!decoded.ok()) return;
+    const auto* decoded_control = decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_graph = decoded_control == nullptr ? nullptr : std::get_if<model::DendrogramPayload>(&decoded_control->payload);
+    expect(decoded_graph != nullptr && decoded_graph->items == expected_items && decoded_graph->links == expected_links,
+        "decoder must reconstruct named branching semantics from shuffled physical keys and chains");
+
+    const auto decoded_xml = oof::source::serialize_form_xml(decoded.value());
+    expect(decoded_xml.ok(), "shuffled physical graph must serialize to named public XML");
+    if (!decoded_xml.ok()) return;
+    const auto final_document = oof::source::parse_form_xml(decoded_xml.value());
+    expect(final_document.ok(), "named graph reconstructed from physical rows must parse");
+    if (!final_document.ok()) return;
+    const auto final_stream = form_stream::encode_document(final_document.value());
+    expect(final_stream.ok(), "named graph reconstructed from physical rows must re-encode");
+    if (!final_stream.ok()) return;
+    const auto final_decoded = form_stream::decode_document(final_stream.value(), "BranchingGraph");
+    expect(final_decoded.ok(), "freshly encoded branching graph must decode");
+    if (!final_decoded.ok()) return;
+    const auto* final_control = final_decoded.value().find_control(model::ObjectId{2});
+    const auto* final_graph = final_control == nullptr ? nullptr : std::get_if<model::DendrogramPayload>(&final_control->payload);
+    expect(final_graph != nullptr && final_graph->items == expected_items && final_graph->links == expected_links,
+        "shuffled native-shaped stream to named XML to fresh stream must preserve every item, label, endpoint and distance");
+}
+
+
 void test_track_bar_observed_record_and_named_round_trip() {
     constexpr std::string_view default_form_xml =
         R"OOF(<Form id="1" name="TrackBarForm" ordinaryFormVersion="2.1"><ChildItems><TrackBar id="4" name="TrackBarResearch"><Position/></TrackBar></ChildItems></Form>)OOF";
@@ -3586,6 +5088,97 @@ void test_track_bar_observed_record_and_named_round_trip() {
     expect(mixed_decoded.ok() && mixed_decoded.value().find_control(model::ObjectId{2})->kind() == model::ControlKind::button &&
                mixed_decoded.value().find_control(model::ObjectId{4})->kind() == model::ControlKind::track_bar,
         "mixed Button and TrackBar records must decode in named control order");
+}
+
+void test_list_box_value_list_data_path_and_supported_properties() {
+    constexpr std::string_view xml = R"OOF(<Form id="1" name="ListBoxForm" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"/><Position><Top>12</Top><Visible>false</Visible><Height>45</Height><Left>23</Left><Width>234</Width></Position><Enabled>false</Enabled><ShowPicture>true</ShowPicture><ShowCheckBox>true</ShowCheckBox><ToolTip>Список проверки</ToolTip><ReadOnly>false</ReadOnly></ListBox></ChildItems></Form>)OOF";
+    auto parsed = oof::source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "named ListBox with ValueList DataPath and proven properties must encode");
+    const auto decoded = form_stream::decode_document(encoded.value(), "ListBoxRoundTrip");
+    expect(decoded.ok(), "named ListBox with ValueList DataPath must decode");
+    const auto* control = decoded.value().find_control(model::ObjectId{7});
+    expect(control && control->kind() == model::ControlKind::list_box && control->data_path &&
+               control->data_path->attribute.id() == model::ObjectId{5},
+        "ListBox DataPath must resolve to the named ValueList attribute");
+    const auto* attribute = decoded.value().find_attribute(model::ObjectId{5});
+    expect(attribute && attribute->type.entries.size() == 1 &&
+               attribute->type.entries.front().term == model::TypeDomainTerm::value_list,
+        "ListBox source type must survive stream decoding as named ValueList");
+    const auto property = [&](std::string_view name) { return control->properties().find(model::PropertyId::from_name(name)); };
+    expect(property("Enabled") && !std::get<bool>(property("Enabled")->value) &&
+               property("ShowPicture") && std::get<bool>(property("ShowPicture")->value) &&
+               property("ShowCheckBox") && std::get<bool>(property("ShowCheckBox")->value) &&
+               property("ToolTip") && std::get<std::string>(property("ToolTip")->value) == "Список проверки" &&
+               property("ReadOnly") && !std::get<bool>(property("ReadOnly")->value),
+        "ListBox supported base and display properties must decode by their named descriptors");
+    expect(control->position.top.value() == 12 && control->position.left.value() == 23 &&
+               control->position.width.value() == 234 && control->position.height.value() == 45 &&
+               !control->position.visible.value(),
+        "ListBox Position and Visible must survive stream decoding");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "ListBox ValueList link, properties, and geometry must round-trip exactly");
+
+    const auto rejects = [](std::string_view source) {
+        const auto candidate = oof::source::parse_form_xml(source);
+        return !candidate || !form_stream::encode_document(candidate.value());
+    };
+    constexpr std::string_view wrong_type = R"OOF(<Form id="1" name="WrongType" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="string"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"/><Position/></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(wrong_type), "ListBox DataPath must reject a non-ValueList attribute");
+    constexpr std::string_view dangling = R"OOF(<Form id="1" name="Dangling" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="9"/><Position/></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(dangling), "ListBox DataPath must reject a dangling Attribute reference");
+    constexpr std::string_view nested = R"OOF(<Form id="1" name="Nested" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"><Member>Nested</Member></DataPath><Position/></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(nested), "ListBox DataPath must reject nested members outside the tested profile");
+    constexpr std::string_view events = R"OOF(<Form id="1" name="Events" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"/><Position/><Events><OnActivateRow>HandleRow</OnActivateRow></Events></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(events), "ListBox event storage must remain rejected until its record is proven");
+    constexpr std::string_view persisted_value = R"OOF(<Form id="1" name="PersistedValue" ordinaryFormVersion="2.1"><Attributes><Attribute id="5" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><ListBox id="7" name="Choices"><DataPath attributeId="5"/><Position/><Value>alpha</Value></ListBox></ChildItems></Form>)OOF";
+    expect(rejects(persisted_value), "runtime Value items must not enter persisted ListBox XML");
+}
+
+void test_list_box_captured_runtime_record_roundtrip() {
+    constexpr std::string_view observed_record = R"CAPTURED(
+{19f8b798-314e-4b4e-8121-905b2a7a03f5,201,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},{23,100743712,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,0,{12741203},0},{4,3,{-15},3},{4,3,{-13},3},2,2,0,0,0,1,0,1,1,{8,2,0,{-20},1,100},{8,2,0,{-20},1,100},0,0,1,0,0,0,0,0,0,0,100,1,2,2,2,0,0,2},6,0,0,0,0},{0}},{8,0,0,0,0,0,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,4,5,0,0},{14,"ПолеСпискаТипизированнаяСвязь",4294967295,0,0,0},{0}}
+)CAPTURED";
+    const auto captured_control = list_stream::parse(observed_record);
+    constexpr std::string_view linked_form_xml =
+        R"OOF(<Form id="1" name="CapturedListBox" ordinaryFormVersion="2.1"><Attributes><Attribute id="200" name="ЗначенияСписка"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes><ChildItems><Button id="100" name="Подготовка1"><Position/></Button><Button id="101" name="Подготовка2"><Position/></Button><Button id="102" name="Подготовка3"><Position/></Button><Button id="103" name="Подготовка4"><Position/></Button><ListBox id="201" name="ПолеСпискаТипизированнаяСвязь"><DataPath attributeId="200"/><Position/></ListBox></ChildItems></Form>)OOF";
+    const auto parsed = oof::source::parse_form_xml(linked_form_xml);
+    expect(parsed.ok(), "captured ListBox fixture model with ValueList link must parse");
+    auto stream = form_stream::encode_document(parsed.value());
+    expect(stream.ok(), "captured ListBox fixture carrier must encode with a distinct AttributeLink");
+    auto& records = stream.value().items[1].items[2].items[2].items;
+    const auto record = std::find_if(records.begin(), records.end(), [](const auto& candidate) {
+        return candidate.is_list && candidate.items.size() > 1 && !candidate.items[1].is_list &&
+            candidate.items[1].atom == "201";
+    });
+    expect(record != records.end(), "captured ListBox control slot must be present in its stream carrier");
+    *record = captured_control;
+
+    const auto decoded = form_stream::decode_document(stream.value(), "CapturedListBox");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* control = decoded.value().find_control(model::ObjectId{201});
+    const auto* attribute = decoded.value().find_attribute(model::ObjectId{200});
+    expect(control && control->kind() == model::ControlKind::list_box && control->name == "ПолеСпискаТипизированнаяСвязь" &&
+               control->data_path && control->data_path->attribute.id() == model::ObjectId{200},
+        "captured ListBox record must decode with the separate AttributeLink to the named source");
+    expect(attribute && attribute->type.entries.size() == 1 &&
+               attribute->type.entries.front().term == model::TypeDomainTerm::value_list &&
+               !attribute->type.entries.front().type_uuid,
+        "captured ListBox fixture must keep its independently typed ValueList Attribute");
+
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok(), "captured ListBox control must re-encode in the supported named profile");
+    const auto& reencoded_records = reencoded.value().items[1].items[2].items[2].items;
+    const auto reencoded_record = std::find_if(reencoded_records.begin(), reencoded_records.end(), [](const auto& candidate) {
+        return candidate.is_list && candidate.items.size() > 1 && !candidate.items[1].is_list &&
+            candidate.items[1].atom == "201";
+    });
+    expect(reencoded_record != reencoded_records.end() &&
+               list_stream::dump_compact(*reencoded_record) == list_stream::dump_compact(captured_control),
+        "ListBox writer must reproduce the independently captured runtime control record exactly");
 }
 
 void test_calendar_field_captured_begin_period_record_decode() {
@@ -4670,6 +6263,308 @@ void test_single_input_field_round_trip() {
         "single InputField must reject triple-profile geometry references");
 }
 
+void test_spreadsheet_document_field_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {model::ControlRef{model::ObjectId{9}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode field{model::ObjectId{9}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    auto& field_payload = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload);
+    field_payload.cells = {
+        {1, 1, "Документ", std::nullopt}, {2, 1, "", std::nullopt}, {2, 3, " Ω & текст ", std::nullopt}};
+    const auto typed_cell = [](std::uint32_t row, std::uint32_t column, model::TypeDomainTerm term,
+                               model::PropertyValue value) {
+        model::TypeDomainEntry entry;
+        entry.term = term;
+        if (term == model::TypeDomainTerm::string) entry.string = {100, true};
+        if (term == model::TypeDomainTerm::numeric) entry.numeric = {15, 3, false};
+        if (term == model::TypeDomainTerm::date) entry.date = {true, true};
+        model::TypeDomainPatternValue type{{entry}};
+        return model::SpreadsheetDocumentCell{row, column, {},
+            model::SpreadsheetDocumentCellValue{std::move(type), std::move(value)}};
+    };
+    field_payload.cells.push_back(typed_cell(4, 1, model::TypeDomainTerm::string, std::string("Unicode Привет 世界")));
+    field_payload.cells.push_back(typed_cell(4, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"-12.375"}));
+    field_payload.cells.push_back(typed_cell(4, 3, model::TypeDomainTerm::boolean, false));
+    field_payload.cells.push_back(typed_cell(4, 4, model::TypeDomainTerm::date, model::DateValue{"2026-10-04T12:30:45"}));
+    field_payload.cells.push_back(typed_cell(6, 1, model::TypeDomainTerm::string, std::string{}));
+    field_payload.cells.push_back(typed_cell(6, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"0"}));
+    field_payload.cells.push_back(typed_cell(6, 3, model::TypeDomainTerm::date, model::DateValue{"0001-01-01T00:00:00"}));
+    auto generic_string = typed_cell(7, 1, model::TypeDomainTerm::string, std::string("x"));
+    generic_string.typed_value->type.entries.front().string.length = 37;
+    field_payload.cells.push_back(std::move(generic_string));
+    auto generic_number = typed_cell(7, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"1.2345"});
+    generic_number.typed_value->type.entries.front().numeric = {12, 4, false};
+    field_payload.cells.push_back(std::move(generic_number));
+    document.add_control(std::move(field));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded.ok() ? "" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), decoded.ok() ? "" : decoded.diagnostics().front().message);
+    const auto* restored_control = decoded.value().find_control(model::ObjectId{9});
+    expect(restored_control != nullptr, "SpreadsheetDocumentField must resolve after storage decode");
+    const auto* restored = std::get_if<model::SpreadsheetDocumentFieldPayload>(&restored_control->payload);
+    expect(restored && restored->cells.size() == 12 && restored->cells[0].row == 1 &&
+        restored->cells[0].column == 1 && restored->cells[0].text == "Документ" &&
+        restored->cells[1].row == 2 && restored->cells[1].column == 1 && restored->cells[1].text.empty() &&
+        restored->cells[2].row == 2 && restored->cells[2].column == 3 && restored->cells[2].text == " Ω & текст ",
+        "SpreadsheetDocumentField cells must preserve sparse coordinates, Unicode, whitespace, and empty content");
+    expect(restored && restored->cells[3].typed_value &&
+        std::get<std::string>(restored->cells[3].typed_value->value) == "Unicode Привет 世界" &&
+        restored->cells[3].typed_value->type.entries.front().string.length == 100 &&
+        restored->cells[4].typed_value &&
+        std::get<model::DecimalValue>(restored->cells[4].typed_value->value).canonical == "-12.375" &&
+        restored->cells[5].typed_value && !std::get<bool>(restored->cells[5].typed_value->value) &&
+        restored->cells[6].typed_value &&
+        std::get<model::DateValue>(restored->cells[6].typed_value->value).canonical == "2026-10-04T12:30:45",
+        "SpreadsheetDocumentField must preserve typed String, Number, Boolean, and Date values and qualifiers");
+    const auto& document_info = encoded.value().items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    expect(list_stream::dump_compact(document_info.items.at(32)) ==
+            list_stream::dump_compact(list_stream::parse(R"LS({2,1,{"S","Unicode Привет 世界"}})LS")) &&
+        list_stream::dump_compact(document_info.items.at(34)) ==
+            list_stream::dump_compact(list_stream::parse(R"LS({2,2,{"N",-12.375}})LS")) &&
+        list_stream::dump_compact(document_info.items.at(36)) == "{0,3}" &&
+        list_stream::dump_compact(document_info.items.at(38)) ==
+            list_stream::dump_compact(list_stream::parse(R"LS({2,4,{"D",20261004123045}})LS")) &&
+        list_stream::dump_compact(document_info.items.at(83)) == "{46137344,1,0,0}" &&
+        list_stream::dump_compact(document_info.items.at(84)) == "{46137344,1,1,0}" &&
+        list_stream::dump_compact(document_info.items.at(85)) == "{46137344,1,2,0}" &&
+        list_stream::dump_compact(document_info.items.at(86)) == "{46137344,1,3,0}",
+        "typed cell records and fresh TypeDomain references must match the observed named wire profile");
+
+    constexpr std::string_view observed_typed_document_info = R"LS({8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,3,0,0,2,0,{16,0,{1,1,{"ru","Первый"}},0},2,{16,0,{1,0},0},1,0,2,0,{16,0,{1,1,{"ru","二"}},0},2,{16,0,{1,1,{"ru","Four"}},0},3,0,4,0,{2,1,{"S","Unicode Привет 世界 🌍"}},1,{2,2,{"N",-12.375}},2,{0,3},3,{2,4,{"D",20261004123045}},{4,0,00000000-0000-0000-0000-000000000000,0},4,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,4,{46137344,1,0,0},{46137344,1,1,0},{46137344,1,2,0},{46137344,1,3,0},0,0,4,{"Pattern",{"S",100,1}},{"Pattern",{"N",15,3,0}},{"Pattern",{"B"}},{"Pattern",{"D"}},1,381ed624-9217-4e63-85db-c4c3cb87daae,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0})LS";
+    model::Form observed_form;
+    observed_form.id = model::ObjectId{1};
+    observed_form.name = "Main";
+    observed_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument observed_document(std::move(observed_form));
+    model::ControlNode observed_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    auto& observed_cells = std::get<model::SpreadsheetDocumentFieldPayload>(observed_field.payload).cells;
+    observed_cells = {{1, 1, "Первый", std::nullopt}, {1, 3, "", std::nullopt},
+        {2, 1, "二", std::nullopt}, {2, 3, "Four", std::nullopt}};
+    observed_cells.push_back(typed_cell(4, 1, model::TypeDomainTerm::string, std::string("Unicode Привет 世界 🌍")));
+    observed_cells.push_back(typed_cell(4, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"-12.375"}));
+    observed_cells.push_back(typed_cell(4, 3, model::TypeDomainTerm::boolean, false));
+    observed_cells.push_back(typed_cell(4, 4, model::TypeDomainTerm::date, model::DateValue{"2026-10-04T12:30:45"}));
+    observed_document.add_control(std::move(observed_field));
+    auto observed_encoded = form_stream::encode_document(observed_document);
+    expect(observed_encoded.ok(), observed_encoded.ok() ? "" : observed_encoded.diagnostics().front().message);
+    auto observed_fixture = list_stream::parse(observed_typed_document_info);
+    auto& observed_control_record = observed_encoded.value().items.at(1).items.at(2).items.at(2).items.at(1);
+    const auto& produced_document_info = observed_control_record.items.at(2).items.at(11);
+    const auto produced_observed_info = list_stream::dump_compact(produced_document_info);
+    const auto expected_observed_info = list_stream::dump_compact(observed_fixture);
+    expect(produced_observed_info == expected_observed_info,
+        std::string("typed-cell writer must match the independent platform-observed complete DocumentInfo; got ") +
+            produced_observed_info + " expected " + expected_observed_info);
+    observed_control_record.items.at(2).items.at(11) = std::move(observed_fixture);
+    const auto observed_decoded = form_stream::decode_document(observed_encoded.value(), "Main");
+    expect(observed_decoded.ok(), observed_decoded.ok() ? "" : observed_decoded.diagnostics().front().message);
+    const auto* observed_control = observed_decoded.value().find_control(model::ObjectId{2});
+    const auto* observed_payload = observed_control == nullptr ? nullptr :
+        std::get_if<model::SpreadsheetDocumentFieldPayload>(&observed_control->payload);
+    expect(observed_payload && observed_payload->cells.size() == 8 &&
+        observed_payload->cells[4].typed_value &&
+        std::get<std::string>(observed_payload->cells[4].typed_value->value) == "Unicode Привет 世界 🌍" &&
+        observed_payload->cells[5].typed_value &&
+        std::get<model::DecimalValue>(observed_payload->cells[5].typed_value->value).canonical == "-12.375" &&
+        observed_payload->cells[6].typed_value && !std::get<bool>(observed_payload->cells[6].typed_value->value) &&
+        observed_payload->cells[7].typed_value &&
+        std::get<model::DateValue>(observed_payload->cells[7].typed_value->value).canonical == "2026-10-04T12:30:45",
+        "independent full DocumentInfo must decode into named typed cells and exact values");
+
+    model::Form shared_form;
+    shared_form.id = model::ObjectId{1};
+    shared_form.name = "Main";
+    shared_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument shared_document(std::move(shared_form));
+    model::ControlNode shared_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    std::get<model::SpreadsheetDocumentFieldPayload>(shared_field.payload).cells = {
+        typed_cell(1, 1, model::TypeDomainTerm::string, std::string("first")),
+        typed_cell(1, 3, model::TypeDomainTerm::string, std::string("second"))};
+    shared_document.add_control(std::move(shared_field));
+    auto shared_encoded = form_stream::encode_document(shared_document);
+    expect(shared_encoded.ok(), shared_encoded.ok() ? "" : shared_encoded.diagnostics().front().message);
+    auto& shared_info = shared_encoded.value().items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    shared_info.items.at(22).items.at(1) = list_stream::ListValue::raw_atom("1");
+    shared_info.items.erase(shared_info.items.begin() + 52);
+    shared_info.items.at(50) = list_stream::ListValue::raw_atom("1");
+    shared_info.items.at(54) = list_stream::ListValue::raw_atom("1");
+    shared_info.items.erase(shared_info.items.begin() + 56);
+    const auto shared_decoded = form_stream::decode_document(shared_encoded.value(), "Main");
+    expect(shared_decoded.ok(), shared_decoded.ok() ? "" : shared_decoded.diagnostics().front().message);
+    const auto* shared_control = shared_decoded.value().find_control(model::ObjectId{2});
+    const auto* shared_payload = shared_control == nullptr ? nullptr :
+        std::get_if<model::SpreadsheetDocumentFieldPayload>(&shared_control->payload);
+    expect(shared_payload && shared_payload->cells.size() == 2 &&
+        std::get<std::string>(shared_payload->cells[0].typed_value->value) == "first" &&
+        std::get<std::string>(shared_payload->cells[1].typed_value->value) == "second" &&
+        shared_payload->cells[0].typed_value->type == shared_payload->cells[1].typed_value->type,
+        "typed cells may resolve a shared format and ValueType reference by their table mappings");
+    expect(restored && restored->cells[7].typed_value &&
+        std::get<std::string>(restored->cells[7].typed_value->value).empty() &&
+        restored->cells[8].typed_value &&
+        std::get<model::DecimalValue>(restored->cells[8].typed_value->value).canonical == "0" &&
+        restored->cells[9].typed_value &&
+        std::get<model::DateValue>(restored->cells[9].typed_value->value).canonical == "0001-01-01T00:00:00",
+        "default typed String, Number, and Date values must survive storage normalization");
+    expect(restored && restored->cells[10].typed_value &&
+        restored->cells[10].typed_value->type.entries.front().string.length == 37 &&
+        restored->cells[11].typed_value &&
+        restored->cells[11].typed_value->type.entries.front().numeric == model::NumericQualifiers{12, 4, false},
+        "non-default String and Number qualifiers must survive typed cell storage");
+
+    constexpr std::string_view fresh_add_control = R"LS({236a17b3-7f44-46d9-a907-75f9cdc61ab5,2,{18,0,0,0,0,5,5,1,1,{4,4,{0},4},{3,1,{-18},0,0,0},{8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,2,0,0,1,0,{16,0,{1,1,{"ru","Первый"}},0},1,0,1,2,{16,0,{1,1,{"ru","Второй"}},0},{3,0,00000000-0000-0000-0000-000000000000,0},2,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0},0,1,{3,0,0,100,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"ru",0,0,0,0,0,0,0},1,1,{0},0,0,0,0,0,1,0,1,1,0,0,0,0,1,1},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,0,1,0,0},{14,"Sheet",4294967295,0,0,0},{0}})LS";
+    const auto platform_record = list_stream::parse(fresh_add_control);
+    model::Form platform_form;
+    platform_form.id = model::ObjectId{1};
+    platform_form.name = "Main";
+    platform_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument platform_document(std::move(platform_form));
+    model::ControlNode platform_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    std::get<model::SpreadsheetDocumentFieldPayload>(platform_field.payload).cells = {
+        {1, 1, "Первый", std::nullopt}, {2, 3, "Второй", std::nullopt}};
+    platform_document.add_control(std::move(platform_field));
+    const auto platform_encode = form_stream::encode_document(platform_document);
+    expect(platform_encode.ok(), platform_encode.ok() ? "" : platform_encode.diagnostics().front().message);
+    auto fresh_add_tree = platform_encode.value();
+    auto& fresh_add_record = fresh_add_tree.items.at(1).items.at(2).items.at(2).items.at(1);
+    fresh_add_record = platform_record;
+    const auto fresh_add_decoded = form_stream::decode_document(fresh_add_tree, "Main");
+    expect(fresh_add_decoded.ok(), fresh_add_decoded.ok() ? "" : fresh_add_decoded.diagnostics().front().message);
+    const auto* fresh_add_control_node = fresh_add_decoded.value().find_control(model::ObjectId{2});
+    expect(fresh_add_control_node != nullptr, "fresh platform Add record must decode to a named control");
+    const auto* fresh_add_payload = fresh_add_control_node == nullptr ? nullptr :
+        std::get_if<model::SpreadsheetDocumentFieldPayload>(&fresh_add_control_node->payload);
+    expect(fresh_add_payload && fresh_add_payload->cells.size() == 2 &&
+        fresh_add_payload->cells[0].text == "Первый" && fresh_add_payload->cells[1].row == 2 &&
+        fresh_add_payload->cells[1].column == 3 && fresh_add_payload->cells[1].text == "Второй",
+        "independent fresh Add record must normalize its unexposed fresh view envelope");
+
+    constexpr std::string_view normalized_default_record = R"LS({236a17b3-7f44-46d9-a907-75f9cdc61ab5,2,{18,0,0,0,0,5,5,1,1,{4,4,{0},4},{3,1,{-18},0,0,0},{8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,1,0,0,1,0,{16,0,{1,1,{"ru","Текст"}},0},{1,0,00000000-0000-0000-0000-000000000000,0},1,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0},0,1,{3,0,0,100,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"ru",0,1,{3,0,0,0,0,00000000-0000-0000-0000-000000000000},0,0,0,0,0},1,1,{0},0,0,0,0,0,1,0,1,1,0,0,0,0,1,1},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,0,1,0,0},{14,"Sheet",4294967295,0,0,0},{0}})LS";
+    model::Form normalized_form;
+    normalized_form.id = model::ObjectId{1};
+    normalized_form.name = "Main";
+    normalized_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument normalized_document(std::move(normalized_form));
+    model::ControlNode normalized_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    std::get<model::SpreadsheetDocumentFieldPayload>(normalized_field.payload).cells = {{1, 1, "Текст", std::nullopt}};
+    normalized_document.add_control(std::move(normalized_field));
+    const auto normalized_encoded = form_stream::encode_document(normalized_document);
+    expect(normalized_encoded.ok(), normalized_encoded.ok() ? "" : normalized_encoded.diagnostics().front().message);
+    const auto normalized_record = list_stream::parse(normalized_default_record);
+    const auto& normalized_writer_record = normalized_encoded.value().items.at(1).items.at(2).items.at(2).items.at(1);
+    expect(list_stream::dump_compact(normalized_writer_record) == list_stream::dump_compact(normalized_record),
+        "writer must match the independently captured Designer-normalized R1C1 selection record exactly");
+    auto normalized_tree = normalized_encoded.value();
+    normalized_tree.items.at(1).items.at(2).items.at(2).items.at(1) = normalized_record;
+    const auto normalized_decoded = form_stream::decode_document(normalized_tree, "Main");
+    expect(normalized_decoded.ok(), normalized_decoded.ok() ? "" : normalized_decoded.diagnostics().front().message);
+    const auto* normalized_control = normalized_decoded.value().find_control(model::ObjectId{2});
+    const auto* normalized_payload = normalized_control == nullptr ? nullptr :
+        std::get_if<model::SpreadsheetDocumentFieldPayload>(&normalized_control->payload);
+    expect(normalized_payload && normalized_payload->cells == std::vector<model::SpreadsheetDocumentCell>{{1, 1, "Текст", std::nullopt}},
+        "independent normalized R1C1 record must decode to the same named cells as fresh Add");
+
+    auto unsupported_row_flags = encoded.value();
+    auto& field_record = unsupported_row_flags.items.at(1).items.at(2).items.at(2).items.at(1);
+    auto& field_info = field_record.items.at(2).items.at(11);
+    expect(field_info.items.size() > 17 && !field_info.items.at(17).is_list,
+        "Spreadsheet Document row fixture must expose flat named row flags");
+    field_info.items.at(17) = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(unsupported_row_flags, "Main").ok(),
+        "SpreadsheetDocumentField must reject nondefault row flags");
+
+    auto excessive_row_count = encoded.value();
+    auto& excessive_row_record = excessive_row_count.items.at(1).items.at(2).items.at(2).items.at(1);
+    excessive_row_record.items.at(2).items.at(11).items.at(15) =
+        list_stream::ListValue::raw_atom("4294967295");
+    expect(!form_stream::decode_document(excessive_row_count, "Main").ok(),
+        "SpreadsheetDocumentField must reject an unrepresentable storage row count before iterating");
+
+    auto excessive_cell_count = encoded.value();
+    auto& excessive_cell_record = excessive_cell_count.items.at(1).items.at(2).items.at(2).items.at(1);
+    excessive_cell_record.items.at(2).items.at(11).items.at(18) =
+        list_stream::ListValue::raw_atom("4294967295");
+    expect(!form_stream::decode_document(excessive_cell_count, "Main").ok(),
+        "SpreadsheetDocumentField must reject an unrepresentable storage cell count before iterating");
+
+    auto bad_typed_reference = encoded.value();
+    auto& bad_reference_info = bad_typed_reference.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    bad_reference_info.items.at(32).items.at(1) = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(bad_typed_reference, "Main").ok(),
+        "SpreadsheetDocumentField must reject a reference conflicting with its typed value");
+    for (const std::string invalid_decimal : {"1e3", "bad", "0.00", "-0"}) {
+        auto malformed_number = encoded.value();
+        auto& malformed_info = malformed_number.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+        malformed_info.items.at(34).items.at(2).items.at(1) = list_stream::ListValue::raw_atom(invalid_decimal);
+        const auto rejected_number = form_stream::decode_document(malformed_number, "Main");
+        expect(!rejected_number.ok() &&
+            rejected_number.diagnostics().front().message.find("canonical decimal") != std::string::npos,
+            "typed Number decode must reject noncanonical atoms before producing an unserializable DecimalValue");
+        model::Form invalid_form;
+        invalid_form.id = model::ObjectId{1};
+        invalid_form.name = "Main";
+        invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+        model::ControlNode invalid_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+        std::get<model::SpreadsheetDocumentFieldPayload>(invalid_field.payload).cells = {
+            typed_cell(1, 1, model::TypeDomainTerm::numeric, model::DecimalValue{invalid_decimal})};
+        invalid_document.add_control(std::move(invalid_field));
+        expect(!form_stream::encode_document(invalid_document).ok(),
+            "typed Number encode must reject a noncanonical DecimalValue without rounding");
+    }
+    auto unknown_type_reference = encoded.value();
+    auto& unknown_type_info = unknown_type_reference.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    unknown_type_info.items.at(83).items.at(0) = list_stream::ListValue::raw_atom("46137345");
+    expect(!form_stream::decode_document(unknown_type_reference, "Main").ok(),
+        "SpreadsheetDocumentField must reject an unknown typed-value reference marker");
+    auto unknown_document_tail = encoded.value();
+    auto& unknown_tail_info = unknown_document_tail.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    unknown_tail_info.items.at(57) = list_stream::ListValue::raw_atom("9");
+    expect(!form_stream::decode_document(unknown_document_tail, "Main").ok(),
+        "SpreadsheetDocumentField must reject an unknown non-table document-tail variation");
+    auto excessive_typed_count = encoded.value();
+    auto& excessive_typed_info = excessive_typed_count.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    excessive_typed_info.items.at(82) = list_stream::ListValue::raw_atom("4294967295");
+    expect(!form_stream::decode_document(excessive_typed_count, "Main").ok(),
+        "SpreadsheetDocumentField must reject an excessive typed-value count");
+    auto excessive_domain_count = encoded.value();
+    auto& excessive_domain_info = excessive_domain_count.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    excessive_domain_info.items.at(94) = list_stream::ListValue::raw_atom("4294967295");
+    expect(!form_stream::decode_document(excessive_domain_count, "Main").ok(),
+        "SpreadsheetDocumentField must reject an excessive ValueType count");
+
+    auto unsupported_area_marker = encoded.value();
+    auto& marker_record = unsupported_area_marker.items.at(1).items.at(2).items.at(2).items.at(1);
+    marker_record.items.at(2).items.at(14).items.at(24).items.at(0) = list_stream::ListValue::raw_atom("4");
+    expect(!form_stream::decode_document(unsupported_area_marker, "Main").ok(),
+        "SpreadsheetDocumentField must reject unknown nondefault view markers");
+    auto unsupported_columns_id = encoded.value();
+    auto& columns_id_record = unsupported_columns_id.items.at(1).items.at(2).items.at(2).items.at(1);
+    columns_id_record.items.at(2).items.at(14).items.at(24).items.at(5) =
+        list_stream::ListValue::raw_atom("11111111-1111-1111-1111-111111111111");
+    expect(!form_stream::decode_document(unsupported_columns_id, "Main").ok(),
+        "SpreadsheetDocumentField must reject unsupported nonzero view columns IDs");
+    auto nondefault_view = encoded.value();
+    auto& nondefault_record = nondefault_view.items.at(1).items.at(2).items.at(2).items.at(1);
+    nondefault_record.items.at(2).items.at(14).items.at(1) = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(nondefault_view, "Main").ok(),
+        "SpreadsheetDocumentField must reject nondefault persisted current-cell data");
+    auto unsupported_view_setting = encoded.value();
+    auto& setting_record = unsupported_view_setting.items.at(1).items.at(2).items.at(2).items.at(1);
+    setting_record.items.at(2).items.at(14).items.at(22) = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(unsupported_view_setting, "Main").ok(),
+        "SpreadsheetDocumentField must reject view data outside the supported default envelope");
+    auto truncated_areas = encoded.value();
+    auto& truncated_record = truncated_areas.items.at(1).items.at(2).items.at(2).items.at(1);
+    truncated_record.items.at(2).items.at(14).items.pop_back();
+    expect(!form_stream::decode_document(truncated_areas, "Main").ok(),
+        "SpreadsheetDocumentField must reject a selection count without complete rectangle records");
+}
+
 void test_two_input_fields_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -5628,6 +7523,157 @@ void test_anchor_bindings_round_trip_and_fanout() {
         "proportional tuple without a primary tuple must be rejected");
 }
 
+void test_chart_named_dense_roundtrip_with_sibling_geometry() {
+    std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+      <Chart id="2" name="Metrics"><Position><Top>0</Top><Height>40</Height><Left>0</Left><Width>120</Width></Position><Title>Новая диаграмма</Title><Series>)XML";
+    constexpr std::array<std::uint64_t, 5> series_ids{2, 8, 9, 10, 11};
+    constexpr std::array<std::string_view, 5> series_texts{"Повтор", "Повтор", "", "Series 4", "Series 5"};
+    constexpr std::array<std::string_view, 5> markers{"Auto", "Circle", "Rhomb", "Rect", "Alternation"};
+    for (std::size_t index = 0; index < series_ids.size(); ++index) {
+        xml += "<ChartSeries id=\"" + std::to_string(series_ids[index]) + "\"><Text>" +
+            std::string(series_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
+            std::to_string(40 + index * 30) + "\" green=\"" + std::to_string(90 + index * 20) +
+            "\" blue=\"" + std::to_string(120 + index * 10) + "\"/><Marker type=\"ChartMarkerType\" member=\"" +
+            std::string(markers[index]) + "\"/></ChartSeries>";
+    }
+    xml += "</Series><Points>";
+    constexpr std::array<std::uint64_t, 3> point_ids{1, 7, 12};
+    constexpr std::array<std::string_view, 3> point_texts{"", "Ось X", "Ось X"};
+    for (std::size_t index = 0; index < point_ids.size(); ++index) {
+        xml += "<ChartPoint id=\"" + std::to_string(point_ids[index]) + "\"><Text>" +
+            std::string(point_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
+            std::to_string(20 + index * 50) + "\" green=\"" + std::to_string(30 + index * 40) +
+            "\" blue=\"" + std::to_string(40 + index * 30) + "\"/></ChartPoint>";
+    }
+    xml += "</Points><Values>";
+    for (std::size_t reverse_series = series_ids.size(); reverse_series > 0; --reverse_series) {
+        const std::size_t series = reverse_series - 1;
+        for (std::size_t reverse_point = point_ids.size(); reverse_point > 0; --reverse_point) {
+            const std::size_t point = reverse_point - 1;
+            xml += "<ChartValue seriesRef=\"" + std::to_string(series_ids[series]) + "\" pointRef=\"" +
+                std::to_string(point_ids[point]) + "\">";
+            if (series == 0 && point == 0) xml += "<Undefined>undefined</Undefined>";
+            else if (series == 0 && point == 1) xml += "<Number>0</Number>";
+            else if (series == 4 && point == 2) xml += "<Number>-23.75</Number>";
+            else xml += "<Number>" + std::to_string(series * 3 + point + 1) + ".125</Number>";
+            xml += "</ChartValue>";
+        }
+    }
+    xml += R"XML(</Values></Chart>
+      <LabelDecoration id="3" name="Caption"><Position><Top>50</Top><Height>20</Height><Left>4</Left><Width>80</Width></Position></LabelDecoration>
+    </ChildItems></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    if (!parsed.ok()) throw std::runtime_error("Chart parse: " + parsed.diagnostics().front().code + " " + parsed.diagnostics().front().message + " " + parsed.diagnostics().front().path);
+    expect(parsed.ok(), "named dense Chart with sibling must parse");
+    auto encoded = form_stream::encode_document(parsed.value());
+    if (!encoded.ok()) throw std::runtime_error("Chart encode: " + encoded.diagnostics().front().code + " " + encoded.diagnostics().front().message + " expected=" + encoded.diagnostics().front().expected + " actual=" + encoded.diagnostics().front().actual + " " + encoded.diagnostics().front().path);
+    expect(encoded.ok(), "named dense Chart must encode in a full document");
+    auto decoded = form_stream::decode_document(encoded.value());
+    expect(decoded.ok(), "named dense Chart must decode from a full document");
+    const auto* chart_control = decoded.value().find_control(model::ObjectId{2});
+    expect(chart_control != nullptr && chart_control->kind() == model::ControlKind::chart, "Chart must remain the first control");
+    const auto* chart = std::get_if<model::ChartPayload>(&chart_control->payload);
+    expect(chart != nullptr && chart->series.size() == 5 && chart->points.size() == 3 && chart->values.size() == 15,
+        "Chart dimensions and dense cell count must survive the stream");
+    expect(chart->series[0].color.red == 40 && chart->series[0].color.green == 90 && chart->series[0].color.blue == 120 &&
+        chart->points[0].color.red == 20 && chart->points[0].color.green == 30 && chart->points[0].color.blue == 40,
+        "Chart RGB channels must preserve platform blue-green-red packing order");
+    expect(chart->series[0].text == "Повтор" && chart->series[1].text == "Повтор" && chart->series[2].text.empty() && chart->points[0].text.empty(),
+        "duplicate and empty Chart captions must survive the stream");
+    const auto* title = chart_control->properties().find(model::PropertyId::from_name("Title"));
+    expect(title != nullptr && std::get<std::string>(title->value) == "Новая диаграмма", "Chart Title must use its property descriptor surface");
+    const auto cell = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{11} && value.point_ref == model::ObjectId{12};
+    });
+    expect(cell != chart->values.end() && std::get<model::DecimalValue>(cell->value).canonical == "-23.75",
+        "Chart matrix must preserve named references and negative decimal values independent of source order");
+    const auto zero = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{2} && value.point_ref == model::ObjectId{7};
+    });
+    expect(zero != chart->values.end() && std::get<model::DecimalValue>(zero->value).canonical == "0",
+        "explicit Chart zero must remain a numeric cell");
+    const auto undefined = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{2} && value.point_ref == model::ObjectId{1};
+    });
+    expect(undefined != chart->values.end() && std::holds_alternative<model::UndefinedValue>(undefined->value),
+        "explicit Chart Undefined must remain distinct from numeric zero");
+    const auto* sibling = decoded.value().find_control(model::ObjectId{3});
+    expect(sibling != nullptr && sibling->position.top.value() == 50 && sibling->position.left.value() == 4,
+        "Chart geometry slot must not overwrite its sibling Position");
+
+    auto designer_normalized_cache = encoded.value();
+    auto* normalized_chart_record = find_chart_record(designer_normalized_cache);
+    expect(normalized_chart_record != nullptr, "encoded document must expose its Chart record for cache normalization testing");
+    const auto chart_middle_start = std::size_t{5} + (series_ids.size() + 1) * 11 + 2 + point_ids.size() * 11;
+    normalized_chart_record->items[3].items[chart_middle_start + 84] = list_stream::ListValue::raw_atom("0.25");
+    const auto chart_cells_end = chart_middle_start + 96 + series_ids.size() * point_ids.size() * 3;
+    const auto chart_render_start = chart_cells_end + 28 + series_ids.size() + 1 + 21 + point_ids.size() + series_ids.size() + 1;
+    normalized_chart_record->items[3].items[chart_render_start + 2] = list_stream::ListValue::raw_atom("0.25");
+    expect(form_stream::decode_document(designer_normalized_cache).ok(),
+        "proven render-cache scalar may be recomputed without relaxing adjacent named Chart fields");
+
+    auto strict_alternation_cache = encoded.value();
+    auto* strict_alternation_record = find_chart_record(strict_alternation_cache);
+    expect(strict_alternation_record != nullptr, "encoded document must expose its Chart record for derived marker testing");
+    strict_alternation_record->items[3].items[51] = list_stream::ListValue::raw_atom("1");
+    expect(form_stream::decode_document(strict_alternation_cache).ok(),
+        "Designer-resolved Alternation cache may differ while its named style remains intact");
+
+    auto wrong_marker_cache_type = encoded.value();
+    auto* wrong_marker_type_record = find_chart_record(wrong_marker_cache_type);
+    expect(wrong_marker_type_record != nullptr, "encoded document must expose its Chart record for marker type testing");
+    wrong_marker_type_record->items[3].items[51] = list_stream::ListValue::string_atom("1");
+    expect(!form_stream::decode_document(wrong_marker_cache_type),
+        "derived Marker cache must remain a raw integer value");
+
+    auto out_of_range_marker_cache = encoded.value();
+    auto* out_of_range_marker_record = find_chart_record(out_of_range_marker_cache);
+    expect(out_of_range_marker_record != nullptr, "encoded document must expose its Chart record for marker range testing");
+    out_of_range_marker_record->items[3].items[51] = list_stream::ListValue::raw_atom("6");
+    expect(!form_stream::decode_document(out_of_range_marker_cache),
+        "derived Marker cache outside the proven enum range must be rejected");
+
+    auto concrete_marker_mismatch = encoded.value();
+    auto* concrete_marker_record = find_chart_record(concrete_marker_mismatch);
+    expect(concrete_marker_record != nullptr, "encoded document must expose its Chart record for concrete marker testing");
+    concrete_marker_record->items[3].items[18] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(concrete_marker_mismatch),
+        "concrete Marker cache must match the named enum exactly");
+
+    auto unknown_chart_style = encoded.value();
+    auto* unknown_chart_record = find_chart_record(unknown_chart_style);
+    expect(unknown_chart_record != nullptr, "encoded document must expose its Chart record for negative testing");
+    unknown_chart_record->items[3].items[6] = list_stream::ListValue::raw_atom("777");
+    expect(!form_stream::decode_document(unknown_chart_style),
+        "Chart decoder must reject an unrecognized style-row value instead of dropping it");
+
+    constexpr std::string_view empty_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Empty"><Position/><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    auto empty = source::parse_form_xml(empty_xml);
+    expect(empty.ok(), "empty platform Chart must remain a valid named model");
+    auto empty_stream = form_stream::encode_document(empty.value());
+    expect(empty_stream.ok(), "empty platform Chart must encode without synthetic data");
+    auto empty_decoded = form_stream::decode_document(empty_stream.value());
+    expect(empty_decoded.ok(), "empty platform Chart must cold decode");
+    const auto* empty_chart_control = empty_decoded.value().find_control(model::ObjectId{2});
+    const auto* empty_chart = empty_chart_control == nullptr ? nullptr : std::get_if<model::ChartPayload>(&empty_chart_control->payload);
+    expect(empty_chart != nullptr && empty_chart->series.empty() && empty_chart->points.empty() && empty_chart->values.empty(),
+        "empty native Chart dimensions must not be rewritten as synthetic values");
+
+    constexpr std::string_view sparse_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Sparse"><Position/><Series><ChartSeries id="2"><Text>S</Text><Color kind="absolute" red="1"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text>P</Text><Color kind="absolute" red="2"/></ChartPoint><ChartPoint id="3"><Text>Q</Text><Color kind="absolute" red="3"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Number>1</Number></ChartValue></Values></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(sparse_xml).ok(), "incomplete Chart matrix must fail instead of filling zero");
+    constexpr std::string_view invalid_number_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="BadNumber"><Position/><Series><ChartSeries id="2"><Text>S</Text><Color kind="absolute" red="1"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text>P</Text><Color kind="absolute" red="2"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Number>NaN</Number></ChartValue></Values></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(invalid_number_xml).ok(), "non-decimal Chart Number must fail closed");
+
+    auto unsupported_auto_marker_xml = xml;
+    const auto second_series_marker = unsupported_auto_marker_xml.find("member=\"Circle\"");
+    expect(second_series_marker != std::string::npos, "test fixture must contain the second Series marker");
+    unsupported_auto_marker_xml.replace(second_series_marker, std::string("member=\"Circle\"").size(), "member=\"Auto\"");
+    const auto unsupported_auto_marker = source::parse_form_xml(unsupported_auto_marker_xml);
+    expect(unsupported_auto_marker.ok(), "unsupported Auto ordinal fixture must remain well-formed named XML");
+    expect(form_stream::encode_document(unsupported_auto_marker.value()).ok(),
+        "Auto is a named Marker value at any Series ordinal; its resolved row cache is derived");
+}
+
 void test_platform_empty_document_fixture() {
     constexpr std::string_view fixture = R"OOF(
 {27,{18,{{1,1,{"ru","Form"}},1,4294967295},{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}},{0}},400,300,1,0,1,4,4,3,400,300,96},{{-1},3,{0},{0}},{00000000-0000-0000-0000-000000000000,0},{0},1,4,1,0,0,0,{0},{0},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
@@ -6094,11 +8140,17 @@ int main() {
         test_usual_group_named_record_round_trip_and_rejections();
         test_gantt_chart_named_storage_round_trip();
         test_gantt_standard_palette_wraparound();
+        test_captured_table_column_record();
+        test_table_read_only_runtime_flags();
+        test_table_column_name_and_data_path_runtime_slots();
+        test_table_column_choice_and_check_box_profiles();
+        test_captured_table_packet_rejections_and_alternate_deflate();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
         test_check_box_tooltip_round_trip_and_validation();
+        test_choice_field_static_profile_round_trip_and_validation();
         test_check_box_font_round_trip_and_validation();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
@@ -6113,18 +8165,28 @@ int main() {
         test_splitter_observed_record_and_named_codec();
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();
+        test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
+        test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_text_document_field_persisted_profile_and_rejections();
         test_calendar_field_begin_display_period();
         test_calendar_field_captured_begin_period_record_decode();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();
+        test_dendrogram_orientation_named_codec();
+        test_dendrogram_strict_native_fixture();
+        test_dendrogram_named_graph_candidate_roundtrip();
+        test_dendrogram_native_three_item_two_link_cursor_fixture();
+        test_dendrogram_unbounded_branching_graph_round_trip();
         test_track_bar_observed_record_and_named_round_trip();
+        test_list_box_value_list_data_path_and_supported_properties();
+        test_list_box_captured_runtime_record_roundtrip();
         test_progress_data_path_mixed_with_existing_links();
         test_button_label_input_field_round_trip();
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
         test_single_input_field_round_trip();
+        test_spreadsheet_document_field_round_trip();
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
         test_root_pages_round_trip_with_page_local_control_order();
@@ -6135,6 +8197,7 @@ int main() {
         test_page_boundary_position_codec();
         test_page_table_codec();
         test_owner_aware_control_geometry_codec();
+        test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

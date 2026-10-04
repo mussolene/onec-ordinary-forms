@@ -314,12 +314,26 @@ void test_page_position_roundtrip_and_rejections() {
 }
 
 void test_all_control_variants() {
-    std::string xml = "<Form id=\"1\" name=\"All\" ordinaryFormVersion=\"2.1\"><ChildItems>";
+    std::string xml = "<Form id=\"1\" name=\"All\" ordinaryFormVersion=\"2.1\"><Attributes>"
+        "<Attribute id=\"100\" name=\"Rows\"><TypeDomain><Entry term=\"valueTable\"/>"
+        "</TypeDomain></Attribute></Attributes><ChildItems>";
     std::uint64_t id = 2;
     for (const auto& descriptor : model::metamodel::control_descriptors()) {
         xml += "<" + std::string(descriptor.public_name) + " id=\"" +
-               std::to_string(id) + "\" name=\"C" + std::to_string(id) +
-               "\"><Position/></" + std::string(descriptor.public_name) + ">";
+               std::to_string(id) + "\" name=\"C" + std::to_string(id) + "\">";
+        if (descriptor.kind == model::ControlKind::table) {
+            xml += "<DataPath attributeId=\"100\"/><Position/><Columns><Column name=\"Code\">"
+                   "<DataPath>Code</DataPath><Header><Item language=\"en\">Code</Item></Header>"
+                   "<Control type=\"InputField\"/></Column></Columns>";
+        } else {
+            xml += "<Position/>";
+            if (descriptor.kind == model::ControlKind::chart) {
+                xml += "<Title>Title</Title><Series><ChartSeries id=\"2\"><Text>Series</Text><Color kind=\"absolute\" red=\"1\"/><Marker type=\"ChartMarkerType\" member=\"Auto\"/></ChartSeries></Series>"
+                       "<Points><ChartPoint id=\"1\"><Text>Point</Text><Color kind=\"absolute\" red=\"2\"/></ChartPoint></Points>"
+                       "<Values><ChartValue seriesRef=\"2\" pointRef=\"1\"><Number>1</Number></ChartValue></Values>";
+            }
+        }
+        xml += "</" + std::string(descriptor.public_name) + ">";
         ++id;
     }
     xml += "</ChildItems></Form>";
@@ -395,6 +409,40 @@ void test_calendar_field_enabled_xml_roundtrip() {
                std::get<bool>(round_trip->properties().find(model::PropertyId::from_name("Enabled"))->value) == false &&
                !round_trip->position.visible.value() && round_trip->position.left.value() == 24,
         "CalendarField named values must survive XML source round-trip");
+}
+
+void test_html_document_field_output_xml_roundtrip() {
+    for (const std::string_view member : {"Auto", "Enable", "Disable"}) {
+        const std::string xml =
+            "<Form id=\"1\" name=\"HtmlForm\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+            "<HTMLDocumentField id=\"2\" name=\"Html\"><Position/>"
+            "<Output type=\"Output\" member=\"" + std::string(member) + "\"/>"
+            "</HTMLDocumentField></ChildItems></Form>";
+        auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), "supported HTMLDocumentField.Output enum must parse");
+        const auto* field = parsed.value().find_control(model::ObjectId{2});
+        expect(field != nullptr && field->kind() == model::ControlKind::html_document_field,
+            "HTMLDocumentField public name must materialize the typed control payload");
+        const auto* output = field->properties().find(model::PropertyId::from_name("Output"));
+        if (member == "Auto") {
+            expect(output == nullptr, "HTMLDocumentField Output Auto must normalize to its implicit default");
+        } else {
+            expect(output != nullptr &&
+                       std::get<model::EnumerationValue>(output->value) == model::EnumerationValue{"Output", std::string(member)},
+                "HTMLDocumentField.Output must materialize a named enumeration");
+        }
+        auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok(), "HTMLDocumentField.Output source must serialize");
+        if (member == "Auto") {
+            expect(serialized.value().find("<Output") == std::string::npos,
+                "implicit Auto default must be omitted from canonical XML");
+        } else {
+            expect(serialized.value().find("<Output type=\"Output\" member=\"" + std::string(member) + "\"/>") != std::string::npos,
+                "non-default Output must serialize with the public property name and enum member");
+        }
+        auto reparsed = source::parse_form_xml(serialized.value());
+        expect(reparsed.ok(), "canonical HTMLDocumentField.Output XML must reparse");
+    }
 }
 
 void test_binding_target_and_manual_roundtrip() {
@@ -696,6 +744,110 @@ void test_input_field_tooltip_and_format_xml_round_trip() {
     }
 }
 
+void test_spreadsheet_document_cells_xml_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Spreadsheet";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    auto& payload = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload);
+    auto& cells = payload.cells;
+    cells = {{1, 3, " Ω <текст> & \"цитата\" ", std::nullopt}, {2, 1, "", std::nullopt}};
+    const auto typed_cell = [](std::uint32_t row, std::uint32_t column, model::TypeDomainTerm term,
+                               model::PropertyValue value) {
+        model::TypeDomainEntry entry;
+        entry.term = term;
+        if (term == model::TypeDomainTerm::string) entry.string = {100, true};
+        if (term == model::TypeDomainTerm::numeric) entry.numeric = {15, 3, false};
+        if (term == model::TypeDomainTerm::date) entry.date = {true, true};
+        return model::SpreadsheetDocumentCell{row, column, {},
+            model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{{entry}}, std::move(value)}};
+    };
+    cells.push_back(typed_cell(4, 1, model::TypeDomainTerm::string, std::string("Unicode Привет 世界")));
+    cells.push_back(typed_cell(4, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"-12.375"}));
+    cells.push_back(typed_cell(4, 3, model::TypeDomainTerm::boolean, false));
+    cells.push_back(typed_cell(4, 4, model::TypeDomainTerm::date, model::DateValue{"2026-10-04T12:30:45"}));
+    auto generic_string = typed_cell(6, 1, model::TypeDomainTerm::string, std::string("x"));
+    generic_string.typed_value->type.entries.front().string.length = 37;
+    cells.push_back(std::move(generic_string));
+    auto generic_number = typed_cell(6, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"1.2345"});
+    generic_number.typed_value->type.entries.front().numeric = {12, 4, false};
+    cells.push_back(std::move(generic_number));
+    document.add_control(std::move(field));
+    const auto serialized = source::serialize_form_xml(document);
+    expect(serialized.ok(), serialized.ok() ? "" : serialized.diagnostics().front().message);
+    expect(serialized.value().find("<Cell row=\"1\" column=\"3\">") != std::string::npos &&
+        serialized.value().find("Ω &lt;текст&gt; &amp; \"цитата\"") != std::string::npos,
+        "named Spreadsheet Document cell must preserve Unicode, whitespace, and XML escaping");
+    expect(serialized.value().find("<Cell row=\"2\" column=\"1\">") != std::string::npos &&
+        serialized.value().find("<Text></Text>") != std::string::npos,
+        "explicitly empty Spreadsheet Document cell must remain present");
+    expect(serialized.value().find("<ContainsValue>true</ContainsValue>") != std::string::npos &&
+        serialized.value().find("<Entry term=\"string\" length=\"100\"/>") != std::string::npos &&
+        serialized.value().find("<Value>Unicode Привет 世界</Value>") != std::string::npos &&
+        serialized.value().find("<Value>-12.375</Value>") != std::string::npos &&
+        serialized.value().find("<Value>false</Value>") != std::string::npos &&
+        serialized.value().find("<Value>2026-10-04T12:30:45</Value>") != std::string::npos,
+        "typed Spreadsheet Document cells must serialize named values and qualifiers");
+    const auto parsed = source::parse_form_xml(serialized.value());
+    expect(parsed.ok(), parsed.ok() ? "" : parsed.diagnostics().front().message);
+    const auto* restored_control = parsed.value().find_control(model::ObjectId{2});
+    expect(restored_control != nullptr, "SpreadsheetDocumentField must resolve after XML parsing");
+    const auto* restored = std::get_if<model::SpreadsheetDocumentFieldPayload>(&restored_control->payload);
+    expect(restored && restored->cells.size() == 8 && restored->cells[0].row == 1 &&
+        restored->cells[0].column == 3 && restored->cells[0].text == " Ω <текст> & \"цитата\" " &&
+        restored->cells[1].row == 2 && restored->cells[1].column == 1 && restored->cells[1].text.empty(),
+        "named Spreadsheet Document cells and explicit empty text must round-trip");
+    expect(restored && restored->cells[2].typed_value &&
+        std::get<std::string>(restored->cells[2].typed_value->value) == "Unicode Привет 世界" &&
+        restored->cells[2].typed_value->type.entries.front().string.length == 100 &&
+        restored->cells[3].typed_value && std::get<model::DecimalValue>(restored->cells[3].typed_value->value).canonical == "-12.375" &&
+        restored->cells[4].typed_value && !std::get<bool>(restored->cells[4].typed_value->value) &&
+        restored->cells[5].typed_value &&
+        std::get<model::DateValue>(restored->cells[5].typed_value->value).canonical == "2026-10-04T12:30:45",
+        "typed Spreadsheet Document values and qualifiers must survive XML round-trip");
+    expect(restored && restored->cells[6].typed_value &&
+        restored->cells[6].typed_value->type.entries.front().string.length == 37 &&
+        restored->cells[7].typed_value &&
+        restored->cells[7].typed_value->type.entries.front().numeric == model::NumericQualifiers{12, 4, false},
+        "Spreadsheet Document must retain supported non-default String and Number qualifiers");
+
+    const auto wrap_cells = [](std::string_view items) {
+        return std::string("<Form id=\"1\" name=\"Spreadsheet\" ordinaryFormVersion=\"2.1\"><ChildItems><SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/><Document>") +
+            std::string(items) + "</Document></SpreadsheetDocumentField></ChildItems></Form>";
+    };
+    for (const auto invalid : {
+        "<Cell row=\"0\" column=\"1\"><Text/></Cell>",
+        "<Cell row=\"1\" column=\"4294967296\"><Text/></Cell>",
+        "<Cell row=\"1\" column=\"1\"><Text>A</Text></Cell><Cell row=\"1\" column=\"1\"><Text>B</Text></Cell>",
+        "<Cell row=\"1\" column=\"1\"/>",
+        "<Cell row=\"1\" column=\"1\"><Text><Nested/></Text></Cell>",
+        "<Cell row=\"1\" column=\"1\"><ContainsValue>false</ContainsValue><ValueType><Entry term=\"boolean\"/></ValueType><Value>false</Value></Cell>",
+        "<Cell row=\"1\" column=\"1\"><Text>x</Text><ContainsValue>true</ContainsValue><ValueType><Entry term=\"boolean\"/></ValueType><Value>false</Value></Cell>",
+        "<Cell row=\"1\" column=\"1\"><ContainsValue>true</ContainsValue><ValueType><Entry term=\"binary\"/></ValueType><Value>x</Value></Cell>"}) {
+        expect(!source::parse_form_xml(wrap_cells(invalid)).ok(),
+            "invalid Spreadsheet Document coordinates or Cell content must be rejected");
+    }
+    const auto unordered = source::parse_form_xml(wrap_cells(
+        "<Cell row=\"2\" column=\"1\"><Text>B</Text></Cell><Cell row=\"1\" column=\"3\"><Text>A</Text></Cell>"));
+    expect(unordered.ok(), "unordered Spreadsheet XML cells must parse");
+    const auto normalized = source::serialize_form_xml(unordered.value());
+    expect(normalized.ok(), "unordered Spreadsheet XML cells must serialize");
+    expect(normalized.value().find("<Cell row=\"1\" column=\"3\">") <
+        normalized.value().find("<Cell row=\"2\" column=\"1\">"),
+        "Spreadsheet XML cells must serialize in row and column order");
+
+    const auto authored_view_settings = source::parse_form_xml(
+        "<Form id=\"1\" name=\"Spreadsheet\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<SpreadsheetDocumentField id=\"2\" name=\"Sheet\"><Position/>"
+        "<ViewSettings currentRow=\"2\" currentColumn=\"3\"><SelectionArea row=\"1\" "
+        "column=\"1\" endRow=\"1\" endColumn=\"1\"/></ViewSettings>"
+        "</SpreadsheetDocumentField></ChildItems></Form>");
+    expect(!authored_view_settings.ok(),
+        "unpersisted SpreadsheetDocumentField ViewSettings must be rejected as authored XML");
+}
+
 void test_check_box_tooltip_xml_round_trip() {
     const auto make_document = [](std::string tool_tip) {
         model::Form form;
@@ -740,6 +892,49 @@ void test_check_box_tooltip_xml_round_trip() {
     const auto reserialized = source::serialize_form_xml(reparsed.value());
     expect(reserialized.ok() && reserialized.value() == serialized.value(),
         "CheckBox ToolTip XML must serialize canonically after parsing");
+}
+
+void test_choice_field_static_xml_profile_and_runtime_list_rejection() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="ChoiceField" ordinaryFormVersion="2.1">
+  <Attributes>
+    <Attribute id="3" name="Choice">
+      <TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain>
+    </Attribute>
+  </Attributes>
+  <ChildItems>
+    <ChoiceField id="2" name="ChoiceField">
+      <DataPath attributeId="3"/>
+      <Position/>
+      <Enabled>false</Enabled>
+      <ToolTip>Выберите Ω &amp; &lt;значение&gt;</ToolTip>
+    </ChoiceField>
+  </ChildItems>
+</Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto* choice = parsed.value().find_control(model::ObjectId{2});
+    expect(choice && choice->kind() == model::ControlKind::choice_field && choice->data_path &&
+               choice->data_path->attribute.id() == model::ObjectId{3} &&
+               !std::get<bool>(choice->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+               std::get<std::string>(choice->properties().find(model::PropertyId::from_name("ToolTip"))->value) ==
+                   "Выберите Ω & <значение>",
+        "ChoiceField XML must expose a named string DataPath and observed static properties");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<DataPath attributeId=\"3\"/>") != std::string::npos &&
+               serialized.value().find("<ChoiceList") == std::string::npos,
+        "ChoiceField XML must serialize the typed binding without pretending to persist ChoiceList");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && reparsed.value().find_control(model::ObjectId{2}) != nullptr,
+        "ChoiceField named static XML must round-trip");
+
+    constexpr std::string_view runtime_list_xml = R"XML(<Form id="1" name="ChoiceField" ordinaryFormVersion="2.1">
+      <Attributes><Attribute id="3" name="Choice"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute></Attributes>
+      <ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><ChoiceList/></ChoiceField></ChildItems>
+    </Form>)XML";
+    const auto runtime_list = source::parse_form_xml(runtime_list_xml);
+    expect_code(runtime_list, "OOF2002",
+        "runtime-only ChoiceList must be rejected from the persisted XML object model");
 }
 
 void test_check_box_font_xml_round_trip() {
@@ -951,6 +1146,131 @@ void test_boolean_type_domain_xml_roundtrip() {
         "Boolean TypeDomain must reject variable qualifier");
 }
 
+void test_value_list_type_domain_xml_roundtrip() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="ValueList" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "named ValueList TypeDomain must parse");
+    const auto& entry = parsed.value().collections().attributes.front().type.entries.front();
+    expect(entry.term == model::TypeDomainTerm::value_list && !entry.type_uuid,
+        "ValueList XML term must not expose its platform UUID");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Entry term=\"valueList\"/>") != std::string::npos,
+        "ValueList TypeDomain must retain its named XML term");
+    expect(source::parse_form_xml(serialized.value()).ok(),
+        "serialized ValueList TypeDomain must parse again");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueList\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Values\"><TypeDomain><Entry term=\"valueList\" typeUuid=\"d47d59f8-73f0-481c-8b5e-f6384c0a4804\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueList term must reject caller-supplied UUIDs");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueList\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Values\"><TypeDomain><Entry term=\"valueList\" length=\"64\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueList term must reject string qualifiers");
+}
+
+void test_value_table_type_domain_xml_roundtrip() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="ValueTable" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "named ValueTable TypeDomain must parse");
+    const auto& entry = parsed.value().collections().attributes.front().type.entries.front();
+    expect(entry.term == model::TypeDomainTerm::value_table && !entry.type_uuid,
+        "ValueTable XML term must not expose its platform UUID");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Entry term=\"valueTable\"/>") != std::string::npos,
+        "ValueTable TypeDomain must retain its named XML term");
+    expect(source::parse_form_xml(serialized.value()).ok(),
+        "serialized ValueTable TypeDomain must parse again");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueTable\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Rows\"><TypeDomain><Entry term=\"valueTable\" typeUuid=\"d47d59f8-73f0-481c-8b5e-f6384c0a4804\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueTable term must reject caller-supplied UUIDs");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueTable\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Rows\"><TypeDomain><Entry term=\"valueTable\" length=\"64\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueTable term must reject qualifiers");
+}
+
+void test_table_columns_named_profile() {
+    constexpr std::string_view valid = R"XML(
+<Form id="1" name="RowsForm" ordinaryFormVersion="2.1">
+  <Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
+  <ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns>
+    <Column name="Code"><DataPath>Code</DataPath><Header><Item language="ru">Код</Item></Header>
+      <Control type="InputField"><Enabled>true</Enabled><ReadOnly>false</ReadOnly></Control>
+    </Column>
+    <Column name="CodeCopy"><DataPath>Code</DataPath><Header><Item language="en">Code copy</Item></Header>
+      <Control type="InputField"/>
+    </Column>
+    <Column name="ChoiceCopy"><DataPath>Code</DataPath><Header><Item language="en">Choice copy</Item></Header>
+      <Control type="ChoiceField"><Enabled>true</Enabled><ToolTip/></Control>
+    </Column>
+    <Column name="CheckCopy"><DataPath>Code</DataPath><Header><Item language="en">Check copy</Item></Header>
+      <Control type="CheckBox"><Enabled>true</Enabled><Caption/><ToolTip/><Font kind="automatic"/></Control>
+    </Column>
+  </Columns></Table></ChildItems>
+</Form>)XML";
+    auto parsed = source::parse_form_xml(valid);
+    expect(parsed.ok(), parsed ? "named Table with repeated source DataPath and typed editors must parse" :
+        parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto* table = parsed.value().find_control(model::ObjectId{3});
+    expect(table != nullptr && std::get<model::TablePayload>(table->payload).columns.size() == 4,
+        "Table must own its ordered typed Columns");
+    const auto& columns = std::get<model::TablePayload>(table->payload).columns;
+    expect(columns[0].data_path == columns[1].data_path && columns[0].data_path == columns[2].data_path &&
+               columns[2].control.kind == model::ControlKind::choice_field &&
+               columns[3].control.kind == model::ControlKind::check_box &&
+               columns[0].control.properties.empty() && columns[2].control.properties.empty() &&
+               columns[3].control.properties.empty(),
+        "duplicate DataPath is allowed and typed editor defaults normalize away");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Columns>") != std::string::npos &&
+               serialized.value().find("type=\"ChoiceField\"") != std::string::npos &&
+               serialized.value().find("type=\"CheckBox\"") != std::string::npos,
+        "named Table Columns must serialize as editable XML");
+    auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && reparsed.value().collections().controls.size() == 1 &&
+               std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
+                       .columns[2].control.kind == model::ControlKind::choice_field &&
+               std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
+                       .columns[3].control.kind == model::ControlKind::check_box,
+        "Table Column XML must survive a source roundtrip");
+
+    std::string duplicate_name(valid);
+    const auto duplicate_pos = duplicate_name.find("name=\"CodeCopy\"");
+    duplicate_name.replace(duplicate_pos, std::string("name=\"CodeCopy\"").size(), "name=\"Code\"");
+    expect(!source::parse_form_xml(duplicate_name).ok(), "duplicate Table Column names must fail");
+
+    std::string unsupported_editor(valid);
+    const auto editor_pos = unsupported_editor.find("type=\"InputField\"");
+    unsupported_editor.replace(editor_pos, std::string("type=\"InputField\"").size(),
+        "type=\"SpreadsheetDocumentField\"");
+    expect(!source::parse_form_xml(unsupported_editor).ok(), "unsupported Table Column editor kind must fail");
+
+    std::string incompatible_default(valid);
+    const auto choice_pos = incompatible_default.find("<Control type=\"ChoiceField\">");
+    incompatible_default.insert(choice_pos + std::string("<Control type=\"ChoiceField\">").size(),
+        "<ReadOnly>false</ReadOnly>");
+    expect(!source::parse_form_xml(incompatible_default).ok(),
+        "ChoiceField must reject an InputField property even when it carries that property's default");
+
+    std::string check_caption(valid);
+    const auto check_pos = check_caption.find("<Control type=\"CheckBox\">");
+    check_caption.insert(check_pos + std::string("<Control type=\"CheckBox\">").size(), "<ChoiceList/>");
+    expect(!source::parse_form_xml(check_caption).ok(),
+        "CheckBox must reject a ChoiceField property even when it carries the platform default");
+
+    std::string nondefault_editor(valid);
+    const auto enabled_pos = nondefault_editor.find("<Enabled>true</Enabled>");
+    nondefault_editor.replace(enabled_pos, std::string("<Enabled>true</Enabled>").size(), "<Enabled>false</Enabled>");
+    expect(!source::parse_form_xml(nondefault_editor).ok(), "unverified persisted editor Enabled=false must fail closed");
+
+    std::string wrong_source(valid);
+    const auto type_pos = wrong_source.find("term=\"valueTable\"");
+    wrong_source.replace(type_pos, std::string("term=\"valueTable\"").size(), "term=\"string\"");
+    expect(!source::parse_form_xml(wrong_source).ok(), "Table source must reject a non-ValueTable type");
+
+    std::string dangling_source(valid);
+    const auto attribute_pos = dangling_source.find("attributeId=\"2\"");
+    dangling_source.replace(attribute_pos, std::string("attributeId=\"2\"").size(), "attributeId=\"99\"");
+    expect(!source::parse_form_xml(dangling_source).ok(), "Table source must reject a dangling attribute link");
+}
+
 void test_inherited_property_has_one_surface() {
     constexpr std::string_view xml =
         "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -967,6 +1287,28 @@ void test_inherited_property_has_one_surface() {
         !control->properties().contains(model::PropertyId::from_name("FirstInGroup")),
         "FirstInGroup must not be duplicated in RadioButton payload");
     expect(source::serialize_form_xml(parsed.value()).ok(), "canonical inherited property must serialize");
+
+    constexpr std::string_view numeric_group_xml = R"XML(
+<Form id="1" name="RadioGroup" ordinaryFormVersion="2.1">
+  <Attributes><Attribute id="10" name="Choice"><TypeDomain><Entry term="numeric" length="10" precision="0" nonNegative="true"/></TypeDomain></Attribute></Attributes>
+  <ChildItems>
+    <RadioButton id="20" name="Head"><DataPath attributeId="10"/><FirstInGroup>true</FirstInGroup>
+      <ValueType><Entry term="numeric" length="10" precision="0" nonNegative="true"/></ValueType>
+      <Position/><SelectionValue>1</SelectionValue>
+    </RadioButton>
+    <RadioButton id="21" name="Member"><Position/><SelectionValue>0</SelectionValue></RadioButton>
+  </ChildItems>
+</Form>)XML";
+    const auto numeric_group = source::parse_form_xml(numeric_group_xml);
+    expect(numeric_group.ok(), "numeric SelectionValue and linked RadioButton group must parse as named properties");
+    const auto* numeric_head = numeric_group.value().find_control(model::ObjectId{20});
+    const auto* selected_value = numeric_head == nullptr ? nullptr :
+        numeric_head->properties().find(model::PropertyId::from_name("SelectionValue"));
+    expect(selected_value && std::get<model::DecimalValue>(selected_value->value).canonical == "1",
+        "RadioButton SelectionValue must use the existing DecimalValue model");
+    const auto canonical_group = source::serialize_form_xml(numeric_group.value());
+    expect(canonical_group.ok() && canonical_group.value().find("<SelectionValue>1</SelectionValue>") != std::string::npos,
+        "RadioButton SelectionValue must serialize as named xs:decimal text");
 
     expect_code(
         source::parse_form_xml(
@@ -1428,14 +1770,20 @@ int main() {
         test_page_position_roundtrip_and_rejections();
         test_all_control_variants();
         test_calendar_field_enabled_xml_roundtrip();
+        test_html_document_field_output_xml_roundtrip();
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
+        test_spreadsheet_document_cells_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
+        test_choice_field_static_xml_profile_and_runtime_list_rejection();
         test_check_box_font_xml_round_trip();
         test_input_field_layout_xml_round_trip();
         test_button_shortcut_xml();
         test_boolean_type_domain_xml_roundtrip();
+        test_value_list_type_domain_xml_roundtrip();
+        test_value_table_type_domain_xml_roundtrip();
+        test_table_columns_named_profile();
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();
         test_strict_rejections();

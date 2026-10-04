@@ -27,6 +27,7 @@ using oof::model::metamodel::ChildPolicy;
 using oof::model::metamodel::ControlDescriptor;
 using oof::model::metamodel::EventDescriptor;
 using oof::model::metamodel::Metamodel;
+using oof::model::metamodel::PersistenceClass;
 using oof::model::metamodel::PropertyDescriptor;
 using oof::model::metamodel::ValueCodec;
 using oof::source::GeneratedSchemas;
@@ -181,7 +182,8 @@ void expect_element_shape(
     std::string_view max_occurs
 ) {
     expect(element != nullptr, "expected schema element");
-    expect(attribute(element, "name") == name, "schema element name drift");
+    expect(attribute(element, "name") == name,
+        "schema element name drift: expected " + std::string(name) + ", got " + attribute(element, "name"));
     expect(attribute(element, "type") == type, "schema element type drift");
     expect(attribute(element, "minOccurs") == min_occurs, "schema element minimum drift");
     expect(attribute(element, "maxOccurs") == max_occurs, "schema element maximum drift");
@@ -371,7 +373,7 @@ void test_schema_version_and_controls(
         enumeration_values(schema, "TypeDomainTermType") ==
             std::vector<std::string>({
                 "unknown", "list", "boolean", "binary", "date", "numeric",
-                "reference", "string", "type"}),
+                "reference", "string", "type", "valueList", "valueTable"}),
         "type-domain term vocabulary drift");
 
     xmlNodePtr form_element = schema_component(schema, "element", "Form");
@@ -420,7 +422,8 @@ void expect_property_element(
     const PropertyDescriptor& descriptor,
     xmlNodePtr element
 ) {
-    expect(attribute(element, "name") == descriptor.xml_name, "property order drift");
+    expect(attribute(element, "name") == descriptor.xml_name,
+        "property order drift: expected " + std::string(descriptor.xml_name) + " got " + attribute(element, "name"));
     expect(attribute(element, "minOccurs") == "0", "property must be optional");
     expect(attribute(element, "maxOccurs") == "1", "property must occur at most once");
 
@@ -528,15 +531,16 @@ void test_date_values(xmlSchemaPtr schema) {
 std::size_t expect_property_sequence(
     std::span<const PropertyDescriptor> properties,
     const std::vector<xmlNodePtr>& elements,
-    std::size_t offset = 0
+    std::size_t offset = 0,
+    bool omit_runtime_only = false
 ) {
-    expect(
-        elements.size() >= offset + properties.size(),
-        "property sequence is incomplete");
-    for (std::size_t index = 0; index < properties.size(); ++index) {
-        expect_property_element(properties[index], elements[offset + index]);
+    std::size_t cursor = offset;
+    for (const auto& property : properties) {
+        if (omit_runtime_only && property.persistence == PersistenceClass::runtime_only) continue;
+        expect(cursor < elements.size(), "property sequence is incomplete");
+        expect_property_element(property, elements[cursor++]);
     }
-    return offset + properties.size();
+    return cursor;
 }
 
 void test_document_package_types(
@@ -758,10 +762,40 @@ void test_control_surfaces_and_property_order(
             }
         }
         expect_element_shape(elements[cursor++], "Position", "PositionType", "1", "1");
-        cursor = expect_property_sequence(
-            metamodel.properties_for(control.kind),
-            elements,
-            cursor);
+        if (control.kind == oof::model::ControlKind::chart) {
+            const auto chart_properties = metamodel.properties_for(control.kind);
+            std::vector<PropertyDescriptor> properties(chart_properties.begin(), chart_properties.end());
+            properties.erase(std::remove_if(properties.begin(), properties.end(), [](const auto& property) {
+                return property.api_name == "Series" || property.api_name == "Points";
+            }), properties.end());
+            cursor = expect_property_sequence(properties, elements, cursor);
+            expect_element_shape(elements[cursor++], "Series", "ChartSeriesCollectionType", "1", "1");
+            expect_element_shape(elements[cursor++], "Points", "ChartPointCollectionType", "1", "1");
+            expect_element_shape(elements[cursor++], "Values", "ChartValueCollectionType", "1", "1");
+            const auto series_fields = direct_children(sequence_for_type(schema, "ChartSeriesType"), "element");
+            expect(series_fields.size() == 3 && attribute(series_fields[0], "name") == "Text" &&
+                attribute(series_fields[1], "name") == "Color" && attribute(series_fields[1], "type") == "ColorValueType" &&
+                attribute(series_fields[2], "name") == "Marker" && attribute(series_fields[2], "type") == "EnumerationValueType",
+                "ChartSeries schema must expose named Text, Color, and Marker fields");
+            const auto point_fields = direct_children(sequence_for_type(schema, "ChartPointType"), "element");
+            expect(point_fields.size() == 2 && attribute(point_fields[0], "name") == "Text" &&
+                attribute(point_fields[1], "name") == "Color" && attribute(point_fields[1], "type") == "ColorValueType",
+                "ChartPoint schema must expose named Text and Color fields");
+        } else {
+            if (control.kind == oof::model::ControlKind::spreadsheet_document_field) {
+                expect_element_shape(elements[cursor++], "Document", "SpreadsheetDocumentType", "0", "1");
+            }
+            for (const auto& descriptor : metamodel.properties_for(control.kind)) {
+                if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
+                    expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
+                } else if (control.kind == oof::model::ControlKind::choice_field &&
+                    descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only) {
+                    continue;
+                } else {
+                    expect_property_element(descriptor, elements[cursor++]);
+                }
+            }
+        }
         if (control.kind == oof::model::ControlKind::gantt_chart) {
             expect_element_shape(elements[cursor++], "Series", "GanttSeriesCollectionType", "0", "1");
             expect_element_shape(elements[cursor++], "Points", "GanttPointCollectionType", "0", "1");
@@ -793,6 +827,80 @@ void test_control_surfaces_and_property_order(
             }),
             "reserved Name/Data must not be control property elements");
     }
+    const auto choice_fields = direct_children(sequence_for_type(schema, "ChoiceFieldType"), "element");
+    expect(std::ranges::none_of(choice_fields, [](xmlNodePtr element) {
+        return attribute(element, "name") == "ChoiceList";
+    }), "runtime-only ChoiceList must not appear in the persisted ChoiceField schema");
+}
+
+void test_choice_field_schema_contract(xmlSchemaPtr schema) {
+    constexpr std::string_view unbound_choice = R"XML(<Form id="1" name="Choice" ordinaryFormVersion="2.1"><ChildItems><ChoiceField id="2" name="ChoiceField"><Position/></ChoiceField></ChildItems></Form>)XML";
+    constexpr std::string_view runtime_list = R"XML(<Form id="1" name="Choice" ordinaryFormVersion="2.1"><ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><ChoiceList/></ChoiceField></ChildItems></Form>)XML";
+    constexpr std::string_view valid_static = R"XML(<Form id="1" name="Choice" ordinaryFormVersion="2.1"><ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><Enabled>false</Enabled></ChoiceField></ChildItems></Form>)XML";
+    expect(validate_document(schema, unbound_choice) == 0,
+        "unbound ChoiceField must satisfy the public XSD");
+    expect(validate_document(schema, runtime_list) != 0,
+        "runtime-only ChoiceList must fail the public ChoiceField XSD");
+    expect(validate_document(schema, valid_static) == 0,
+        "named ChoiceField DataPath and proven Boolean properties must satisfy the XSD");
+}
+
+void test_table_read_only_schema_contract(xmlSchemaPtr schema) {
+    constexpr std::string_view table = R"XML(<Form id="1" name="TableReadOnly" ordinaryFormVersion="2.1"><ChildItems><Table id="2" name="Rows"><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header/><Control type="InputField"/></Column></Columns><ReadOnly>false</ReadOnly></Table></ChildItems></Form>)XML";
+    expect(validate_document(schema, table) == 0, "named Table ReadOnly=false must satisfy the compiled public schema");
+    std::string invalid(table);
+    invalid.replace(invalid.find("<ReadOnly>false</ReadOnly>"), 26, "<ReadOnly>notBoolean</ReadOnly>");
+    expect(validate_document(schema, invalid) != 0, "Table ReadOnly must reject nonboolean XML values");
+}
+
+void test_table_column_editor_schema(xmlNodePtr schema) {
+    expect(enumeration_values(schema, "TableColumnEditorKindType") ==
+            std::vector<std::string>{"InputField", "ChoiceField", "CheckBox"},
+        "Table Column Control must expose only the three named editor kinds");
+    xmlNodePtr type = schema_component(schema, "complexType", "TableColumnControlType");
+    expect(type != nullptr, "Table Column Control must have its named type");
+    const auto elements = direct_children(direct_child(type, "sequence"), "element");
+    const std::array<std::pair<std::string_view, std::string_view>, 5> expected{{
+        {"Enabled", "xs:boolean"}, {"ReadOnly", "xs:boolean"}, {"Caption", "xs:string"},
+        {"ToolTip", "xs:string"}, {"Font", "FontValueType"},
+    }};
+    expect(elements.size() == expected.size(), "Table Column Control must expose only named properties");
+    for (std::size_t index = 0; index < expected.size(); ++index) {
+        expect_element_shape(elements[index], expected[index].first, expected[index].second, "0", "1");
+    }
+    expect_type_attribute(schema, "TableColumnControlType", "type", "TableColumnEditorKindType", "required");
+}
+
+void test_spreadsheet_document_schema(xmlNodePtr schema) {
+    expect(schema_component(schema, "complexType", "SpreadsheetDocumentType") != nullptr,
+        "named SpreadsheetDocument type must exist");
+    expect(schema_component(schema, "complexType", "SpreadsheetDocumentCellType") != nullptr,
+        "named SpreadsheetDocument Cell type must exist");
+    const auto cells = direct_children(sequence_for_type(schema, "SpreadsheetDocumentType"), "element");
+    expect_element_shape(cells.at(0), "Cell", "SpreadsheetDocumentCellType", "0", "unbounded");
+    const auto cell_type = schema_component(schema, "complexType", "SpreadsheetDocumentCellType");
+    const auto choice = direct_child(cell_type, "choice");
+    const auto alternatives = direct_children(choice, "element");
+    expect(alternatives.size() == 1 && attribute(alternatives[0], "name") == "Text" &&
+        attribute(alternatives[0], "type") == "xs:string",
+        "Spreadsheet Cell must choose between text and typed value representations");
+    const auto typed_sequence = direct_child(choice, "sequence");
+    const auto typed_elements = direct_children(typed_sequence, "element");
+    expect(typed_elements.size() == 3 && attribute(typed_elements[0], "name") == "ContainsValue" &&
+        attribute(typed_elements[0], "fixed") == "true" && attribute(typed_elements[1], "name") == "ValueType" &&
+        attribute(typed_elements[1], "type") == "TypeDomainValueType" && attribute(typed_elements[2], "name") == "Value",
+        "typed Spreadsheet Cell must expose named ContainsValue, ValueType, and Value");
+    expect_type_attribute(schema, "SpreadsheetDocumentCellType", "row", "SpreadsheetCoordinateType", "required");
+    expect_type_attribute(schema, "SpreadsheetDocumentCellType", "column", "SpreadsheetCoordinateType", "required");
+}
+
+void test_spreadsheet_document_instances(xmlSchemaPtr schema) {
+    constexpr std::string_view typed_cell = R"XML(<Form id="1" name="Spreadsheet" ordinaryFormVersion="2.1"><ChildItems><SpreadsheetDocumentField id="2" name="Sheet"><Position/><Document><Cell row="1" column="1"><ContainsValue>true</ContainsValue><ValueType><Entry term="boolean"/></ValueType><Value>false</Value></Cell></Document></SpreadsheetDocumentField></ChildItems></Form>)XML";
+    constexpr std::string_view false_contains_value = R"XML(<Form id="1" name="Spreadsheet" ordinaryFormVersion="2.1"><ChildItems><SpreadsheetDocumentField id="2" name="Sheet"><Position/><Document><Cell row="1" column="1"><ContainsValue>false</ContainsValue><ValueType><Entry term="boolean"/></ValueType><Value>false</Value></Cell></Document></SpreadsheetDocumentField></ChildItems></Form>)XML";
+    expect(validate_document(schema, typed_cell) == 0,
+        "named typed Spreadsheet Cell must satisfy the public XSD");
+    expect(validate_document(schema, false_contains_value) != 0,
+        "typed Spreadsheet Cell must require ContainsValue=true in the public XSD");
 }
 
 void test_event_surfaces(const Metamodel& metamodel, xmlNodePtr schema) {
@@ -1069,6 +1177,24 @@ void test_document_instances(xmlSchemaPtr schema) {
         validate_document(schema, complete_document) == 0,
         "full current public document package must validate");
 
+    constexpr std::string_view mixed_table_editors = R"XML(
+<Form id="1" name="RowsForm" ordinaryFormVersion="2.1">
+  <Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
+  <ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns>
+    <Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column>
+    <Column name="Choice"><DataPath>Code</DataPath><Header><Item language="en">Choice</Item></Header><Control type="ChoiceField"><Enabled>true</Enabled><ToolTip/></Control></Column>
+    <Column name="Checked"><DataPath>Active</DataPath><Header><Item language="en">Checked</Item></Header><Control type="CheckBox"><Enabled>true</Enabled><Caption/><ToolTip/><Font kind="automatic"/></Control></Column>
+  </Columns></Table></ChildItems>
+</Form>)XML";
+    expect(validate_document(schema, mixed_table_editors) == 0,
+        "generated schema must validate a named Table with all three typed default editors");
+    std::string unknown_table_editor(mixed_table_editors);
+    const auto editor_type_pos = unknown_table_editor.find("type=\"CheckBox\"");
+    unknown_table_editor.replace(editor_type_pos, std::string("type=\"CheckBox\"").size(),
+        "type=\"PictureDecoration\"");
+    expect(validate_document(schema, unknown_table_editor) != 0,
+        "generated schema must reject an editor kind outside its named enumeration");
+
     constexpr std::string_view panel_page = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1">
   <ChildItems>
@@ -1221,10 +1347,15 @@ int main() {
         test_document_package_types(metamodel, form_schema);
         test_data_path_position_and_bindings(metamodel, form_schema);
         test_control_surfaces_and_property_order(metamodel, form_schema);
+        test_spreadsheet_document_schema(form_schema);
+        test_choice_field_schema_contract(compiled_form.get());
+        test_table_column_editor_schema(form_schema);
+        test_table_read_only_schema_contract(compiled_form.get());
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
         test_document_instances(compiled_form.get());
+        test_spreadsheet_document_instances(compiled_form.get());
         test_date_values(compiled_form.get());
         test_schema_structure_coverage_does_not_imply_codec_coverage(
             metamodel,

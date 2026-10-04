@@ -106,7 +106,7 @@ constexpr std::array<ControlIdentity, control_kind_count> control_identities{{
     {ControlKind::pivot_chart, "a26da99e-184a-4823-b0d6-62816d38dc4e", "", all_versions, ClassificationStatus::platform_ui_guid_table_backed, ChildPolicy::forbidden},
     {ControlKind::gantt_chart, "e5fdc112-5c84-4a16-9728-72b85692b6e2", "gchrt", all_versions, ClassificationStatus::corpus_xsd_correlated, ChildPolicy::forbidden},
     {ControlKind::dendrogram, "984981b1-622d-4ebc-94f7-885f0cdfb59a", "dndrgm", all_versions, ClassificationStatus::corpus_xsd_correlated, ChildPolicy::forbidden},
-    {ControlKind::html_document_field, "d92a805c-98ae-4750-9158-d9ce7cec2f20", "html", all_versions, ClassificationStatus::platform_resource_backed_windows_oracle_pending, ChildPolicy::forbidden},
+    {ControlKind::html_document_field, "d92a805c-98ae-4750-9158-d9ce7cec2f20", "html", all_versions, ClassificationStatus::platform_resource_backed, ChildPolicy::forbidden},
     {ControlKind::list_box, "19f8b798-314e-4b4e-8121-905b2a7a03f5", "txt", all_versions, ClassificationStatus::corpus_xsd_resource_correlated, ChildPolicy::forbidden},
     {ControlKind::progress_bar, "b1db1f86-abbb-4cf0-8852-fe6ae21650c2", "prgb", all_versions, ClassificationStatus::corpus_xsd_resource_correlated, ChildPolicy::forbidden},
     {ControlKind::track_bar, "6c06cd5d-8481-4b6f-a90a-7a97a8bb8bef", "trckb", all_versions, ClassificationStatus::corpus_xsd_resource_correlated, ChildPolicy::forbidden},
@@ -745,6 +745,16 @@ void apply_proven_storage_overrides(
     classify_property(radio_button, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(radio_button, "Caption", StorageCodec::control_info, DefaultKind::string, "");
     classify_property(radio_button, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    classify_property(radio_button, "SelectionValue", StorageCodec::control_info, DefaultKind::undefined, "undefined");
+    std::ranges::find(radio_button, "SelectionValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::decimal;
+
+    auto& html_document_field = properties[static_cast<std::size_t>(ControlKind::html_document_field)];
+    classify_property(
+        html_document_field,
+        "Output",
+        StorageCodec::control_info,
+        DefaultKind::enumeration,
+        "Auto");
 
     auto& picture_decoration = properties[static_cast<std::size_t>(ControlKind::picture_decoration)];
     classify_property(
@@ -794,6 +804,15 @@ void apply_proven_storage_overrides(
         DefaultKind::none,
         "");
 
+    auto& choice_field = properties[static_cast<std::size_t>(ControlKind::choice_field)];
+    classify_property(choice_field, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(choice_field, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    if (const auto choice_list = std::ranges::find(choice_field, "ChoiceList", &PropertyDescriptor::api_name);
+        choice_list != choice_field.end()) {
+        choice_list->persistence = PersistenceClass::runtime_only;
+        choice_list->storage_codec = StorageCodec::none;
+    }
+
     auto& check_box = properties[static_cast<std::size_t>(ControlKind::check_box)];
     classify_property(
         check_box,
@@ -823,6 +842,16 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::undefined,
         "undefined");
+
+    auto& list_box = properties[static_cast<std::size_t>(ControlKind::list_box)];
+    classify_property(list_box, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(list_box, "ShowPicture", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(list_box, "ShowCheckBox", StorageCodec::control_info, DefaultKind::boolean, "false");
+    classify_property(list_box, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    classify_property(list_box, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
+
+    auto& table = properties[static_cast<std::size_t>(ControlKind::table)];
+    classify_property(table, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
 
     auto& text_document_field = properties[static_cast<std::size_t>(ControlKind::text_document_field)];
     classify_property(text_document_field, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
@@ -1029,6 +1058,28 @@ struct Metamodel::Impl {
         for (auto descriptor : make_control_property_descriptors()) {
             properties[static_cast<std::size_t>(descriptor.control_kind)].push_back(descriptor);
         }
+        auto& dendrogram_properties = properties[static_cast<std::size_t>(ControlKind::dendrogram)];
+        dendrogram_properties.push_back(PropertyDescriptor{
+            PropertyId::from_name("Items"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::dendrogram, 998,
+            "Items", "Items", u8"Элементы", u8"ЭлементыДендрограммы",
+            ValueKind::collection, ValueCodec::dendrogram_items, ApiAccess::read_write,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::collection_record, {DefaultKind::none, ""}});
+        dendrogram_properties.push_back(PropertyDescriptor{
+            PropertyId::from_name("Links"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::dendrogram, 999,
+            "Links", "Links", u8"Связи", u8"СвязиДендрограммы",
+            ValueKind::collection, ValueCodec::dendrogram_links, ApiAccess::read_write,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::collection_record, {DefaultKind::none, ""}});
+        dendrogram_properties.push_back(PropertyDescriptor{
+            PropertyId::from_name("Orientation"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::dendrogram, 1000,
+            "Orientation", "Orientation", u8"Ориентация", u8"ОриентацияДендрограммы",
+            ValueKind::enumeration, ValueCodec::enumeration, ApiAccess::read_write,
+            VersionMask::platform_8_5, PersistenceClass::persisted_editable,
+            StorageCodec::value_record, {DefaultKind::enumeration, "DendrogramOrientation.Up"}});
         for (auto descriptor : make_control_event_descriptors()) {
             events[static_cast<std::size_t>(descriptor.control_kind)].push_back(descriptor);
         }
@@ -1043,6 +1094,15 @@ struct Metamodel::Impl {
             panel_placement_properties,
             form_properties,
             events);
+        auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
+        // Публичное Title отображает путь Диаграмма.ОбластьЗаголовка.Текст, а не отдельное свойство диаграммы.
+        chart_properties.push_back({
+            PropertyId::from_name("Title"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::chart, chart_properties.size(), "Title", "TitleArea.Text",
+            u8"ОбластьЗаголовка.Текст", u8"Строка", ValueKind::string, ValueCodec::string,
+            ApiAccess::read_write, VersionMask::platform_8_5,
+            PersistenceClass::persisted_editable, StorageCodec::control_info,
+            {DefaultKind::string, ""}});
 
         // Help may repeat an inherited extension property on one concrete control.
         // The executable model keeps the shared extension as the single owner.
@@ -1541,6 +1601,10 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
     switch (codec) {
         case ValueCodec::command_bar_buttons:
             return "command-bar-buttons";
+        case ValueCodec::dendrogram_items:
+            return "dendrogram-items";
+        case ValueCodec::dendrogram_links:
+            return "dendrogram-links";
         case ValueCodec::unclassified:
             return "unclassified";
         case ValueCodec::boolean:

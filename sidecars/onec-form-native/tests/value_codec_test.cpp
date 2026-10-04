@@ -116,6 +116,71 @@ void test_type_domain() {
             "{\"Pattern\",{\"T\",d47d59f8-73f0-481c-8b5e-f6384c0a4804}}",
         "type-domain must match the proven platform fixture");
 
+    model::TypeDomainEntry value_list_entry;
+    value_list_entry.term = model::TypeDomainTerm::value_list;
+    const model::TypeDomainPatternValue value_list_fixture{{value_list_entry}};
+    expect(
+        codec::encode_type_domain(value_list_fixture) ==
+            "{\"Pattern\",{\"#\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}",
+        "ValueList term must use the independent platform type descriptor");
+    expect(
+        codec::decode_type_domain("{\"Pattern\",{\"#\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}") ==
+            value_list_fixture,
+        "ValueList platform type descriptor must decode as the named term");
+    for (const auto token : {"T", "R", "L"}) {
+        const auto other_platform_term = codec::decode_type_domain(
+            std::string("{\"Pattern\",{\"") + token +
+            "\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}");
+        expect(other_platform_term.entries.front().term != model::TypeDomainTerm::value_list,
+            "ValueList recognition must be limited to the proven # type token");
+    }
+
+    model::TypeDomainEntry value_table_entry;
+    value_table_entry.term = model::TypeDomainTerm::value_table;
+    const model::TypeDomainPatternValue value_table_fixture{{value_table_entry}};
+    constexpr std::string_view value_table_pattern =
+        "{\"Pattern\",{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663}}";
+    expect(codec::encode_type_domain(value_table_fixture) == value_table_pattern,
+        "ValueTable term must emit its independently proven fixed platform descriptor");
+    expect(codec::decode_type_domain(value_table_pattern) == value_table_fixture,
+        "ValueTable platform descriptor must decode as the named term");
+    for (const auto token : {"T", "R", "L"}) {
+        const auto other_platform_term = codec::decode_type_domain(
+            std::string("{\"Pattern\",{\"") + token +
+            "\",acf6192e-81ca-46ef-93a6-5a6968b78663}}");
+        expect(other_platform_term.entries.front().term != model::TypeDomainTerm::value_table,
+            "ValueTable recognition must be limited to the proven # type token");
+    }
+    expect(codec::decode_type_domain(
+        "{\"Pattern\",{\"#\",d47d59f8-73f0-481c-8b5e-f6384c0a4804}}")
+        .entries.front().term == model::TypeDomainTerm::unknown,
+        "unrelated unknown type UUID must not normalize to ValueTable");
+    model::TypeDomainEntry invalid_value_table = value_table_entry;
+    invalid_value_table.type_uuid = model::UuidValue{"d47d59f8-73f0-481c-8b5e-f6384c0a4804"};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_table}})); },
+        "ValueTable must reject an overriding type UUID");
+    invalid_value_table = value_table_entry;
+    invalid_value_table.numeric = {8, 2, false};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_table}})); },
+        "ValueTable must reject type qualifiers");
+
+    model::TypeDomainEntry invalid_value_list = value_list_entry;
+    invalid_value_list.type_uuid = model::UuidValue{"d47d59f8-73f0-481c-8b5e-f6384c0a4804"};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_list}})); },
+        "ValueList must reject an overriding type UUID");
+    invalid_value_list = value_list_entry;
+    invalid_value_list.string = {64, false};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_list}})); },
+        "ValueList must reject qualifiers");
+
     model::TypeDomainPatternValue value;
 
     model::TypeDomainEntry type;
@@ -370,6 +435,27 @@ void test_platform_date_codec() {
     }
 }
 
+void test_canonical_decimal() {
+    expect(codec::canonical_decimal("  +00012.37500\n") == "12.375",
+        "shared decimal canonicalization must preserve arbitrary precision and normalize lexical form");
+    expect(codec::canonical_decimal("-0.000") == "0",
+        "negative zero must normalize to zero as before");
+    expect(codec::canonical_decimal("1.") == "1",
+        "existing decimal normalization must continue to accept a trailing decimal point");
+    expect(codec::canonical_decimal("123456789012345678901234567890.125") ==
+               "123456789012345678901234567890.125",
+        "decimal canonicalization must not pass through binary floating point");
+    for (const std::string_view invalid : {"", ".", "1.2.3", "--1", "1e3", "NaN"}) {
+        bool rejected = false;
+        try {
+            static_cast<void>(codec::canonical_decimal(invalid));
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        expect(rejected, "invalid xs:decimal lexical values must be rejected");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -383,6 +469,7 @@ int main() {
         test_font();
         test_shortcut();
         test_platform_date_codec();
+        test_canonical_decimal();
     } catch (const std::exception& error) {
         std::cerr << "value codec tests: FAIL: " << error.what() << '\n';
         return 1;

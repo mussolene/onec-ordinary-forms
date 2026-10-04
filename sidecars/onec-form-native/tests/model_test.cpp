@@ -214,6 +214,13 @@ void test_descriptors() {
                radio_tool_tip->default_value.kind == DefaultKind::string &&
                radio_tool_tip->default_value.canonical.empty(),
         "RadioButton ToolTip must declare its editable empty string default");
+    const auto* html_output = find_property(ControlKind::html_document_field, "Output");
+    expect(html_output && html_output->persistence == PersistenceClass::persisted_editable &&
+               html_output->storage_codec == StorageCodec::control_info &&
+               html_output->value_codec == ValueCodec::enumeration &&
+               html_output->default_value.kind == DefaultKind::enumeration &&
+               html_output->default_value.canonical == "Auto",
+        "HTMLDocumentField Output must declare its editable UseOutput Auto default");
     const auto* picture_enabled = find_property(ControlKind::picture_decoration, "Enabled");
     const auto* picture_tool_tip = find_property(ControlKind::picture_decoration, "ToolTip");
     const auto* picture_value = find_property(ControlKind::picture_decoration, "Picture");
@@ -436,11 +443,11 @@ void test_help_metamodel() {
     const MetamodelCoverage& coverage = metamodel_coverage();
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 419,
-        "executable metamodel must include three named Gantt chart properties");
+        coverage.control_property_occurrences == 423,
+        "executable metamodel must include Chart and spreadsheet properties");
     expect(
-        coverage.unique_control_property_names == 203,
-        "type-specific metamodel must include three named Gantt chart properties");
+        coverage.unique_control_property_names == 206,
+        "type-specific metamodel must exclude the inherited property duplicate");
     expect(
         coverage.control_event_occurrences == 79,
         "help catalog must retain 79 control event occurrences");
@@ -466,6 +473,22 @@ void test_help_metamodel() {
     expect(
         property_descriptors(ControlKind::input_field).size() == 45,
         "InputField must retain the exact 45-property TextBox surface");
+    const auto* choice_enabled = find_property(ControlKind::choice_field, "Enabled");
+    const auto* choice_tool_tip = find_property(ControlKind::choice_field, "ToolTip");
+    const auto* choice_list = find_property(ControlKind::choice_field, "ChoiceList");
+    expect(choice_enabled && choice_enabled->persistence == PersistenceClass::persisted_editable &&
+            choice_enabled->storage_codec == StorageCodec::control_base &&
+            choice_enabled->default_value.kind == DefaultKind::boolean &&
+            choice_enabled->default_value.canonical == "true",
+        "ChoiceField Enabled must use the observed true base default");
+    expect(choice_tool_tip && choice_tool_tip->persistence == PersistenceClass::persisted_editable &&
+            choice_tool_tip->storage_codec == StorageCodec::control_base &&
+            choice_tool_tip->default_value.kind == DefaultKind::string &&
+            choice_tool_tip->default_value.canonical.empty(),
+        "ChoiceField ToolTip must use the observed empty base string default");
+    expect(choice_list && choice_list->persistence == PersistenceClass::runtime_only &&
+            choice_list->storage_codec == StorageCodec::none,
+        "ChoiceField ChoiceList must remain runtime-only rather than a persisted XML value");
     expect(
         event_descriptors(ControlKind::input_field).size() == 9,
         "InputField must retain the exact 9-event TextBox surface");
@@ -475,6 +498,20 @@ void test_help_metamodel() {
     expect(
         find_property(ControlKind::input_field, "ReadOnly")->value_codec == ValueCodec::boolean,
         "safe Boolean help types must receive the Boolean domain codec");
+    const auto* dendrogram_items = find_property(ControlKind::dendrogram, "Items");
+    const auto* dendrogram_links = find_property(ControlKind::dendrogram, "Links");
+    const auto* dendrogram_orientation = find_property(ControlKind::dendrogram, "Orientation");
+    expect(dendrogram_items && dendrogram_items->value_codec == ValueCodec::dendrogram_items &&
+            dendrogram_items->storage_codec == StorageCodec::collection_record &&
+            dendrogram_items->persistence == PersistenceClass::persisted_editable &&
+            dendrogram_links && dendrogram_links->value_codec == ValueCodec::dendrogram_links &&
+            dendrogram_links->storage_codec == StorageCodec::collection_record &&
+            dendrogram_links->persistence == PersistenceClass::persisted_editable,
+        "Dendrogram Items and Links must be named typed owned collections");
+    expect(dendrogram_orientation && dendrogram_orientation->value_codec == ValueCodec::enumeration &&
+            dendrogram_orientation->default_value.kind == DefaultKind::enumeration &&
+            dendrogram_orientation->default_value.canonical == "DendrogramOrientation.Up",
+        "Dendrogram Orientation must retain its documented enum type and implicit Up default");
     expect(
         find_property(ControlKind::input_field, "AutoChoiceIncomplete")->persistence == PersistenceClass::persisted_editable &&
             find_property(ControlKind::input_field, "AutoChoiceIncomplete")->storage_codec == StorageCodec::control_info &&
@@ -1133,6 +1170,30 @@ void test_page_position_invariants() {
         "Page Position dimensions must be non-negative");
 }
 
+void test_chart_number_lexical_validation() {
+    using namespace oof::model;
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(ControlRef{ObjectId{2}});
+    OrdinaryFormDocument document(std::move(form));
+    ChartPayload chart;
+    ChartSeries series;
+    series.id = ObjectId{2};
+    series.color.kind = ColorKind::absolute;
+    series.color.red = 255;
+    series.marker = {"ChartMarkerType", "Auto"};
+    chart.series.push_back(series);
+    ChartPoint point;
+    point.id = ObjectId{1};
+    point.color.kind = ColorKind::absolute;
+    point.color.blue = 128;
+    chart.points.push_back(point);
+    chart.values.push_back({ObjectId{2}, ObjectId{1}, DecimalValue{"NaN"}});
+    document.add_control(ControlNode{ObjectId{2}, "Chart", std::move(chart)});
+    expect(document.validate().has(InvariantCode::invalid_property),
+        "Chart model validation must reject non-decimal numeric values such as NaN");
+}
+
 }  // namespace
 
 int main() {
@@ -1159,6 +1220,7 @@ int main() {
         test_event_sequence_invariants();
         test_duplicate_bindings_rejected();
         test_page_position_invariants();
+        test_chart_number_lexical_validation();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';
         return 1;

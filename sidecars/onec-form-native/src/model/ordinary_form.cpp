@@ -84,6 +84,50 @@ bool property_value_matches(
         value);
 }
 
+bool table_column_editor_property_allowed(ControlKind kind, std::string_view name) {
+    switch (kind) {
+        case ControlKind::input_field:
+            return name == "Enabled" || name == "ReadOnly";
+        case ControlKind::choice_field:
+            return name == "Enabled" || name == "ToolTip";
+        case ControlKind::check_box:
+            return name == "Enabled" || name == "Caption" || name == "ToolTip" || name == "Font";
+        default:
+            return false;
+    }
+}
+
+bool table_column_editor_property_default(std::string_view name, const PropertyValue& value) {
+    if (name == "Enabled") return std::holds_alternative<bool>(value) && std::get<bool>(value);
+    if (name == "ReadOnly") return std::holds_alternative<bool>(value) && !std::get<bool>(value);
+    if (name == "Caption" || name == "ToolTip") {
+        return std::holds_alternative<std::string>(value) && std::get<std::string>(value).empty();
+    }
+    if (name == "Font") {
+        return std::holds_alternative<FontValue>(value) && std::get<FontValue>(value) == FontValue{};
+    }
+    return false;
+}
+
+bool canonical_chart_decimal(std::string_view value) {
+    if (value.empty()) return false;
+    if (value.front() == '-') value.remove_prefix(1);
+    if (value.empty()) return false;
+    const auto point = value.find('.');
+    if (point != std::string_view::npos && value.find('.', point + 1) != std::string_view::npos) return false;
+    const auto integer = point == std::string_view::npos ? value : value.substr(0, point);
+    const auto fraction = point == std::string_view::npos ? std::string_view{} : value.substr(point + 1);
+    const auto digits = [](std::string_view part) {
+        return std::ranges::all_of(part, [](unsigned char c) { return c >= '0' && c <= '9'; });
+    };
+    if ((!integer.empty() && !digits(integer)) || (!fraction.empty() && !digits(fraction)) ||
+        (integer.empty() && fraction.empty())) return false;
+    if (integer.size() > 1 && integer.front() == '0') return false;
+    if (!fraction.empty() && fraction.back() == '0') return false;
+    if (fraction.empty() && point != std::string_view::npos) return false;
+    return !(value == "-0");
+}
+
 }  // namespace
 
 const PropertyEntry* PropertySet::find(PropertyId id) const noexcept {
@@ -755,6 +799,62 @@ ValidationReport OrdinaryFormDocument::validate() const {
             validate_buttons(validate_buttons, *owned_buttons, 0);
         }
         const auto& descriptor = metamodel::descriptor_for(control.kind());
+        if (const auto* spreadsheet = std::get_if<SpreadsheetDocumentFieldPayload>(&control.payload)) {
+            std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
+            std::optional<std::pair<std::uint32_t, std::uint32_t>> previous;
+            for (const auto& cell : spreadsheet->cells) {
+                const auto coordinate = std::pair{cell.row, cell.column};
+                if (cell.row == 0 || cell.column == 0 || !coordinates.emplace(coordinate).second ||
+                    (previous && coordinate <= *previous)) {
+                    add_violation(
+                        report,
+                        InvariantCode::invalid_property,
+                        control.id,
+                        control.id,
+                        "Spreadsheet Document cells require unique positive uint32 row and column coordinates in row-major order");
+                    break;
+                }
+                if (cell.typed_value.has_value()) {
+                    const auto& typed = *cell.typed_value;
+                    bool supported = false;
+                    if (typed.type.entries.size() == 1) {
+                        const auto& entry = typed.type.entries.front();
+                        if (entry.term == TypeDomainTerm::string) {
+                            const bool unrelated_qualifiers_default = !entry.type_uuid.has_value() &&
+                                entry.numeric == NumericQualifiers{} && entry.binary == LengthQualifiers{} &&
+                                entry.date == DateQualifiers{};
+                            supported = unrelated_qualifiers_default &&
+                                std::holds_alternative<std::string>(typed.value);
+                        } else if (entry.term == TypeDomainTerm::numeric) {
+                            const bool unrelated_qualifiers_default = !entry.type_uuid.has_value() &&
+                                entry.string == LengthQualifiers{} && entry.binary == LengthQualifiers{} &&
+                                entry.date == DateQualifiers{};
+                            supported = unrelated_qualifiers_default &&
+                                (entry.numeric.length == 0 || entry.numeric.precision <= entry.numeric.length) &&
+                                std::holds_alternative<DecimalValue>(typed.value);
+                        } else if (entry.term == TypeDomainTerm::boolean) {
+                            supported = entry == TypeDomainEntry{.term = TypeDomainTerm::boolean} &&
+                                std::holds_alternative<bool>(typed.value);
+                        } else if (entry.term == TypeDomainTerm::date) {
+                            supported = !entry.type_uuid.has_value() && entry.numeric == NumericQualifiers{} &&
+                                entry.string == LengthQualifiers{} && entry.binary == LengthQualifiers{} &&
+                                entry.date == DateQualifiers{true, true} &&
+                                std::holds_alternative<DateValue>(typed.value);
+                        }
+                    }
+                    if (!cell.text.empty() || !supported) {
+                        add_violation(
+                            report,
+                            InvariantCode::invalid_property,
+                            control.id,
+                            control.id,
+                            "Spreadsheet typed cells require an empty Text and a supported ValueType/Value pair");
+                        break;
+                    }
+                }
+                previous = coordinate;
+            }
+        }
         if (!control.children.empty() && descriptor.child_policy == metamodel::ChildPolicy::forbidden) {
             add_violation(
                 report,
@@ -862,6 +962,55 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 invalid_gantt("Gantt FullIntervalBegin must precede FullIntervalEnd");
             }
         }
+        if (const auto* table = std::get_if<TablePayload>(&control.payload)) {
+            const auto invalid_table = [&](std::string reason) {
+                add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
+            };
+            if (!control.data_path || !control.data_path->members.empty()) {
+                invalid_table("Table requires a direct DataPath to a ValueTable Attribute");
+            } else if (const Attribute* attribute = find_attribute(control.data_path->attribute.id());
+                       attribute == nullptr || attribute->type.entries.size() != 1 ||
+                       [&] {
+                           TypeDomainEntry expected;
+                           expected.term = TypeDomainTerm::value_table;
+                           return attribute->type.entries.front() != expected;
+                       }()) {
+                invalid_table("Table DataPath must reference the named ValueTable type");
+            }
+            std::set<std::string> column_names;
+            for (const auto& column : table->columns) {
+                if (column.name.empty() || !column_names.insert(column.name).second) {
+                    invalid_table("Table Column names must be non-empty and unique");
+                }
+                if (column.data_path.empty()) {
+                    invalid_table("Table Column DataPath must be non-empty");
+                }
+                if (column.header.items.empty()) {
+                    invalid_table("Table Column Header must contain localized text");
+                }
+                std::set<std::string> languages;
+                for (const auto& item : column.header.items) {
+                    if (item.language.empty() || !languages.insert(item.language).second) {
+                        invalid_table("Table Column Header languages must be non-empty and unique");
+                    }
+                }
+                column.control.properties.for_each_explicit([&](const PropertyEntry& entry) {
+                    const auto* property = metamodel::find_property(column.control.kind, entry.id);
+                    if (!table_column_editor_property_allowed(column.control.kind,
+                            property == nullptr ? std::string_view{} : property->api_name) ||
+                        !property_value_matches(property->value_codec, entry.value) ||
+                        !table_column_editor_property_default(property->api_name, entry.value)) {
+                        invalid_table("Table Column editor has an incompatible, unsupported, or nondefault property");
+                        return;
+                    }
+                });
+                if (column.control.kind != ControlKind::input_field &&
+                    column.control.kind != ControlKind::choice_field &&
+                    column.control.kind != ControlKind::check_box) {
+                    invalid_table("Table Column Control kind is unsupported");
+                }
+            }
+        }
         validate_property_set(
             control.id,
             control.extension_properties,
@@ -877,6 +1026,61 @@ ValidationReport OrdinaryFormDocument::validate() const {
             [](const metamodel::PropertyDescriptor& descriptor) {
                 return descriptor.surface == metamodel::PropertySurface::control_payload;
             });
+        if (const auto* chart = std::get_if<ChartPayload>(&control.payload)) {
+            const auto invalid_chart = [&](std::string reason) {
+                add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
+            };
+            if (control.kind() != ControlKind::chart) {
+                invalid_chart("Chart payload is attached to a non-Chart control");
+            }
+            if (!chart->points.empty() && chart->series.size() >
+                std::numeric_limits<std::size_t>::max() / chart->points.size()) {
+                invalid_chart("Chart dense Values dimensions overflow");
+            } else if (chart->values.size() != chart->series.size() * chart->points.size()) {
+                invalid_chart("Chart Values must be a dense Series by Point matrix");
+            }
+            std::unordered_set<ObjectId, ObjectIdHash> series_ids;
+            for (const auto& series : chart->series) {
+                if (!series.id || series.id.value() == 1 || !series_ids.insert(series.id).second) {
+                    invalid_chart("Chart Series IDs must be unique, positive, and distinct from reserved summary ID 1");
+                }
+                const bool absolute_color = series.color.kind == ColorKind::absolute && series.color.alpha == 255 &&
+                    std::holds_alternative<std::monostate>(series.color.style);
+                if (!absolute_color) {
+                    invalid_chart("Chart Series Color must be an absolute opaque RGB value");
+                }
+                if (series.marker.type_name != "ChartMarkerType" ||
+                    (series.marker.member != "Auto" && series.marker.member != "Alternation" &&
+                     series.marker.member != "Rect" && series.marker.member != "Circle" &&
+                     series.marker.member != "None" && series.marker.member != "Rhomb")) {
+                    invalid_chart("Chart Series Marker must name a supported ТипМаркераДиаграммы member");
+                }
+            }
+            std::unordered_set<ObjectId, ObjectIdHash> point_ids;
+            for (const auto& point : chart->points) {
+                if (!point.id || !point_ids.insert(point.id).second) {
+                    invalid_chart("Chart Point IDs must be positive and unique");
+                }
+                const bool absolute_color = point.color.kind == ColorKind::absolute && point.color.alpha == 255 &&
+                    std::holds_alternative<std::monostate>(point.color.style);
+                if (!absolute_color) {
+                    invalid_chart("Chart Point Color must be an absolute opaque RGB value");
+                }
+            }
+            std::set<std::pair<ObjectId, ObjectId>> value_pairs;
+            for (const auto& value : chart->values) {
+                if (!series_ids.contains(value.series_ref) || !point_ids.contains(value.point_ref)) {
+                    invalid_chart("Chart Value references must resolve to a Series and a Point");
+                }
+                if (!value_pairs.emplace(value.series_ref, value.point_ref).second) {
+                    invalid_chart("Chart Value pairs must be unique");
+                }
+                if (const auto* number = std::get_if<DecimalValue>(&value.value);
+                    number != nullptr && !canonical_chart_decimal(number->canonical)) {
+                    invalid_chart("Chart Value Number must contain a decimal value");
+                }
+            }
+        }
     }
 
     for (const auto& page : collections_.pages) {
