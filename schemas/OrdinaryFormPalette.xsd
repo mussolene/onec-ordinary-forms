@@ -1045,7 +1045,8 @@
         </Properties></NamedConcept>
         <NamedConcept name="TableColumnControl" russianName="ЭлементУправленияКолонкиТабличногоПоля"><Properties>
           <Property name="Type" russianName="ВидРедактора"/><Property name="Enabled" russianName="Доступность"/>
-          <Property name="ReadOnly" russianName="ТолькоПросмотр"/>
+          <Property name="ReadOnly" russianName="ТолькоПросмотр"/><Property name="Caption" russianName="Заголовок"/>
+          <Property name="ToolTip" russianName="Подсказка"/><Property name="Font" russianName="Шрифт"/>
         </Properties></NamedConcept>
       </Palette>
     </xs:appinfo>

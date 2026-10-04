@@ -265,6 +265,84 @@ void test_captured_table_column_record() {
         "independent captured Table/Column record must re-encode exactly apart from recompressed editor bytes");
 }
 
+void test_table_column_choice_and_check_box_profiles() {
+    const auto make_document = [](model::ControlKind invalid_kind = model::ControlKind::input_field,
+                                  bool mismatched_property = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "TableEditors";
+        form.children = {model::ControlRef{model::ObjectId{3}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue value_table_type;
+        model::TypeDomainEntry value_table_entry;
+        value_table_entry.term = model::TypeDomainTerm::value_table;
+        value_table_type.entries.push_back(value_table_entry);
+        document.add_attribute(model::Attribute{model::ObjectId{2}, "Rows", value_table_type});
+        model::ControlNode table{model::ObjectId{3}, "Rows", model::TablePayload{}};
+        table.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {}};
+        auto& columns = std::get<model::TablePayload>(table.payload).columns;
+        const auto add_column = [&](std::string name, model::ControlKind kind) {
+            model::TableColumn column;
+            column.name = std::move(name);
+            column.data_path = "Code";
+            column.header.items.push_back({"en", column.name});
+            column.control.kind = kind;
+            columns.push_back(std::move(column));
+        };
+        add_column("InputCode", model::ControlKind::input_field);
+        add_column("ChoiceCode", model::ControlKind::choice_field);
+        add_column("CheckCode", model::ControlKind::check_box);
+        if (mismatched_property) {
+            columns[1].control.properties.set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+        }
+        if (invalid_kind != model::ControlKind::input_field) columns[0].control.kind = invalid_kind;
+        document.add_control(std::move(table));
+        return document;
+    };
+
+    const auto document = make_document();
+    auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "three named default Table editors must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    auto roundtrip = form_stream::decode_document(encoded.value(), "TableEditorProfiles");
+    expect(roundtrip.ok(), roundtrip ? "three named default Table editors must decode" :
+        roundtrip.diagnostics().front().path + ": " + roundtrip.diagnostics().front().message);
+    const auto table_after = std::find_if(roundtrip.value().collections().controls.begin(),
+        roundtrip.value().collections().controls.end(), [](const auto& control) {
+            return control.kind() == model::ControlKind::table;
+        });
+    expect(table_after != roundtrip.value().collections().controls.end(), "roundtrip must retain Table");
+    const auto& columns_after = std::get<model::TablePayload>(table_after->payload).columns;
+    expect(columns_after.size() == 3 && columns_after[0].control.kind == model::ControlKind::input_field &&
+               columns_after[1].control.kind == model::ControlKind::choice_field &&
+               columns_after[2].control.kind == model::ControlKind::check_box,
+        "Table Column editor GUID and typed payload must roundtrip for all supported kinds");
+
+    auto mismatched_guid = encoded.value();
+    auto* table_record = find_record_with_guid(
+        mismatched_guid, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table_record != nullptr, "encoded form must contain Table record for mismatch checks");
+    auto& first_column = table_record->items[2].items[2].items[1].items[23].items[1];
+    first_column.items[1].items[1].items[1].items[38] = list_stream::ListValue::raw_atom(
+        std::string(model::metamodel::descriptor_for(model::ControlKind::check_box).guid));
+    expect(!form_stream::decode_document(mismatched_guid, "MismatchedTableEditor").ok(),
+        "editor GUID must reject a packet whose nested payload belongs to a different kind");
+
+    auto unknown_kind = encoded.value();
+    table_record = find_record_with_guid(
+        unknown_kind, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    auto& unknown_column = table_record->items[2].items[2].items[1].items[23].items[1];
+    unknown_column.items[1].items[1].items[1].items[38] = list_stream::ListValue::raw_atom(
+        "00000000-0000-4000-8000-000000000000");
+    expect(!form_stream::decode_document(unknown_kind, "UnknownTableEditor").ok(),
+        "unknown Table Column editor GUID must fail closed");
+
+    expect(!form_stream::encode_document(make_document(model::ControlKind::input_field, true)).ok(),
+        "ChoiceField must reject a mismatched InputField property even at its default value");
+    expect(!form_stream::encode_document(make_document(model::ControlKind::spreadsheet_document_field)).ok(),
+        "unsupported Table Column editor kind must fail closed");
+}
+
 void expect_captured_table_rejected(list_stream::ListValue payload, std::string_view message) {
     expect(!form_stream::decode_document(payload, "CapturedTable"), message);
 }
@@ -6450,6 +6528,7 @@ int main() {
         test_attribute_allocator_is_separate_from_control_ids();
         test_usual_group_named_record_round_trip_and_rejections();
         test_captured_table_column_record();
+        test_table_column_choice_and_check_box_profiles();
         test_captured_table_packet_rejections_and_alternate_deflate();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();

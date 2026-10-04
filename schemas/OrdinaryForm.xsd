@@ -1655,12 +1655,22 @@
   </xs:complexType>
   <xs:element name="Form" type="FormType"/>
 
+  <xs:simpleType name="TableColumnEditorKindType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="InputField"/>
+      <xs:enumeration value="ChoiceField"/>
+      <xs:enumeration value="CheckBox"/>
+    </xs:restriction>
+  </xs:simpleType>
   <xs:complexType name="TableColumnControlType">
     <xs:sequence>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
-    <xs:attribute name="type" type="xs:string" use="required" fixed="InputField"/>
+    <xs:attribute name="type" type="TableColumnEditorKindType" use="required"/>
   </xs:complexType>
   <xs:complexType name="TableColumnType">
     <xs:sequence>

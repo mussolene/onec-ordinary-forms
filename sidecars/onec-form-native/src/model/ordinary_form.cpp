@@ -80,6 +80,31 @@ bool property_value_matches(
         value);
 }
 
+bool table_column_editor_property_allowed(ControlKind kind, std::string_view name) {
+    switch (kind) {
+        case ControlKind::input_field:
+            return name == "Enabled" || name == "ReadOnly";
+        case ControlKind::choice_field:
+            return name == "Enabled" || name == "ToolTip";
+        case ControlKind::check_box:
+            return name == "Enabled" || name == "Caption" || name == "ToolTip" || name == "Font";
+        default:
+            return false;
+    }
+}
+
+bool table_column_editor_property_default(std::string_view name, const PropertyValue& value) {
+    if (name == "Enabled") return std::holds_alternative<bool>(value) && std::get<bool>(value);
+    if (name == "ReadOnly") return std::holds_alternative<bool>(value) && !std::get<bool>(value);
+    if (name == "Caption" || name == "ToolTip") {
+        return std::holds_alternative<std::string>(value) && std::get<std::string>(value).empty();
+    }
+    if (name == "Font") {
+        return std::holds_alternative<FontValue>(value) && std::get<FontValue>(value) == FontValue{};
+    }
+    return false;
+}
+
 }  // namespace
 
 const PropertyEntry* PropertySet::find(PropertyId id) const noexcept {
@@ -828,23 +853,21 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         invalid_table("Table Column Header languages must be non-empty and unique");
                     }
                 }
-                if (column.control.kind != ControlKind::input_field) {
-                    invalid_table("Table Column Control currently supports only InputField");
-                }
                 column.control.properties.for_each_explicit([&](const PropertyEntry& entry) {
-                    const auto* property = metamodel::find_property(ControlKind::input_field, entry.id);
-                    if (property == nullptr ||
-                        (property->api_name != "Enabled" && property->api_name != "ReadOnly") ||
-                        !std::holds_alternative<bool>(entry.value)) {
-                        invalid_table("Table Column InputField supports only Boolean Enabled and ReadOnly");
+                    const auto* property = metamodel::find_property(column.control.kind, entry.id);
+                    if (!table_column_editor_property_allowed(column.control.kind,
+                            property == nullptr ? std::string_view{} : property->api_name) ||
+                        !property_value_matches(property->value_codec, entry.value) ||
+                        !table_column_editor_property_default(property->api_name, entry.value)) {
+                        invalid_table("Table Column editor has an incompatible, unsupported, or nondefault property");
                         return;
                     }
-                    const bool value = std::get<bool>(entry.value);
-                    if ((property->api_name == "Enabled" && !value) ||
-                        (property->api_name == "ReadOnly" && value)) {
-                        invalid_table("Table Column InputField supports only Enabled=true and ReadOnly=false");
-                    }
                 });
+                if (column.control.kind != ControlKind::input_field &&
+                    column.control.kind != ControlKind::choice_field &&
+                    column.control.kind != ControlKind::check_box) {
+                    invalid_table("Table Column Control kind is unsupported");
+                }
             }
         }
         validate_property_set(

@@ -1088,21 +1088,38 @@ void test_table_columns_named_profile() {
     <Column name="CodeCopy"><DataPath>Code</DataPath><Header><Item language="en">Code copy</Item></Header>
       <Control type="InputField"/>
     </Column>
+    <Column name="ChoiceCopy"><DataPath>Code</DataPath><Header><Item language="en">Choice copy</Item></Header>
+      <Control type="ChoiceField"><Enabled>true</Enabled><ToolTip/></Control>
+    </Column>
+    <Column name="CheckCopy"><DataPath>Code</DataPath><Header><Item language="en">Check copy</Item></Header>
+      <Control type="CheckBox"><Enabled>true</Enabled><Caption/><ToolTip/><Font kind="automatic"/></Control>
+    </Column>
   </Columns></Table></ChildItems>
 </Form>)XML";
     auto parsed = source::parse_form_xml(valid);
-    expect(parsed.ok(), "named Table with repeated source DataPath and typed InputField columns must parse");
+    expect(parsed.ok(), parsed ? "named Table with repeated source DataPath and typed editors must parse" :
+        parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
     const auto* table = parsed.value().find_control(model::ObjectId{3});
-    expect(table != nullptr && std::get<model::TablePayload>(table->payload).columns.size() == 2,
+    expect(table != nullptr && std::get<model::TablePayload>(table->payload).columns.size() == 4,
         "Table must own its ordered typed Columns");
     const auto& columns = std::get<model::TablePayload>(table->payload).columns;
-    expect(columns[0].data_path == columns[1].data_path && columns[0].control.properties.empty(),
-        "duplicate DataPath is allowed and explicit default editor flags normalize away");
+    expect(columns[0].data_path == columns[1].data_path && columns[0].data_path == columns[2].data_path &&
+               columns[2].control.kind == model::ControlKind::choice_field &&
+               columns[3].control.kind == model::ControlKind::check_box &&
+               columns[0].control.properties.empty() && columns[2].control.properties.empty() &&
+               columns[3].control.properties.empty(),
+        "duplicate DataPath is allowed and typed editor defaults normalize away");
     auto serialized = source::serialize_form_xml(parsed.value());
-    expect(serialized.ok() && serialized.value().find("<Columns>") != std::string::npos,
+    expect(serialized.ok() && serialized.value().find("<Columns>") != std::string::npos &&
+               serialized.value().find("type=\"ChoiceField\"") != std::string::npos &&
+               serialized.value().find("type=\"CheckBox\"") != std::string::npos,
         "named Table Columns must serialize as editable XML");
     auto reparsed = source::parse_form_xml(serialized.value());
-    expect(reparsed.ok() && reparsed.value().collections().controls.size() == 1,
+    expect(reparsed.ok() && reparsed.value().collections().controls.size() == 1 &&
+               std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
+                       .columns[2].control.kind == model::ControlKind::choice_field &&
+               std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
+                       .columns[3].control.kind == model::ControlKind::check_box,
         "Table Column XML must survive a source roundtrip");
 
     std::string duplicate_name(valid);
@@ -1115,6 +1132,19 @@ void test_table_columns_named_profile() {
     unsupported_editor.replace(editor_pos, std::string("type=\"InputField\"").size(),
         "type=\"SpreadsheetDocumentField\"");
     expect(!source::parse_form_xml(unsupported_editor).ok(), "unsupported Table Column editor kind must fail");
+
+    std::string incompatible_default(valid);
+    const auto choice_pos = incompatible_default.find("<Control type=\"ChoiceField\">");
+    incompatible_default.insert(choice_pos + std::string("<Control type=\"ChoiceField\">").size(),
+        "<ReadOnly>false</ReadOnly>");
+    expect(!source::parse_form_xml(incompatible_default).ok(),
+        "ChoiceField must reject an InputField property even when it carries that property's default");
+
+    std::string check_caption(valid);
+    const auto check_pos = check_caption.find("<Control type=\"CheckBox\">");
+    check_caption.insert(check_pos + std::string("<Control type=\"CheckBox\">").size(), "<ChoiceList/>");
+    expect(!source::parse_form_xml(check_caption).ok(),
+        "CheckBox must reject a ChoiceField property even when it carries the platform default");
 
     std::string nondefault_editor(valid);
     const auto enabled_pos = nondefault_editor.find("<Enabled>true</Enabled>");

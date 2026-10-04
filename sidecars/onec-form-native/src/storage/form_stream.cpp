@@ -2071,32 +2071,61 @@ LV encode_table_column_editor_packet(const LV& info, std::string_view path) {
 }
 
 bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value);
+std::string explicit_string(
+    const model::PropertySet& properties,
+    std::string_view name,
+    std::string_view default_value = {});
 void require_allowed_properties(
     const model::PropertySet& properties,
     std::initializer_list<std::string_view> allowed,
     std::string_view path);
 
-LV canonical_table_column_input_field_info(const model::TableColumnControl& control) {
-    if (control.kind != model::ControlKind::input_field) {
-        throw std::logic_error("Table Column Control must be an InputField");
+LV canonical_table_column_editor_info(const model::TableColumnControl& control) {
+    constexpr std::string_view path = "$/Table/Columns/Column/Control";
+    if (control.kind == model::ControlKind::input_field) {
+        require_allowed_properties(control.properties, {"Enabled", "ReadOnly"}, path);
+        InputFieldFlagValues flags{};
+        for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+            flags[index] = input_field_flag_mappings[index].default_value;
+        }
+        const model::TypeDomainPatternValue empty_type;
+        const bool enabled = explicit_bool(control.properties, "Enabled", true);
+        const bool read_only = explicit_bool(control.properties, "ReadOnly", false);
+        if (!enabled || read_only) {
+            fail("OOF1122", std::string(path), "Enabled=true and ReadOnly=false",
+                enabled ? "ReadOnly=true" : "Enabled=false",
+                "Table Column editor property value is outside the supported persisted profile");
+        }
+        LV info = canonical_input_field_info(
+            empty_type, enabled, read_only, flags, InputFieldTextValues{}, InputFieldLayoutValues{});
+        info.items[3] = list({raw("0")});
+        return info;
     }
-    require_allowed_properties(control.properties, {"Enabled", "ReadOnly"}, "$/Table/Columns/Column/Control");
-    InputFieldFlagValues flags{};
-    for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
-        flags[index] = input_field_flag_mappings[index].default_value;
+    if (control.kind == model::ControlKind::choice_field) {
+        require_allowed_properties(control.properties, {"Enabled", "ToolTip"}, path);
+        const bool enabled = explicit_bool(control.properties, "Enabled", true);
+        const std::string tool_tip = explicit_string(control.properties, "ToolTip");
+        if (!enabled || !tool_tip.empty()) {
+            fail("OOF1122", std::string(path), "Enabled=true and empty ToolTip",
+                enabled ? "ToolTip is non-empty" : "Enabled=false",
+                "Table Column ChoiceField is outside the observed default profile");
+        }
+        return canonical_choice_field_info(enabled, tool_tip);
     }
-    const model::TypeDomainPatternValue empty_type;
-    const bool enabled = explicit_bool(control.properties, "Enabled", true);
-    const bool read_only = explicit_bool(control.properties, "ReadOnly", false);
-    if (!enabled || read_only) {
-        fail("OOF1122", "$/Table/Columns/Column/Control", "Enabled=true and ReadOnly=false",
-            enabled ? "ReadOnly=true" : "Enabled=false",
-            "Table Column editor property value is outside the supported persisted profile");
+    if (control.kind == model::ControlKind::check_box) {
+        require_allowed_properties(control.properties, {"Enabled", "Caption", "ToolTip", "Font"}, path);
+        const bool enabled = explicit_bool(control.properties, "Enabled", true);
+        const std::string caption = explicit_string(control.properties, "Caption");
+        const std::string tool_tip = explicit_string(control.properties, "ToolTip");
+        const auto font = explicit_control_font(control.properties, std::string(path) + "/Font");
+        if (!enabled || !caption.empty() || !tool_tip.empty() || font != model::FontValue{}) {
+            fail("OOF1122", std::string(path), "default CheckBox properties",
+                "nondefault property", "Table Column CheckBox is outside its candidate default profile");
+        }
+        return canonical_check_box_info(enabled, caption, tool_tip, &font);
     }
-    LV info = canonical_input_field_info(
-        empty_type, enabled, read_only, flags, InputFieldTextValues{}, InputFieldLayoutValues{});
-    info.items[3] = list({raw("0")});
-    return info;
+    fail("OOF1122", std::string(path), "InputField, ChoiceField, or CheckBox", "unsupported kind",
+        "Table Column editor kind is unsupported");
 }
 
 LV canonical_table_column_record(const model::TableColumn& column, std::string_view path) {
@@ -2114,9 +2143,9 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
     properties.items[1] = encoded_localized(column.header);
     properties.items[30] = string_value(column.data_path);
     properties.items[35] = encoded_type_domain(model::TypeDomainPatternValue{}, std::string(path) + "/Control/TypeRestriction");
-    properties.items[38] = raw(std::string(model::metamodel::descriptor_for(model::ControlKind::input_field).guid));
+    properties.items[38] = raw(std::string(model::metamodel::descriptor_for(column.control.kind).guid));
     properties.items[39] = encode_table_column_editor_packet(
-        canonical_table_column_input_field_info(column.control), std::string(path) + "/Control");
+        canonical_table_column_editor_info(column.control), std::string(path) + "/Control");
     return list({
         raw("737535a4-21e6-4971-8513-3e3173a9fedd"),
         list({raw("8"), list({raw("8"), std::move(properties), list({raw("-1")}), list({raw("-1")}), list({raw("-1")})}),
@@ -3961,9 +3990,21 @@ model::TableColumn decode_table_column(const LV& value, std::string_view path) {
     } catch (const std::exception& error) {
         fail("OOF1108", child_path(properties_path, 1), "LocalizedString Header", describe(properties.items[1]), error.what());
     }
-    require_raw_constant(properties.items[38],
-        model::metamodel::descriptor_for(model::ControlKind::input_field).guid,
-        child_path(properties_path, 38));
+    model::ControlKind editor_kind;
+    const auto& editor_guid = properties.items[38];
+    if (!editor_guid.is_list && editor_guid.atom ==
+        model::metamodel::descriptor_for(model::ControlKind::input_field).guid) {
+        editor_kind = model::ControlKind::input_field;
+    } else if (!editor_guid.is_list && editor_guid.atom ==
+        model::metamodel::descriptor_for(model::ControlKind::choice_field).guid) {
+        editor_kind = model::ControlKind::choice_field;
+    } else if (!editor_guid.is_list && editor_guid.atom ==
+        model::metamodel::descriptor_for(model::ControlKind::check_box).guid) {
+        editor_kind = model::ControlKind::check_box;
+    } else {
+        fail("OOF1122", child_path(properties_path, 38), "InputField, ChoiceField, or CheckBox GUID",
+            describe(editor_guid), "Table Column editor kind is unsupported");
+    }
     static_cast<void>(type_domain(properties.items[35], child_path(properties_path, 35)));
     const auto inflated = decode_table_column_editor_packet(
         properties.items[39], child_path(properties_path, 39));
@@ -3975,25 +4016,27 @@ model::TableColumn decode_table_column(const LV& value, std::string_view path) {
     try {
         editor_info = list_stream::parse(editor_text);
     } catch (const std::exception& error) {
-        fail("OOF1114", child_path(properties_path, 39), "valid embedded InputField ListStream", {}, error.what());
+        fail("OOF1114", child_path(properties_path, 39), "valid embedded Table Column editor ListStream", {}, error.what());
     }
-    require_arity(editor_info, 10, child_path(properties_path, 39));
-    require_arity(editor_info.items[2], 1, child_path(child_path(properties_path, 39), 2));
-    const auto payload_path = child_path(properties_path, 39) + "/payload";
-    const auto base_path = child_path(properties_path, 39) + "/base";
-    require_arity(editor_info.items[2].items[0], 46, payload_path);
-    require_arity(editor_info.items[2].items[0].items[0], 21,
-        base_path);
-    column.control.kind = model::ControlKind::input_field;
-    const bool enabled = bool_atom(editor_info.items[2].items[0].items[0].items[1], child_path(properties_path, 39));
-    const bool read_only = bool_atom(editor_info.items[2].items[0].items[13], child_path(properties_path, 39));
-    if (!enabled || read_only) {
-        fail("OOF1122", child_path(properties_path, 39), "Enabled=true and ReadOnly=false",
-            enabled ? "ReadOnly=true" : "Enabled=false",
-            "Table Column editor property value is outside its persisted profile");
+    column.control.kind = editor_kind;
+    const auto editor_path = child_path(properties_path, 39);
+    if (editor_kind == model::ControlKind::input_field) {
+        require_arity(editor_info, 10, editor_path);
+        require_arity(editor_info.items[2], 1, child_path(editor_path, 2));
+        const auto payload_path = editor_path + "/payload";
+        const auto base_path = editor_path + "/base";
+        require_arity(editor_info.items[2].items[0], 46, payload_path);
+        require_arity(editor_info.items[2].items[0].items[0], 21, base_path);
+        const bool enabled = bool_atom(editor_info.items[2].items[0].items[0].items[1], editor_path);
+        const bool read_only = bool_atom(editor_info.items[2].items[0].items[13], editor_path);
+        if (!enabled || read_only) {
+            fail("OOF1122", editor_path, "Enabled=true and ReadOnly=false",
+                enabled ? "ReadOnly=true" : "Enabled=false",
+                "Table Column InputField is outside its persisted profile");
+        }
     }
-    require_exact(editor_info, canonical_table_column_input_field_info(column.control),
-        child_path(properties_path, 39), "embedded InputField editor is outside its typed default property profile");
+    require_exact(editor_info, canonical_table_column_editor_info(column.control), editor_path,
+        "embedded Table Column editor is outside its typed default property profile");
     LV normalized = value;
     const LV canonical = canonical_table_column_record(column, path);
     normalized.items[1].items[1].items[1].items[39] = canonical.items[1].items[1].items[1].items[39];
@@ -4085,7 +4128,7 @@ bool explicit_bool(const model::PropertySet& properties, std::string_view name, 
 std::string explicit_string(
     const model::PropertySet& properties,
     std::string_view name,
-    std::string_view default_value = {}) {
+    std::string_view default_value) {
     const auto* value = properties.find(model::PropertyId::from_name(name));
     if (value == nullptr) {
         return std::string(default_value);
