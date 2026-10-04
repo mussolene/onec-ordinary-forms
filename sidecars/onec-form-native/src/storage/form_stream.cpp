@@ -2317,21 +2317,21 @@ LV gantt_default_dimension_value(std::uint64_t first_id, std::uint64_t last_id) 
 }
 
 LV gantt_palette(const model::GanttChartPayload& data, bool points) {
-    const auto count = points ? data.points.size() : data.series.size();
-    const std::size_t proven_count = points ? 3 : 2;
-    if (count > proven_count)
-        fail("OOF1122", "$/GanttChart/Palette", points ? "at most 3 Points" : "at most 2 Series",
-            std::to_string(count), "Gantt palette expansion beyond the proven dimension count is unsupported");
+    const auto count = std::min<std::size_t>(points ? data.points.size() : data.series.size(), 16);
     const auto packed_color = [](std::uint32_t value) {
         return list({raw("4"), raw("0"), list({raw(std::to_string(value))}), raw("0")});
     };
     const LV absolute_black = packed_color(0);
     const LV automatic = list({raw("4"), raw("4"), list({raw("0")}), raw("4")});
-    constexpr std::array<std::pair<std::uint32_t, std::uint32_t>, 7> default_colors{{
-        {0, 0}, {15700567, 0}, {15700567, 5410297}, {5410297, 0},
-        {5410297, 6733657}, {6733657, 0}, {6733657, 10517142}}};
+    // chart.so 8.5.1.1343: инициализатор 0xda0e60, методы ColorManager 0xda1620/0xda16e0.
+    constexpr std::array<std::uint32_t, 16> default_colors{
+        15700567, 5410297, 6733657, 10517142, 7829482, 2525628, 11110461, 12341090,
+        13469947, 6029465, 7597468, 3634944, 14283127, 10183424, 10526880, 5263440};
     const auto color_at = [&](std::size_t index) {
-        return std::pair<LV, LV>{packed_color(default_colors[index].first), packed_color(default_colors[index].second)};
+        if (index == 0) return std::pair<LV, LV>{absolute_black, absolute_black};
+        const auto ordinal = (index - 1) / 2;
+        return std::pair<LV, LV>{packed_color(default_colors[ordinal % default_colors.size()]),
+            index % 2 == 0 ? packed_color(default_colors[(ordinal + 1) % default_colors.size()]) : absolute_black};
     };
     std::vector<LV> entries{raw("0"), raw(std::to_string(count * 2 + 1))};
     for (std::size_t index = 0; index < count * 2 + 1; ++index) {
@@ -2345,11 +2345,6 @@ LV gantt_palette(const model::GanttChartPayload& data, bool points) {
 
 LV gantt_dimension_table(const model::GanttChartPayload& data, bool points) {
     const std::size_t count = points ? data.points.size() : data.series.size();
-    const std::size_t proven_count = points ? 3 : 2;
-    if (count > proven_count)
-        fail("OOF1122", points ? "$/Gantt/Points" : "$/Gantt/Series",
-            points ? "at most 3 Points for the proven palette profile" : "at most 2 Series for the proven palette profile",
-            std::to_string(count), "Gantt dimension table is outside the proven palette profile");
     if (count > (std::numeric_limits<std::uint32_t>::max() - 1u) / 2u)
         fail("OOF1112", points ? "$/Gantt/Points" : "$/Gantt/Series", "safe uint32 palette count", "count overflow", "Gantt palette count is too large");
     std::vector<LV> rows{raw("3"), raw("0"), raw(std::to_string(count + 1))};
@@ -2361,7 +2356,7 @@ LV gantt_dimension_table(const model::GanttChartPayload& data, bool points) {
                 fail("OOF1112", "$/Gantt/Points", "IDs and ordinal cache keys within uint32", "overflow", "Gantt point key is too large");
             rows.push_back(raw(std::to_string(item.id.value())));
             rows.push_back(list({raw("2"), gantt_dimension_value(item.id, item.value, item.text, next,
-                static_cast<std::uint64_t>(index) * 2u),
+                static_cast<std::uint64_t>((index - 1) % 16 + 1) * 2u),
                 list({raw("4"), raw("0"), list({raw("0")}), string_value(""), raw("-1"), raw("-1"), raw("1"), raw("0"), string_value("")}),
                 list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")})}));
         }
@@ -2373,7 +2368,7 @@ LV gantt_dimension_table(const model::GanttChartPayload& data, bool points) {
                 fail("OOF1112", "$/Gantt/Series", "IDs and ordinal cache keys within uint32", "overflow", "Gantt series key is too large");
             rows.push_back(raw(std::to_string(item.id.value())));
             rows.push_back(list({raw("3"), gantt_dimension_value(item.id, item.value, item.text, next,
-                static_cast<std::uint64_t>(index) * 2u)}));
+                static_cast<std::uint64_t>((index - 1) % 16 + 1) * 2u)}));
         }
     }
     rows.push_back(raw("0"));
@@ -2514,7 +2509,7 @@ std::vector<std::tuple<model::ObjectId, std::string, std::string>> decode_gantt_
         fail("OOF1102", rows_path, "dimension rows matching declared count", describe(rows), "Gantt dimension table count is inconsistent");
     std::map<std::uint64_t, std::tuple<model::ObjectId, std::string, std::string, std::uint64_t>> by_id;
     std::set<std::uint64_t> referenced;
-    for (std::size_t i = 0; i < count; ++i) {
+    for (std::size_t i = 0; i <= count; ++i) {
         const std::size_t cursor = 3 + 2 * i;
         const auto key = integer_atom<std::uint64_t>(rows.items[cursor], child_path(rows_path, cursor));
         const LV& row = rows.items[cursor + 1];
@@ -2525,6 +2520,7 @@ std::vector<std::tuple<model::ObjectId, std::string, std::string>> decode_gantt_
         require_raw_constant(value.items[0], "8", child_path(rows_path, cursor + 1) + "/1/0");
         if (integer_atom<std::uint64_t>(value.items[1], child_path(rows_path, cursor + 1) + "/1/1") != key)
             fail("OOF1114", child_path(rows_path, cursor), std::to_string(key), describe(value), "Gantt dimension key differs from its native row ID");
+        if (key == 0) continue;
         const auto next = integer_atom<std::uint64_t>(value.items[4], child_path(rows_path, cursor + 1) + "/1/4");
         if (next != 0 && !referenced.insert(next).second)
             fail("OOF1114", child_path(rows_path, cursor + 1) + "/1/4", "unique next ID", std::to_string(next), "Gantt dimension chain branches");
@@ -2541,13 +2537,12 @@ std::vector<std::tuple<model::ObjectId, std::string, std::string>> decode_gantt_
             fail("OOF1114", child_path(rows_path, cursor), "unique Gantt dimension ID", std::to_string(key), "Gantt dimension ID is duplicated");
     }
     const std::size_t default_cursor = 3 + 2 * count;
-    require_raw_constant(rows.items[default_cursor], "0", child_path(rows_path, default_cursor));
     require_raw_constant(rows.items[default_cursor + 3], "1", child_path(rows_path, default_cursor + 3));
     require_raw_constant(rows.items[default_cursor + 4], "0", child_path(rows_path, default_cursor + 4));
     const auto palette_path = child_path(rows_path, default_cursor + 2);
     const LV& palette = rows.items[default_cursor + 2];
     require_list(palette, palette_path);
-    const std::size_t expected_palette = 2 * count + 1;
+    const std::size_t expected_palette = 2 * std::min<std::size_t>(count, 16) + 1;
     require_arity(palette, 2 + expected_palette, palette_path);
     require_raw_constant(palette.items[0], "0", child_path(palette_path, 0));
     if (integer_atom<std::uint32_t>(palette.items[1], child_path(palette_path, 1)) != expected_palette)
@@ -2597,7 +2592,7 @@ void require_gantt_dimension_table_match(const LV& actual, const LV& expected,
     }
     const auto keyed_rows = [&](const LV& rows, std::string_view rows_path) {
         std::map<std::uint64_t, std::string> by_key;
-        for (std::size_t i = 0; i < count; ++i) {
+        for (std::size_t i = 0; i <= count; ++i) {
             const auto cursor = 3 + 2 * i;
             const auto key = integer_atom<std::uint64_t>(rows.items[cursor], child_path(rows_path, cursor));
             if (!by_key.emplace(key, list_stream::dump_compact(rows.items[cursor + 1])).second)
@@ -2609,7 +2604,7 @@ void require_gantt_dimension_table_match(const LV& actual, const LV& expected,
     const auto expected_by_key = keyed_rows(expected_rows, child_path(path, 1));
     if (actual_by_key != expected_by_key)
         fail("OOF1114", child_path(path, 1), "same named row records by dimension ID", "row content differs", "Gantt dimension row differs from its canonical named value");
-    const std::size_t tail = 3 + 2 * count;
+    const std::size_t tail = 5 + 2 * count;
     for (std::size_t i = tail; i < actual_rows.items.size(); ++i) {
         if (list_stream::dump_compact(actual_rows.items[i]) != list_stream::dump_compact(expected_rows.items[i]))
             fail("OOF1114", child_path(path, 1) + "/" + std::to_string(i),

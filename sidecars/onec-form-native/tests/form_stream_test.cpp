@@ -602,14 +602,21 @@ void test_gantt_chart_named_storage_round_trip() {
     for (const std::size_t table_slot : {2u, 3u}) {
         auto& rows = gantt_record->items[2].items[table_slot].items[1].items;
         const auto dimensions = static_cast<std::size_t>(std::stoul(rows[2].atom)) - 1;
-        for (std::size_t left = 0; left < dimensions / 2; ++left) {
-            const auto right = dimensions - left - 1;
+        for (std::size_t left = 0; left < (dimensions + 1) / 2; ++left) {
+            const auto right = dimensions - left;
             std::swap(rows[3 + 2 * left], rows[3 + 2 * right]);
             std::swap(rows[4 + 2 * left], rows[4 + 2 * right]);
         }
     }
     const auto reordered_decode = form_stream::decode_document(reordered, "GanttReorderedRows");
     expect(reordered_decode.ok(), reordered_decode ? "" : reordered_decode.diagnostics().front().path + ": " + reordered_decode.diagnostics().front().message);
+
+    auto wrong_default = reordered;
+    auto* wrong_default_gantt = find_gantt_record(find_gantt_record, wrong_default);
+    wrong_default_gantt->items[2].items[3].items[1].items[4].items[1].items[10] =
+        list_stream::ListValue::raw_atom("0");
+    expect(!form_stream::decode_document(wrong_default, "GanttCorruptDefaultRow").ok(),
+        "Gantt reordered default row must still match its exact sentinel contract");
 
     auto platform_layout = encoded.value();
     auto* platform_gantt = find_gantt_record(find_gantt_record, platform_layout);
@@ -2167,6 +2174,79 @@ void test_label_decoration_observed_center_right_records() {
 {0}
 }
 )OOF", "Right");
+}
+
+void test_gantt_standard_palette_wraparound() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "GanttPaletteWrap";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::GanttChartPayload payload;
+    for (std::uint64_t index = 0; index < 18; ++index)
+        payload.series.push_back({model::ObjectId{71 + 3 * index}, "S" + std::to_string(index),
+            "Series " + std::to_string(index), std::nullopt});
+    for (std::uint64_t index = 0; index < 19; ++index)
+        payload.points.push_back({model::ObjectId{83 + 4 * index}, "P" + std::to_string(index),
+            "Point " + std::to_string(index), std::nullopt});
+    payload.intervals.push_back({model::ObjectId{155}, model::ObjectId{122},
+        model::DateValue{"2027-02-01T00:00:00"}, model::DateValue{"2027-02-03T00:00:00"}, "Wrap"});
+    model::ControlNode gantt{model::ObjectId{2}, "Schedule", std::move(payload)};
+    gantt.properties().set_explicit(model::PropertyId::from_name("AutoFullInterval"), false);
+    gantt.properties().set_explicit(model::PropertyId::from_name("FullIntervalBegin"), model::DateValue{"2027-01-01T00:00:00"});
+    gantt.properties().set_explicit(model::PropertyId::from_name("FullIntervalEnd"), model::DateValue{"2027-03-01T00:00:00"});
+    gantt.position.left.set(8);
+    gantt.position.top.set(8);
+    gantt.position.width.set(400);
+    gantt.position.height.set(240);
+    document.add_control(std::move(gantt));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), "Gantt palette candidate must encode dimensions beyond the former fixture limits");
+    const auto& info = encoded.value().items[1].items[2].items[2].items[1].items[2];
+    const auto& series_palette = info.items[3].items[1].items[41];
+    const auto& point_palette = info.items[2].items[1].items[43];
+    expect(series_palette.items[1].atom == "33" && point_palette.items[1].atom == "33",
+        "Gantt factory-derived palette must reuse its 33 distinct records after the 16-color cycle");
+    for (const auto* palette : {&series_palette, &point_palette}) {
+        expect(list_stream::dump_compact(palette->items[34].items[1]) ==
+                   "{0,{4,0,{5263440},0},{4,0,{15700567},0}}" &&
+                   list_stream::dump_compact(palette->items[4].items[1]) ==
+                   "{0,{4,0,{15700567},0},{4,0,{5410297},0}}",
+            "Gantt standard ColorManager cycle must wrap from its final RGB to the first and second RGB");
+    }
+    for (const auto slot : {2u, 3u}) {
+        const auto& rows = info.items[slot].items[1].items;
+        expect(rows[4].items[1].items[9].atom == (slot == 2 ? "6" : "4") &&
+                   rows[6].items[1].items[9].atom == (slot == 2 ? "4" : "2"),
+            "Gantt dimensions after ordinal 16 must reuse independently observed factory cache keys");
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "GanttPaletteWrap");
+    expect(decoded.ok(), "Gantt large palette candidate must decode to named dimensions");
+    const auto* restored = std::get_if<model::GanttChartPayload>(&decoded.value().find_control(model::ObjectId{2})->payload);
+    expect(restored && restored->series.size() == 18 && restored->points.size() == 19 &&
+               restored->series.back().id == model::ObjectId{122} && restored->points.back().id == model::ObjectId{155} &&
+               restored->intervals.size() == 1 && restored->intervals[0].text == "Wrap",
+        "Gantt candidate must retain collection order, final dimension references and interval text");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "Gantt large named graph must rebuild without palette drift");
+    auto interior_default = encoded.value();
+    auto& interior_info = interior_default.items[1].items[2].items[2].items[1].items[2];
+    for (const auto slot : {2u, 3u}) {
+        auto& rows = interior_info.items[slot].items[1].items;
+        const auto count = static_cast<std::size_t>(std::stoul(rows[2].atom)) - 1;
+        std::swap(rows[3 + 2 * count], rows[7]);
+        std::swap(rows[4 + 2 * count], rows[8]);
+    }
+    expect(form_stream::decode_document(interior_default, "GanttInteriorDefault").ok(),
+        "Gantt default ID0 may occupy an interior physical position in each dimension table");
+
+    auto malformed = encoded.value();
+    malformed.items[1].items[2].items[2].items[1].items[2].items[3].items[1].items[41]
+        .items[34].items[1].items[2].items[2].items[0] = list_stream::ListValue::raw_atom("0");
+    expect(!form_stream::decode_document(malformed, "GanttWrongWrappedSecondary").ok(),
+        "Gantt decoder must reject a changed secondary color rather than silently normalize it");
 }
 
 void test_label_enabled_and_tooltip_round_trip() {
@@ -6013,6 +6093,7 @@ int main() {
         test_attribute_allocator_is_separate_from_control_ids();
         test_usual_group_named_record_round_trip_and_rejections();
         test_gantt_chart_named_storage_round_trip();
+        test_gantt_standard_palette_wraparound();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_button_multiline_round_trip_and_validation();
