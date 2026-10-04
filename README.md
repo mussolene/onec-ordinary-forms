@@ -19,13 +19,15 @@ build/sidecars/onec-form-native/oof --help
 
 Для одного такого синтетического результата также пройден цикл штатной сборки EPF и строгой выгрузки Designer: публичный XML сохранился побайтово, в модуле изменились только окончания строк на CRLF. Границы этого эксперимента и проверки библиотек записаны в [карте механизма платформы](docs/platform-mechanism-extraction.md).
 
-По состоянию интеграционной ветки на 2026-10-04 бинарный цикл подтвержден для
-22 из 25 целевых типов: `Button`, `CalendarField`, `Chart`, `CheckBox`, `ChoiceField`,
-`CommandBar`, `Dendrogram`, `GanttChart`, `HTMLDocumentField`, `InputField`, `LabelDecoration`,
-`ListBox`, `Panel`, `PictureDecoration`, `ProgressBar`, `RadioButton`,
+По состоянию интеграционной ветки на 2026-10-05 бинарный цикл подтвержден для
+25 из 25 целевых типов: `Button`, `CalendarField`, `Chart`, `CheckBox`, `ChoiceField`,
+`CommandBar`, `Dendrogram`, `GanttChart`, `GeographicalSchemaField`,
+`GraphicalSchemaField`, `HTMLDocumentField`, `InputField`, `LabelDecoration`,
+`ListBox`, `Panel`, `PictureDecoration`, `PivotChart`, `ProgressBar`, `RadioButton`,
 `SpreadsheetDocumentField`, `Splitter`, `Table`, `TextDocumentField`, `TrackBar`
-и `UsualGroup`. Все двадцать два имеют статус PARTIAL, полностью покрытых типов нет.
-Это 88% типов, а не оценка
+и `UsualGroup`. Все двадцать пять имеют статус PARTIAL, полностью покрытых типов нет.
+У последних трех типов пока поддержано только стандартное состояние.
+Это 100% типов, а не оценка
 готовности продукта.
 Целевые 25 типов не включают
 `ActiveXControl`; XML-модель описывает 26 типов, но ее покрытие не доказывает

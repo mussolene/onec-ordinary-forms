@@ -2936,6 +2936,71 @@ struct DecodedControl {
     std::vector<model::PictureAsset> menu_assets;
 };
 
+std::size_t control_geometry_slot(std::string_view guid) {
+    return guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid ||
+        guid == model::metamodel::descriptor_for(model::ControlKind::geographical_schema_field).guid ? 4 : 3;
+}
+
+LV canonical_graphical_schema_field_info() {
+    return parse_constant(R"OOF({{19,1,{4,3,{-10},3},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},5,{{5,{{1,{4,3,{-10},3},1,20,20,3,6,6,{"N",10},7,{"N",10},8,{"N",10},9,{"N",10},13,{"N",0},16,{"N",0}}},0,0}},{0},0,0})OOF");
+}
+
+LV canonical_geographical_schema_field_info() {
+    return parse_constant("{19,1,{4,3,{-10},3},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,1,3,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+}
+
+LV canonical_geographical_schema() {
+    return parse_constant("{2,2,{{1,0,0,0},{0,0,0,0,0,{}},{1,{1,0},{8,2,0,{-20},1,100},{4,3,{-3},3},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},1,{4,3,{-10},3},0,0,0,95},{1,{8,2,0,{-20},1,100},{4,3,{-3},3},{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},1,{4,3,{-10},3},0,{},75,0,5,0,1},{{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},1,{4,3,{-10},3},0,25,5,0},{0,{}},0,1,0,0,0,0},{0},0}");
+}
+
+// Стандартное состояние Designer включает демонстрационную диаграмму без источника и ролей.
+LV canonical_default_pivot_chart_info() {
+    return parse_constant(R"OOF({3,{0,{11},{75,5,4,1,4,{4,0,{10053120},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,{1,1,{"ru","<Элемент 2>"}},1,0,0,2,{"U"},{"U"},0,{4,0,{13434624},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},1,{1,1,{"ru","<Элемент 3>"}},1,0,0,3,{"U"},{"U"},0,{4,0,{10053120},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},2,{1,1,{"ru","<Элемент 5>"}},1,0,0,4,{"U"},{"U"},0,{4,0,{13434624},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},3,{1,1,{"ru","<Элемент 6>"}},1,0,0,5,{"U"},{"U"},0,{4,0,{11837108},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},1,{1,1,{"ru","Сводная"}},0,0,0,1,{"U"},{"U"},0,1,4,{1,1,{"ru","<Элемент 2>"}},1,1,{4,0,{16762956},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},4,0,0,{"U"},{"U"},0,{1,1,{"ru","<Элемент 3>"}},1,2,{4,0,{7964671},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},4,0,0,{"U"},{"U"},0,{1,1,{"ru","<Элемент 5>"}},1,3,{4,0,{49407},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},4,0,0,{"U"},{"U"},0,{1,1,{"ru","<Элемент 6>"}},1,4,{4,0,{7258719},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},4,0,0,{"U"},{"U"},0,3,3,6,0,", ",4,{1,0},{1,0},{4,3,{-3},3},0,0,{1,1,{"ru","СводнаяДиаграмма1"}},1,1,{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},0,{4,3,{-1},3},1,{4,3,{-1},3},1,{4,3,{-1},3},0,{4,0,{16777215},0},{4,3,{-3},3},{4,3,{-3},3},{4,3,{-3},3},{8,3,0,1,100},{8,3,0,1,100},{8,3,0,1,100},1,1,1,1,1,{1,0},0,{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},{4,4,{0},4},1,1,0,4,30,1,0,0,0,0,1,0,0,1,0,1,1,2,{1,0},1,0,0,1,{4,0,{169},0},0,0,{1,0,0,0},0,180,5,1,0,4,{4,0,{11119017},0},1,0,1,0,0,0,0,2.3125e-1,0,7.6875e-1,3.527777777777778e-1,0,3.138888888888889e-1,7.6875e-1,0,0,9.611111111111111e-1,0,{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"",0,0,{"N",2},{"U"},"<Элемент 1> <Элемент 2>"\000A<Элемент 1> <Элемент 2>"\000A2",{"N",3},{"U"},"<Элемент 1> <Элемент 2>"\000A<Элемент 1> <Элемент 3>"\000A3",{"N",3},{"U"},"<Элемент 1> <Элемент 2>"\000A<Элемент 4> <Элемент 5>"\000A3",{"N",1},{"U"},"<Элемент 1> <Элемент 2>"\000A<Элемент 4> <Элемент 6>"\000A1",{"N",2},{"U"},"<Элемент 1> <Элемент 3>"\000A<Элемент 1> <Элемент 2>"\000A2",{"N",4},{"U"},"<Элемент 1> <Элемент 3>"\000A<Элемент 1> <Элемент 3>"\000A4",{"N",2},{"U"},"<Элемент 1> <Элемент 3>"\000A<Элемент 4> <Элемент 5>"\000A2",{"N",3},{"U"},"<Элемент 1> <Элемент 3>"\000A<Элемент 4> <Элемент 6>"\000A3",{"N",2},{"U"},"<Элемент 4> <Элемент 5>"\000A<Элемент 1> <Элемент 2>"\000A2",{"N",4},{"U"},"<Элемент 4> <Элемент 5>"\000A<Элемент 1> <Элемент 3>"\000A4",{"N",4},{"U"},"<Элемент 4> <Элемент 5>"\000A<Элемент 4> <Элемент 5>"\000A4",{"N",3},{"U"},"<Элемент 4> <Элемент 5>"\000A<Элемент 4> <Элемент 6>"\000A3",{"N",3},{"U"},"<Элемент 4> <Элемент 6>"\000A<Элемент 1> <Элемент 2>"\000A3",{"N",2},{"U"},"<Элемент 4> <Элемент 6>"\000A<Элемент 1> <Элемент 3>"\000A2",{"N",5},{"U"},"<Элемент 4> <Элемент 6>"\000A<Элемент 4> <Элемент 5>"\000A5",{"N",4},{"U"},"<Элемент 4> <Элемент 6>"\000A<Элемент 4> <Элемент 6>"\000A4",14,2,{8,3,0,1,100},1,{4,4,{0},4},{3,0,{0},1,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},1,1,1,0,0,95,1e-1,1e-1,3e-2,{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},{4,0,{0},0},2,255,0,7352523,00000000-0000-0000-0000-000000000000,0,{0,0},{0,0},{0,0},{0,0},{0,0},0,{0,0,{0,1,0,1,0},0,0},{0,0,{0,1,0,1,0},0,0},0,0,2,-2,1,10,1,20,0,0,{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},0,0,{4,4,{0},4},{4,4,{0},4},0,{{4,4,{0},4}},{{4,4,{0},4}},{{4,4,{0},4}},{{4,4,{0},4}},{{4,0,{10053120},0},4,0,0,0,"",{1,0},{1,0},{1,0},0},{{4,0,{13434624},0},4,0,0,0,"",{1,0},{1,0},{1,0},0},{{4,0,{10053120},0},4,0,0,0,"",{1,0},{1,0},{1,0},0},{{4,0,{13434624},0},4,0,0,0,"",{1,0},{1,0},{1,0},0},{{4,4,{0},4},4,0,0,0,"",{1,0},{1,0},{1,0},0},0,0,0.23125,0,0.76875,0.352777777777777777777777778,0,0.313888888888888888888888889,0.76875,0,0,0.961111111111111111111111111,0,0,0,0,0,0.17,0,0.83,0.08,0,0,0.83,0,0,0.92,{0,0},{0,0},{0,0},{0,0},{0,14,{4,4,{0},4},{4,4,{0},4},0,0},{0,14,{4,4,{0},4},{4,4,{0},4},0,0},0,0,{0,0,0,0,0},{0,0,0,0},0,{{1,{1,1,{"#","<Элемент 1> <Элемент 2>"\000A<Элемент 1> <Элемент 2>"\000A2"}},0},0},{{1,{1,1,{"#","<Элемент 1> <Элемент 2>"\000A<Элемент 1> <Элемент 3>"\000A3"}},0},0},{{1,{1,1,{"#","<Элемент 1> <Элемент 2>"\000A<Элемент 4> <Элемент 5>"\000A3"}},0},0},{{1,{1,1,{"#","<Элемент 1> <Элемент 2>"\000A<Элемент 4> <Элемент 6>"\000A1"}},0},0},{{1,{1,1,{"#","<Элемент 1> <Элемент 3>"\000A<Элемент 1> <Элемент 2>"\000A2"}},0},0},{{1,{1,1,{"#","<Элемент 1> <Элемент 3>"\000A<Элемент 1> <Элемент 3>"\000A4"}},0},0},{{1,{1,1,{"#","<Элемент 1> <Элемент 3>"\000A<Элемент 4> <Элемент 5>"\000A2"}},0},0},{{1,{1,1,{"#","<Элемент 1> <Элемент 3>"\000A<Элемент 4> <Элемент 6>"\000A3"}},0},0},{{1,{1,1,{"#","<Элемент 4> <Элемент 5>"\000A<Элемент 1> <Элемент 2>"\000A2"}},0},0},{{1,{1,1,{"#","<Элемент 4> <Элемент 5>"\000A<Элемент 1> <Элемент 3>"\000A4"}},0},0},{{1,{1,1,{"#","<Элемент 4> <Элемент 5>"\000A<Элемент 4> <Элемент 5>"\000A4"}},0},0},{{1,{1,1,{"#","<Элемент 4> <Элемент 5>"\000A<Элемент 4> <Элемент 6>"\000A3"}},0},0},{{1,{1,1,{"#","<Элемент 4> <Элемент 6>"\000A<Элемент 1> <Элемент 2>"\000A3"}},0},0},{{1,{1,1,{"#","<Элемент 4> <Элемент 6>"\000A<Элемент 1> <Элемент 3>"\000A2"}},0},0},{{1,{1,1,{"#","<Элемент 4> <Элемент 6>"\000A<Элемент 4> <Элемент 5>"\000A5"}},0},0},{{1,{1,1,{"#","<Элемент 4> <Элемент 6>"\000A<Элемент 4> <Элемент 6>"\000A4"}},0},0},,60,{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{0,0,{0,1,0,1,0},0,0},0,0,0,0,0,0,0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4}}},{0,{0,{3,0,1,0,{1,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761},0},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},{0,{3,0,1,0,{1,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761},0},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},{0,0},1,1},1,6,12,1,2,1,0,{4,3,{-7},3},{4,3,{-3},3},1})OOF");
+}
+
+DecodedControl decode_default_complex_control(
+    const LV& record, std::string_view path, const GeometryContext& context,
+    model::ControlKind kind) {
+    const auto& descriptor = model::metamodel::descriptor_for(kind);
+    const auto geometry_slot = control_geometry_slot(descriptor.guid);
+    require_arity(record, geometry_slot + 3, path);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (id == 0 || id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        fail("OOF1122", child_path(path, 1), "positive int64 control ID", std::to_string(id), "Default complex control ID is invalid");
+    if (kind == model::ControlKind::graphical_schema_field) {
+        require_exact(record.items[2], canonical_graphical_schema_field_info(), child_path(path, 2),
+            "GraphicalSchemaField contains nondefault properties or nonempty schema content");
+    } else if (kind == model::ControlKind::pivot_chart) {
+        require_exact(record.items[2], canonical_default_pivot_chart_info(), child_path(path, 2),
+            "PivotChart contains nondefault diagram, source, role, or settings values");
+    } else {
+        require_exact(record.items[2], canonical_geographical_schema_field_info(), child_path(path, 2),
+            "GeographicalSchemaField contains nondefault properties");
+        require_exact(record.items[3], canonical_geographical_schema(), child_path(path, 3),
+            "GeographicalSchemaField contains nondefault or nonempty schema content");
+    }
+    auto geometry = decode_geometry(record.items[geometry_slot], child_path(path, geometry_slot), context);
+    const auto metadata_slot = geometry_slot + 1;
+    const auto& metadata = record.items[metadata_slot];
+    const auto metadata_path = child_path(path, metadata_slot);
+    require_arity(metadata, 6, metadata_path);
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Default complex control name is required");
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "Default complex control contains unsupported metadata");
+    require_exact(record.items[geometry_slot + 2], list({raw("0")}), child_path(path, geometry_slot + 2),
+        "Default complex control cannot contain form controls");
+    model::ControlPayload payload = kind == model::ControlKind::graphical_schema_field
+        ? model::ControlPayload{model::GraphicalSchemaFieldPayload{}}
+        : kind == model::ControlKind::pivot_chart
+        ? model::ControlPayload{model::PivotChartPayload{}}
+        : model::ControlPayload{model::GeographicalSchemaFieldPayload{}};
+    model::ControlNode control{model::ObjectId{id}, name, std::move(payload)};
+    control.position = std::move(geometry.position);
+    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
+}
+
 LV canonical_empty_gantt_info() {
     return list({
         raw("19"),
@@ -7083,6 +7148,31 @@ LV encode_text_document_field(const model::ControlNode& control, const GeometryC
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}), list({raw("0")})});
 }
 
+LV encode_default_complex_control(const model::ControlNode& control, const GeometryContext& context) {
+    const auto& descriptor = model::metamodel::descriptor_for(control.kind());
+    const std::string path = "$/" + std::string(descriptor.public_name);
+    if (control.id.value() == 0 || control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        fail("OOF1122", path, "positive int64 control ID", std::to_string(control.id.value()), "Default complex control ID is invalid");
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty())
+        fail("OOF1122", path, "named default complex control without DataPath, events, extensions, or children", control.name,
+            "Default complex control uses an unsupported storage concept");
+    require_allowed_properties(control.properties(), {}, path);
+    std::vector<LV> fields{raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value()))};
+    if (control.kind() == model::ControlKind::graphical_schema_field) {
+        fields.push_back(canonical_graphical_schema_field_info());
+    } else if (control.kind() == model::ControlKind::pivot_chart) {
+        fields.push_back(canonical_default_pivot_chart_info());
+    } else {
+        fields.push_back(canonical_geographical_schema_field_info());
+        fields.push_back(canonical_geographical_schema());
+    }
+    fields.push_back(encode_geometry(control.position, context, IncomingAnchorLists{}));
+    fields.push_back(list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}));
+    fields.push_back(list({raw("0")}));
+    return list(std::move(fields));
+}
+
 LV encode_calendar_field(const model::ControlNode& control, const GeometryContext& context) {
     if (control.kind() != model::ControlKind::calendar_field || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
@@ -7993,7 +8083,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 require_list(record, record_path);
                 static_cast<void>(raw_atom(at(record, 1, record_path), child_path(record_path, 1)));
                 const std::string child_guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
-                const std::size_t geometry_slot = child_guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid ? 4 : 3;
+                const std::size_t geometry_slot = control_geometry_slot(child_guid);
                 const auto geometry_path = child_path(record_path, geometry_slot);
                 const auto& geometry = at(record, geometry_slot, record_path);
                 std::size_t ordinal_slot = 0;
@@ -8020,7 +8110,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     child_table.items.begin() + 1, child_table.items.end(), [&](const LV& record) {
                         std::size_t ordinal_slot = 0;
                         const auto guid = raw_atom(at(record, 0, path), child_path(path, 0));
-                        const auto slot = guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid ? 4 : 3;
+                        const auto slot = control_geometry_slot(guid);
                         const auto page_ordinal = geometry_page_ordinal(at(record, slot, path), path, ordinal_slot);
                         return page_ordinal.page == page_index;
                     }));
@@ -8075,6 +8165,12 @@ Result<model::OrdinaryFormDocument> decode_document(
                     }
                     else if (guid == spreadsheet_descriptor.guid) child = decode_spreadsheet_document_field(record, record_path, context);
                     else if (guid == text_document_descriptor.guid) child = decode_text_document_field(record, record_path, context);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::pivot_chart).guid)
+                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::pivot_chart);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::graphical_schema_field).guid)
+                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::graphical_schema_field);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::geographical_schema_field).guid)
+                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::geographical_schema_field);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid ||
                              guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid ||
@@ -8208,7 +8304,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                 const auto found = expected_sibling_incoming.find(child.control.id.value());
                 const IncomingAnchorLists empty;
                 require_incoming_graph(child.incoming, found == expected_sibling_incoming.end() ? empty : found->second,
-                    child_path(child_record_paths.at(child.control.id.value()), 3));
+                    child_path(child_record_paths.at(child.control.id.value()),
+                        control_geometry_slot(model::metamodel::descriptor_for(child.control.kind()).guid)));
                 pending_controls.push_back(child);
             }
         };
@@ -8557,6 +8654,10 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_spreadsheet_document_field(*control, context);
                 } else if (control->kind() == model::ControlKind::text_document_field) {
                     record = encode_text_document_field(*control, context);
+                } else if (control->kind() == model::ControlKind::graphical_schema_field ||
+                           control->kind() == model::ControlKind::geographical_schema_field ||
+                           control->kind() == model::ControlKind::pivot_chart) {
+                    record = encode_default_complex_control(*control, context);
                 } else if (control->kind() == model::ControlKind::input_field) {
                     record = encode_input_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::check_box) {
@@ -8660,7 +8761,7 @@ Result<list_stream::ListValue> encode_document(
             for (auto& child : children) {
                 const auto found = child_incoming.find(child.control->id.value());
                 const IncomingAnchorLists empty;
-                child.record.items[child.control->kind() == model::ControlKind::chart ? 4 : 3] = encode_geometry(child.control->position,
+                child.record.items[control_geometry_slot(model::metamodel::descriptor_for(child.control->kind()).guid)] = encode_geometry(child.control->position,
                     GeometryContext{owner, child.page_index, static_cast<std::uint32_t>(child.ordinal)},
                     found == child_incoming.end() ? empty : found->second);
             }
