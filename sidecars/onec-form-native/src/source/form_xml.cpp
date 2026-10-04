@@ -686,6 +686,72 @@ model::StyleReference parse_style_reference(xmlNodePtr node) {
     return std::monostate{};
 }
 
+constexpr std::array<std::pair<model::ControlBorderType, std::string_view>, 9> border_type_names{{
+    {model::ControlBorderType::without_border, "WithoutBorder"},
+    {model::ControlBorderType::single, "Single"},
+    {model::ControlBorderType::double_line, "Double"},
+    {model::ControlBorderType::embossed, "Embossed"},
+    {model::ControlBorderType::indented, "Indented"},
+    {model::ControlBorderType::underline, "Underline"},
+    {model::ControlBorderType::double_underline, "DoubleUnderline"},
+    {model::ControlBorderType::overline, "Overline"},
+    {model::ControlBorderType::rounded, "Rounded"},
+}};
+
+model::BorderValue parse_border(xmlNodePtr node) {
+    static constexpr std::string_view allowed_attributes[] = {
+        "kind", "borderType", "width", "styleName", "styleObjectId", "styleUuid"};
+    std::set<std::string_view> seen;
+    for (xmlAttrPtr attribute = node->properties; attribute != nullptr; attribute = attribute->next) {
+        const std::string_view name(reinterpret_cast<const char*>(attribute->name));
+        if (attribute->ns != nullptr ||
+            std::ranges::find(allowed_attributes, name) == std::end(allowed_attributes) ||
+            !seen.insert(name).second) {
+            fail("OOF2003", node, {}, std::string(name), "one named Border attribute", "unsupported or duplicate",
+                "Border contains an unsupported or duplicate attribute");
+        }
+    }
+    for (xmlNodePtr child = node->children; child != nullptr; child = child->next) {
+        if (child->type == XML_ELEMENT_NODE ||
+            ((child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) &&
+             !trim_ascii(node_text(child)).empty())) {
+            fail("OOF2003", node, {}, "Border", "attributes only", "content",
+                "Border cannot contain elements or text");
+        }
+    }
+    model::BorderValue value;
+    const auto kind = required_attribute(node, "kind");
+    if (kind == "absolute") {
+        if (seen.contains("styleName") || seen.contains("styleObjectId") || seen.contains("styleUuid")) {
+            fail("OOF2003", node, {}, "Border", "absolute border without style attributes", "style",
+                "Absolute Border must not carry a style reference");
+        }
+        const auto type_name = required_attribute(node, "borderType");
+        const auto type = std::ranges::find(border_type_names, type_name,
+            &std::pair<model::ControlBorderType, std::string_view>::second);
+        if (type == border_type_names.end()) {
+            fail("OOF2003", node, {}, "borderType", "ControlBorderType name", type_name,
+                "Border contains an unknown ControlBorderType");
+        }
+        value.border_type = type->first;
+        value.width = parse_integer<std::uint32_t>(required_attribute(node, "width"), node, "width");
+    } else if (kind == "styleReference") {
+        value.kind = model::BorderKind::style_reference;
+        if (seen.contains("borderType") || seen.contains("width")) {
+            fail("OOF2003", node, {}, "Border", "style border without absolute attributes", "absolute fields",
+                "Style Border must not carry borderType or width");
+        }
+        value.style = parse_style_reference(node);
+    } else {
+        fail("OOF2003", node, {}, "kind", "absolute|styleReference", kind, "Unknown Border kind");
+    }
+    if (!model::valid_border_value(value)) {
+        fail("OOF2003", node, {}, "Border", "valid typed Border", "invalid fields",
+            "Border type, width, or style reference is invalid");
+    }
+    return value;
+}
+
 model::ColorKind parse_color_kind(std::string_view value, xmlNodePtr node) {
     if (value == "absolute") {
         return model::ColorKind::absolute;
@@ -922,6 +988,8 @@ model::PropertyValue parse_property_value(
             return parse_enumeration(node);
         case mm::ValueCodec::color:
             return parse_color(node);
+        case mm::ValueCodec::border:
+            return parse_border(node);
         case mm::ValueCodec::font:
             return parse_font(node);
         case mm::ValueCodec::shortcut:
@@ -999,6 +1067,9 @@ bool equals_descriptor_default(
         case mm::DefaultKind::font:
             return canonical == "automatic" && std::holds_alternative<model::FontValue>(value) &&
                 std::get<model::FontValue>(value) == model::FontValue{};
+        case mm::DefaultKind::border:
+            return canonical == "WithoutBorder:0" && std::holds_alternative<model::BorderValue>(value) &&
+                std::get<model::BorderValue>(value) == model::BorderValue{};
         case mm::DefaultKind::shortcut:
             return canonical == "None" && std::holds_alternative<model::ShortcutValue>(value) &&
                 std::get<model::ShortcutValue>(value) == model::ShortcutValue{};
@@ -2379,6 +2450,29 @@ private:
         }
     }
 
+    void write_border(
+        std::string_view name,
+        const model::BorderValue& value,
+        std::string_view object_id
+    ) {
+        if (!model::valid_border_value(value)) {
+            serialization_fail(std::string(object_id), std::string(name), "valid typed Border", "invalid fields",
+                "Border type, width, or style reference is invalid");
+        }
+        XmlAttributes attributes;
+        if (value.kind == model::BorderKind::absolute) {
+            const auto type = std::ranges::find(border_type_names, value.border_type,
+                &std::pair<model::ControlBorderType, std::string_view>::first);
+            attributes.emplace_back("kind", "absolute");
+            attributes.emplace_back("borderType", std::string(type->second));
+            attributes.emplace_back("width", std::to_string(value.width));
+        } else {
+            attributes.emplace_back("kind", "styleReference");
+            append_style_attributes(attributes, value.style, object_id, name);
+        }
+        writer_.empty(name, attributes);
+    }
+
     void write_type_domain(
         std::string_view name,
         const model::TypeDomainPatternValue& value,
@@ -2641,6 +2735,9 @@ private:
             }
             case mm::ValueCodec::color:
                 write_color(name, require_value<model::ColorValue>(value, object_id, name, "color"), object_id);
+                return;
+            case mm::ValueCodec::border:
+                write_border(name, require_value<model::BorderValue>(value, object_id, name, "border"), object_id);
                 return;
             case mm::ValueCodec::font:
                 write_font(name, require_value<model::FontValue>(value, object_id, name, "font"), object_id);

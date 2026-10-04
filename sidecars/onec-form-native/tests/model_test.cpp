@@ -579,8 +579,9 @@ void test_help_metamodel() {
     }
     expect(
         find_property(ControlKind::input_field, "Border")->value_codec ==
-            ValueCodec::unclassified,
-        "incomplete Border skeletons must not become product value codecs");
+            ValueCodec::border &&
+        find_property(ControlKind::input_field, "Border")->persistence == PersistenceClass::unclassified,
+        "typed Border codec must not classify unproven InputField border storage");
     expect(
         find_property(ControlKind::input_field, "ValueType")->value_codec ==
             ValueCodec::type_domain,
@@ -1199,6 +1200,64 @@ void test_chart_number_lexical_validation() {
         "Chart model validation must reject non-decimal numeric values such as NaN");
 }
 
+void test_border_value_invariants() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+    const auto* descriptor = find_property(ControlKind::command_bar, "Border");
+    expect(descriptor && descriptor->value_codec == ValueCodec::border &&
+        descriptor->persistence == PersistenceClass::persisted_editable &&
+        descriptor->storage_codec == StorageCodec::control_base &&
+        descriptor->default_value.kind == DefaultKind::border &&
+        descriptor->default_value.canonical == "WithoutBorder:0",
+        "CommandBar Border must have a typed persisted descriptor and proven default");
+    const auto validate = [](const BorderValue& border) {
+        Form form; form.id = ObjectId{1}; form.name = "Border";
+        form.children = {ControlRef{ObjectId{2}}};
+        OrdinaryFormDocument document(std::move(form));
+        ControlNode bar{ObjectId{2}, "Tools", CommandBarPayload{}};
+        bar.properties().set_explicit(PropertyId::from_name("Border"), border);
+        document.add_control(std::move(bar));
+        return document.validate();
+    };
+    BorderValue value;
+    expect(validate(value).ok(), "default absolute Border must validate");
+    value.border_type = ControlBorderType::double_line;
+    for (std::uint32_t width = 0; width <= 5; ++width) {
+        value.width = width;
+        expect(validate(value).ok(), "absolute Border integer width 0..5 must validate");
+    }
+    value.width = 6;
+    expect(validate(value).has(InvariantCode::invalid_property), "Border width 6 must fail model validation");
+    value.width = 2; value.border_type = ControlBorderType::without_border;
+    expect(!validate(value).ok(), "WithoutBorder width above 1 must fail");
+    value.border_type = ControlBorderType::rounded;
+    expect(!validate(value).ok(), "Rounded width 2 must fail");
+    value.width = 1;
+    expect(validate(value).ok(), "generic Rounded width 1 remains a valid value");
+    value.border_type = static_cast<ControlBorderType>(255);
+    expect(!validate(value).ok(), "invalid ControlBorderType enum must fail");
+    value = BorderValue{}; value.kind = static_cast<BorderKind>(255);
+    expect(!validate(value).ok(), "invalid BorderKind enum must fail");
+    value = BorderValue{}; value.style = QualifiedName{"StyleBorders.ControlBorder"};
+    expect(!validate(value).ok(), "absolute Border must reject a style reference");
+    value.kind = BorderKind::style_reference;
+    expect(validate(value).ok(), "named style Border must validate");
+    value.width = 1;
+    expect(!validate(value).ok(), "style Border must reject unused absolute width");
+    value.width = 0; value.border_type = ControlBorderType::single;
+    expect(!validate(value).ok(), "style Border must reject unused absolute type");
+    value.border_type = ControlBorderType::without_border; value.style = QualifiedName{};
+    expect(!validate(value).ok(), "style Border must reject empty name");
+    value.style = std::monostate{};
+    expect(!validate(value).ok(), "style Border must reject missing reference");
+    value.style = CompositeIdValue{5, UuidValue{"12345678-1234-1234-1234-123456789abc"}, false};
+    expect(validate(value).ok(), "composite style Border must validate");
+    value.style = CompositeIdValue{0, UuidValue{"00000000-0000-0000-0000-000000000000"}, false};
+    expect(!validate(value).ok(), "style Border must reject null composite reference");
+    value.style = CompositeIdValue{5, UuidValue{"invalid"}, false};
+    expect(!validate(value).ok(), "style Border must reject malformed UUID");
+}
+
 }  // namespace
 
 int main() {
@@ -1226,6 +1285,7 @@ int main() {
         test_duplicate_bindings_rejected();
         test_page_position_invariants();
         test_chart_number_lexical_validation();
+        test_border_value_invariants();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';
         return 1;

@@ -1852,6 +1852,97 @@ void test_command_bar_buttons_xml_only_contract() {
         "CommandBar typed Buttons and Actions must survive XML-only round-trip");
 }
 
+void test_command_bar_border_xml_contract() {
+    const auto xml_for = [](std::string_view border) {
+        return std::string{"<Form id=\"1\" name=\"Border\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+            "<CommandBar id=\"2\" name=\"Tools\"><Position/>"} + std::string(border) +
+            "</CommandBar></ChildItems></Form>";
+    };
+    const auto round_trip = [&](std::string_view border, const model::BorderValue& expected) {
+        auto parsed = source::parse_form_xml(xml_for(border));
+        expect(parsed.ok(), "valid Border XML must parse and pass generated schema");
+        const auto* property = parsed.value().find_control(model::ObjectId{2})->properties().find(
+            model::PropertyId::from_name("Border"));
+        expect(property && std::get<model::BorderValue>(property->value) == expected,
+            "Border XML must retain typed fields");
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok(), "typed Border must serialize");
+        auto reparsed = source::parse_form_xml(serialized.value());
+        expect(reparsed.ok(), "serialized Border must parse");
+        const auto* repeated = reparsed.value().find_control(model::ObjectId{2})->properties().find(
+            model::PropertyId::from_name("Border"));
+        expect(repeated && std::get<model::BorderValue>(repeated->value) == expected,
+            "typed Border must round-trip symmetrically");
+    };
+    constexpr std::array<std::pair<model::ControlBorderType, std::string_view>, 9> types{{
+        {model::ControlBorderType::without_border, "WithoutBorder"},
+        {model::ControlBorderType::single, "Single"},
+        {model::ControlBorderType::double_line, "Double"},
+        {model::ControlBorderType::embossed, "Embossed"},
+        {model::ControlBorderType::indented, "Indented"},
+        {model::ControlBorderType::underline, "Underline"},
+        {model::ControlBorderType::double_underline, "DoubleUnderline"},
+        {model::ControlBorderType::overline, "Overline"},
+        {model::ControlBorderType::rounded, "Rounded"},
+    }};
+    for (const auto& [type, name] : types) {
+        model::BorderValue expected; expected.border_type = type; expected.width = 1;
+        round_trip("<Border kind=\"absolute\" borderType=\"" + std::string(name) + "\" width=\"1\"/>", expected);
+    }
+    for (std::uint32_t width = 0; width <= 5; ++width) {
+        model::BorderValue expected; expected.border_type = model::ControlBorderType::double_line; expected.width = width;
+        round_trip("<Border kind=\"absolute\" borderType=\"Double\" width=\"" + std::to_string(width) + "\"/>", expected);
+    }
+    model::BorderValue style; style.kind = model::BorderKind::style_reference;
+    style.style = model::QualifiedName{"StyleBorders.ControlBorder"};
+    round_trip("<Border kind=\"styleReference\" styleName=\"StyleBorders.ControlBorder\"/>", style);
+    style.style = model::CompositeIdValue{5, model::UuidValue{"12345678-1234-1234-1234-123456789abc"}, false};
+    round_trip("<Border kind=\"styleReference\" styleObjectId=\"5\" styleUuid=\"12345678-1234-1234-1234-123456789abc\"/>", style);
+    auto default_document = source::parse_form_xml(xml_for("<Border kind=\"absolute\" borderType=\"WithoutBorder\" width=\"0\"/>"));
+    expect(default_document.ok() && !default_document.value().find_control(model::ObjectId{2})->properties().find(
+        model::PropertyId::from_name("Border")), "default Border must be implicit after parsing");
+    const auto document_with_border = [&](const model::BorderValue& border) {
+        model::OrdinaryFormDocument document(default_document.value().form());
+        auto bar = *default_document.value().find_control(model::ObjectId{2});
+        bar.properties().set_explicit(model::PropertyId::from_name("Border"), border);
+        document.add_control(std::move(bar));
+        return document;
+    };
+    const auto omitted = source::serialize_form_xml(document_with_border(model::BorderValue{}));
+    expect(omitted.ok() && omitted.value().find("<Border ") == std::string::npos,
+        "explicit default Border must serialize as omitted");
+
+    for (const auto border : {
+        "<Border kind=\"automatic\"/>",
+        "<Border kind=\"absolute\" width=\"1\"/>",
+        "<Border kind=\"absolute\" borderType=\"Single\"/>",
+        "<Border kind=\"absolute\" borderType=\"Unknown\" width=\"1\"/>",
+        "<Border kind=\"absolute\" borderType=\"Single\" width=\"6\"/>",
+        "<Border kind=\"absolute\" borderType=\"Single\" width=\"-1\"/>",
+        "<Border kind=\"absolute\" borderType=\"Single\" width=\"1.5\"/>",
+        "<Border kind=\"absolute\" borderType=\"WithoutBorder\" width=\"2\"/>",
+        "<Border kind=\"absolute\" borderType=\"Rounded\" width=\"0\"/>",
+        "<Border kind=\"absolute\" borderType=\"Single\" width=\"1\" styleName=\"StyleBorders.ControlBorder\"/>",
+        "<Border kind=\"styleReference\" styleName=\"StyleBorders.ControlBorder\" borderType=\"WithoutBorder\"/>",
+        "<Border kind=\"styleReference\" styleName=\"StyleBorders.ControlBorder\" width=\"0\"/>",
+        "<Border kind=\"styleReference\"/>",
+        "<Border kind=\"styleReference\" styleName=\"\"/>",
+        "<Border kind=\"styleReference\" styleObjectId=\"5\"/>",
+        "<Border kind=\"styleReference\" styleObjectId=\"0\" styleUuid=\"00000000-0000-0000-0000-000000000000\"/>",
+        "<Border kind=\"styleReference\" styleName=\"StyleBorders.ControlBorder\" styleObjectId=\"5\" styleUuid=\"12345678-1234-1234-1234-123456789abc\"/>",
+        "<Border kind=\"absolute\" borderType=\"Single\" width=\"1\" extra=\"1\"/>",
+        "<Border kind=\"absolute\" borderType=\"Single\" width=\"1\"><Width>1</Width></Border>",
+        "<Border kind=\"absolute\" borderType=\"Single\" width=\"1\">1</Border>",
+        "<Border kind=\"absolute\" borderType=\"Single\" width=\"1\" width=\"2\"/>",
+        "<Border kind=\"absolute\" borderType=\"Single\" width=\"1\"/><Border kind=\"absolute\" borderType=\"Single\" width=\"2\"/>"}) {
+        expect(!source::parse_form_xml(xml_for(border)).ok(), "invalid Border XML must be rejected");
+    }
+    model::BorderValue invalid; invalid.width = 6;
+    expect(!source::serialize_form_xml(document_with_border(invalid)).ok(), "writer must reject invalid model Border");
+    invalid = model::BorderValue{}; invalid.kind = model::BorderKind::style_reference;
+    expect(!source::serialize_form_xml(document_with_border(invalid)).ok(), "writer must reject style Border without a reference");
+}
+
 }  // namespace
 
 int main() {
@@ -1892,6 +1983,7 @@ int main() {
         test_progress_bar_xml_only_contract();
         test_command_bar_buttons_xml_only_contract();
         test_command_bar_default_button_xml_contract();
+        test_command_bar_border_xml_contract();
         test_main_panel_typed_xml_contract();
         test_picture_decoration_enabled_tooltip_xml_roundtrip();
         test_picture_decoration_standard_picture_xml_roundtrip();

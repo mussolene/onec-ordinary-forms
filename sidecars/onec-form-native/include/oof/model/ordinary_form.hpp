@@ -288,6 +288,34 @@ struct QualifiedName {
 
 using StyleReference = std::variant<std::monostate, CompositeIdValue, QualifiedName>;
 
+enum class BorderKind : std::uint8_t {
+    absolute,
+    style_reference,
+};
+
+enum class ControlBorderType : std::uint8_t {
+    without_border,
+    single,
+    double_line,
+    embossed,
+    indented,
+    underline,
+    double_underline,
+    overline,
+    rounded,
+};
+
+struct BorderValue {
+    BorderKind kind = BorderKind::absolute;
+    ControlBorderType border_type = ControlBorderType::without_border;
+    std::uint32_t width = 0;
+    StyleReference style;
+
+    friend bool operator==(const BorderValue&, const BorderValue&) = default;
+};
+
+[[nodiscard]] bool valid_border_value(const BorderValue& value) noexcept;
+
 enum class ColorKind : std::uint8_t {
     absolute,
     automatic,
@@ -401,6 +429,7 @@ using PropertyValue = std::variant<
     CompositeIdValue,
     TypeDomainPatternValue,
     EnumerationValue,
+    BorderValue,
     ColorValue,
     FontValue,
     PictureRef,

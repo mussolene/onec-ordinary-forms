@@ -888,6 +888,67 @@ LV encode_control_font(const model::FontValue& font, std::string_view property_p
     }
 }
 
+constexpr std::array<std::pair<model::ControlBorderType, std::uint32_t>, 8> native_border_types{{
+    {model::ControlBorderType::without_border, 0}, {model::ControlBorderType::single, 1},
+    {model::ControlBorderType::double_line, 200}, {model::ControlBorderType::embossed, 2},
+    {model::ControlBorderType::indented, 3}, {model::ControlBorderType::underline, 4},
+    {model::ControlBorderType::double_underline, 5}, {model::ControlBorderType::overline, 7}}};
+
+LV encode_control_border(const model::BorderValue& border, std::string_view path) {
+    if (border.kind == model::BorderKind::style_reference) {
+        const auto* name = std::get_if<model::QualifiedName>(&border.style);
+        if (name == nullptr || name->value != "StyleBorders.ControlBorder" ||
+            border.border_type != model::ControlBorderType::without_border || border.width != 0)
+            fail("OOF1122", std::string(path), "named StyleBorders.ControlBorder without absolute fields",
+                "unsupported style border", "Border style is unsupported");
+        return parse_constant("{3,1,{-18},0,0,0}");
+    }
+    const auto type = std::ranges::find(native_border_types, border.border_type, [](const auto& entry) { return entry.first; });
+    if (border.kind != model::BorderKind::absolute || type == native_border_types.end() ||
+        !std::holds_alternative<std::monostate>(border.style) || border.width > 5 ||
+        (border.border_type == model::ControlBorderType::without_border && border.width > 1))
+        fail("OOF1122", std::string(path), "supported absolute Border type and integer width 0..5",
+            "unsupported border", "Border cannot be represented by this control");
+    const auto state = border == model::BorderValue{} ? "0" : "3";
+    return list({raw("3"), raw("0"), list({raw("0")}), raw(std::to_string(type->second)),
+        raw(std::to_string(border.width)), raw(state), raw("48312c09-257f-4b29-b280-284dd89efc1e")});
+}
+
+model::BorderValue decode_control_border(const LV& value, std::string_view path) {
+    require_list(value, path);
+    const auto kind = integer_atom<unsigned>(at(value, 1, path), child_path(path, 1));
+    model::BorderValue border;
+    if (kind == 1) {
+        require_exact(value, parse_constant("{3,1,{-18},0,0,0}"), path, "Unsupported named Border style");
+        border.kind = model::BorderKind::style_reference;
+        border.style = model::QualifiedName{"StyleBorders.ControlBorder"};
+        return border;
+    }
+    if (kind != 0) fail("OOF1114", child_path(path, 1), "absolute or known style Border", std::to_string(kind), "Unsupported Border kind");
+    require_arity(value, 7, path);
+    const auto type_code = integer_atom<std::uint32_t>(value.items[3], child_path(path, 3));
+    const auto type = std::ranges::find(native_border_types, type_code, [](const auto& entry) { return entry.second; });
+    if (type == native_border_types.end()) fail("OOF1114", child_path(path, 3), "supported Border type", std::to_string(type_code), "Unsupported Border type");
+    border.border_type = type->first;
+    border.width = integer_atom<std::uint32_t>(value.items[4], child_path(path, 4));
+    if (border.width > 5 || (border.border_type == model::ControlBorderType::without_border && border.width > 1))
+        fail("OOF1114", child_path(path, 4), "integer Border width 0..5 (WithoutBorder at most 1)",
+            std::to_string(border.width), "Unsupported Border width");
+    const auto state = integer_atom<unsigned>(value.items[5], child_path(path, 5));
+    if (state != 0 && state != 3) fail("OOF1114", child_path(path, 5), "observed Border state 0 or 3", std::to_string(state), "Unsupported Border state");
+    auto normalized = value;
+    const auto expected = encode_control_border(border, path);
+    normalized.items[5] = expected.items[5];
+    // The platform XDTO reader restores these named enum values from an absent factory.
+    if (state == 0 && border.width == 1 &&
+        (border.border_type == model::ControlBorderType::underline || border.border_type == model::ControlBorderType::overline) &&
+        !value.items[6].is_list && value.items[6].atom_kind == LV::AtomKind::raw &&
+        value.items[6].atom == "00000000-0000-0000-0000-000000000000")
+        normalized.items[6] = expected.items[6];
+    require_exact(normalized, expected, path, "Border record contains unsupported fields");
+    return border;
+}
+
 model::FontValue decode_control_font(const LV& value, std::string_view path) {
     try {
         return value_codec::decode_font(list_stream::dump_compact(value));
@@ -959,13 +1020,15 @@ constexpr std::string_view command_bar_root_marker = "b78f2e80-ec68-11d4-9dcf-00
 LV canonical_command_bar_base(bool enabled, std::string_view tool_tip,
                               const model::ColorValue* border_color = nullptr,
                               const model::ColorValue* button_text_color = nullptr,
-                              const model::ColorValue* back_color = nullptr) {
+                              const model::ColorValue* back_color = nullptr,
+                              const model::BorderValue* border = nullptr) {
     auto value = parse_constant(R"OOF({19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}})OOF");
     value.items[1] = raw(enabled ? "1" : "0");
     value.items[12] = encoded_localized(tool_tip);
     if (border_color != nullptr) value.items[6] = encode_button_color(*border_color, "$/CommandBar/BorderColor");
     if (button_text_color != nullptr) value.items[10] = encode_button_color(*button_text_color, "$/CommandBar/ButtonTextColor");
     if (back_color != nullptr) value.items[2] = encode_button_color(*back_color, "$/CommandBar/BackColor");
+    if (border != nullptr) value.items[11] = encode_control_border(*border, "$/CommandBar/Border");
     return value;
 }
 
@@ -1010,9 +1073,10 @@ LV canonical_command_bar_properties(bool enabled, std::string_view tool_tip,
                                      const model::OrdinaryFormDocument& document, std::uint64_t control_id, bool secondary = true,
                                      const model::ColorValue* border_color = nullptr,
                                      const model::ColorValue* button_text_color = nullptr,
-                                     const model::ColorValue* back_color = nullptr) {
+                                     const model::ColorValue* back_color = nullptr,
+                                     const model::BorderValue* border = nullptr) {
     std::vector<LV> properties(14, raw("0"));
-    properties[0] = canonical_command_bar_base(enabled, tool_tip, border_color, button_text_color, back_color);
+    properties[0] = canonical_command_bar_base(enabled, tool_tip, border_color, button_text_color, back_color, border);
     // Slot 1 observed canonical default.
     properties[1] = raw("9");
     // Slot 2 observed canonical default.
@@ -3597,8 +3661,10 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
     const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
     const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
+    const auto border = decode_control_border(base.items[11], child_path(base_path, 11));
     auto normalized_base = base;
     normalized_base.items[12] = encoded_localized(tool_tip);
+    normalized_base.items[11] = encode_control_border(border, child_path(base_path, 11));
     require_raw_constant(properties.items[8], command_bar_root_marker, child_path(properties_path, 8));
     const auto root_group_id = integer_atom<std::uint64_t>(properties.items[9], child_path(properties_path, 9));
     const bool secondary = bool_atom(properties.items[5], child_path(properties_path, 5));
@@ -3625,7 +3691,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     normalized.items[10] = raw("9d0a2e40-b978-11d4-84b6-008048da06df");
     normalized.items[11] = raw("0");
     const auto expected = canonical_command_bar_properties(enabled, tool_tip, {}, empty_document, raw_id, secondary,
-        &border_color, &button_text_color, &back_color);
+        &border_color, &button_text_color, &back_color, &border);
     const auto& expected_base = expected.items[0];
     const auto base_mismatch = std::mismatch(normalized.items[0].items.begin(), normalized.items[0].items.end(),
         expected_base.items.begin(), expected_base.items.end(), [](const auto& left, const auto& right) {
@@ -3659,6 +3725,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if (button_text_color != button_color_default("ButtonTextColor"))
         control.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"), button_text_color);
     if (back_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
+    if (border != model::BorderValue{}) control.properties().set_explicit(model::PropertyId::from_name("Border"), border);
     std::get<model::CommandBarPayload>(control.payload).buttons = std::move(menu.entries);
     control.position = geometry.position;
     return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, std::move(menu.assets)};
@@ -6750,7 +6817,7 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
     if (!control.events.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty())
         fail("OOF1122", "$/CommandBar", "CommandBar without events, DataPath, extensions, or child controls",
             control.name, "CommandBar uses a storage concept outside the supported profile");
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Secondary", "BorderColor", "ButtonTextColor", "BackColor"}, "$/CommandBar");
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Secondary", "BorderColor", "ButtonTextColor", "BackColor", "Border"}, "$/CommandBar");
     const auto* payload = std::get_if<model::CommandBarPayload>(&control.payload);
     if (payload == nullptr) fail("OOF1122", "$/CommandBar", "CommandBarPayload", "different payload", "CommandBar payload is invalid");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -6759,8 +6826,14 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
     const auto button_text_color = explicit_button_color(control.properties(), "ButtonTextColor", "CommandBar");
     const auto back_color = control.properties().contains(model::PropertyId::from_name("BackColor"))
         ? explicit_button_color(control.properties(), "BackColor", "CommandBar") : model::ColorValue{};
+    model::BorderValue border;
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("Border"))) {
+        const auto* typed_border = std::get_if<model::BorderValue>(&entry->value);
+        if (typed_border == nullptr) fail("OOF1122", "$/CommandBar/Border", "BorderValue", "different value type", "Border has the wrong value type");
+        border = *typed_border;
+    }
     const auto properties = canonical_command_bar_properties(enabled, tool_tip, payload->buttons, document, control.id.value(),
-        explicit_bool(control.properties(), "Secondary", true), &border_color, &button_text_color, &back_color);
+        explicit_bool(control.properties(), "Secondary", true), &border_color, &button_text_color, &back_color, &border);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
     const auto info = list({raw("2"), properties});
     const auto metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});

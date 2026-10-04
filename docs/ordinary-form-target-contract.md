@@ -742,3 +742,45 @@ StyleColors.BorderColor подтверждено платформой для р�
 Сборка только из XML, getters после загрузки, строгий Designer и равенство
 канонического XML/модуля проверены: ev_d97633f9fe8d4c6f8594caa32b0f9414.
 Остальные свойства оформления CommandBar этим разделом не объявлены готовыми.
+
+
+## Типизированная рамка Border
+
+BorderValue является именованным значением PropertyValue. Абсолютная рамка
+содержит ControlBorderType и целую толщину; стилевая рамка использует
+существующий StyleReference. Примеры публичного XML:
+
+```xml
+<Border kind="absolute" borderType="Double" width="2"/>
+<Border kind="styleReference" styleName="StyleBorders.ControlBorder"/>
+```
+
+Absolute требует borderType и width и не допускает style attributes;
+styleReference требует ссылку и не допускает абсолютные поля. Пустые ссылки,
+неизвестные имена типов, лишние атрибуты, элементы и текст отвергаются.
+Default CommandBar.Border: absolute, WithoutBorder, width=0, без ссылки.
+Он опускается в XML; default конструктора платформы width=1 этим не заменяется.
+Толщина хранится целым числом 0..5, WithoutBorder допускает максимум 1.
+
+Общая модель/XSD знает девять ControlBorderType. CommandBar поддерживает
+WithoutBorder, Single, Double, Embossed, Indented, Underline, DoubleUnderline
+и Overline. Rounded у CommandBar явно отклоняется: native setter оставляет
+предыдущее значение. В общей модели Rounded требует ширину 1 для будущих
+доказанных контекстов. Это не объявляет другие контролы готовыми к Border.
+
+CommandBar использует descriptor-backed serializer без исходного BIN.
+Поддержаны абсолютные рамки и доказанный StyleBorders.ControlBorder.
+Неизвестные стили, фабрики и состояния не заменяются на default. Собственные
+native setters, XML-only сборка, getters, строгий Designer и равенство
+канонического XML/модуля проверены: ev_5583621bb36a4f63ba0f790fb51727d5.
+Для двух записей из эталона (Underline/1 и Overline/1 в состоянии создания)
+подтверждено восстановление через официальный XDTO: целая Border имеет
+именованное начертание, хотя исходный getter ТипРамки возвращает Неопределено.
+ПрочитатьXML и назначение Рамка восстанавливают enum без изменения XDTO целой
+рамки. Decoder принимает только эти точные записи, encoder собирает обычную
+именованную рамку. Исходный аномальный getter не сохраняется; контракт здесь
+является канонизацией именованного XDTO значения, а не равенством всех getter.
+Другие сочетания отсутствующей фабрики отклоняются. Свежая сборка только из
+XML, getters, строгий Designer и совпадение повторных XML/модулей для обоих
+вариантов: ev_bbb81122b09942cbb28bd51a53f6b545. Полный эталон прошел Border
+и остановился на следующем поле CommandBar; его полный цикл еще не завершен.

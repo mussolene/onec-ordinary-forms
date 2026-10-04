@@ -2458,6 +2458,119 @@ void test_command_bar_owner_pair_and_strict_profile() {
         "zero footer must remain unsupported for a nonempty collection");
 }
 
+void test_command_bar_border_named_round_trip_and_guards() {
+    const auto make_document = [](const model::BorderValue& border) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "CommandBarBorder";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode bar{model::ObjectId{2}, "Tools", model::CommandBarPayload{}};
+        bar.properties().set_explicit(model::PropertyId::from_name("Border"), border);
+        document.add_control(std::move(bar));
+        return document;
+    };
+    const std::array<std::pair<model::ControlBorderType, std::uint32_t>, 8> native_cases{{
+        {model::ControlBorderType::without_border, 0}, {model::ControlBorderType::single, 1},
+        {model::ControlBorderType::double_line, 200}, {model::ControlBorderType::embossed, 2},
+        {model::ControlBorderType::indented, 3}, {model::ControlBorderType::underline, 4},
+        {model::ControlBorderType::double_underline, 5}, {model::ControlBorderType::overline, 7}}};
+    for (const auto& [type, code] : native_cases) for (const auto width : {0u, 1u, 2u, 5u}) {
+        if (type == model::ControlBorderType::without_border && width > 1) continue;
+        model::BorderValue border; border.border_type = type; border.width = width;
+        const auto document = make_document(border);
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), encoded ? "typed absolute border must encode" : encoded.diagnostics().front().message);
+        const auto& native = encoded.value().items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[11];
+        expect(native.items[3].atom == std::to_string(code) && native.items[4].atom == std::to_string(width),
+            "absolute Border must use independently observed native type codes and width");
+        const auto decoded = form_stream::decode_document(encoded.value(), "CommandBarBorder");
+        expect(decoded.ok(), decoded ? "typed border must decode" : decoded.diagnostics().front().message);
+        const auto* entry = decoded.value().find_control(model::ObjectId{2})->properties().find(model::PropertyId::from_name("Border"));
+        expect(border == model::BorderValue{} ? entry == nullptr : entry != nullptr && std::get<model::BorderValue>(entry->value) == border,
+            "default must normalize to implicit while named type and width remain explicit");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "typed border XML must serialize");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "typed border XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "fresh XML rebuild must retain absolute Border semantics");
+    }
+    model::BorderValue underline; underline.border_type = model::ControlBorderType::underline; underline.width = 1;
+    const auto canonical = form_stream::encode_document(make_document(underline));
+    expect(canonical.ok(), "underline must encode");
+    const auto border_at = [](auto& stream) -> auto& {
+        return stream.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[11];
+    };
+    auto created_state = canonical.value(); border_at(created_state).items[5] = list_stream::ListValue::raw_atom("0");
+    const auto created = form_stream::decode_document(created_state, "CreatedBorder");
+    expect(created.ok(), "observed native creation state must decode into the same named Border");
+    const auto created_rebuilt = form_stream::encode_document(created.value());
+    expect(created_rebuilt.ok() && list_stream::dump_compact(created_rebuilt.value()) == list_stream::dump_compact(canonical.value()),
+        "creation state must be derived without preserving source data");
+    for (const auto invalid_state : {1u, 2u, 4u}) {
+        auto invalid = canonical.value(); border_at(invalid).items[5] = list_stream::ListValue::raw_atom(std::to_string(invalid_state));
+        expect(!form_stream::decode_document(invalid, "UnknownBorderState"), "unproven creation states must be rejected");
+    }
+    auto invalid_width = canonical.value(); border_at(invalid_width).items[4] = list_stream::ListValue::raw_atom("6");
+    expect(!form_stream::decode_document(invalid_width, "UnknownBorderWidth"), "width outside native range must reject");
+    for (const auto type : {model::ControlBorderType::underline, model::ControlBorderType::overline}) {
+        model::BorderValue named; named.border_type = type; named.width = 1;
+        const auto named_stream = form_stream::encode_document(make_document(named));
+        auto absent_factory = named_stream.value();
+        border_at(absent_factory).items[5] = list_stream::ListValue::raw_atom("0");
+        border_at(absent_factory).items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+        const auto restored = form_stream::decode_document(absent_factory, "XDTORestoredBorder");
+        expect(restored.ok(), "platform XDTO restores the observed named border with an absent factory");
+        const auto rebuilt = form_stream::encode_document(restored.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(named_stream.value()),
+            "absent factory must rebuild from named semantics without source preservation");
+    }
+    auto unproven_state = canonical.value();
+    border_at(unproven_state).items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+    expect(!form_stream::decode_document(unproven_state, "UnprovenAbsentFactoryState"),
+        "absent factory must not expand beyond the accepted native creation state");
+    auto invalid_factory = canonical.value(); border_at(invalid_factory).items[6] = list_stream::ListValue::raw_atom("11111111-1111-4111-8111-111111111111");
+    expect(!form_stream::decode_document(invalid_factory, "UnknownBorderFactory"), "unknown nonnull Border factory must reject");
+    for (const auto width : {0u, 2u, 5u}) {
+        auto unproven_absent = canonical.value();
+        border_at(unproven_absent).items[5] = list_stream::ListValue::raw_atom("0");
+        border_at(unproven_absent).items[4] = list_stream::ListValue::raw_atom(std::to_string(width));
+        border_at(unproven_absent).items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+        expect(!form_stream::decode_document(unproven_absent, "UnprovenAbsentFactoryWidth"),
+            "absent factory must not expand to unproven widths");
+    }
+    auto unproven_type = canonical.value();
+    border_at(unproven_type).items[5] = list_stream::ListValue::raw_atom("0");
+    border_at(unproven_type).items[3] = list_stream::ListValue::raw_atom("1");
+    border_at(unproven_type).items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+    expect(!form_stream::decode_document(unproven_type, "UnprovenAbsentFactoryType"),
+        "absent factory must not expand to unproven named border types");
+    for (unsigned mutation = 0; mutation < 4; ++mutation) {
+        auto malformed = canonical.value();
+        auto& native = border_at(malformed);
+        native.items[5] = list_stream::ListValue::raw_atom("0");
+        native.items[6] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+        if (mutation == 0) native.items[0] = list_stream::ListValue::raw_atom("4");
+        if (mutation == 1) native.items[2] = list_stream::parse("{1}");
+        if (mutation == 2) native.items[6] = list_stream::ListValue::string_atom("00000000-0000-0000-0000-000000000000");
+        if (mutation == 3) native.items[1] = list_stream::ListValue::raw_atom("1");
+        expect(!form_stream::decode_document(malformed, "MalformedAbsentFactoryBorder"),
+            "restoration must not hide an invalid version, carrier, atom kind or Border kind");
+    }
+    model::BorderValue style; style.kind = model::BorderKind::style_reference;
+    style.style = model::QualifiedName{"StyleBorders.ControlBorder"};
+    const auto style_encoded = form_stream::encode_document(make_document(style));
+    expect(style_encoded.ok() && list_stream::dump_compact(border_at(style_encoded.value())) == "{3,1,{-18},0,0,0}",
+        "named style Border must match its independent native setter record");
+    const auto style_decoded = form_stream::decode_document(style_encoded.value(), "StyleBorder");
+    expect(style_decoded.ok() && std::get<model::BorderValue>(style_decoded.value().find_control(model::ObjectId{2})->properties().find(
+        model::PropertyId::from_name("Border"))->value) == style, "named style reference must survive decode");
+    style.style = model::QualifiedName{"StyleBorders.Unknown"};
+    expect(!form_stream::encode_document(make_document(style)), "unknown style name must reject");
+    model::BorderValue rounded; rounded.border_type = model::ControlBorderType::rounded; rounded.width = 1;
+    expect(!form_stream::encode_document(make_document(rounded)), "CommandBar must reject silently ignored Rounded instead of pretending it is applied");
+}
+
 void test_command_bar_colors_named_round_trip_and_guards() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "CommandBarColors";
     form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
@@ -9331,6 +9444,7 @@ int main() {
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
         test_command_bar_owner_pair_and_strict_profile();
+        test_command_bar_border_named_round_trip_and_guards();
         test_command_bar_colors_named_round_trip_and_guards();
         test_command_bar_default_button_round_trip_and_guards();
         test_captured_command_bar_control_record_literal();

@@ -130,6 +130,40 @@
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="BorderKindType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="absolute"/>
+      <xs:enumeration value="styleReference"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ControlBorderTypeValueType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="WithoutBorder"/>
+      <xs:enumeration value="Single"/>
+      <xs:enumeration value="Double"/>
+      <xs:enumeration value="Embossed"/>
+      <xs:enumeration value="Indented"/>
+      <xs:enumeration value="Underline"/>
+      <xs:enumeration value="DoubleUnderline"/>
+      <xs:enumeration value="Overline"/>
+      <xs:enumeration value="Rounded"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="BorderWidthType">
+    <xs:restriction base="xs:unsignedInt">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="BorderValueType">
+    <xs:attribute name="kind" type="BorderKindType" use="required"/>
+    <xs:attribute name="borderType" type="ControlBorderTypeValueType" use="optional"/>
+    <xs:attribute name="width" type="BorderWidthType" use="optional"/>
+    <xs:attribute name="styleName" type="NonEmptyTokenType" use="optional"/>
+    <xs:attribute name="styleObjectId" type="xs:long" use="optional"/>
+    <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
+  </xs:complexType>
+
   <xs:complexType name="ColorValueType">
     <xs:attribute name="kind" type="ColorKindType" use="required"/>
     <xs:attribute name="red" type="xs:unsignedByte" use="optional"/>
@@ -1752,7 +1786,7 @@
       <xs:element name="TabOrder" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SeparateByPage" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ScrollPageMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Pages" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
@@ -1790,7 +1824,7 @@
       <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -1862,7 +1896,7 @@
       <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="NonselectedPictureText" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -1896,7 +1930,7 @@
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TitleLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ThreeState" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -1935,7 +1969,7 @@
       <xs:element name="SpinButton" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -1972,7 +2006,7 @@
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TitleLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="FieldTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2026,7 +2060,7 @@
       <xs:element name="MarkIncomplete" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ExtendedEdit" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextEdit" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ListChoiceMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2068,7 +2102,7 @@
       <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2097,7 +2131,7 @@
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="SplitterEventsType" minOccurs="0" maxOccurs="1"/>
@@ -2159,8 +2193,8 @@
       <xs:element name="TransparentLabel" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HideBaseValue" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LabelDelimiter" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="LabelBorder" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="LabelBorder" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SpaceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Light" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SummarySeries" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
@@ -2290,7 +2324,7 @@
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Output" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Document" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="HTMLDocumentFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
@@ -2316,7 +2350,7 @@
       <xs:element name="ShowPicture" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowCheckBox" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentRow" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2348,7 +2382,7 @@
       <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowPercent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowStyle" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2382,7 +2416,7 @@
       <xs:element name="MarkingAppearance" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2418,7 +2452,7 @@
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CurrentDate" type="DateValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HolidayColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2452,7 +2486,7 @@
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="SelectedText" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Font" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="TextDocumentFieldEventsType" minOccurs="0" maxOccurs="1"/>
@@ -2556,7 +2590,7 @@
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="RowInputMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChoiceMode" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SelectionMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
@@ -2609,7 +2643,7 @@
       <xs:element name="ShowSelection" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableStartDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EnableDrag" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="SpreadsheetDocumentFieldEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
@@ -2643,7 +2677,7 @@
       <xs:element name="LabelPictureLocation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PictureSize" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Format" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
