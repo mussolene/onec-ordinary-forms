@@ -73,6 +73,10 @@ std::string_view xsd_type(ValueCodec codec) {
     switch (codec) {
         case ValueCodec::command_bar_buttons:
             return "CommandBarButtonsType";
+        case ValueCodec::dendrogram_items:
+            return "DendrogramItemsType";
+        case ValueCodec::dendrogram_links:
+            return "DendrogramLinksType";
         case ValueCodec::unclassified:
             return "UnclassifiedValueType";
         case ValueCodec::boolean:
@@ -709,6 +713,17 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
   </xs:sequence><xs:attribute name="name" type="xs:string" use="required"/><xs:attribute name="type" type="CommandBarButtonKindType" use="required"/></xs:complexType>
   <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
 
+  <xs:complexType name="DendrogramItemsType"><xs:sequence><xs:element name="Item" type="DendrogramItemType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="DendrogramItemType"><xs:sequence><xs:element name="Value" type="xs:string"/><xs:element name="Text" type="LocalizedStringValueType"/></xs:sequence></xs:complexType>
+  <xs:complexType name="DendrogramLinksType"><xs:sequence><xs:element name="Link" type="DendrogramLinkType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="DendrogramLinkType"><xs:sequence><xs:element name="FirstItem" type="xs:string"/><xs:element name="SecondItem" type="xs:string"/><xs:element name="Title" type="LocalizedStringValueType"/><xs:element name="Distance" type="xs:decimal" minOccurs="0"/></xs:sequence></xs:complexType>
+
+)XSD";
+
+    output += R"XSD(  <xs:simpleType name="SpreadsheetCoordinateType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="4294967295"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:element name="Text" type="xs:string" minOccurs="1" maxOccurs="1"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+
 )XSD";
 
     const auto controls = metamodel.controls();
@@ -798,6 +813,10 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             metamodel.control_extension_properties());
         output +=
             "      <xs:element name=\"Position\" type=\"PositionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+        if (control.kind == model::ControlKind::spreadsheet_document_field) {
+            output +=
+                "      <xs:element name=\"Document\" type=\"SpreadsheetDocumentType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+        }
         for (const auto& property : metamodel.properties_for(control.kind)) {
             if (control.kind == ControlKind::table && property.api_name == "Columns") {
                 output +=

@@ -776,6 +776,24 @@ ValidationReport OrdinaryFormDocument::validate() const {
             validate_buttons(validate_buttons, *owned_buttons, 0);
         }
         const auto& descriptor = metamodel::descriptor_for(control.kind());
+        if (const auto* spreadsheet = std::get_if<SpreadsheetDocumentFieldPayload>(&control.payload)) {
+            std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
+            std::optional<std::pair<std::uint32_t, std::uint32_t>> previous;
+            for (const auto& cell : spreadsheet->cells) {
+                const auto coordinate = std::pair{cell.row, cell.column};
+                if (cell.row == 0 || cell.column == 0 || !coordinates.emplace(coordinate).second ||
+                    (previous && coordinate <= *previous)) {
+                    add_violation(
+                        report,
+                        InvariantCode::invalid_property,
+                        control.id,
+                        control.id,
+                        "Spreadsheet Document cells require unique positive uint32 row and column coordinates in row-major order");
+                    break;
+                }
+                previous = coordinate;
+            }
+        }
         if (!control.children.empty() && descriptor.child_policy == metamodel::ChildPolicy::forbidden) {
             add_violation(
                 report,

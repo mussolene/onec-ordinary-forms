@@ -589,7 +589,26 @@ struct SplitterPayload final : TypedControlPayload<ControlKind::splitter> {};
 struct ChartPayload final : TypedControlPayload<ControlKind::chart> {};
 struct PivotChartPayload final : TypedControlPayload<ControlKind::pivot_chart> {};
 struct GanttChartPayload final : TypedControlPayload<ControlKind::gantt_chart> {};
-struct DendrogramPayload final : TypedControlPayload<ControlKind::dendrogram> {};
+struct DendrogramItem {
+    std::string value;
+    LocalizedStringValue text;
+
+    friend bool operator==(const DendrogramItem&, const DendrogramItem&) = default;
+};
+
+struct DendrogramLink {
+    std::string first_item;
+    std::string second_item;
+    LocalizedStringValue title;
+    DecimalValue distance{"0"};
+
+    friend bool operator==(const DendrogramLink&, const DendrogramLink&) = default;
+};
+
+struct DendrogramPayload final : TypedControlPayload<ControlKind::dendrogram> {
+    std::vector<DendrogramItem> items;
+    std::vector<DendrogramLink> links;
+};
 struct HtmlDocumentFieldPayload final
     : TypedControlPayload<ControlKind::html_document_field> {};
 struct ListBoxPayload final : TypedControlPayload<ControlKind::list_box> {};
@@ -602,6 +621,12 @@ struct GeographicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::geographical_schema_field> {};
 struct GraphicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::graphical_schema_field> {};
+struct SpreadsheetDocumentCell final {
+    std::uint32_t row{};
+    std::uint32_t column{};
+    std::string text;
+    friend bool operator==(const SpreadsheetDocumentCell&, const SpreadsheetDocumentCell&) = default;
+};
 struct TableColumnControl {
     ControlKind kind = ControlKind::input_field;
     PropertySet properties;
@@ -618,7 +643,9 @@ struct TablePayload final : TypedControlPayload<ControlKind::table> {
     std::vector<TableColumn> columns;
 };
 struct SpreadsheetDocumentFieldPayload final
-    : TypedControlPayload<ControlKind::spreadsheet_document_field> {};
+    : TypedControlPayload<ControlKind::spreadsheet_document_field> {
+    std::vector<SpreadsheetDocumentCell> cells;
+};
 struct LabelDecorationPayload final
     : TypedControlPayload<ControlKind::label_decoration> {};
 struct ActiveXControlPayload final
