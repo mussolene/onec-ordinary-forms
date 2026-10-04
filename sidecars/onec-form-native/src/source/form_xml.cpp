@@ -1002,6 +1002,18 @@ bool equals_descriptor_default(
     return false;
 }
 
+bool equals_table_column_editor_default(
+    model::ControlKind kind,
+    const mm::PropertyDescriptor& descriptor,
+    const model::PropertyValue& value) {
+    if (kind == model::ControlKind::input_field) {
+        if (descriptor.api_name == "Enabled") return std::holds_alternative<bool>(value) && std::get<bool>(value);
+        if (descriptor.api_name == "ReadOnly") return std::holds_alternative<bool>(value) && !std::get<bool>(value);
+        return false;
+    }
+    return equals_descriptor_default(descriptor, value);
+}
+
 model::ControlPayload make_payload(model::ControlKind kind) {
     switch (kind) {
         case model::ControlKind::panel: return model::PanelPayload{};
@@ -1642,25 +1654,44 @@ private:
                         }
                     }
                     const std::string type = required_attribute(field, "type", owner);
-                    if (type != "InputField") {
+                    if (type == "InputField") {
+                        column.control.kind = model::ControlKind::input_field;
+                    } else if (type == "ChoiceField") {
+                        column.control.kind = model::ControlKind::choice_field;
+                    } else if (type == "CheckBox") {
+                        column.control.kind = model::ControlKind::check_box;
+                    } else {
                         fail("OOF2003", field, std::string(owner), "type",
-                            "InputField", type, "Unsupported Table Column Control type");
+                            "InputField, ChoiceField, or CheckBox", type, "Unsupported Table Column Control type");
                     }
-                    column.control.kind = model::ControlKind::input_field;
                     std::set<std::string> control_properties;
                     for (xmlNodePtr property_node : element_children(field)) {
                         const std::string property_name = node_name(property_node);
-                        if (!control_properties.insert(property_name).second ||
-                            (property_name != "Enabled" && property_name != "ReadOnly")) {
+                        const bool supported_property =
+                            (column.control.kind == model::ControlKind::input_field &&
+                                (property_name == "Enabled" || property_name == "ReadOnly")) ||
+                            (column.control.kind == model::ControlKind::choice_field &&
+                                (property_name == "Enabled" || property_name == "ToolTip")) ||
+                            (column.control.kind == model::ControlKind::check_box &&
+                                (property_name == "Enabled" || property_name == "Caption" ||
+                                    property_name == "ToolTip" || property_name == "Font"));
+                        if (!control_properties.insert(property_name).second || !supported_property) {
                             fail("OOF2003", property_node, std::string(owner), property_name,
-                                "Enabled or ReadOnly at most once", property_name,
-                                "Unsupported Table Column InputField property");
+                                "a compatible named default property, at most once", property_name,
+                                "Unsupported Table Column editor property");
                         }
-                        const bool value = parse_boolean(node_text(property_node), property_node, property_name, owner);
-                        const bool default_value = property_name == "Enabled";
-                        if (value != default_value) {
-                            column.control.properties.set_explicit(
-                                model::PropertyId::from_name(property_name), value);
+                        const auto* descriptor = metamodel_.property(column.control.kind, property_name);
+                        if (descriptor == nullptr || descriptor->surface != mm::PropertySurface::control_payload) {
+                            fail("OOF2003", property_node, std::string(owner), property_name,
+                                "declared payload property for the selected editor", property_name,
+                                "Table Column editor property is not declared by its typed owner");
+                        }
+                        const model::PropertyValue value = parse_property_value(
+                            property_node, descriptor->value_codec, owner);
+                        if (!equals_table_column_editor_default(column.control.kind, *descriptor, value)) {
+                            fail("OOF2003", property_node, std::string(owner), property_name,
+                                "the observed default value", node_text(property_node),
+                                "Table Column editor only supports observed default property values");
                         }
                     }
                     control_seen = true;
@@ -2794,18 +2825,36 @@ private:
         }
         writer_.open("Columns");
         for (const auto& column : columns) {
-            if (column.control.kind != model::ControlKind::input_field) {
-                serialization_fail(std::string(owner), "Column/Control", "InputField", "unsupported control",
-                    "Table Column Control kind is unsupported");
+            std::string_view control_type;
+            switch (column.control.kind) {
+                case model::ControlKind::input_field: control_type = "InputField"; break;
+                case model::ControlKind::choice_field: control_type = "ChoiceField"; break;
+                case model::ControlKind::check_box: control_type = "CheckBox"; break;
+                default:
+                    serialization_fail(std::string(owner), "Column/Control", "InputField, ChoiceField, or CheckBox",
+                        "unsupported control", "Table Column Control kind is unsupported");
             }
+            column.control.properties.for_each_explicit([&](const model::PropertyEntry& entry) {
+                const auto* descriptor = metamodel_.property(column.control.kind, entry.id);
+                const bool supported = descriptor != nullptr &&
+                    ((column.control.kind == model::ControlKind::input_field &&
+                        (descriptor->api_name == "Enabled" || descriptor->api_name == "ReadOnly")) ||
+                     (column.control.kind == model::ControlKind::choice_field &&
+                        (descriptor->api_name == "Enabled" || descriptor->api_name == "ToolTip")) ||
+                     (column.control.kind == model::ControlKind::check_box &&
+                        (descriptor->api_name == "Enabled" || descriptor->api_name == "Caption" ||
+                            descriptor->api_name == "ToolTip" || descriptor->api_name == "Font")));
+                if (!supported || !equals_table_column_editor_default(column.control.kind, *descriptor, entry.value)) {
+                    serialization_fail(std::string(owner), "Column/Control/" +
+                        (descriptor == nullptr ? std::string("unknown") : std::string(descriptor->xml_name)),
+                        "compatible observed default property", "unsupported or nondefault value",
+                        "Table Column editor property is outside its typed default profile");
+                }
+            });
             writer_.open("Column", {{"name", column.name}});
             writer_.text("DataPath", column.data_path);
             write_localized("Header", column.header, owner);
-            writer_.open("Control", {{"type", "InputField"}});
-            write_property_set(
-                column.control.properties,
-                metamodel_.properties_for(model::ControlKind::input_field),
-                owner);
+            writer_.open("Control", {{"type", std::string(control_type)}});
             writer_.close("Control");
             writer_.close("Column");
         }
