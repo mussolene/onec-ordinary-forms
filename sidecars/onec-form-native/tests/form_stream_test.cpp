@@ -2504,10 +2504,72 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
             "unclassified ProgressBar leaf diagnostic was " + unsupported_decode.diagnostics().front().code +
                 " at " + unsupported_decode.diagnostics().front().path);
 
-    constexpr std::string_view data_path_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Amount"><TypeDomain><Entry term="string" length="64"/></TypeDomain></Attribute></Attributes><ChildItems><ProgressBar id="4" name="P"><DataPath attributeId="3"/><Position/></ProgressBar></ChildItems></Form>)OOF";
+    constexpr std::string_view data_path_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Amount"><TypeDomain><Entry term="numeric" length="10" precision="2" nonNegative="true"/></TypeDomain></Attribute></Attributes><ChildItems><ProgressBar id="4" name="P"><DataPath attributeId="3"/><Position/></ProgressBar></ChildItems></Form>)OOF";
     const auto data_path = oof::source::parse_form_xml(data_path_xml);
-    expect(data_path.ok() && !form_stream::encode_document(data_path.value()),
-        "unobserved ProgressBar DataPath must stay unsupported by the primary codec");
+    expect(data_path.ok(), "ProgressBar direct numeric DataPath with named qualifiers must parse");
+    const auto data_path_encoded = form_stream::encode_document(data_path.value());
+    expect(data_path_encoded.ok(), data_path_encoded ? "" : data_path_encoded.diagnostics().front().message);
+    const auto& progress_links = data_path_encoded.value().items[2].items[3];
+    expect(progress_links.items.size() == 2 && progress_links.items[1].items[0].atom == "4" &&
+               progress_links.items[1].items[1].items[1].items[0].atom == "3",
+        "ProgressBar DataPath must encode as control 4 linked to local Attribute 3");
+    const auto data_path_decoded = form_stream::decode_document(data_path_encoded.value(), "Progress");
+    expect(data_path_decoded.ok() && data_path_decoded.value().find_control(model::ObjectId{4})->data_path &&
+               data_path_decoded.value().find_control(model::ObjectId{4})->data_path->attribute.id() == model::ObjectId{3},
+        "ProgressBar direct numeric DataPath must survive decode");
+    const auto data_path_reencoded = form_stream::encode_document(data_path_decoded.value());
+    expect(data_path_reencoded.ok() && list_stream::dump_compact(data_path_reencoded.value()) ==
+               list_stream::dump_compact(data_path_encoded.value()),
+        "ProgressBar direct numeric DataPath must survive encode-decode-encode");
+
+    const auto xml_for_domain = [](std::string_view domain, std::string_view target = "3") {
+        return std::string("<Form id=\"1\" name=\"Progress\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"3\" name=\"Amount\"><TypeDomain>") +
+            std::string(domain) + "</TypeDomain></Attribute></Attributes><ChildItems><ProgressBar id=\"4\" name=\"P\"><DataPath attributeId=\"" +
+            std::string(target) + "\"/><Position/></ProgressBar></ChildItems></Form>";
+    };
+    for (const auto [domain, label] : std::array<std::pair<std::string_view, std::string_view>, 4>{{
+             {"<Entry term=\"string\" length=\"64\"/>", "nonNumeric"},
+             {"<Entry term=\"numeric\" length=\"10\"/><Entry term=\"numeric\" length=\"8\"/>", "compound"},
+             {"<Entry term=\"unknown\" typeUuid=\"01234567-89AB-CDEF-0123-456789ABCDEF\"/>", "unknown"},
+             {"<Entry term=\"numeric\" length=\"10\"/><Entry term=\"string\" length=\"2\"/>", "variant"},
+         }}) {
+        const auto invalid = oof::source::parse_form_xml(xml_for_domain(domain));
+        expect(invalid.ok() && !form_stream::encode_document(invalid.value()),
+            std::string("ProgressBar must reject a ") + std::string(label) + " Attribute domain");
+    }
+    const auto dangling_xml = oof::source::parse_form_xml(xml_for_domain(
+        "<Entry term=\"numeric\" length=\"10\" precision=\"2\"/>", "99"));
+    expect(!dangling_xml || !form_stream::encode_document(dangling_xml.value()),
+        "ProgressBar must reject a dangling DataPath Attribute ID");
+    auto compound_xml_text = xml_for_domain(
+        "<Entry term=\"numeric\" length=\"10\" precision=\"2\"/>");
+    const auto empty_path_end = compound_xml_text.find("/><Position/>");
+    compound_xml_text.replace(empty_path_end, std::string("/><Position/>").size(),
+        "><Member>Nested</Member></DataPath><Position/>");
+    const auto compound_path_xml = oof::source::parse_form_xml(compound_xml_text);
+    expect(compound_path_xml.ok() && !form_stream::encode_document(compound_path_xml.value()),
+        "ProgressBar must reject compound DataPath members");
+    auto metadata_uuid = data_path_encoded.value();
+    metadata_uuid.items[2].items[3].items[1].items[1].items[1] =
+        list_stream::ListValue::list({list_stream::ListValue::raw_atom("3"),
+            list_stream::ListValue::raw_atom("01234567-89AB-CDEF-0123-456789ABCDEF")});
+    expect(!form_stream::decode_document(metadata_uuid, "Progress"),
+        "ProgressBar must reject metadata UUID Attribute links");
+    auto dangling_link = data_path_encoded.value();
+    dangling_link.items[2].items[3].items[1].items[1].items[1].items[0] =
+        list_stream::ListValue::raw_atom("99");
+    expect(!form_stream::decode_document(dangling_link, "Progress"),
+        "ProgressBar decoder must reject dangling Attribute links");
+    auto non_numeric_link = data_path_encoded.value();
+    model::TypeDomainPatternValue linked_string_type;
+    model::TypeDomainEntry linked_string_entry;
+    linked_string_entry.term = model::TypeDomainTerm::string;
+    linked_string_entry.string = model::LengthQualifiers{64, false};
+    linked_string_type.entries.push_back(linked_string_entry);
+    non_numeric_link.items[2].items[2].items[1].items[5] =
+        list_stream::parse(value_codec::encode_type_domain(linked_string_type));
+    expect(!form_stream::decode_document(non_numeric_link, "Progress"),
+        "ProgressBar decoder must reject a linked nonNumeric Attribute");
 
     model::Form overflow_form;
     overflow_form.id = model::ObjectId{1};
@@ -2519,6 +2581,57 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
     const auto overflow_result = form_stream::encode_document(overflow);
     expect(!overflow_result && overflow_result.diagnostics().front().code == "OOF1122",
         "ProgressBar ID above int64 must be rejected before encoding");
+}
+
+void test_progress_data_path_mixed_with_existing_links() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "MixedProgressLinks";
+    form.children = {model::ControlRef{model::ObjectId{42}}, model::ControlRef{model::ObjectId{5}},
+        model::ControlRef{model::ObjectId{9}}, model::ControlRef{model::ObjectId{10}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::TypeDomainEntry numeric_entry;
+    numeric_entry.term = model::TypeDomainTerm::numeric;
+    numeric_entry.numeric = model::NumericQualifiers{10, 2, true};
+    model::TypeDomainPatternValue numeric_type;
+    numeric_type.entries.push_back(numeric_entry);
+    model::TypeDomainPatternValue string_type;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{64, false};
+    string_type.entries.push_back(string_entry);
+    model::TypeDomainPatternValue boolean_type;
+    model::TypeDomainEntry boolean_entry;
+    boolean_entry.term = model::TypeDomainTerm::boolean;
+    boolean_type.entries.push_back(boolean_entry);
+    document.add_attribute(model::Attribute{model::ObjectId{17}, "Amount", numeric_type});
+    document.add_attribute(model::Attribute{model::ObjectId{6}, "Text", string_type});
+    document.add_attribute(model::Attribute{model::ObjectId{7}, "Flag", boolean_type});
+    model::ControlNode bound{model::ObjectId{42}, "BoundProgress", model::ProgressBarPayload{}};
+    bound.data_path = model::DataPath{model::AttributeRef{model::ObjectId{17}}, {}};
+    document.add_control(std::move(bound));
+    document.add_control(model::ControlNode{model::ObjectId{5}, "UnboundProgress", model::ProgressBarPayload{}});
+    model::ControlNode input{model::ObjectId{9}, "Input", model::InputFieldPayload{}};
+    input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{6}}, {}};
+    document.add_control(std::move(input));
+    model::ControlNode checkbox{model::ObjectId{10}, "Check", model::CheckBoxPayload{}};
+    checkbox.data_path = model::DataPath{model::AttributeRef{model::ObjectId{7}}, {}};
+    document.add_control(std::move(checkbox));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& links = encoded.value().items[2].items[3];
+    expect(links.items.size() == 4 && links.items[0].atom == "3" &&
+               links.items[1].items[0].atom == "9" && links.items[2].items[0].atom == "10" &&
+               links.items[3].items[0].atom == "42",
+        "bound ProgressBar, InputField, and CheckBox must produce exactly three correctly counted links");
+    const auto decoded = form_stream::decode_document(encoded.value(), "MixedProgressLinks");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    expect(decoded.value().find_control(model::ObjectId{42})->data_path.has_value() &&
+               !decoded.value().find_control(model::ObjectId{5})->data_path.has_value() &&
+               decoded.value().find_control(model::ObjectId{9})->data_path.has_value() &&
+               decoded.value().find_control(model::ObjectId{10})->data_path.has_value(),
+        "bound and unbound ProgressBars must coexist with required InputField and CheckBox links");
 }
 
 void test_calendar_field_observed_record_decode() {
@@ -4709,6 +4822,7 @@ int main() {
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();
+        test_progress_data_path_mixed_with_existing_links();
         test_button_label_input_field_round_trip();
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
