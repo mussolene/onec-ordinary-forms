@@ -1327,6 +1327,31 @@ void test_progress_bar_xml_only_contract() {
         "ProgressBar XML-only object model must round-trip");
 }
 
+void test_command_bar_buttons_xml_only_contract() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="CommandBar" ordinaryFormVersion="2.1"><ChildItems>
+      <CommandBar id="4" name="Tools"><Position/><Enabled>false</Enabled><Buttons>
+        <CommandBarButton name="Run" type="Action"><Text>Start</Text><Action>RunHandler</Action></CommandBarButton>
+        <CommandBarButton name="More" type="Submenu"><Buttons><CommandBarButton name="Stop" type="Action"><Action>StopHandler</Action></CommandBarButton></Buttons></CommandBarButton>
+      </Buttons><ToolTip>Actions</ToolTip></CommandBar>
+    </ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto* bar = parsed.value().find_control(model::ObjectId{4});
+    expect(bar != nullptr && bar->kind() == model::ControlKind::command_bar &&
+        !std::get<bool>(bar->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+        std::get<std::string>(bar->properties().find(model::PropertyId::from_name("ToolTip"))->value) == "Actions" &&
+        std::get<model::CommandBarPayload>(bar->payload).buttons.size() == 2,
+        "CommandBar named properties and entry-owned Actions must parse");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<CommandBar name=\"Tools\" id=\"4\">") != std::string::npos,
+        "CommandBar XML-only fresh serialization must use named control properties");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() &&
+        std::get<model::CommandBarPayload>(reparsed.value().find_control(model::ObjectId{4})->payload).buttons ==
+            std::get<model::CommandBarPayload>(bar->payload).buttons,
+        "CommandBar typed Buttons and Actions must survive XML-only round-trip");
+}
+
 }  // namespace
 
 int main() {
@@ -1356,6 +1381,7 @@ int main() {
         test_label_horizontal_align_xml_roundtrip();
         test_label_enabled_tooltip_xml_roundtrip();
         test_progress_bar_xml_only_contract();
+        test_command_bar_buttons_xml_only_contract();
         test_picture_decoration_enabled_tooltip_xml_roundtrip();
         test_picture_decoration_standard_picture_xml_roundtrip();
     } catch (const std::exception& error) {

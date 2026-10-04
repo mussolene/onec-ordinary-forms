@@ -1235,6 +1235,117 @@ void test_named_button_menu_round_trip_and_invalid_references() {
     expect(!form_stream::decode_document(huge_order_footer, "Menu"), "oversized menu order footer count must be rejected");
 }
 
+void test_command_bar_owner_pair_and_strict_profile() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "CommandBarOwnerPair";
+    form.children = {model::ControlRef{model::ObjectId{1}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode command_bar{model::ObjectId{1}, "Tools", model::CommandBarPayload{}};
+    command_bar.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    command_bar.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Run tools"));
+    model::CommandBarButton action; action.name = "Run"; action.action = "RunHandler";
+    action.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.ActivateTask"}};
+    model::CommandBarButton submenu; submenu.name = "More";
+    submenu.type = model::CommandBarButtonKind::submenu;
+    submenu.buttons = {action};
+    std::get<model::CommandBarPayload>(command_bar.payload).buttons = {submenu};
+    document.add_control(std::move(command_bar));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "CommandBar with owner and submenu ID 1 must encode" :
+        encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "CommandBarOwnerPair");
+    expect(decoded.ok(), decoded ? "CommandBar root pair and submenu pair must decode" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* control = decoded.value().find_control(model::ObjectId{1});
+    expect(control != nullptr && control->kind() == model::ControlKind::command_bar &&
+        std::get<model::CommandBarPayload>(control->payload).buttons ==
+            std::get<model::CommandBarPayload>(document.find_control(model::ObjectId{1})->payload).buttons,
+        "root (marker,1) and submenu (header owner,1) must remain separate groups");
+    expect(!std::get<bool>(control->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+        std::get<std::string>(control->properties().find(model::PropertyId::from_name("ToolTip"))->value) == "Run tools",
+        "CommandBar named Enabled and ToolTip values must round-trip independently of Buttons");
+
+    auto unknown_default = encoded.value();
+    auto& control_record = unknown_default.items[1].items[2].items[2].items[1];
+    control_record.items[2].items[1].items[1] = list_stream::ListValue::raw_atom("1");
+    const auto rejected = form_stream::decode_document(unknown_default, "CommandBarUnknownDefault");
+    expect(!rejected, "noncanonical unmodeled CommandBar default slot must be rejected");
+
+    auto wrong_root_marker = encoded.value();
+    wrong_root_marker.items[1].items[2].items[2].items[1].items[2].items[1].items[8] =
+        list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+    expect(!form_stream::decode_document(wrong_root_marker, "CommandBarWrongRootMarker"),
+        "unsupported root owner marker must be rejected");
+    auto wrong_root_id = encoded.value();
+    wrong_root_id.items[1].items[2].items[2].items[1].items[2].items[1].items[9] =
+        list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(wrong_root_id, "CommandBarWrongRootId"),
+        "root group ID that differs from control ID must be rejected");
+    auto unsupported_base_leaf = encoded.value();
+    unsupported_base_leaf.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[20] =
+        list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(unsupported_base_leaf, "CommandBarUnknownBaseLeaf"),
+        "noncanonical unmodeled CommandBar base leaf must be rejected");
+
+    const auto encode_owner_four = [](std::vector<model::CommandBarButton> entries) {
+        model::Form owner_form; owner_form.id = model::ObjectId{1}; owner_form.name = "CommandBarOwnerFour";
+        owner_form.children = {model::ControlRef{model::ObjectId{4}}};
+        model::OrdinaryFormDocument owner_document(std::move(owner_form));
+        model::ControlNode owner_bar{model::ObjectId{4}, "Tools", model::CommandBarPayload{}};
+        std::get<model::CommandBarPayload>(owner_bar.payload).buttons = std::move(entries);
+        owner_document.add_control(std::move(owner_bar));
+        return form_stream::encode_document(owner_document);
+    };
+    const auto menu_for_owner_four = [](const list_stream::ListValue& payload) -> const list_stream::ListValue& {
+        const auto& records = payload.items[1].items[2].items[2].items;
+        const auto record = std::ranges::find(records, std::string("4"), [](const auto& row) {
+            return row.items.size() > 1 ? row.items[1].atom : std::string{};
+        });
+        if (record == records.end()) throw std::runtime_error("CommandBar owner ID 4 record is absent");
+        return record->items[2].items[1].items[7];
+    };
+    const auto empty_owner_four = encode_owner_four({});
+    expect(empty_owner_four.ok() && menu_for_owner_four(empty_owner_four.value()).items[2].atom == "0",
+        "empty menu max ID must stay in menu-entry namespace even when root ID is 4");
+    model::CommandBarButton one_entry; one_entry.name = "Only"; one_entry.action = "OnlyHandler";
+    const auto one_entry_owner_four = encode_owner_four({one_entry});
+    expect(one_entry_owner_four.ok() && menu_for_owner_four(one_entry_owner_four.value()).items[2].atom == "1",
+        "one-entry menu max ID must be 1, independent of root owner ID 4");
+}
+
+void test_captured_command_bar_control_record_literal() {
+    constexpr std::string_view captured_record = R"OOF({e69bf21d-97b2-4f37-86db-675aea9ec2cb,4,{2,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},9,2,0,0,1,1,{5,f6183561-313a-4f39-a1cd-591a0c2b8493,1,1,1,{8,7919d563-1cca-46f4-809c-27d4d06a62a5,1,e1692cc2-605b-4535-84dd-28440238746c,{3,"ProbeHandler",{1,"",{1,0},{1,0},{1,0},{4,0,{0},"",-1,-1,1,0,""},{0,0,0}}},0,0,0},1,{5,b78f2e80-ec68-11d4-9dcf-0050bae2bc79,4,0,1,7919d563-1cca-46f4-809c-27d4d06a62a5,{8,"ProbeAction",0,1,{1,1,{"ru","Probe"}},1,f6183561-313a-4f39-a1cd-591a0c2b8493,1,1e2,0,0,1,0,1,0,0},{-1,0,{0}}}},b78f2e80-ec68-11d4-9dcf-0050bae2bc79,4,9d0a2e40-b978-11d4-84b6-008048da06df,0,0,0}},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,1,2,0,0},{14,"ResearchCommandBar",4294967295,0,0,0},{0}})OOF";
+    const auto actual_record = list_stream::parse(captured_record);
+    expect(actual_record.is_list && actual_record.items.size() == 6,
+        "captured literal CommandBar tuple must retain all six top-level fields");
+    expect(actual_record.items[2].items[1].items[7].items[2].atom == "1" &&
+        actual_record.items[2].items[1].items[9].atom == "4",
+        "captured owner ID 4 tuple confirms menu max ID 1 is not the root ID");
+
+    model::Form form; form.id = model::ObjectId{1}; form.name = "CapturedCommandBar";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{4}}};
+    model::OrdinaryFormDocument seeded(std::move(form));
+    seeded.add_control(model::ControlNode{model::ObjectId{2}, "Seed", model::ButtonPayload{}});
+    seeded.add_control(model::ControlNode{model::ObjectId{4}, "ResearchCommandBar", model::CommandBarPayload{}});
+    auto payload = form_stream::encode_document(seeded);
+    expect(payload.ok(), "known Form plus control ID 2 seed must encode before literal injection");
+    auto& records = payload.value().items[1].items[2].items[2].items;
+    const auto target = std::ranges::find(records, std::string("4"), [](const auto& row) {
+        return row.items.size() > 1 ? row.items[1].atom : std::string{};
+    });
+    expect(target != records.end(), "seeded known Form must expose the CommandBar owner record");
+    *target = actual_record;
+    const auto decoded = form_stream::decode_document(payload.value(), "CapturedCommandBar");
+    expect(decoded.ok(), decoded ? "captured full control tuple must decode without rewriting geometry or info" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* control = decoded.value().find_control(model::ObjectId{4});
+    expect(control != nullptr && control->kind() == model::ControlKind::command_bar &&
+        control->name == "ResearchCommandBar" &&
+        !std::get<model::CommandBarPayload>(control->payload).buttons.empty(),
+        "literal actual CommandBar control must be decoded with its named owner and entries");
+}
+
 void test_button_menu_mode_round_trip_and_validation() {
     static constexpr std::string_view members[] = {"DontUse", "Use", "UseExtra"};
     const std::string menu_block =
@@ -4577,6 +4688,8 @@ void test_owner_aware_control_geometry_codec() {
 
 int main() {
     try {
+        test_command_bar_owner_pair_and_strict_profile();
+        test_captured_command_bar_control_record_literal();
         test_outer_format_probe();
         test_layout_probe();
         test_runtime_envelope();
