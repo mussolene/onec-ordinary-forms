@@ -2045,6 +2045,48 @@ std::optional<std::string> decode_button_event(const LV& value, std::string_view
     return handler;
 }
 
+LV encode_form_close_events(const model::OrdinaryFormDocument& document) {
+    const auto& references = document.form().events;
+    if (references.empty()) return list({raw("0")});
+    if (references.size() != 1) fail("OOF1122", "$/Form/Events", "zero or one owned Form.OnClose", std::to_string(references.size()), "Form event collection is unsupported");
+    const auto* event = document.find_event(references.front().id());
+    if (event == nullptr || event->name != "OnClose" || event->handler.empty() ||
+        !std::holds_alternative<model::FormRef>(event->owner) ||
+        std::get<model::FormRef>(event->owner).id() != document.form().id) {
+        fail("OOF1122", "$/Form/Events", "owned Form.OnClose with non-empty handler", "different event", "Form event cannot be encoded");
+    }
+    const auto* descriptor = model::metamodel::find_form_event("OnClose");
+    if (descriptor == nullptr || descriptor->storage_codec != model::metamodel::StorageCodec::event_record || descriptor->storage_tag.empty())
+        throw std::logic_error("Form.OnClose has no executable storage descriptor");
+    return list({raw("1"), list({raw("70003"), raw(std::string(descriptor->storage_tag)),
+        list({raw("3"), string_value(event->handler),
+            parse_constant("{1,\"\",{1,0},{1,0},{1,0},{4,0,{0},\"\",-1,-1,1,0,\"\"},{0,0,0}}")})})});
+}
+
+std::optional<std::string> decode_form_close_events(const LV& value, std::string_view path) {
+    require_list(value, path);
+    if (value.items.empty()) fail("OOF1103", std::string(path), "event count", "missing", "Form event table has no count");
+    const auto count = integer_atom<std::uint32_t>(value.items[0], child_path(path, 0));
+    if (count == 0) { require_arity(value, 1, path); return std::nullopt; }
+    if (count != 1) fail("OOF1116", std::string(path), "zero or one Form.OnClose", std::to_string(count), "Multiple form events are unsupported");
+    require_arity(value, 2, path);
+    const auto& event = value.items[1]; const auto event_path = child_path(path, 1);
+    require_arity(event, 3, event_path);
+    require_raw_constant(event.items[0], "70003", child_path(event_path, 0));
+    const auto* descriptor = model::metamodel::find_form_event("OnClose");
+    if (descriptor == nullptr || descriptor->storage_codec != model::metamodel::StorageCodec::event_record || descriptor->storage_tag.empty())
+        throw std::logic_error("Form.OnClose has no executable storage descriptor");
+    require_raw_constant(event.items[1], descriptor->storage_tag, child_path(event_path, 1));
+    const auto& action = event.items[2]; const auto action_path = child_path(event_path, 2);
+    require_arity(action, 3, action_path);
+    require_raw_constant(action.items[0], "3", child_path(action_path, 0));
+    const auto handler = string_atom(action.items[1], child_path(action_path, 1));
+    if (handler.empty()) fail("OOF1115", child_path(action_path, 1), "non-empty Form.OnClose handler", "empty", "Form.OnClose handler cannot be empty");
+    require_exact(action.items[2], parse_constant("{1,\"\",{1,0},{1,0},{1,0},{4,0,{0},\"\",-1,-1,1,0,\"\"},{0,0,0}}"),
+        child_path(action_path, 2), "Form.OnClose action name, presentations, style or defaults are unsupported");
+    return handler;
+}
+
 struct DecodedPictureDescriptor {
     std::vector<std::uint8_t> bytes;
     bool transparent = false;
@@ -7804,7 +7846,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             parse_constant("{00000000-0000-0000-0000-000000000000,0}"),
             "$/3",
             "Unsupported root identity record");
-        require_exact(payload.items[4], list({raw("0")}), "$/4", "Unsupported root record");
+        const auto form_close_handler = decode_form_close_events(payload.items[4], "$/4");
         require_raw_constant(payload.items[5], "1", "$/5");
         require_raw_constant(payload.items[6], "4", "$/6");
         require_raw_constant(payload.items[7], "1", "$/7");
@@ -7827,6 +7869,8 @@ Result<model::OrdinaryFormDocument> decode_document(
         const std::string caption = decoded_single_language_text(header.items[0], "$/1/1/0");
         const std::uint64_t stored_max_id = integer_atom<std::uint64_t>(header.items[1], "$/1/1/1");
         require_raw_constant(header.items[2], "4294967295", "$/1/1/2");
+        if (form_close_handler && stored_max_id == std::numeric_limits<std::uint64_t>::max())
+            fail("OOF1120", "$/4", "allocatable Form.OnClose ID", "uint64 max", "Synthetic event ID overflows");
 
         const std::int32_t width = integer_atom<std::int32_t>(form_section.items[3], "$/1/3");
         const std::int32_t height = integer_atom<std::int32_t>(form_section.items[4], "$/1/4");
@@ -8263,6 +8307,13 @@ Result<model::OrdinaryFormDocument> decode_document(
         std::uint64_t synthetic_event_offset = 0;
         const std::uint64_t event_id_base = std::max(stored_max_id, next_page_id - 1);
         std::vector<model::PictureAsset> decoded_picture_assets;
+        if (form_close_handler) {
+            if (event_id_base == std::numeric_limits<std::uint64_t>::max()) fail("OOF1120", "$/4", "allocatable Form.OnClose ID", "uint64 max", "Synthetic event ID overflows");
+            const model::ObjectId event_id{event_id_base + ++synthetic_event_offset};
+            form.events.push_back(model::EventRef{event_id});
+            document.add_event(model::Event{event_id, "OnClose", *form_close_handler, model::FormRef{form.id}});
+        }
+
         for (auto& decoded_control : pending_controls) {
             if (decoded_control.click_handler) {
                 if (synthetic_event_offset >=
@@ -8350,11 +8401,11 @@ Result<list_stream::ListValue> encode_document(
                 std::to_string(document.form().id.value()),
                 "Form identity is outside the executable storage slice");
         }
-        if (!document.collections().commands.empty() || !document.form().events.empty()) {
+        if (!document.collections().commands.empty()) {
             fail(
                 "OOF1122",
                 "$",
-                "no commands or form events",
+                "no commands",
                 "unsupported document collections",
                 "Document contains a storage concept without an executable codec");
         }
@@ -8751,7 +8802,7 @@ Result<list_stream::ListValue> encode_document(
             form_section,
             encoded_attributes_result.value(),
             parse_constant("{00000000-0000-0000-0000-000000000000,0}"),
-            list({raw("0")}),
+            encode_form_close_events(document),
             raw("1"),
             raw("4"),
             raw("1"),

@@ -1088,6 +1088,12 @@ struct Metamodel::Impl {
         panel_placement_properties = make_panel_placement_property_descriptors();
         form_properties = make_form_property_descriptors();
         form_events = make_form_event_descriptors();
+        auto close = std::ranges::find(form_events, std::string_view{"OnClose"}, &EventDescriptor::api_name);
+        if (close == form_events.end()) throw std::logic_error("missing Form.OnClose descriptor");
+        close->persistence = PersistenceClass::persisted_editable;
+        close->storage_codec = StorageCodec::event_record;
+        close->storage_tag = "e1692cc2-605b-4535-84dd-28440238746c";
+
 
         apply_proven_storage_overrides(
             properties,
