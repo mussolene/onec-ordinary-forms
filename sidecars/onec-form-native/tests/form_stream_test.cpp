@@ -2431,10 +2431,31 @@ void test_command_bar_owner_pair_and_strict_profile() {
     const auto empty_owner_four = encode_owner_four({});
     expect(empty_owner_four.ok() && menu_for_owner_four(empty_owner_four.value()).items[2].atom == "0",
         "empty menu max ID must stay in menu-entry namespace even when root ID is 4");
+    auto empty_zero_footer = empty_owner_four.value();
+    auto& empty_menu = empty_zero_footer.items[1].items[2].items[2].items[1].items[2].items[1].items[7];
+    empty_menu.items.back().items.back().items[0] = list_stream::ListValue::raw_atom("0");
+    const auto empty_decoded = form_stream::decode_document(empty_zero_footer, "EmptyCommandBarZeroFooter");
+    expect(empty_decoded.ok() && std::get<model::CommandBarPayload>(
+        empty_decoded.value().find_control(model::ObjectId{4})->payload).buttons.empty(),
+        "native zero footer of an empty CommandBar root must decode into empty named buttons");
+    const auto empty_rebuilt = form_stream::encode_document(empty_decoded.value());
+    expect(empty_rebuilt.ok() && list_stream::dump_compact(empty_rebuilt.value()) ==
+        list_stream::dump_compact(empty_owner_four.value()),
+        "empty root footer variant must rebuild from named state without source preservation");
+    auto wrong_empty_footer = empty_zero_footer;
+    wrong_empty_footer.items[1].items[2].items[2].items[1].items[2].items[1].items[7].items.back().items.back().items[1] =
+        list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(wrong_empty_footer, "EmptyCommandBarWrongFooter"),
+        "zero footer must not bypass the remaining empty collection contract");
     model::CommandBarButton one_entry; one_entry.name = "Only"; one_entry.action = "OnlyHandler";
     const auto one_entry_owner_four = encode_owner_four({one_entry});
     expect(one_entry_owner_four.ok() && menu_for_owner_four(one_entry_owner_four.value()).items[2].atom == "1",
         "one-entry menu max ID must be 1, independent of root owner ID 4");
+    auto nonempty_zero_footer = one_entry_owner_four.value();
+    nonempty_zero_footer.items[1].items[2].items[2].items[1].items[2].items[1].items[7].items.back().items.back().items[0] =
+        list_stream::ListValue::raw_atom("0");
+    expect(!form_stream::decode_document(nonempty_zero_footer, "NonemptyCommandBarZeroFooter"),
+        "zero footer must remain unsupported for a nonempty collection");
 }
 
 void test_command_bar_default_button_round_trip_and_guards() {
