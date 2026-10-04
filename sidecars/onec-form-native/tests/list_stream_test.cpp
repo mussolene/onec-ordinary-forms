@@ -83,6 +83,27 @@ void test_quoted_strings() {
     expect(list_stream::dump_compact(value) == text, "quoted string output must be deterministic");
 }
 
+void test_platform_utf16_string_segments() {
+    // Independent literal emitted by strict Designer export for the synthetic cell.
+    const auto actual = list_stream::parse(R"({"S","Unicode Привет 世界 "\d83c"\df0d"})");
+    expect(actual.items[1].atom == "Unicode Привет 世界 🌍",
+        "platform surrogate pair must decode to the original non-BMP string");
+    expect(equal(actual, list_stream::parse(list_stream::dump_compact(actual))),
+        "platform string must survive canonical UTF-8 serialization");
+    expect(list_stream::parse(R"({""\0041"})").items[0].atom == "A",
+        "quoted BMP code unit must decode exactly");
+    expect(list_stream::parse(R"({""\d800"\dc00"\dbff"\dfff"})").items[0].atom ==
+        "\U00010000\U0010ffff", "surrogate boundaries must decode exactly");
+    for (const auto invalid : {
+        R"({"x"\df0d"})", R"({"x"\d83c"})", R"({"x"\d83c"\0041"})",
+        R"({"x"\d83c"\d800"})", R"({"x"\d83c"\df0})", R"({"x"\d83c"\zzzz"})",
+        R"({"x"\0041"bad})", R"({"x"\12345"})", R"({"x"\12"})", R"({"x"\d83c"\df0d})",
+        R"("x"\)", R"("x"\d)", R"("x"\d83c")"}) {
+        expect_rejected([&] { list_stream::parse(invalid); },
+            "malformed or unpaired UTF-16 string continuation must be rejected");
+    }
+}
+
 void test_bool_codec() {
     list_stream::ListInStream in("{0,1}");
     in.begin_list();
@@ -261,6 +282,7 @@ int main() {
     try {
         test_empty_and_nested_lists();
         test_quoted_strings();
+        test_platform_utf16_string_segments();
         test_bool_codec();
         test_integer_codecs();
         test_double_codec();
