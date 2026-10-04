@@ -24,6 +24,7 @@ constexpr std::uint32_t shortcut_version = 0;
 constexpr std::uint32_t shortcut_allowed_flags = 16U | 8U | 4U;
 constexpr std::string_view type_domain_root = "Pattern";
 constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
+constexpr std::string_view value_list_type_uuid = "4772b3b4-f4a3-49c0-a1a5-8cb5961511a3";
 
 std::string_view term_token(model::TypeDomainTerm term) {
     switch (term) {
@@ -45,6 +46,8 @@ std::string_view term_token(model::TypeDomainTerm term) {
             return "S";
         case model::TypeDomainTerm::type:
             return "T";
+        case model::TypeDomainTerm::value_list:
+            return "#";
     }
     throw std::runtime_error("unsupported type-domain term");
 }
@@ -323,6 +326,15 @@ void write_type_domain(
                     out.write_guid(entry.type_uuid->canonical);
                 }
                 break;
+            case model::TypeDomainTerm::value_list:
+                if (entry.type_uuid.has_value() || entry.numeric != model::NumericQualifiers{} ||
+                    entry.string != model::LengthQualifiers{} ||
+                    entry.binary != model::LengthQualifiers{} ||
+                    entry.date != model::DateQualifiers{}) {
+                    throw std::runtime_error("ValueList type-domain term cannot carry UUID or qualifiers");
+                }
+                out.write_guid(std::string(value_list_type_uuid));
+                break;
             case model::TypeDomainTerm::numeric:
                 if (entry.numeric.length != 0 || entry.numeric.precision != 0 ||
                     entry.numeric.non_negative) {
@@ -377,8 +389,15 @@ model::TypeDomainPatternValue read_type_domain(list_stream::ListInStream& in) {
             case model::TypeDomainTerm::unknown:
                 if (in.has_next()) {
                     entry.type_uuid = model::UuidValue{in.read_guid()};
+                    if (entry.term == model::TypeDomainTerm::unknown &&
+                        entry.type_uuid->canonical == value_list_type_uuid) {
+                        entry.term = model::TypeDomainTerm::value_list;
+                        entry.type_uuid.reset();
+                    }
                 }
                 break;
+            case model::TypeDomainTerm::value_list:
+                throw std::runtime_error("ValueList uses the platform unknown type token");
             case model::TypeDomainTerm::numeric:
                 if (in.has_next()) {
                     entry.numeric.length = in.read_uint32();

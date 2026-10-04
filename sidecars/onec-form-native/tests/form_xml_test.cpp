@@ -930,6 +930,26 @@ void test_boolean_type_domain_xml_roundtrip() {
         "Boolean TypeDomain must reject variable qualifier");
 }
 
+void test_value_list_type_domain_xml_roundtrip() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="ValueList" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "named ValueList TypeDomain must parse");
+    const auto& entry = parsed.value().collections().attributes.front().type.entries.front();
+    expect(entry.term == model::TypeDomainTerm::value_list && !entry.type_uuid,
+        "ValueList XML term must not expose its platform UUID");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Entry term=\"valueList\"/>") != std::string::npos,
+        "ValueList TypeDomain must retain its named XML term");
+    expect(source::parse_form_xml(serialized.value()).ok(),
+        "serialized ValueList TypeDomain must parse again");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueList\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Values\"><TypeDomain><Entry term=\"valueList\" typeUuid=\"d47d59f8-73f0-481c-8b5e-f6384c0a4804\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueList term must reject caller-supplied UUIDs");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueList\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Values\"><TypeDomain><Entry term=\"valueList\" length=\"64\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueList term must reject string qualifiers");
+}
+
 void test_inherited_property_has_one_surface() {
     constexpr std::string_view xml =
         "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -1371,6 +1391,7 @@ int main() {
         test_input_field_layout_xml_round_trip();
         test_button_shortcut_xml();
         test_boolean_type_domain_xml_roundtrip();
+        test_value_list_type_domain_xml_roundtrip();
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();
         test_strict_rejections();

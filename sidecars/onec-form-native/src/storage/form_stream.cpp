@@ -2767,6 +2767,44 @@ LV canonical_track_bar_info(
         list({raw("0")})});
 }
 
+LV canonical_list_box_properties(bool enabled, std::string_view tool_tip) {
+    auto properties = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
+        "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
+        "{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    properties.items[1] = raw(enabled ? "1" : "0");
+    properties.items[12] = encoded_localized(tool_tip);
+    return properties;
+}
+
+// Fixed ListBox slots are retained only for the observed public flags below.
+LV canonical_list_box_info(
+    bool enabled,
+    bool show_picture,
+    bool show_check_box,
+    bool read_only,
+    std::string_view tool_tip) {
+    auto property_flags = parse_constant(
+        "{23,100743712,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},"
+        "{4,0,{12741203},0},{4,3,{-15},3},{4,3,{-13},3},2,2,0,0,0,1,0,1,1,"
+        "{8,2,0,{-20},1,100},{8,2,0,{-20},1,100},0,0,1,0,0,0,0,0,0,0,"
+        "100,1,2,2,2,0,0,2}");
+    property_flags.items[1] = raw(read_only ? "100743712" : "100744736");
+    return list({
+        raw("1"),
+        list({
+            canonical_list_box_properties(enabled, tool_tip),
+            std::move(property_flags),
+            raw("6"),
+            raw("0"),
+            raw(show_picture ? "1" : "0"),
+            raw(show_check_box ? "1" : "0"),
+            raw("0"),
+        }),
+        list({raw("0")}),
+    });
+}
+
 DecodedControl decode_progress_bar(
     const LV& record,
     std::string_view path,
@@ -2927,6 +2965,85 @@ DecodedControl decode_track_bar(
         model::PropertyId::from_name("MinValue"), static_cast<std::int64_t>(min_value));
     if (step != 1) control.properties().set_explicit(
         model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+DecodedControl decode_list_box(
+    const LV& record,
+    std::string_view path,
+    const AttributeRecord& linked_attribute,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 ListBox ID", std::to_string(raw_id),
+            "ListBox ID is invalid");
+    }
+    if (linked_attribute.type.entries.size() != 1 ||
+        linked_attribute.type.entries.front().term != model::TypeDomainTerm::value_list ||
+        linked_attribute.type.entries.front().type_uuid.has_value()) {
+        fail("OOF1122", "$/2/3", "link to one ValueList Attribute", linked_attribute.name,
+            "ListBox DataPath must target a single ValueList Attribute");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 3, info_path);
+    require_raw_constant(info.items[0], "1", child_path(info_path, 0));
+    const auto& properties = info.items[1];
+    const auto properties_path = child_path(info_path, 1);
+    require_arity(properties, 7, properties_path);
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(properties.items[0], 21, base_path);
+    const bool enabled = bool_atom(properties.items[0].items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        properties.items[0].items[12], child_path(base_path, 12));
+    const auto flags_path = child_path(properties_path, 1);
+    require_list(properties.items[1], flags_path);
+    require_arity(properties.items[1], 38, flags_path);
+    const auto read_only_code = integer_atom<std::uint32_t>(properties.items[1].items[1], child_path(flags_path, 1));
+    if (read_only_code != 100743712 && read_only_code != 100744736) {
+        fail("OOF1122", child_path(flags_path, 1), "observed ListBox ReadOnly state", std::to_string(read_only_code),
+            "ListBox ReadOnly record is outside the supported profile");
+    }
+    const bool read_only = read_only_code == 100743712;
+    require_raw_constant(properties.items[2], "6", child_path(properties_path, 2));
+    require_raw_constant(properties.items[3], "0", child_path(properties_path, 3));
+    const bool show_picture = bool_atom(properties.items[4], child_path(properties_path, 4));
+    const bool show_check_box = bool_atom(properties.items[5], child_path(properties_path, 5));
+    auto normalized_info = info;
+    normalized_info.items[1].items[0].items[1] = raw("1");
+    normalized_info.items[1].items[0].items[12] = encoded_localized("");
+    normalized_info.items[1].items[1].items[1] = raw("100743712");
+    normalized_info.items[1].items[4] = raw("0");
+    normalized_info.items[1].items[5] = raw("0");
+    require_exact(normalized_info,
+        canonical_list_box_info(true, false, false, true, ""), info_path,
+        "ListBox contains a property outside the supported profile");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty ListBox Name", "empty",
+        "ListBox Name is required");
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")} ),
+        metadata_path, "ListBox metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "ListBox cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::ListBoxPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (show_picture) control.properties().set_explicit(model::PropertyId::from_name("ShowPicture"), true);
+    if (show_check_box) control.properties().set_explicit(model::PropertyId::from_name("ShowCheckBox"), true);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -3625,6 +3742,52 @@ LV encode_track_bar(const model::ControlNode& control, const GeometryContext& co
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")})});
+}
+
+LV encode_list_box(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::list_box || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "ListBox with positive int64 ID", control.name,
+            "ListBox is outside the supported profile");
+    }
+    if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
+        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/ListBox", "named ListBox with direct DataPath and ordinary Position",
+            control.name, "ListBox uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(),
+        {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly"}, "$/ListBox");
+    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    if (attribute == nullptr) {
+        fail("OOF1123", "$/ListBox/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "ListBox DataPath does not resolve");
+    }
+    if (attribute->type.entries.size() != 1 ||
+        attribute->type.entries.front().term != model::TypeDomainTerm::value_list ||
+        attribute->type.entries.front().type_uuid.has_value()) {
+        fail("OOF1122", "$/ListBox/DataPath", "single ValueList Attribute", attribute->name,
+            "ListBox DataPath must target a single ValueList Attribute");
+    }
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const bool show_picture = explicit_bool(control.properties(), "ShowPicture", false);
+    const bool show_check_box = explicit_bool(control.properties(), "ShowCheckBox", false);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_list_box_info(enabled, show_picture, show_check_box, read_only, tool_tip),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
 }
 
 LV encode_check_box(
@@ -4498,6 +4661,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& checkbox_descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
         const auto& progress_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
         const auto& track_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
+        const auto& list_box_descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
         const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
         using DecodeChildTable = std::function<void(
             const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&, std::string_view)>;
@@ -4573,7 +4737,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
-                             guid == progress_bar_descriptor.guid) {
+                             guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                             fail("OOF1122", child_path(record_path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
@@ -4583,7 +4747,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         const auto link_it = links_by_control.find(candidate_key);
                         const bool required_link = guid != progress_bar_descriptor.guid;
                         if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
-                            "DataPath link for each InputField or CheckBox", std::to_string(candidate_id),
+                            "DataPath link for each InputField, CheckBox, or ListBox", std::to_string(candidate_id),
                             "Linked control has no attribute link");
                         const AttributeRecord* linked_attribute = nullptr;
                         if (link_it != links_by_control.end()) {
@@ -4607,6 +4771,10 @@ Result<model::OrdinaryFormDocument> decode_document(
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == checkbox_descriptor.guid) {
                             child = decode_check_box(record, record_path, *linked_attribute, context);
+                            child.control.data_path = model::DataPath{model::AttributeRef{
+                                model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                        } else if (guid == list_box_descriptor.guid) {
+                            child = decode_list_box(record, record_path, *linked_attribute, context);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else {
@@ -4977,6 +5145,8 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_progress_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::track_bar) {
                     record = encode_track_bar(*control, context);
+                } else if (control->kind() == model::ControlKind::list_box) {
+                    record = encode_list_box(document, *control, context);
                 } else if (control->kind() == model::ControlKind::panel) {
                     if (!control->events.empty() || control->data_path || !control->extension_properties.empty()) {
                         fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",
@@ -4993,7 +5163,7 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, TrackBar, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, TrackBar, ListBox, or Panel", control->name,
                         "Control payload is unsupported");
                 }
                 if (control->data_path) {
@@ -5112,7 +5282,7 @@ Result<list_stream::ListValue> encode_document(
             }
         }
         if (linked_control_count != attributes.links.size()) {
-            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField, CheckBox, or bound ProgressBar",
+            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField, CheckBox, ListBox, or bound ProgressBar",
                 std::to_string(linked_control_count), "Linked control and DataPath link counts do not match");
         }
         if (max_id >= std::numeric_limits<std::uint32_t>::max()) {
