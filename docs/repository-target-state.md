@@ -36,30 +36,30 @@ Form.xml + Form/Module.bsl -> OrdinaryForm -> Form.bin
 | Публичный тип | Имя платформы | Вложенность по дескриптору | Данные и события | Form.bin | Что подтверждено / следующий опыт | Владелец работы |
 | --- | --- | --- | --- | --- | --- | --- |
 | `Button` | Кнопка | Нет | Click -> событие элемента; DataPath бинарно не поддержан | **PARTIAL** | ID, имя, Caption, Enabled, Position, Visible, Click handler; отличающиеся представления действия явно отклоняются | Интегратор |
-| `CalendarField` | ПолеКалендаря | Нет | DataPath и события не поддержаны | **PARTIAL** | ID, имя, Enabled, Position, Visible, BeginOfDisplayPeriod Date/Undefined; CurrentDate меняет только runtime; EndOfDisplayPeriod и SelectedDates требуют исследования | Группа CalendarField |
-| `Chart` | Диаграмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить типизированный источник данных и базовые значения; не выводить из help | Группа CalendarField |
-| `PivotChart` | СводнаяДиаграмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить тип и значения после независимого сохранения Designer | Группа ProgressBar |
+| `CalendarField` | ПолеКалендаря | Нет | DataPath и события не поддержаны | **PARTIAL** | ID, имя, Enabled, Position, Visible, BeginOfDisplayPeriod Date/Undefined; CurrentDate меняет только runtime; EndOfDisplayPeriod и SelectedDates требуют исследования | Интегратор |
+| `Chart` | Диаграмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить типизированный источник данных и базовые значения; не выводить из help | `agent/chart-controls` (активна) |
+| `PivotChart` | СводнаяДиаграмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить тип и значения после независимого сохранения Designer | `matvienko/pivot-controls` (активна) |
 | `CheckBox` | Флажок | Нет | DataPath -> Boolean Attribute; события бинарно не поддержаны | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Font, Position, Visible, Boolean DataPath; остальные свойства и события не поддержаны | Интегратор |
-| `ChoiceField` | ПолеВыбора | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить ChoiceList и связанный вариант отдельно | Группа CalendarField |
-| `CommandBar` | КоманднаяПанель | Нет | Типизированные Buttons и Action на кнопке | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, вложенные меню и сохранение обработчиков; вызов действий и остальные свойства не проверены | Группа CommandBar |
-| `Dendrogram` | Дендрограмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Создать в Designer, сверить доступность по версии и свойства | Группа ProgressBar |
-| `GeographicalSchemaField` | ПолеГеографическойСхемы | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить требуемую объектную модель и ссылочные значения | Группа ProgressBar |
-| `GraphicalSchemaField` | ПолеГрафическойСхемы | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить CurrentItem и зависимости диаграммы | Группа ProgressBar |
-| `UsualGroup` | РамкаГруппы | Контролы | ChildPolicy допускает упорядоченные контролы; runtime не проверен | **NOT_SUPPORTED** | Проверить вложенность и порядок детей | Группа ProgressBar |
-| `HTMLDocumentField` | ПолеHTMLДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Нужен Windows-платформенный образец; отдельно проверить Document и события | Группа ProgressBar |
+| `ChoiceField` | ПолеВыбора | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить ChoiceList и связанный вариант отдельно | `agent/choicefield-controls` (назначена, не запущена) |
+| `CommandBar` | КоманднаяПанель | Нет | Типизированные Buttons и Action на кнопке | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, вложенные меню, сохранение Action и вызов прямым щелчком; вложенный вызов не проверен | Интегратор |
+| `Dendrogram` | Дендрограмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Создать в Designer, сверить доступность по версии и свойства | `matvienko/dendrogram-controls` (активна) |
+| `GeographicalSchemaField` | ПолеГеографическойСхемы | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить требуемую объектную модель и ссылочные значения | `matvienko/geographical-controls` (активна) |
+| `GraphicalSchemaField` | ПолеГрафическойСхемы | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить CurrentItem и зависимости диаграммы | `matvienko/graphical-schema-controls` (активна) |
+| `UsualGroup` | РамкаГруппы | Контролы | ChildPolicy допускает упорядоченные контролы; runtime не проверен | **NOT_SUPPORTED** | Проверить вложенность и порядок детей | `agent/group-frame-controls` (активна) |
+| `HTMLDocumentField` | ПолеHTMLДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | В Linux вызовы Add и OutputEnum с результатами 0/2/0 прошли; содержимое не проверено. Следующий опыт SetText/GetText; до кодека, строгой проверки Designer и холодной проверки тип не поддержан (`ev_b2b0cd3296714c49a4f178fa75664b3d`) | `agent/html-document-field-controls` (активна) |
 | `InputField` | ПолеВвода | Нет | DataPath -> Attribute/TypeDomain; события владельца элемента не проверялись | **PARTIAL** | ID, имя, Position, Visible, DataPath; 21 подтвержденное сохраняемое свойство строкового профиля; другие типы и события не поддержаны | Интегратор |
 | `LabelDecoration` | Надпись | Нет | Click указан в каталоге, бинарно не проверен; DataPath не проверен | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Position, Visible, HorizontalAlign Auto/Left/Center/Right; события и остальные свойства не поддержаны | Интегратор |
-| `ListBox` | ПолеСписка | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить список значений и связь с реквизитом отдельно | Группа CalendarField |
+| `ListBox` | ПолеСписка | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить список значений и связь с реквизитом отдельно | `agent/listbox-controls` (активна) |
 | `Panel` | Панель | Контролы и страницы | Именованные Page и рекурсивные ChildItems в стандартном оформлении | **PARTIAL** | Два уровня вложенности, локальный порядок, ссылки на владельца и соседей; другие свойства панели не поддержаны | Интегратор |
 | `PictureDecoration` | ПолеКартинки | Нет | Стандартный и внешний Picture поддержаны; события не поддержаны | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible, PictureLib reference и внешние PictureAsset; остальные свойства и события не поддержаны | Интегратор |
 | `ProgressBar` | Индикатор | Нет | Прямой DataPath к локальному числовому реквизиту; синхронизация при открытии проверена | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible, MaxValue/MinValue/Step int32, необязательный числовой DataPath; события и остальные типы связей не поддержаны | Группа ProgressBar |
-| `RadioButton` | Переключатель | Нет | DataPath, выбор группы и события не поддержаны | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Position, Visible; требуется исследование значения и связи группы | Группа переключателя |
-| `Splitter` | Разделитель | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить пару связанных областей и геометрию | Группа ProgressBar |
-| `SpreadsheetDocumentField` | ПолеТабличногоДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | GUID коррелирован, сборка не подтверждена; проверить содержимое отдельно | Группа ProgressBar |
-| `Table` | ТабличноеПоле | Нет | Колонки/строки и привязки не подтверждены бинарно | **NOT_SUPPORTED** | Проверить колонки, реквизит-источник и вложенные поля | Группа CalendarField |
-| `TextDocumentField` | ПолеТекстовогоДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить значение документа и типизированную запись | Группа ProgressBar |
-| `GanttChart` | ДиаграммаГанта | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить серии, строки и редактируемые события | Группа ProgressBar |
-| `TrackBar` | ПолосаРегулирования | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить связь с числовым реквизитом, диапазон и шаг | Группа ProgressBar |
+| `RadioButton` | Переключатель | Нет | DataPath, выбор группы и события не поддержаны | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Position, Visible; требуется исследование значения и связи группы | Интегратор: исследование |
+| `Splitter` | Разделитель | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить пару связанных областей и геометрию | `agent/splitter-controls` (активна) |
+| `SpreadsheetDocumentField` | ПолеТабличногоДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | GUID коррелирован, сборка не подтверждена; проверить содержимое отдельно | `matvienko/spreadsheet-document-controls` (активна) |
+| `Table` | ТабличноеПоле | Нет | Колонки/строки и привязки не подтверждены бинарно | **NOT_SUPPORTED** | Проверить колонки, реквизит-источник и вложенные поля | `agent/table-controls` (активна) |
+| `TextDocumentField` | ПолеТекстовогоДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить значение документа и типизированную запись | `agent/text-document-controls` (активна) |
+| `GanttChart` | ДиаграммаГанта | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить серии, строки и редактируемые события | `agent/gantt-chart-controls` (активна) |
+| `TrackBar` | ПолосаРегулирования | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить связь с числовым реквизитом, диапазон и шаг | `agent/trackbar-controls` (PR #7, draft) |
 
 Столбец вложенности показывает только политику объектного дескриптора: у Panel допускаются упорядоченные контролы и страницы, у UsualGroup упорядоченные контролы, у остальных запрещены дочерние контролы. Это не бинарное доказательство. Связь Button.Click принадлежит Button; связь `InputField.DataPath -> Attributes.Attribute -> TypeDomain` подтверждена для строковых реквизитов, `CheckBox.DataPath` для булевых. `DataPath` необязателен в XSD и это не доказывает поведение контрола без реквизита. Designer подтвердил `B` без квалификаторов как Boolean. Прежнее соответствие BinaryData удалено; бинарная запись BinaryData явно отклоняется до отдельного доказательства.
 
@@ -146,21 +146,40 @@ LabelDecoration дополнен Enabled и ToolTip, CheckBox дополнен T
 
 ## Координация групп
 
-Интегратор управляет своей командой и группами верхнего уровня.
-Все 25 контролов закреплены в столбце владельца основной таблицы.
-Код, схемы, документацию и коммиты объединяет только интегратор;
-исследователи работают в отдельных игнорируемых каталогах и готовят
-отдельные патчи. Группа CommandBar также независимо проверяет результаты.
-Владение Panel остается у интегратора; внешний аудит Panel только читает
-оставшиеся пробелы и не повторяет подтвержденные опыты размещения.
+В основной таблице указаны все владельцы. Ниже приведена текущая очередь, а не
+новая оценка продуктовой поддержки. Для каждой задачи исполнитель работает в
+собственной ветке/worktree и готовит ограниченный PR. Интегратор проверяет
+изменение и факты; root принимает и объединяет PR по очереди. После разрешения
+конфликтов повторяются затронутые проверки. Открытые ветки и PR не увеличивают
+счетчик 10/25 PARTIAL; выпуск закрыт до выполнения полного целевого контракта.
 
-CalendarField, ProgressBar и PictureDecoration получили начальный основной кодек.
-Следующий шаг: расширить сохраняемые свойства и типизированные значения этих
-контролов, затем реализовать следующие типы по закрепленным владельцам.
-UsualGroup требует разрешения противоречия между текущей политикой
-ChildItems и допустимым владельцем динамического элемента платформы.
-Результат Add не заменяет доказательство статической структуры документа;
-молчаливое уплощение или перенос в Panel не допускаются.
+| Контролы | Группа и ветка | Этап | PR и ограничение |
+| --- | --- | --- | --- |
+| RadioButton | Интегратор; отдельная ветка не указана | Исследование TypeValue отклонено (`ev_3ef843311b504c26acb620ffc3ccb1ff`) | Не заявлять поддержку значения выбора и SelectionValue |
+| Splitter | `agent/splitter-controls` | Активная работа | Проверить пару областей и геометрию |
+| TextDocumentField | `agent/text-document-controls` | Активная работа | Проверить значение и типизированную запись |
+| Table, ListBox | `agent/table-controls`, `agent/listbox-controls` | Активная работа, GPT-6 Luna medium | Колонки, строки, список и связь с реквизитом не подтверждены |
+| ChoiceField | `agent/choicefield-controls` | В очереди; запуск не начат, среда выполнения не выделила слот | Не указывать как активную работу; ChoiceList и связанный вариант не проверены |
+| TrackBar | `agent/trackbar-controls` | PR #7, черновик, ожидает интеграции | Числовая связь, диапазон и шаг требуют проверки |
+| PivotChart | `matvienko/pivot-controls` | Активная работа, GPT-6 Luna medium | Тип и значения требуют независимого сохранения Designer |
+| Dendrogram | `matvienko/dendrogram-controls` | Активная работа, GPT-6 Luna medium | Проверить доступность по версии и свойства |
+| GeographicalSchemaField | `matvienko/geographical-controls` | Активная работа, GPT-6 Luna medium | Проверить объектную модель и ссылочные значения |
+| UsualGroup | `agent/group-frame-controls` | Активная работа | Сначала разрешить противоречие политики `ChildItems` и владельца динамического элемента; не уплощать в Panel |
+| GraphicalSchemaField | `matvienko/graphical-schema-controls` | Активная работа | Проверить `CurrentItem` и зависимости диаграммы |
+| SpreadsheetDocumentField | `matvienko/spreadsheet-document-controls` | Активная работа | GUID сопоставлен, содержимое и сборка не подтверждены |
+| Chart, GanttChart, HTMLDocumentField | `agent/chart-controls`, `agent/gantt-chart-controls`, `agent/html-document-field-controls` | Активная работа, GPT-6 Luna medium | Проверить объектные модели; для HTMLDocumentField изучить SetText/GetText и содержимое |
+
+CommandBar поддержан частично: `Action` сохраняется, один прямой щелчок вызвал
+обработчик в общей сцене (`ev_6f4d03968e5f410a85dec37706f26ee9`); вложенный
+вызов не проверен.
+RadioButton и Splitter остаются работой интегратора. Панель и группа картинок
+проверяются только в очерченных пределах основной таблицы.
+
+Активны 13 исполнителей в пяти группах; ChoiceField остается в очереди, а
+TrackBar проверяет интегратор. PR #2, #3, #4, #5 и #6 приняты. PR #1 остается
+основным черновиком; PR #7 с TrackBar также открыт как черновик и ожидает
+слияния. Объединяйте задачи последовательно; после каждого принятого PR
+пересчитывайте только типы с завершенным кодеком и текущими доказательствами.
 
 Для новых рабочих задач используется GPT-6 Luna medium.
 Порядок готовности: именованная модель, основной кодек, нативные тесты,
@@ -308,6 +327,13 @@ BeginOfDisplayPeriod сохраняет локальную дату с точн�
 libxml2 подтвердила 9 допустимых и 28 недопустимых вариантов схемы:
 `ev_32e7076e10f04a33bd54044ae10c818e`.
 
+Отдельная свежая сцена проверила четыре варианта `BeginOfDisplayPeriod`,
+включая Date и Undefined (`ev_cf1969d4a41d4e19b06be345b3beffa0`). В общей
+XML-only сцене десяти типов после интеграции проверена дата
+`2031-03-04T05:06:07`, строгий Designer и холодное чтение; XML, модуль и ресурсы
+сверены в `scan-output/mixed-ten-calendar-integrated-20261004`. Неопределено в
+этой общей сцене не проверялось.
+
 Год 4000 принят конструктором Дата и началом периода; значение сохранено
 в подтвержденном поле потока и восстановлено. Ограничение литерала даты
 языка запросов 3999 сюда не переносится. Верхняя граница года платформы
@@ -327,15 +353,19 @@ CommandBar хранит Enabled, ToolTip и типизированную кол�
 
 Полная независимая запись платформы совпала с тестовой фикстурой. Две панели
 с разными ID, Unicode и вложенными кнопками прошли строгий Designer и холодные
-getters; три обработчика сохранились. Платформенный вызов обработчиков пока
-не проверен. В платформенной сцене картинок меню нет, стандартная картинка
-подтверждена нативным тестом. Доказательства:
+getters; три обработчика сохранились. Один прямой щелчок в общей сцене вызвал
+Action (`ev_6f4d03968e5f410a85dec37706f26ee9`); вложенный вызов не проверен. В
+платформенной сцене картинок меню нет, стандартная картинка подтверждена
+нативным тестом. Доказательства:
 `ev_85604d13606142ebb92db2cce54fa289`, `ev_7202bb5ad7e04b6b9b3a935d879cf2ad`.
 Охват типов 10/25 PARTIAL (40%), 0 FULL; это не общая готовность продукта.
 
 Совместная XML-only сцена десяти типов прошла строгий Designer и холодные
 проверки: вложенная страница/кнопка, меню командной панели, три привязки и
 один внешний GIF. XML, модуль, ресурсы и повторная сборка совпали.
-Нативные наборы 11/11 PASS; модель/поток/XML: 20+46+28 = 94 сценария.
-Сохранение Action проверено, фактическое нажатие кнопки не проверялось.
+Нативные наборы 11/11 PASS; на момент этой сцены модель/поток/XML: 20+46+28 = 94 сценария.
+Сохранение Action проверено; фактический вызов обработчика подтвержден отдельно ниже.
 Доказательство: `ev_4060308b9ad8474aac691623e66eecd7`.
+
+После интеграции CalendarField текущие исходники содержат 11 CTest наборов и
+20+48+28 = 96 именованных функций-сценариев в модельных, потоковых и XML-тестах.
