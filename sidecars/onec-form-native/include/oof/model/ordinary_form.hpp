@@ -587,7 +587,26 @@ struct SplitterPayload final : TypedControlPayload<ControlKind::splitter> {};
 struct ChartPayload final : TypedControlPayload<ControlKind::chart> {};
 struct PivotChartPayload final : TypedControlPayload<ControlKind::pivot_chart> {};
 struct GanttChartPayload final : TypedControlPayload<ControlKind::gantt_chart> {};
-struct DendrogramPayload final : TypedControlPayload<ControlKind::dendrogram> {};
+struct DendrogramItem {
+    std::string value;
+    LocalizedStringValue text;
+
+    friend bool operator==(const DendrogramItem&, const DendrogramItem&) = default;
+};
+
+struct DendrogramLink {
+    std::string first_item;
+    std::string second_item;
+    LocalizedStringValue title;
+    DecimalValue distance{"0"};
+
+    friend bool operator==(const DendrogramLink&, const DendrogramLink&) = default;
+};
+
+struct DendrogramPayload final : TypedControlPayload<ControlKind::dendrogram> {
+    std::vector<DendrogramItem> items;
+    std::vector<DendrogramLink> links;
+};
 struct HtmlDocumentFieldPayload final
     : TypedControlPayload<ControlKind::html_document_field> {};
 struct ListBoxPayload final : TypedControlPayload<ControlKind::list_box> {};

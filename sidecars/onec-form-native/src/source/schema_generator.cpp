@@ -71,6 +71,10 @@ std::string_view xsd_type(ValueCodec codec) {
     switch (codec) {
         case ValueCodec::command_bar_buttons:
             return "CommandBarButtonsType";
+        case ValueCodec::dendrogram_items:
+            return "DendrogramItemsType";
+        case ValueCodec::dendrogram_links:
+            return "DendrogramLinksType";
         case ValueCodec::unclassified:
             return "UnclassifiedValueType";
         case ValueCodec::boolean:
@@ -675,6 +679,11 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     <xs:element name="Representation" type="ButtonRepresentationType" minOccurs="0"/><xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0"/><xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/><xs:element name="Action" type="xs:string" minOccurs="0"/><xs:element name="Order" type="CommandBarButtonOrderType" minOccurs="0"/><xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0"/>
   </xs:sequence><xs:attribute name="name" type="xs:string" use="required"/><xs:attribute name="type" type="CommandBarButtonKindType" use="required"/></xs:complexType>
   <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
+
+  <xs:complexType name="DendrogramItemsType"><xs:sequence><xs:element name="Item" type="DendrogramItemType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="DendrogramItemType"><xs:sequence><xs:element name="Value" type="xs:string"/><xs:element name="Text" type="LocalizedStringValueType"/></xs:sequence></xs:complexType>
+  <xs:complexType name="DendrogramLinksType"><xs:sequence><xs:element name="Link" type="DendrogramLinkType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="DendrogramLinkType"><xs:sequence><xs:element name="FirstItem" type="xs:string"/><xs:element name="SecondItem" type="xs:string"/><xs:element name="Title" type="LocalizedStringValueType"/><xs:element name="Distance" type="xs:decimal" minOccurs="0"/></xs:sequence></xs:complexType>
 
 )XSD";
 

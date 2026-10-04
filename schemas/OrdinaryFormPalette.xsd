@@ -448,6 +448,9 @@
               <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
               <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="Items" apiName="Items" russianName="Элементы" russianType="ЭлементыДендрограммы" valueCodec="dendrogram-items"/>
+              <Property name="Links" apiName="Links" russianName="Связи" russianType="СвязиДендрограммы" valueCodec="dendrogram-links"/>
+              <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="ОриентацияДендрограммы" valueCodec="enumeration"/>
             </Properties>
             <Events>
               <Event name="Selection" apiName="Selection" russianName="Выбор"/>
