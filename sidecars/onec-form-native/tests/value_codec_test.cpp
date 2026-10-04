@@ -116,6 +116,37 @@ void test_type_domain() {
             "{\"Pattern\",{\"T\",d47d59f8-73f0-481c-8b5e-f6384c0a4804}}",
         "type-domain must match the proven platform fixture");
 
+    model::TypeDomainEntry value_list_entry;
+    value_list_entry.term = model::TypeDomainTerm::value_list;
+    const model::TypeDomainPatternValue value_list_fixture{{value_list_entry}};
+    expect(
+        codec::encode_type_domain(value_list_fixture) ==
+            "{\"Pattern\",{\"#\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}",
+        "ValueList term must use the independent platform type descriptor");
+    expect(
+        codec::decode_type_domain("{\"Pattern\",{\"#\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}") ==
+            value_list_fixture,
+        "ValueList platform type descriptor must decode as the named term");
+    for (const auto token : {"T", "R", "L"}) {
+        const auto other_platform_term = codec::decode_type_domain(
+            std::string("{\"Pattern\",{\"") + token +
+            "\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}");
+        expect(other_platform_term.entries.front().term != model::TypeDomainTerm::value_list,
+            "ValueList recognition must be limited to the proven # type token");
+    }
+    model::TypeDomainEntry invalid_value_list = value_list_entry;
+    invalid_value_list.type_uuid = model::UuidValue{"d47d59f8-73f0-481c-8b5e-f6384c0a4804"};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_list}})); },
+        "ValueList must reject an overriding type UUID");
+    invalid_value_list = value_list_entry;
+    invalid_value_list.string = {64, false};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_list}})); },
+        "ValueList must reject qualifiers");
+
     model::TypeDomainPatternValue value;
 
     model::TypeDomainEntry type;

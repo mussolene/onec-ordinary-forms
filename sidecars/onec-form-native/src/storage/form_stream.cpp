@@ -683,6 +683,22 @@ model::ColorValue explicit_button_color(const model::PropertySet& properties, st
     return std::get<model::ColorValue>(entry->value);
 }
 
+model::ColorValue explicit_splitter_color(const model::PropertySet& properties, std::string_view name) {
+    const auto* entry = properties.find(model::PropertyId::from_name(name));
+    if (entry == nullptr) return model::ColorValue{};
+    if (!std::holds_alternative<model::ColorValue>(entry->value)) {
+        fail("OOF1122", std::string("$/Splitter/") + std::string(name), "ColorValue",
+            "different value type", "Splitter color property has the wrong value type");
+    }
+    const auto color = std::get<model::ColorValue>(entry->value);
+    if (color.kind != model::ColorKind::automatic && color.kind != model::ColorKind::absolute) {
+        fail("OOF1122", std::string("$/Splitter/") + std::string(name),
+            "automatic or absolute RGB color", "unobserved color kind",
+            "Splitter style colors are outside the supported storage profile");
+    }
+    return color;
+}
+
 LV encode_control_font(const model::FontValue& font, std::string_view property_path) {
     try {
         return list_stream::parse(value_codec::encode_font(font));
@@ -803,11 +819,45 @@ LV canonical_command_bar_properties(bool enabled, std::string_view tool_tip,
     return list(std::move(properties));
 }
 
+
+LV canonical_usual_group_properties(bool enabled, std::string_view caption, std::string_view tool_tip) {
+    auto base = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,4,700,1,100},0,{4,4,{0},4},{4,4,{0},4},"
+        "{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
+        "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    base.items[1] = raw(enabled ? "1" : "0");
+    base.items[12] = encoded_localized(tool_tip);
+    return list({raw("0"), list({
+        std::move(base),
+        raw("8"),
+        encoded_localized(caption),
+        parse_constant("{3,0,{0},6,1,0,cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2}"),
+        raw("0"),
+    })});
+}
+
 LV canonical_picture_properties(bool enabled, std::string_view tool_tip = {}) {
     auto properties = parse_constant(
         R"({{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},20,0,0,{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,2,0,0,1,2},{0,0,0},1,1,0,0,{1,0},0,1,1,1})");
     properties.items[0] = canonical_button_base(enabled, tool_tip);
     return properties;
+}
+
+LV canonical_splitter_properties(bool enabled, std::int32_t orientation, std::string_view tool_tip,
+    const model::ColorValue& border_color, const model::ColorValue& back_color) {
+    auto base = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1,{4,4,{0},4},"
+        "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
+        "{3,0,{-18},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
+        "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    if (!base.is_list || base.items.size() != 21) {
+        throw std::logic_error("canonical Splitter base record is malformed");
+    }
+    base.items[1] = raw(enabled ? "1" : "0");
+    base.items[12] = encoded_localized(tool_tip);
+    base.items[2] = encode_button_color(back_color, "$/Splitter/BackColor");
+    base.items[6] = encode_button_color(border_color, "$/Splitter/BorderColor");
+    return list({std::move(base), raw("2"), raw(std::to_string(orientation)), raw("0")});
 }
 
 LV canonical_button_properties(
@@ -923,6 +973,18 @@ LV canonical_choice_field_info(bool enabled, std::string_view tool_tip) {
     return list({raw("2"), std::move(properties), list({raw("0")})});
 }
 
+LV canonical_html_document_field_data(std::int32_t output) {
+    return list({
+        raw("5"),
+        raw("0"),
+        list({raw("0")}),
+        list({raw("4"), raw("4"), list({raw("0")}), raw("4")}),
+        list({raw("3"), raw("1"), list({raw("-18")}), raw("0"), raw("0"), raw("0")}),
+        raw("1"),
+        raw(std::to_string(output)),
+    });
+}
+
 LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_view tool_tip,
     const model::FontValue* font = nullptr) {
     return list({
@@ -974,6 +1036,20 @@ LV canonical_calendar_field_info(bool enabled, std::string_view begin_period = "
         raw("1"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"),
     });
     return list({raw("1"), properties, zero_record});
+}
+
+LV canonical_text_document_field_info(bool enabled, const model::ColorValue& border_color,
+                                      const model::FontValue& font) {
+    auto base = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
+        "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
+        "{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
+        "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    base.items[1] = raw(enabled ? "1" : "0");
+    base.items[4] = encode_control_font(font, "$/TextDocumentField/Font");
+    base.items[6] = encode_button_color(border_color, "$/TextDocumentField/BorderColor");
+    return list({std::move(base), raw("6"), raw("1"),
+        raw("00000000-0000-0000-0000-000000000000"), list({raw("0")}), raw("0"), raw("0")});
 }
 
 
@@ -2281,6 +2357,59 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, std::move(menu.assets)};
 }
 
+
+DecodedControl decode_usual_group(const LV& record, std::string_view path, const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::usual_group);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 UsualGroup ID", std::to_string(raw_id),
+            "UsualGroup ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 2, info_path);
+    require_raw_constant(info.items[0], "0", child_path(info_path, 0));
+    const auto& properties = info.items[1];
+    const auto properties_path = child_path(info_path, 1);
+    require_arity(properties, 5, properties_path);
+    const auto& base = properties.items[0];
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(base, 21, base_path);
+    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
+    const std::string caption = decoded_single_language_text(properties.items[2], child_path(properties_path, 2));
+    auto normalized = properties;
+    auto normalized_base = base;
+    normalized_base.items[12] = encoded_localized(tool_tip);
+    normalized.items[0] = std::move(normalized_base);
+    normalized.items[2] = encoded_localized(caption);
+    require_exact(normalized, canonical_usual_group_properties(enabled, caption, tool_tip).items[1],
+        properties_path, "UsualGroup contains an unsupported property or event variation");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+        "Control name is required");
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "UsualGroup metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "UsualGroup children are not supported by the executable storage profile");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::UsualGroupPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
 DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
@@ -2586,6 +2715,75 @@ DecodedControl decode_picture_decoration(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::move(picture_asset), {}};
 }
 
+DecodedControl decode_splitter(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::splitter);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 Splitter ID", std::to_string(raw_id),
+            "Splitter ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 2, info_path);
+    require_raw_constant(info.items[0], "0", child_path(info_path, 0));
+    const auto& properties = info.items[1];
+    const auto properties_path = child_path(info_path, 1);
+    require_arity(properties, 4, properties_path);
+    const auto& base = properties.items[0];
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(base, 21, base_path);
+    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
+    const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
+    const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
+    if ((back_color.kind != model::ColorKind::automatic && back_color.kind != model::ColorKind::absolute) ||
+        (border_color.kind != model::ColorKind::automatic && border_color.kind != model::ColorKind::absolute)) {
+        fail("OOF1114", properties_path, "automatic or observed absolute Splitter colors", describe(properties),
+            "Splitter style colors are outside the supported storage profile");
+    }
+    const auto orientation_storage = integer_atom<std::int32_t>(properties.items[2], child_path(properties_path, 2));
+    std::string orientation_member;
+    if (orientation_storage == 2) orientation_member = "Auto";
+    else if (orientation_storage == 0) orientation_member = "Vertical";
+    else if (orientation_storage == 1) orientation_member = "Horizontal";
+    else fail("OOF1114", child_path(properties_path, 2), "Orientation Auto(2), Vertical(0), or Horizontal(1)",
+        std::to_string(orientation_storage), "Splitter orientation value is unsupported");
+
+    require_exact(properties,
+        canonical_splitter_properties(enabled, orientation_storage, tool_tip, border_color, back_color),
+        properties_path, "Splitter properties differ from the supported exact record");
+    const auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+        "Control name is required");
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "Splitter metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "Splitter cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::SplitterPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (orientation_member != "Auto") control.properties().set_explicit(
+        model::PropertyId::from_name("Orientation"), model::EnumerationValue{"Orientation", orientation_member});
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    if (back_color.kind != model::ColorKind::automatic) control.properties().set_explicit(
+        model::PropertyId::from_name("BackColor"), back_color);
+    if (border_color.kind != model::ColorKind::automatic) control.properties().set_explicit(
+        model::PropertyId::from_name("BorderColor"), border_color);
+    control.position = decoded_geometry.position;
+    return {std::move(control), std::nullopt, decoded_geometry.incoming, std::nullopt, {}};
+}
+
 DecodedControl decode_radio_button(
     const LV& record,
     std::string_view path,
@@ -2649,6 +2847,59 @@ DecodedControl decode_radio_button(
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+DecodedControl decode_html_document_field(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::html_document_field);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 HTMLDocumentField ID", std::to_string(raw_id),
+            "HTMLDocumentField ID is invalid");
+    }
+
+    const auto& data = record.items[2];
+    const auto data_path = child_path(path, 2);
+    require_arity(data, 7, data_path);
+    const auto output = integer_atom<std::int32_t>(data.items[6], child_path(data_path, 6));
+    if (output < 0 || output > 2) {
+        fail("OOF1114", child_path(data_path, 6), "UseOutput storage value 0, 1, or 2",
+            std::to_string(output), "HTMLDocumentField.Output storage value is unsupported");
+    }
+    auto normalized_data = data;
+    normalized_data.items[6] = raw("0");
+    require_exact(normalized_data, canonical_html_document_field_data(0), data_path,
+        "HTMLDocumentField contains an unproven property or storage variation");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+            "Control name is required");
+    }
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "HTMLDocumentField metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "HTMLDocumentField cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::HtmlDocumentFieldPayload{}};
+    static constexpr std::array<std::string_view, 3> members{"Auto", "Enable", "Disable"};
+    if (output != 0) {
+        control.properties().set_explicit(
+            model::PropertyId::from_name("Output"),
+            model::EnumerationValue{"Output", std::string(members[static_cast<std::size_t>(output)])});
+    }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2757,6 +3008,67 @@ LV canonical_progress_bar_info(
         raw(std::to_string(max_value)), raw(std::to_string(step)), raw("1"), raw("0"), raw("2")});
 }
 
+LV canonical_track_bar_properties(bool enabled, std::string_view tool_tip) {
+    auto properties = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
+        "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
+        "{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    properties.items[1] = raw(enabled ? "1" : "0");
+    properties.items[12] = encoded_localized(tool_tip);
+    return properties;
+}
+
+LV canonical_track_bar_info(
+    bool enabled,
+    std::string_view tool_tip,
+    std::int32_t min_value = 0,
+    std::int32_t max_value = 100,
+    std::int32_t step = 1) {
+    return list({raw("1"),
+        list({canonical_track_bar_properties(enabled, tool_tip), raw("5"), raw(std::to_string(min_value)),
+            raw(std::to_string(max_value)), raw(std::to_string(step)), raw("10"), raw("2"), raw("2"),
+            raw("5"), raw("100")}),
+        list({raw("0")})});
+}
+
+LV canonical_list_box_properties(bool enabled, std::string_view tool_tip) {
+    auto properties = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
+        "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
+        "{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    properties.items[1] = raw(enabled ? "1" : "0");
+    properties.items[12] = encoded_localized(tool_tip);
+    return properties;
+}
+
+// Fixed ListBox slots are retained only for the observed public flags below.
+LV canonical_list_box_info(
+    bool enabled,
+    bool show_picture,
+    bool show_check_box,
+    bool read_only,
+    std::string_view tool_tip) {
+    auto property_flags = parse_constant(
+        "{23,100743712,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},"
+        "{4,0,{12741203},0},{4,3,{-15},3},{4,3,{-13},3},2,2,0,0,0,1,0,1,1,"
+        "{8,2,0,{-20},1,100},{8,2,0,{-20},1,100},0,0,1,0,0,0,0,0,0,0,"
+        "100,1,2,2,2,0,0,2}");
+    property_flags.items[1] = raw(read_only ? "100743712" : "100744736");
+    return list({
+        raw("1"),
+        list({
+            canonical_list_box_properties(enabled, tool_tip),
+            std::move(property_flags),
+            raw("6"),
+            raw("0"),
+            raw(show_picture ? "1" : "0"),
+            raw(show_check_box ? "1" : "0"),
+            raw("0"),
+        }),
+        list({raw("0")}),
+    });
+}
+
 DecodedControl decode_progress_bar(
     const LV& record,
     std::string_view path,
@@ -2833,6 +3145,169 @@ DecodedControl decode_progress_bar(
         model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
     if (linked_attribute) control.data_path = model::DataPath{
         model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+DecodedControl decode_track_bar(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const std::uint64_t raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 TrackBar ID", std::to_string(raw_id),
+            "TrackBar ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 3, info_path);
+    require_raw_constant(info.items[0], "1", child_path(info_path, 0));
+    const auto& info_payload = info.items[1];
+    const auto payload_path = child_path(info_path, 1);
+    require_arity(info_payload, 10, payload_path);
+    const auto& properties = info_payload.items[0];
+    const auto properties_path = child_path(payload_path, 0);
+    require_arity(properties, 21, properties_path);
+    const bool enabled = bool_atom(properties.items[1], child_path(properties_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        properties.items[12], child_path(properties_path, 12));
+    const std::int32_t min_value = integer_atom<std::int32_t>(
+        info_payload.items[2], child_path(payload_path, 2));
+    const std::int32_t max_value = integer_atom<std::int32_t>(
+        info_payload.items[3], child_path(payload_path, 3));
+    const std::int32_t step = integer_atom<std::int32_t>(
+        info_payload.items[4], child_path(payload_path, 4));
+    if (max_value < 0) {
+        fail("OOF1122", child_path(payload_path, 3), "non-negative TrackBar MaxValue",
+            std::to_string(max_value), "TrackBar MaxValue below zero was clamped by the platform runtime");
+    }
+    if (min_value < 0) {
+        fail("OOF1122", child_path(payload_path, 2), "non-negative TrackBar MinValue",
+            std::to_string(min_value), "TrackBar MinValue below zero was not accepted by the platform runtime");
+    }
+    if (step <= 0) {
+        fail("OOF1122", child_path(payload_path, 4), "positive TrackBar Step", std::to_string(step),
+            "TrackBar Step at or below zero was not accepted by the platform runtime");
+    }
+
+    auto normalized_info = info;
+    normalized_info.items[1].items[0].items[1] = raw("1");
+    normalized_info.items[1].items[0].items[12] = encoded_localized("");
+    normalized_info.items[1].items[2] = raw("0");
+    normalized_info.items[1].items[3] = raw("100");
+    normalized_info.items[1].items[4] = raw("1");
+    require_exact(normalized_info, canonical_track_bar_info(true, ""), info_path,
+        "TrackBar contains a property outside the supported profile");
+
+    const auto geometry_path = child_path(path, 3);
+    auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+            "Control name is required");
+    }
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "TrackBar metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "TrackBar cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::TrackBarPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    if (max_value != 100) control.properties().set_explicit(
+        model::PropertyId::from_name("MaxValue"), static_cast<std::int64_t>(max_value));
+    if (min_value != 0) control.properties().set_explicit(
+        model::PropertyId::from_name("MinValue"), static_cast<std::int64_t>(min_value));
+    if (step != 1) control.properties().set_explicit(
+        model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+DecodedControl decode_list_box(
+    const LV& record,
+    std::string_view path,
+    const AttributeRecord& linked_attribute,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 ListBox ID", std::to_string(raw_id),
+            "ListBox ID is invalid");
+    }
+    if (linked_attribute.type.entries.size() != 1 ||
+        linked_attribute.type.entries.front().term != model::TypeDomainTerm::value_list ||
+        linked_attribute.type.entries.front().type_uuid.has_value()) {
+        fail("OOF1122", "$/2/3", "link to one ValueList Attribute", linked_attribute.name,
+            "ListBox DataPath must target a single ValueList Attribute");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 3, info_path);
+    require_raw_constant(info.items[0], "1", child_path(info_path, 0));
+    const auto& properties = info.items[1];
+    const auto properties_path = child_path(info_path, 1);
+    require_arity(properties, 7, properties_path);
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(properties.items[0], 21, base_path);
+    const bool enabled = bool_atom(properties.items[0].items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        properties.items[0].items[12], child_path(base_path, 12));
+    const auto flags_path = child_path(properties_path, 1);
+    require_list(properties.items[1], flags_path);
+    require_arity(properties.items[1], 38, flags_path);
+    const auto read_only_code = integer_atom<std::uint32_t>(properties.items[1].items[1], child_path(flags_path, 1));
+    if (read_only_code != 100743712 && read_only_code != 100744736) {
+        fail("OOF1122", child_path(flags_path, 1), "observed ListBox ReadOnly state", std::to_string(read_only_code),
+            "ListBox ReadOnly record is outside the supported profile");
+    }
+    const bool read_only = read_only_code == 100743712;
+    require_raw_constant(properties.items[2], "6", child_path(properties_path, 2));
+    require_raw_constant(properties.items[3], "0", child_path(properties_path, 3));
+    const bool show_picture = bool_atom(properties.items[4], child_path(properties_path, 4));
+    const bool show_check_box = bool_atom(properties.items[5], child_path(properties_path, 5));
+    auto normalized_info = info;
+    normalized_info.items[1].items[0].items[1] = raw("1");
+    normalized_info.items[1].items[0].items[12] = encoded_localized("");
+    normalized_info.items[1].items[1].items[1] = raw("100743712");
+    normalized_info.items[1].items[4] = raw("0");
+    normalized_info.items[1].items[5] = raw("0");
+    require_exact(normalized_info,
+        canonical_list_box_info(true, false, false, true, ""), info_path,
+        "ListBox contains a property outside the supported profile");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty ListBox Name", "empty",
+        "ListBox Name is required");
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")} ),
+        metadata_path, "ListBox metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "ListBox cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::ListBoxPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (show_picture) control.properties().set_explicit(model::PropertyId::from_name("ShowPicture"), true);
+    if (show_check_box) control.properties().set_explicit(model::PropertyId::from_name("ShowCheckBox"), true);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2965,6 +3440,40 @@ DecodedControl decode_choice_field(
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ChoiceFieldPayload{}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+DecodedControl decode_text_document_field(
+    const LV& record, std::string_view path, const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        fail("OOF1122", child_path(path, 1), "positive int64 TextDocumentField ID", std::to_string(raw_id), "TextDocumentField ID is invalid");
+    const auto& info = record.items[2];
+    require_arity(info, 7, child_path(path, 2));
+    const auto& base = info.items[0];
+    require_arity(base, 21, child_path(child_path(path, 2), 0));
+    const bool enabled = bool_atom(base.items[1], child_path(child_path(path, 2), 0) + "/1");
+    const auto border_color = decode_button_color(base.items[6], child_path(child_path(path, 2), 0) + "/6");
+    const auto font = decode_control_font(base.items[4], child_path(child_path(path, 2), 0) + "/4");
+    require_exact(info, canonical_text_document_field_info(enabled, border_color, font), child_path(path, 2),
+        "TextDocumentField contains an unsupported persisted property or record variant");
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    require_arity(metadata, 6, child_path(path, 4));
+    require_raw_constant(metadata.items[0], "14", child_path(child_path(path, 4), 0));
+    const auto name = string_atom(metadata.items[1], child_path(child_path(path, 4), 1));
+    if (name.empty()) fail("OOF1115", child_path(path, 4), "non-empty control name", "empty", "Control name is required");
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        child_path(path, 4), "TextDocumentField metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "TextDocumentField cannot contain storage children");
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::TextDocumentFieldPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+    if (font != model::FontValue{}) control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -3459,6 +3968,39 @@ LV encode_picture_decoration(
     });
 }
 
+LV encode_splitter(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::splitter || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "Splitter with positive int64 ID", control.name,
+            "Splitter is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/Splitter", "named Splitter without events, DataPath, extensions, or children and plain Position",
+            control.name, "Splitter uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Enabled", "Orientation", "ToolTip", "BorderColor", "BackColor"},
+        "$/Splitter");
+    if (!std::holds_alternative<model::SplitterPayload>(control.payload)) {
+        fail("OOF1122", "$/Splitter", "SplitterPayload", "different payload", "Splitter payload is invalid");
+    }
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const std::int32_t orientation = explicit_enum_storage_value(control.properties(), "Splitter", "Orientation",
+        "Orientation", 2, {{"Auto", 2}, {"Vertical", 0}, {"Horizontal", 1}});
+    const auto back_color = explicit_splitter_color(control.properties(), "BackColor");
+    const auto border_color = explicit_splitter_color(control.properties(), "BorderColor");
+    const auto properties = canonical_splitter_properties(enabled, orientation, tool_tip, border_color, back_color);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::splitter);
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        list({raw("0"), properties}), encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")})});
+}
+
 LV encode_label(const model::ControlNode& control, const GeometryContext& context) {
     if (control.kind() != model::ControlKind::label_decoration ||
         control.id.value() == 0 || control.id.value() > std::numeric_limits<std::int64_t>::max()) {
@@ -3543,6 +4085,95 @@ LV encode_progress_bar(
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         list({raw("0"), canonical_progress_bar_info(enabled, tool_tip, max_value, min_value, step)}),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
+LV encode_track_bar(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::track_bar || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "TrackBar with positive int64 ID", control.name,
+            "TrackBar is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/TrackBar", "named TrackBar without DataPath, Events, or storage children",
+            control.name, "TrackBar uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(
+        control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step"}, "$/TrackBar");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const std::int32_t max_value = explicit_integer(
+        control.properties(), "MaxValue", 100, "$/TrackBar/MaxValue");
+    const std::int32_t min_value = explicit_integer(
+        control.properties(), "MinValue", 0, "$/TrackBar/MinValue");
+    const std::int32_t step = explicit_integer(control.properties(), "Step", 1, "$/TrackBar/Step");
+    if (max_value < 0) {
+        fail("OOF1122", "$/TrackBar/MaxValue", "non-negative TrackBar MaxValue", std::to_string(max_value),
+            "TrackBar MaxValue below zero was clamped by the platform runtime");
+    }
+    if (min_value < 0) {
+        fail("OOF1122", "$/TrackBar/MinValue", "non-negative TrackBar MinValue", std::to_string(min_value),
+            "TrackBar MinValue values below zero were not accepted by the platform runtime");
+    }
+    if (step <= 0) {
+        fail("OOF1122", "$/TrackBar/Step", "positive TrackBar Step", std::to_string(step),
+            "TrackBar Step values at or below zero were not accepted by the platform runtime");
+    }
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        canonical_track_bar_info(enabled, tool_tip, min_value, max_value, step),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")})});
+}
+
+LV encode_list_box(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::list_box || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "ListBox with positive int64 ID", control.name,
+            "ListBox is outside the supported profile");
+    }
+    if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
+        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/ListBox", "named ListBox with direct DataPath and ordinary Position",
+            control.name, "ListBox uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(),
+        {"Enabled", "ShowPicture", "ShowCheckBox", "ToolTip", "ReadOnly"}, "$/ListBox");
+    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    if (attribute == nullptr) {
+        fail("OOF1123", "$/ListBox/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "ListBox DataPath does not resolve");
+    }
+    if (attribute->type.entries.size() != 1 ||
+        attribute->type.entries.front().term != model::TypeDomainTerm::value_list ||
+        attribute->type.entries.front().type_uuid.has_value()) {
+        fail("OOF1122", "$/ListBox/DataPath", "single ValueList Attribute", attribute->name,
+            "ListBox DataPath must target a single ValueList Attribute");
+    }
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const bool show_picture = explicit_bool(control.properties(), "ShowPicture", false);
+    const bool show_check_box = explicit_bool(control.properties(), "ShowCheckBox", false);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_list_box_info(enabled, show_picture, show_check_box, read_only, tool_tip),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -3659,6 +4290,54 @@ LV encode_radio_button(const model::ControlNode& control, const GeometryContext&
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
+}
+
+LV encode_html_document_field(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::html_document_field || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "HTMLDocumentField with positive int64 ID", control.name,
+            "HTMLDocumentField is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/HTMLDocumentField", "named HTMLDocumentField with plain Position and no DataPath, Events, extensions, or children",
+            control.name, "HTMLDocumentField uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Output"}, "$/HTMLDocumentField");
+    const auto output = explicit_enum_storage_value(
+        control.properties(), "HTMLDocumentField", "Output", "Output", 0,
+        {{"Auto", 0}, {"Enable", 1}, {"Disable", 2}});
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::html_document_field);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_html_document_field_data(output),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
+LV encode_text_document_field(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::text_document_field || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
+        fail("OOF1122", "$/Form/ChildItems", "TextDocumentField with positive int64 ID", control.name, "TextDocumentField is outside the supported profile");
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() || control.position.z_order.is_explicit() ||
+        control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty())
+        fail("OOF1122", "$/TextDocumentField", "named unbound TextDocumentField with plain Position", control.name, "TextDocumentField uses an unsupported storage concept");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Font"}, "$/TextDocumentField");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const auto border_color = explicit_button_color(control.properties(), "BorderColor");
+    const auto font = explicit_control_font(control.properties(), "$/TextDocumentField/Font");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        canonical_text_document_field_info(enabled, border_color, font),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}), list({raw("0")})});
 }
 
 LV encode_calendar_field(const model::ControlNode& control, const GeometryContext& context) {
@@ -4458,9 +5137,12 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& picture_descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
         const auto& label_descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
         const auto& calendar_descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
+        const auto& text_document_descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
         const auto& input_descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
         const auto& checkbox_descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
         const auto& progress_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
+        const auto& track_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
+        const auto& list_box_descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
         const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
         using DecodeChildTable = std::function<void(
             const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&, std::string_view)>;
@@ -4530,14 +5212,22 @@ Result<model::OrdinaryFormDocument> decode_document(
                     DecodedControl child;
                     if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
                     else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
+                        child = decode_usual_group(record, record_path, context);
+
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid)
                         child = decode_radio_button(record, record_path, context);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::html_document_field).guid)
+                        child = decode_html_document_field(record, record_path, context);
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::splitter).guid)
+                        child = decode_splitter(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
+                    else if (guid == text_document_descriptor.guid) child = decode_text_document_field(record, record_path, context);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid ||
-                             guid == progress_bar_descriptor.guid) {
+                             guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                             fail("OOF1122", child_path(record_path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
@@ -4549,7 +5239,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                             guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid;
                         const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid;
                         if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
-                            "DataPath link for each InputField or CheckBox", std::to_string(candidate_id),
+                            "DataPath link for each InputField, CheckBox, or ListBox", std::to_string(candidate_id),
                             "Linked control has no attribute link");
                         const AttributeRecord* linked_attribute = nullptr;
                         if (link_it != links_by_control.end()) {
@@ -4581,9 +5271,15 @@ Result<model::OrdinaryFormDocument> decode_document(
                             child = decode_check_box(record, record_path, *linked_attribute, context);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                        } else if (guid == list_box_descriptor.guid) {
+                            child = decode_list_box(record, record_path, *linked_attribute, context);
+                            child.control.data_path = model::DataPath{model::AttributeRef{
+                                model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else {
                             child = decode_progress_bar(record, record_path, context, linked_attribute);
                         }
+                    } else if (guid == track_bar_descriptor.guid) {
+                        child = decode_track_bar(record, record_path, context);
                     } else if (guid == panel_descriptor.guid) {
                         require_arity(record, 6, record_path);
                         const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -4931,14 +5627,45 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_command_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
+                } else if (control->kind() == model::ControlKind::usual_group) {
+                    if (control->id.value() == 0 || control->id.value() > static_cast<std::uint64_t>(
+                            std::numeric_limits<std::int64_t>::max())) {
+                        fail("OOF1122", "$/UsualGroup/ID", "positive int64 UsualGroup ID",
+                            std::to_string(control->id.value()), "UsualGroup ID is invalid");
+                    }
+                    if (control->name.empty() || control->data_path || !control->extension_properties.empty() ||
+                        !control->children.empty() || !control->events.empty() ||
+                        control->position.default_control.is_explicit() || control->position.tab_order.is_explicit() ||
+                        control->position.z_order.is_explicit() || control->position.collapse.is_explicit() ||
+                        !control->position.bindings.dimensions.empty()) {
+                        fail("OOF1122", child_path(path, ordinal), "plain childless UsualGroup with basic Position",
+                            control->name, "UsualGroup uses an unsupported storage concept");
+                    }
+                    require_allowed_properties(control->properties(), {"Caption", "Enabled", "ToolTip"},
+                        child_path(path, ordinal) + "/UsualGroup");
+                    const bool enabled = explicit_bool(control->properties(), "Enabled", true);
+                    const auto caption = explicit_string(control->properties(), "Caption");
+                    const auto tool_tip = explicit_string(control->properties(), "ToolTip");
+                    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::usual_group);
+                    record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),
+                        canonical_usual_group_properties(enabled, caption, tool_tip),
+                        encode_geometry(control->position, context, IncomingAnchorLists{}),
+                        list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+                        list({raw("0")})});
                 } else if (control->kind() == model::ControlKind::radio_button) {
                     record = encode_radio_button(*control, context);
+                } else if (control->kind() == model::ControlKind::html_document_field) {
+                    record = encode_html_document_field(*control, context);
                 } else if (control->kind() == model::ControlKind::picture_decoration) {
                     record = encode_picture_decoration(*control, document, context);
+                } else if (control->kind() == model::ControlKind::splitter) {
+                    record = encode_splitter(*control, context);
                 } else if (control->kind() == model::ControlKind::label_decoration) {
                     record = encode_label(*control, context);
                 } else if (control->kind() == model::ControlKind::calendar_field) {
                     record = encode_calendar_field(*control, context);
+                } else if (control->kind() == model::ControlKind::text_document_field) {
+                    record = encode_text_document_field(*control, context);
                 } else if (control->kind() == model::ControlKind::input_field) {
                     record = encode_input_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::check_box) {
@@ -4947,6 +5674,10 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_choice_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::progress_bar) {
                     record = encode_progress_bar(document, *control, context);
+                } else if (control->kind() == model::ControlKind::track_bar) {
+                    record = encode_track_bar(*control, context);
+                } else if (control->kind() == model::ControlKind::list_box) {
+                    record = encode_list_box(document, *control, context);
                 } else if (control->kind() == model::ControlKind::panel) {
                     if (!control->events.empty() || control->data_path || !control->extension_properties.empty()) {
                         fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",
@@ -4963,7 +5694,7 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ChoiceField, ProgressBar, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "UsualGroup, Button, RadioButton, HTMLDocumentField, TextDocumentField, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ChoiceField, ProgressBar, TrackBar, ListBox, or Panel", control->name,
                         "Control payload is unsupported");
                 }
                 if (control->data_path) {
@@ -5082,7 +5813,7 @@ Result<list_stream::ListValue> encode_document(
             }
         }
         if (linked_control_count != attributes.links.size()) {
-            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField, CheckBox, or bound ProgressBar",
+            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField, CheckBox, ListBox, or bound ProgressBar",
                 std::to_string(linked_control_count), "Linked control and DataPath link counts do not match");
         }
         if (max_id >= std::numeric_limits<std::uint32_t>::max()) {

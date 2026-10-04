@@ -372,7 +372,7 @@ void test_schema_version_and_controls(
         enumeration_values(schema, "TypeDomainTermType") ==
             std::vector<std::string>({
                 "unknown", "list", "boolean", "binary", "date", "numeric",
-                "reference", "string", "type"}),
+                "reference", "string", "type", "valueList"}),
         "type-domain term vocabulary drift");
 
     xmlNodePtr form_element = schema_component(schema, "element", "Form");
