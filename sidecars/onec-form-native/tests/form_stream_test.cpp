@@ -3108,6 +3108,11 @@ void test_html_document_field_output_platform_record_and_guards() {
 }
 
 void test_radio_button_basic_observed_record_and_rejections() {
+    const auto append_child_ref = [](model::OrdinaryFormDocument& document, model::ObjectId id) {
+        auto form = document.form();
+        form.children.push_back(model::ControlRef{id});
+        document.set_form(std::move(form));
+    };
     const auto make_document = [](std::string caption = {}, bool enabled = true, std::string tool_tip = {}) {
         model::Form form;
         form.id = model::ObjectId{1};
@@ -3153,6 +3158,23 @@ void test_radio_button_basic_observed_record_and_rejections() {
                list_stream::dump_compact(default_encoded.value()),
         "default RadioButton document must round-trip canonically");
 
+    auto adjacent_defaults = make_document();
+    for (const auto [id, name] : {std::pair{104ULL, "RadioDefault2"}, std::pair{105ULL, "RadioDefault3"}}) {
+        append_child_ref(adjacent_defaults, model::ObjectId{id});
+        adjacent_defaults.add_control(model::ControlNode{model::ObjectId{id}, name, model::RadioButtonPayload{}});
+    }
+    append_child_ref(adjacent_defaults, model::ObjectId{106});
+    adjacent_defaults.add_control(model::ControlNode{model::ObjectId{106}, "Separator", model::LabelDecorationPayload{}});
+    append_child_ref(adjacent_defaults, model::ObjectId{107});
+    adjacent_defaults.add_control(model::ControlNode{model::ObjectId{107}, "RadioAfterLabel", model::RadioButtonPayload{}});
+    const auto adjacent_encoded = form_stream::encode_document(adjacent_defaults);
+    expect(adjacent_encoded.ok(), "adjacent default RadioButtons and one after a Label must remain independent controls");
+    const auto adjacent_decoded = form_stream::decode_document(adjacent_encoded.value(), "AdjacentDefaultRadios");
+    expect(adjacent_decoded.ok() && adjacent_decoded.value().find_control(model::ObjectId{104}) != nullptr &&
+               adjacent_decoded.value().find_control(model::ObjectId{105}) != nullptr &&
+               adjacent_decoded.value().find_control(model::ObjectId{107}) != nullptr,
+        "adjacent ungrouped RadioButtons must decode independently across a Label boundary");
+
     const std::string caption = "Radio Ω <tag> & текст";
     const std::string tool_tip = "Radio hint Ω <tag> & текст";
     const auto changed_encoded = form_stream::encode_document(make_document(caption, false, tool_tip));
@@ -3193,8 +3215,81 @@ void test_radio_button_basic_observed_record_and_rejections() {
     data_path_document.add_attribute(model::Attribute{model::ObjectId{200}, "Pattern", string_type});
     auto* radio_with_data = const_cast<model::ControlNode*>(data_path_document.find_control(model::ObjectId{103}));
     radio_with_data->data_path = model::DataPath{model::AttributeRef{model::ObjectId{200}}, {}};
-    expect_failure(form_stream::encode_document(data_path_document), "OOF1122", "$/RadioButton",
+    expect_failure(form_stream::encode_document(data_path_document), "OOF1122", "$/Form/ChildItems/3",
         "RadioButton DataPath must be explicitly rejected outside the proven profile");
+
+    auto numeric_group = make_document();
+    auto* numeric_head = const_cast<model::ControlNode*>(numeric_group.find_control(model::ObjectId{103}));
+    numeric_head->extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+    model::TypeDomainPatternValue numeric_type;
+    model::TypeDomainEntry numeric_entry;
+    numeric_entry.term = model::TypeDomainTerm::numeric;
+    numeric_entry.numeric = {10, 0, true};
+    numeric_type.entries.push_back(numeric_entry);
+    numeric_head->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), numeric_type);
+    numeric_head->properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"1"});
+    numeric_group.add_attribute(model::Attribute{model::ObjectId{200}, "Choice", numeric_type});
+    numeric_head->data_path = model::DataPath{model::AttributeRef{model::ObjectId{200}}, {}};
+    auto numeric_form = numeric_group.form();
+    numeric_form.children.push_back(model::ControlRef{model::ObjectId{104}});
+    numeric_group.set_form(std::move(numeric_form));
+    model::ControlNode numeric_member{model::ObjectId{104}, "RadioMember", model::RadioButtonPayload{}};
+    numeric_member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
+    numeric_group.add_control(std::move(numeric_member));
+    append_child_ref(numeric_group, model::ObjectId{105});
+    model::ControlNode numeric_member_three{model::ObjectId{105}, "RadioMemberThree", model::RadioButtonPayload{}};
+    numeric_member_three.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
+    numeric_group.add_control(std::move(numeric_member_three));
+    append_child_ref(numeric_group, model::ObjectId{106});
+    numeric_group.add_control(model::ControlNode{model::ObjectId{106}, "GroupSeparator", model::LabelDecorationPayload{}});
+    append_child_ref(numeric_group, model::ObjectId{107});
+    model::ControlNode second_head{model::ObjectId{107}, "FractionalGroupHead", model::RadioButtonPayload{}};
+    second_head.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+    model::TypeDomainEntry fractional_numeric_entry;
+    fractional_numeric_entry.term = model::TypeDomainTerm::numeric;
+    fractional_numeric_entry.numeric = {15, 3, false};
+    const model::TypeDomainPatternValue fractional_numeric_type{{fractional_numeric_entry}};
+    second_head.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), fractional_numeric_type);
+    second_head.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"-12.375"});
+    numeric_group.add_attribute(model::Attribute{model::ObjectId{201}, "FractionalChoice", fractional_numeric_type});
+    second_head.data_path = model::DataPath{model::AttributeRef{model::ObjectId{201}}, {}};
+    numeric_group.add_control(std::move(second_head));
+    for (const auto [id, name] : {std::pair{108ULL, "FractionalMember2"},
+                                  std::pair{109ULL, "FractionalMember3"},
+                                  std::pair{110ULL, "FractionalMember4"}}) {
+        append_child_ref(numeric_group, model::ObjectId{id});
+        model::ControlNode member{model::ObjectId{id}, name, model::RadioButtonPayload{}};
+        member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
+        numeric_group.add_control(std::move(member));
+    }
+    const auto numeric_encoded = form_stream::encode_document(numeric_group);
+    expect(numeric_encoded.ok(), "named integer and fractional RadioButton groups must encode with independent numeric qualifiers");
+    const auto numeric_decoded = form_stream::decode_document(numeric_encoded.value(), "RadioButtonNumericGroup");
+    expect(numeric_decoded.ok(), "named integer and fractional RadioButton groups must decode");
+    const auto* decoded_head = numeric_decoded.value().find_control(model::ObjectId{103});
+    const auto* decoded_member = numeric_decoded.value().find_control(model::ObjectId{104});
+    expect(decoded_head && decoded_head->data_path && decoded_head->extension_properties.find(
+               model::PropertyId::from_name("FirstInGroup")) && decoded_member &&
+               decoded_member->properties().find(model::PropertyId::from_name("SelectionValue")) &&
+               std::get<model::DecimalValue>(decoded_member->properties().find(
+                   model::PropertyId::from_name("SelectionValue"))->value).canonical == "0",
+        "RadioButton group head binding and contextual zero remain named model properties");
+    const auto numeric_reencoded = form_stream::encode_document(numeric_decoded.value());
+    expect(numeric_reencoded.ok() && list_stream::dump_compact(numeric_reencoded.value()) ==
+               list_stream::dump_compact(numeric_encoded.value()),
+        "named integer and fractional RadioButton groups must round-trip without stream drift");
+    auto wrong_group_selection = numeric_group;
+    auto* wrong_member = const_cast<model::ControlNode*>(wrong_group_selection.find_control(model::ObjectId{104}));
+    wrong_member->properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"-1"});
+    expect_failure(form_stream::encode_document(wrong_group_selection), "OOF1122", "$/Form/ChildItems/6",
+        "RadioButton member selection outside the inherited nonnegative qualifiers must fail closed");
+    auto wrong_group_type = numeric_group;
+    auto* wrong_head = const_cast<model::ControlNode*>(wrong_group_type.find_control(model::ObjectId{103}));
+    numeric_entry.numeric.precision = 1;
+    wrong_head->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"),
+        model::TypeDomainPatternValue{{numeric_entry}});
+    expect_failure(form_stream::encode_document(wrong_group_type), "OOF1122", "$/Form/ChildItems/6",
+        "RadioButton head ValueType must match its linked Attribute qualifiers");
 
     auto unsupported_default = default_encoded.value();
     auto& unsupported_data_header = unsupported_default.items[1].items[2].items[2].items[4].items[2].items[1];
@@ -3209,6 +3304,138 @@ void test_radio_button_basic_observed_record_and_rejections() {
         model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
     expect(!form_stream::decode_document(multilingual, "RadioButtonCodec"),
         "multilingual RadioButton Caption must be rejected without loss");
+}
+
+void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() {
+    const auto numeric_type = [](std::uint32_t digits, std::uint32_t fraction, bool non_negative) {
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::numeric;
+        entry.numeric = {digits, fraction, non_negative};
+        return model::TypeDomainPatternValue{{entry}};
+    };
+    const auto add_head = [&](model::OrdinaryFormDocument& document, std::uint64_t id,
+                              std::uint64_t attribute_id, std::string name, std::string attribute_name,
+                              const model::TypeDomainPatternValue& type, std::string selection) {
+        document.add_attribute(model::Attribute{model::ObjectId{attribute_id}, std::move(attribute_name), type});
+        model::ControlNode head{model::ObjectId{id}, std::move(name), model::RadioButtonPayload{}};
+        head.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+        head.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), type);
+        head.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{std::move(selection)});
+        head.data_path = model::DataPath{model::AttributeRef{model::ObjectId{attribute_id}}, {}};
+        document.add_control(std::move(head));
+    };
+    const auto add_member = [](model::OrdinaryFormDocument& document, std::uint64_t id,
+                               std::string name, std::string selection) {
+        model::ControlNode member{model::ObjectId{id}, std::move(name), model::RadioButtonPayload{}};
+        member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"),
+            model::DecimalValue{std::move(selection)});
+        document.add_control(std::move(member));
+    };
+    const auto add_label = [](model::OrdinaryFormDocument& document, std::uint64_t id, std::string name) {
+        document.add_control(model::ControlNode{model::ObjectId{id}, std::move(name), model::LabelDecorationPayload{}});
+    };
+    const auto make_form = [](std::vector<model::ChildItemRef> children) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "RadioGroupOrder";
+        form.children = std::move(children);
+        return form;
+    };
+
+    const auto signed_fractional_type = numeric_type(10, 2, false);
+    model::OrdinaryFormDocument ordered(make_form({
+        model::ControlRef{model::ObjectId{901}},
+        model::ControlRef{model::ObjectId{17}},
+        model::ControlRef{model::ObjectId{70}},
+    }));
+    add_head(ordered, 901, 1001, "HeadLaterId", "Choice", signed_fractional_type, "1.25");
+    add_member(ordered, 17, "MemberEarlierId", "-12.34");
+    add_label(ordered, 70, "BoundaryLabel");
+
+    const auto ordered_encoded = form_stream::encode_document(ordered);
+    expect(ordered_encoded.ok(),
+        "ChildItems order must bind a lower-ID member to the preceding numeric head and accept an in-range decimal");
+    const auto ordered_decoded = form_stream::decode_document(ordered_encoded.value(), "RadioGroupOrder");
+    expect(ordered_decoded.ok(), "ordered numeric group with inherited member type must decode");
+    const auto& decoded_children = ordered_decoded.value().form().children;
+    expect(decoded_children.size() == 3 &&
+               std::get<model::ControlRef>(decoded_children[0]).id() == model::ObjectId{901} &&
+               std::get<model::ControlRef>(decoded_children[1]).id() == model::ObjectId{17} &&
+               std::get<model::ControlRef>(decoded_children[2]).id() == model::ObjectId{70},
+        "decoded ChildItems order must remain head then member despite the higher head ObjectId");
+    const auto* decoded_member = ordered_decoded.value().find_control(model::ObjectId{17});
+    const auto* decoded_selection = decoded_member == nullptr ? nullptr : decoded_member->properties().find(
+        model::PropertyId::from_name("SelectionValue"));
+    expect(decoded_selection && std::get<model::DecimalValue>(decoded_selection->value).canonical == "-12.34" &&
+               decoded_member->extension_properties.find(model::PropertyId::from_name("ValueType")) == nullptr,
+        "decoded member must preserve its named DecimalValue without materializing inherited ValueType locally");
+    const auto ordered_reencoded = form_stream::encode_document(ordered_decoded.value());
+    expect(ordered_reencoded.ok() && list_stream::dump_compact(ordered_reencoded.value()) ==
+               list_stream::dump_compact(ordered_encoded.value()),
+        "inherited member decimal selection must round-trip without normalization or drift");
+
+    auto reordered = ordered;
+    auto reordered_form = reordered.form();
+    std::swap(reordered_form.children[0], reordered_form.children[1]);
+    reordered.set_form(std::move(reordered_form));
+    expect_failure(form_stream::encode_document(reordered), "OOF1122", "$/Form/ChildItems/0",
+        "moving the selected member before its head must change its group assignment and reject its unbound nonzero value");
+
+    auto out_of_range = ordered;
+    auto* too_precise = const_cast<model::ControlNode*>(out_of_range.find_control(model::ObjectId{17}));
+    too_precise->properties().set_explicit(model::PropertyId::from_name("SelectionValue"),
+        model::DecimalValue{"-12.345"});
+    expect_failure(form_stream::encode_document(out_of_range), "OOF1122", "$/Form/ChildItems/2",
+        "inherited member decimal must respect the head precision without coercion");
+
+    auto oversized_stream = ordered_encoded.value();
+    auto& member_record = oversized_stream.items[1].items[2].items[2].items[1];
+    member_record.items[2].items[4] = list_stream::ListValue::list({
+        list_stream::ListValue::string_atom("N"), list_stream::ListValue::raw_atom("123456789")});
+    expect(!form_stream::decode_document(oversized_stream, "RadioGroupOrder"),
+        "decoder must reject member selection outside the inherited head precision");
+
+    model::Page nested_page;
+    nested_page.id = model::ObjectId{400};
+    nested_page.name = "NestedPage";
+    model::Position page_bounds;
+    for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+        model::AnchorBinding binding;
+        binding.coordinate = edge;
+        binding.target_coordinate = edge;
+        binding.target = model::ControlRef{model::ObjectId{300}};
+        page_bounds.bindings.anchors.push_back(std::move(binding));
+    }
+    nested_page.position.set(page_bounds);
+    nested_page.children = {model::ControlRef{model::ObjectId{901}}, model::ControlRef{model::ObjectId{17}}};
+    model::ControlNode nested_panel{model::ObjectId{300}, "NestedPanel", model::PanelPayload{}};
+    nested_panel.children = {model::PageRef{model::ObjectId{400}}};
+    model::OrdinaryFormDocument page_group(make_form({model::ControlRef{model::ObjectId{300}}}));
+    add_head(page_group, 901, 1001, "PageHead", "Choice", signed_fractional_type, "1.25");
+    add_member(page_group, 17, "PageMember", "-12.34");
+    page_group.add_page(std::move(nested_page));
+    page_group.add_control(std::move(nested_panel));
+    const auto page_group_encoded = form_stream::encode_document(page_group);
+    expect(page_group_encoded.ok(),
+        "RadioButton group context must be scoped to and preserved within a Panel page" +
+            (page_group_encoded ? std::string{} : ": " + page_group_encoded.diagnostics().front().path + " " +
+                page_group_encoded.diagnostics().front().message));
+
+    model::Page split_page;
+    split_page.id = model::ObjectId{400};
+    split_page.name = "SplitPage";
+    split_page.position.set(page_bounds);
+    split_page.children = {model::ControlRef{model::ObjectId{17}}};
+    model::ControlNode boundary_panel{model::ObjectId{300}, "BoundaryPanel", model::PanelPayload{}};
+    boundary_panel.children = {model::PageRef{model::ObjectId{400}}};
+    model::OrdinaryFormDocument split_by_page(make_form({
+        model::ControlRef{model::ObjectId{901}}, model::ControlRef{model::ObjectId{300}}}));
+    add_head(split_by_page, 901, 1001, "OuterPageHead", "Choice", signed_fractional_type, "1.25");
+    add_member(split_by_page, 17, "InnerPageMember", "-12.34");
+    split_by_page.add_page(std::move(split_page));
+    split_by_page.add_control(std::move(boundary_panel));
+    expect(!form_stream::encode_document(split_by_page),
+        "a RadioButton group must not cross from the form into a nested Panel page");
 }
 
 void test_text_document_field_persisted_profile_and_rejections() {
@@ -6599,6 +6826,7 @@ int main() {
         test_splitter_observed_record_and_named_codec();
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();
+        test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_text_document_field_persisted_profile_and_rejections();

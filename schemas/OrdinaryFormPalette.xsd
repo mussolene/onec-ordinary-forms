@@ -240,7 +240,7 @@
           <Control name="RadioButton" apiName="RadioButton" russianName="Переключатель" children="none">
             <Properties>
               <Property name="VerticalAlign" apiName="VerticalAlign" russianName="ВертикальноеПоложение" russianType="ВертикальноеПоложение" valueCodec="enumeration"/>
-              <Property name="SelectionValue" apiName="SelectionValue" russianName="ВыбираемоеЗначение" russianType="Совпадает с описанием типа первого в группе переключателя" valueCodec="unclassified"/>
+              <Property name="SelectionValue" apiName="SelectionValue" russianName="ВыбираемоеЗначение" russianType="Совпадает с описанием типа первого в группе переключателя" valueCodec="decimal"/>
               <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>

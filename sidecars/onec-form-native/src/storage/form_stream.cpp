@@ -1000,8 +1000,14 @@ LV canonical_label_properties(
     });
 }
 
+LV encoded_radio_selection_value(const std::optional<model::DecimalValue>& value);
 
-LV canonical_radio_button_info(bool enabled, std::string_view caption, std::string_view tool_tip) {
+LV canonical_radio_button_info(
+    const model::TypeDomainPatternValue& value_type,
+    std::optional<model::DecimalValue> selection_value,
+    bool enabled,
+    std::string_view caption,
+    std::string_view tool_tip) {
     const auto properties = list({
         canonical_button_base(enabled, tool_tip),
         raw("7"),
@@ -1015,10 +1021,10 @@ LV canonical_radio_button_info(bool enabled, std::string_view caption, std::stri
     });
     return list({
         raw("4"),
-        list({string_value("Pattern")}),
+        encoded_type_domain(value_type, "$/RadioButton/ValueType"),
         list({std::move(properties), raw("4"), raw("0"), raw("0"), raw("0"), raw("0")}),
         raw("0"),
-        list({string_value("U")}),
+        encoded_radio_selection_value(selection_value),
         list({raw("0")}),
     });
 }
@@ -1745,6 +1751,58 @@ void require_incoming_graph(
 
 bool is_single_string_type_domain(const model::TypeDomainPatternValue& value) {
     return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::string;
+}
+
+bool is_single_numeric_type_domain(const model::TypeDomainPatternValue& value) {
+    return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::numeric;
+}
+
+bool decimal_fits_numeric_qualifiers(
+    std::string_view canonical,
+    const model::NumericQualifiers& qualifiers) {
+    if (canonical.empty()) return false;
+    const bool negative = canonical.front() == '-';
+    if (negative && qualifiers.non_negative) return false;
+    if (negative) canonical.remove_prefix(1);
+    const auto point = canonical.find('.');
+    const auto integer = point == std::string_view::npos ? canonical : canonical.substr(0, point);
+    const auto fraction = point == std::string_view::npos ? std::string_view{} : canonical.substr(point + 1);
+    const auto significant_integer = integer.find_first_not_of('0');
+    const std::size_t integer_digits = significant_integer == std::string_view::npos
+        ? 0 : integer.size() - significant_integer;
+    return qualifiers.precision <= qualifiers.length &&
+           integer_digits <= qualifiers.length - qualifiers.precision &&
+           fraction.size() <= qualifiers.precision;
+}
+
+LV encoded_radio_selection_value(const std::optional<model::DecimalValue>& value) {
+    if (!value) return list({string_value("U")});
+    try {
+        return list({string_value("N"), raw(value_codec::canonical_decimal(value->canonical))});
+    } catch (const std::invalid_argument& error) {
+        fail("OOF1122", "$/RadioButton/SelectionValue", "xs:decimal", value->canonical, error.what());
+    }
+}
+
+std::optional<model::DecimalValue> decoded_radio_selection_value(
+    const LV& value,
+    std::string_view path) {
+    require_list(value, path);
+    if (value.items.size() == 1 && string_atom(value.items[0], child_path(path, 0)) == "U") {
+        return std::nullopt;
+    }
+    require_arity(value, 2, path);
+    if (string_atom(value.items[0], child_path(path, 0)) != "N") {
+        fail("OOF1122", std::string(path), "numeric SelectionValue", describe(value),
+            "RadioButton SelectionValue is outside the numeric observed profile");
+    }
+    try {
+        return model::DecimalValue{value_codec::canonical_decimal(
+            raw_atom(value.items[1], child_path(path, 1)))};
+    } catch (const std::invalid_argument&) {
+        fail("OOF1122", std::string(path), "canonical numeric SelectionValue", describe(value),
+            "RadioButton SelectionValue has an invalid numeric atom");
+    }
 }
 
 bool is_single_boolean_type_domain(const model::TypeDomainPatternValue& value) {
@@ -3119,6 +3177,7 @@ DecodedControl decode_splitter(
 DecodedControl decode_radio_button(
     const LV& record,
     std::string_view path,
+    const AttributeRecord* linked_attribute,
     const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
@@ -3133,8 +3192,19 @@ DecodedControl decode_radio_button(
     const auto info_path = child_path(path, 2);
     require_arity(info, 6, info_path);
     require_raw_constant(info.items[0], "4", child_path(info_path, 0));
-    require_exact(info.items[1], list({string_value("Pattern")}), child_path(info_path, 1),
-        "RadioButton data header is outside the observed unbound profile");
+    const auto value_type = type_domain(info.items[1], child_path(info_path, 1));
+    if (!value_type.entries.empty() && !is_single_numeric_type_domain(value_type)) {
+        fail("OOF1122", child_path(info_path, 1), "empty or single Numeric ValueType", describe(info.items[1]),
+            "RadioButton ValueType is outside the supported numeric profile");
+    }
+    if (linked_attribute != nullptr && value_type != linked_attribute->type) {
+        fail("OOF1122", child_path(info_path, 1), "ValueType matching linked Attribute", describe(info.items[1]),
+            "RadioButton ValueType differs from its linked Attribute type");
+    }
+    if (linked_attribute == nullptr && !value_type.entries.empty()) {
+        fail("OOF1122", child_path(info_path, 1), "empty ValueType without DataPath", describe(info.items[1]),
+            "RadioButton numeric ValueType requires a linked Attribute");
+    }
     const auto& control_info = info.items[2];
     const auto control_info_path = child_path(info_path, 2);
     require_arity(control_info, 6, control_info_path);
@@ -3149,6 +3219,13 @@ DecodedControl decode_radio_button(
         base_properties.items[12], child_path(base_path, 12));
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
+    const auto selection_value = decoded_radio_selection_value(info.items[4], child_path(info_path, 4));
+    const bool inherited_group_selection = selection_value && value_type.entries.empty() && linked_attribute == nullptr;
+    if (selection_value && !inherited_group_selection && (!is_single_numeric_type_domain(value_type) ||
+        !decimal_fits_numeric_qualifiers(selection_value->canonical, value_type.entries.front().numeric))) {
+        fail("OOF1122", child_path(info_path, 4), "SelectionValue within numeric ValueType qualifiers",
+            describe(info.items[4]), "RadioButton SelectionValue does not fit its numeric ValueType");
+    }
     auto normalized_info = info;
     auto normalized_properties = properties;
     auto normalized_base = base_properties;
@@ -3156,7 +3233,7 @@ DecodedControl decode_radio_button(
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[2] = encoded_localized(caption);
     normalized_info.items[2].items[0] = std::move(normalized_properties);
-    require_exact(normalized_info, canonical_radio_button_info(enabled, caption, tool_tip), info_path,
+    require_exact(normalized_info, canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip), info_path,
         "RadioButton contains a property, binding, event, or storage variation outside the observed basic profile");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -3164,13 +3241,14 @@ DecodedControl decode_radio_button(
     const auto metadata_path = child_path(path, 4);
     require_arity(metadata, 6, metadata_path);
     require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const bool first_in_group = bool_atom(metadata.items[5], child_path(metadata_path, 5));
     const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
     if (name.empty()) {
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
             "Control name is required");
     }
     require_exact(metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
         metadata_path, "RadioButton metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "RadioButton cannot contain storage children");
@@ -3179,8 +3257,127 @@ DecodedControl decode_radio_button(
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    if (selection_value) control.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), *selection_value);
+    if (first_in_group) control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+    if (!value_type.entries.empty()) control.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), value_type);
+    if (linked_attribute != nullptr) control.data_path = model::DataPath{model::AttributeRef{
+        model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+void validate_radio_group(
+    const model::OrdinaryFormDocument& document,
+    const std::vector<const model::ControlNode*>& group,
+    std::string_view path) {
+    if (group.empty()) return;
+    const auto first_entry = group.front()->extension_properties.find(model::PropertyId::from_name("FirstInGroup"));
+    const bool starts_group = first_entry != nullptr && std::holds_alternative<bool>(first_entry->value) &&
+        std::get<bool>(first_entry->value);
+    if (!starts_group) {
+        bool unsupported_extension = false;
+        group.front()->extension_properties.for_each_explicit([&](const model::PropertyEntry& entry) {
+            if (entry.id == model::PropertyId::from_name("FirstInGroup")) {
+                const auto* value = std::get_if<bool>(&entry.value);
+                if (value == nullptr || *value) unsupported_extension = true;
+            } else if (entry.id == model::PropertyId::from_name("ValueType")) {
+                const auto* value = std::get_if<model::TypeDomainPatternValue>(&entry.value);
+                if (value == nullptr || !value->entries.empty()) unsupported_extension = true;
+            } else {
+                unsupported_extension = true;
+            }
+        });
+        if (group.size() != 1 || group.front()->data_path || unsupported_extension ||
+            group.front()->properties().find(model::PropertyId::from_name("SelectionValue"))) {
+            fail("OOF1122", std::string(path), "unbound standalone RadioButton or supported group member",
+                group.front()->name, "RadioButton storage state is outside the observed standalone profile");
+        }
+        return;
+    }
+    const auto& head = *group[0];
+    const auto* head_type_entry = head.extension_properties.find(model::PropertyId::from_name("ValueType"));
+    const auto* head_selection_entry = head.properties().find(model::PropertyId::from_name("SelectionValue"));
+    const model::TypeDomainPatternValue* head_type = head_type_entry == nullptr ? nullptr :
+        std::get_if<model::TypeDomainPatternValue>(&head_type_entry->value);
+    const model::DecimalValue* head_selection = head_selection_entry == nullptr ? nullptr :
+        std::get_if<model::DecimalValue>(&head_selection_entry->value);
+    const bool has_numeric_effective_type = head.data_path && head_type != nullptr &&
+        is_single_numeric_type_domain(*head_type);
+    for (std::size_t index = 1; index < group.size(); ++index) {
+        const auto& member = *group[index];
+        const auto* member_type_entry = member.extension_properties.find(model::PropertyId::from_name("ValueType"));
+        const auto* member_selection_entry = member.properties().find(model::PropertyId::from_name("SelectionValue"));
+        const auto* member_type = member_type_entry == nullptr ? nullptr :
+            std::get_if<model::TypeDomainPatternValue>(&member_type_entry->value);
+        const auto* member_selection = member_selection_entry == nullptr ? nullptr :
+            std::get_if<model::DecimalValue>(&member_selection_entry->value);
+        const bool value_fits_effective_type = member_selection != nullptr &&
+            (has_numeric_effective_type
+                ? decimal_fits_numeric_qualifiers(member_selection->canonical, head_type->entries.front().numeric)
+                : value_codec::canonical_decimal(member_selection->canonical) == "0");
+        if (member.data_path || (member_type != nullptr && !member_type->entries.empty()) || !value_fits_effective_type) {
+            fail("OOF1122", std::string(path), "group member with Pattern ValueType and SelectionValue fitting the group head type",
+                member.name, "RadioButton group member differs from the observed group value type");
+        }
+    }
+    if (head.data_path) {
+        if (head_type == nullptr || !is_single_numeric_type_domain(*head_type) || head_selection == nullptr) {
+            fail("OOF1122", std::string(path), "numeric head ValueType, DataPath, and SelectionValue",
+                head.name, "RadioButton group head is missing its numeric binding profile");
+        }
+        const auto* attribute = document.find_attribute(head.data_path->attribute.id());
+        if (attribute == nullptr || attribute->type != *head_type ||
+            !decimal_fits_numeric_qualifiers(head_selection->canonical, head_type->entries.front().numeric)) {
+            fail("OOF1122", std::string(path), "head numeric Attribute and matching SelectionValue",
+                head.name, "RadioButton group head numeric values do not agree");
+        }
+        return;
+    }
+    if ((head_type != nullptr && !head_type->entries.empty()) || head_selection != nullptr) {
+        fail("OOF1122", std::string(path), "unbound group head with Pattern ValueType and Undefined SelectionValue",
+            head.name, "Unbound RadioButton group head differs from the observed profile");
+    }
+}
+
+void validate_radio_groups(const model::OrdinaryFormDocument& document) {
+    std::vector<const model::ControlNode*> group;
+    const auto flush_group = [&](std::string_view path) {
+        validate_radio_group(document, group, path);
+        group.clear();
+    };
+    std::function<void(const std::vector<model::ChildItemRef>&, std::string_view)> visit;
+    visit = [&](const std::vector<model::ChildItemRef>& children, std::string_view path) {
+        std::size_t ordinal = 0;
+        for (const auto& child : children) {
+            const auto child_path_text = std::string(path) + "/" + std::to_string(ordinal++);
+            if (const auto* control_ref = std::get_if<model::ControlRef>(&child)) {
+                const auto* control = document.find_control(control_ref->id());
+                if (control == nullptr) continue;
+                if (control->kind() == model::ControlKind::radio_button) {
+                    const auto* first = control->extension_properties.find(model::PropertyId::from_name("FirstInGroup"));
+                    if (first != nullptr && std::holds_alternative<bool>(first->value) && std::get<bool>(first->value)) {
+                        flush_group(child_path_text);
+                        group.push_back(control);
+                    } else if (group.empty()) {
+                        validate_radio_group(document, std::vector<const model::ControlNode*>{control}, child_path_text);
+                    } else {
+                        group.push_back(control);
+                    }
+                    continue;
+                }
+                flush_group(child_path_text);
+                visit(control->children, child_path_text);
+            } else if (const auto* page_ref = std::get_if<model::PageRef>(&child)) {
+                flush_group(child_path_text);
+                const auto* page = document.find_page(page_ref->id());
+                if (page != nullptr) visit(page->children, child_path_text);
+            } else {
+                flush_group(child_path_text);
+            }
+        }
+        flush_group(path);
+    };
+    visit(document.form().children, "$/Form/ChildItems");
 }
 
 DecodedControl decode_html_document_field(
@@ -4844,21 +5041,79 @@ LV encode_choice_field(
     });
 }
 
-LV encode_radio_button(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_radio_button(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::radio_button || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "RadioButton with positive int64 ID", control.name,
             "RadioButton is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/RadioButton", "named unbound RadioButton with plain Position", control.name,
+        fail("OOF1122", "$/RadioButton", "named RadioButton with plain Position", control.name,
             "RadioButton uses a storage concept outside the supported basic profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip"}, "$/RadioButton");
+    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "SelectionValue"}, "$/RadioButton");
+    bool first_in_group = false;
+    if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("FirstInGroup"))) {
+        const auto* value = std::get_if<bool>(&entry->value);
+        if (value == nullptr) fail("OOF1122", "$/RadioButton/FirstInGroup", "Boolean", "different value kind",
+            "RadioButton FirstInGroup must be Boolean");
+        first_in_group = *value;
+    }
+    model::TypeDomainPatternValue value_type;
+    if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("ValueType"))) {
+        const auto* value = std::get_if<model::TypeDomainPatternValue>(&entry->value);
+        if (value == nullptr) fail("OOF1122", "$/RadioButton/ValueType", "TypeDomainPattern", "different value kind",
+            "RadioButton ValueType must be a TypeDomainPattern");
+        value_type = *value;
+    }
+    bool unsupported_extension = false;
+    control.extension_properties.for_each_explicit([&](const model::PropertyEntry& entry) {
+        if (entry.id != model::PropertyId::from_name("FirstInGroup") &&
+            entry.id != model::PropertyId::from_name("ValueType")) unsupported_extension = true;
+    });
+    if (unsupported_extension) fail("OOF1122", "$/RadioButton", "FirstInGroup and ValueType extensions", "other property",
+        "RadioButton has an unsupported extension property");
+    if (!value_type.entries.empty() && !is_single_numeric_type_domain(value_type)) {
+        fail("OOF1122", "$/RadioButton/ValueType", "empty or single Numeric TypeDomainPattern", "other type",
+            "RadioButton ValueType is outside the supported numeric profile");
+    }
+    std::optional<model::DecimalValue> selection_value;
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("SelectionValue"))) {
+        const auto* value = std::get_if<model::DecimalValue>(&entry->value);
+        if (value == nullptr) fail("OOF1122", "$/RadioButton/SelectionValue", "DecimalValue", "different value kind",
+            "RadioButton SelectionValue must be DecimalValue");
+        try { selection_value = model::DecimalValue{value_codec::canonical_decimal(value->canonical)}; }
+        catch (const std::invalid_argument& error) {
+            fail("OOF1122", "$/RadioButton/SelectionValue", "xs:decimal", value->canonical, error.what());
+        }
+    }
+    if (control.data_path && !is_single_numeric_type_domain(value_type)) {
+        fail("OOF1122", "$/RadioButton/DataPath", "numeric ValueType with DataPath", "missing or non-numeric type",
+            "RadioButton DataPath requires a numeric ValueType");
+    }
+    if (control.data_path) {
+        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        if (attribute == nullptr || attribute->type != value_type) {
+            fail("OOF1122", "$/RadioButton/DataPath", "existing Attribute with matching numeric ValueType",
+                std::to_string(control.data_path->attribute.id().value()),
+                "RadioButton DataPath does not resolve to an Attribute with the same numeric type");
+        }
+    }
+    if (selection_value) {
+        const bool contextual_member = value_type.entries.empty() && !first_in_group;
+        if (!contextual_member && (!is_single_numeric_type_domain(value_type) ||
+            !decimal_fits_numeric_qualifiers(selection_value->canonical, value_type.entries.front().numeric))) {
+            fail("OOF1122", "$/RadioButton/SelectionValue", "SelectionValue within numeric ValueType qualifiers",
+                selection_value->canonical, "RadioButton SelectionValue does not fit its numeric ValueType");
+        }
+    }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
@@ -4866,9 +5121,9 @@ LV encode_radio_button(const model::ControlNode& control, const GeometryContext&
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_radio_button_info(enabled, caption, tool_tip),
+        canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
         list({raw("0")}),
     });
 }
@@ -5833,8 +6088,6 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
                         child = decode_usual_group(record, record_path, context);
 
-                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid)
-                        child = decode_radio_button(record, record_path, context);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::html_document_field).guid)
                         child = decode_html_document_field(record, record_path, context);
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
@@ -5847,6 +6100,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid ||
                              guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid ||
+                             guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
@@ -5857,7 +6111,9 @@ Result<model::OrdinaryFormDocument> decode_document(
                         const auto link_it = links_by_control.find(candidate_key);
                         const bool choice_field_guid =
                             guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid;
-                        const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid;
+                        const bool radio_button_guid =
+                            guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid;
+                        const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid && !radio_button_guid;
                         if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
                             "DataPath link for each InputField, CheckBox, or ListBox", std::to_string(candidate_id),
                             "Linked control has no attribute link");
@@ -5883,6 +6139,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                                 child.control.data_path = model::DataPath{model::AttributeRef{
                                     model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                             }
+                        } else if (radio_button_guid) {
+                            child = decode_radio_button(record, record_path, linked_attribute, context);
                         } else if (guid == input_descriptor.guid) {
                             child = decode_input_field(record, record_path, *linked_attribute, context);
                             child.control.data_path = model::DataPath{model::AttributeRef{
@@ -6086,6 +6344,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         for (auto& asset : decoded_picture_assets) document.add_asset(std::move(asset));
         document.set_form(std::move(form));
 
+        validate_radio_groups(document);
         const auto report = document.validate();
         if (!report.ok()) {
             fail(
@@ -6102,6 +6361,7 @@ Result<model::OrdinaryFormDocument> decode_document(
 Result<list_stream::ListValue> encode_document(
     const model::OrdinaryFormDocument& document) {
     return capture_decode_failure<list_stream::ListValue>([&document] {
+        validate_radio_groups(document);
         const auto validation = document.validate();
         if (!validation.ok()) {
             fail(
@@ -6275,7 +6535,7 @@ Result<list_stream::ListValue> encode_document(
                         list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
                         list({raw("0")})});
                 } else if (control->kind() == model::ControlKind::radio_button) {
-                    record = encode_radio_button(*control, context);
+                    record = encode_radio_button(document, *control, context);
                 } else if (control->kind() == model::ControlKind::html_document_field) {
                     record = encode_html_document_field(*control, context);
                 } else if (control->kind() == model::ControlKind::picture_decoration) {

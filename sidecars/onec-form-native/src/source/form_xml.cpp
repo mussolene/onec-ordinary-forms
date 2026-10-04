@@ -261,66 +261,12 @@ std::string canonical_decimal(
     std::string_view property,
     std::string_view object_id = {}
 ) {
-    text = trim_ascii(text);
-    bool negative = false;
-    if (!text.empty() && (text.front() == '+' || text.front() == '-')) {
-        negative = text.front() == '-';
-        text.remove_prefix(1);
+    try {
+        return storage::value_codec::canonical_decimal(text);
+    } catch (const std::invalid_argument&) {
+        fail("OOF2003", node, std::string(object_id), std::string(property), "xs:decimal",
+            std::string(text), "Ordinary-form decimal has an invalid lexical value");
     }
-    const std::size_t point = text.find('.');
-    if (text.empty() || (point != std::string_view::npos && text.find('.', point + 1) != std::string_view::npos)) {
-        fail(
-            "OOF2003",
-            node,
-            std::string(object_id),
-            std::string(property),
-            "xs:decimal",
-            std::string(text),
-            "Ordinary-form decimal has an invalid lexical value");
-    }
-    std::string_view integer = point == std::string_view::npos ? text : text.substr(0, point);
-    std::string_view fraction = point == std::string_view::npos ? std::string_view{} : text.substr(point + 1);
-    const auto digits_only = [](std::string_view value) {
-        return std::all_of(value.begin(), value.end(), [](unsigned char character) {
-            return character >= '0' && character <= '9';
-        });
-    };
-    if ((!integer.empty() && !digits_only(integer)) ||
-        (!fraction.empty() && !digits_only(fraction)) ||
-        (integer.empty() && fraction.empty())) {
-        fail(
-            "OOF2003",
-            node,
-            std::string(object_id),
-            std::string(property),
-            "xs:decimal",
-            std::string(text),
-            "Ordinary-form decimal has an invalid lexical value");
-    }
-    while (integer.size() > 1 && integer.front() == '0') {
-        integer.remove_prefix(1);
-    }
-    while (!fraction.empty() && fraction.back() == '0') {
-        fraction.remove_suffix(1);
-    }
-    const bool integer_is_zero = integer.empty() ||
-                                 std::all_of(integer.begin(), integer.end(), [](char value) {
-                                     return value == '0';
-                                 });
-    const bool fraction_is_zero = fraction.empty();
-    if (integer_is_zero && fraction_is_zero) {
-        return "0";
-    }
-    std::string result;
-    if (negative) {
-        result.push_back('-');
-    }
-    result.append(integer.empty() ? "0" : integer);
-    if (!fraction.empty()) {
-        result.push_back('.');
-        result.append(fraction);
-    }
-    return result;
 }
 
 std::string canonical_uuid(std::string value) {

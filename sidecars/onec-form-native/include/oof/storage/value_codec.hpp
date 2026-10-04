@@ -8,6 +8,9 @@
 
 namespace oof::storage::value_codec {
 
+// Canonical xs:decimal lexical form shared by XML and typed numeric stream values.
+[[nodiscard]] std::string canonical_decimal(std::string_view text);
+
 // Calendar dates use 1C's local, second-precision YYYYMMDDHHMMSS atoms.
 [[nodiscard]] std::string date_to_platform(std::string_view canonical);
 [[nodiscard]] std::string date_from_platform(std::string_view atom);
