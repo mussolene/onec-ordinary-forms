@@ -203,6 +203,13 @@ void test_descriptors() {
                radio_tool_tip->default_value.kind == DefaultKind::string &&
                radio_tool_tip->default_value.canonical.empty(),
         "RadioButton ToolTip must declare its editable empty string default");
+    const auto* html_output = find_property(ControlKind::html_document_field, "Output");
+    expect(html_output && html_output->persistence == PersistenceClass::persisted_editable &&
+               html_output->storage_codec == StorageCodec::control_info &&
+               html_output->value_codec == ValueCodec::enumeration &&
+               html_output->default_value.kind == DefaultKind::enumeration &&
+               html_output->default_value.canonical == "Auto",
+        "HTMLDocumentField Output must declare its editable UseOutput Auto default");
     const auto* picture_enabled = find_property(ControlKind::picture_decoration, "Enabled");
     const auto* picture_tool_tip = find_property(ControlKind::picture_decoration, "ToolTip");
     const auto* picture_value = find_property(ControlKind::picture_decoration, "Picture");
