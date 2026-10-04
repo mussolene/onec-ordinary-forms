@@ -177,11 +177,10 @@ inline std::vector<Token> tokenize(std::string_view text) {
                         ++index;
                         continue;
                     }
-                    while (index < text.size() && text[index] == '\\') {
+                    if (index < text.size() && text[index] == '\\') {
                         // Platform strings continue with a quoted UTF-16 code unit.
                         const auto read_code_unit = [&]() -> std::uint32_t {
-                            if (text.size() - index < 6 || text[index] != '\\' ||
-                                text[index + 5] != '"') {
+                            if (text.size() - index < 5 || text[index] != '\\') {
                                 throw std::runtime_error("ListInStream truncated UTF-16 string escape");
                             }
                             std::uint32_t unit = 0;
@@ -194,11 +193,15 @@ inline std::vector<Token> tokenize(std::string_view text) {
                                     ch <= '9' ? ch - '0' :
                                     ch <= 'F' ? ch - 'A' + 10 : ch - 'a' + 10);
                             }
-                            index += 6;
+                            index += 5;
                             return unit;
                         };
                         std::uint32_t code_point = read_code_unit();
                         if (code_point >= 0xd800 && code_point <= 0xdbff) {
+                            if (index == text.size() || text[index] != '"') {
+                                throw std::runtime_error("ListInStream missing UTF-16 low surrogate");
+                            }
+                            ++index;
                             const auto low = read_code_unit();
                             if (low < 0xdc00 || low > 0xdfff) {
                                 throw std::runtime_error("ListInStream invalid UTF-16 surrogate pair");
@@ -222,6 +225,7 @@ inline std::vector<Token> tokenize(std::string_view text) {
                             value += static_cast<char>(0x80 | ((code_point >> 6) & 0x3f));
                             value += static_cast<char>(0x80 | (code_point & 0x3f));
                         }
+                        continue;
                     }
                     if (index < text.size()) {
                         const unsigned char next = static_cast<unsigned char>(text[index]);
