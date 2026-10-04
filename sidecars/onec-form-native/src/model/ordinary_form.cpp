@@ -814,6 +814,57 @@ ValidationReport OrdinaryFormDocument::validate() const {
         if (control.data_path.has_value()) {
             require_attribute(control.id, control.data_path->attribute);
         }
+        if (const auto* table = std::get_if<TablePayload>(&control.payload)) {
+            const auto invalid_table = [&](std::string reason) {
+                add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
+            };
+            if (!control.data_path || !control.data_path->members.empty()) {
+                invalid_table("Table requires a direct DataPath to a ValueTable Attribute");
+            } else if (const Attribute* attribute = find_attribute(control.data_path->attribute.id());
+                       attribute == nullptr || attribute->type.entries.size() != 1 ||
+                       [&] {
+                           TypeDomainEntry expected;
+                           expected.term = TypeDomainTerm::value_table;
+                           return attribute->type.entries.front() != expected;
+                       }()) {
+                invalid_table("Table DataPath must reference the named ValueTable type");
+            }
+            std::set<std::string> column_names;
+            for (const auto& column : table->columns) {
+                if (column.name.empty() || !column_names.insert(column.name).second) {
+                    invalid_table("Table Column names must be non-empty and unique");
+                }
+                if (column.data_path.empty()) {
+                    invalid_table("Table Column DataPath must be non-empty");
+                }
+                if (column.header.items.empty()) {
+                    invalid_table("Table Column Header must contain localized text");
+                }
+                std::set<std::string> languages;
+                for (const auto& item : column.header.items) {
+                    if (item.language.empty() || !languages.insert(item.language).second) {
+                        invalid_table("Table Column Header languages must be non-empty and unique");
+                    }
+                }
+                if (column.control.kind != ControlKind::input_field) {
+                    invalid_table("Table Column Control currently supports only InputField");
+                }
+                column.control.properties.for_each_explicit([&](const PropertyEntry& entry) {
+                    const auto* property = metamodel::find_property(ControlKind::input_field, entry.id);
+                    if (property == nullptr ||
+                        (property->api_name != "Enabled" && property->api_name != "ReadOnly") ||
+                        !std::holds_alternative<bool>(entry.value)) {
+                        invalid_table("Table Column InputField supports only Boolean Enabled and ReadOnly");
+                        return;
+                    }
+                    const bool value = std::get<bool>(entry.value);
+                    if ((property->api_name == "Enabled" && !value) ||
+                        (property->api_name == "ReadOnly" && value)) {
+                        invalid_table("Table Column InputField supports only Enabled=true and ReadOnly=false");
+                    }
+                });
+            }
+        }
         validate_property_set(
             control.id,
             control.extension_properties,

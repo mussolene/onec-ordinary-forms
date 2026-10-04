@@ -19,6 +19,8 @@
 #include <variant>
 #include <vector>
 
+#include <zlib.h>
+
 #include "oof/model/metamodel.hpp"
 #include "oof/storage/value_codec.hpp"
 
@@ -415,6 +417,10 @@ LV canonical_spreadsheet_field_info(
     view_info.items.insert(view_info.items.begin() + 24,
         list({raw("3"), raw("0"), raw("0"), raw("0"), raw("0"), raw("00000000-0000-0000-0000-000000000000")}));
     return info;
+}
+
+LV encoded_localized(const model::LocalizedStringValue& value) {
+    return list_stream::parse(value_codec::encode_localized_string(value));
 }
 
 std::string decoded_single_language_text(const LV& value, std::string_view path) {
@@ -1219,7 +1225,13 @@ LV canonical_input_field_info(
     value.items[2].items[0].items[17] = raw(std::to_string(layout_values.horizontal_align));
     value.items[2].items[0].items[18] = raw(std::to_string(layout_values.vertical_align));
     value.items[2].items[0].items[31] = raw(std::to_string(layout_values.choice_list_height));
-    value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().string.length));
+    if (type.entries.empty()) {
+        value.items[2].items[0].items[14] = raw("0");
+    } else if (type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::string) {
+        value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().string.length));
+    } else {
+        throw std::logic_error("canonical InputField profile only supports empty or single-string TypeDomain");
+    }
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
         const bool encoded = flags[index];
@@ -1739,6 +1751,12 @@ bool is_single_boolean_type_domain(const model::TypeDomainPatternValue& value) {
     return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::boolean;
 }
 
+bool is_single_value_table_type_domain(const model::TypeDomainPatternValue& value) {
+    model::TypeDomainEntry expected;
+    expected.term = model::TypeDomainTerm::value_table;
+    return value.entries.size() == 1 && value.entries.front() == expected;
+}
+
 LV canonical_event_table(std::optional<std::string_view> handler) {
     if (!handler) {
         return list({raw("0")});
@@ -1938,6 +1956,263 @@ std::vector<std::uint8_t> decode_base64(std::string_view input, std::string_view
         if (input[index + 3] != '=') output.push_back(static_cast<std::uint8_t>(triple & 0xff));
     }
     return output;
+}
+
+constexpr std::size_t max_column_editor_packet_size = 1024 * 1024;
+constexpr std::array<std::uint8_t, 18> table_column_editor_header{
+    0x02, 0x01, 0x53, 0x4b, 0x6f, 0xf4, 0x88, 0x8d, 0xc1,
+    0x4e, 0xa0, 0xd5, 0xeb, 0xb6, 0xbd, 0xa0, 0xa7, 0x0d};
+
+struct InflateState {
+    z_stream stream{};
+    bool initialized = false;
+
+    ~InflateState() {
+        if (initialized) inflateEnd(&stream);
+    }
+};
+
+struct DeflateState {
+    z_stream stream{};
+    bool initialized = false;
+
+    ~DeflateState() {
+        if (initialized) deflateEnd(&stream);
+    }
+};
+
+std::vector<std::uint8_t> decode_table_column_editor_packet(
+    const LV& encoded_packet,
+    std::string_view path) {
+    require_arity(encoded_packet, 2, path);
+    const auto& encoded_chunks = encoded_packet.items[0];
+    require_list(encoded_chunks, child_path(path, 0));
+    require_raw_constant(encoded_packet.items[1], "0", child_path(path, 1));
+    constexpr std::size_t max_encoded_packet_size = ((max_column_editor_packet_size + 2) / 3) * 4;
+    if (encoded_chunks.items.empty() || encoded_chunks.items.size() > (max_encoded_packet_size + 63) / 64) {
+        fail("OOF1114", child_path(path, 0), "bounded non-empty base64 packet chunks",
+            std::to_string(encoded_chunks.items.size()), "Table Column editor packet has an invalid chunk count");
+    }
+    std::string encoded;
+    for (std::size_t index = 0; index < encoded_chunks.items.size(); ++index) {
+        const auto& chunk = encoded_chunks.items[index];
+        const std::string chunk_path = child_path(child_path(path, 0), index);
+        if (chunk.is_list || chunk.atom_kind != LV::AtomKind::raw) {
+            fail("OOF1114", chunk_path, "raw base64 packet chunk", describe(chunk),
+                "Table Column editor packet chunk has an invalid value kind");
+        }
+        const std::string_view atom = chunk.atom;
+        const bool first = index == 0;
+        if ((first && !atom.starts_with("#base64:")) || (!first && atom.starts_with("#base64:"))) {
+            fail("OOF1114", chunk_path, "one initial #base64: marker followed by packet chunks",
+                std::string(atom), "Table Column editor packet has malformed base64 chunk markers");
+        }
+        const auto data = first ? atom.substr(8) : atom;
+        if (data.empty() || data.size() > 64 || (index + 1 < encoded_chunks.items.size() && data.size() != 64) ||
+            data.size() > max_encoded_packet_size - encoded.size()) {
+            fail("OOF1114", chunk_path, "bounded canonical 64-character base64 chunks", {},
+                "Table Column editor packet chunk size is unsupported");
+        }
+        encoded.append(data);
+    }
+    auto packet = decode_base64(encoded, child_path(path, 0));
+    if (packet.size() <= table_column_editor_header.size() || packet.size() > max_column_editor_packet_size ||
+        !std::equal(table_column_editor_header.begin(), table_column_editor_header.end(), packet.begin())) {
+        fail("OOF1114", std::string(path), "bounded Table Column InputField packet with version 2.1 header",
+            std::to_string(packet.size()), "Table Column editor packet header or size is unsupported");
+    }
+
+    InflateState state;
+    if (inflateInit2(&state.stream, -MAX_WBITS) != Z_OK) {
+        fail("OOF1124", std::string(path), "available raw DEFLATE decoder", {},
+            "Could not initialize Table Column editor decompressor");
+    }
+    state.initialized = true;
+    state.stream.next_in = packet.data() + table_column_editor_header.size();
+    state.stream.avail_in = static_cast<uInt>(packet.size() - table_column_editor_header.size());
+    std::vector<std::uint8_t> inflated;
+    std::array<std::uint8_t, 4096> chunk{};
+    int result = Z_OK;
+    while (result == Z_OK) {
+        state.stream.next_out = chunk.data();
+        state.stream.avail_out = static_cast<uInt>(chunk.size());
+        result = inflate(&state.stream, Z_NO_FLUSH);
+        const std::size_t produced = chunk.size() - state.stream.avail_out;
+        if (produced > max_column_editor_packet_size - inflated.size()) {
+            fail("OOF1114", std::string(path), "inflated Table Column editor within 1 MiB", {},
+                "Table Column editor packet exceeds the decompression limit");
+        }
+        inflated.insert(inflated.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(produced));
+        if (result != Z_OK && result != Z_STREAM_END) {
+            fail("OOF1114", std::string(path), "valid raw DEFLATE stream", std::to_string(result),
+                "Table Column editor packet is corrupt");
+        }
+        if (result == Z_OK && state.stream.avail_in == 0 && produced == 0) {
+            fail("OOF1114", std::string(path), "complete raw DEFLATE stream", {},
+                "Table Column editor packet is truncated");
+        }
+    }
+    if (state.stream.avail_in != 0 || inflated.size() < 11) {
+        fail("OOF1114", std::string(path), "single complete raw DEFLATE stream with envelope", {},
+            "Table Column editor packet has trailing bytes or a truncated envelope");
+    }
+    std::uint64_t declared_size = 0;
+    for (std::size_t index = 0; index < sizeof(declared_size); ++index) {
+        declared_size |= static_cast<std::uint64_t>(inflated[index]) << (index * 8);
+    }
+    constexpr std::array<std::uint8_t, 3> utf8_bom{0xef, 0xbb, 0xbf};
+    if (declared_size != inflated.size() - sizeof(declared_size) ||
+        !std::equal(utf8_bom.begin(), utf8_bom.end(), inflated.begin() + sizeof(declared_size))) {
+        fail("OOF1114", std::string(path), "matching uncompressed size and UTF-8 BOM", {},
+            "Table Column editor packet envelope is invalid");
+    }
+    return inflated;
+}
+
+LV encode_table_column_editor_packet(const LV& info, std::string_view path) {
+    const std::string text = list_stream::dump_listout(info);
+    constexpr std::array<std::uint8_t, 3> utf8_bom{0xef, 0xbb, 0xbf};
+    const std::size_t declared_size = utf8_bom.size() + text.size();
+    if (declared_size > max_column_editor_packet_size) {
+        fail("OOF1114", std::string(path), "Table Column editor under 1 MiB", {},
+            "Table Column editor payload exceeds the serialization limit");
+    }
+    std::vector<std::uint8_t> envelope(sizeof(std::uint64_t) + declared_size);
+    const auto size64 = static_cast<std::uint64_t>(declared_size);
+    for (std::size_t index = 0; index < sizeof(size64); ++index) {
+        envelope[index] = static_cast<std::uint8_t>((size64 >> (index * 8)) & 0xff);
+    }
+    std::copy(utf8_bom.begin(), utf8_bom.end(), envelope.begin() + sizeof(size64));
+    std::copy(text.begin(), text.end(), envelope.begin() + sizeof(size64) + utf8_bom.size());
+
+    DeflateState state;
+    if (deflateInit2(&state.stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -MAX_WBITS, 8,
+            Z_DEFAULT_STRATEGY) != Z_OK) {
+        fail("OOF1124", std::string(path), "available raw DEFLATE encoder", {},
+            "Could not initialize Table Column editor compressor");
+    }
+    state.initialized = true;
+    state.stream.next_in = envelope.data();
+    state.stream.avail_in = static_cast<uInt>(envelope.size());
+    std::vector<std::uint8_t> compressed;
+    std::array<std::uint8_t, 4096> chunk{};
+    int result = Z_OK;
+    while (result == Z_OK) {
+        state.stream.next_out = chunk.data();
+        state.stream.avail_out = static_cast<uInt>(chunk.size());
+        result = deflate(&state.stream, state.stream.avail_in == 0 ? Z_FINISH : Z_NO_FLUSH);
+        const std::size_t produced = chunk.size() - state.stream.avail_out;
+        if (produced > max_column_editor_packet_size - compressed.size()) {
+            fail("OOF1114", std::string(path), "compressed Table Column editor within 1 MiB", {},
+                "Table Column editor packet exceeds the serialization limit");
+        }
+        compressed.insert(compressed.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(produced));
+        if (result != Z_OK && result != Z_STREAM_END) {
+            fail("OOF1124", std::string(path), "successful raw DEFLATE encoding", std::to_string(result),
+                "Could not encode Table Column editor packet");
+        }
+    }
+    if (compressed.size() + table_column_editor_header.size() > max_column_editor_packet_size) {
+        fail("OOF1114", std::string(path), "bounded Table Column editor packet", {},
+            "Table Column editor packet exceeds the serialization limit");
+    }
+    std::vector<std::uint8_t> packet(table_column_editor_header.begin(), table_column_editor_header.end());
+    packet.insert(packet.end(), compressed.begin(), compressed.end());
+    const std::string encoded = encode_base64(packet);
+    std::vector<LV> chunks;
+    for (std::size_t begin = 0; begin < encoded.size(); begin += 64) {
+        const std::string part = encoded.substr(begin, std::min<std::size_t>(64, encoded.size() - begin));
+        chunks.push_back(raw((begin == 0 ? "#base64:" : "") + part));
+    }
+    return list({list(std::move(chunks)), raw("0")});
+}
+
+bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value);
+void require_allowed_properties(
+    const model::PropertySet& properties,
+    std::initializer_list<std::string_view> allowed,
+    std::string_view path);
+
+LV canonical_table_column_input_field_info(const model::TableColumnControl& control) {
+    if (control.kind != model::ControlKind::input_field) {
+        throw std::logic_error("Table Column Control must be an InputField");
+    }
+    require_allowed_properties(control.properties, {"Enabled", "ReadOnly"}, "$/Table/Columns/Column/Control");
+    InputFieldFlagValues flags{};
+    for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+        flags[index] = input_field_flag_mappings[index].default_value;
+    }
+    const model::TypeDomainPatternValue empty_type;
+    const bool enabled = explicit_bool(control.properties, "Enabled", true);
+    const bool read_only = explicit_bool(control.properties, "ReadOnly", false);
+    if (!enabled || read_only) {
+        fail("OOF1122", "$/Table/Columns/Column/Control", "Enabled=true and ReadOnly=false",
+            enabled ? "ReadOnly=true" : "Enabled=false",
+            "Table Column editor property value is outside the supported persisted profile");
+    }
+    LV info = canonical_input_field_info(
+        empty_type, enabled, read_only, flags, InputFieldTextValues{}, InputFieldLayoutValues{});
+    info.items[3] = list({raw("0")});
+    return info;
+}
+
+LV canonical_table_column_record(const model::TableColumn& column, std::string_view path) {
+    auto properties = parse_constant(R"OOF(
+{23,{0},{1,0},{1,0},2.1e2,0,0,-1,-1,12590592,
+{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},
+16,16,d2314b5d-8da4-4e0f-822b-45e7500eae09,
+{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},
+{8,3,0,1,100},{8,3,0,1,100},{8,3,0,1,100},1,0,0,4,0,"",{},30,0,{1,0},{"Pattern"},0,1,
+381ed624-9217-4e63-85db-c4c3cb87daae,{{},0},0,0,0,0,0,2.1e2,0,1,0,0,2,0}
+)OOF");
+    if (properties.items.size() != 52) {
+        throw std::logic_error("canonical Table Column property record has the wrong arity");
+    }
+    properties.items[1] = encoded_localized(column.header);
+    properties.items[30] = string_value(column.data_path);
+    properties.items[35] = encoded_type_domain(model::TypeDomainPatternValue{}, std::string(path) + "/Control/TypeRestriction");
+    properties.items[38] = raw(std::string(model::metamodel::descriptor_for(model::ControlKind::input_field).guid));
+    properties.items[39] = encode_table_column_editor_packet(
+        canonical_table_column_input_field_info(column.control), std::string(path) + "/Control");
+    return list({
+        raw("737535a4-21e6-4971-8513-3e3173a9fedd"),
+        list({raw("8"), list({raw("8"), std::move(properties), list({raw("-1")}), list({raw("-1")}), list({raw("-1")})}),
+            string_value(column.name), string_value(""), string_value(""), raw("0")})});
+}
+
+LV canonical_table_control_info(
+    const model::TypeDomainPatternValue& source_type,
+    const std::vector<model::TableColumn>& columns,
+    std::string_view path) {
+    if (columns.empty() || columns.size() > 256) {
+        fail("OOF1122", std::string(path) + "/Columns", "1 to 256 Columns",
+            std::to_string(columns.size()), "Table Columns collection is outside the supported profile");
+    }
+    auto base = parse_constant(R"OOF(
+{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},
+{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}
+)OOF");
+    auto properties = parse_constant(R"OOF(
+{23,117643809,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,0,{12741203},0},
+{4,3,{-15},3},{4,3,{-13},3},2,2,0,0,0,0,0,1,1,{8,2,0,{-20},1,100},{8,2,0,{-20},1,100},0,0,
+1,{0},0,0,0,0,0,0,0,100,1,2,1,1,0,0,2}
+)OOF");
+    if (base.items.size() != 21 || properties.items.size() != 39) {
+        throw std::logic_error("canonical Table control property record has the wrong arity");
+    }
+    std::vector<LV> column_records;
+    column_records.reserve(columns.size() + 1);
+    column_records.push_back(raw(std::to_string(columns.size())));
+    for (std::size_t index = 0; index < columns.size(); ++index) {
+        column_records.push_back(canonical_table_column_record(
+            columns[index], std::string(path) + "/Columns/Column[" + std::to_string(index) + "]"));
+    }
+    properties.items[23] = list(std::move(column_records));
+    return list({
+        raw("5"), encoded_type_domain(source_type, std::string(path) + "/ValueType"),
+        list({std::move(base), std::move(properties)}),
+        list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})}),
+        list({raw("0")})});
 }
 
 LV encode_button_picture(const model::PictureAsset& asset, std::string_view path) {
@@ -3629,7 +3904,8 @@ DecodedControl decode_spreadsheet_document_field(
     if (document_info.items.size() < 65) fail("OOF1102", document_path, "complete SpreadsheetDocumentField info", describe(document_info), "Document info is incomplete");
     require_raw_constant(document_info.items[14], "2", child_path(document_path, 14));
     const auto row_count = integer_atom<std::uint32_t>(document_info.items[15], child_path(document_path, 15));
-    if (document_info.items.size() < 65 + static_cast<std::size_t>(row_count) * 3)
+    const auto row_payload_size = document_info.items.size() - 65;
+    if (static_cast<std::size_t>(row_count) > row_payload_size / 3)
         fail("OOF1114", child_path(document_path, 15), "row count matching bounded row records", std::to_string(row_count), "Spreadsheet Document row count is invalid");
     model::SpreadsheetDocumentFieldPayload payload;
     std::size_t cursor = 16;
@@ -3645,7 +3921,8 @@ DecodedControl decode_spreadsheet_document_field(
         ++cursor;
         const auto cell_count = integer_atom<std::uint32_t>(at(document_info, cursor, document_path), child_path(document_path, cursor));
         ++cursor;
-        if (cell_count == 0 || cursor + static_cast<std::size_t>(cell_count) * 2 > document_info.items.size())
+        if (cell_count == 0 || cursor > document_info.items.size() ||
+            static_cast<std::size_t>(cell_count) > (document_info.items.size() - cursor) / 2)
             fail("OOF1114", child_path(document_path, cursor - 1), "nonempty row with matching cell records", std::to_string(cell_count), "Spreadsheet row cell count is invalid");
         std::uint32_t previous_column = 0;
         bool first_column = true;
@@ -3830,6 +4107,140 @@ DecodedControl decode_input_field(
     }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
+model::TableColumn decode_table_column(const LV& value, std::string_view path) {
+    require_arity(value, 2, path);
+    require_raw_constant(value.items[0], "737535a4-21e6-4971-8513-3e3173a9fedd", child_path(path, 0));
+    const auto body_path = child_path(path, 1);
+    const auto& body = value.items[1];
+    require_arity(body, 6, body_path);
+    require_raw_constant(body.items[0], "8", child_path(body_path, 0));
+    const auto info_path = child_path(body_path, 1);
+    const auto& info = body.items[1];
+    require_arity(info, 5, info_path);
+    require_raw_constant(info.items[0], "8", child_path(info_path, 0));
+    const auto properties_path = child_path(info_path, 1);
+    const auto& properties = info.items[1];
+    require_arity(properties, 52, properties_path);
+
+    model::TableColumn column;
+    column.name = string_atom(body.items[2], child_path(body_path, 2));
+    column.data_path = string_atom(properties.items[30], child_path(properties_path, 30));
+    try {
+        list_stream::ListInStream localized(properties.items[1]);
+        column.header = value_codec::read_localized_string(localized);
+    } catch (const std::exception& error) {
+        fail("OOF1108", child_path(properties_path, 1), "LocalizedString Header", describe(properties.items[1]), error.what());
+    }
+    require_raw_constant(properties.items[38],
+        model::metamodel::descriptor_for(model::ControlKind::input_field).guid,
+        child_path(properties_path, 38));
+    static_cast<void>(type_domain(properties.items[35], child_path(properties_path, 35)));
+    const auto inflated = decode_table_column_editor_packet(
+        properties.items[39], child_path(properties_path, 39));
+    constexpr std::size_t envelope_prefix_size = sizeof(std::uint64_t) + 3;
+    const std::string_view editor_text(
+        reinterpret_cast<const char*>(inflated.data() + envelope_prefix_size),
+        inflated.size() - envelope_prefix_size);
+    LV editor_info;
+    try {
+        editor_info = list_stream::parse(editor_text);
+    } catch (const std::exception& error) {
+        fail("OOF1114", child_path(properties_path, 39), "valid embedded InputField ListStream", {}, error.what());
+    }
+    require_arity(editor_info, 10, child_path(properties_path, 39));
+    require_arity(editor_info.items[2], 1, child_path(child_path(properties_path, 39), 2));
+    const auto payload_path = child_path(properties_path, 39) + "/payload";
+    const auto base_path = child_path(properties_path, 39) + "/base";
+    require_arity(editor_info.items[2].items[0], 46, payload_path);
+    require_arity(editor_info.items[2].items[0].items[0], 21,
+        base_path);
+    column.control.kind = model::ControlKind::input_field;
+    const bool enabled = bool_atom(editor_info.items[2].items[0].items[0].items[1], child_path(properties_path, 39));
+    const bool read_only = bool_atom(editor_info.items[2].items[0].items[13], child_path(properties_path, 39));
+    if (!enabled || read_only) {
+        fail("OOF1122", child_path(properties_path, 39), "Enabled=true and ReadOnly=false",
+            enabled ? "ReadOnly=true" : "Enabled=false",
+            "Table Column editor property value is outside its persisted profile");
+    }
+    require_exact(editor_info, canonical_table_column_input_field_info(column.control),
+        child_path(properties_path, 39), "embedded InputField editor is outside its typed default property profile");
+    LV normalized = value;
+    const LV canonical = canonical_table_column_record(column, path);
+    normalized.items[1].items[1].items[1].items[39] = canonical.items[1].items[1].items[1].items[39];
+    require_exact(normalized, canonical, path,
+        "Table Column contains an unsupported property, event, or storage variation");
+    return column;
+}
+
+DecodedControl decode_table(
+    const LV& record,
+    std::string_view path,
+    const AttributeRecord& linked_attribute,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 Table ID", std::to_string(raw_id), "Table ID is invalid");
+    }
+    if (!is_single_value_table_type_domain(linked_attribute.type)) {
+        fail("OOF1122", child_path(path, 1), "DataPath to an unqualified ValueTable Attribute",
+            linked_attribute.name, "Table DataPath target must have the named ValueTable type");
+    }
+    const auto info_path = child_path(path, 2);
+    const auto& info = record.items[2];
+    require_arity(info, 5, info_path);
+    require_raw_constant(info.items[0], "5", child_path(info_path, 0));
+    const auto stored_type = type_domain(info.items[1], child_path(info_path, 1));
+    if (stored_type != linked_attribute.type) {
+        fail("OOF1122", child_path(info_path, 1), "Table ValueType matching linked ValueTable Attribute",
+            describe(info.items[1]), "Table DataPath and ValueType disagree");
+    }
+    require_arity(info.items[2], 2, child_path(info_path, 2));
+    require_arity(info.items[2].items[1], 39, child_path(child_path(info_path, 2), 1));
+    const auto columns_path = child_path(child_path(child_path(info_path, 2), 1), 23);
+    const auto& stored_columns = info.items[2].items[1].items[23];
+    require_list(stored_columns, columns_path);
+    if (stored_columns.items.empty() || stored_columns.items.size() < 2 || stored_columns.items.size() > 257 ||
+        integer_atom<std::size_t>(stored_columns.items[0], columns_path) != stored_columns.items.size() - 1) {
+        fail("OOF1114", columns_path, "matching Table Column count from 1 to 256",
+            std::to_string(stored_columns.items.size()), "Table Column collection is malformed");
+    }
+    auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto metadata_path = child_path(path, 4);
+    require_arity(record.items[4], 6, metadata_path);
+    require_raw_constant(record.items[4].items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(record.items[4].items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty Table Name", "empty", "Table Name is required");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::TablePayload{}};
+    control.data_path = model::DataPath{model::AttributeRef{
+        model::ObjectId{static_cast<std::uint64_t>(linked_attribute.id.object_id)}}, {}};
+    control.position = geometry.position;
+    auto& table = std::get<model::TablePayload>(control.payload);
+    table.columns.reserve(stored_columns.items.size() - 1);
+    for (std::size_t index = 1; index < stored_columns.items.size(); ++index) {
+        table.columns.push_back(decode_table_column(stored_columns.items[index], child_path(columns_path, index)));
+    }
+    LV normalized_info = info;
+    const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, info_path);
+    auto& normalized_columns = normalized_info.items[2].items[1].items[23];
+    const auto& canonical_columns = canonical_info.items[2].items[1].items[23];
+    for (std::size_t index = 1; index < normalized_columns.items.size(); ++index) {
+        normalized_columns.items[index].items[1].items[1].items[1].items[39] =
+            canonical_columns.items[index].items[1].items[1].items[1].items[39];
+    }
+    require_exact(normalized_info, canonical_info, info_path,
+        "Table contains a property or storage variation outside the typed profile");
+    require_exact(record.items[4],
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "Table metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "Table cannot contain storage children");
+    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
 }
 
 bool explicit_bool(const model::PropertySet& properties, std::string_view name, bool default_value) {
@@ -4606,6 +5017,42 @@ LV encode_input_field(
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
+}
+
+LV encode_table(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::table || control.id.value() == 0) {
+        fail("OOF1122", "$/Table", "Table with positive ID", control.name,
+            "Table is outside the supported storage profile");
+    }
+    if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
+        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/Table", "named Table with direct DataPath and basic Position", control.name,
+            "Table uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {}, "$/Table");
+    const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+    if (attribute == nullptr) {
+        fail("OOF1123", "$/Table/DataPath", "existing ValueTable Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "Table DataPath does not resolve");
+    }
+    if (!is_single_value_table_type_domain(attribute->type)) {
+        fail("OOF1122", "$/Table/DataPath", "unqualified ValueTable Attribute", attribute->name,
+            "Table DataPath must target the named ValueTable type");
+    }
+    const auto& table = std::get<model::TablePayload>(control.payload);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
+    return list({
+        raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        canonical_table_control_info(attribute->type, table.columns, "$/Table"),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")})});
 }
 
 }  // namespace
@@ -5399,7 +5846,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == text_document_descriptor.guid) child = decode_text_document_field(record, record_path, context);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid ||
-                             guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid) {
+                             guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid ||
+                             guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                             fail("OOF1122", child_path(record_path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
@@ -5447,6 +5895,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                             child = decode_list_box(record, record_path, *linked_attribute, context);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                        } else if (guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
+                            child = decode_table(record, record_path, *linked_attribute, context);
                         } else {
                             child = decode_progress_bar(record, record_path, context, linked_attribute);
                         }
@@ -5852,6 +6302,8 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_track_bar(*control, context);
                 } else if (control->kind() == model::ControlKind::list_box) {
                     record = encode_list_box(document, *control, context);
+                } else if (control->kind() == model::ControlKind::table) {
+                    record = encode_table(document, *control, context);
                 } else if (control->kind() == model::ControlKind::panel) {
                     if (!control->events.empty() || control->data_path || !control->extension_properties.empty()) {
                         fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",

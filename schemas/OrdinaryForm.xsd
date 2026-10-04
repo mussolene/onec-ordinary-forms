@@ -95,6 +95,7 @@
       <xs:enumeration value="string"/>
       <xs:enumeration value="type"/>
       <xs:enumeration value="valueList"/>
+      <xs:enumeration value="valueTable"/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -1658,6 +1659,27 @@
   </xs:complexType>
   <xs:element name="Form" type="FormType"/>
 
+  <xs:complexType name="TableColumnControlType">
+    <xs:sequence>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="type" type="xs:string" use="required" fixed="InputField"/>
+  </xs:complexType>
+  <xs:complexType name="TableColumnType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="xs:string" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Header" type="LocalizedStringValueType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Control" type="TableColumnControlType" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="TableColumnsType">
+    <xs:sequence>
+      <xs:element name="Column" type="TableColumnType" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
   <xs:complexType name="PanelType">
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
@@ -2466,7 +2488,7 @@
       <xs:element name="ChangeSettingOfColumns" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChangePositionOfColumns" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChangeRowSet" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Columns" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Columns" type="TableColumnsType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="InitialTreeView" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="InitialListView" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Footer" type="xs:boolean" minOccurs="0" maxOccurs="1"/>

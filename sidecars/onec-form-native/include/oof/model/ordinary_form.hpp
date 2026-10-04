@@ -237,6 +237,7 @@ enum class TypeDomainTerm : std::uint8_t {
     string,
     type,
     value_list,
+    value_table,
 };
 
 struct NumericQualifiers {
@@ -601,12 +602,26 @@ struct GeographicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::geographical_schema_field> {};
 struct GraphicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::graphical_schema_field> {};
-struct TablePayload final : TypedControlPayload<ControlKind::table> {};
 struct SpreadsheetDocumentCell final {
     std::uint32_t row{};
     std::uint32_t column{};
     std::string text;
     friend bool operator==(const SpreadsheetDocumentCell&, const SpreadsheetDocumentCell&) = default;
+};
+struct TableColumnControl {
+    ControlKind kind = ControlKind::input_field;
+    PropertySet properties;
+};
+
+struct TableColumn {
+    std::string name;
+    std::string data_path;
+    LocalizedStringValue header;
+    TableColumnControl control;
+};
+
+struct TablePayload final : TypedControlPayload<ControlKind::table> {
+    std::vector<TableColumn> columns;
 };
 struct SpreadsheetDocumentFieldPayload final
     : TypedControlPayload<ControlKind::spreadsheet_document_field> {
