@@ -1494,8 +1494,50 @@ private:
             make_payload(descriptor->kind),
         };
         bool position_seen = false;
+        bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
+            if (name == "Document" && descriptor->kind == model::ControlKind::spreadsheet_document_field) {
+                if (spreadsheet_document_seen)
+                    fail("OOF2003", child, id_text, "Document", "at most one Document element", "duplicate", "SpreadsheetDocumentField has duplicate Document elements");
+                spreadsheet_document_seen = true;
+                if (child->properties != nullptr)
+                    fail("OOF2003", child, id_text, "Document", "no attributes", "present", "Spreadsheet Document does not accept attributes");
+                auto& cells = std::get<model::SpreadsheetDocumentFieldPayload>(control.payload).cells;
+                std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
+                for (xmlNodePtr cell_node : element_children(child)) {
+                    if (node_name(cell_node) != "Cell")
+                        fail("OOF2003", cell_node, id_text, node_name(cell_node), "Cell", node_name(cell_node), "Unknown spreadsheet Document item");
+                    for (xmlAttrPtr attr = cell_node->properties; attr != nullptr; attr = attr->next) {
+                        const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                        if (attr_name != "row" && attr_name != "column")
+                            fail("OOF2003", cell_node, id_text, std::string(attr_name), "row and column attributes", std::string(attr_name), "Unsupported spreadsheet Cell attribute");
+                    }
+                    const auto row = parse_integer<std::uint32_t>(required_attribute(cell_node, "row", id_text), cell_node, "row", id_text);
+                    const auto column = parse_integer<std::uint32_t>(required_attribute(cell_node, "column", id_text), cell_node, "column", id_text);
+                    if (row == 0 || column == 0)
+                        fail("OOF2003", cell_node, id_text, "coordinate", "positive uint32 row and column", "zero", "Spreadsheet Cell coordinates are one-based");
+                    if (!coordinates.emplace(row, column).second)
+                        fail("OOF2003", cell_node, id_text, "coordinate", "unique row and column pair", "duplicate", "Spreadsheet Document contains a duplicate Cell coordinate");
+                    bool text_seen = false;
+                    std::string text;
+                    for (xmlNodePtr value_node : element_children(cell_node)) {
+                        if (node_name(value_node) != "Text" || text_seen)
+                            fail("OOF2003", value_node, id_text, node_name(value_node), "one Text child", node_name(value_node), "Spreadsheet Cell requires exactly one Text child");
+                        if (value_node->properties != nullptr || !element_children(value_node).empty())
+                            fail("OOF2003", value_node, id_text, "Text", "text content without attributes or nested elements", "structured content", "Spreadsheet Cell Text must be plain text");
+                        text_seen = true;
+                        text = node_text(value_node);
+                    }
+                    if (!text_seen)
+                        fail("OOF2003", cell_node, id_text, "Text", "required Text child", "missing", "Spreadsheet Cell requires a Text child");
+                    cells.push_back({row, column, std::move(text)});
+                }
+                std::sort(cells.begin(), cells.end(), [](const auto& left, const auto& right) {
+                    return std::tie(left.row, left.column) < std::tie(right.row, right.column);
+                });
+                continue;
+            }
             if (name == "Buttons" && (descriptor->kind == model::ControlKind::button || descriptor->kind == model::ControlKind::command_bar)) {
                 if (auto* payload = std::get_if<model::ButtonPayload>(&control.payload)) payload->buttons = parse_command_bar_buttons(child, id_text);
                 else std::get<model::CommandBarPayload>(control.payload).buttons = parse_command_bar_buttons(child, id_text);
@@ -2533,6 +2575,16 @@ private:
             id,
             true);
         write_position(control.position);
+        if (const auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
+            spreadsheet != nullptr && !spreadsheet->cells.empty()) {
+            writer_.open("Document");
+            for (const auto& cell : spreadsheet->cells) {
+                writer_.open("Cell", {{"row", std::to_string(cell.row)}, {"column", std::to_string(cell.column)}});
+                writer_.text("Text", cell.text);
+                writer_.close("Cell");
+            }
+            writer_.close("Document");
+        }
         const std::vector<model::CommandBarButton>* owned_buttons = nullptr;
         if (const auto* button = std::get_if<model::ButtonPayload>(&control.payload)) owned_buttons = &button->buttons;
         if (const auto* command_bar = std::get_if<model::CommandBarPayload>(&control.payload)) owned_buttons = &command_bar->buttons;

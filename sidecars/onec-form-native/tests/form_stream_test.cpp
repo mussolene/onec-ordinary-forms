@@ -5027,6 +5027,134 @@ void test_single_input_field_round_trip() {
         "single InputField must reject triple-profile geometry references");
 }
 
+void test_spreadsheet_document_field_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Main";
+    form.children = {model::ControlRef{model::ObjectId{9}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode field{model::ObjectId{9}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    auto& field_payload = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload);
+    field_payload.cells = {
+        {1, 1, "Документ"}, {2, 1, ""}, {2, 3, " Ω & текст "}};
+    document.add_control(std::move(field));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded.ok() ? "" : encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "Main");
+    expect(decoded.ok(), decoded.ok() ? "" : decoded.diagnostics().front().message);
+    const auto* restored_control = decoded.value().find_control(model::ObjectId{9});
+    expect(restored_control != nullptr, "SpreadsheetDocumentField must resolve after storage decode");
+    const auto* restored = std::get_if<model::SpreadsheetDocumentFieldPayload>(&restored_control->payload);
+    expect(restored && restored->cells.size() == 3 && restored->cells[0].row == 1 &&
+        restored->cells[0].column == 1 && restored->cells[0].text == "Документ" &&
+        restored->cells[1].row == 2 && restored->cells[1].column == 1 && restored->cells[1].text.empty() &&
+        restored->cells[2].row == 2 && restored->cells[2].column == 3 && restored->cells[2].text == " Ω & текст ",
+        "SpreadsheetDocumentField cells must preserve sparse coordinates, Unicode, whitespace, and empty content");
+
+    constexpr std::string_view fresh_add_control = R"LS({236a17b3-7f44-46d9-a907-75f9cdc61ab5,2,{18,0,0,0,0,5,5,1,1,{4,4,{0},4},{3,1,{-18},0,0,0},{8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,2,0,0,1,0,{16,0,{1,1,{"ru","Первый"}},0},1,0,1,2,{16,0,{1,1,{"ru","Второй"}},0},{3,0,00000000-0000-0000-0000-000000000000,0},2,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0},0,1,{3,0,0,100,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"ru",0,0,0,0,0,0,0},1,1,{0},0,0,0,0,0,1,0,1,1,0,0,0,0,1,1},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,0,1,0,0},{14,"Sheet",4294967295,0,0,0},{0}})LS";
+    const auto platform_record = list_stream::parse(fresh_add_control);
+    model::Form platform_form;
+    platform_form.id = model::ObjectId{1};
+    platform_form.name = "Main";
+    platform_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument platform_document(std::move(platform_form));
+    model::ControlNode platform_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    std::get<model::SpreadsheetDocumentFieldPayload>(platform_field.payload).cells = {
+        {1, 1, "Первый"}, {2, 3, "Второй"}};
+    platform_document.add_control(std::move(platform_field));
+    const auto platform_encode = form_stream::encode_document(platform_document);
+    expect(platform_encode.ok(), platform_encode.ok() ? "" : platform_encode.diagnostics().front().message);
+    auto fresh_add_tree = platform_encode.value();
+    auto& fresh_add_record = fresh_add_tree.items.at(1).items.at(2).items.at(2).items.at(1);
+    fresh_add_record = platform_record;
+    const auto fresh_add_decoded = form_stream::decode_document(fresh_add_tree, "Main");
+    expect(fresh_add_decoded.ok(), fresh_add_decoded.ok() ? "" : fresh_add_decoded.diagnostics().front().message);
+    const auto* fresh_add_control_node = fresh_add_decoded.value().find_control(model::ObjectId{2});
+    expect(fresh_add_control_node != nullptr, "fresh platform Add record must decode to a named control");
+    const auto* fresh_add_payload = fresh_add_control_node == nullptr ? nullptr :
+        std::get_if<model::SpreadsheetDocumentFieldPayload>(&fresh_add_control_node->payload);
+    expect(fresh_add_payload && fresh_add_payload->cells.size() == 2 &&
+        fresh_add_payload->cells[0].text == "Первый" && fresh_add_payload->cells[1].row == 2 &&
+        fresh_add_payload->cells[1].column == 3 && fresh_add_payload->cells[1].text == "Второй",
+        "independent fresh Add record must normalize its unexposed fresh view envelope");
+
+    constexpr std::string_view normalized_default_record = R"LS({236a17b3-7f44-46d9-a907-75f9cdc61ab5,2,{18,0,0,0,0,5,5,1,1,{4,4,{0},4},{3,1,{-18},0,0,0},{8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,1,0,0,1,0,{16,0,{1,1,{"ru","Текст"}},0},{1,0,00000000-0000-0000-0000-000000000000,0},1,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0},0,1,{3,0,0,100,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"ru",0,1,{3,0,0,0,0,00000000-0000-0000-0000-000000000000},0,0,0,0,0},1,1,{0},0,0,0,0,0,1,0,1,1,0,0,0,0,1,1},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,0,1,0,0},{14,"Sheet",4294967295,0,0,0},{0}})LS";
+    model::Form normalized_form;
+    normalized_form.id = model::ObjectId{1};
+    normalized_form.name = "Main";
+    normalized_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument normalized_document(std::move(normalized_form));
+    model::ControlNode normalized_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    std::get<model::SpreadsheetDocumentFieldPayload>(normalized_field.payload).cells = {{1, 1, "Текст"}};
+    normalized_document.add_control(std::move(normalized_field));
+    const auto normalized_encoded = form_stream::encode_document(normalized_document);
+    expect(normalized_encoded.ok(), normalized_encoded.ok() ? "" : normalized_encoded.diagnostics().front().message);
+    const auto normalized_record = list_stream::parse(normalized_default_record);
+    const auto& normalized_writer_record = normalized_encoded.value().items.at(1).items.at(2).items.at(2).items.at(1);
+    expect(list_stream::dump_compact(normalized_writer_record) == list_stream::dump_compact(normalized_record),
+        "writer must match the independently captured Designer-normalized R1C1 selection record exactly");
+    auto normalized_tree = normalized_encoded.value();
+    normalized_tree.items.at(1).items.at(2).items.at(2).items.at(1) = normalized_record;
+    const auto normalized_decoded = form_stream::decode_document(normalized_tree, "Main");
+    expect(normalized_decoded.ok(), normalized_decoded.ok() ? "" : normalized_decoded.diagnostics().front().message);
+    const auto* normalized_control = normalized_decoded.value().find_control(model::ObjectId{2});
+    const auto* normalized_payload = normalized_control == nullptr ? nullptr :
+        std::get_if<model::SpreadsheetDocumentFieldPayload>(&normalized_control->payload);
+    expect(normalized_payload && normalized_payload->cells == std::vector<model::SpreadsheetDocumentCell>{{1, 1, "Текст"}},
+        "independent normalized R1C1 record must decode to the same named cells as fresh Add");
+
+    auto unsupported_row_flags = encoded.value();
+    auto& field_record = unsupported_row_flags.items.at(1).items.at(2).items.at(2).items.at(1);
+    auto& field_info = field_record.items.at(2).items.at(11);
+    expect(field_info.items.size() > 17 && !field_info.items.at(17).is_list,
+        "Spreadsheet Document row fixture must expose flat named row flags");
+    field_info.items.at(17) = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(unsupported_row_flags, "Main").ok(),
+        "SpreadsheetDocumentField must reject nondefault row flags");
+
+    auto excessive_row_count = encoded.value();
+    auto& excessive_row_record = excessive_row_count.items.at(1).items.at(2).items.at(2).items.at(1);
+    excessive_row_record.items.at(2).items.at(11).items.at(15) =
+        list_stream::ListValue::raw_atom("4294967295");
+    expect(!form_stream::decode_document(excessive_row_count, "Main").ok(),
+        "SpreadsheetDocumentField must reject an unrepresentable storage row count before iterating");
+
+    auto excessive_cell_count = encoded.value();
+    auto& excessive_cell_record = excessive_cell_count.items.at(1).items.at(2).items.at(2).items.at(1);
+    excessive_cell_record.items.at(2).items.at(11).items.at(18) =
+        list_stream::ListValue::raw_atom("4294967295");
+    expect(!form_stream::decode_document(excessive_cell_count, "Main").ok(),
+        "SpreadsheetDocumentField must reject an unrepresentable storage cell count before iterating");
+
+    auto unsupported_area_marker = encoded.value();
+    auto& marker_record = unsupported_area_marker.items.at(1).items.at(2).items.at(2).items.at(1);
+    marker_record.items.at(2).items.at(14).items.at(24).items.at(0) = list_stream::ListValue::raw_atom("4");
+    expect(!form_stream::decode_document(unsupported_area_marker, "Main").ok(),
+        "SpreadsheetDocumentField must reject unknown nondefault view markers");
+    auto unsupported_columns_id = encoded.value();
+    auto& columns_id_record = unsupported_columns_id.items.at(1).items.at(2).items.at(2).items.at(1);
+    columns_id_record.items.at(2).items.at(14).items.at(24).items.at(5) =
+        list_stream::ListValue::raw_atom("11111111-1111-1111-1111-111111111111");
+    expect(!form_stream::decode_document(unsupported_columns_id, "Main").ok(),
+        "SpreadsheetDocumentField must reject unsupported nonzero view columns IDs");
+    auto nondefault_view = encoded.value();
+    auto& nondefault_record = nondefault_view.items.at(1).items.at(2).items.at(2).items.at(1);
+    nondefault_record.items.at(2).items.at(14).items.at(1) = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(nondefault_view, "Main").ok(),
+        "SpreadsheetDocumentField must reject nondefault persisted current-cell data");
+    auto unsupported_view_setting = encoded.value();
+    auto& setting_record = unsupported_view_setting.items.at(1).items.at(2).items.at(2).items.at(1);
+    setting_record.items.at(2).items.at(14).items.at(22) = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(unsupported_view_setting, "Main").ok(),
+        "SpreadsheetDocumentField must reject view data outside the supported default envelope");
+    auto truncated_areas = encoded.value();
+    auto& truncated_record = truncated_areas.items.at(1).items.at(2).items.at(2).items.at(1);
+    truncated_record.items.at(2).items.at(14).items.pop_back();
+    expect(!form_stream::decode_document(truncated_areas, "Main").ok(),
+        "SpreadsheetDocumentField must reject a selection count without complete rectangle records");
+}
+
 void test_two_input_fields_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -6486,6 +6614,7 @@ int main() {
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
         test_single_input_field_round_trip();
+        test_spreadsheet_document_field_round_trip();
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
         test_root_pages_round_trip_with_page_local_control_order();
