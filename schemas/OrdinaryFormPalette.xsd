@@ -1065,6 +1065,9 @@
           <Property name="Name" russianName="Имя"/><Property name="DataPath" russianName="Данные"/>
           <Property name="Header" russianName="ТекстШапки"/><Property name="Control" russianName="ЭлементУправления"/>
         </Properties></NamedConcept>
+        <NamedConcept name="SpreadsheetDocumentCellControl" russianName="ЭлементУправленияЯчейкиТабличногоДокумента"><Properties>
+          <Property name="ReadOnly" russianName="ТолькоПросмотр"/>
+        </Properties></NamedConcept>
         <NamedConcept name="TableColumnControl" russianName="ЭлементУправленияКолонкиТабличногоПоля"><Properties>
           <Property name="Type" russianName="ВидРедактора"/><Property name="Enabled" russianName="Доступность"/>
           <Property name="ReadOnly" russianName="ТолькоПросмотр"/><Property name="Caption" russianName="Заголовок"/>

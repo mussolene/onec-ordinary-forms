@@ -852,6 +852,19 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         break;
                     }
                 }
+                if (cell.control.has_value()) {
+                    bool supported = cell.typed_value.has_value() &&
+                        cell.control->kind == ControlKind::input_field;
+                    cell.control->properties.for_each_explicit([&](const PropertyEntry& entry) {
+                        if (entry.id != PropertyId::from_name("ReadOnly") ||
+                            !std::holds_alternative<bool>(entry.value)) supported = false;
+                    });
+                    if (!supported) {
+                        add_violation(report, InvariantCode::invalid_property, control.id, control.id,
+                            "Spreadsheet Cell.Control requires a typed cell, InputField, and Boolean ReadOnly only");
+                        break;
+                    }
+                }
                 previous = coordinate;
             }
         }

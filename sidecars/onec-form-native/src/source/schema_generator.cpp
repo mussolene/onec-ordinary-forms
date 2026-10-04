@@ -730,7 +730,9 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
 )XSD";
 
     output += R"XSD(  <xs:simpleType name="SpreadsheetCoordinateType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="4294967295"/></xs:restriction></xs:simpleType>
-  <xs:complexType name="SpreadsheetDocumentCellType"><xs:choice><xs:element name="Text" type="xs:string"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/></xs:sequence></xs:choice><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:simpleType name="SpreadsheetDocumentCellControlKindType"><xs:restriction base="xs:string"><xs:enumeration value="InputField"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="SpreadsheetDocumentCellControlType"><xs:sequence><xs:element name="ReadOnly" type="xs:boolean" minOccurs="0"/></xs:sequence><xs:attribute name="type" type="SpreadsheetDocumentCellControlKindType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentCellType"><xs:choice><xs:element name="Text" type="xs:string"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/><xs:element name="Control" type="SpreadsheetDocumentCellControlType" minOccurs="0"/></xs:sequence></xs:choice><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
   <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
 
 )XSD";
@@ -1028,6 +1030,9 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "        <NamedConcept name=\"TableColumn\" russianName=\"КолонкаТабличногоПоля\"><Properties>\n"
         "          <Property name=\"Name\" russianName=\"Имя\"/><Property name=\"DataPath\" russianName=\"Данные\"/>\n"
         "          <Property name=\"Header\" russianName=\"ТекстШапки\"/><Property name=\"Control\" russianName=\"ЭлементУправления\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"SpreadsheetDocumentCellControl\" russianName=\"ЭлементУправленияЯчейкиТабличногоДокумента\"><Properties>\n"
+        "          <Property name=\"ReadOnly\" russianName=\"ТолькоПросмотр\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"TableColumnControl\" russianName=\"ЭлементУправленияКолонкиТабличногоПоля\"><Properties>\n"
         "          <Property name=\"Type\" russianName=\"ВидРедактора\"/><Property name=\"Enabled\" russianName=\"Доступность\"/>\n"

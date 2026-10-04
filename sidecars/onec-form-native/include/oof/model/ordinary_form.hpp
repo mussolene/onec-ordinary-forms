@@ -682,11 +682,27 @@ struct SpreadsheetDocumentCellValue final {
 
     friend bool operator==(const SpreadsheetDocumentCellValue&, const SpreadsheetDocumentCellValue&) = default;
 };
+struct SpreadsheetDocumentCellControl final {
+    ControlKind kind = ControlKind::input_field;
+    PropertySet properties;
+
+    friend bool operator==(const SpreadsheetDocumentCellControl& left,
+                           const SpreadsheetDocumentCellControl& right) {
+        if (left.kind != right.kind || left.properties.size() != right.properties.size()) return false;
+        bool equal = true;
+        left.properties.for_each_explicit([&](const PropertyEntry& entry) {
+            const auto* other = right.properties.find(entry.id);
+            if (other == nullptr || *other != entry) equal = false;
+        });
+        return equal;
+    }
+};
 struct SpreadsheetDocumentCell final {
     std::uint32_t row{};
     std::uint32_t column{};
     std::string text;
     std::optional<SpreadsheetDocumentCellValue> typed_value;
+    std::optional<SpreadsheetDocumentCellControl> control{};
     friend bool operator==(const SpreadsheetDocumentCell&, const SpreadsheetDocumentCell&) = default;
 };
 struct TableColumnControl {

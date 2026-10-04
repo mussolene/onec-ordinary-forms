@@ -430,6 +430,7 @@ bool spreadsheet_cell_value_is_default(const model::SpreadsheetDocumentCellValue
     }
 }
 
+LV encoded_spreadsheet_cell_control(const model::SpreadsheetDocumentCell& cell, std::string_view path);
 LV canonical_spreadsheet_field_info(
     const model::SpreadsheetDocumentFieldPayload& payload,
     bool fresh_add_default = false) {
@@ -459,12 +460,17 @@ LV canonical_spreadsheet_field_info(
             if (cell->typed_value.has_value()) {
                 const auto& typed = *cell->typed_value;
                 const auto reference = typed_cells.size() + 1;
-                if (spreadsheet_cell_value_is_default(typed)) {
-                    row_items.push_back(list({raw("0"), raw(std::to_string(reference))}));
-                } else {
-                    row_items.push_back(list({raw("2"), raw(std::to_string(reference)),
-                        encoded_spreadsheet_cell_value(typed.value, "$/SpreadsheetDocumentField/Cell/Value")}));
+                const bool default_value = spreadsheet_cell_value_is_default(typed);
+                std::vector<LV> cell_items{raw(std::to_string((default_value ? 0 : 2) +
+                    (cell->control.has_value() ? 1 : 0))), raw(std::to_string(reference))};
+                if (cell->control.has_value()) {
+                    cell_items.push_back(raw("1"));
+                    cell_items.push_back(encoded_spreadsheet_cell_control(*cell,
+                        "$/SpreadsheetDocumentField/Cell/Control"));
                 }
+                if (!default_value) cell_items.push_back(encoded_spreadsheet_cell_value(typed.value,
+                    "$/SpreadsheetDocumentField/Cell/Value"));
+                row_items.push_back(list(std::move(cell_items)));
                 typed_cells.push_back(cell);
             } else {
                 const auto value = cell->text.empty()
@@ -2233,6 +2239,113 @@ std::vector<std::uint8_t> decode_table_column_editor_packet(
             "Table Column editor packet envelope is invalid");
     }
     return inflated;
+}
+
+// Cell editors use a BOM-prefixed textual stream, independently of Table Column compression.
+LV spreadsheet_cell_editor_info(const model::TypeDomainPatternValue& type, bool read_only,
+                                std::string_view path) {
+    if (type.entries.size() != 1)
+        fail("OOF1114", std::string(path), "one scalar Cell.ValueType", {}, "Cell editor requires one scalar type");
+    InputFieldFlagValues flags{};
+    for (std::size_t index = 0; index < flags.size(); ++index)
+        flags[index] = input_field_flag_mappings[index].default_value;
+    // Keep the standalone InputField qualifier guard intact. Cell-specific adaptation is explicit here.
+    auto info = canonical_input_field_info(model::TypeDomainPatternValue{}, true, read_only, flags,
+        InputFieldTextValues{}, InputFieldLayoutValues{});
+    info.items[1] = encoded_type_domain(type, path);
+    auto& editor = info.items[2].items[0];
+    const auto& entry = type.entries.front();
+    switch (entry.term) {
+        case model::TypeDomainTerm::string:
+            editor.items[14] = raw(std::to_string(entry.string.length));
+            break;
+        case model::TypeDomainTerm::numeric:
+            editor.items[4] = raw("0");
+            editor.items[14] = raw(std::to_string(entry.numeric.length));
+            editor.items[15] = raw(std::to_string(entry.numeric.precision));
+            editor.items[22] = raw("1");
+            break;
+        case model::TypeDomainTerm::boolean:
+            break;
+        case model::TypeDomainTerm::date:
+            if (entry.date != model::DateQualifiers{true, true})
+                fail("OOF1114", std::string(path), "DateTime Cell editor", {}, "Cell editor date qualifiers are unsupported");
+            editor.items[4] = raw("0");
+            editor.items[22] = raw("2");
+            editor.items[30] = raw("2");
+            break;
+        default:
+            fail("OOF1114", std::string(path), "String, Number, Boolean, or DateTime Cell editor", {},
+                "Cell editor type is unsupported");
+    }
+    return info;
+}
+
+LV encoded_spreadsheet_cell_control(const model::SpreadsheetDocumentCell& cell, std::string_view path) {
+    const auto& control = *cell.control;
+    if (control.kind != model::ControlKind::input_field || !cell.typed_value.has_value())
+        fail("OOF1114", std::string(path), "InputField on a typed Cell", {}, "Cell editor owner or kind is unsupported");
+    bool read_only = false;
+    control.properties.for_each_explicit([&](const model::PropertyEntry& entry) {
+        if (entry.id != model::PropertyId::from_name("ReadOnly") || !std::holds_alternative<bool>(entry.value))
+            fail("OOF1114", std::string(path), "Boolean ReadOnly only", {}, "Cell editor property is unsupported");
+        read_only = std::get<bool>(entry.value);
+    });
+    const auto envelope = list({raw("2"), raw("1"), raw("381ed624-9217-4e63-85db-c4c3cb87daae"),
+        list({spreadsheet_cell_editor_info(cell.typed_value->type, read_only, path)}), raw("0")});
+    const auto wrapped = list_stream::dump_listout(envelope);
+    const std::string text = std::string("\xef\xbb\xbf") + wrapped.substr(1, wrapped.size() - 2);
+    const auto encoded = encode_base64(std::span<const std::uint8_t>(
+        reinterpret_cast<const std::uint8_t*>(text.data()), text.size()));
+    std::vector<LV> chunks;
+    for (std::size_t index = 0; index < encoded.size(); index += 64)
+        chunks.push_back(raw((index == 0 ? "#base64:" : "") + encoded.substr(index, 64)));
+    return list(std::move(chunks));
+}
+
+model::SpreadsheetDocumentCellControl decoded_spreadsheet_cell_control(
+    const LV& packet, const model::TypeDomainPatternValue& type, std::string_view path) {
+    require_list(packet, path);
+    constexpr std::size_t max_encoded_size = 1024 * 1024;
+    if (packet.items.empty() || packet.items.size() > (max_encoded_size + 63) / 64)
+        fail("OOF1114", std::string(path), "bounded nonempty Cell editor packet", {}, "Cell editor packet size is invalid");
+    std::string encoded;
+    for (std::size_t index = 0; index < packet.items.size(); ++index) {
+        const auto atom = raw_atom(packet.items[index], child_path(path, index));
+        const bool first = index == 0;
+        if ((first && !atom.starts_with("#base64:")) || (!first && atom.starts_with("#base64:")))
+            fail("OOF1114", std::string(path), "one initial base64 marker", {}, "Cell editor packet marker is invalid");
+        const auto chunk = first ? atom.substr(8) : atom;
+        if (chunk.empty() || chunk.size() > 64 || (index + 1 < packet.items.size() && chunk.size() != 64) ||
+            chunk.size() > max_encoded_size - encoded.size())
+            fail("OOF1114", std::string(path), "bounded 64-character Cell editor chunks", {}, "Cell editor chunk size is invalid");
+        encoded.append(chunk);
+    }
+    const auto bytes = decode_base64(encoded, path);
+    const std::string text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    if (!text.starts_with("\xef\xbb\xbf"))
+        fail("OOF1114", std::string(path), "UTF-8 BOM Cell editor stream", {}, "Cell editor packet lacks its BOM");
+    LV envelope;
+    try { envelope = list_stream::parse("{" + text.substr(3) + "}"); }
+    catch (const std::exception&) {
+        fail("OOF1114", std::string(path), "complete textual Cell editor stream", {}, "Cell editor stream is malformed");
+    }
+    require_arity(envelope, 5, path);
+    require_raw_constant(envelope.items[0], "2", path);
+    require_raw_constant(envelope.items[1], "1", path);
+    require_raw_constant(envelope.items[2], "381ed624-9217-4e63-85db-c4c3cb87daae", path);
+    require_raw_constant(envelope.items[4], "0", path);
+    require_arity(envelope.items[3], 1, path);
+    const auto& info = envelope.items[3].items[0];
+    require_arity(info, 10, path);
+    require_arity(info.items[2], 1, path);
+    require_arity(info.items[2].items[0], 46, path);
+    const bool read_only = bool_atom(info.items[2].items[0].items[13], path);
+    require_exact(info, spreadsheet_cell_editor_info(type, read_only, path), path,
+        "Cell editor contains an unsupported kind, property, qualifier, or type mismatch");
+    model::SpreadsheetDocumentCellControl control;
+    control.properties.set_explicit(model::PropertyId::from_name("ReadOnly"), read_only);
+    return control;
 }
 
 LV encode_table_column_editor_packet(const LV& info, std::string_view path) {
@@ -5707,23 +5820,19 @@ DecodedControl decode_spreadsheet_document_field(
                 const auto text = decoded_single_language_text(value.items[2], child_path(value_path, 2));
                 require_raw_constant(value.items[3], "0", child_path(value_path, 3));
                 payload.cells.push_back({row_index + 1, column + 1, text, std::nullopt});
-            } else if (value.is_list && value.items.size() == 2 && !value.items[0].is_list &&
-                value.items[0].atom == "0") {
-                require_raw_constant(value.items[0], "0", child_path(value_path, 0));
+            } else if (value.is_list && value.items.size() >= 2 && !value.items[0].is_list &&
+                (value.items[0].atom == "0" || value.items[0].atom == "1" ||
+                 value.items[0].atom == "2" || value.items[0].atom == "3")) {
+                const auto flags = integer_atom<std::uint32_t>(value.items[0], child_path(value_path, 0));
+                const bool has_control = (flags & 1) != 0;
+                const bool has_value = (flags & 2) != 0;
+                require_arity(value, 2 + (has_control ? 2 : 0) + (has_value ? 1 : 0), value_path);
+                if (has_control) require_raw_constant(value.items[2], "1", child_path(value_path, 2));
                 const auto reference = integer_atom<std::uint32_t>(value.items[1], child_path(value_path, 1));
+                auto typed = has_value ? decoded_spreadsheet_cell_value(value.items.back(), value_path) :
+                    model::PropertyValue{model::UndefinedValue{}};
                 typed_cell_indices.push_back(payload.cells.size());
-                typed_cell_defaults.push_back(true);
-                typed_format_references.push_back(reference);
-                typed_cell_record_indices.push_back(value_index);
-                payload.cells.push_back({row_index + 1, column + 1, {},
-                    model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{}, model::UndefinedValue{}}});
-            } else if (value.is_list && value.items.size() == 3 && !value.items[0].is_list &&
-                value.items[0].atom == "2") {
-                require_raw_constant(value.items[0], "2", child_path(value_path, 0));
-                const auto reference = integer_atom<std::uint32_t>(value.items[1], child_path(value_path, 1));
-                auto typed = decoded_spreadsheet_cell_value(value.items[2], child_path(value_path, 2));
-                typed_cell_indices.push_back(payload.cells.size());
-                typed_cell_defaults.push_back(false);
+                typed_cell_defaults.push_back(!has_value);
                 typed_format_references.push_back(reference);
                 typed_cell_record_indices.push_back(value_index);
                 payload.cells.push_back({row_index + 1, column + 1, {},
@@ -5842,6 +5951,10 @@ DecodedControl decode_spreadsheet_document_field(
                     "Spreadsheet Document cell value conflicts with its ValueType");
         }
         typed.type = type;
+        const auto& cell_record = document_info.items.at(typed_cell_record_indices[index]);
+        if ((integer_atom<std::uint32_t>(cell_record.items[0], document_path) & 1) != 0)
+            payload.cells[typed_cell_indices[index]].control = decoded_spreadsheet_cell_control(
+                cell_record.items[3], type, child_path(document_path, typed_cell_record_indices[index]));
     }
     if (std::ranges::find(used_format, false) != used_format.end() ||
         std::ranges::find(used_domain, false) != used_domain.end())
@@ -5872,6 +5985,8 @@ DecodedControl decode_spreadsheet_document_field(
     for (std::size_t index = 0; index < typed_cell_record_indices.size(); ++index) {
         auto& cell_record = normalized_document_info.items.at(typed_cell_record_indices[index]);
         cell_record.items.at(1) = raw(std::to_string(index + 1));
+        if (payload.cells[typed_cell_indices[index]].control.has_value())
+            cell_record.items.at(3) = encoded_spreadsheet_cell_control(payload.cells[typed_cell_indices[index]], document_path);
     }
     const auto expected_format_count = integer_atom<std::uint32_t>(
         expected_document_info.items.at(tail_start + 25), child_path(document_path, tail_start + 25));

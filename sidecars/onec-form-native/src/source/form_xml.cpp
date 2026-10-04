@@ -1543,6 +1543,7 @@ private:
                     std::string text;
                     std::optional<model::TypeDomainPatternValue> value_type;
                     std::optional<model::PropertyValue> typed_value;
+                    std::optional<model::SpreadsheetDocumentCellControl> cell_control;
                     unsigned int content_stage = 0;
                     for (xmlNodePtr value_node : element_children(cell_node)) {
                         const auto name = node_name(value_node);
@@ -1608,6 +1609,29 @@ private:
                             content_stage = 4;
                             continue;
                         }
+                        if (name == "Control") {
+                            if (cell_control.has_value() || !value_type_seen || (content_stage != 3 && content_stage != 4))
+                                fail("OOF2003", value_node, id_text, name, "one Control after typed value", "duplicate or out of order", "Cell.Control requires a typed cell");
+                            for (xmlAttrPtr attr = value_node->properties; attr != nullptr; attr = attr->next) {
+                                if (std::string_view(reinterpret_cast<const char*>(attr->name)) != "type")
+                                    fail("OOF2003", value_node, id_text, name, "type attribute only", "unsupported attribute", "Unsupported Cell.Control attribute");
+                            }
+                            if (required_attribute(value_node, "type", id_text) != "InputField")
+                                fail("OOF2003", value_node, id_text, name, "InputField", "unsupported type", "Unsupported Cell.Control kind");
+                            cell_control.emplace();
+                            bool read_only_seen = false;
+                            for (xmlNodePtr property_node : element_children(value_node)) {
+                                if (node_name(property_node) != "ReadOnly" || read_only_seen || property_node->properties != nullptr ||
+                                    !element_children(property_node).empty())
+                                    fail("OOF2003", property_node, id_text, "ReadOnly", "one plain Boolean ReadOnly", "unsupported property", "Unsupported Cell.Control property");
+                                const auto* property = metamodel_.property(model::ControlKind::input_field, "ReadOnly");
+                                cell_control->properties.set_explicit(property->id,
+                                    parse_property_value(property_node, property->value_codec, id_text));
+                                read_only_seen = true;
+                            }
+                            content_stage = 5;
+                            continue;
+                        }
                         fail("OOF2003", value_node, id_text, name, "Text or typed-cell children", name, "Unknown Spreadsheet Cell item");
                     }
                     std::optional<model::SpreadsheetDocumentCellValue> typed;
@@ -1643,7 +1667,7 @@ private:
                     } else if (!text_seen) {
                         fail("OOF2003", cell_node, id_text, "Text", "required Text child", "missing", "Spreadsheet Cell requires Text or a typed value");
                     }
-                    cells.push_back({row, column, std::move(text), std::move(typed)});
+                    cells.push_back({row, column, std::move(text), std::move(typed), std::move(cell_control)});
                 }
                 std::sort(cells.begin(), cells.end(), [](const auto& left, const auto& right) {
                     return std::tie(left.row, left.column) < std::tie(right.row, right.column);
@@ -3006,6 +3030,12 @@ private:
                             serialization_fail(id, "Document/Cell/Value", "String, Number, Boolean, or Date", "unsupported value", "Spreadsheet Cell Value kind is unsupported");
                         }
                     }
+                }
+                if (cell.control.has_value()) {
+                    writer_.open("Control", {{"type", "InputField"}});
+                    const auto* read_only = cell.control->properties.find(model::PropertyId::from_name("ReadOnly"));
+                    writer_.text("ReadOnly", read_only != nullptr && std::get<bool>(read_only->value) ? "true" : "false");
+                    writer_.close("Control");
                 }
                 writer_.close("Cell");
             }

@@ -6263,6 +6263,312 @@ void test_single_input_field_round_trip() {
         "single InputField must reject triple-profile geometry references");
 }
 
+void test_spreadsheet_cell_controls() {
+    // Independent literals from synthetic platform scalar editors, not the writer under test.
+    const std::array<std::string_view, 4> captured = {
+R"CELL({2,1,381ed624-9217-4e63-85db-c4c3cb87daae,
+{
+{9,
+{"Pattern",
+{"S",100,1}
+},
+{
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,1,
+{-18},0,0,0},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},31,0,0,1,0,0,0,0,0,0,1,0,0,100,0,0,4,0,
+{"U"},
+{"U"},"",0,1,0,0,0,0,
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},0,0,0,
+{0,0,0},
+{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
+},
+{1,
+{9a7643d2-19e9-45e2-8893-280bc9195a97,
+{4,
+{"U"},
+{"U"},0,"",0,0}
+}
+},
+{0},0,1,0,
+{1,0},0}
+},0})CELL",
+R"CELL({2,1,381ed624-9217-4e63-85db-c4c3cb87daae,
+{
+{9,
+{"Pattern",
+{"N",15,3,0}
+},
+{
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,1,
+{-18},0,0,0},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},31,0,0,0,0,0,0,0,0,0,1,0,0,15,3,0,4,0,
+{"U"},
+{"U"},"",1,1,0,0,0,0,
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},0,0,0,
+{0,0,0},
+{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
+},
+{1,
+{9a7643d2-19e9-45e2-8893-280bc9195a97,
+{4,
+{"U"},
+{"U"},0,"",0,0}
+}
+},
+{0},0,1,0,
+{1,0},0}
+},0})CELL",
+R"CELL({2,1,381ed624-9217-4e63-85db-c4c3cb87daae,
+{
+{9,
+{"Pattern",
+{"B"}
+},
+{
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,1,
+{-18},0,0,0},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},31,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,4,0,
+{"U"},
+{"U"},"",0,1,0,0,0,0,
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},0,0,0,
+{0,0,0},
+{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
+},
+{1,
+{9a7643d2-19e9-45e2-8893-280bc9195a97,
+{4,
+{"U"},
+{"U"},0,"",0,0}
+}
+},
+{0},0,1,0,
+{1,0},0}
+},0})CELL",
+R"CELL({2,1,381ed624-9217-4e63-85db-c4c3cb87daae,
+{
+{9,
+{"Pattern",
+{"D"}
+},
+{
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,1,
+{-18},0,0,0},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},31,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,4,0,
+{"U"},
+{"U"},"",2,1,0,0,0,0,
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},2,0,0,
+{0,0,0},
+{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
+},
+{1,
+{9a7643d2-19e9-45e2-8893-280bc9195a97,
+{4,
+{"U"},
+{"U"},0,"",0,0}
+}
+},
+{0},0,1,0,
+{1,0},0}
+},0})CELL"};
+    const auto chunks_for_text = [](std::string_view text) {
+        const std::string packet = std::string("\xef\xbb\xbf") + std::string(text);
+        const std::vector<std::uint8_t> bytes(packet.begin(), packet.end());
+        const auto encoded = test_base64_encode(bytes);
+        std::vector<list_stream::ListValue> chunks;
+        for (std::size_t pos = 0; pos < encoded.size(); pos += 64)
+            chunks.push_back(list_stream::ListValue::raw_atom((pos == 0 ? "#base64:" : "") + encoded.substr(pos, 64)));
+        return list_stream::ListValue::list(std::move(chunks));
+    };
+    const auto chunks_for_envelope = [&](const list_stream::ListValue& envelope) {
+        const auto text = list_stream::dump_compact(envelope);
+        return chunks_for_text(std::string_view(text).substr(1, text.size() - 2));
+    };
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "Cells";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    auto& cells = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload).cells;
+    const std::array terms{model::TypeDomainTerm::string, model::TypeDomainTerm::numeric,
+        model::TypeDomainTerm::boolean, model::TypeDomainTerm::date};
+    const std::array<model::PropertyValue, 4> values{std::string("Unicode Привет 世界 🌍"),
+        model::DecimalValue{"-12.375"}, false, model::DateValue{"2026-10-04T12:30:45"}};
+    for (std::size_t i = 0; i < terms.size(); ++i) {
+        model::TypeDomainEntry type; type.term = terms[i];
+        if (i == 0) type.string = {100, true};
+        if (i == 1) type.numeric = {15, 3, false};
+        if (i == 3) type.date = {true, true};
+        model::SpreadsheetDocumentCell cell{1, static_cast<std::uint32_t>(i + 1), {},
+            model::SpreadsheetDocumentCellValue{model::TypeDomainPatternValue{{type}}, values[i]}};
+        cell.control.emplace();
+        cell.control->properties.set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+        cells.push_back(std::move(cell));
+    }
+    document.add_control(std::move(field));
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded.ok() ? "" : encoded.diagnostics().front().message);
+    auto fixture = encoded.value();
+    auto& info = fixture.items[1].items[2].items[2].items[1].items[2].items[11];
+    for (std::size_t i = 0; i < captured.size(); ++i) {
+        auto& cell = info.items[20 + 2 * i];
+        expect(cell.items.size() == (i == 2 ? 4 : 5) && cell.items[0].atom == (i == 2 ? "1" : "3"),
+            "Cell editor flags must preserve absent Boolean default values independently of Control");
+        std::string joined;
+        for (std::size_t part = 0; part < cell.items[3].items.size(); ++part)
+            joined += part == 0 ? cell.items[3].items[part].atom.substr(8) : cell.items[3].items[part].atom;
+        const auto bytes = test_base64_decode(joined);
+        const std::string text(bytes.begin(), bytes.end());
+        const auto produced = list_stream::parse("{" + text.substr(3) + "}");
+        expect(list_stream::dump_compact(produced) == list_stream::dump_compact(list_stream::parse(captured[i])),
+            "Cell editor writer must match the independent scalar editor literal");
+        cell.items[3] = chunks_for_text(captured[i].substr(1, captured[i].size() - 2));
+    }
+    for (bool read_only : {false, true}) {
+        auto changed = fixture;
+        auto& changed_info = changed.items[1].items[2].items[2].items[1].items[2].items[11];
+        for (std::size_t i = 0; i < captured.size(); ++i) {
+            auto packet = list_stream::parse(captured[i]);
+            packet.items[3].items[0].items[2].items[0].items[13] = list_stream::ListValue::raw_atom(read_only ? "1" : "0");
+            changed_info.items[20 + 2 * i].items[3] = chunks_for_envelope(packet);
+        }
+        const auto decoded = form_stream::decode_document(changed, "Cells");
+        expect(decoded.ok(), decoded.ok() ? "" : decoded.diagnostics().front().message);
+        const auto& restored = std::get<model::SpreadsheetDocumentFieldPayload>(decoded.value().find_control(model::ObjectId{2})->payload).cells;
+        for (std::size_t i = 0; i < restored.size(); ++i) {
+            expect(restored[i].control.has_value() && restored[i].control->kind == model::ControlKind::input_field &&
+                std::get<bool>(restored[i].control->properties.find(model::PropertyId::from_name("ReadOnly"))->value) == read_only &&
+                restored[i].typed_value->value == values[i], "Independent Cell editor must decode into named ReadOnly and unchanged scalar value");
+        }
+    }
+    model::OrdinaryFormDocument qualified(document.form());
+    auto qualified_field = *document.find_control(model::ObjectId{2});
+    auto& qualified_cells = std::get<model::SpreadsheetDocumentFieldPayload>(qualified_field.payload).cells;
+    qualified_cells[0].typed_value->type.entries.front().string = {37, true};
+    qualified_cells[1].typed_value->type.entries.front().numeric = {12, 4, false};
+    qualified.add_control(qualified_field);
+    const auto qualified_encoded = form_stream::encode_document(qualified);
+    expect(qualified_encoded.ok(), "Cell.Control must derive qualifiers without a hardcoded String100 restriction");
+    const auto qualified_decoded = form_stream::decode_document(qualified_encoded.value(), "Cells");
+    expect(qualified_decoded.ok() && std::get<model::SpreadsheetDocumentFieldPayload>(qualified_decoded.value().find_control(model::ObjectId{2})->payload).cells == qualified_cells,
+        "Named Cell.Control must round-trip supported String and Number qualifiers");
+    model::OrdinaryFormDocument unsupported(document.form());
+    auto unsupported_field = *document.find_control(model::ObjectId{2});
+    std::get<model::SpreadsheetDocumentFieldPayload>(unsupported_field.payload).cells[0].control->kind = model::ControlKind::check_box;
+    unsupported.add_control(std::move(unsupported_field));
+    expect(!form_stream::encode_document(unsupported), "Model must reject unsupported Cell editor kinds before serialization");
+    for (int mutation = 0; mutation < 12; ++mutation) {
+        auto broken = fixture;
+        auto& cell = broken.items[1].items[2].items[2].items[1].items[2].items[11].items[20];
+        auto packet = list_stream::parse(captured[0]);
+        if (mutation == 0) packet.items[0] = list_stream::ListValue::raw_atom("3");
+        if (mutation == 1) packet.items[3].items[0].items[0] = list_stream::ListValue::raw_atom("8");
+        if (mutation == 2) packet.items[3].items[0].items[2].items[0].items[13] = list_stream::ListValue::raw_atom("2");
+        if (mutation == 3) packet.items[3].items[0].items[2].items[0].items[5] = list_stream::ListValue::raw_atom("1");
+        if (mutation == 4) packet.items.push_back(list_stream::ListValue::raw_atom("0"));
+        if (mutation == 8) packet.items[2] = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+        if (mutation == 9) packet.items[3].items[0].items[1].items[1].items[1] = list_stream::ListValue::raw_atom("37");
+        cell.items[3] = chunks_for_envelope(packet);
+        if (mutation == 5) cell.items[3].items[0] = list_stream::ListValue::raw_atom("#base64:!!!!");
+        if (mutation == 6) cell.items[0] = list_stream::ListValue::raw_atom("7");
+        if (mutation == 7) cell.items[1] = list_stream::ListValue::raw_atom("999");
+        if (mutation == 10) cell.items[3].items.pop_back();
+        if (mutation == 11) cell.items[2] = list_stream::ListValue::raw_atom("2");
+        expect(!form_stream::decode_document(broken, "Cells"), "Cell decoder must reject corrupted kind, field, Boolean, trailing data, base64, flags, and references");
+    }
+}
+
 void test_spreadsheet_document_field_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -8186,6 +8492,7 @@ int main() {
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
         test_single_input_field_round_trip();
+        test_spreadsheet_cell_controls();
         test_spreadsheet_document_field_round_trip();
         test_two_input_fields_round_trip();
         test_six_reordered_controls_use_logical_geometry_ordinals();
