@@ -2406,6 +2406,194 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
         "unimplemented PictureDecoration events must be rejected");
 }
 
+void test_splitter_observed_record_and_named_codec() {
+    const auto make_document = [](std::string name) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "SplitterCodec";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_control(model::ControlNode{model::ObjectId{2}, std::move(name), model::SplitterPayload{}});
+        return document;
+    };
+    const auto splitter_record = [](const list_stream::ListValue& stream) -> const list_stream::ListValue& {
+        return stream.items[1].items[2].items[2].items[1];
+    };
+    const auto mutable_splitter_record = [](list_stream::ListValue& stream) -> list_stream::ListValue& {
+        return stream.items[1].items[2].items[2].items[1];
+    };
+
+    constexpr std::string_view captured_record = R"SPLITTER(
+{36e52348-5d60-4770-8e89-a16ed50a2006,2,
+{0,
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,0,
+{-18},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},2,2,0}
+},
+{8,0,0,0,0,1,
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},0,0,0,0,0,0,0,0,1,0,0},
+{14,"SplitterProbe",4294967295,0,0,0},
+{0}
+}
+)SPLITTER";
+    const auto actual_record = list_stream::parse(captured_record);
+    const auto defaults = form_stream::encode_document(make_document("SplitterProbe"));
+    expect(defaults.ok(), defaults ? "default named Splitter must encode without a source binary" :
+        defaults.diagnostics().front().path + ": " + defaults.diagnostics().front().message);
+    const auto default_record_decoded = form_stream::decode_document(defaults.value(), "SplitterCodec");
+    expect(default_record_decoded.ok(), "default encoded Splitter must decode");
+    const auto* default_control = default_record_decoded.value().find_control(model::ObjectId{2});
+    expect(default_control && default_control->kind() == model::ControlKind::splitter &&
+               default_control->name == "SplitterProbe" &&
+               !default_control->properties().find(model::PropertyId::from_name("Orientation")) &&
+               !default_control->properties().find(model::PropertyId::from_name("Enabled")) &&
+               !default_control->properties().find(model::PropertyId::from_name("ToolTip")),
+        "default Splitter must decode to its named identity with implicit property defaults");
+
+    auto observed_stream = form_stream::encode_document(make_document("SplitterProbe"));
+    expect(observed_stream.ok(), "named Splitter envelope must encode before inserting the independent platform record");
+    mutable_splitter_record(observed_stream.value()) = actual_record;
+    const auto decoded_actual = form_stream::decode_document(observed_stream.value(), "CapturedSplitter");
+    expect(decoded_actual.ok(), decoded_actual ? "" : decoded_actual.diagnostics().front().path + ": " +
+        decoded_actual.diagnostics().front().message);
+    const auto* actual_control = decoded_actual.value().find_control(model::ObjectId{2});
+    expect(actual_control && actual_control->name == "SplitterProbe" &&
+               actual_control->kind() == model::ControlKind::splitter,
+        "full captured Splitter record must decode to the named Splitter model");
+    const auto captured_roundtrip = form_stream::encode_document(decoded_actual.value());
+    expect(captured_roundtrip.ok() && list_stream::dump_compact(splitter_record(captured_roundtrip.value())) ==
+               list_stream::dump_compact(actual_record),
+        "full captured Splitter record must re-encode without dropping its canonical payload");
+
+    const std::string tool_tip = "Подсказка Ω <важно> & \"цитата\"\nВторая\rстрока";
+    auto changed_document = make_document("SplitterChanged");
+    auto* changed = const_cast<model::ControlNode*>(changed_document.find_control(model::ObjectId{2}));
+    changed->properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    changed->properties().set_explicit(model::PropertyId::from_name("Orientation"),
+        model::EnumerationValue{"Orientation", "Horizontal"});
+    changed->properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    model::ColorValue back_color;
+    back_color.kind = model::ColorKind::absolute;
+    back_color.red = 31; back_color.green = 127; back_color.blue = 223;
+    changed->properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
+    model::ColorValue border_color;
+    border_color.kind = model::ColorKind::absolute;
+    border_color.red = 223; border_color.green = 127; border_color.blue = 31;
+    changed->properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+    const auto xml = oof::source::serialize_form_xml(changed_document);
+    expect(xml.ok(), "named Splitter model must serialize as public XML");
+    const auto parsed = oof::source::parse_form_xml(xml.value());
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto changed_stream = form_stream::encode_document(parsed.value());
+    expect(changed_stream.ok(), changed_stream ? "" : changed_stream.diagnostics().front().path + ": " +
+        changed_stream.diagnostics().front().message);
+    const auto decoded_changed = form_stream::decode_document(changed_stream.value(), "SplitterChanged");
+    expect(decoded_changed.ok(), "XML-only changed Splitter must decode after storage encoding");
+    const auto* result = decoded_changed.value().find_control(model::ObjectId{2});
+    expect(result && !std::get<bool>(result->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+               std::get<model::EnumerationValue>(result->properties().find(model::PropertyId::from_name("Orientation"))->value) ==
+                   model::EnumerationValue{"Orientation", "Horizontal"} &&
+               std::get<std::string>(result->properties().find(model::PropertyId::from_name("ToolTip"))->value) == tool_tip &&
+               std::get<model::ColorValue>(result->properties().find(model::PropertyId::from_name("BackColor"))->value) == back_color &&
+               std::get<model::ColorValue>(result->properties().find(model::PropertyId::from_name("BorderColor"))->value) == border_color,
+        "named Splitter Enabled, Orientation, ToolTip, and observed RGB colors must survive XML-only round-trip");
+    const auto reencoded = form_stream::encode_document(decoded_changed.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(changed_stream.value()),
+        "changed Splitter storage must round-trip canonically");
+
+    auto explicit_auto = make_document("SplitterProbe");
+    const_cast<model::ControlNode*>(explicit_auto.find_control(model::ObjectId{2}))
+        ->properties().set_explicit(model::PropertyId::from_name("Orientation"),
+            model::EnumerationValue{"Orientation", "Auto"});
+    const auto auto_encoded = form_stream::encode_document(explicit_auto);
+    expect(auto_encoded.ok() && list_stream::dump_compact(auto_encoded.value()) ==
+               list_stream::dump_compact(defaults.value()),
+        "explicit Splitter Orientation Auto must normalize to its implicit default");
+    auto vertical_document = make_document("Vertical");
+    const_cast<model::ControlNode*>(vertical_document.find_control(model::ObjectId{2}))
+        ->properties().set_explicit(model::PropertyId::from_name("Orientation"),
+            model::EnumerationValue{"Orientation", "Vertical"});
+    const auto vertical_encoded = form_stream::encode_document(vertical_document);
+    expect(vertical_encoded.ok(), "observed Vertical orientation must encode");
+    const auto vertical_decoded = form_stream::decode_document(vertical_encoded.value(), "SplitterVertical");
+    const auto* vertical_control = vertical_decoded ?
+        vertical_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* vertical_value = vertical_control ? vertical_control->properties().find(
+        model::PropertyId::from_name("Orientation")) : nullptr;
+    expect(vertical_decoded.ok() && vertical_value &&
+               std::get<model::EnumerationValue>(vertical_value->value) ==
+                   model::EnumerationValue{"Orientation", "Vertical"},
+        "observed Vertical orientation must round-trip by its named enum value");
+
+    auto unsupported_orientation = make_document("BadOrientation");
+    const_cast<model::ControlNode*>(unsupported_orientation.find_control(model::ObjectId{2}))
+        ->properties().set_explicit(model::PropertyId::from_name("Orientation"),
+            model::EnumerationValue{"Orientation", "Diagonal"});
+    expect_failure(form_stream::encode_document(unsupported_orientation), "OOF1122", "$/Splitter/Orientation",
+        "unknown Orientation members must be rejected");
+    auto unsupported_property = make_document("BadProperty");
+    const_cast<model::ControlNode*>(unsupported_property.find_control(model::ObjectId{2}))
+        ->properties().set_explicit(model::PropertyId::from_name("Border"), std::string("unsupported"));
+    expect(!form_stream::encode_document(unsupported_property),
+        "unimplemented Border property must be rejected before it is silently discarded");
+    auto event_document = make_document("Eventful");
+    auto* eventful = const_cast<model::ControlNode*>(event_document.find_control(model::ObjectId{2}));
+    eventful->events.push_back(model::EventRef{model::ObjectId{4}});
+    event_document.add_event(model::Event{model::ObjectId{4}, "OnChange", "Handler",
+        model::ControlRef{model::ObjectId{2}}});
+    expect(!form_stream::encode_document(event_document),
+        "unimplemented Splitter events must be rejected before they are silently discarded");
+    auto unsupported_storage = defaults.value();
+    mutable_splitter_record(unsupported_storage).items[2].items[1].items[0].items[5] =
+        list_stream::ListValue::raw_atom("0");
+    expect_failure(form_stream::decode_document(unsupported_storage, "SplitterCodec"), "OOF1114",
+        "$/1/2/2/1/2/1", "non-default unimplemented Splitter base data must fail closed");
+}
+
 void test_fresh_checkbox_stream_decode() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -5705,6 +5893,7 @@ int main() {
         test_label_decoration_observed_center_right_records();
         test_label_enabled_and_tooltip_round_trip();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
+        test_splitter_observed_record_and_named_codec();
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();
         test_calendar_field_enabled_round_trip_and_rejections();
