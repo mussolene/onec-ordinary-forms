@@ -16,6 +16,7 @@
 
 #include <zlib.h>
 
+#include "oof/form_bin.hpp"
 #include "oof/model/metamodel.hpp"
 #include "oof/source/form_xml.hpp"
 #include "oof/storage/form_stream.hpp"
@@ -324,6 +325,146 @@ void test_table_read_only_runtime_flags() {
     record->items[2].items[2].items[1].items[1] = list_stream::ListValue::raw_atom("117644835");
     expect(!form_stream::decode_document(unknown_flag, "UnknownTableFlag"),
         "changing any unproven Table flag must fail strict canonical validation");
+}
+
+void test_table_first_in_group_observed_metadata() {
+    for (const bool first_in_group : {false, true}) {
+        auto literal = captured_table_payload();
+        auto* record = find_record_with_guid(literal,
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(record != nullptr, "captured fixture must contain Table");
+        // Table setter/getter и снимки 70978: {14,"Rows",4294967295,0,0,0} -> ...0,0,1.
+        // Не используем меняющийся между снимками счетчик формы как mapping свойства.
+        const auto observed_metadata = list_stream::parse(first_in_group
+            ? R"LS({14,"Rows",4294967295,0,0,1})LS"
+            : R"LS({14,"Rows",4294967295,0,0,0})LS");
+        record->items[4] = observed_metadata;
+        auto decoded = form_stream::decode_document(literal, "ObservedTableFirstInGroup");
+        expect(decoded.ok(), "independent Table FirstInGroup metadata must decode");
+        const auto table = std::find_if(decoded.value().collections().controls.begin(),
+            decoded.value().collections().controls.end(), [](const auto& control) {
+                return control.kind() == model::ControlKind::table;
+            });
+        expect(table != decoded.value().collections().controls.end(), "observed Table must be named");
+        const auto* property = table->extension_properties.find(model::PropertyId::from_name("FirstInGroup"));
+        expect(first_in_group ? property != nullptr && std::get<bool>(property->value) : property == nullptr,
+            "Table FirstInGroup=false must be the storage default and true explicit");
+        auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), "observed FirstInGroup must serialize to named XML");
+        expect((xml.value().find("<FirstInGroup>true</FirstInGroup>") != std::string::npos) == first_in_group,
+            "FirstInGroup must use the existing public property without raw storage");
+        auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "observed FirstInGroup XML must parse");
+        auto encoded = form_stream::encode_document(parsed.value());
+        expect(encoded.ok(), "observed FirstInGroup must survive XML and storage");
+        const auto* encoded_record = find_record_with_guid(encoded.value(),
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(encoded_record != nullptr &&
+                   list_stream::dump_compact(encoded_record->items[4]) == list_stream::dump_compact(observed_metadata),
+            "writer must reproduce the exact independent Table metadata");
+    }
+
+    for (const auto& invalid_value : {list_stream::ListValue::raw_atom("2"),
+                                      list_stream::ListValue::string_atom("1"),
+                                      list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")})}) {
+        auto literal = captured_table_payload();
+        auto* record = find_record_with_guid(literal,
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        record->items[4].items[5] = invalid_value;
+        expect(!form_stream::decode_document(literal, "MalformedTableFirstInGroup"),
+            "unknown FirstInGroup ordinal and non-raw Boolean must fail closed");
+    }
+    auto reordered = captured_table_payload();
+    auto* record = find_record_with_guid(reordered,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    record->items[4].items[4] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(reordered, "ReorderedTableFirstInGroup"),
+        "FirstInGroup in an unproven neighboring metadata slot must fail closed");
+}
+
+void test_table_first_in_group_fresh_model_xml_bin() {
+    const auto make_document = [](std::optional<bool> first_in_group) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "TableFirstInGroup";
+        form.children = {model::ControlRef{model::ObjectId{3}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::value_table;
+        type.entries.push_back(entry);
+        document.add_attribute(model::Attribute{model::ObjectId{2}, "Rows", type});
+        model::ControlNode table{model::ObjectId{3}, "Rows", model::TablePayload{}};
+        table.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {}};
+        table.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+        if (first_in_group) {
+            table.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), *first_in_group);
+        }
+        auto& columns = std::get<model::TablePayload>(table.payload).columns;
+        for (const auto kind : {model::ControlKind::input_field, model::ControlKind::choice_field,
+                                model::ControlKind::check_box}) {
+            model::TableColumn column;
+            column.name = std::string(model::metamodel::descriptor_for(kind).public_name);
+            column.data_path = "Code";
+            column.header.items.push_back({"en", column.name});
+            column.control.kind = kind;
+            columns.push_back(std::move(column));
+        }
+        document.add_control(std::move(table));
+        return document;
+    };
+
+    std::optional<list_stream::ListValue> omitted_record;
+    for (const auto first_in_group : {std::optional<bool>{}, std::optional<bool>{false}, std::optional<bool>{true}}) {
+        auto document = make_document(first_in_group);
+        auto xml = source::serialize_form_xml(document);
+        expect(xml.ok(), "fresh named Table model must serialize to XML");
+        if (first_in_group) {
+            expect(xml.value().find(*first_in_group ? "<FirstInGroup>true</FirstInGroup>"
+                                                    : "<FirstInGroup>false</FirstInGroup>") != std::string::npos,
+                "explicit Boolean values must use named FirstInGroup XML");
+        }
+        auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "fresh named XML must parse without a baseline");
+        auto binary = oof::save_form_bin(parsed.value());
+        expect(binary.ok(), "fresh named XML must produce Form.bin without a source binary");
+        auto loaded = oof::load_form_bin(binary.value(), "TableFirstInGroup");
+        expect(loaded.ok(), "fresh FirstInGroup Form.bin must load");
+        const auto* table = loaded.value().find_control(model::ObjectId{3});
+        expect(table != nullptr && table->kind() == model::ControlKind::table, "fresh binary must retain Table");
+        const auto* property = table->extension_properties.find(model::PropertyId::from_name("FirstInGroup"));
+        expect(first_in_group.value_or(false) ? property != nullptr && std::get<bool>(property->value)
+                                              : property == nullptr,
+            "fresh binary must retain true and normalize explicit/omitted false");
+        expect(!std::get<bool>(table->properties().find(model::PropertyId::from_name("ReadOnly"))->value),
+            "ReadOnly=false must coexist with FirstInGroup");
+        const auto& columns = std::get<model::TablePayload>(table->payload).columns;
+        expect(columns.size() == 3 && columns[0].control.kind == model::ControlKind::input_field &&
+                   columns[1].control.kind == model::ControlKind::choice_field &&
+                   columns[2].control.kind == model::ControlKind::check_box,
+            "FirstInGroup must preserve all three supported editor profiles");
+        auto encoded = form_stream::encode_document(loaded.value());
+        expect(encoded.ok(), "fresh loaded Table must encode");
+        const auto* record = find_record_with_guid(encoded.value(),
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(record != nullptr && record->items[4].items[5].atom == (first_in_group.value_or(false) ? "1" : "0"),
+            "fresh binary must use the observed Table metadata position");
+        if (!first_in_group) omitted_record = *record;
+        if (first_in_group && !*first_in_group) {
+            expect(omitted_record && list_stream::dump_compact(*omitted_record) == list_stream::dump_compact(*record),
+                "explicit false and omitted FirstInGroup must have identical Table records");
+        }
+    }
+
+    auto invalid_type = make_document(true);
+    auto& table = const_cast<model::ControlNode&>(*invalid_type.find_control(model::ObjectId{3}));
+    table.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), std::string("true"));
+    expect(!form_stream::encode_document(invalid_type), "non-Boolean FirstInGroup must be rejected");
+    auto unsupported = make_document(true);
+    auto& other = const_cast<model::ControlNode&>(*unsupported.find_control(model::ObjectId{3}));
+    other.extension_properties.set_explicit(model::PropertyId::from_name("SkipOnInput"), false);
+    expect(!form_stream::encode_document(unsupported),
+        "unproven Table extensions must be rejected even at their apparent default");
 }
 
 void test_table_column_name_and_data_path_runtime_slots() {
@@ -8608,6 +8749,8 @@ int main() {
         test_gantt_standard_palette_wraparound();
         test_captured_table_column_record();
         test_table_read_only_runtime_flags();
+        test_table_first_in_group_observed_metadata();
+        test_table_first_in_group_fresh_model_xml_bin();
         test_table_column_name_and_data_path_runtime_slots();
         test_table_column_choice_and_check_box_profiles();
         test_captured_table_packet_rejections_and_alternate_deflate();
