@@ -51,7 +51,7 @@ Form.xml + Form/Module.bsl -> OrdinaryForm -> Form.bin
 | `LabelDecoration` | Надпись | Нет | Click указан в каталоге, бинарно не проверен; DataPath не проверен | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Position, Visible, HorizontalAlign Auto/Left/Center/Right; события и остальные свойства не поддержаны | Интегратор |
 | `ListBox` | ПолеСписка | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить список значений и связь с реквизитом отдельно | Группа CalendarField |
 | `Panel` | Панель | Контролы и страницы | Именованные Page и рекурсивные ChildItems в стандартном оформлении | **PARTIAL** | Два уровня вложенности, локальный порядок, ссылки на владельца и соседей; другие свойства панели не поддержаны | Интегратор |
-| `PictureDecoration` | ПолеКартинки | Нет | Стандартный Picture поддержан; события не поддержаны | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible, PictureLib reference; внешние ресурсы пока отклоняются | Интегратор |
+| `PictureDecoration` | ПолеКартинки | Нет | Стандартный и внешний Picture поддержаны; события не поддержаны | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible, PictureLib reference и внешние PictureAsset; остальные свойства и события не поддержаны | Интегратор |
 | `ProgressBar` | Индикатор | Нет | DataPath и текущее значение не поддержаны | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible, MaxValue/MinValue/Step int32; числовая связь требует кодека | Группа ProgressBar |
 | `RadioButton` | Переключатель | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить значение группы и Boolean/enum домен | Группа CalendarField |
 | `Splitter` | Разделитель | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить пару связанных областей и геометрию | Группа ProgressBar |
@@ -209,7 +209,29 @@ macOS и Linux amd64 Release: 11/11 наборов PASS. В трех набор�
 Доказательство: `ev_0ee9debb8425427190f119dc979e5813`.
 
 Охват типов остается 8/25 PARTIAL (32%), 0 FULL. Следующие конкретные
-пробелы: внешние PictureAsset, числовой DataPath и CommandBar owner model.
+пробелы: числовой DataPath и CommandBar owner model.
 Исследование CurrentDate календаря подтвердило getter даты без времени,
 но изменение полного потока формы затронуло только счетчик; сохраняемый
 слот не установлен (`ev_afe483778c69455190dae5d05d3fce3b`).
+
+## Внешняя картинка PictureDecoration
+
+PictureDecoration.Picture использует тот же PictureRef и PictureAsset,
+что кнопка. Ресурс хранится в Form/Items/<ElementName>/Picture.gif;
+XML содержит именованную ссылку и описание ресурса, байты в XML не
+встраиваются. Чтение извлекает файл и сохраняет признак прозрачности.
+Запись получает ресурс из документа, а не из исходного Form.bin.
+
+Полная сериализация формы подтвердила изменение только внутренней записи
+картинки и счетчика. После восстановления запись картинки совпала.
+Свежая XML-only сцена одновременно содержит Empty, PictureLib.Write,
+внешнюю GIF и прозрачную GIF. Строгий Designer сохранил точные XML,
+Module.bsl, два ресурса и повторно собранный Form.bin. После запуска
+четыре getter-сравнения прошли, обе выгруженные GIF совпали с исходными
+байтами. macOS и Linux amd64 Release: 11/11 наборов PASS; независимая
+приемка кода PASS. Доказательство: `ev_fad2f43a38b04fc2b284e9266769b01f`.
+
+Доказанный внешний формат этой сцены: GIF. Другие форматы используют
+общий существующий кодек картинки, отдельного платформенного подтверждения
+PictureDecoration для них эта партия не дает. Общий охват остается
+8/25 PARTIAL (32%), 0 FULL.

@@ -2124,11 +2124,37 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
     const_cast<model::ControlNode*>(external_picture_document.find_control(model::ObjectId{2}))
         ->properties().set_explicit(model::PropertyId::from_name("Picture"),
             model::PictureRef{model::PictureAssetRef{model::ObjectId{20}}});
+    const std::vector<std::uint8_t> external_gif{
+        0x47,0x49,0x46,0x38,0x39,0x61,0x01,0x00,0x01,0x00,0x80,0x00,0x00,0x00,0x00,0x00,
+        0xff,0xff,0xff,0x21,0xf9,0x04,0x01,0x00,0x00,0x00,0x00,0x2c,0x00,0x00,0x00,0x00,
+        0x01,0x00,0x01,0x00,0x00,0x02,0x01,0x44,0x00,0x3b};
     external_picture_document.add_asset(model::PictureAsset{model::ObjectId{20},
-        "Items/Picture/Picture.gif", model::PictureFormat::gif,
-        {'G','I','F','8','9','a',0,1}, false});
-    expect_failure(form_stream::encode_document(external_picture_document), "OOF1122",
-        "$/PictureDecoration/Picture", "unverified external PictureDecoration assets must fail closed");
+        "Items/Picture/Picture.gif", model::PictureFormat::gif, external_gif, false});
+    const auto external_picture_encoded = form_stream::encode_document(external_picture_document);
+    expect(external_picture_encoded.ok(), "synthetic external PictureDecoration GIF must encode");
+    const auto& external_picture_value = picture_record(external_picture_encoded.value()).items[2].items[1].items[4].items[2];
+    expect(external_picture_value.items.size() == 10 && external_picture_value.items[0].atom == "4" &&
+               external_picture_value.items[1].atom == "3" && external_picture_value.items[6].atom == "0" &&
+               external_picture_value.items[7].items[0].items[0].atom ==
+                   "#base64:R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+        "PictureDecoration external GIF must use the observed Button picture tuple");
+    const auto external_picture_decoded = form_stream::decode_document(
+        external_picture_encoded.value(), "PictureDecorationExternalPicture");
+    expect(external_picture_decoded.ok(), "synthetic external PictureDecoration GIF must decode");
+    const auto* external_decoded_control = external_picture_decoded.value().find_control(model::ObjectId{2});
+    const auto* external_decoded_property = external_decoded_control == nullptr ? nullptr :
+        external_decoded_control->properties().find(model::PropertyId::from_name("Picture"));
+    expect(external_decoded_property && std::holds_alternative<model::PictureRef>(external_decoded_property->value) &&
+               external_picture_decoded.value().assets().size() == 1 &&
+               external_picture_decoded.value().assets().front().bytes == external_gif &&
+               external_picture_decoded.value().assets().front().format == model::PictureFormat::gif &&
+               !external_picture_decoded.value().assets().front().transparent,
+        "PictureDecoration external GIF must decode as a typed PictureRef and exact PictureAsset bytes");
+    const auto external_picture_reencoded = form_stream::encode_document(external_picture_decoded.value());
+    expect(external_picture_reencoded.ok() &&
+               list_stream::dump_compact(picture_record(external_picture_reencoded.value())) ==
+                   list_stream::dump_compact(picture_record(external_picture_encoded.value())),
+        "PictureDecoration external GIF must re-encode canonically");
 
     auto unknown_property_document = make_document(false, true, "");
     const_cast<model::ControlNode*>(unknown_property_document.find_control(model::ObjectId{2}))

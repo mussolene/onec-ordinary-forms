@@ -2352,10 +2352,6 @@ DecodedControl decode_picture_decoration(
     require_arity(picture_slot, 11, picture_slot_path);
     const auto picture = decode_button_picture(
         picture_slot.items[2], child_path(picture_slot_path, 2));
-    if (picture && !picture->standard_name) {
-        fail("OOF1114", child_path(picture_slot_path, 1), "supported standard PictureLib picture",
-            "external picture bytes", "PictureDecoration external picture assets are unsupported");
-    }
     auto normalized_properties = picture_properties;
     auto normalized_base = base_properties;
     normalized_base.items[12] = encoded_localized(tool_tip);
@@ -2387,6 +2383,12 @@ DecodedControl decode_picture_decoration(
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "PictureDecoration cannot contain storage children");
 
+    std::optional<model::PictureAsset> picture_asset;
+    if (picture && !picture->standard_name) {
+        picture_asset = model::PictureAsset{
+            {}, "Items/" + name + "/Picture." + std::string(picture_format_extension(picture->format)),
+            picture->format, picture->bytes, picture->transparent};
+    }
     model::ControlNode control{
         model::ObjectId{raw_id},
         name,
@@ -2404,7 +2406,7 @@ DecodedControl decode_picture_decoration(
                 model::QualifiedName{*picture->standard_name}});
     }
     control.position = std::move(decoded_geometry.position);
-    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::move(picture_asset), {}};
 }
 
 DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
@@ -3042,6 +3044,7 @@ LV encode_button(
 
 LV encode_picture_decoration(
     const model::ControlNode& control,
+    const model::OrdinaryFormDocument& document,
     const GeometryContext& context) {
     if (control.kind() != model::ControlKind::picture_decoration || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
@@ -3060,27 +3063,41 @@ LV encode_picture_decoration(
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
+    const model::PictureAsset* picture_asset = nullptr;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Picture"))) {
         if (!std::holds_alternative<model::PictureRef>(entry->value)) {
             fail("OOF1122", "$/PictureDecoration/Picture", "PictureRef", "different value type",
                 "PictureDecoration.Picture has the wrong value type");
         }
         const auto& reference = std::get<model::PictureRef>(entry->value);
-        if (!reference.standard_name || reference.asset.id().value() != 0) {
-            fail("OOF1122", "$/PictureDecoration/Picture", "standard PictureLib reference",
-                reference.standard_name ? "conflicting asset target" : "external asset",
-                "PictureDecoration external picture assets are unsupported");
-        }
-        standard_picture = model::metamodel::find_standard_picture(reference.standard_name->value);
-        if (standard_picture == nullptr) {
-            fail("OOF1122", "$/PictureDecoration/Picture", "known PictureLib name",
-                reference.standard_name->value, "Standard picture name is unsupported");
+        if (reference.standard_name) {
+            if (reference.asset.id().value() != 0) {
+                fail("OOF1122", "$/PictureDecoration/Picture", "standard picture with empty asset ID",
+                    std::to_string(reference.asset.id().value()), "Picture reference has conflicting targets");
+            }
+            standard_picture = model::metamodel::find_standard_picture(reference.standard_name->value);
+            if (standard_picture == nullptr) {
+                fail("OOF1122", "$/PictureDecoration/Picture", "known PictureLib name",
+                    reference.standard_name->value, "Standard picture name is unsupported");
+            }
+        } else {
+            if (reference.asset.id().value() == 0) {
+                fail("OOF1122", "$/PictureDecoration/Picture", "positive asset ID", "0",
+                    "Picture asset reference is empty");
+            }
+            picture_asset = document.find_asset(reference.asset.id());
+            if (picture_asset == nullptr) {
+                fail("OOF1123", "$/PictureDecoration/Picture", "existing PictureAsset", "missing",
+                    "PictureDecoration picture reference is dangling");
+            }
         }
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
     auto picture_properties = canonical_picture_properties(enabled, tool_tip);
     if (standard_picture != nullptr) {
         picture_properties.items[4].items[2] = encode_standard_button_picture(*standard_picture);
+    } else if (picture_asset != nullptr) {
+        picture_properties.items[4].items[2] = encode_button_picture(*picture_asset, "$/PictureDecoration/Picture");
     }
     return list({
         raw(std::string(descriptor.guid)),
@@ -4436,7 +4453,7 @@ Result<list_stream::ListValue> encode_document(
                 if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
                 } else if (control->kind() == model::ControlKind::picture_decoration) {
-                    record = encode_picture_decoration(*control, context);
+                    record = encode_picture_decoration(*control, document, context);
                 } else if (control->kind() == model::ControlKind::label_decoration) {
                     record = encode_label(*control, context);
                 } else if (control->kind() == model::ControlKind::calendar_field) {
