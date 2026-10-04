@@ -116,6 +116,37 @@ void test_type_domain() {
             "{\"Pattern\",{\"T\",d47d59f8-73f0-481c-8b5e-f6384c0a4804}}",
         "type-domain must match the proven platform fixture");
 
+    model::TypeDomainEntry value_list_entry;
+    value_list_entry.term = model::TypeDomainTerm::value_list;
+    const model::TypeDomainPatternValue value_list_fixture{{value_list_entry}};
+    expect(
+        codec::encode_type_domain(value_list_fixture) ==
+            "{\"Pattern\",{\"#\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}",
+        "ValueList term must use the independent platform type descriptor");
+    expect(
+        codec::decode_type_domain("{\"Pattern\",{\"#\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}") ==
+            value_list_fixture,
+        "ValueList platform type descriptor must decode as the named term");
+    for (const auto token : {"T", "R", "L"}) {
+        const auto other_platform_term = codec::decode_type_domain(
+            std::string("{\"Pattern\",{\"") + token +
+            "\",4772b3b4-f4a3-49c0-a1a5-8cb5961511a3}}");
+        expect(other_platform_term.entries.front().term != model::TypeDomainTerm::value_list,
+            "ValueList recognition must be limited to the proven # type token");
+    }
+    model::TypeDomainEntry invalid_value_list = value_list_entry;
+    invalid_value_list.type_uuid = model::UuidValue{"d47d59f8-73f0-481c-8b5e-f6384c0a4804"};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_list}})); },
+        "ValueList must reject an overriding type UUID");
+    invalid_value_list = value_list_entry;
+    invalid_value_list.string = {64, false};
+    expect_rejected(
+        [&] { static_cast<void>(codec::encode_type_domain(
+            model::TypeDomainPatternValue{{invalid_value_list}})); },
+        "ValueList must reject qualifiers");
+
     model::TypeDomainPatternValue value;
 
     model::TypeDomainEntry type;
@@ -356,6 +387,20 @@ void test_shortcut() {
         "unknown named Shortcut key must be rejected");
 }
 
+void test_platform_date_codec() {
+    expect(codec::date_to_platform("2024-02-29T00:00:00") == "20240229000000",
+        "local leap-day date must encode to the canonical platform atom");
+    expect(codec::date_from_platform("20311107234510") == "2031-11-07T23:45:10",
+        "platform seconds and time fields must decode without loss");
+    for (const std::string_view invalid : {
+             "2023-02-29T00:00:00", "2024-13-01T00:00:00", "2024-04-31T00:00:00",
+             "2024-01-01T24:00:00", "2024-01-01T00:60:00", "2024-01-01T00:00:60",
+             "2024-01-01T00:00:00Z", "2024-01-01T00:00:00.1"}) {
+        expect_rejected([invalid] { static_cast<void>(codec::date_to_platform(invalid)); },
+            "invalid, zoned, or fractional date must be rejected");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -368,6 +413,7 @@ int main() {
         test_color();
         test_font();
         test_shortcut();
+        test_platform_date_codec();
     } catch (const std::exception& error) {
         std::cerr << "value codec tests: FAIL: " << error.what() << '\n';
         return 1;

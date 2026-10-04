@@ -93,6 +93,27 @@ void test_complete_document_roundtrip() {
     expect(repeated.value() == serialized.value(), "Form.xml serialization must be deterministic");
 }
 
+void test_usual_group_named_xml_round_trip() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Groups" ordinaryFormVersion="2.1"><ChildItems>
+      <UsualGroup id="2" name="DefaultGroup"><Position/></UsualGroup>
+      <UsualGroup id="3" name="CustomGroup"><Position><Top>30</Top><Visible>false</Visible><Height>70</Height><Left>20</Left><Width>150</Width></Position><Enabled>false</Enabled><Caption>Группа Ω</Caption><ToolTip>Подсказка</ToolTip></UsualGroup>
+    </ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed.ok() ? "UsualGroup named XML must parse" :
+        parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto* custom = parsed.value().find_control(model::ObjectId{3});
+    expect(custom && custom->kind() == model::ControlKind::usual_group && custom->position.left.value() == 20 &&
+        custom->position.width.value() == 150 && !custom->position.visible.value(),
+        "UsualGroup Position and Visible must be typed");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<UsualGroup") != std::string::npos &&
+        serialized.value().find("Группа Ω") != std::string::npos && serialized.value().find("<Visible>false</Visible>") != std::string::npos,
+        "UsualGroup named properties must serialize in public XML");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && source::serialize_form_xml(reparsed.value()).value() == serialized.value(),
+        "UsualGroup XML must reach a deterministic named round-trip");
+}
+
 void test_root_page_tree_xml_roundtrip() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1">
@@ -374,6 +395,40 @@ void test_calendar_field_enabled_xml_roundtrip() {
                std::get<bool>(round_trip->properties().find(model::PropertyId::from_name("Enabled"))->value) == false &&
                !round_trip->position.visible.value() && round_trip->position.left.value() == 24,
         "CalendarField named values must survive XML source round-trip");
+}
+
+void test_html_document_field_output_xml_roundtrip() {
+    for (const std::string_view member : {"Auto", "Enable", "Disable"}) {
+        const std::string xml =
+            "<Form id=\"1\" name=\"HtmlForm\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+            "<HTMLDocumentField id=\"2\" name=\"Html\"><Position/>"
+            "<Output type=\"Output\" member=\"" + std::string(member) + "\"/>"
+            "</HTMLDocumentField></ChildItems></Form>";
+        auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), "supported HTMLDocumentField.Output enum must parse");
+        const auto* field = parsed.value().find_control(model::ObjectId{2});
+        expect(field != nullptr && field->kind() == model::ControlKind::html_document_field,
+            "HTMLDocumentField public name must materialize the typed control payload");
+        const auto* output = field->properties().find(model::PropertyId::from_name("Output"));
+        if (member == "Auto") {
+            expect(output == nullptr, "HTMLDocumentField Output Auto must normalize to its implicit default");
+        } else {
+            expect(output != nullptr &&
+                       std::get<model::EnumerationValue>(output->value) == model::EnumerationValue{"Output", std::string(member)},
+                "HTMLDocumentField.Output must materialize a named enumeration");
+        }
+        auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok(), "HTMLDocumentField.Output source must serialize");
+        if (member == "Auto") {
+            expect(serialized.value().find("<Output") == std::string::npos,
+                "implicit Auto default must be omitted from canonical XML");
+        } else {
+            expect(serialized.value().find("<Output type=\"Output\" member=\"" + std::string(member) + "\"/>") != std::string::npos,
+                "non-default Output must serialize with the public property name and enum member");
+        }
+        auto reparsed = source::parse_form_xml(serialized.value());
+        expect(reparsed.ok(), "canonical HTMLDocumentField.Output XML must reparse");
+    }
 }
 
 void test_binding_target_and_manual_roundtrip() {
@@ -782,6 +837,49 @@ void test_check_box_tooltip_xml_round_trip() {
         "CheckBox ToolTip XML must serialize canonically after parsing");
 }
 
+void test_choice_field_static_xml_profile_and_runtime_list_rejection() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="ChoiceField" ordinaryFormVersion="2.1">
+  <Attributes>
+    <Attribute id="3" name="Choice">
+      <TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain>
+    </Attribute>
+  </Attributes>
+  <ChildItems>
+    <ChoiceField id="2" name="ChoiceField">
+      <DataPath attributeId="3"/>
+      <Position/>
+      <Enabled>false</Enabled>
+      <ToolTip>Выберите Ω &amp; &lt;значение&gt;</ToolTip>
+    </ChoiceField>
+  </ChildItems>
+</Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto* choice = parsed.value().find_control(model::ObjectId{2});
+    expect(choice && choice->kind() == model::ControlKind::choice_field && choice->data_path &&
+               choice->data_path->attribute.id() == model::ObjectId{3} &&
+               !std::get<bool>(choice->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+               std::get<std::string>(choice->properties().find(model::PropertyId::from_name("ToolTip"))->value) ==
+                   "Выберите Ω & <значение>",
+        "ChoiceField XML must expose a named string DataPath and observed static properties");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<DataPath attributeId=\"3\"/>") != std::string::npos &&
+               serialized.value().find("<ChoiceList") == std::string::npos,
+        "ChoiceField XML must serialize the typed binding without pretending to persist ChoiceList");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok() && reparsed.value().find_control(model::ObjectId{2}) != nullptr,
+        "ChoiceField named static XML must round-trip");
+
+    constexpr std::string_view runtime_list_xml = R"XML(<Form id="1" name="ChoiceField" ordinaryFormVersion="2.1">
+      <Attributes><Attribute id="3" name="Choice"><TypeDomain><Entry term="string" length="64" variable="false"/></TypeDomain></Attribute></Attributes>
+      <ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><ChoiceList/></ChoiceField></ChildItems>
+    </Form>)XML";
+    const auto runtime_list = source::parse_form_xml(runtime_list_xml);
+    expect_code(runtime_list, "OOF2002",
+        "runtime-only ChoiceList must be rejected from the persisted XML object model");
+}
+
 void test_check_box_font_xml_round_trip() {
     const auto make_document = [](std::optional<model::FontValue> font) {
         model::Form form;
@@ -989,6 +1087,26 @@ void test_boolean_type_domain_xml_roundtrip() {
             "</TypeDomain></Attribute></Attributes></Form>"),
         "OOF2003",
         "Boolean TypeDomain must reject variable qualifier");
+}
+
+void test_value_list_type_domain_xml_roundtrip() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="ValueList" ordinaryFormVersion="2.1"><Attributes><Attribute id="2" name="Values"><TypeDomain><Entry term="valueList"/></TypeDomain></Attribute></Attributes></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "named ValueList TypeDomain must parse");
+    const auto& entry = parsed.value().collections().attributes.front().type.entries.front();
+    expect(entry.term == model::TypeDomainTerm::value_list && !entry.type_uuid,
+        "ValueList XML term must not expose its platform UUID");
+    auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Entry term=\"valueList\"/>") != std::string::npos,
+        "ValueList TypeDomain must retain its named XML term");
+    expect(source::parse_form_xml(serialized.value()).ok(),
+        "serialized ValueList TypeDomain must parse again");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueList\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Values\"><TypeDomain><Entry term=\"valueList\" typeUuid=\"d47d59f8-73f0-481c-8b5e-f6384c0a4804\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueList term must reject caller-supplied UUIDs");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"ValueList\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Values\"><TypeDomain><Entry term=\"valueList\" length=\"64\"/></TypeDomain></Attribute></Attributes></Form>"),
+        "OOF2003", "ValueList term must reject string qualifiers");
 }
 
 void test_inherited_property_has_one_surface() {
@@ -1418,21 +1536,25 @@ void test_command_bar_buttons_xml_only_contract() {
 int main() {
     try {
         test_complete_document_roundtrip();
+        test_usual_group_named_xml_round_trip();
         test_root_page_tree_xml_roundtrip();
         test_page_internal_ids_do_not_change_xml();
         test_page_boolean_defaults_and_rejections();
         test_page_position_roundtrip_and_rejections();
         test_all_control_variants();
         test_calendar_field_enabled_xml_roundtrip();
+        test_html_document_field_output_xml_roundtrip();
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
         test_spreadsheet_document_cells_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
+        test_choice_field_static_xml_profile_and_runtime_list_rejection();
         test_check_box_font_xml_round_trip();
         test_input_field_layout_xml_round_trip();
         test_button_shortcut_xml();
         test_boolean_type_domain_xml_roundtrip();
+        test_value_list_type_domain_xml_roundtrip();
         test_inherited_property_has_one_surface();
         test_xml_character_normalization_is_lossless();
         test_strict_rejections();

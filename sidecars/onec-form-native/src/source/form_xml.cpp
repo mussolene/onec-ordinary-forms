@@ -30,6 +30,7 @@
 
 #include "oof/model/metamodel.hpp"
 #include "oof/source/schema_generator.hpp"
+#include "oof/storage/value_codec.hpp"
 
 namespace oof::source {
 namespace {
@@ -573,7 +574,7 @@ model::CompositeIdValue parse_composite_id(xmlNodePtr node) {
 }
 
 model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr node) {
-    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 9> terms{{
+    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 10> terms{{
         {"unknown", model::TypeDomainTerm::unknown},
         {"list", model::TypeDomainTerm::list},
         {"boolean", model::TypeDomainTerm::boolean},
@@ -583,6 +584,7 @@ model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr 
         {"reference", model::TypeDomainTerm::reference},
         {"string", model::TypeDomainTerm::string},
         {"type", model::TypeDomainTerm::type},
+        {"valueList", model::TypeDomainTerm::value_list},
     }};
     const auto found = std::ranges::find(terms, value, &decltype(terms)::value_type::first);
     if (found == terms.end()) {
@@ -954,8 +956,9 @@ model::PropertyValue parse_property_value(
             return parse_formatted_string(node);
         case mm::ValueCodec::date: {
             const std::string text(trim_ascii(node_text(node)));
-            return text == "undefined" ? model::PropertyValue{model::UndefinedValue{}}
-                                       : model::PropertyValue{model::DateValue{text}};
+            if (text == "undefined") return model::UndefinedValue{};
+            (void)storage::value_codec::date_to_platform(text);
+            return model::DateValue{text};
         }
         case mm::ValueCodec::uuid:
             return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(node))))};
@@ -994,6 +997,8 @@ bool equals_descriptor_default(
         case mm::DefaultKind::unknown:
         case mm::DefaultKind::none:
             return false;
+        case mm::DefaultKind::undefined:
+            return canonical == "undefined" && std::holds_alternative<model::UndefinedValue>(value);
         case mm::DefaultKind::boolean:
             return std::holds_alternative<bool>(value) &&
                    std::get<bool>(value) == (canonical == "true" || canonical == "1");
@@ -1791,6 +1796,7 @@ std::string_view type_domain_term_name(model::TypeDomainTerm term) {
         case model::TypeDomainTerm::reference: return "reference";
         case model::TypeDomainTerm::string: return "string";
         case model::TypeDomainTerm::type: return "type";
+        case model::TypeDomainTerm::value_list: return "valueList";
     }
     return "unknown";
 }
@@ -1951,6 +1957,17 @@ private:
                 case model::TypeDomainTerm::type:
                     if (entry.type_uuid.has_value()) {
                         attributes.emplace_back("typeUuid", canonical_uuid(entry.type_uuid->canonical));
+                    }
+                    break;
+                case model::TypeDomainTerm::value_list:
+                    if (entry.type_uuid.has_value() ||
+                        entry.numeric != model::NumericQualifiers{} ||
+                        entry.string != model::LengthQualifiers{} ||
+                        entry.binary != model::LengthQualifiers{} ||
+                        entry.date != model::DateQualifiers{}) {
+                        serialization_fail(std::string(object_id), std::string(name),
+                            "unqualified ValueList descriptor", "UUID or qualifiers",
+                            "ValueList type-domain entry cannot carry UUID or qualifiers");
                     }
                     break;
                 case model::TypeDomainTerm::boolean:
@@ -2140,7 +2157,9 @@ private:
                 if (std::holds_alternative<model::UndefinedValue>(value)) {
                     writer_.text(name, "undefined");
                 } else {
-                    writer_.text(name, require_value<model::DateValue>(value, object_id, name, "Date or Undefined").canonical);
+                    const auto& date = require_value<model::DateValue>(value, object_id, name, "Date or Undefined");
+                    (void)storage::value_codec::date_to_platform(date.canonical);
+                    writer_.text(name, date.canonical);
                 }
                 return;
             case mm::ValueCodec::uuid:
