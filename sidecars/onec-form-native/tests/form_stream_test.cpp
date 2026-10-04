@@ -533,6 +533,141 @@ void test_usual_group_named_record_round_trip_and_rejections() {
         "UsualGroup IDs above int64 range must be rejected by the control encoder");
 }
 
+void test_gantt_chart_named_storage_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "Gantt";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::GanttChartPayload payload;
+    payload.series.push_back({model::ObjectId{71}, "S-A", "Series A", std::nullopt});
+    payload.series.push_back({model::ObjectId{74}, "S-B", "Series B", std::nullopt});
+    payload.points.push_back({model::ObjectId{83}, "P-X", "Point X", std::nullopt});
+    payload.points.push_back({model::ObjectId{84}, "P-Y", "Point Y", std::nullopt});
+    payload.points.push_back({model::ObjectId{85}, "P-Z", "Point Z", std::nullopt});
+    payload.intervals.push_back({model::ObjectId{83}, model::ObjectId{71},
+        model::DateValue{"2027-01-10T00:00:00"}, model::DateValue{"2027-01-12T00:00:00"}, "First"});
+    payload.intervals.push_back({model::ObjectId{83}, model::ObjectId{71},
+        model::DateValue{"2027-01-14T00:00:00"}, model::DateValue{"2027-01-16T00:00:00"}, "Second"});
+    model::ControlNode gantt{model::ObjectId{2}, "Schedule", std::move(payload)};
+    gantt.properties().set_explicit(model::PropertyId::from_name("AutoFullInterval"), false);
+    gantt.properties().set_explicit(model::PropertyId::from_name("FullIntervalBegin"), model::DateValue{"2027-01-01T00:00:00"});
+    gantt.properties().set_explicit(model::PropertyId::from_name("FullIntervalEnd"), model::DateValue{"2027-03-01T00:00:00"});
+    gantt.position.left.set(8);
+    gantt.position.top.set(8);
+    gantt.position.width.set(400);
+    gantt.position.height.set(240);
+    document.add_control(std::move(gantt));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message + " expected=" + encoded.diagnostics().front().expected + " actual=" + encoded.diagnostics().front().actual);
+    const auto decoded = form_stream::decode_document(encoded.value(), "Gantt");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message + " expected=" + decoded.diagnostics().front().expected + " actual=" + decoded.diagnostics().front().actual);
+    const auto* control = decoded.value().find_control(model::ObjectId{2});
+    const auto* restored = control ? std::get_if<model::GanttChartPayload>(&control->payload) : nullptr;
+    expect(restored && restored->series.size() == 2 && restored->points.size() == 3 && restored->intervals.size() == 2,
+        "Gantt storage must retain named dimensions and repeated interval pair");
+    expect(restored->series[0].id == model::ObjectId{71} && restored->points[0].id == model::ObjectId{83} &&
+               restored->intervals[0].text == "First" && restored->intervals[1].text == "Second",
+        "Gantt native keys and ordered interval records must return to their named model objects");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
+        "Gantt native records must roundtrip without private-field drift");
+
+    auto reordered = encoded.value();
+    const auto find_gantt_record = [&](auto&& self, list_stream::ListValue& value) -> list_stream::ListValue* {
+        if (!value.is_list) return nullptr;
+        const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::gantt_chart);
+        if (value.items.size() == 6 && !value.items[0].is_list && value.items[0].atom == descriptor.guid)
+            return &value;
+        for (auto& child : value.items) {
+            if (auto* found = self(self, child)) return found;
+        }
+        return nullptr;
+    };
+    auto palette_fixture = encoded.value();
+    auto* palette_gantt = find_gantt_record(find_gantt_record, palette_fixture);
+    expect(palette_gantt != nullptr, "encoded document must contain its Gantt record for palette validation");
+    const auto& point_rows = palette_gantt->items[2].items[2].items[1];
+    const auto& point_palette = point_rows.items[11];
+    expect(list_stream::dump_compact(point_palette.items[2].items[2]) == "{4,4,{0},4}" &&
+               list_stream::dump_compact(point_palette.items[2].items[3]) == "{4,4,{0},4}",
+        "Gantt Point palette footer colors must use the proven Auto color defaults");
+    const auto& series_rows = palette_gantt->items[2].items[3].items[1];
+    const auto& series_palette = series_rows.items[9];
+    expect(list_stream::dump_compact(series_palette.items[2].items[2]) == "{4,0,{0},0}",
+        "Gantt Series palette footer must retain the proven absolute-black default");
+    auto* gantt_record = find_gantt_record(find_gantt_record, reordered);
+    expect(gantt_record != nullptr, "encoded document must contain its Gantt record");
+    for (const std::size_t table_slot : {2u, 3u}) {
+        auto& rows = gantt_record->items[2].items[table_slot].items[1].items;
+        const auto dimensions = static_cast<std::size_t>(std::stoul(rows[2].atom)) - 1;
+        for (std::size_t left = 0; left < dimensions / 2; ++left) {
+            const auto right = dimensions - left - 1;
+            std::swap(rows[3 + 2 * left], rows[3 + 2 * right]);
+            std::swap(rows[4 + 2 * left], rows[4 + 2 * right]);
+        }
+    }
+    const auto reordered_decode = form_stream::decode_document(reordered, "GanttReorderedRows");
+    expect(reordered_decode.ok(), reordered_decode ? "" : reordered_decode.diagnostics().front().path + ": " + reordered_decode.diagnostics().front().message);
+
+    auto platform_layout = encoded.value();
+    auto* platform_gantt = find_gantt_record(find_gantt_record, platform_layout);
+    expect(platform_gantt != nullptr, "platform layout fixture must contain its Gantt record");
+    auto& layout_values = platform_gantt->items[2].items[1].items[2].items;
+    constexpr std::array<std::pair<std::size_t, std::string_view>, 8> layout_adjustments{{
+        {102, "1.4375e-1"}, {104, "8.5625e-1"}, {106, "0"}, {107, "0"},
+        {167, "0.14375"}, {169, "0.85625"}, {171, "0"}, {172, "0"}}};
+    for (const auto& [slot, value] : layout_adjustments) {
+        expect(slot < layout_values.size(), "platform layout fixture must expose every verified runtime-adjusted slot");
+        layout_values[slot] = list_stream::ListValue::raw_atom(std::string(value));
+    }
+    const auto platform_layout_decode = form_stream::decode_document(platform_layout, "GanttPlatformLayout");
+    expect(platform_layout_decode.ok(), platform_layout_decode ? "" : platform_layout_decode.diagnostics().front().path + ": " + platform_layout_decode.diagnostics().front().message);
+    const auto platform_layout_roundtrip = form_stream::encode_document(platform_layout_decode.value());
+    expect(platform_layout_roundtrip.ok(), "named Gantt graph must rebuild after platform layout normalization");
+
+    auto invalid_platform_layout = platform_layout;
+    auto* invalid_layout_gantt = find_gantt_record(find_gantt_record, invalid_platform_layout);
+    invalid_layout_gantt->items[2].items[1].items[2].items[102] = list_stream::ListValue::raw_atom("1.01");
+    expect_failure(form_stream::decode_document(invalid_platform_layout, "GanttInvalidPlatformLayout"),
+        "OOF1114", "$/1/2/2/1/2/1/2/102",
+        "Gantt runtime-adjusted layout leaves outside the verified range must be rejected");
+
+    model::Form color_form;
+    color_form.id = model::ObjectId{1};
+    color_form.name = "GanttColor";
+    color_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument color_document(std::move(color_form));
+    model::GanttChartPayload color_payload;
+    color_payload.series.push_back({model::ObjectId{1}, "series", "Series",
+        model::ColorValue{model::ColorKind::absolute, 10, 20, 30, 255, std::monostate{}}});
+    model::ControlNode color_chart{model::ObjectId{2}, "Colored", std::move(color_payload)};
+    color_chart.position.left.set(8);
+    color_chart.position.top.set(8);
+    color_chart.position.width.set(200);
+    color_chart.position.height.set(100);
+    color_document.add_control(std::move(color_chart));
+    expect_failure(form_stream::encode_document(color_document), "OOF1122", "$/GanttChart/Color",
+        "Gantt colors without a proved native palette mapping must be rejected instead of dropped");
+
+    model::Form auto_form;
+    auto_form.id = model::ObjectId{1};
+    auto_form.name = "GanttAutoBounds";
+    auto_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument auto_document(std::move(auto_form));
+    model::ControlNode auto_chart{model::ObjectId{2}, "Auto", model::GanttChartPayload{}};
+    auto_chart.properties().set_explicit(model::PropertyId::from_name("FullIntervalBegin"), model::DateValue{"2027-01-01T00:00:00"});
+    auto_chart.properties().set_explicit(model::PropertyId::from_name("FullIntervalEnd"), model::DateValue{"2027-03-01T00:00:00"});
+    auto_chart.position.left.set(8);
+    auto_chart.position.top.set(8);
+    auto_chart.position.width.set(200);
+    auto_chart.position.height.set(100);
+    auto_document.add_control(std::move(auto_chart));
+    expect_failure(form_stream::encode_document(auto_document), "OOF1122", "$/GanttChart/FullInterval",
+        "explicit bounds in automatic mode must not be silently omitted on decode");
+}
+
 void test_multiple_top_level_buttons_round_trip() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -5877,6 +6012,7 @@ int main() {
         test_empty_attributes_allocator_header();
         test_attribute_allocator_is_separate_from_control_ids();
         test_usual_group_named_record_round_trip_and_rejections();
+        test_gantt_chart_named_storage_round_trip();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
         test_button_multiline_round_trip_and_validation();

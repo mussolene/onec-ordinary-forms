@@ -3,15 +3,19 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
 #include <limits>
+#include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -2255,6 +2259,486 @@ struct DecodedControl {
     std::optional<model::PictureAsset> picture_asset;
     std::vector<model::PictureAsset> menu_assets;
 };
+
+LV canonical_empty_gantt_info() {
+    return list({
+        raw("19"),
+        list({raw("0"), list({raw("11")}), list({raw("75"), raw("1"), raw("0"), raw("1"), raw("0"), list({raw("4"), raw("0"), list({raw("11837108")}), raw("0")}), list({raw("4"), raw("0"), list({raw("0")}), raw("1"), raw("2"), raw("0"), raw("e5cabe59-d992-4d31-8086-3116931aff81"), raw("0")}), raw("1"), list({raw("1"), raw("1"), list({string_value("ru"), string_value("Сводная")})}), raw("0"), raw("0"), raw("0"), raw("1"), list({string_value("U")}), list({string_value("U")}), raw("0"), raw("1"), raw("0"), raw("-1"), raw("0"), raw("4"), raw("0"), string_value(", "), raw("4"), list({raw("1"), raw("0")}), list({raw("1"), raw("0")}), list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), raw("0"), raw("0"), list({raw("1"), raw("0")}), raw("1"), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("0"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("3"), list({raw("-22")}), raw("3")}), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("0"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("3"), list({raw("-22")}), raw("3")}), list({raw("3"), raw("0"), list({raw("0")}), raw("1"), raw("1"), raw("0"), raw("00000000-0000-0000-0000-000000000000")}), list({raw("4"), raw("3"), list({raw("-22")}), raw("3")}), raw("0"), list({raw("4"), raw("3"), list({raw("-1")}), raw("3")}), raw("1"), list({raw("4"), raw("3"), list({raw("-1")}), raw("3")}), raw("1"), list({raw("4"), raw("3"), list({raw("-1")}), raw("3")}), raw("0"), list({raw("4"), raw("0"), list({raw("16777215")}), raw("0")}), list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), raw("1"), raw("1"), raw("1"), raw("1"), raw("1"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("0"), list({raw("0")}), raw("1"), raw("1"), raw("0"), raw("e5cabe59-d992-4d31-8086-3116931aff81"), raw("0")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), raw("1"), raw("0"), raw("4"), raw("30"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("1"), raw("2"), list({raw("1"), raw("0")}), raw("1"), raw("0"), raw("0"), raw("1"), list({raw("4"), raw("0"), list({raw("169")}), raw("0")}), raw("0"), raw("0"), list({raw("1"), raw("0"), raw("0"), raw("0")}), raw("0"), raw("180"), raw("5"), raw("1"), raw("0"), raw("4"), list({raw("4"), raw("0"), list({raw("11119017")}), raw("0")}), raw("1"), raw("0"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("1"), raw("0"), raw("0"), raw("1"), raw("1"), raw("0"), list({raw("4"), raw("3"), list({raw("-22")}), raw("3")}), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("0"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), string_value(""), raw("0"), raw("1"), raw("14"), raw("2"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), raw("1"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("3"), raw("0"), list({raw("0")}), raw("1"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), raw("1"), raw("1"), raw("0"), raw("0"), raw("95"), raw("1e-1"), raw("1e-1"), raw("3e-2"), list({raw("4"), raw("0"), list({raw("0")}), raw("1"), raw("1"), raw("0"), raw("e5cabe59-d992-4d31-8086-3116931aff81"), raw("0")}), list({raw("4"), raw("0"), list({raw("0")}), raw("0")}), raw("2"), raw("255"), raw("0"), raw("0"), raw("00000000-0000-0000-0000-000000000000"), raw("0"), list({raw("0"), raw("0")}), raw("0"), list({raw("0"), raw("0"), list({raw("0"), raw("1"), raw("0"), raw("1"), raw("0")}), raw("0"), raw("0")}), list({raw("0"), raw("0"), list({raw("0"), raw("1"), raw("0"), raw("1"), raw("0")}), raw("0"), raw("0")}), raw("0"), raw("0"), raw("2"), raw("-2"), raw("1"), raw("10"), raw("1"), raw("20"), raw("0"), raw("0"), list({raw("2"), raw("0"), raw("0"), raw("2"), list({raw("1"), raw("0")}), list({raw("1"), raw("4"), raw("0.5"), raw("0.5"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("2"), raw("0")}), raw("2"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("2"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), list({raw("2"), raw("0"), raw("0"), raw("2"), list({raw("1"), raw("0")}), list({raw("1"), raw("4"), raw("0.5"), raw("0.5"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("2"), raw("0")}), raw("2"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("2"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), list({raw("2"), raw("0"), raw("0"), raw("2"), list({raw("1"), raw("0")}), list({raw("1"), raw("4"), raw("0.5"), raw("0.5"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("2"), raw("0")}), raw("2"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("2"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), list({list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("0"), raw("0"), raw("0"), string_value(""), list({raw("1"), raw("0")}), list({raw("1"), raw("0")}), list({raw("1"), raw("0")}), raw("0")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("1"), raw("1"), raw("0"), raw("0"), raw("1"), raw("1"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0.17"), raw("0"), raw("0.83"), raw("0.08"), raw("0"), raw("0"), raw("0.83"), raw("0"), raw("0"), raw("0.92"), list({raw("0"), raw("0")}), list({raw("0"), raw("0")}), list({raw("0"), raw("0")}), list({raw("0"), raw("0")}), list({raw("0"), raw("14"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0")}), list({raw("0"), raw("14"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0")}), raw("0"), raw("0"), list({raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), list({raw("0"), raw("0"), raw("0"), raw("0")}), raw("0"), raw(""), raw("60"), list({raw("2"), raw("0"), raw("0"), raw("2"), list({raw("1"), raw("0")}), list({raw("1"), raw("4"), raw("0.5"), raw("0.5"), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1"), list({raw("3"), raw("0"), list({raw("0")}), raw("0"), raw("1"), raw("0"), raw("48312c09-257f-4b29-b280-284dd89efc1e")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("4"), raw("2"), raw("0")}), raw("2"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("2"), list({raw("1"), raw("0")}), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0")}), list({raw("0"), raw("0"), list({raw("0"), raw("1"), raw("0"), raw("1"), raw("0")}), raw("0"), raw("0")}), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")})})}),
+        list({raw("1"), list({raw("3"), raw("0"), raw("1"), raw("0"), list({raw("2"), list({raw("8"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), list({string_value("U")}), list({raw("1"), raw("0")}), list({string_value("U")}), raw("0"), raw("4294901761")}), list({raw("4"), raw("0"), list({raw("0")}), string_value(""), raw("-1"), raw("-1"), raw("1"), raw("0"), string_value("")}), list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")})}), list({raw("0"), raw("1"), list({raw("0"), list({raw("0"), list({raw("4"), raw("0"), list({raw("0")}), raw("0")}), list({raw("4"), raw("0"), list({raw("0")}), raw("0")})}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")})})}), raw("1"), raw("0")})}),
+        list({raw("0"), list({raw("3"), raw("0"), raw("1"), raw("0"), list({raw("3"), list({raw("8"), raw("0"), raw("0"), raw("0"), raw("0"), raw("0"), list({string_value("U")}), list({raw("1"), raw("0")}), list({string_value("U")}), raw("0"), raw("4294901761")})}), list({raw("0"), raw("1"), list({raw("0"), list({raw("0"), list({raw("4"), raw("0"), list({raw("0")}), raw("0")}), list({raw("4"), raw("0"), list({raw("0")}), raw("0")})}), list({raw("4"), raw("0"), list({raw("0")}), raw("0")})})}), raw("1"), raw("0")})}),
+        raw("0"),
+        raw("0"),
+        raw("1"),
+        list({raw("3"), raw("0"), raw("1"), list({raw("8"), raw("30"), raw("1"), raw("1"), list({raw("4"), raw("0"), list({raw("0")}), raw("2"), raw("1"), raw("0"), raw("e5cabe59-d992-4d31-8086-3116931aff81"), raw("0")}), list({raw("4"), raw("0"), list({raw("12632256")}), raw("0")}), raw("3"), list({raw("1"), raw("0")}), list({raw("0"), list({raw("1"), raw("0"), raw("0")})}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1")}), raw("0"), list({raw("4"), raw("3"), list({raw("-10")}), raw("3")}), list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), raw("0")}),
+        raw("2"),
+        raw("50"),
+        raw("1"),
+        raw("1"),
+        raw("20261001000000"),
+        raw("20261101000000"),
+        raw("20261001000000"),
+        raw("0"),
+        raw("3"),
+        raw("30"),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        list({raw("1"), raw("0")}),
+        list({raw("4"), raw("0"), list({raw("16777215")}), raw("0")}),
+        list({raw("3"), list({raw("0"), list({raw("1"), raw("0"), raw("0")}), raw("0")}), list({raw("0"), raw("0")})}),
+        raw("0"),
+        list({raw("4"), raw("0"), list({raw("5592405")}), raw("0")}),
+        list({raw("4"), raw("0"), list({raw("0")}), raw("1"), raw("1"), raw("0"), raw("e5cabe59-d992-4d31-8086-3116931aff81"), raw("0")}),
+        list({raw("0"), raw("0"), raw("0")}),
+        raw("0"),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        raw("0")
+    });
+}
+
+LV gantt_dimension_value(model::ObjectId id, std::string_view value,
+                         std::string_view text, std::uint64_t next_id,
+                         std::uint64_t cache_key) {
+    if (id.value() > UINT32_MAX || cache_key > UINT32_MAX)
+        fail("OOF1112", "$/GanttChart/Dimensions", "dimension ID and cache key within uint32", "overflow", "Gantt dimension key is too large");
+    return list({raw("8"), raw(std::to_string(id.value())), raw("0"), raw("0"),
+        raw(std::to_string(next_id)), raw("0"),
+        list({string_value("S"), string_value(std::string(value))}),
+        encoded_localized(text), list({string_value("U")}),
+        raw(std::to_string(cache_key)), raw("0")});
+}
+
+LV gantt_default_dimension_value(std::uint64_t first_id, std::uint64_t last_id) {
+    return list({raw("8"), raw("0"), raw("0"), raw(std::to_string(first_id)), raw("0"), raw(std::to_string(last_id)),
+        list({string_value("U")}), list({raw("1"), raw("0")}), list({string_value("U")}),
+        raw("0"), raw("4294901761")});
+}
+
+LV gantt_palette(const model::GanttChartPayload& data, bool points) {
+    const auto count = points ? data.points.size() : data.series.size();
+    const std::size_t proven_count = points ? 3 : 2;
+    if (count > proven_count)
+        fail("OOF1122", "$/GanttChart/Palette", points ? "at most 3 Points" : "at most 2 Series",
+            std::to_string(count), "Gantt palette expansion beyond the proven dimension count is unsupported");
+    const auto packed_color = [](std::uint32_t value) {
+        return list({raw("4"), raw("0"), list({raw(std::to_string(value))}), raw("0")});
+    };
+    const LV absolute_black = packed_color(0);
+    const LV automatic = list({raw("4"), raw("4"), list({raw("0")}), raw("4")});
+    constexpr std::array<std::pair<std::uint32_t, std::uint32_t>, 7> default_colors{{
+        {0, 0}, {15700567, 0}, {15700567, 5410297}, {5410297, 0},
+        {5410297, 6733657}, {6733657, 0}, {6733657, 10517142}}};
+    const auto color_at = [&](std::size_t index) {
+        return std::pair<LV, LV>{packed_color(default_colors[index].first), packed_color(default_colors[index].second)};
+    };
+    std::vector<LV> entries{raw("0"), raw(std::to_string(count * 2 + 1))};
+    for (std::size_t index = 0; index < count * 2 + 1; ++index) {
+        const auto [first, second] = color_at(index);
+        LV pair = list({raw("0"), first, second});
+        if (points) entries.push_back(list({raw("0"), std::move(pair), automatic, automatic}));
+        else entries.push_back(list({raw("0"), std::move(pair), absolute_black}));
+    }
+    return list(std::move(entries));
+}
+
+LV gantt_dimension_table(const model::GanttChartPayload& data, bool points) {
+    const std::size_t count = points ? data.points.size() : data.series.size();
+    const std::size_t proven_count = points ? 3 : 2;
+    if (count > proven_count)
+        fail("OOF1122", points ? "$/Gantt/Points" : "$/Gantt/Series",
+            points ? "at most 3 Points for the proven palette profile" : "at most 2 Series for the proven palette profile",
+            std::to_string(count), "Gantt dimension table is outside the proven palette profile");
+    if (count > (std::numeric_limits<std::uint32_t>::max() - 1u) / 2u)
+        fail("OOF1112", points ? "$/Gantt/Points" : "$/Gantt/Series", "safe uint32 palette count", "count overflow", "Gantt palette count is too large");
+    std::vector<LV> rows{raw("3"), raw("0"), raw(std::to_string(count + 1))};
+    if (points) {
+        for (std::size_t index = count; index > 0; --index) {
+            const auto& item = data.points[index - 1];
+            const std::uint64_t next = index < count ? data.points[index].id.value() : 0;
+            if (item.id.value() > UINT32_MAX || index > UINT32_MAX / 2u)
+                fail("OOF1112", "$/Gantt/Points", "IDs and ordinal cache keys within uint32", "overflow", "Gantt point key is too large");
+            rows.push_back(raw(std::to_string(item.id.value())));
+            rows.push_back(list({raw("2"), gantt_dimension_value(item.id, item.value, item.text, next,
+                static_cast<std::uint64_t>(index) * 2u),
+                list({raw("4"), raw("0"), list({raw("0")}), string_value(""), raw("-1"), raw("-1"), raw("1"), raw("0"), string_value("")}),
+                list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")})}));
+        }
+    } else {
+        for (std::size_t index = count; index > 0; --index) {
+            const auto& item = data.series[index - 1];
+            const std::uint64_t next = index < count ? data.series[index].id.value() : 0;
+            if (item.id.value() > UINT32_MAX || index > UINT32_MAX / 2u)
+                fail("OOF1112", "$/Gantt/Series", "IDs and ordinal cache keys within uint32", "overflow", "Gantt series key is too large");
+            rows.push_back(raw(std::to_string(item.id.value())));
+            rows.push_back(list({raw("3"), gantt_dimension_value(item.id, item.value, item.text, next,
+                static_cast<std::uint64_t>(index) * 2u)}));
+        }
+    }
+    rows.push_back(raw("0"));
+    if (points) {
+        const auto first_id = count == 0 ? 0 : data.points.front().id.value();
+        const auto last_id = count == 0 ? 0 : data.points.back().id.value();
+        rows.push_back(list({raw("2"), gantt_default_dimension_value(first_id, last_id),
+            list({raw("4"), raw("0"), list({raw("0")}), string_value(""), raw("-1"), raw("-1"), raw("1"), raw("0"), string_value("")}),
+            list({raw("8"), raw("3"), raw("0"), raw("1"), raw("100")})}));
+    } else {
+        const auto first_id = count == 0 ? 0 : data.series.front().id.value();
+        const auto last_id = count == 0 ? 0 : data.series.back().id.value();
+        rows.push_back(list({raw("3"), gantt_default_dimension_value(first_id, last_id)}));
+    }
+    rows.push_back(gantt_palette(data, points));
+    rows.push_back(raw("1"));
+    rows.push_back(raw("0"));
+    return list({raw(points ? "1" : "0"), list(std::move(rows))});
+}
+
+LV gantt_interval_record(const model::GanttInterval& interval, std::uint64_t pair,
+                         std::size_t ordinal) {
+    const LV color = list({raw("4"), raw("4"), list({raw("0")}), raw("4")});
+    return list({raw("5"), raw(std::to_string(pair)),
+        raw(value_codec::date_to_platform(interval.start_date.canonical)),
+        raw(value_codec::date_to_platform(interval.end_date.canonical)), encoded_localized(interval.text),
+        list({string_value("U")}), color, raw(std::to_string(ordinal)), color});
+}
+
+LV gantt_next_table() {
+    return list({raw("3"), raw("0"), raw("1"),
+        list({raw("8"), raw("30"), raw("1"), raw("1"),
+            list({raw("4"), raw("0"), list({raw("0")}), raw("2"), raw("1"), raw("0"),
+                raw("e5cabe59-d992-4d31-8086-3116931aff81"), raw("0")}),
+            list({raw("4"), raw("0"), list({raw("12632256")}), raw("0")}), raw("3"),
+            list({raw("1"), raw("0")}), list({raw("0"), list({raw("1"), raw("0"), raw("0")})}),
+            list({raw("4"), raw("4"), list({raw("0")}), raw("4")}),
+            list({raw("4"), raw("4"), list({raw("0")}), raw("4")}), raw("1")}),
+        raw("0"), list({raw("4"), raw("3"), list({raw("-10")}), raw("3")}),
+        list({raw("4"), raw("3"), list({raw("-3")}), raw("3")}), raw("0")});
+}
+
+LV encode_gantt_chart_info(const model::ControlNode& control) {
+    const auto* data = std::get_if<model::GanttChartPayload>(&control.payload);
+    if (!data) fail("OOF1122", "$/GanttChart", "GanttChartPayload", "different payload", "Gantt payload is invalid");
+    if (std::ranges::any_of(data->series, [](const auto& item) { return item.color.has_value(); }) ||
+        std::ranges::any_of(data->points, [](const auto& item) { return item.color.has_value(); }))
+        fail("OOF1122", "$/GanttChart/Color", "no explicit Series or Point Color until native mapping is proven", "explicit Color", "Gantt dimension colors are not supported by the proven storage profile");
+    std::map<std::uint64_t, std::size_t> pair_ordinals;
+    std::map<std::uint64_t, bool> pairs;
+    for (const auto& interval : data->intervals) {
+        const auto point = interval.point_ref.value();
+        const auto series = interval.series_ref.value();
+        if (point > UINT32_MAX || series > UINT32_MAX)
+            fail("OOF1122", "$/GanttChart/Intervals", "dimension IDs within uint32", "ID overflow", "Gantt pair key cannot represent this ID");
+        ++pair_ordinals[(point << 32) | series];
+        pairs.emplace((point << 32) | series, true);
+    }
+    const std::size_t n = data->intervals.size(), u = pairs.size();
+    if (n > UINT32_MAX || u > UINT32_MAX)
+        fail("OOF1112", "$/GanttChart/Intervals", "interval and pair counts within uint32", "count overflow", "Gantt data count is too large");
+    if (n > (std::numeric_limits<std::size_t>::max() - 33) / 2 ||
+        u > (std::numeric_limits<std::size_t>::max() - 33 - 2 * n) / 2)
+        fail("OOF1112", "$/GanttChart/Intervals", "safe dynamic count arithmetic", "overflow", "Gantt data is too large");
+    LV base = canonical_empty_gantt_info();
+    require_arity(base, 33, "$/GanttChart/InfoDefaults");
+    base.items[2] = gantt_dimension_table(*data, true);
+    base.items[3] = gantt_dimension_table(*data, false);
+    base.items[4] = raw(std::to_string(n));
+    std::vector<LV> items(base.items.begin(), base.items.begin() + 5);
+    pair_ordinals.clear();
+    for (const auto& interval : data->intervals) {
+        const auto pair = (interval.point_ref.value() << 32) | interval.series_ref.value();
+        items.push_back(raw(std::to_string(pair)));
+        items.push_back(gantt_interval_record(interval, pair, ++pair_ordinals[pair]));
+    }
+    items.push_back(raw(std::to_string(u)));
+    const LV color = list({raw("4"), raw("4"), list({raw("0")}), raw("4")});
+    for (const auto& [pair, unused] : pairs) {
+        static_cast<void>(unused);
+        items.push_back(raw(std::to_string(pair)));
+        items.push_back(list({raw("4"), raw(std::to_string(pair)), list({raw("1"), raw("0")}),
+            list({string_value("U")}), raw("0"), color, color, color, color,
+            list({raw("0"), raw("1"), raw("0"), raw("0"), raw("0")}), raw("0")}));
+    }
+    items.push_back(raw("1"));
+    items.push_back(gantt_next_table());
+    items.insert(items.end(), base.items.begin() + 8, base.items.end());
+    LV info = list(std::move(items));
+    const std::size_t shift = 2 * n + 2 * u;
+    bool auto_full = true;
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("AutoFullInterval"))) {
+        const auto* value = std::get_if<bool>(&entry->value);
+        if (!value) fail("OOF1122", "$/GanttChart/AutoFullInterval", "Boolean", "different value", "Gantt AutoFullInterval is invalid");
+        auto_full = *value;
+    }
+    const bool has_begin = control.properties().find(model::PropertyId::from_name("FullIntervalBegin")) != nullptr;
+    const bool has_end = control.properties().find(model::PropertyId::from_name("FullIntervalEnd")) != nullptr;
+    if (auto_full && (has_begin || has_end))
+        fail("OOF1122", "$/GanttChart/FullInterval", "omitted explicit bounds when AutoFullInterval is true",
+            "explicit bounds", "Gantt storage cannot prove round-trip of explicit bounds in automatic mode");
+    info.items.at(11 + shift) = raw(auto_full ? "1" : "0");
+    for (const auto [name, slot] : {std::pair<std::string_view, std::size_t>{"FullIntervalBegin", 12}, {"FullIntervalEnd", 13}}) {
+        const auto* entry = control.properties().find(model::PropertyId::from_name(name));
+        if (entry != nullptr) {
+            const auto* date = std::get_if<model::DateValue>(&entry->value);
+            if (!date) fail("OOF1122", "$/GanttChart/" + std::string(name), "DateValue", "different value", "Gantt date property is invalid");
+            info.items.at(slot + shift) = raw(value_codec::date_to_platform(date->canonical));
+        }
+    }
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("FullIntervalBegin"))) {
+        const auto* date = std::get_if<model::DateValue>(&entry->value);
+        if (!date) fail("OOF1122", "$/GanttChart/FullIntervalBegin", "DateValue", "different value", "Gantt date property is invalid");
+        info.items.at(14 + shift) = raw(value_codec::date_to_platform(date->canonical));
+    }
+    if (info.items.size() != 33 + shift)
+        fail("OOF1114", "$/GanttChart/Info", "33 + 2*N + 2*U slots", std::to_string(info.items.size()), "Gantt cursor invariant failed");
+    return info;
+}
+
+std::vector<std::tuple<model::ObjectId, std::string, std::string>> decode_gantt_dimensions(
+    const LV& table, bool points, std::string_view path) {
+    require_arity(table, 2, path);
+    require_raw_constant(table.items[0], points ? "1" : "0", child_path(path, 0));
+    const std::string rows_path = child_path(path, 1);
+    const LV& rows = table.items[1];
+    require_list(rows, rows_path);
+    if (rows.items.size() < 8)
+        fail("OOF1103", rows_path, "Gantt table header and default row", describe(rows), "Gantt dimension table is truncated");
+    require_raw_constant(rows.items[0], "3", child_path(rows_path, 0));
+    require_raw_constant(rows.items[1], "0", child_path(rows_path, 1));
+    const auto declared = integer_atom<std::uint32_t>(rows.items[2], child_path(rows_path, 2));
+    if (declared == 0) fail("OOF1103", child_path(rows_path, 2), "dimension count including default row", "0", "Gantt dimension table is empty");
+    const std::size_t count = declared - 1;
+    if (count > (std::numeric_limits<std::size_t>::max() - 8) / 2)
+        fail("OOF1102", rows_path, "safe dimension count", std::to_string(count), "Gantt dimension count overflows its record layout");
+    if (rows.items.size() != 8 + 2 * count)
+        fail("OOF1102", rows_path, "dimension rows matching declared count", describe(rows), "Gantt dimension table count is inconsistent");
+    std::map<std::uint64_t, std::tuple<model::ObjectId, std::string, std::string, std::uint64_t>> by_id;
+    std::set<std::uint64_t> referenced;
+    for (std::size_t i = 0; i < count; ++i) {
+        const std::size_t cursor = 3 + 2 * i;
+        const auto key = integer_atom<std::uint64_t>(rows.items[cursor], child_path(rows_path, cursor));
+        const LV& row = rows.items[cursor + 1];
+        require_arity(row, points ? 4 : 2, child_path(rows_path, cursor + 1));
+        require_raw_constant(row.items[0], points ? "2" : "3", child_path(rows_path, cursor + 1) + "/0");
+        const LV& value = row.items[1];
+        require_arity(value, 11, child_path(rows_path, cursor + 1) + "/1");
+        require_raw_constant(value.items[0], "8", child_path(rows_path, cursor + 1) + "/1/0");
+        if (integer_atom<std::uint64_t>(value.items[1], child_path(rows_path, cursor + 1) + "/1/1") != key)
+            fail("OOF1114", child_path(rows_path, cursor), std::to_string(key), describe(value), "Gantt dimension key differs from its native row ID");
+        const auto next = integer_atom<std::uint64_t>(value.items[4], child_path(rows_path, cursor + 1) + "/1/4");
+        if (next != 0 && !referenced.insert(next).second)
+            fail("OOF1114", child_path(rows_path, cursor + 1) + "/1/4", "unique next ID", std::to_string(next), "Gantt dimension chain branches");
+        const LV& stored_value = value.items[6];
+        require_arity(stored_value, 2, child_path(rows_path, cursor + 1) + "/1/6");
+        if (string_atom(stored_value.items[0], child_path(rows_path, cursor + 1) + "/1/6/0") != "S")
+            fail("OOF1114", child_path(rows_path, cursor + 1) + "/1/6/0", "String value marker S", describe(stored_value.items[0]), "Gantt dimension value type is unsupported");
+        const std::string dimension_value = string_atom(stored_value.items[1], child_path(rows_path, cursor + 1) + "/1/6/1");
+        const std::string dimension_text = decoded_single_language_text(value.items[7], child_path(rows_path, cursor + 1) + "/1/7");
+        if (points)
+            require_exact(row.items[2], list({raw("4"), raw("0"), list({raw("0")}), string_value(""), raw("-1"), raw("-1"), raw("1"), raw("0"), string_value("")}),
+                child_path(rows_path, cursor + 1) + "/2", "Gantt Point private row defaults differ from the proven profile");
+        if (!by_id.emplace(key, std::make_tuple(model::ObjectId{key}, dimension_value, dimension_text, next)).second)
+            fail("OOF1114", child_path(rows_path, cursor), "unique Gantt dimension ID", std::to_string(key), "Gantt dimension ID is duplicated");
+    }
+    const std::size_t default_cursor = 3 + 2 * count;
+    require_raw_constant(rows.items[default_cursor], "0", child_path(rows_path, default_cursor));
+    require_raw_constant(rows.items[default_cursor + 3], "1", child_path(rows_path, default_cursor + 3));
+    require_raw_constant(rows.items[default_cursor + 4], "0", child_path(rows_path, default_cursor + 4));
+    const auto palette_path = child_path(rows_path, default_cursor + 2);
+    const LV& palette = rows.items[default_cursor + 2];
+    require_list(palette, palette_path);
+    const std::size_t expected_palette = 2 * count + 1;
+    require_arity(palette, 2 + expected_palette, palette_path);
+    require_raw_constant(palette.items[0], "0", child_path(palette_path, 0));
+    if (integer_atom<std::uint32_t>(palette.items[1], child_path(palette_path, 1)) != expected_palette)
+        fail("OOF1114", child_path(palette_path, 1), std::to_string(expected_palette), describe(palette.items[1]), "Gantt palette count is inconsistent");
+    std::uint64_t first = 0;
+    for (const auto& [key, item] : by_id) {
+        if (!referenced.contains(key)) {
+            if (first != 0) fail("OOF1114", rows_path, "one head for Gantt dimension chain", std::to_string(key), "Gantt dimension chain has multiple heads");
+            first = key;
+        }
+    }
+    std::vector<std::tuple<model::ObjectId, std::string, std::string>> output;
+    std::set<std::uint64_t> visited;
+    while (first != 0) {
+        const auto found = by_id.find(first);
+        if (found == by_id.end() || !visited.insert(first).second)
+            fail("OOF1114", rows_path, "acyclic Gantt dimension next chain", std::to_string(first), "Gantt dimension chain is dangling or cyclic");
+        output.emplace_back(std::get<0>(found->second), std::get<1>(found->second), std::get<2>(found->second));
+        first = std::get<3>(found->second);
+    }
+    if (visited.size() != count) fail("OOF1114", rows_path, "all Gantt dimensions reachable from chain head", std::to_string(visited.size()), "Gantt dimension rows are unlinked");
+    return output;
+}
+
+void require_gantt_dimension_table_match(const LV& actual, const LV& expected,
+                                         std::string_view path) {
+    require_arity(actual, 2, path);
+    require_arity(expected, 2, path);
+    if (list_stream::dump_compact(actual.items[0]) != list_stream::dump_compact(expected.items[0]))
+        fail("OOF1114", child_path(path, 0), list_stream::dump_compact(expected.items[0]),
+            list_stream::dump_compact(actual.items[0]), "Gantt dimension kind changed");
+    const LV& actual_rows = actual.items[1];
+    const LV& expected_rows = expected.items[1];
+    require_list(actual_rows, child_path(path, 1));
+    require_list(expected_rows, child_path(path, 1));
+    if (actual_rows.items.size() < 8 || expected_rows.items.size() < 8)
+        fail("OOF1103", child_path(path, 1), "Gantt dimension table with header and default row", "truncated", "Gantt dimension table is truncated");
+    const auto count = integer_atom<std::uint32_t>(expected_rows.items[2], child_path(path, 1) + "/2") - 1;
+    if (actual_rows.items.size() != 8 + 2 * count || expected_rows.items.size() != 8 + 2 * count)
+        fail("OOF1102", child_path(path, 1), std::to_string(8 + 2 * count),
+            std::to_string(actual_rows.items.size()), "Gantt dimension row count differs from its canonical table");
+    for (std::size_t i = 0; i < 3; ++i) {
+        if (list_stream::dump_compact(actual_rows.items[i]) != list_stream::dump_compact(expected_rows.items[i]))
+            fail("OOF1114", child_path(path, 1) + "/" + std::to_string(i),
+                list_stream::dump_compact(expected_rows.items[i]), list_stream::dump_compact(actual_rows.items[i]),
+                "Gantt dimension table header differs from its canonical value");
+    }
+    const auto keyed_rows = [&](const LV& rows, std::string_view rows_path) {
+        std::map<std::uint64_t, std::string> by_key;
+        for (std::size_t i = 0; i < count; ++i) {
+            const auto cursor = 3 + 2 * i;
+            const auto key = integer_atom<std::uint64_t>(rows.items[cursor], child_path(rows_path, cursor));
+            if (!by_key.emplace(key, list_stream::dump_compact(rows.items[cursor + 1])).second)
+                fail("OOF1114", child_path(rows_path, cursor), "unique dimension ID", std::to_string(key), "Gantt dimension ID is duplicated");
+        }
+        return by_key;
+    };
+    const auto actual_by_key = keyed_rows(actual_rows, child_path(path, 1));
+    const auto expected_by_key = keyed_rows(expected_rows, child_path(path, 1));
+    if (actual_by_key != expected_by_key)
+        fail("OOF1114", child_path(path, 1), "same named row records by dimension ID", "row content differs", "Gantt dimension row differs from its canonical named value");
+    const std::size_t tail = 3 + 2 * count;
+    for (std::size_t i = tail; i < actual_rows.items.size(); ++i) {
+        if (list_stream::dump_compact(actual_rows.items[i]) != list_stream::dump_compact(expected_rows.items[i]))
+            fail("OOF1114", child_path(path, 1) + "/" + std::to_string(i),
+                list_stream::dump_compact(expected_rows.items[i]), list_stream::dump_compact(actual_rows.items[i]),
+                "Gantt dimension defaults or palette differ from the proven profile");
+    }
+}
+
+void normalize_gantt_runtime_layout_values(const LV& actual, LV& normalized, std::string_view path) {
+    constexpr std::array<std::size_t, 8> platform_adjusted_slots{102, 104, 106, 107, 167, 169, 171, 172};
+    const std::string section_path = child_path(path, 1) + "/2";
+    const LV& actual_section = at(at(actual, 1, path), 2, child_path(path, 1));
+    LV& normalized_section = normalized.items.at(1).items.at(2);
+    require_arity(actual_section, 222, section_path);
+    require_arity(normalized_section, 222, section_path);
+    for (const std::size_t slot : platform_adjusted_slots) {
+        const auto slot_path = child_path(section_path, slot);
+        const std::string value = raw_atom(actual_section.items[slot], slot_path);
+        double parsed = 0.0;
+        const auto result = std::from_chars(value.data(), value.data() + value.size(), parsed,
+            std::chars_format::general);
+        if (value.empty() || result.ec != std::errc{} || result.ptr != value.data() + value.size() ||
+            !std::isfinite(parsed) || parsed < 0.0 || parsed > 1.0) {
+            fail("OOF1114", slot_path, "finite raw numeric layout value in [0,1]", value,
+                "Gantt platform-adjusted layout value is outside the verified numeric domain");
+        }
+        normalized_section.items[slot] = actual_section.items[slot];
+    }
+}
+
+
+DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
+                                  const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::gantt_chart);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    const LV& info = record.items[2];
+    const std::string info_path = child_path(path, 2);
+    require_list(info, info_path);
+    if (info.items.size() < 33) fail("OOF1103", info_path, "at least 33 Gantt info fields", describe(info), "Gantt info record is truncated");
+    require_raw_constant(info.items[0], "19", child_path(info_path, 0));
+    const auto interval_count = integer_atom<std::uint32_t>(info.items[4], child_path(info_path, 4));
+    const auto points = decode_gantt_dimensions(info.items[2], true, child_path(info_path, 2));
+    const auto series = decode_gantt_dimensions(info.items[3], false, child_path(info_path, 3));
+    const std::size_t n = interval_count;
+    if (n > (std::numeric_limits<std::size_t>::max() - 33) / 2)
+        fail("OOF1102", child_path(info_path, 4), "safe interval count", std::to_string(n), "Gantt interval count overflows its record layout");
+    const std::size_t interval_cursor = 5;
+    if (info.items.size() < interval_cursor + 2 * n + 1)
+        fail("OOF1103", info_path, "interval rows and pair count", describe(info), "Gantt dynamic section is truncated");
+    std::set<std::uint64_t> point_ids;
+    std::set<std::uint64_t> series_ids;
+    for (const auto& point : points) point_ids.insert(std::get<0>(point).value());
+    for (const auto& item : series) series_ids.insert(std::get<0>(item).value());
+    model::GanttChartPayload payload;
+    for (const auto& [item_id, value, text] : series) {
+        payload.series.push_back({item_id, value, text, std::nullopt});
+    }
+    for (const auto& [item_id, value, text] : points) {
+        payload.points.push_back({item_id, value, text, std::nullopt});
+    }
+    std::map<std::uint64_t, std::size_t> pair_ordinals;
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto cursor = interval_cursor + 2 * i;
+        const auto pair = integer_atom<std::uint64_t>(info.items[cursor], child_path(info_path, cursor));
+        const auto point = pair >> 32;
+        const auto item_series = pair & 0xffffffffu;
+        if (!point_ids.contains(point) || !series_ids.contains(item_series))
+            fail("OOF1114", child_path(info_path, cursor), "pair key references known Point and Series IDs", std::to_string(pair), "Gantt interval refers to an unknown dimension");
+        const LV& interval = info.items[cursor + 1];
+        const auto interval_path = child_path(info_path, cursor + 1);
+        require_arity(interval, 9, interval_path);
+        require_raw_constant(interval.items[0], "5", child_path(interval_path, 0));
+        if (integer_atom<std::uint64_t>(interval.items[1], child_path(interval_path, 1)) != pair)
+            fail("OOF1114", child_path(interval_path, 1), std::to_string(pair), describe(interval.items[1]), "Gantt interval pair key does not match its record");
+        const std::size_t expected_ordinal = ++pair_ordinals[pair];
+        if (integer_atom<std::size_t>(interval.items[7], child_path(interval_path, 7)) != expected_ordinal)
+            fail("OOF1114", child_path(interval_path, 7), std::to_string(expected_ordinal), describe(interval.items[7]), "Gantt interval ordinal is inconsistent");
+        payload.intervals.push_back({model::ObjectId{point}, model::ObjectId{item_series},
+            model::DateValue{value_codec::date_from_platform(raw_atom(interval.items[2], child_path(interval_path, 2)))},
+            model::DateValue{value_codec::date_from_platform(raw_atom(interval.items[3], child_path(interval_path, 3)))},
+            decoded_single_language_text(interval.items[4], child_path(interval_path, 4))});
+    }
+    const std::size_t pair_count_cursor = interval_cursor + 2 * n;
+    const auto pair_count = integer_atom<std::uint32_t>(info.items[pair_count_cursor], child_path(info_path, pair_count_cursor));
+    std::set<std::uint64_t> actual_pairs;
+    for (const auto& [pair, ordinal] : pair_ordinals) { static_cast<void>(ordinal); actual_pairs.insert(pair); }
+    if (pair_count != actual_pairs.size())
+        fail("OOF1114", child_path(info_path, pair_count_cursor), std::to_string(actual_pairs.size()), std::to_string(pair_count), "Gantt pair-value count is inconsistent");
+
+    if (actual_pairs.size() > (std::numeric_limits<std::size_t>::max() - 33 - 2 * n) / 2)
+        fail("OOF1102", child_path(info_path, pair_count_cursor), "safe pair count", std::to_string(actual_pairs.size()), "Gantt pair count overflows its record layout");
+    const std::size_t shift = 2 * n + 2 * actual_pairs.size();
+    if (info.items.size() != 33 + shift)
+        fail("OOF1102", info_path, "33 + 2*N + 2*U fields", std::to_string(info.items.size()), "Gantt dynamic info cursor differs from the supported profile");
+    bool auto_full = bool_atom(info.items[11 + shift], child_path(info_path, 11 + shift));
+    model::ControlNode control{model::ObjectId{id}, "", std::move(payload)};
+    if (!auto_full) control.properties().set_explicit(model::PropertyId::from_name("AutoFullInterval"), false);
+    if (!auto_full) {
+        control.properties().set_explicit(model::PropertyId::from_name("FullIntervalBegin"),
+            model::DateValue{value_codec::date_from_platform(raw_atom(info.items[12 + shift], child_path(info_path, 12 + shift)))});
+        control.properties().set_explicit(model::PropertyId::from_name("FullIntervalEnd"),
+            model::DateValue{value_codec::date_from_platform(raw_atom(info.items[13 + shift], child_path(info_path, 13 + shift)))});
+    }
+    const LV expected = encode_gantt_chart_info(control);
+    require_gantt_dimension_table_match(info.items[2], expected.items[2], child_path(info_path, 2));
+    require_gantt_dimension_table_match(info.items[3], expected.items[3], child_path(info_path, 3));
+    LV normalized = info;
+    normalized.items[2] = expected.items[2];
+    normalized.items[3] = expected.items[3];
+    LV expected_with_platform_layout = expected;
+    normalize_gantt_runtime_layout_values(info, expected_with_platform_layout, info_path);
+    if (list_stream::dump_compact(expected_with_platform_layout) != list_stream::dump_compact(normalized))
+        fail("OOF1114", info_path, "canonical Gantt info generated from named data", "unsupported private settings or table fields", "Gantt info differs from the proven typed storage profile");
+
+    const LV& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty Gantt name", "empty", "Control name is required");
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")} ), metadata_path, "Gantt metadata differs from the supported profile");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "Gantt storage children are unsupported");
+    control.name = name;
+    const auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    control.position = geometry.position;
+    return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
+}
 
 DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context) {
     require_arity(record, 6, path);
@@ -4893,6 +5377,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                         }
                     } else if (guid == track_bar_descriptor.guid) {
                         child = decode_track_bar(record, record_path, context);
+                    } else if (guid == model::metamodel::descriptor_for(model::ControlKind::gantt_chart).guid) {
+                        child = decode_gantt_chart(record, record_path, context);
                     } else if (guid == panel_descriptor.guid) {
                         require_arity(record, 6, record_path);
                         const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -5238,6 +5724,22 @@ Result<list_stream::ListValue> encode_document(
                 LV record;
                 if (control->kind() == model::ControlKind::command_bar) {
                     record = encode_command_bar(document, *control, context);
+                } else if (control->kind() == model::ControlKind::gantt_chart) {
+                    if (control->id.value() == 0 || control->id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
+                        control->name.empty() || control->data_path || !control->children.empty() || !control->events.empty() ||
+                        !control->extension_properties.empty() || control->position.default_control.is_explicit() ||
+                        control->position.tab_order.is_explicit() || control->position.z_order.is_explicit() ||
+                        control->position.collapse.is_explicit() || !control->position.bindings.dimensions.empty())
+                        fail("OOF1122", child_path(path, ordinal), "childless GanttChart with basic Position", control->name,
+                            "GanttChart uses an unsupported storage concept");
+                    require_allowed_properties(control->properties(), {"AutoFullInterval", "FullIntervalBegin", "FullIntervalEnd"},
+                        child_path(path, ordinal) + "/GanttChart");
+                    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::gantt_chart);
+                    record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),
+                        encode_gantt_chart_info(*control),
+                        encode_geometry(control->position, context, IncomingAnchorLists{}),
+                        list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+                        list({raw("0")})});
                 } else if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
                 } else if (control->kind() == model::ControlKind::usual_group) {
@@ -5301,7 +5803,7 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "UsualGroup, Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, TrackBar, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "UsualGroup, Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, GanttChart, InputField, CheckBox, ProgressBar, TrackBar, or Panel", control->name,
                         "Control payload is unsupported");
                 }
                 if (control->data_path) {

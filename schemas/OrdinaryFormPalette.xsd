@@ -432,6 +432,9 @@
               <Property name="PeriodicVariantRepetition" apiName="PeriodicVariantRepetition" russianName="КратностьПериодическогоВарианта" russianType="Число" valueCodec="decimal"/>
               <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" valueCodec="decimal"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="AutoFullInterval" apiName="AutoFullInterval" russianName="АвтоОпределениеПолногоИнтервала" russianType="Булево" valueCodec="boolean"/>
+              <Property name="FullIntervalBegin" apiName="FullIntervalBegin" russianName="НачалоПолногоИнтервала" russianType="Дата" valueCodec="date"/>
+              <Property name="FullIntervalEnd" apiName="FullIntervalEnd" russianName="КонецПолногоИнтервала" russianType="Дата" valueCodec="date"/>
             </Properties>
             <Events>
               <Event name="OnIntervalEditEnd" apiName="OnIntervalEditEnd" russianName="ПриОкончанииРедактированияИнтервала"/>
@@ -1038,6 +1041,15 @@
           <Property name="Text" russianName="Текст"/><Property name="Explanation" russianName="Пояснение"/><Property name="ToolTip" russianName="Подсказка"/>
           <Property name="Enabled" russianName="Доступность"/><Property name="Checked" russianName="Пометка"/><Property name="ChangesData" russianName="ИзменяетДанные"/>
           <Property name="Representation" russianName="Отображение"/><Property name="Shortcut" russianName="СочетаниеКлавиш"/><Property name="Picture" russianName="Картинка"/><Property name="Action" russianName="Действие"/><Property name="Order" russianName="ПорядокКнопок"/><Property name="Buttons" russianName="Кнопки"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="GanttSeries" russianName="СерияДиаграммыГанта"><Properties>
+          <Property name="Value" russianName="Значение" russianType="Строка"/><Property name="Text" russianName="Текст" russianType="Строка"/><Property name="Color" russianName="Цвет" russianType="Цвет"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="GanttPoint" russianName="ТочкаДиаграммыГанта"><Properties>
+          <Property name="Value" russianName="Значение" russianType="Строка"/><Property name="Text" russianName="Текст" russianType="Строка"/><Property name="Color" russianName="Цвет" russianType="Цвет"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="GanttInterval" russianName="ИнтервалДиаграммыГанта"><Properties>
+          <Property name="pointRef" russianName="Точка"/><Property name="seriesRef" russianName="Серия"/><Property name="StartDate" russianName="Начало" russianType="Дата"/><Property name="EndDate" russianName="Окончание" russianType="Дата"/><Property name="Text" russianName="Текст" russianType="Строка"/>
         </Properties></NamedConcept>
       </Palette>
     </xs:appinfo>

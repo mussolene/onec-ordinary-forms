@@ -2,14 +2,18 @@
 
 #include <array>
 #include <algorithm>
+#include <charconv>
+#include <cstdint>
 #include <functional>
 #include <limits>
 #include <set>
+#include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "oof/model/metamodel.hpp"
+#include "oof/storage/value_codec.hpp"
 
 namespace oof::model {
 namespace {
@@ -795,6 +799,68 @@ ValidationReport OrdinaryFormDocument::validate() const {
         validate_position(control.id, control.position);
         if (control.data_path.has_value()) {
             require_attribute(control.id, control.data_path->attribute);
+        }
+        if (const auto* gantt = std::get_if<GanttChartPayload>(&control.payload)) {
+            const auto invalid_gantt = [&](std::string message) {
+                add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(message));
+            };
+            std::unordered_set<std::uint64_t> series_ids;
+            std::unordered_set<std::uint64_t> point_ids;
+            for (const auto& item : gantt->series) {
+                if (!item.id || !series_ids.insert(item.id.value()).second) {
+                    invalid_gantt("Gantt Series IDs must be non-empty and unique in their domain");
+                }
+            }
+            for (const auto& item : gantt->points) {
+                if (!item.id || !point_ids.insert(item.id.value()).second) {
+                    invalid_gantt("Gantt Point IDs must be non-empty and unique in their domain");
+                }
+            }
+            const auto platform_date_key = [](const DateValue& date) {
+                const std::string encoded = storage::value_codec::date_to_platform(date.canonical);
+                std::uint64_t key = 0;
+                const auto parsed = std::from_chars(encoded.data(), encoded.data() + encoded.size(), key, 10);
+                if (encoded.empty() || parsed.ec != std::errc{} || parsed.ptr != encoded.data() + encoded.size())
+                    throw std::invalid_argument("invalid encoded platform date");
+                return key;
+            };
+            for (const auto& interval : gantt->intervals) {
+                if (!series_ids.contains(interval.series_ref.value()) || !point_ids.contains(interval.point_ref.value())) {
+                    invalid_gantt("Gantt Interval references must resolve to a Series and Point in the same control");
+                }
+                try {
+                    if (platform_date_key(interval.start_date) > platform_date_key(interval.end_date)) {
+                        invalid_gantt("Gantt Interval start date must not follow its end date");
+                    }
+                } catch (const std::exception&) {
+                    invalid_gantt("Gantt Interval dates must be valid local date-times");
+                }
+            }
+            bool auto_full_interval = true;
+            const auto* auto_entry = control.properties().find(PropertyId::from_name("AutoFullInterval"));
+            if (auto_entry != nullptr) {
+                if (const auto* value = std::get_if<bool>(&auto_entry->value)) auto_full_interval = *value;
+            }
+            const auto date_property = [&](std::string_view name) -> const DateValue* {
+                const auto* entry = control.properties().find(PropertyId::from_name(name));
+                return entry == nullptr ? nullptr : std::get_if<DateValue>(&entry->value);
+            };
+            const DateValue* begin = date_property("FullIntervalBegin");
+            const DateValue* end = date_property("FullIntervalEnd");
+            if (!auto_full_interval && (begin == nullptr || end == nullptr)) {
+                invalid_gantt("Manual Gantt full interval requires both FullIntervalBegin and FullIntervalEnd");
+            }
+            std::optional<std::uint64_t> begin_key;
+            std::optional<std::uint64_t> end_key;
+            try {
+                if (begin != nullptr) begin_key = platform_date_key(*begin);
+                if (end != nullptr) end_key = platform_date_key(*end);
+            } catch (const std::exception&) {
+                invalid_gantt("Gantt full interval properties must be valid local date-times");
+            }
+            if (begin_key.has_value() && end_key.has_value() && *begin_key >= *end_key) {
+                invalid_gantt("Gantt FullIntervalBegin must precede FullIntervalEnd");
+            }
         }
         validate_property_set(
             control.id,
