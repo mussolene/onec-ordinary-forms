@@ -1,4 +1,5 @@
 find_package(LibXml2 REQUIRED)
+find_package(ZLIB REQUIRED)
 
 function(oof_enable_project_warnings target_name)
   if(MSVC)
@@ -36,7 +37,7 @@ target_include_directories(
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
 )
 oof_enable_project_warnings(liboof)
-target_link_libraries(liboof PRIVATE LibXml2::LibXml2)
+target_link_libraries(liboof PRIVATE LibXml2::LibXml2 ZLIB::ZLIB)
 
 add_executable(oof src/cli/main.cpp)
 set_target_properties(

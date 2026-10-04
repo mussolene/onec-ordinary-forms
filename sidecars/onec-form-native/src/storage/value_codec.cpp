@@ -3,6 +3,8 @@
 #include "oof/model/metamodel.hpp"
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <cstdint>
 #include <cmath>
 #include <limits>
@@ -22,6 +24,8 @@ constexpr std::uint32_t shortcut_version = 0;
 constexpr std::uint32_t shortcut_allowed_flags = 16U | 8U | 4U;
 constexpr std::string_view type_domain_root = "Pattern";
 constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
+constexpr std::string_view value_list_type_uuid = "4772b3b4-f4a3-49c0-a1a5-8cb5961511a3";
+constexpr std::string_view value_table_type_uuid = "acf6192e-81ca-46ef-93a6-5a6968b78663";
 
 std::string_view term_token(model::TypeDomainTerm term) {
     switch (term) {
@@ -43,6 +47,10 @@ std::string_view term_token(model::TypeDomainTerm term) {
             return "S";
         case model::TypeDomainTerm::type:
             return "T";
+        case model::TypeDomainTerm::value_list:
+            return "#";
+        case model::TypeDomainTerm::value_table:
+            return "#";
     }
     throw std::runtime_error("unsupported type-domain term");
 }
@@ -163,6 +171,60 @@ std::string encode_value(const Value& value, Write&& write) {
 
 }  // namespace
 
+namespace {
+void validate_date_parts(std::string_view digits) {
+    if (digits.size() != 14 || !std::ranges::all_of(digits, [](unsigned char ch) {
+            return ch >= '0' && ch <= '9';
+        })) {
+        throw std::runtime_error("date must use local second-precision YYYYMMDDHHMMSS without a timezone or fraction");
+    }
+    std::array<int, 6> parts{};
+    constexpr std::array<std::size_t, 6> offsets{0, 4, 6, 8, 10, 12};
+    constexpr std::array<std::size_t, 6> widths{4, 2, 2, 2, 2, 2};
+    for (std::size_t i = 0; i < parts.size(); ++i) {
+        const auto result = std::from_chars(digits.data() + offsets[i],
+            digits.data() + offsets[i] + widths[i], parts[i]);
+        if (result.ec != std::errc{}) throw std::runtime_error("date contains an invalid numeric field");
+    }
+    const auto [year, month, day, hour, minute, second] = parts;
+    constexpr std::array<int, 12> month_days{31,28,31,30,31,30,31,31,30,31,30,31};
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    const int max_day = month >= 1 && month <= 12
+        ? month_days[static_cast<std::size_t>(month - 1)] + (month == 2 && leap ? 1 : 0) : 0;
+    if (year < 1 || year > 9999 || day < 1 || day > max_day ||
+        hour > 23 || minute > 59 || second > 59) {
+        throw std::runtime_error("date is outside the supported Gregorian calendar fields");
+    }
+}
+}  // namespace
+
+std::string date_to_platform(std::string_view canonical) {
+    if (canonical.size() != 19 || canonical[4] != '-' || canonical[7] != '-' ||
+        canonical[10] != 'T' || canonical[13] != ':' || canonical[16] != ':') {
+        throw std::runtime_error("date must be YYYY-MM-DDTHH:MM:SS without a timezone or fraction");
+    }
+    std::string digits;
+    digits.reserve(14);
+    for (const auto index : {0U, 1U, 2U, 3U, 5U, 6U, 8U, 9U, 11U, 12U, 14U, 15U, 17U, 18U}) {
+        digits.push_back(canonical[index]);
+    }
+    validate_date_parts(digits);
+    return digits;
+}
+
+std::string date_from_platform(std::string_view atom) {
+    validate_date_parts(atom);
+    std::string result;
+    result.reserve(19);
+    result.append(atom.substr(0, 4)); result.push_back('-');
+    result.append(atom.substr(4, 2)); result.push_back('-');
+    result.append(atom.substr(6, 2)); result.push_back('T');
+    result.append(atom.substr(8, 2)); result.push_back(':');
+    result.append(atom.substr(10, 2)); result.push_back(':');
+    result.append(atom.substr(12, 2));
+    return result;
+}
+
 void write_localized_string(
     list_stream::ListOutStream& out,
     const model::LocalizedStringValue& value) {
@@ -267,6 +329,24 @@ void write_type_domain(
                     out.write_guid(entry.type_uuid->canonical);
                 }
                 break;
+            case model::TypeDomainTerm::value_list:
+                if (entry.type_uuid.has_value() || entry.numeric != model::NumericQualifiers{} ||
+                    entry.string != model::LengthQualifiers{} ||
+                    entry.binary != model::LengthQualifiers{} ||
+                    entry.date != model::DateQualifiers{}) {
+                    throw std::runtime_error("ValueList type-domain term cannot carry UUID or qualifiers");
+                }
+                out.write_guid(std::string(value_list_type_uuid));
+                break;
+            case model::TypeDomainTerm::value_table:
+                if (entry.type_uuid.has_value() || entry.numeric != model::NumericQualifiers{} ||
+                    entry.string != model::LengthQualifiers{} ||
+                    entry.binary != model::LengthQualifiers{} ||
+                    entry.date != model::DateQualifiers{}) {
+                    throw std::runtime_error("ValueTable type-domain term cannot carry UUID or qualifiers");
+                }
+                out.write_guid(std::string(value_table_type_uuid));
+                break;
             case model::TypeDomainTerm::numeric:
                 if (entry.numeric.length != 0 || entry.numeric.precision != 0 ||
                     entry.numeric.non_negative) {
@@ -321,8 +401,21 @@ model::TypeDomainPatternValue read_type_domain(list_stream::ListInStream& in) {
             case model::TypeDomainTerm::unknown:
                 if (in.has_next()) {
                     entry.type_uuid = model::UuidValue{in.read_guid()};
+                    if (entry.term == model::TypeDomainTerm::unknown &&
+                        entry.type_uuid->canonical == value_list_type_uuid) {
+                        entry.term = model::TypeDomainTerm::value_list;
+                        entry.type_uuid.reset();
+                    } else if (entry.term == model::TypeDomainTerm::unknown &&
+                        entry.type_uuid->canonical == value_table_type_uuid) {
+                        entry.term = model::TypeDomainTerm::value_table;
+                        entry.type_uuid.reset();
+                    }
                 }
                 break;
+            case model::TypeDomainTerm::value_list:
+                throw std::runtime_error("ValueList uses the platform unknown type token");
+            case model::TypeDomainTerm::value_table:
+                throw std::runtime_error("ValueTable uses the platform unknown type token");
             case model::TypeDomainTerm::numeric:
                 if (in.has_next()) {
                     entry.numeric.length = in.read_uint32();

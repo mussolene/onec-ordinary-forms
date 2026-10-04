@@ -35,6 +35,13 @@ void test_descriptors() {
 
     const auto descriptors = control_descriptors();
     expect(descriptors.size() == 26, "metamodel must contain exactly 26 descriptors");
+    const auto* begin_period = find_property(ControlKind::calendar_field, "BeginOfDisplayPeriod");
+    expect(begin_period != nullptr && begin_period->value_codec == ValueCodec::date &&
+               begin_period->persistence == PersistenceClass::persisted_editable &&
+               begin_period->storage_codec == StorageCodec::control_info &&
+               begin_period->default_value.kind == DefaultKind::undefined &&
+               begin_period->default_value.canonical == "undefined",
+        "CalendarField BeginOfDisplayPeriod must be a classified Date property with Undefined default");
 
     std::set<std::string_view> guids;
     std::set<std::string_view> public_names;
@@ -90,6 +97,16 @@ void test_descriptors() {
     expect(
         find_by_russian_name(u8"РамкаГруппы")->kind == ControlKind::usual_group,
         "Russian-name lookup must resolve UsualGroup");
+    const auto* group_enabled = find_property(ControlKind::usual_group, "Enabled");
+    const auto* group_caption = find_property(ControlKind::usual_group, "Caption");
+    const auto* group_tool_tip = find_property(ControlKind::usual_group, "ToolTip");
+    expect(group_enabled && group_enabled->storage_codec == StorageCodec::control_base &&
+               group_enabled->default_value.kind == DefaultKind::boolean && group_enabled->default_value.canonical == "true" &&
+               group_caption && group_caption->storage_codec == StorageCodec::control_info &&
+               group_caption->default_value.kind == DefaultKind::string && group_caption->default_value.canonical.empty() &&
+               group_tool_tip && group_tool_tip->storage_codec == StorageCodec::control_base &&
+               group_tool_tip->default_value.kind == DefaultKind::string && group_tool_tip->default_value.canonical.empty(),
+        "UsualGroup named property descriptors must expose observed storage and defaults");
 
     const auto* horizontal = find_property(ControlKind::button, "HorizontalAlign");
     const auto* vertical = find_property(ControlKind::button, "VerticalAlign");
@@ -122,6 +139,23 @@ void test_descriptors() {
                check_box_font->default_value.kind == DefaultKind::font &&
                check_box_font->default_value.canonical == "automatic",
         "CheckBox Font descriptor must declare its editable automatic Font default");
+    const auto* splitter_orientation = find_property(ControlKind::splitter, "Orientation");
+    const auto* splitter_enabled = find_property(ControlKind::splitter, "Enabled");
+    const auto* splitter_back_color = find_property(ControlKind::splitter, "BackColor");
+    expect(splitter_orientation && splitter_orientation->persistence == PersistenceClass::persisted_editable &&
+               splitter_orientation->storage_codec == StorageCodec::control_info &&
+               splitter_orientation->value_codec == ValueCodec::enumeration &&
+               splitter_orientation->default_value.kind == DefaultKind::enumeration &&
+               splitter_orientation->default_value.canonical == "Auto",
+        "Splitter Orientation descriptor must declare its editable Auto default");
+    expect(splitter_enabled && splitter_enabled->storage_codec == StorageCodec::control_base &&
+               splitter_enabled->default_value.kind == DefaultKind::boolean &&
+               splitter_enabled->default_value.canonical == "true" &&
+               splitter_back_color && splitter_back_color->storage_codec == StorageCodec::control_base &&
+               splitter_back_color->value_codec == ValueCodec::color &&
+               splitter_back_color->default_value.kind == DefaultKind::color &&
+               splitter_back_color->default_value.canonical == "automatic",
+        "Splitter base descriptors must declare proven editable defaults");
     expect(picture_location && picture_location->storage_codec == StorageCodec::control_info &&
                picture_location->default_value.kind == DefaultKind::enumeration &&
                picture_location->default_value.canonical == "Left",
@@ -169,6 +203,13 @@ void test_descriptors() {
                radio_tool_tip->default_value.kind == DefaultKind::string &&
                radio_tool_tip->default_value.canonical.empty(),
         "RadioButton ToolTip must declare its editable empty string default");
+    const auto* html_output = find_property(ControlKind::html_document_field, "Output");
+    expect(html_output && html_output->persistence == PersistenceClass::persisted_editable &&
+               html_output->storage_codec == StorageCodec::control_info &&
+               html_output->value_codec == ValueCodec::enumeration &&
+               html_output->default_value.kind == DefaultKind::enumeration &&
+               html_output->default_value.canonical == "Auto",
+        "HTMLDocumentField Output must declare its editable UseOutput Auto default");
     const auto* picture_enabled = find_property(ControlKind::picture_decoration, "Enabled");
     const auto* picture_tool_tip = find_property(ControlKind::picture_decoration, "ToolTip");
     const auto* picture_value = find_property(ControlKind::picture_decoration, "Picture");
@@ -351,6 +392,40 @@ void test_progress_bar_storage_descriptors() {
         "ProgressBar Step must use named int32 input, observed control-info storage, and default 1");
 }
 
+void test_track_bar_storage_descriptors() {
+    using namespace oof::model::metamodel;
+    const auto* enabled = find_property(ControlKind::track_bar, "Enabled");
+    const auto* tool_tip = find_property(ControlKind::track_bar, "ToolTip");
+    const auto* max_value = find_property(ControlKind::track_bar, "MaxValue");
+    const auto* min_value = find_property(ControlKind::track_bar, "MinValue");
+    const auto* step = find_property(ControlKind::track_bar, "Step");
+    expect(enabled && enabled->persistence == PersistenceClass::persisted_editable &&
+               enabled->storage_codec == StorageCodec::control_info &&
+               enabled->default_value.kind == DefaultKind::boolean &&
+               enabled->default_value.canonical == "true",
+        "TrackBar Enabled must use its observed control-info codec and true default");
+    expect(tool_tip && tool_tip->persistence == PersistenceClass::persisted_editable &&
+               tool_tip->storage_codec == StorageCodec::control_info &&
+               tool_tip->default_value.kind == DefaultKind::string &&
+               tool_tip->default_value.canonical.empty(),
+        "TrackBar ToolTip must use its observed control-info codec and empty default");
+    expect(max_value && max_value->persistence == PersistenceClass::persisted_editable &&
+               max_value->storage_codec == StorageCodec::control_info &&
+               max_value->default_value.kind == DefaultKind::integer &&
+               max_value->default_value.canonical == "100" && max_value->value_codec == ValueCodec::integer32,
+        "TrackBar MaxValue must use named int32 input, observed control-info storage, and default 100");
+    expect(min_value && min_value->persistence == PersistenceClass::persisted_editable &&
+               min_value->storage_codec == StorageCodec::control_info &&
+               min_value->default_value.kind == DefaultKind::integer &&
+               min_value->default_value.canonical == "0" && min_value->value_codec == ValueCodec::integer32,
+        "TrackBar MinValue must use named int32 input, observed control-info storage, and default 0");
+    expect(step && step->persistence == PersistenceClass::persisted_editable &&
+               step->storage_codec == StorageCodec::control_info &&
+               step->default_value.kind == DefaultKind::integer &&
+               step->default_value.canonical == "1" && step->value_codec == ValueCodec::integer32,
+        "TrackBar Step must use named int32 input, observed control-info storage, and default 1");
+}
+
 void test_help_metamodel() {
     using namespace oof::model::metamodel;
 
@@ -387,6 +462,22 @@ void test_help_metamodel() {
     expect(
         property_descriptors(ControlKind::input_field).size() == 45,
         "InputField must retain the exact 45-property TextBox surface");
+    const auto* choice_enabled = find_property(ControlKind::choice_field, "Enabled");
+    const auto* choice_tool_tip = find_property(ControlKind::choice_field, "ToolTip");
+    const auto* choice_list = find_property(ControlKind::choice_field, "ChoiceList");
+    expect(choice_enabled && choice_enabled->persistence == PersistenceClass::persisted_editable &&
+            choice_enabled->storage_codec == StorageCodec::control_base &&
+            choice_enabled->default_value.kind == DefaultKind::boolean &&
+            choice_enabled->default_value.canonical == "true",
+        "ChoiceField Enabled must use the observed true base default");
+    expect(choice_tool_tip && choice_tool_tip->persistence == PersistenceClass::persisted_editable &&
+            choice_tool_tip->storage_codec == StorageCodec::control_base &&
+            choice_tool_tip->default_value.kind == DefaultKind::string &&
+            choice_tool_tip->default_value.canonical.empty(),
+        "ChoiceField ToolTip must use the observed empty base string default");
+    expect(choice_list && choice_list->persistence == PersistenceClass::runtime_only &&
+            choice_list->storage_codec == StorageCodec::none,
+        "ChoiceField ChoiceList must remain runtime-only rather than a persisted XML value");
     expect(
         event_descriptors(ControlKind::input_field).size() == 9,
         "InputField must retain the exact 9-event TextBox surface");
@@ -1049,6 +1140,7 @@ int main() {
         test_standard_picture_descriptor_catalog();
         test_button_alignment_xml_defaults();
         test_progress_bar_storage_descriptors();
+        test_track_bar_storage_descriptors();
         test_help_metamodel();
         test_variant_coverage();
         test_property_default_semantics();

@@ -30,8 +30,24 @@
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="LocalDateValueType">
+    <xs:restriction base="xs:dateTime">
+      <xs:pattern value="[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]"/>
+    </xs:restriction>
+  </xs:simpleType>
+
   <xs:simpleType name="DateValueType">
-    <xs:union memberTypes="xs:dateTime UndefinedValueType"/>
+    <xs:union memberTypes="LocalDateValueType UndefinedValueType"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="CalendarBeginLocalDateValueType">
+    <xs:restriction base="LocalDateValueType">
+      <xs:minExclusive value="0001-01-01T00:00:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="CalendarBeginDateValueType">
+    <xs:union memberTypes="CalendarBeginLocalDateValueType UndefinedValueType"/>
   </xs:simpleType>
 
   <xs:simpleType name="NonEmptyTokenType">
@@ -78,6 +94,8 @@
       <xs:enumeration value="reference"/>
       <xs:enumeration value="string"/>
       <xs:enumeration value="type"/>
+      <xs:enumeration value="valueList"/>
+      <xs:enumeration value="valueTable"/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -1289,6 +1307,10 @@
   <xs:complexType name="DendrogramLinksType"><xs:sequence><xs:element name="Link" type="DendrogramLinkType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
   <xs:complexType name="DendrogramLinkType"><xs:sequence><xs:element name="FirstItem" type="xs:string"/><xs:element name="SecondItem" type="xs:string"/><xs:element name="Title" type="LocalizedStringValueType"/><xs:element name="Distance" type="xs:decimal" minOccurs="0"/></xs:sequence></xs:complexType>
 
+  <xs:simpleType name="SpreadsheetCoordinateType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="4294967295"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:element name="Text" type="xs:string" minOccurs="1" maxOccurs="1"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+
   <xs:complexType name="ControlChildItemsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element ref="Panel"/>
@@ -1642,6 +1664,27 @@
   </xs:complexType>
   <xs:element name="Form" type="FormType"/>
 
+  <xs:complexType name="TableColumnControlType">
+    <xs:sequence>
+      <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="type" type="xs:string" use="required" fixed="InputField"/>
+  </xs:complexType>
+  <xs:complexType name="TableColumnType">
+    <xs:sequence>
+      <xs:element name="DataPath" type="xs:string" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Header" type="LocalizedStringValueType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Control" type="TableColumnControlType" minOccurs="1" maxOccurs="1"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+  </xs:complexType>
+  <xs:complexType name="TableColumnsType">
+    <xs:sequence>
+      <xs:element name="Column" type="TableColumnType" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
   <xs:complexType name="PanelType">
     <xs:sequence>
       <xs:element name="DataPath" type="DataPathType" minOccurs="0" maxOccurs="1"/>
@@ -1848,7 +1891,6 @@
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ChoiceList" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BorderColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonTextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2281,8 +2323,8 @@
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="LargeStep" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MaxValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="MinValue" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MaxValue" type="xs:int" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MinValue" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MarkingAppearance" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
@@ -2292,7 +2334,7 @@
       <xs:element name="TextColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ButtonBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Step" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Step" type="xs:int" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MarkingStep" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="TrackBarEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
@@ -2317,7 +2359,7 @@
       <xs:element name="SelectedDates" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="EndOfDisplayPeriod" type="DateValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="BeginOfDisplayPeriod" type="DateValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="BeginOfDisplayPeriod" type="CalendarBeginDateValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ShowCurrentDate" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="CalendarNavigation" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
@@ -2454,7 +2496,7 @@
       <xs:element name="ChangeSettingOfColumns" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChangePositionOfColumns" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChangeRowSet" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Columns" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Columns" type="TableColumnsType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="InitialTreeView" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="InitialListView" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Footer" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
@@ -2507,6 +2549,7 @@
       <xs:element name="SkipOnInput" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Document" type="SpreadsheetDocumentType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="VerticalScrollBar" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="HorizontalScrollBar" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>

@@ -31,6 +31,7 @@
 
 #include "oof/model/metamodel.hpp"
 #include "oof/source/schema_generator.hpp"
+#include "oof/storage/value_codec.hpp"
 
 namespace oof::source {
 namespace {
@@ -574,7 +575,7 @@ model::CompositeIdValue parse_composite_id(xmlNodePtr node) {
 }
 
 model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr node) {
-    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 9> terms{{
+    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 11> terms{{
         {"unknown", model::TypeDomainTerm::unknown},
         {"list", model::TypeDomainTerm::list},
         {"boolean", model::TypeDomainTerm::boolean},
@@ -584,6 +585,8 @@ model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr 
         {"reference", model::TypeDomainTerm::reference},
         {"string", model::TypeDomainTerm::string},
         {"type", model::TypeDomainTerm::type},
+        {"valueList", model::TypeDomainTerm::value_list},
+        {"valueTable", model::TypeDomainTerm::value_table},
     }};
     const auto found = std::ranges::find(terms, value, &decltype(terms)::value_type::first);
     if (found == terms.end()) {
@@ -955,8 +958,9 @@ model::PropertyValue parse_property_value(
             return parse_formatted_string(node);
         case mm::ValueCodec::date: {
             const std::string text(trim_ascii(node_text(node)));
-            return text == "undefined" ? model::PropertyValue{model::UndefinedValue{}}
-                                       : model::PropertyValue{model::DateValue{text}};
+            if (text == "undefined") return model::UndefinedValue{};
+            (void)storage::value_codec::date_to_platform(text);
+            return model::DateValue{text};
         }
         case mm::ValueCodec::uuid:
             return model::UuidValue{canonical_uuid(std::string(trim_ascii(node_text(node))))};
@@ -999,6 +1003,8 @@ bool equals_descriptor_default(
         case mm::DefaultKind::unknown:
         case mm::DefaultKind::none:
             return false;
+        case mm::DefaultKind::undefined:
+            return canonical == "undefined" && std::holds_alternative<model::UndefinedValue>(value);
         case mm::DefaultKind::boolean:
             return std::holds_alternative<bool>(value) &&
                    std::get<bool>(value) == (canonical == "true" || canonical == "1");
@@ -1502,11 +1508,55 @@ private:
         bool position_seen = false;
         bool dendrogram_items_seen = false;
         bool dendrogram_links_seen = false;
+        bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
+            if (name == "Document" && descriptor->kind == model::ControlKind::spreadsheet_document_field) {
+                if (spreadsheet_document_seen)
+                    fail("OOF2003", child, id_text, "Document", "at most one Document element", "duplicate", "SpreadsheetDocumentField has duplicate Document elements");
+                spreadsheet_document_seen = true;
+                if (child->properties != nullptr)
+                    fail("OOF2003", child, id_text, "Document", "no attributes", "present", "Spreadsheet Document does not accept attributes");
+                auto& cells = std::get<model::SpreadsheetDocumentFieldPayload>(control.payload).cells;
+                std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
+                for (xmlNodePtr cell_node : element_children(child)) {
+                    if (node_name(cell_node) != "Cell")
+                        fail("OOF2003", cell_node, id_text, node_name(cell_node), "Cell", node_name(cell_node), "Unknown spreadsheet Document item");
+                    for (xmlAttrPtr attr = cell_node->properties; attr != nullptr; attr = attr->next) {
+                        const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                        if (attr_name != "row" && attr_name != "column")
+                            fail("OOF2003", cell_node, id_text, std::string(attr_name), "row and column attributes", std::string(attr_name), "Unsupported spreadsheet Cell attribute");
+                    }
+                    const auto row = parse_integer<std::uint32_t>(required_attribute(cell_node, "row", id_text), cell_node, "row", id_text);
+                    const auto column = parse_integer<std::uint32_t>(required_attribute(cell_node, "column", id_text), cell_node, "column", id_text);
+                    if (row == 0 || column == 0)
+                        fail("OOF2003", cell_node, id_text, "coordinate", "positive uint32 row and column", "zero", "Spreadsheet Cell coordinates are one-based");
+                    if (!coordinates.emplace(row, column).second)
+                        fail("OOF2003", cell_node, id_text, "coordinate", "unique row and column pair", "duplicate", "Spreadsheet Document contains a duplicate Cell coordinate");
+                    bool text_seen = false;
+                    std::string text;
+                    for (xmlNodePtr value_node : element_children(cell_node)) {
+                        if (node_name(value_node) != "Text" || text_seen)
+                            fail("OOF2003", value_node, id_text, node_name(value_node), "one Text child", node_name(value_node), "Spreadsheet Cell requires exactly one Text child");
+                        if (value_node->properties != nullptr || !element_children(value_node).empty())
+                            fail("OOF2003", value_node, id_text, "Text", "text content without attributes or nested elements", "structured content", "Spreadsheet Cell Text must be plain text");
+                        text_seen = true;
+                        text = node_text(value_node);
+                    }
+                    if (!text_seen)
+                        fail("OOF2003", cell_node, id_text, "Text", "required Text child", "missing", "Spreadsheet Cell requires a Text child");
+                    cells.push_back({row, column, std::move(text)});
+                }
+                std::sort(cells.begin(), cells.end(), [](const auto& left, const auto& right) {
+                    return std::tie(left.row, left.column) < std::tie(right.row, right.column);
+                });
+                continue;
+            }
             if (name == "Buttons" && (descriptor->kind == model::ControlKind::button || descriptor->kind == model::ControlKind::command_bar)) {
                 if (auto* payload = std::get_if<model::ButtonPayload>(&control.payload)) payload->buttons = parse_command_bar_buttons(child, id_text);
                 else std::get<model::CommandBarPayload>(control.payload).buttons = parse_command_bar_buttons(child, id_text);
+            } else if (name == "Columns" && descriptor->kind == model::ControlKind::table) {
+                std::get<model::TablePayload>(control.payload).columns = parse_table_columns(child, id_text);
             } else if (name == "DataPath") {
                 control.data_path = parse_data_path(child, id_text);
             } else if (dendrogram != nullptr && name == "Items") {
@@ -1556,6 +1606,92 @@ private:
         const model::ControlRef reference{id};
         objects_.controls.push_back(std::move(control));
         return reference;
+    }
+
+    std::vector<model::TableColumn> parse_table_columns(xmlNodePtr node, std::string_view owner) {
+        std::vector<model::TableColumn> columns;
+        std::set<std::string> names;
+        for (xmlNodePtr column_node : element_children(node)) {
+            if (node_name(column_node) != "Column") {
+                fail("OOF2003", column_node, std::string(owner), node_name(column_node),
+                    "Column", node_name(column_node), "Unknown Table column object");
+            }
+            for (xmlAttrPtr attr = column_node->properties; attr != nullptr; attr = attr->next) {
+                const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                if (attr_name != "name") {
+                    fail("OOF2003", column_node, std::string(owner), std::string(attr_name),
+                        "name attribute", std::string(attr_name), "Unsupported Table Column attribute");
+                }
+            }
+            model::TableColumn column;
+            column.name = required_attribute(column_node, "name", owner);
+            if (column.name.empty() || !names.insert(column.name).second) {
+                fail("OOF2003", column_node, std::string(owner), "name",
+                    "non-empty unique Column name", column.name, "Table Column name is empty or duplicated");
+            }
+            std::set<std::string> seen;
+            bool data_path_seen = false;
+            bool header_seen = false;
+            bool control_seen = false;
+            for (xmlNodePtr field : element_children(column_node)) {
+                const std::string field_name = node_name(field);
+                if (!seen.insert(field_name).second) {
+                    fail("OOF2003", field, std::string(owner), field_name,
+                        "Column field at most once", field_name, "Duplicate Table Column field");
+                }
+                if (field_name == "DataPath") {
+                    column.data_path = node_text(field);
+                    data_path_seen = true;
+                } else if (field_name == "Header") {
+                    column.header = parse_localized_string(field);
+                    header_seen = true;
+                } else if (field_name == "Control") {
+                    for (xmlAttrPtr attr = field->properties; attr != nullptr; attr = attr->next) {
+                        const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                        if (attr_name != "type") {
+                            fail("OOF2003", field, std::string(owner), std::string(attr_name),
+                                "type attribute", std::string(attr_name), "Unsupported Table Column Control attribute");
+                        }
+                    }
+                    const std::string type = required_attribute(field, "type", owner);
+                    if (type != "InputField") {
+                        fail("OOF2003", field, std::string(owner), "type",
+                            "InputField", type, "Unsupported Table Column Control type");
+                    }
+                    column.control.kind = model::ControlKind::input_field;
+                    std::set<std::string> control_properties;
+                    for (xmlNodePtr property_node : element_children(field)) {
+                        const std::string property_name = node_name(property_node);
+                        if (!control_properties.insert(property_name).second ||
+                            (property_name != "Enabled" && property_name != "ReadOnly")) {
+                            fail("OOF2003", property_node, std::string(owner), property_name,
+                                "Enabled or ReadOnly at most once", property_name,
+                                "Unsupported Table Column InputField property");
+                        }
+                        const bool value = parse_boolean(node_text(property_node), property_node, property_name, owner);
+                        const bool default_value = property_name == "Enabled";
+                        if (value != default_value) {
+                            column.control.properties.set_explicit(
+                                model::PropertyId::from_name(property_name), value);
+                        }
+                    }
+                    control_seen = true;
+                } else {
+                    fail("OOF2003", field, std::string(owner), field_name,
+                        "DataPath, Header, and Control", field_name, "Unsupported Table Column field");
+                }
+            }
+            if (!data_path_seen || !header_seen || !control_seen || column.data_path.empty() || column.header.items.empty()) {
+                fail("OOF2003", column_node, std::string(owner), "Column fields",
+                    "DataPath, localized Header, and typed Control", "incomplete", "Table Column is incomplete");
+            }
+            columns.push_back(std::move(column));
+        }
+        if (columns.empty()) {
+            fail("OOF2003", node, std::string(owner), "Column",
+                "at least one Column", "empty", "Table Columns collection is empty");
+        }
+        return columns;
     }
 
     model::CommandBarButton parse_command_bar_button(xmlNodePtr node, std::string_view owner) {
@@ -1855,6 +1991,8 @@ std::string_view type_domain_term_name(model::TypeDomainTerm term) {
         case model::TypeDomainTerm::reference: return "reference";
         case model::TypeDomainTerm::string: return "string";
         case model::TypeDomainTerm::type: return "type";
+        case model::TypeDomainTerm::value_list: return "valueList";
+        case model::TypeDomainTerm::value_table: return "valueTable";
     }
     return "unknown";
 }
@@ -2015,6 +2153,28 @@ private:
                 case model::TypeDomainTerm::type:
                     if (entry.type_uuid.has_value()) {
                         attributes.emplace_back("typeUuid", canonical_uuid(entry.type_uuid->canonical));
+                    }
+                    break;
+                case model::TypeDomainTerm::value_list:
+                    if (entry.type_uuid.has_value() ||
+                        entry.numeric != model::NumericQualifiers{} ||
+                        entry.string != model::LengthQualifiers{} ||
+                        entry.binary != model::LengthQualifiers{} ||
+                        entry.date != model::DateQualifiers{}) {
+                        serialization_fail(std::string(object_id), std::string(name),
+                            "unqualified ValueList descriptor", "UUID or qualifiers",
+                            "ValueList type-domain entry cannot carry UUID or qualifiers");
+                    }
+                    break;
+                case model::TypeDomainTerm::value_table:
+                    if (entry.type_uuid.has_value() ||
+                        entry.numeric != model::NumericQualifiers{} ||
+                        entry.string != model::LengthQualifiers{} ||
+                        entry.binary != model::LengthQualifiers{} ||
+                        entry.date != model::DateQualifiers{}) {
+                        serialization_fail(std::string(object_id), std::string(name),
+                            "unqualified ValueTable descriptor", "UUID or qualifiers",
+                            "ValueTable type-domain entry cannot carry UUID or qualifiers");
                     }
                     break;
                 case model::TypeDomainTerm::boolean:
@@ -2204,7 +2364,9 @@ private:
                 if (std::holds_alternative<model::UndefinedValue>(value)) {
                     writer_.text(name, "undefined");
                 } else {
-                    writer_.text(name, require_value<model::DateValue>(value, object_id, name, "Date or Undefined").canonical);
+                    const auto& date = require_value<model::DateValue>(value, object_id, name, "Date or Undefined");
+                    (void)storage::value_codec::date_to_platform(date.canonical);
+                    writer_.text(name, date.canonical);
                 }
                 return;
             case mm::ValueCodec::uuid:
@@ -2579,6 +2741,16 @@ private:
         write_position(control.position);
         if (const auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload))
             write_dendrogram_payload(*dendrogram, id);
+        if (const auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
+            spreadsheet != nullptr && !spreadsheet->cells.empty()) {
+            writer_.open("Document");
+            for (const auto& cell : spreadsheet->cells) {
+                writer_.open("Cell", {{"row", std::to_string(cell.row)}, {"column", std::to_string(cell.column)}});
+                writer_.text("Text", cell.text);
+                writer_.close("Cell");
+            }
+            writer_.close("Document");
+        }
         const std::vector<model::CommandBarButton>* owned_buttons = nullptr;
         if (const auto* button = std::get_if<model::ButtonPayload>(&control.payload)) owned_buttons = &button->buttons;
         if (const auto* command_bar = std::get_if<model::CommandBarPayload>(&control.payload)) owned_buttons = &command_bar->buttons;
@@ -2592,9 +2764,37 @@ private:
         } else {
             write_property_set(control.properties(), metamodel_.properties_for(control.kind()), id);
         }
+        if (const auto* table = std::get_if<model::TablePayload>(&control.payload)) {
+            write_table_columns(table->columns, id);
+        }
         write_events("Events", control.events, metamodel_.events_for(control.kind()), id);
         write_child_items(control.children);
         writer_.close(descriptor.public_name);
+    }
+
+    void write_table_columns(const std::vector<model::TableColumn>& columns, std::string_view owner) {
+        if (columns.empty()) {
+            serialization_fail(std::string(owner), "Columns", "at least one typed Column", "empty",
+                "Table Columns collection is empty");
+        }
+        writer_.open("Columns");
+        for (const auto& column : columns) {
+            if (column.control.kind != model::ControlKind::input_field) {
+                serialization_fail(std::string(owner), "Column/Control", "InputField", "unsupported control",
+                    "Table Column Control kind is unsupported");
+            }
+            writer_.open("Column", {{"name", column.name}});
+            writer_.text("DataPath", column.data_path);
+            write_localized("Header", column.header, owner);
+            writer_.open("Control", {{"type", "InputField"}});
+            write_property_set(
+                column.control.properties,
+                metamodel_.properties_for(model::ControlKind::input_field),
+                owner);
+            writer_.close("Control");
+            writer_.close("Column");
+        }
+        writer_.close("Columns");
     }
 
     void write_child_items(const std::vector<model::ChildItemRef>& children) {

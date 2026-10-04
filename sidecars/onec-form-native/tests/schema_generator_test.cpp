@@ -27,6 +27,7 @@ using oof::model::metamodel::ChildPolicy;
 using oof::model::metamodel::ControlDescriptor;
 using oof::model::metamodel::EventDescriptor;
 using oof::model::metamodel::Metamodel;
+using oof::model::metamodel::PersistenceClass;
 using oof::model::metamodel::PropertyDescriptor;
 using oof::model::metamodel::ValueCodec;
 using oof::source::GeneratedSchemas;
@@ -371,7 +372,7 @@ void test_schema_version_and_controls(
         enumeration_values(schema, "TypeDomainTermType") ==
             std::vector<std::string>({
                 "unknown", "list", "boolean", "binary", "date", "numeric",
-                "reference", "string", "type"}),
+                "reference", "string", "type", "valueList", "valueTable"}),
         "type-domain term vocabulary drift");
 
     xmlNodePtr form_element = schema_component(schema, "element", "Form");
@@ -420,7 +421,8 @@ void expect_property_element(
     const PropertyDescriptor& descriptor,
     xmlNodePtr element
 ) {
-    expect(attribute(element, "name") == descriptor.xml_name, "property order drift");
+    expect(attribute(element, "name") == descriptor.xml_name,
+        "property order drift: expected " + std::string(descriptor.xml_name) + " got " + attribute(element, "name"));
     expect(attribute(element, "minOccurs") == "0", "property must be optional");
     expect(attribute(element, "maxOccurs") == "1", "property must occur at most once");
 
@@ -432,6 +434,12 @@ void expect_property_element(
             type == "UnclassifiedValueType",
             "unclassified property must use the rejecting type");
     } else {
+        if (descriptor.control_kind == oof::model::ControlKind::calendar_field &&
+            descriptor.api_name == "BeginOfDisplayPeriod") {
+            expect(
+                type == "CalendarBeginDateValueType",
+                "calendar begin date must use its bounded date type");
+        }
         if (descriptor.value_codec == ValueCodec::command_bar_buttons)
             expect(type == "CommandBarButtonsType", "menu collection must use its descriptor-backed schema type");
         expect(
@@ -443,18 +451,95 @@ void expect_property_element(
     }
 }
 
+std::string calendar_instance(
+    std::string_view property_name = {},
+    std::string_view value = {}
+) {
+    std::string xml =
+        "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<CalendarField id=\"2\" name=\"Calendar\"><Position/>";
+    if (!property_name.empty()) {
+        xml += "<";
+        xml += property_name;
+        xml += ">";
+        xml += value;
+        xml += "</";
+        xml += property_name;
+        xml += ">";
+    }
+    xml += "</CalendarField></ChildItems></Form>";
+    return xml;
+}
+
+void test_date_values(xmlSchemaPtr schema) {
+    const auto valid = [&](std::string_view property, std::string_view value) {
+        return validate_document(schema, calendar_instance(property, value)) == 0;
+    };
+    const auto invalid = [&](std::string_view property, std::string_view value) {
+        return validate_document(schema, calendar_instance(property, value)) != 0;
+    };
+
+    expect(
+        validate_document(schema, calendar_instance()) == 0,
+        "omitted calendar date properties must retain their schema defaults");
+    expect(valid("CurrentDate", "2031-11-07T23:45:10"),
+           "canonical local date-time must validate");
+    expect(valid("CurrentDate", "2024-02-29T00:00:00"),
+           "Gregorian leap-day midnight must validate");
+    expect(valid("CurrentDate", "0001-01-01T00:00:00"),
+           "earliest local date-time must remain valid for generic date properties");
+    expect(valid("BeginOfDisplayPeriod", "undefined"),
+           "undefined must remain valid for the calendar begin date");
+    expect(valid("BeginOfDisplayPeriod", "2031-11-07T23:45:10"),
+           "calendar begin date must preserve the canonical timed-date contract");
+    expect(valid("BeginOfDisplayPeriod", "2024-02-29T00:00:00"),
+           "calendar begin date must accept Gregorian leap-day midnight");
+    expect(valid("BeginOfDisplayPeriod", "4000-01-01T00:00:00"),
+           "query literal limits must not restrict the observed calendar date contract");
+    expect(valid("BeginOfDisplayPeriod", "0001-01-01T00:00:01"),
+           "calendar begin date must accept values after its lower bound");
+    expect(invalid("CurrentDate", "2023-02-29T00:00:00"),
+           "invalid Gregorian leap day must be rejected");
+
+    constexpr std::array invalid_lexemes{
+        "2031-11-07T23:45:10Z",
+        "2031-11-07T23:45:10+01:00",
+        "2031-11-07T23:45:10-01:00",
+        "2031-11-07T23:45:10.1",
+        "2031-11-07T23:45:10.0000",
+        "0000-01-01T00:00:00",
+        "10000-01-01T00:00:00",
+        "-0001-01-01T00:00:00",
+        "2024-01-01T24:00:00",
+        "2024-01-01T00:60:00",
+        "2024-01-01T00:00:60",
+        "prefix2031-11-07T23:45:10",
+        "2031-11-07T23:45:10suffix",
+    };
+    for (const std::string_view value : invalid_lexemes) {
+        for (const std::string_view property : {"CurrentDate", "BeginOfDisplayPeriod"}) {
+            expect(invalid(property, value),
+                   "noncanonical local date-time lexeme must be rejected: " +
+                       std::string(property) + ": " + std::string(value));
+        }
+    }
+    expect(invalid("BeginOfDisplayPeriod", "0001-01-01T00:00:00"),
+           "calendar begin date lower bound must be exclusive");
+}
+
 std::size_t expect_property_sequence(
     std::span<const PropertyDescriptor> properties,
     const std::vector<xmlNodePtr>& elements,
-    std::size_t offset = 0
+    std::size_t offset = 0,
+    bool omit_runtime_only = false
 ) {
-    expect(
-        elements.size() >= offset + properties.size(),
-        "property sequence is incomplete");
-    for (std::size_t index = 0; index < properties.size(); ++index) {
-        expect_property_element(properties[index], elements[offset + index]);
+    std::size_t cursor = offset;
+    for (const auto& property : properties) {
+        if (omit_runtime_only && property.persistence == PersistenceClass::runtime_only) continue;
+        expect(cursor < elements.size(), "property sequence is incomplete");
+        expect_property_element(property, elements[cursor++]);
     }
-    return offset + properties.size();
+    return cursor;
 }
 
 void test_document_package_types(
@@ -676,10 +761,19 @@ void test_control_surfaces_and_property_order(
             }
         }
         expect_element_shape(elements[cursor++], "Position", "PositionType", "1", "1");
-        cursor = expect_property_sequence(
-            metamodel.properties_for(control.kind),
-            elements,
-            cursor);
+        if (control.kind == oof::model::ControlKind::spreadsheet_document_field) {
+            expect_element_shape(elements[cursor++], "Document", "SpreadsheetDocumentType", "0", "1");
+        }
+        for (const auto& descriptor : metamodel.properties_for(control.kind)) {
+            if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
+                expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
+            } else if (control.kind == oof::model::ControlKind::choice_field &&
+                descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only) {
+                continue;
+            } else {
+                expect_property_element(descriptor, elements[cursor++]);
+            }
+        }
         expect_element_shape(
             elements[cursor++],
             "Events",
@@ -706,6 +800,35 @@ void test_control_surfaces_and_property_order(
             }),
             "reserved Name/Data must not be control property elements");
     }
+    const auto choice_fields = direct_children(sequence_for_type(schema, "ChoiceFieldType"), "element");
+    expect(std::ranges::none_of(choice_fields, [](xmlNodePtr element) {
+        return attribute(element, "name") == "ChoiceList";
+    }), "runtime-only ChoiceList must not appear in the persisted ChoiceField schema");
+}
+
+void test_choice_field_schema_contract(xmlSchemaPtr schema) {
+    constexpr std::string_view unbound_choice = R"XML(<Form id="1" name="Choice" ordinaryFormVersion="2.1"><ChildItems><ChoiceField id="2" name="ChoiceField"><Position/></ChoiceField></ChildItems></Form>)XML";
+    constexpr std::string_view runtime_list = R"XML(<Form id="1" name="Choice" ordinaryFormVersion="2.1"><ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><ChoiceList/></ChoiceField></ChildItems></Form>)XML";
+    constexpr std::string_view valid_static = R"XML(<Form id="1" name="Choice" ordinaryFormVersion="2.1"><ChildItems><ChoiceField id="2" name="ChoiceField"><DataPath attributeId="3"/><Position/><Enabled>false</Enabled></ChoiceField></ChildItems></Form>)XML";
+    expect(validate_document(schema, unbound_choice) == 0,
+        "unbound ChoiceField must satisfy the public XSD");
+    expect(validate_document(schema, runtime_list) != 0,
+        "runtime-only ChoiceList must fail the public ChoiceField XSD");
+    expect(validate_document(schema, valid_static) == 0,
+        "named ChoiceField DataPath and proven Boolean properties must satisfy the XSD");
+}
+
+void test_spreadsheet_document_schema(xmlNodePtr schema) {
+    expect(schema_component(schema, "complexType", "SpreadsheetDocumentType") != nullptr,
+        "named SpreadsheetDocument type must exist");
+    expect(schema_component(schema, "complexType", "SpreadsheetDocumentCellType") != nullptr,
+        "named SpreadsheetDocument Cell type must exist");
+    const auto cells = direct_children(sequence_for_type(schema, "SpreadsheetDocumentType"), "element");
+    expect_element_shape(cells.at(0), "Cell", "SpreadsheetDocumentCellType", "0", "unbounded");
+    const auto text = direct_children(sequence_for_type(schema, "SpreadsheetDocumentCellType"), "element");
+    expect_element_shape(text.at(0), "Text", "xs:string", "1", "1");
+    expect_type_attribute(schema, "SpreadsheetDocumentCellType", "row", "SpreadsheetCoordinateType", "required");
+    expect_type_attribute(schema, "SpreadsheetDocumentCellType", "column", "SpreadsheetCoordinateType", "required");
 }
 
 void test_event_surfaces(const Metamodel& metamodel, xmlNodePtr schema) {
@@ -1134,10 +1257,13 @@ int main() {
         test_document_package_types(metamodel, form_schema);
         test_data_path_position_and_bindings(metamodel, form_schema);
         test_control_surfaces_and_property_order(metamodel, form_schema);
+        test_spreadsheet_document_schema(form_schema);
+        test_choice_field_schema_contract(compiled_form.get());
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
         test_document_instances(compiled_form.get());
+        test_date_values(compiled_form.get());
         test_schema_structure_coverage_does_not_imply_codec_coverage(
             metamodel,
             compiled_form.get());

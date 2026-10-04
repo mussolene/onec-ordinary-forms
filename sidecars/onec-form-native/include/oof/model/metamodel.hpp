@@ -128,6 +128,7 @@ enum class StorageCodec : std::uint8_t {
 enum class DefaultKind : std::uint8_t {
     unknown,
     none,
+    undefined,
     boolean,
     integer,
     decimal,
