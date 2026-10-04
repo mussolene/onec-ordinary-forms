@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "oof/source/form_xml.hpp"
 
@@ -14,6 +15,7 @@ namespace oof::source {
 namespace {
 
 using model::control_kind_count;
+using model::ControlKind;
 using model::metamodel::ChildPolicy;
 using model::metamodel::ControlDescriptor;
 using model::metamodel::DescriptorOwner;
@@ -71,6 +73,10 @@ std::string_view xsd_type(ValueCodec codec) {
     switch (codec) {
         case ValueCodec::command_bar_buttons:
             return "CommandBarButtonsType";
+        case ValueCodec::dendrogram_items:
+            return "DendrogramItemsType";
+        case ValueCodec::dendrogram_links:
+            return "DendrogramLinksType";
         case ValueCodec::unclassified:
             return "UnclassifiedValueType";
         case ValueCodec::boolean:
@@ -355,6 +361,7 @@ void append_value_types(std::string& output) {
       <xs:enumeration value="string"/>
       <xs:enumeration value="type"/>
       <xs:enumeration value="valueList"/>
+      <xs:enumeration value="valueTable"/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -617,9 +624,14 @@ void append_property_element(
 void append_property_elements(
     std::string& output,
     std::span<const PropertyDescriptor> properties,
-    std::string_view indent = "      "
+    std::string_view indent = "      ",
+    bool include_runtime_only = true
 ) {
     for (const auto& property : properties) {
+        if (!include_runtime_only &&
+            property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+            continue;
+        }
         append_property_element(output, property, indent);
     }
 }
@@ -710,6 +722,17 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
   </xs:sequence><xs:attribute name="name" type="xs:string" use="required"/><xs:attribute name="type" type="CommandBarButtonKindType" use="required"/></xs:complexType>
   <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
 
+  <xs:complexType name="DendrogramItemsType"><xs:sequence><xs:element name="Item" type="DendrogramItemType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="DendrogramItemType"><xs:sequence><xs:element name="Value" type="xs:string"/><xs:element name="Text" type="LocalizedStringValueType"/></xs:sequence></xs:complexType>
+  <xs:complexType name="DendrogramLinksType"><xs:sequence><xs:element name="Link" type="DendrogramLinkType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="DendrogramLinkType"><xs:sequence><xs:element name="FirstItem" type="xs:string"/><xs:element name="SecondItem" type="xs:string"/><xs:element name="Title" type="LocalizedStringValueType"/><xs:element name="Distance" type="xs:decimal" minOccurs="0"/></xs:sequence></xs:complexType>
+
+)XSD";
+
+    output += R"XSD(  <xs:simpleType name="SpreadsheetCoordinateType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="4294967295"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:element name="Text" type="xs:string" minOccurs="1" maxOccurs="1"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+
 )XSD";
 
     const auto controls = metamodel.controls();
@@ -755,6 +778,28 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
         "  </xs:complexType>\n"
         "  <xs:element name=\"Form\" type=\"FormType\"/>\n\n";
 
+    output +=
+        "  <xs:complexType name=\"TableColumnControlType\">\n"
+        "    <xs:sequence>\n"
+        "      <xs:element name=\"Enabled\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"ReadOnly\" type=\"xs:boolean\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+        "    </xs:sequence>\n"
+        "    <xs:attribute name=\"type\" type=\"xs:string\" use=\"required\" fixed=\"InputField\"/>\n"
+        "  </xs:complexType>\n"
+        "  <xs:complexType name=\"TableColumnType\">\n"
+        "    <xs:sequence>\n"
+        "      <xs:element name=\"DataPath\" type=\"xs:string\" minOccurs=\"1\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"Header\" type=\"LocalizedStringValueType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n"
+        "      <xs:element name=\"Control\" type=\"TableColumnControlType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n"
+        "    </xs:sequence>\n"
+        "    <xs:attribute name=\"name\" type=\"xs:string\" use=\"required\"/>\n"
+        "  </xs:complexType>\n"
+        "  <xs:complexType name=\"TableColumnsType\">\n"
+        "    <xs:sequence>\n"
+        "      <xs:element name=\"Column\" type=\"TableColumnType\" minOccurs=\"1\" maxOccurs=\"unbounded\"/>\n"
+        "    </xs:sequence>\n"
+        "  </xs:complexType>\n\n";
+
     for (const auto& control : controls) {
         const std::string type_name = std::string(control.public_name) + "Type";
         output += "  <xs:complexType";
@@ -777,7 +822,21 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             output += "      <xs:element name=\"Points\" type=\"ChartPointCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
             output += "      <xs:element name=\"Values\" type=\"ChartValueCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
         } else {
-            append_property_elements(output, metamodel.properties_for(control.kind));
+            if (control.kind == model::ControlKind::spreadsheet_document_field) {
+                output +=
+                    "      <xs:element name=\"Document\" type=\"SpreadsheetDocumentType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+            }
+            for (const auto& property : metamodel.properties_for(control.kind)) {
+                if (control.kind == model::ControlKind::table && property.api_name == "Columns") {
+                    output +=
+                        "      <xs:element name=\"Columns\" type=\"TableColumnsType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+                } else if (control.kind == model::ControlKind::choice_field &&
+                    property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+                    continue;
+                } else {
+                    append_property_element(output, property, "      ");
+                }
+            }
         }
 
         output += "      <xs:element name=\"Events\" type=\"";
@@ -922,6 +981,14 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"Text\" russianName=\"Текст\"/><Property name=\"Explanation\" russianName=\"Пояснение\"/><Property name=\"ToolTip\" russianName=\"Подсказка\"/>\n"
         "          <Property name=\"Enabled\" russianName=\"Доступность\"/><Property name=\"Checked\" russianName=\"Пометка\"/><Property name=\"ChangesData\" russianName=\"ИзменяетДанные\"/>\n"
         "          <Property name=\"Representation\" russianName=\"Отображение\"/><Property name=\"Shortcut\" russianName=\"СочетаниеКлавиш\"/><Property name=\"Picture\" russianName=\"Картинка\"/><Property name=\"Action\" russianName=\"Действие\"/><Property name=\"Order\" russianName=\"ПорядокКнопок\"/><Property name=\"Buttons\" russianName=\"Кнопки\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"TableColumn\" russianName=\"КолонкаТабличногоПоля\"><Properties>\n"
+        "          <Property name=\"Name\" russianName=\"Имя\"/><Property name=\"DataPath\" russianName=\"Данные\"/>\n"
+        "          <Property name=\"Header\" russianName=\"ТекстШапки\"/><Property name=\"Control\" russianName=\"ЭлементУправления\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"TableColumnControl\" russianName=\"ЭлементУправленияКолонкиТабличногоПоля\"><Properties>\n"
+        "          <Property name=\"Type\" russianName=\"ВидРедактора\"/><Property name=\"Enabled\" russianName=\"Доступность\"/>\n"
+        "          <Property name=\"ReadOnly\" russianName=\"ТолькоПросмотр\"/>\n"
         "        </Properties></NamedConcept>\n"
         "      </Palette>\n"
         "    </xs:appinfo>\n"

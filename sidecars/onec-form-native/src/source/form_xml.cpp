@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <limits>
 #include <locale>
+#include <map>
 #include <memory>
 #include <optional>
 #include <set>
@@ -574,7 +575,7 @@ model::CompositeIdValue parse_composite_id(xmlNodePtr node) {
 }
 
 model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr node) {
-    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 10> terms{{
+    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 11> terms{{
         {"unknown", model::TypeDomainTerm::unknown},
         {"list", model::TypeDomainTerm::list},
         {"boolean", model::TypeDomainTerm::boolean},
@@ -585,6 +586,7 @@ model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr 
         {"string", model::TypeDomainTerm::string},
         {"type", model::TypeDomainTerm::type},
         {"valueList", model::TypeDomainTerm::value_list},
+        {"valueTable", model::TypeDomainTerm::value_table},
     }};
     const auto found = std::ranges::find(terms, value, &decltype(terms)::value_type::first);
     if (found == terms.end()) {
@@ -978,6 +980,10 @@ model::PropertyValue parse_property_value(
             return parse_picture_reference(node, property, object_id);
         case mm::ValueCodec::command_bar_buttons:
             fail("OOF2003", node, std::string(object_id), property, "owned Buttons collection", "scalar", "Buttons is not a scalar property");
+        case mm::ValueCodec::dendrogram_items:
+            fail("OOF2003", node, std::string(object_id), property, "owned Items collection", "scalar", "Dendrogram Items is not a scalar property");
+        case mm::ValueCodec::dendrogram_links:
+            fail("OOF2003", node, std::string(object_id), property, "owned Links collection", "scalar", "Dendrogram Links is not a scalar property");
         case mm::ValueCodec::control_reference:
             return model::ControlRef{parse_object_id(node_text(node), node, property, object_id)};
         case mm::ValueCodec::attribute_reference:
@@ -1016,10 +1022,16 @@ bool equals_descriptor_default(
         case mm::DefaultKind::string:
             return std::holds_alternative<std::string>(value) &&
                    std::get<std::string>(value) == canonical;
-        case mm::DefaultKind::enumeration:
-            return std::holds_alternative<model::EnumerationValue>(value) &&
-                   std::get<model::EnumerationValue>(value).type_name == descriptor.api_name &&
-                   std::get<model::EnumerationValue>(value).member == canonical;
+        case mm::DefaultKind::enumeration: {
+            if (!std::holds_alternative<model::EnumerationValue>(value)) return false;
+            const auto& enumeration = std::get<model::EnumerationValue>(value);
+            const auto separator = canonical.find('.');
+            const auto expected_type = separator == std::string_view::npos
+                ? descriptor.api_name : canonical.substr(0, separator);
+            const auto expected_member = separator == std::string_view::npos
+                ? canonical : canonical.substr(separator + 1);
+            return enumeration.type_name == expected_type && enumeration.member == expected_member;
+        }
         case mm::DefaultKind::color: {
             if (!std::holds_alternative<model::ColorValue>(value)) return false;
             const auto& color = std::get<model::ColorValue>(value);
@@ -1492,7 +1504,11 @@ private:
             required_attribute(node, "name", id_text),
             make_payload(descriptor->kind),
         };
+        auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
         bool position_seen = false;
+        bool dendrogram_items_seen = false;
+        bool dendrogram_links_seen = false;
+        bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
             if (descriptor->kind == model::ControlKind::chart &&
@@ -1536,11 +1552,67 @@ private:
                         fail("OOF2003", item, id_text, node_name(item), name == "Series" ? "ChartSeries" : name == "Points" ? "ChartPoint" : "ChartValue", node_name(item), "Unknown Chart collection item");
                     }
                 }
-            } else if (name == "Buttons" && (descriptor->kind == model::ControlKind::button || descriptor->kind == model::ControlKind::command_bar)) {
+            }
+            else if (name == "Document" && descriptor->kind == model::ControlKind::spreadsheet_document_field) {
+                if (spreadsheet_document_seen)
+                    fail("OOF2003", child, id_text, "Document", "at most one Document element", "duplicate", "SpreadsheetDocumentField has duplicate Document elements");
+                spreadsheet_document_seen = true;
+                if (child->properties != nullptr)
+                    fail("OOF2003", child, id_text, "Document", "no attributes", "present", "Spreadsheet Document does not accept attributes");
+                auto& cells = std::get<model::SpreadsheetDocumentFieldPayload>(control.payload).cells;
+                std::set<std::pair<std::uint32_t, std::uint32_t>> coordinates;
+                for (xmlNodePtr cell_node : element_children(child)) {
+                    if (node_name(cell_node) != "Cell")
+                        fail("OOF2003", cell_node, id_text, node_name(cell_node), "Cell", node_name(cell_node), "Unknown spreadsheet Document item");
+                    for (xmlAttrPtr attr = cell_node->properties; attr != nullptr; attr = attr->next) {
+                        const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                        if (attr_name != "row" && attr_name != "column")
+                            fail("OOF2003", cell_node, id_text, std::string(attr_name), "row and column attributes", std::string(attr_name), "Unsupported spreadsheet Cell attribute");
+                    }
+                    const auto row = parse_integer<std::uint32_t>(required_attribute(cell_node, "row", id_text), cell_node, "row", id_text);
+                    const auto column = parse_integer<std::uint32_t>(required_attribute(cell_node, "column", id_text), cell_node, "column", id_text);
+                    if (row == 0 || column == 0)
+                        fail("OOF2003", cell_node, id_text, "coordinate", "positive uint32 row and column", "zero", "Spreadsheet Cell coordinates are one-based");
+                    if (!coordinates.emplace(row, column).second)
+                        fail("OOF2003", cell_node, id_text, "coordinate", "unique row and column pair", "duplicate", "Spreadsheet Document contains a duplicate Cell coordinate");
+                    bool text_seen = false;
+                    std::string text;
+                    for (xmlNodePtr value_node : element_children(cell_node)) {
+                        if (node_name(value_node) != "Text" || text_seen)
+                            fail("OOF2003", value_node, id_text, node_name(value_node), "one Text child", node_name(value_node), "Spreadsheet Cell requires exactly one Text child");
+                        if (value_node->properties != nullptr || !element_children(value_node).empty())
+                            fail("OOF2003", value_node, id_text, "Text", "text content without attributes or nested elements", "structured content", "Spreadsheet Cell Text must be plain text");
+                        text_seen = true;
+                        text = node_text(value_node);
+                    }
+                    if (!text_seen)
+                        fail("OOF2003", cell_node, id_text, "Text", "required Text child", "missing", "Spreadsheet Cell requires a Text child");
+                    cells.push_back({row, column, std::move(text)});
+                }
+                std::sort(cells.begin(), cells.end(), [](const auto& left, const auto& right) {
+                    return std::tie(left.row, left.column) < std::tie(right.row, right.column);
+                });
+                continue;
+            }
+            else if (name == "Buttons" && (descriptor->kind == model::ControlKind::button || descriptor->kind == model::ControlKind::command_bar)) {
                 if (auto* payload = std::get_if<model::ButtonPayload>(&control.payload)) payload->buttons = parse_command_bar_buttons(child, id_text);
                 else std::get<model::CommandBarPayload>(control.payload).buttons = parse_command_bar_buttons(child, id_text);
+            } else if (name == "Columns" && descriptor->kind == model::ControlKind::table) {
+                std::get<model::TablePayload>(control.payload).columns = parse_table_columns(child, id_text);
             } else if (name == "DataPath") {
                 control.data_path = parse_data_path(child, id_text);
+            } else if (dendrogram != nullptr && name == "Items") {
+                if (dendrogram_items_seen) {
+                    fail("OOF2003", child, id_text, name, "one owned Items collection", "duplicate", "Dendrogram Items is duplicated");
+                }
+                dendrogram_items_seen = true;
+                dendrogram->items = parse_dendrogram_items(child, id_text);
+            } else if (dendrogram != nullptr && name == "Links") {
+                if (dendrogram_links_seen) {
+                    fail("OOF2003", child, id_text, name, "one owned Links collection", "duplicate", "Dendrogram Links is duplicated");
+                }
+                dendrogram_links_seen = true;
+                dendrogram->links = parse_dendrogram_links(child, id_text);
             } else if (name == "Position") {
                 control.position = parse_position(child, id_text);
                 position_seen = true;
@@ -1569,12 +1641,99 @@ private:
                 }
             }
         }
+        if (dendrogram != nullptr) validate_dendrogram_graph(*dendrogram, node, id_text);
         if (!position_seen) {
             fail("OOF2003", node, id_text, "Position", "required Position", "missing", "Control has no typed Position");
         }
         const model::ControlRef reference{id};
         objects_.controls.push_back(std::move(control));
         return reference;
+    }
+
+    std::vector<model::TableColumn> parse_table_columns(xmlNodePtr node, std::string_view owner) {
+        std::vector<model::TableColumn> columns;
+        std::set<std::string> names;
+        for (xmlNodePtr column_node : element_children(node)) {
+            if (node_name(column_node) != "Column") {
+                fail("OOF2003", column_node, std::string(owner), node_name(column_node),
+                    "Column", node_name(column_node), "Unknown Table column object");
+            }
+            for (xmlAttrPtr attr = column_node->properties; attr != nullptr; attr = attr->next) {
+                const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                if (attr_name != "name") {
+                    fail("OOF2003", column_node, std::string(owner), std::string(attr_name),
+                        "name attribute", std::string(attr_name), "Unsupported Table Column attribute");
+                }
+            }
+            model::TableColumn column;
+            column.name = required_attribute(column_node, "name", owner);
+            if (column.name.empty() || !names.insert(column.name).second) {
+                fail("OOF2003", column_node, std::string(owner), "name",
+                    "non-empty unique Column name", column.name, "Table Column name is empty or duplicated");
+            }
+            std::set<std::string> seen;
+            bool data_path_seen = false;
+            bool header_seen = false;
+            bool control_seen = false;
+            for (xmlNodePtr field : element_children(column_node)) {
+                const std::string field_name = node_name(field);
+                if (!seen.insert(field_name).second) {
+                    fail("OOF2003", field, std::string(owner), field_name,
+                        "Column field at most once", field_name, "Duplicate Table Column field");
+                }
+                if (field_name == "DataPath") {
+                    column.data_path = node_text(field);
+                    data_path_seen = true;
+                } else if (field_name == "Header") {
+                    column.header = parse_localized_string(field);
+                    header_seen = true;
+                } else if (field_name == "Control") {
+                    for (xmlAttrPtr attr = field->properties; attr != nullptr; attr = attr->next) {
+                        const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                        if (attr_name != "type") {
+                            fail("OOF2003", field, std::string(owner), std::string(attr_name),
+                                "type attribute", std::string(attr_name), "Unsupported Table Column Control attribute");
+                        }
+                    }
+                    const std::string type = required_attribute(field, "type", owner);
+                    if (type != "InputField") {
+                        fail("OOF2003", field, std::string(owner), "type",
+                            "InputField", type, "Unsupported Table Column Control type");
+                    }
+                    column.control.kind = model::ControlKind::input_field;
+                    std::set<std::string> control_properties;
+                    for (xmlNodePtr property_node : element_children(field)) {
+                        const std::string property_name = node_name(property_node);
+                        if (!control_properties.insert(property_name).second ||
+                            (property_name != "Enabled" && property_name != "ReadOnly")) {
+                            fail("OOF2003", property_node, std::string(owner), property_name,
+                                "Enabled or ReadOnly at most once", property_name,
+                                "Unsupported Table Column InputField property");
+                        }
+                        const bool value = parse_boolean(node_text(property_node), property_node, property_name, owner);
+                        const bool default_value = property_name == "Enabled";
+                        if (value != default_value) {
+                            column.control.properties.set_explicit(
+                                model::PropertyId::from_name(property_name), value);
+                        }
+                    }
+                    control_seen = true;
+                } else {
+                    fail("OOF2003", field, std::string(owner), field_name,
+                        "DataPath, Header, and Control", field_name, "Unsupported Table Column field");
+                }
+            }
+            if (!data_path_seen || !header_seen || !control_seen || column.data_path.empty() || column.header.items.empty()) {
+                fail("OOF2003", column_node, std::string(owner), "Column fields",
+                    "DataPath, localized Header, and typed Control", "incomplete", "Table Column is incomplete");
+            }
+            columns.push_back(std::move(column));
+        }
+        if (columns.empty()) {
+            fail("OOF2003", node, std::string(owner), "Column",
+                "at least one Column", "empty", "Table Columns collection is empty");
+        }
+        return columns;
     }
 
     model::CommandBarButton parse_command_bar_button(xmlNodePtr node, std::string_view owner) {
@@ -1636,6 +1795,85 @@ private:
         if (item.type == model::CommandBarButtonKind::separator && seen.size() != 0)
             fail("OOF2003", node, std::string(owner), "fields", "no separator fields", "present", "Separator cannot have fields");
         return item;
+    }
+
+    std::vector<model::DendrogramItem> parse_dendrogram_items(xmlNodePtr node, std::string_view owner) {
+        std::vector<model::DendrogramItem> result;
+        std::set<std::string> values;
+        for (xmlNodePtr child : element_children(node)) {
+            if (node_name(child) != "Item") {
+                fail("OOF2003", child, std::string(owner), node_name(child), "Item", node_name(child), "Unknown Dendrogram item");
+            }
+            model::DendrogramItem item;
+            bool value_seen = false;
+            bool text_seen = false;
+            for (xmlNodePtr field : element_children(child)) {
+                const auto name = node_name(field);
+                if (name == "Value" && !value_seen) {
+                    item.value = node_text(field);
+                    value_seen = true;
+                } else if (name == "Text" && !text_seen) {
+                    item.text = parse_localized_string(field);
+                    text_seen = true;
+                } else {
+                    fail("OOF2003", field, std::string(owner), name, "Value and Text", name, "Unsupported or duplicate Dendrogram item field");
+                }
+            }
+            if (!value_seen || item.value.empty() || !values.insert(item.value).second) {
+                fail("OOF2003", child, std::string(owner), "Value", "unique non-empty string", item.value, "Dendrogram item value is missing, empty, or duplicated");
+            }
+            if (item.text.items.empty()) {
+                fail("OOF2003", child, std::string(owner), "Text", "at least one localized Item", "empty", "Dendrogram item Text requires localized text");
+            }
+            const auto max_rows = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max() - 1);
+            if (result.size() >= max_rows)
+                fail("OOF1122", child, std::string(owner), "Items", "collection size representable by uint32 keys", std::to_string(result.size() + 1), "Dendrogram Items collection is too large");
+            result.push_back(std::move(item));
+        }
+        return result;
+    }
+
+    std::vector<model::DendrogramLink> parse_dendrogram_links(xmlNodePtr node, std::string_view owner) {
+        std::vector<model::DendrogramLink> result;
+        for (xmlNodePtr child : element_children(node)) {
+            if (node_name(child) != "Link") fail("OOF2003", child, std::string(owner), node_name(child), "Link", node_name(child), "Unknown Dendrogram link");
+            model::DendrogramLink link;
+            bool first_seen = false, second_seen = false, title_seen = false, distance_seen = false;
+            for (xmlNodePtr field : element_children(child)) {
+                const auto name = node_name(field);
+                if (name == "FirstItem" && !first_seen) { link.first_item = node_text(field); first_seen = true; }
+                else if (name == "SecondItem" && !second_seen) { link.second_item = node_text(field); second_seen = true; }
+                else if (name == "Title" && !title_seen) { link.title = parse_localized_string(field); title_seen = true; }
+                else if (name == "Distance" && !distance_seen) { link.distance = model::DecimalValue{canonical_decimal(node_text(field), field, name, owner)}; distance_seen = true; }
+                else fail("OOF2003", field, std::string(owner), name, "FirstItem, SecondItem, Title, optional Distance", name, "Unsupported or duplicate Dendrogram link field");
+            }
+            if (!first_seen || !second_seen || !title_seen || link.title.items.empty())
+                fail("OOF2003", child, std::string(owner), "Link", "named endpoints and localized Title", "incomplete", "Dendrogram link is incomplete");
+            const auto max_rows = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max() - 1);
+            if (result.size() >= max_rows)
+                fail("OOF1122", child, std::string(owner), "Links", "collection size representable by uint32 keys", std::to_string(result.size() + 1), "Dendrogram Links collection is too large");
+            result.push_back(std::move(link));
+        }
+        return result;
+    }
+
+    void validate_dendrogram_graph(const model::DendrogramPayload& graph, xmlNodePtr node, std::string_view owner) {
+        std::set<std::string> values;
+        for (const auto& item : graph.items) {
+            if (item.value.empty() || !values.insert(item.value).second || item.text.items.empty())
+                fail("OOF2003", node, std::string(owner), "Items", "unique non-empty values with localized Text", item.value, "Invalid Dendrogram items");
+        }
+        std::set<std::pair<std::string, std::string>> edges;
+        for (const auto& link : graph.links) {
+            if (link.first_item == link.second_item || !values.contains(link.first_item) || !values.contains(link.second_item))
+                fail("OOF2003", node, std::string(owner), "Links", "distinct endpoints resolving to Items", link.first_item + "->" + link.second_item, "Dendrogram link endpoint is invalid");
+            auto edge = std::minmax(link.first_item, link.second_item);
+            if (!edges.emplace(edge.first, edge.second).second)
+                fail("OOF2003", node, std::string(owner), "Links", "unique graph edges", link.first_item + "->" + link.second_item, "Duplicate Dendrogram edge");
+            if (link.title.items.empty())
+                fail("OOF2003", node, std::string(owner), "Title", "localized value", "empty", "Dendrogram link title is invalid");
+            (void)canonical_decimal(link.distance.canonical, node, "Distance", owner);
+        }
     }
 
     std::vector<model::CommandBarButton> parse_command_bar_buttons(xmlNodePtr node, std::string_view owner) {
@@ -1796,6 +2034,7 @@ std::string_view type_domain_term_name(model::TypeDomainTerm term) {
         case model::TypeDomainTerm::string: return "string";
         case model::TypeDomainTerm::type: return "type";
         case model::TypeDomainTerm::value_list: return "valueList";
+        case model::TypeDomainTerm::value_table: return "valueTable";
     }
     return "unknown";
 }
@@ -1967,6 +2206,17 @@ private:
                         serialization_fail(std::string(object_id), std::string(name),
                             "unqualified ValueList descriptor", "UUID or qualifiers",
                             "ValueList type-domain entry cannot carry UUID or qualifiers");
+                    }
+                    break;
+                case model::TypeDomainTerm::value_table:
+                    if (entry.type_uuid.has_value() ||
+                        entry.numeric != model::NumericQualifiers{} ||
+                        entry.string != model::LengthQualifiers{} ||
+                        entry.binary != model::LengthQualifiers{} ||
+                        entry.date != model::DateQualifiers{}) {
+                        serialization_fail(std::string(object_id), std::string(name),
+                            "unqualified ValueTable descriptor", "UUID or qualifiers",
+                            "ValueTable type-domain entry cannot carry UUID or qualifiers");
                     }
                     break;
                 case model::TypeDomainTerm::boolean:
@@ -2205,6 +2455,10 @@ private:
             }
             case mm::ValueCodec::command_bar_buttons:
                 serialization_fail(std::string(object_id), std::string(name), "owned Buttons collection", "scalar", "Buttons is not a scalar property");
+            case mm::ValueCodec::dendrogram_items:
+                serialization_fail(std::string(object_id), std::string(name), "owned Items collection", "scalar", "Dendrogram Items is not a scalar property");
+            case mm::ValueCodec::dendrogram_links:
+                serialization_fail(std::string(object_id), std::string(name), "owned Links collection", "scalar", "Dendrogram Links is not a scalar property");
             case mm::ValueCodec::control_reference:
                 writer_.text(name, object_id_text(require_value<model::ControlRef>(value, object_id, name, "control reference").id()));
                 return;
@@ -2462,6 +2716,60 @@ private:
         writer_.close("Buttons");
     }
 
+    void write_dendrogram_payload(const model::DendrogramPayload& graph, std::string_view owner) {
+        const auto max_rows = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max() - 1);
+        if (graph.items.size() > max_rows || graph.links.size() > max_rows)
+            serialization_fail(std::string(owner), "Items/Links", "collection size representable by uint32 keys",
+                std::to_string(graph.items.size()) + "/" + std::to_string(graph.links.size()), "Dendrogram graph exceeds the encodable collection range");
+        std::set<std::string> values;
+        for (const auto& item : graph.items) {
+            if (item.value.empty() || !values.insert(item.value).second || item.text.items.empty())
+                serialization_fail(std::string(owner), "Items", "unique non-empty values with localized Text", item.value, "Dendrogram item is invalid");
+        }
+        std::set<std::pair<std::string, std::string>> edges;
+        std::map<std::string, std::size_t> keys;
+        for (std::size_t index = 0; index < graph.items.size(); ++index) keys.emplace(graph.items[index].value, index);
+        std::vector<std::size_t> parents(graph.items.size());
+        for (std::size_t index = 0; index < parents.size(); ++index) parents[index] = index;
+        for (const auto& link : graph.links) {
+            const auto first = keys.find(link.first_item), second = keys.find(link.second_item);
+            if (first == keys.end() || second == keys.end() || first == second || link.title.items.empty())
+                serialization_fail(std::string(owner), "Links", "distinct resolved endpoints with localized Title", link.first_item + "->" + link.second_item, "Dendrogram link is invalid");
+            const auto edge = std::minmax(link.first_item, link.second_item);
+            if (!edges.emplace(edge.first, edge.second).second)
+                serialization_fail(std::string(owner), "Links", "unique acyclic edges", link.first_item + "->" + link.second_item, "Duplicate Dendrogram edge");
+            const auto root = [&](std::size_t node) { while (parents[node] != node) node = parents[node]; return node; };
+            const auto first_root = root(first->second), second_root = root(second->second);
+            if (first_root == second_root)
+                serialization_fail(std::string(owner), "Links", "acyclic graph", link.first_item + "->" + link.second_item, "Dendrogram cycle is unsupported");
+            parents[first_root] = second_root;
+            (void)canonical_decimal(link.distance.canonical, nullptr, "Distance", owner);
+        }
+        if (!graph.items.empty()) {
+            writer_.open("Items");
+            for (const auto& item : graph.items) {
+                writer_.open("Item");
+                writer_.text("Value", item.value);
+                write_localized("Text", item.text, owner);
+                writer_.close("Item");
+            }
+            writer_.close("Items");
+        }
+        if (!graph.links.empty()) {
+            writer_.open("Links");
+            for (const auto& link : graph.links) {
+                writer_.open("Link");
+                writer_.text("FirstItem", link.first_item);
+                writer_.text("SecondItem", link.second_item);
+                write_localized("Title", link.title, owner);
+                if (link.distance.canonical != "0")
+                    writer_.text("Distance", canonical_decimal(link.distance.canonical, nullptr, "Distance", owner));
+                writer_.close("Link");
+            }
+            writer_.close("Links");
+        }
+    }
+
     void write_control(const model::ControlNode& control) {
         const auto& descriptor = metamodel_.control(control.kind());
         const std::string id = object_id_text(control.id);
@@ -2473,6 +2781,18 @@ private:
             id,
             true);
         write_position(control.position);
+        if (const auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload))
+            write_dendrogram_payload(*dendrogram, id);
+        if (const auto* spreadsheet = std::get_if<model::SpreadsheetDocumentFieldPayload>(&control.payload);
+            spreadsheet != nullptr && !spreadsheet->cells.empty()) {
+            writer_.open("Document");
+            for (const auto& cell : spreadsheet->cells) {
+                writer_.open("Cell", {{"row", std::to_string(cell.row)}, {"column", std::to_string(cell.column)}});
+                writer_.text("Text", cell.text);
+                writer_.close("Cell");
+            }
+            writer_.close("Document");
+        }
         const std::vector<model::CommandBarButton>* owned_buttons = nullptr;
         if (const auto* button = std::get_if<model::ButtonPayload>(&control.payload)) owned_buttons = &button->buttons;
         if (const auto* command_bar = std::get_if<model::CommandBarPayload>(&control.payload)) owned_buttons = &command_bar->buttons;
@@ -2513,9 +2833,37 @@ private:
             }
             writer_.close("Values");
         }
+        if (const auto* table = std::get_if<model::TablePayload>(&control.payload)) {
+            write_table_columns(table->columns, id);
+        }
         write_events("Events", control.events, metamodel_.events_for(control.kind()), id);
         write_child_items(control.children);
         writer_.close(descriptor.public_name);
+    }
+
+    void write_table_columns(const std::vector<model::TableColumn>& columns, std::string_view owner) {
+        if (columns.empty()) {
+            serialization_fail(std::string(owner), "Columns", "at least one typed Column", "empty",
+                "Table Columns collection is empty");
+        }
+        writer_.open("Columns");
+        for (const auto& column : columns) {
+            if (column.control.kind != model::ControlKind::input_field) {
+                serialization_fail(std::string(owner), "Column/Control", "InputField", "unsupported control",
+                    "Table Column Control kind is unsupported");
+            }
+            writer_.open("Column", {{"name", column.name}});
+            writer_.text("DataPath", column.data_path);
+            write_localized("Header", column.header, owner);
+            writer_.open("Control", {{"type", "InputField"}});
+            write_property_set(
+                column.control.properties,
+                metamodel_.properties_for(model::ControlKind::input_field),
+                owner);
+            writer_.close("Control");
+            writer_.close("Column");
+        }
+        writer_.close("Columns");
     }
 
     void write_child_items(const std::vector<model::ChildItemRef>& children) {
