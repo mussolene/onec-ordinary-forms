@@ -799,13 +799,23 @@ LV canonical_button_properties(
     return properties;
 }
 
-LV canonical_label_properties(std::string_view caption, std::int32_t horizontal_align) {
+LV canonical_label_properties(
+    std::string_view caption,
+    std::int32_t horizontal_align,
+    bool enabled,
+    std::string_view tool_tip) {
+    auto base_properties = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
+        "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
+        "{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
+        "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    if (!base_properties.is_list || base_properties.items.size() != 21) {
+        throw std::logic_error("canonical LabelDecoration base properties are malformed");
+    }
+    base_properties.items[1] = raw(enabled ? "1" : "0");
+    base_properties.items[12] = encoded_localized(tool_tip);
     return list({
-        parse_constant(
-            "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
-            "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
-            "{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
-            "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}"),
+        std::move(base_properties),
         raw("11"),
         encoded_localized(caption),
         raw(std::to_string(horizontal_align)),
@@ -826,12 +836,12 @@ LV canonical_label_properties(std::string_view caption, std::int32_t horizontal_
 }
 
 
-LV canonical_check_box_info(bool enabled, std::string_view caption) {
+LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_view tool_tip) {
     return list({
         raw("1"),
         list({
             list({
-                canonical_button_base(enabled),
+                canonical_button_base(enabled, tool_tip),
                 raw("7"),
                 encoded_localized(caption),
                 raw("1"),
@@ -2293,6 +2303,12 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     const auto& properties = info.items[1];
     const std::string properties_path = child_path(info_path, 1);
     require_arity(properties, 21, properties_path);
+    const auto& base_properties = properties.items[0];
+    const std::string base_properties_path = child_path(properties_path, 0);
+    require_arity(base_properties, 21, base_properties_path);
+    const bool enabled = bool_atom(base_properties.items[1], child_path(base_properties_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        base_properties.items[12], child_path(base_properties_path, 12));
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     const std::int32_t horizontal_align = integer_atom<std::int32_t>(
@@ -2302,10 +2318,13 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
             std::to_string(horizontal_align), "LabelDecoration.HorizontalAlign storage value is unsupported");
     }
     auto normalized_properties = properties;
+    auto normalized_base_properties = base_properties;
+    normalized_base_properties.items[12] = encoded_localized(tool_tip);
+    normalized_properties.items[0] = std::move(normalized_base_properties);
     normalized_properties.items[2] = encoded_localized(caption);
     require_exact(
         normalized_properties,
-        canonical_label_properties(caption, horizontal_align),
+        canonical_label_properties(caption, horizontal_align, enabled, tool_tip),
         properties_path,
         "LabelDecoration properties differ from the supported default profile");
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2), "LabelDecoration events are unsupported");
@@ -2334,6 +2353,12 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     };
     if (!caption.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    }
+    if (!enabled) {
+        control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    }
+    if (!tool_tip.empty()) {
+        control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     }
     control.properties().set_explicit(
         model::PropertyId::from_name("HorizontalAlign"),
@@ -2374,13 +2399,16 @@ DecodedControl decode_check_box(
     const auto base_path = child_path(properties_path, 0);
     require_arity(base_properties, 21, base_path);
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        base_properties.items[12], child_path(base_path, 12));
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     auto normalized_info = info;
+    normalized_info.items[1].items[0].items[0].items[12] = encoded_localized(tool_tip);
     normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
     require_exact(
         normalized_info,
-        canonical_check_box_info(enabled, caption),
+        canonical_check_box_info(enabled, caption, tool_tip),
         info_path,
         "CheckBox uses an unsupported property, event, or storage variation");
 
@@ -2404,6 +2432,7 @@ DecodedControl decode_check_box(
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CheckBoxPayload{}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2747,8 +2776,11 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
-    require_allowed_properties(control.properties(), {"Caption", "HorizontalAlign"}, "$/LabelDecoration");
+    require_allowed_properties(
+        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip"}, "$/LabelDecoration");
     const std::string caption = explicit_string(control.properties(), "Caption");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     std::int32_t horizontal_align = 0;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("HorizontalAlign"))) {
         if (!std::holds_alternative<model::EnumerationValue>(entry->value)) {
@@ -2767,7 +2799,7 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("3"), canonical_label_properties(caption, horizontal_align), list({raw("0")})}),
+        list({raw("3"), canonical_label_properties(caption, horizontal_align, enabled, tool_tip), list({raw("0")})}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -2790,7 +2822,7 @@ LV encode_check_box(
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
             "CheckBox uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Caption"}, "$/CheckBox");
+    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip"}, "$/CheckBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
@@ -2802,11 +2834,12 @@ LV encode_check_box(
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_check_box_info(enabled, caption),
+        canonical_check_box_info(enabled, caption, tool_tip),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

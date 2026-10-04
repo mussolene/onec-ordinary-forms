@@ -634,6 +634,52 @@ void test_input_field_tooltip_and_format_xml_round_trip() {
     }
 }
 
+void test_check_box_tooltip_xml_round_trip() {
+    const auto make_document = [](std::string tool_tip) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CheckBoxToolTip";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::boolean;
+        type.entries.push_back(entry);
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Flag", type});
+        model::ControlNode check_box{model::ObjectId{2}, "FlagControl", model::CheckBoxPayload{}};
+        check_box.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        check_box.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::move(tool_tip));
+        document.add_control(std::move(check_box));
+        return document;
+    };
+
+    const auto empty_serialized = source::serialize_form_xml(make_document(""));
+    expect(empty_serialized.ok() && empty_serialized.value().find("<ToolTip>") == std::string::npos,
+        "empty CheckBox ToolTip must serialize as an omitted default");
+    const auto empty_reparsed = source::parse_form_xml(empty_serialized.value());
+    expect(empty_reparsed.ok(), "empty CheckBox ToolTip XML must parse after serialization");
+    const auto* empty_check_box = empty_reparsed.value().find_control(model::ObjectId{2});
+    expect(empty_check_box && !empty_check_box->properties().find(model::PropertyId::from_name("ToolTip")),
+        "empty CheckBox ToolTip must normalize to its implicit default in the model");
+
+    const std::string tool_tip = "Подсказка Ω <важно> & \"цитата\"\nВторая строка";
+    const auto serialized = source::serialize_form_xml(make_document(tool_tip));
+    expect(serialized.ok(), "CheckBox ToolTip must serialize");
+    expect(serialized.value().find("<ToolTip>Подсказка Ω &lt;важно&gt; &amp; \"цитата\"\nВторая строка</ToolTip>") !=
+            std::string::npos,
+        "CheckBox ToolTip XML must escape markup and preserve Unicode, punctuation, and newlines");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "CheckBox ToolTip XML must parse after serialization");
+    const auto* check_box = reparsed.value().find_control(model::ObjectId{2});
+    const auto* parsed_tool_tip = check_box == nullptr ? nullptr :
+        check_box->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(parsed_tool_tip && std::get<std::string>(parsed_tool_tip->value) == tool_tip,
+        "CheckBox ToolTip XML value must round-trip independently");
+    const auto reserialized = source::serialize_form_xml(reparsed.value());
+    expect(reserialized.ok() && reserialized.value() == serialized.value(),
+        "CheckBox ToolTip XML must serialize canonically after parsing");
+}
+
 void test_input_field_layout_xml_round_trip() {
     const auto make_xml = [](std::optional<std::string> horizontal,
                              std::optional<std::string> vertical,
@@ -942,6 +988,52 @@ void test_label_horizontal_align_xml_roundtrip() {
         "canonical LabelDecoration alignment XML must reparse");
 }
 
+void test_label_enabled_tooltip_xml_roundtrip() {
+    constexpr std::string_view xml = R"XML(
+<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+  <LabelDecoration id="3" name="Notice"><Position/><Enabled>false</Enabled><ToolTip>Подсказка Ω &amp; &lt;важно&gt; "цитата"
+Вторая строка</ToolTip></LabelDecoration>
+</ChildItems></Form>
+)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), "LabelDecoration Enabled and ToolTip XML must parse");
+    const auto* label = parsed.value().find_control(model::ObjectId{3});
+    expect(label != nullptr, "LabelDecoration must resolve after XML parsing");
+    const auto* enabled = label->properties().find(model::PropertyId::from_name("Enabled"));
+    const auto* tool_tip = label->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(enabled && !std::get<bool>(enabled->value), "LabelDecoration Enabled=false must parse as Boolean");
+    expect(tool_tip && std::get<std::string>(tool_tip->value) ==
+               "Подсказка Ω & <важно> \"цитата\"\nВторая строка",
+        "LabelDecoration ToolTip must preserve Unicode, XML punctuation, and newline text");
+
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<Enabled>false</Enabled>") != std::string::npos &&
+               serialized.value().find("&amp;") != std::string::npos &&
+               serialized.value().find("&lt;важно&gt;") != std::string::npos,
+        "LabelDecoration properties must serialize as named, escaped XML values");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "serialized LabelDecoration properties must reparse");
+    const auto* reparsed_label = reparsed.value().find_control(model::ObjectId{3});
+    const auto* reparsed_tool_tip = reparsed_label == nullptr ? nullptr : reparsed_label->properties().find(
+        model::PropertyId::from_name("ToolTip"));
+    expect(reparsed_tool_tip && std::get<std::string>(reparsed_tool_tip->value) ==
+               "Подсказка Ω & <важно> \"цитата\"\nВторая строка",
+        "LabelDecoration ToolTip text must survive XML serialization and reparsing");
+
+    constexpr std::string_view explicit_defaults_xml = R"XML(
+<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+  <LabelDecoration id="3" name="Notice"><Position/><Enabled>true</Enabled><ToolTip></ToolTip></LabelDecoration>
+</ChildItems></Form>
+)XML";
+    const auto explicit_defaults = source::parse_form_xml(explicit_defaults_xml);
+    expect(explicit_defaults.ok(), "explicit LabelDecoration defaults must parse");
+    const auto defaults_serialized = source::serialize_form_xml(explicit_defaults.value());
+    expect(defaults_serialized.ok() &&
+               defaults_serialized.value().find("<Enabled>") == std::string::npos &&
+               defaults_serialized.value().find("<ToolTip>") == std::string::npos,
+        "explicit LabelDecoration Enabled=true and empty ToolTip must be omitted from public XML");
+}
+
 void test_button_foreign_enum_default_is_retained() {
     constexpr std::string_view xml = R"XML(
 <Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
@@ -1058,6 +1150,7 @@ int main() {
         test_binding_target_and_manual_roundtrip();
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
+        test_check_box_tooltip_xml_round_trip();
         test_input_field_layout_xml_round_trip();
         test_button_shortcut_xml();
         test_boolean_type_domain_xml_roundtrip();
@@ -1069,6 +1162,7 @@ int main() {
         test_standard_picture_xml_reference_roundtrip();
         test_button_menu_model_roundtrip_and_rejections();
         test_label_horizontal_align_xml_roundtrip();
+        test_label_enabled_tooltip_xml_roundtrip();
     } catch (const std::exception& error) {
         std::cerr << "form XML tests: FAIL: " << error.what() << '\n';
         return 1;

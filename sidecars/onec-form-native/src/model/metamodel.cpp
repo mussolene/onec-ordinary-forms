@@ -709,6 +709,18 @@ void apply_proven_storage_overrides(
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(
         label_decoration,
+        "Enabled",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "true");
+    classify_property(
+        label_decoration,
+        "ToolTip",
+        StorageCodec::control_info,
+        DefaultKind::string,
+        "");
+    classify_property(
+        label_decoration,
         "HorizontalAlign",
         StorageCodec::control_info,
         DefaultKind::none,
@@ -727,6 +739,7 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::string,
         "");
+    classify_property(check_box, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
     classify_property(input_field, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");

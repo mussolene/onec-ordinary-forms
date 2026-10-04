@@ -109,6 +109,12 @@ void test_descriptors() {
                tool_tip->default_value.kind == DefaultKind::string &&
                tool_tip->default_value.canonical.empty(),
         "Button ToolTip descriptor must declare its empty localized default");
+    const auto* check_box_tool_tip = find_property(ControlKind::check_box, "ToolTip");
+    expect(check_box_tool_tip && check_box_tool_tip->persistence == PersistenceClass::persisted_editable &&
+               check_box_tool_tip->storage_codec == StorageCodec::control_base &&
+               check_box_tool_tip->default_value.kind == DefaultKind::string &&
+               check_box_tool_tip->default_value.canonical.empty(),
+        "CheckBox ToolTip descriptor must declare its empty localized base-string default");
     expect(picture_location && picture_location->storage_codec == StorageCodec::control_info &&
                picture_location->default_value.kind == DefaultKind::enumeration &&
                picture_location->default_value.canonical == "Left",
@@ -121,6 +127,20 @@ void test_descriptors() {
                menu_mode->default_value.kind == DefaultKind::enumeration &&
                menu_mode->default_value.canonical == "DontUse",
         "Button MenuMode descriptor must declare DontUse as its encoded default");
+    const auto* label_enabled = find_property(ControlKind::label_decoration, "Enabled");
+    const auto* label_tool_tip = find_property(ControlKind::label_decoration, "ToolTip");
+    expect(label_enabled && label_enabled->persistence == PersistenceClass::persisted_editable &&
+               label_enabled->storage_codec == StorageCodec::control_info &&
+               label_enabled->value_codec == ValueCodec::boolean &&
+               label_enabled->default_value.kind == DefaultKind::boolean &&
+               label_enabled->default_value.canonical == "true",
+        "LabelDecoration Enabled must declare its editable Boolean true default");
+    expect(label_tool_tip && label_tool_tip->persistence == PersistenceClass::persisted_editable &&
+               label_tool_tip->storage_codec == StorageCodec::control_info &&
+               label_tool_tip->value_codec == ValueCodec::string &&
+               label_tool_tip->default_value.kind == DefaultKind::string &&
+               label_tool_tip->default_value.canonical.empty(),
+        "LabelDecoration ToolTip must declare its editable empty string default");
 }
 
 void test_standard_picture_descriptor_catalog() {

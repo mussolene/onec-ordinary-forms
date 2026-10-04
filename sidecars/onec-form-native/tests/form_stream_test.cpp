@@ -728,6 +728,80 @@ void test_button_alignments_and_tooltip_round_trip() {
         "normalizing a mixed-ending ToolTip through the model must preserve its storage record");
 }
 
+void test_check_box_tooltip_round_trip_and_validation() {
+    const auto make_document = [](std::optional<std::string> tool_tip) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CheckBoxToolTip";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue boolean_type;
+        model::TypeDomainEntry boolean_entry;
+        boolean_entry.term = model::TypeDomainTerm::boolean;
+        boolean_type.entries.push_back(boolean_entry);
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Flag", boolean_type});
+        model::ControlNode check_box{model::ObjectId{2}, "FlagControl", model::CheckBoxPayload{}};
+        check_box.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        if (tool_tip.has_value()) {
+            check_box.properties().set_explicit(model::PropertyId::from_name("ToolTip"), *tool_tip);
+        }
+        document.add_control(std::move(check_box));
+        return document;
+    };
+    const auto check_box_base = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        const auto& record = encoded.items[1].items[2].items[2].items[1];
+        return record.items[2].items[1].items[0].items[0];
+    };
+
+    const auto default_encoded = form_stream::encode_document(make_document(std::nullopt));
+    const auto explicit_empty_encoded = form_stream::encode_document(make_document(std::string{}));
+    expect(default_encoded.ok() && explicit_empty_encoded.ok(),
+        "default and explicit empty CheckBox ToolTip must encode");
+    expect(list_stream::dump_compact(default_encoded.value()) ==
+               list_stream::dump_compact(explicit_empty_encoded.value()),
+        "explicit empty CheckBox ToolTip must normalize to the default storage");
+    const auto default_decoded = form_stream::decode_document(explicit_empty_encoded.value(), "CheckBoxToolTip");
+    expect(default_decoded.ok(), "explicit empty CheckBox ToolTip must decode");
+    const auto* default_check_box = default_decoded.value().find_control(model::ObjectId{2});
+    expect(default_check_box && !default_check_box->properties().find(model::PropertyId::from_name("ToolTip")),
+        "empty CheckBox ToolTip must normalize to its implicit default");
+
+    const std::string tool_tip = "Подсказка Ω <важно> & \"цитата\"\nВторая строка";
+    const auto encoded = form_stream::encode_document(make_document(tool_tip));
+    expect(encoded.ok(), "CheckBox ToolTip with Unicode, punctuation, and a newline must encode");
+    const auto& stored_tool_tip = check_box_base(encoded.value()).items[12];
+    expect(list_stream::dump_compact(stored_tool_tip) == value_codec::encode_localized_string(
+               model::LocalizedStringValue{{{"ru", "Подсказка Ω <важно> & \"цитата\"\r\nВторая строка"}}}),
+        "CheckBox ToolTip must occupy the observed localized base slot with canonical line endings");
+    const auto decoded = form_stream::decode_document(encoded.value(), "CheckBoxToolTip");
+    expect(decoded.ok(), "CheckBox ToolTip must decode");
+    const auto* check_box = decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_tool_tip = check_box == nullptr ? nullptr :
+        check_box->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(decoded_tool_tip && std::get<std::string>(decoded_tool_tip->value) == tool_tip,
+        "CheckBox ToolTip must round-trip Unicode, punctuation, and newlines");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "CheckBox ToolTip storage must round-trip without drift");
+
+    constexpr std::string_view tooltip_path = "$/1/2/2/1/2/1/0/0/12";
+    auto malformed = encoded.value();
+    auto& malformed_tool_tip = malformed.items[1].items[2].items[2].items[1]
+        .items[2].items[1].items[0].items[0].items[12];
+    malformed_tool_tip = list_stream::ListValue::raw_atom("malformed");
+    expect_failure(form_stream::decode_document(malformed, "CheckBoxToolTip"), "OOF1108", tooltip_path,
+        "malformed CheckBox ToolTip localization must be rejected");
+
+    auto multilingual = encoded.value();
+    auto& multilingual_tool_tip = multilingual.items[1].items[2].items[2].items[1]
+        .items[2].items[1].items[0].items[0].items[12];
+    multilingual_tool_tip = list_stream::parse(value_codec::encode_localized_string(
+        model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
+    expect_failure(form_stream::decode_document(multilingual, "CheckBoxToolTip"), "OOF1115", tooltip_path,
+        "multilingual CheckBox ToolTip must be rejected without loss");
+}
+
 void test_button_colors_round_trip_and_validation() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -1470,6 +1544,74 @@ void test_button_then_label_decoration_round_trip() {
         "OOF1114",
         "$/1/2/2/2/3/6/2",
         "unsupported LabelDecoration storage leaves must fail closed");
+}
+
+void test_label_enabled_and_tooltip_round_trip() {
+    const auto encode_label = [](bool explicit_defaults, bool enabled, std::string tool_tip) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "LabelProperties";
+        form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Run", model::ButtonPayload{}});
+        model::ControlNode label{model::ObjectId{3}, "Notice", model::LabelDecorationPayload{}};
+        if (explicit_defaults || !enabled) {
+            label.properties().set_explicit(model::PropertyId::from_name("Enabled"), enabled);
+        }
+        if (explicit_defaults || !tool_tip.empty()) {
+            label.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::move(tool_tip));
+        }
+        document.add_control(std::move(label));
+        return form_stream::encode_document(document);
+    };
+
+    const auto implicit_defaults = encode_label(false, true, "");
+    const auto explicit_defaults = encode_label(true, true, "");
+    expect(implicit_defaults.ok() && explicit_defaults.ok(),
+        "LabelDecoration defaults must encode with implicit and explicit model values");
+    expect(list_stream::dump_compact(implicit_defaults.value()) ==
+               list_stream::dump_compact(explicit_defaults.value()),
+        "explicit LabelDecoration Enabled=true and empty ToolTip must omit from storage");
+
+    const std::string tool_tip = "Подсказка Ω & <важно> \"цитата\"\nВторая\rстрока";
+    const auto variant = encode_label(false, false, tool_tip);
+    expect(variant.ok(), variant ? "LabelDecoration Enabled and ToolTip must encode" :
+        variant.diagnostics().front().path + ": " + variant.diagnostics().front().message);
+    const auto& label_record = variant.value().items[1].items[2].items[2].items[2];
+    const auto& label_base = label_record.items[2].items[1].items[0];
+    expect(label_base.items.size() == 21 && label_base.items[1].atom == "0" &&
+               label_base.items[12].is_list &&
+               list_stream::dump_compact(label_base.items[12]) !=
+                   list_stream::dump_compact(implicit_defaults.value().items[1].items[2].items[2].items[2]
+                       .items[2].items[1].items[0].items[12]),
+        "LabelDecoration Enabled and ToolTip must occupy their observed named storage slots");
+
+    const auto decoded = form_stream::decode_document(variant.value(), "LabelProperties");
+    expect(decoded.ok(), "LabelDecoration Enabled and ToolTip must decode");
+    const auto* label = decoded.value().find_control(model::ObjectId{3});
+    expect(label != nullptr, "LabelDecoration must survive property decoding");
+    const auto* enabled = label->properties().find(model::PropertyId::from_name("Enabled"));
+    const auto* decoded_tool_tip = label->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(enabled && !std::get<bool>(enabled->value),
+        "LabelDecoration Enabled=false must survive decoding");
+    expect(decoded_tool_tip && std::get<std::string>(decoded_tool_tip->value) ==
+               "Подсказка Ω & <важно> \"цитата\"\nВторая\rстрока",
+        "LabelDecoration ToolTip must round-trip Unicode, XML punctuation, and mixed newlines");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(variant.value()),
+        "LabelDecoration Enabled and ToolTip storage must round-trip without drift");
+
+    auto unsupported_localization = variant.value();
+    auto& tooltip_slot = unsupported_localization.items[1].items[2].items[2].items[2]
+        .items[2].items[1].items[0].items[12];
+    tooltip_slot = list_stream::parse(value_codec::encode_localized_string(
+        model::LocalizedStringValue{{{"en", "Hint"}, {"ru", "Подсказка"}}}));
+    expect_failure(
+        form_stream::decode_document(unsupported_localization, "LabelProperties"),
+        "OOF1115",
+        "$/1/2/2/2/2/1/0/12",
+        "LabelDecoration ToolTip must reject multiple localized values");
 }
 
 void test_fresh_checkbox_stream_decode() {
@@ -3567,6 +3709,7 @@ int main() {
         test_multiple_top_level_buttons_round_trip();
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
+        test_check_box_tooltip_round_trip_and_validation();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();
@@ -3574,6 +3717,7 @@ int main() {
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
+        test_label_enabled_and_tooltip_round_trip();
         test_fresh_checkbox_stream_decode();
         test_button_label_input_field_round_trip();
         test_input_field_tooltip_and_format_round_trip();
