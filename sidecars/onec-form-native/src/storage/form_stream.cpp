@@ -2874,7 +2874,10 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         if (!groups.emplace(key, &group).second) fail("OOF1114", std::string(path), "unique owner/ID collection pairs", std::to_string(id), "Duplicate menu collection");
         const auto& footer = group.items.back();
         require_arity(footer, 3, path);
-        require_raw_constant(footer.items[0], "-1", path);
+        const bool empty_command_bar_root = root_group && root_marker == command_bar_root_marker &&
+            integer_atom<std::size_t>(group.items[4], path) == 0;
+        require_raw_constant(footer.items[0],
+            empty_command_bar_root && footer.items[0].atom == "0" ? "0" : "-1", path);
         require_raw_constant(footer.items[1], "0", path);
         require_list(footer.items[2], path);
         const auto& refs = footer.items[2];
@@ -2996,7 +2999,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             entries.push_back(std::move(entry));
         }
         submenu_refs[0] = raw(std::to_string(submenu_count));
-        require_exact(group.items.back(), list({raw("-1"), raw("0"), list(std::move(submenu_refs))}),
+        require_exact(group.items.back(), list({group.items.back().items[0], raw("0"), list(std::move(submenu_refs))}),
             path, "Menu submenu references are inconsistent");
         return entries;
     };
