@@ -2906,6 +2906,13 @@ private:
                     entry != nullptr && !equals_descriptor_default(property, entry->value))
                     write_property(property, entry->value, id);
             }
+        } else if (const auto* table = std::get_if<model::TablePayload>(&control.payload)) {
+            for (const auto& property : metamodel_.properties_for(control.kind())) {
+                if (property.api_name == "Columns") write_table_columns(table->columns, id);
+                else if (const auto* entry = control.properties().find(property.id);
+                    entry != nullptr && !equals_descriptor_default(property, entry->value))
+                    write_property(property, entry->value, id);
+            }
         } else {
             write_property_set(control.properties(), metamodel_.properties_for(control.kind()), id);
         }
@@ -2935,9 +2942,6 @@ private:
                 writer_.close("ChartValue");
             }
             writer_.close("Values");
-        }
-        if (const auto* table = std::get_if<model::TablePayload>(&control.payload)) {
-            write_table_columns(table->columns, id);
         }
         write_events("Events", control.events, metamodel_.events_for(control.kind()), id);
         write_child_items(control.children);

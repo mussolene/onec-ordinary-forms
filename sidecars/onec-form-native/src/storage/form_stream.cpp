@@ -2377,6 +2377,7 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
 LV canonical_table_control_info(
     const model::TypeDomainPatternValue& source_type,
     const std::vector<model::TableColumn>& columns,
+    bool read_only,
     std::string_view path) {
     if (columns.empty() || columns.size() > 256) {
         fail("OOF1122", std::string(path) + "/Columns", "1 to 256 Columns",
@@ -2394,6 +2395,7 @@ LV canonical_table_control_info(
     if (base.items.size() != 21 || properties.items.size() != 39) {
         throw std::logic_error("canonical Table control property record has the wrong arity");
     }
+    if (!read_only) properties.items[1] = raw(std::to_string(117643809U | 0x400U));
     std::vector<LV> column_records;
     column_records.reserve(columns.size() + 1);
     column_records.push_back(raw(std::to_string(columns.size())));
@@ -5711,7 +5713,11 @@ DecodedControl decode_table(
         table.columns.push_back(decode_table_column(stored_columns.items[index], child_path(columns_path, index)));
     }
     LV normalized_info = info;
-    const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, info_path);
+    const auto flags = integer_atom<std::uint32_t>(info.items[2].items[1].items[1],
+        child_path(child_path(child_path(info_path, 2), 1), 1));
+    const bool read_only = (flags & 0x400U) == 0;
+    if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+    const LV canonical_info = canonical_table_control_info(linked_attribute.type, table.columns, read_only, info_path);
     auto& normalized_columns = normalized_info.items[2].items[1].items[23];
     const auto& canonical_columns = canonical_info.items[2].items[1].items[23];
     for (std::size_t index = 1; index < normalized_columns.items.size(); ++index) {
@@ -6621,7 +6627,8 @@ LV encode_table(
         fail("OOF1122", "$/Table", "named Table with direct DataPath and basic Position", control.name,
             "Table uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {}, "$/Table");
+    require_allowed_properties(control.properties(), {"ReadOnly"}, "$/Table");
+    const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/Table/DataPath", "existing ValueTable Attribute",
@@ -6635,7 +6642,7 @@ LV encode_table(
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
     return list({
         raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
-        canonical_table_control_info(attribute->type, table.columns, "$/Table"),
+        canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table"),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")})});
