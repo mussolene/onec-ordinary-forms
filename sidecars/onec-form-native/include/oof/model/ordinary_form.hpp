@@ -603,6 +603,7 @@ struct ChartValue {
     ObjectId series_ref{};
     ObjectId point_ref{};
     std::variant<DecimalValue, UndefinedValue> value{DecimalValue{}};
+    std::string tooltip{};
 };
 
 struct ChartPayload final : TypedControlPayload<ControlKind::chart> {

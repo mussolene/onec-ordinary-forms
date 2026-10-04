@@ -8312,6 +8312,98 @@ void test_page_table_codec() {
 }
 
 
+
+void test_chart_value_tooltip_named_pair_and_xml_text() {
+    const std::string tooltip_one = R"(Север: "Первая" & <10>)";
+    const std::string tooltip_two = R"(Вторая: Ёжик, 東京 "20")" + std::string{"\r\n"} + "Строка 2";
+    const std::string xml = R"XML(<Form id="1" name="Hints" ordinaryFormVersion="2.1"><ChildItems>
+      <Chart id="2" name="Metrics"><Position/>
+        <Series><ChartSeries id="2"><Text>Series</Text><Color kind="absolute" red="20"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series>
+        <Points><ChartPoint id="1"><Text>First</Text><Color kind="absolute" red="30"/></ChartPoint><ChartPoint id="3"><Text>Second</Text><Color kind="absolute" red="40"/></ChartPoint></Points>
+        <Values><ChartValue seriesRef="2" pointRef="1"><Number>10</Number><ToolTip>Север: "Первая" &amp; &lt;10&gt;</ToolTip></ChartValue>
+          <ChartValue seriesRef="2" pointRef="3"><Number>20</Number><ToolTip>Вторая: Ёжик, 東京 "20"&#xD;&#xA;Строка 2</ToolTip></ChartValue></Values>
+      </Chart></ChildItems></Form>)XML";
+    const auto parsed=source::parse_form_xml(xml);
+    expect(parsed.ok(), "named ChartValue ToolTip must parse after its typed value");
+    const auto& model_chart=std::get<model::ChartPayload>(parsed.value().find_control(model::ObjectId{2})->payload);
+    expect(model_chart.values[0].tooltip==tooltip_one && model_chart.values[1].tooltip==tooltip_two,
+        "XML character references must preserve Unicode, quotes and logical CRLF without transport conversion");
+    const auto encoded=form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "named Tooltip strings must encode both representations");
+    const auto& info=encoded.value().items[1].items[2].items[2].items[1].items[3];
+    // Независимая пара из опыта 19327, первая подсказка без преобразования переводов строк.
+    const auto observed=list_stream::parse(R"({{1,{1,1,{"#","Север: ""Первая"" & <10>"}},0},0})");
+    expect(info.items[153].atom==tooltip_one && list_stream::dump_compact(info.items[246])==list_stream::dump_compact(observed),
+        "writer must match both atom and independent observed single-fragment representation");
+    const auto decoded=form_stream::decode_document(encoded.value(),"Hints");
+    expect(decoded.ok(), "paired plain string ToolTip must decode");
+    const auto canonical=source::serialize_form_xml(decoded.value());
+    expect(canonical.ok() && canonical.value().find("&#xD;")!=std::string::npos && canonical.value().find("&amp;")!=std::string::npos,
+        "XML writer must escape carriage returns and markup in Tooltip text");
+    const auto reparsed=source::parse_form_xml(canonical.value());
+    expect(reparsed.ok(), "canonical ToolTip XML must parse again");
+    const auto& re_chart=std::get<model::ChartPayload>(reparsed.value().find_control(model::ObjectId{2})->payload);
+    expect(re_chart.values[0].tooltip==tooltip_one && re_chart.values[1].tooltip==tooltip_two,
+        "ToolTip XML roundtrip must preserve exact logical string bytes");
+    const auto rebuilt=form_stream::encode_document(reparsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value())==list_stream::dump_compact(encoded.value()),
+        "named Tooltip XML must rebuild the complete native Chart stream without a baseline");
+    auto undefined_xml=xml;
+    undefined_xml.replace(undefined_xml.find("<Number>10</Number>"),19,"<Undefined>undefined</Undefined>");
+    const auto undefined_source=source::parse_form_xml(undefined_xml);
+    expect(undefined_source.ok(), undefined_source.ok() ? "" : "Undefined with ToolTip: " + undefined_source.diagnostics().front().message + " actual=" + undefined_source.diagnostics().front().actual);
+    const auto undefined_native=form_stream::encode_document(undefined_source.value());
+    expect(undefined_native.ok(), "Undefined with ToolTip must encode without a numeric value");
+    const auto undefined_decoded=form_stream::decode_document(undefined_native.value(),"UndefinedHint");
+    expect(undefined_decoded.ok(), "Undefined with ToolTip must decode");
+    const auto& undefined_chart=std::get<model::ChartPayload>(undefined_decoded.value().find_control(model::ObjectId{2})->payload);
+    expect(std::holds_alternative<model::UndefinedValue>(undefined_chart.values[0].value)
+        && undefined_chart.values[0].tooltip==tooltip_one,
+        "ToolTip must preserve the Undefined variant rather than supplying a numeric value");
+    const auto undefined_canonical=source::serialize_form_xml(undefined_decoded.value());
+    expect(undefined_canonical.ok(), "Undefined with ToolTip must serialize to named XML");
+    const auto undefined_reparsed=source::parse_form_xml(undefined_canonical.value());
+    expect(undefined_reparsed.ok(), "Undefined ToolTip canonical XML must parse");
+    const auto undefined_rebuilt=form_stream::encode_document(undefined_reparsed.value());
+    expect(undefined_rebuilt.ok() && list_stream::dump_compact(undefined_rebuilt.value())==list_stream::dump_compact(undefined_native.value()),
+        "Undefined ToolTip must rebuild the complete native stream through XML");
+    auto duplicate_xml=xml;
+    duplicate_xml.insert(duplicate_xml.find("</ToolTip>")+10,"<ToolTip>duplicate</ToolTip>");
+    expect(!source::parse_form_xml(duplicate_xml).ok(), "duplicate ToolTip must fail instead of losing a value");
+    auto reordered_xml=xml;
+    reordered_xml.erase(reordered_xml.find("<Number>10</Number>"),19);
+    reordered_xml.insert(reordered_xml.find("</ToolTip>")+10,"<Number>10</Number>");
+    expect(!source::parse_form_xml(reordered_xml).ok(), "ToolTip before the typed value must fail the public XML contract");
+    auto mismatched=encoded.value();
+    mismatched.items[1].items[2].items[2].items[1].items[3].items[153]=list_stream::ListValue::string_atom("different");
+    expect(!form_stream::decode_document(mismatched,"Mismatch").ok(), "Tooltip atom and fragment mismatch must fail");
+    auto multiple=encoded.value();
+    multiple.items[1].items[2].items[2].items[1].items[3].items[246].items[0].items[1]=
+        list_stream::parse(R"({1,2,{"#","Север: ""Первая"" & <10>"},{"#","extra"}})");
+    expect(!form_stream::decode_document(multiple,"Formatted").ok(), "multifragment Tooltip must not be silently flattened");
+    auto unknown_tag=encoded.value();
+    unknown_tag.items[1].items[2].items[2].items[1].items[3].items[246].items[0].items[1].items[2].items[0]=list_stream::ListValue::string_atom("unknown");
+    expect(!form_stream::decode_document(unknown_tag,"UnknownText").ok(), "unsupported text fragment kinds must fail");
+    auto empty_source=parsed.value();
+    auto& empty_chart=std::get<model::ChartPayload>(const_cast<model::ControlNode*>(empty_source.find_control(model::ObjectId{2}))->payload);
+    for(auto& cell:empty_chart.values)cell.tooltip.clear();
+    const auto empty_encoded=form_stream::encode_document(empty_source);
+    expect(empty_encoded.ok(), "empty named Tooltip must use proven default representation");
+    const auto& empty_info=empty_encoded.value().items[1].items[2].items[2].items[1].items[3];
+    expect(empty_info.items[153].atom.empty() && list_stream::dump_compact(empty_info.items[246])=="{{1,{1,0},0},0}",
+        "omitted and empty model Tooltip must emit default empty atom and no_text companion");
+    auto alternative=empty_encoded.value();
+    alternative.items[1].items[2].items[2].items[1].items[3].items[246]=list_stream::parse(R"({{1,{1,1,{"#",""}},0},0})");
+    expect(!form_stream::decode_document(alternative,"UnknownEmpty").ok(), "unproven explicit-empty alternative companion must fail");
+    const auto empty_xml=source::serialize_form_xml(empty_source);
+    expect(empty_xml.ok() && empty_xml.value().find("<ToolTip>")==std::string::npos, "default empty ToolTip must be omitted in canonical XML");
+    auto explicit_empty_xml=xml;const auto tip_at=explicit_empty_xml.find("<ToolTip>");const auto tip_end=explicit_empty_xml.find("</ToolTip>",tip_at);
+    explicit_empty_xml.replace(tip_at,tip_end+10-tip_at,"<ToolTip/>");
+    const auto explicit_empty=source::parse_form_xml(explicit_empty_xml);
+    expect(explicit_empty.ok() && std::get<model::ChartPayload>(explicit_empty.value().find_control(model::ObjectId{2})->payload).values[0].tooltip.empty(),
+        "explicit empty XML must mean the canonical proven empty default");
+}
+
 void test_independent_tab_order_observed_geometry_and_guards() {
     // Независимые снимки опыта 67445: изменено только OrderSecond.ПорядокОбхода.
     for (const auto& [literal, ordinal, tab] : std::vector<std::tuple<std::string, std::uint32_t, std::int32_t>>{
@@ -8573,6 +8665,7 @@ int main() {
         test_page_table_codec();
         test_owner_aware_control_geometry_codec();
         test_independent_tab_order_observed_geometry_and_guards();
+        test_chart_value_tooltip_named_pair_and_xml_text();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {

@@ -4614,8 +4614,8 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
         for (const auto& point : chart.points) {
             const auto found = value_index.find(ChartValueKey{series.id.value(), point.id.value()});
             if (found == value_index.end()) fail("OOF1122", "$/Chart/Values", "complete Series by Point matrix", "missing pair", "Chart matrix contains a missing pair");
-            if (const auto* decimal = std::get_if<model::DecimalValue>(&found->second->value)) append({list({string_value("N"), raw(decimal->canonical)}), list({string_value("U")}), string_value("")});
-            else append({list({string_value("U")}), list({string_value("U")}), string_value("")});
+            if (const auto* decimal = std::get_if<model::DecimalValue>(&found->second->value)) append({list({string_value("N"), raw(decimal->canonical)}), list({string_value("U")}), string_value(found->second->tooltip)});
+            else append({list({string_value("U")}), list({string_value("U")}), string_value(found->second->tooltip)});
         }
     }
     append(canonical_chart_data_defaults());
@@ -4632,8 +4632,13 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
         append({style});
     }
     append(canonical_chart_render_defaults());
-    for (std::size_t index = 0; index < series_count * point_count; ++index) {
-        append({list({list({raw("1"), no_text, raw("0")}), raw("0")})});
+    for (const auto& series : chart.series) {
+        for (const auto& point : chart.points) {
+            const auto& tooltip = value_index.at(ChartValueKey{series.id.value(), point.id.value()})->tooltip;
+            const auto text = tooltip.empty() ? no_text
+                : list({raw("1"), raw("1"), list({string_value("#"), string_value(tooltip)})});
+            append({list({list({raw("1"), text, raw("0")}), raw("0")})});
+        }
     }
     append(canonical_chart_tail_defaults());
     if (info.size() != expected) fail("OOF1122", "$/Chart/Info", "count-derived Chart grammar", std::to_string(info.size()), "Chart Info cardinality does not match the supported collection profile");
@@ -4722,8 +4727,8 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
             if (encoded.items.empty() || encoded.items.size() > 2) fail("OOF1102", child_path(info_path, cell_offset), "typed numeric or Undefined Chart cell", describe(encoded), "Chart cell has an unsupported value shape");
             const auto type = string_atom(encoded.items[0], child_path(info_path, cell_offset));
             require_exact(at(info, cell_offset + 1, info_path), list({string_value("U")}), child_path(info_path, cell_offset + 1), "Chart value info is unsupported");
-            require_exact(at(info, cell_offset + 2, info_path), string_value(""), child_path(info_path, cell_offset + 2), "Chart tooltip is unsupported");
             model::ChartValue value;
+            value.tooltip = string_atom(at(info, cell_offset + 2, info_path), child_path(info_path, cell_offset + 2));
             value.series_ref = payload.series[series].id;
             value.point_ref = payload.points[point].id;
             if (type == "N" && encoded.items.size() == 2) value.value = model::DecimalValue{raw_atom(encoded.items[1], child_path(info_path, cell_offset + 1))};

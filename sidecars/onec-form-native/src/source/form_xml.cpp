@@ -1502,12 +1502,14 @@ private:
                         value.series_ref = parse_object_id(required_attribute(item, "seriesRef"), item);
                         value.point_ref = parse_object_id(required_attribute(item, "pointRef"), item);
                         const auto fields = element_children(item);
-                        if (fields.size() != 1) fail("OOF2003", item, id_text, "ChartValue", "one Number or Undefined", std::to_string(fields.size()), "ChartValue requires one typed value");
+                        if (fields.empty() || fields.size() > 2 || (fields.size() == 2 && node_name(fields[1]) != "ToolTip"))
+                            fail("OOF2003", item, id_text, "ChartValue", "one Number or Undefined and optional ToolTip", std::to_string(fields.size()), "ChartValue requires one typed value and optional plain string ToolTip");
                         if (node_name(fields.front()) == "Number") value.value = model::DecimalValue{canonical_decimal(node_text(fields.front()), fields.front(), "Number", id_text)};
                         else if (node_name(fields.front()) == "Undefined") {
                             if (node_text(fields.front()) != "undefined") fail("OOF2003", fields.front(), id_text, "Undefined", "undefined", node_text(fields.front()), "Invalid Undefined value");
                             value.value = model::UndefinedValue{};
                         } else fail("OOF2003", fields.front(), id_text, node_name(fields.front()), "Number or Undefined", node_name(fields.front()), "Unknown ChartValue type");
+                        if (fields.size() == 2) value.tooltip = node_text(fields[1]);
                         chart.values.push_back(std::move(value));
                     } else {
                         fail("OOF2003", item, id_text, node_name(item), name == "Series" ? "ChartSeries" : name == "Points" ? "ChartPoint" : "ChartValue", node_name(item), "Unknown Chart collection item");
@@ -3087,6 +3089,7 @@ private:
                 writer_.open("ChartValue", {{"seriesRef", object_id_text(item.series_ref)}, {"pointRef", object_id_text(item.point_ref)}});
                 if (const auto* number = std::get_if<model::DecimalValue>(&item.value)) writer_.text("Number", number->canonical);
                 else writer_.text("Undefined", "undefined");
+                if (!item.tooltip.empty()) writer_.text("ToolTip", item.tooltip);
                 writer_.close("ChartValue");
             }
             writer_.close("Values");
