@@ -262,66 +262,12 @@ std::string canonical_decimal(
     std::string_view property,
     std::string_view object_id = {}
 ) {
-    text = trim_ascii(text);
-    bool negative = false;
-    if (!text.empty() && (text.front() == '+' || text.front() == '-')) {
-        negative = text.front() == '-';
-        text.remove_prefix(1);
+    try {
+        return storage::value_codec::canonical_decimal(text);
+    } catch (const std::invalid_argument&) {
+        fail("OOF2003", node, std::string(object_id), std::string(property), "xs:decimal",
+            std::string(text), "Ordinary-form decimal has an invalid lexical value");
     }
-    const std::size_t point = text.find('.');
-    if (text.empty() || (point != std::string_view::npos && text.find('.', point + 1) != std::string_view::npos)) {
-        fail(
-            "OOF2003",
-            node,
-            std::string(object_id),
-            std::string(property),
-            "xs:decimal",
-            std::string(text),
-            "Ordinary-form decimal has an invalid lexical value");
-    }
-    std::string_view integer = point == std::string_view::npos ? text : text.substr(0, point);
-    std::string_view fraction = point == std::string_view::npos ? std::string_view{} : text.substr(point + 1);
-    const auto digits_only = [](std::string_view value) {
-        return std::all_of(value.begin(), value.end(), [](unsigned char character) {
-            return character >= '0' && character <= '9';
-        });
-    };
-    if ((!integer.empty() && !digits_only(integer)) ||
-        (!fraction.empty() && !digits_only(fraction)) ||
-        (integer.empty() && fraction.empty())) {
-        fail(
-            "OOF2003",
-            node,
-            std::string(object_id),
-            std::string(property),
-            "xs:decimal",
-            std::string(text),
-            "Ordinary-form decimal has an invalid lexical value");
-    }
-    while (integer.size() > 1 && integer.front() == '0') {
-        integer.remove_prefix(1);
-    }
-    while (!fraction.empty() && fraction.back() == '0') {
-        fraction.remove_suffix(1);
-    }
-    const bool integer_is_zero = integer.empty() ||
-                                 std::all_of(integer.begin(), integer.end(), [](char value) {
-                                     return value == '0';
-                                 });
-    const bool fraction_is_zero = fraction.empty();
-    if (integer_is_zero && fraction_is_zero) {
-        return "0";
-    }
-    std::string result;
-    if (negative) {
-        result.push_back('-');
-    }
-    result.append(integer.empty() ? "0" : integer);
-    if (!fraction.empty()) {
-        result.push_back('.');
-        result.append(fraction);
-    }
-    return result;
 }
 
 std::string canonical_uuid(std::string value) {
@@ -1523,7 +1469,49 @@ private:
         bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
-            if (name == "Document" && descriptor->kind == model::ControlKind::spreadsheet_document_field) {
+            if (descriptor->kind == model::ControlKind::chart &&
+                       (name == "Series" || name == "Points" || name == "Values")) {
+                auto& chart = std::get<model::ChartPayload>(control.payload);
+                for (xmlNodePtr item : element_children(child)) {
+                    if (name == "Series" && node_name(item) == "ChartSeries") {
+                        model::ChartSeries series;
+                        series.id = parse_object_id(required_attribute(item, "id"), item);
+                        for (xmlNodePtr field : element_children(item)) {
+                            const std::string field_name = node_name(field);
+                            if (field_name == "Text") series.text = node_text(field);
+                            else if (field_name == "Color") series.color = parse_color(field);
+                            else if (field_name == "Marker") series.marker = parse_enumeration(field);
+                            else fail("OOF2003", field, id_text, field_name, "Text, Color, or Marker", field_name, "Unknown ChartSeries field");
+                        }
+                        chart.series.push_back(std::move(series));
+                    } else if (name == "Points" && node_name(item) == "ChartPoint") {
+                        model::ChartPoint point;
+                        point.id = parse_object_id(required_attribute(item, "id"), item);
+                        for (xmlNodePtr field : element_children(item)) {
+                            const std::string field_name = node_name(field);
+                            if (field_name == "Text") point.text = node_text(field);
+                            else if (field_name == "Color") point.color = parse_color(field);
+                            else fail("OOF2003", field, id_text, field_name, "Text or Color", field_name, "Unknown ChartPoint field");
+                        }
+                        chart.points.push_back(std::move(point));
+                    } else if (name == "Values" && node_name(item) == "ChartValue") {
+                        model::ChartValue value;
+                        value.series_ref = parse_object_id(required_attribute(item, "seriesRef"), item);
+                        value.point_ref = parse_object_id(required_attribute(item, "pointRef"), item);
+                        const auto fields = element_children(item);
+                        if (fields.size() != 1) fail("OOF2003", item, id_text, "ChartValue", "one Number or Undefined", std::to_string(fields.size()), "ChartValue requires one typed value");
+                        if (node_name(fields.front()) == "Number") value.value = model::DecimalValue{canonical_decimal(node_text(fields.front()), fields.front(), "Number", id_text)};
+                        else if (node_name(fields.front()) == "Undefined") {
+                            if (node_text(fields.front()) != "undefined") fail("OOF2003", fields.front(), id_text, "Undefined", "undefined", node_text(fields.front()), "Invalid Undefined value");
+                            value.value = model::UndefinedValue{};
+                        } else fail("OOF2003", fields.front(), id_text, node_name(fields.front()), "Number or Undefined", node_name(fields.front()), "Unknown ChartValue type");
+                        chart.values.push_back(std::move(value));
+                    } else {
+                        fail("OOF2003", item, id_text, node_name(item), name == "Series" ? "ChartSeries" : name == "Points" ? "ChartPoint" : "ChartValue", node_name(item), "Unknown Chart collection item");
+                    }
+                }
+            }
+            else if (name == "Document" && descriptor->kind == model::ControlKind::spreadsheet_document_field) {
                 if (spreadsheet_document_seen)
                     fail("OOF2003", child, id_text, "Document", "at most one Document element", "duplicate", "SpreadsheetDocumentField has duplicate Document elements");
                 spreadsheet_document_seen = true;
@@ -1564,7 +1552,7 @@ private:
                 });
                 continue;
             }
-            if (name == "Buttons" && (descriptor->kind == model::ControlKind::button || descriptor->kind == model::ControlKind::command_bar)) {
+            else if (name == "Buttons" && (descriptor->kind == model::ControlKind::button || descriptor->kind == model::ControlKind::command_bar)) {
                 if (auto* payload = std::get_if<model::ButtonPayload>(&control.payload)) payload->buttons = parse_command_bar_buttons(child, id_text);
                 else std::get<model::CommandBarPayload>(control.payload).buttons = parse_command_bar_buttons(child, id_text);
             } else if (name == "Columns" && descriptor->kind == model::ControlKind::table) {
@@ -2794,6 +2782,33 @@ private:
             }
         } else {
             write_property_set(control.properties(), metamodel_.properties_for(control.kind()), id);
+        }
+        if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
+            writer_.open("Series");
+            for (const auto& item : chart->series) {
+                writer_.open("ChartSeries", {{"id", object_id_text(item.id)}});
+                writer_.text("Text", item.text);
+                write_color("Color", item.color, object_id_text(item.id));
+                write_enumeration("Marker", item.marker);
+                writer_.close("ChartSeries");
+            }
+            writer_.close("Series");
+            writer_.open("Points");
+            for (const auto& item : chart->points) {
+                writer_.open("ChartPoint", {{"id", object_id_text(item.id)}});
+                writer_.text("Text", item.text);
+                write_color("Color", item.color, object_id_text(item.id));
+                writer_.close("ChartPoint");
+            }
+            writer_.close("Points");
+            writer_.open("Values");
+            for (const auto& item : chart->values) {
+                writer_.open("ChartValue", {{"seriesRef", object_id_text(item.series_ref)}, {"pointRef", object_id_text(item.point_ref)}});
+                if (const auto* number = std::get_if<model::DecimalValue>(&item.value)) writer_.text("Number", number->canonical);
+                else writer_.text("Undefined", "undefined");
+                writer_.close("ChartValue");
+            }
+            writer_.close("Values");
         }
         if (const auto* table = std::get_if<model::TablePayload>(&control.payload)) {
             write_table_columns(table->columns, id);

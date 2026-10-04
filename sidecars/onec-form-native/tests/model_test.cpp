@@ -432,10 +432,10 @@ void test_help_metamodel() {
     const MetamodelCoverage& coverage = metamodel_coverage();
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 419,
-        "executable metamodel must collapse one inherited property duplicate");
+        coverage.control_property_occurrences == 420,
+        "executable metamodel must include Chart and spreadsheet properties");
     expect(
-        coverage.unique_control_property_names == 202,
+        coverage.unique_control_property_names == 203,
         "type-specific metamodel must exclude the inherited property duplicate");
     expect(
         coverage.control_event_occurrences == 79,
@@ -1132,6 +1132,30 @@ void test_page_position_invariants() {
         "Page Position dimensions must be non-negative");
 }
 
+void test_chart_number_lexical_validation() {
+    using namespace oof::model;
+    Form form;
+    form.id = ObjectId{1};
+    form.children.push_back(ControlRef{ObjectId{2}});
+    OrdinaryFormDocument document(std::move(form));
+    ChartPayload chart;
+    ChartSeries series;
+    series.id = ObjectId{2};
+    series.color.kind = ColorKind::absolute;
+    series.color.red = 255;
+    series.marker = {"ChartMarkerType", "Auto"};
+    chart.series.push_back(series);
+    ChartPoint point;
+    point.id = ObjectId{1};
+    point.color.kind = ColorKind::absolute;
+    point.color.blue = 128;
+    chart.points.push_back(point);
+    chart.values.push_back({ObjectId{2}, ObjectId{1}, DecimalValue{"NaN"}});
+    document.add_control(ControlNode{ObjectId{2}, "Chart", std::move(chart)});
+    expect(document.validate().has(InvariantCode::invalid_property),
+        "Chart model validation must reject non-decimal numeric values such as NaN");
+}
+
 }  // namespace
 
 int main() {
@@ -1157,6 +1181,7 @@ int main() {
         test_event_sequence_invariants();
         test_duplicate_bindings_rejected();
         test_page_position_invariants();
+        test_chart_number_lexical_validation();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';
         return 1;

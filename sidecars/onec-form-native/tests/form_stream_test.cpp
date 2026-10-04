@@ -112,6 +112,16 @@ list_stream::ListValue* find_usual_group_record(list_stream::ListValue& value) {
     return nullptr;
 }
 
+list_stream::ListValue* find_chart_record(list_stream::ListValue& value) {
+    constexpr std::string_view guid = "a8b97779-1a4b-4059-b09c-807f86d2a461";
+    if (value.is_list && value.items.size() == 7 && !value.items[0].is_list && value.items[0].atom == guid) return &value;
+    if (!value.is_list) return nullptr;
+    for (auto& item : value.items) {
+        if (auto* found = find_chart_record(item)) return found;
+    }
+    return nullptr;
+}
+
 list_stream::ListValue* find_record_with_guid(list_stream::ListValue& value, std::string_view guid) {
     if (value.is_list && value.items.size() == 6 && !value.items[0].is_list && value.items[0].atom == guid) {
         return &value;
@@ -3225,6 +3235,11 @@ void test_html_document_field_output_platform_record_and_guards() {
 }
 
 void test_radio_button_basic_observed_record_and_rejections() {
+    const auto append_child_ref = [](model::OrdinaryFormDocument& document, model::ObjectId id) {
+        auto form = document.form();
+        form.children.push_back(model::ControlRef{id});
+        document.set_form(std::move(form));
+    };
     const auto make_document = [](std::string caption = {}, bool enabled = true, std::string tool_tip = {}) {
         model::Form form;
         form.id = model::ObjectId{1};
@@ -3270,6 +3285,23 @@ void test_radio_button_basic_observed_record_and_rejections() {
                list_stream::dump_compact(default_encoded.value()),
         "default RadioButton document must round-trip canonically");
 
+    auto adjacent_defaults = make_document();
+    for (const auto [id, name] : {std::pair{104ULL, "RadioDefault2"}, std::pair{105ULL, "RadioDefault3"}}) {
+        append_child_ref(adjacent_defaults, model::ObjectId{id});
+        adjacent_defaults.add_control(model::ControlNode{model::ObjectId{id}, name, model::RadioButtonPayload{}});
+    }
+    append_child_ref(adjacent_defaults, model::ObjectId{106});
+    adjacent_defaults.add_control(model::ControlNode{model::ObjectId{106}, "Separator", model::LabelDecorationPayload{}});
+    append_child_ref(adjacent_defaults, model::ObjectId{107});
+    adjacent_defaults.add_control(model::ControlNode{model::ObjectId{107}, "RadioAfterLabel", model::RadioButtonPayload{}});
+    const auto adjacent_encoded = form_stream::encode_document(adjacent_defaults);
+    expect(adjacent_encoded.ok(), "adjacent default RadioButtons and one after a Label must remain independent controls");
+    const auto adjacent_decoded = form_stream::decode_document(adjacent_encoded.value(), "AdjacentDefaultRadios");
+    expect(adjacent_decoded.ok() && adjacent_decoded.value().find_control(model::ObjectId{104}) != nullptr &&
+               adjacent_decoded.value().find_control(model::ObjectId{105}) != nullptr &&
+               adjacent_decoded.value().find_control(model::ObjectId{107}) != nullptr,
+        "adjacent ungrouped RadioButtons must decode independently across a Label boundary");
+
     const std::string caption = "Radio Ω <tag> & текст";
     const std::string tool_tip = "Radio hint Ω <tag> & текст";
     const auto changed_encoded = form_stream::encode_document(make_document(caption, false, tool_tip));
@@ -3310,8 +3342,81 @@ void test_radio_button_basic_observed_record_and_rejections() {
     data_path_document.add_attribute(model::Attribute{model::ObjectId{200}, "Pattern", string_type});
     auto* radio_with_data = const_cast<model::ControlNode*>(data_path_document.find_control(model::ObjectId{103}));
     radio_with_data->data_path = model::DataPath{model::AttributeRef{model::ObjectId{200}}, {}};
-    expect_failure(form_stream::encode_document(data_path_document), "OOF1122", "$/RadioButton",
+    expect_failure(form_stream::encode_document(data_path_document), "OOF1122", "$/Form/ChildItems/3",
         "RadioButton DataPath must be explicitly rejected outside the proven profile");
+
+    auto numeric_group = make_document();
+    auto* numeric_head = const_cast<model::ControlNode*>(numeric_group.find_control(model::ObjectId{103}));
+    numeric_head->extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+    model::TypeDomainPatternValue numeric_type;
+    model::TypeDomainEntry numeric_entry;
+    numeric_entry.term = model::TypeDomainTerm::numeric;
+    numeric_entry.numeric = {10, 0, true};
+    numeric_type.entries.push_back(numeric_entry);
+    numeric_head->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), numeric_type);
+    numeric_head->properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"1"});
+    numeric_group.add_attribute(model::Attribute{model::ObjectId{200}, "Choice", numeric_type});
+    numeric_head->data_path = model::DataPath{model::AttributeRef{model::ObjectId{200}}, {}};
+    auto numeric_form = numeric_group.form();
+    numeric_form.children.push_back(model::ControlRef{model::ObjectId{104}});
+    numeric_group.set_form(std::move(numeric_form));
+    model::ControlNode numeric_member{model::ObjectId{104}, "RadioMember", model::RadioButtonPayload{}};
+    numeric_member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
+    numeric_group.add_control(std::move(numeric_member));
+    append_child_ref(numeric_group, model::ObjectId{105});
+    model::ControlNode numeric_member_three{model::ObjectId{105}, "RadioMemberThree", model::RadioButtonPayload{}};
+    numeric_member_three.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
+    numeric_group.add_control(std::move(numeric_member_three));
+    append_child_ref(numeric_group, model::ObjectId{106});
+    numeric_group.add_control(model::ControlNode{model::ObjectId{106}, "GroupSeparator", model::LabelDecorationPayload{}});
+    append_child_ref(numeric_group, model::ObjectId{107});
+    model::ControlNode second_head{model::ObjectId{107}, "FractionalGroupHead", model::RadioButtonPayload{}};
+    second_head.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+    model::TypeDomainEntry fractional_numeric_entry;
+    fractional_numeric_entry.term = model::TypeDomainTerm::numeric;
+    fractional_numeric_entry.numeric = {15, 3, false};
+    const model::TypeDomainPatternValue fractional_numeric_type{{fractional_numeric_entry}};
+    second_head.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), fractional_numeric_type);
+    second_head.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"-12.375"});
+    numeric_group.add_attribute(model::Attribute{model::ObjectId{201}, "FractionalChoice", fractional_numeric_type});
+    second_head.data_path = model::DataPath{model::AttributeRef{model::ObjectId{201}}, {}};
+    numeric_group.add_control(std::move(second_head));
+    for (const auto [id, name] : {std::pair{108ULL, "FractionalMember2"},
+                                  std::pair{109ULL, "FractionalMember3"},
+                                  std::pair{110ULL, "FractionalMember4"}}) {
+        append_child_ref(numeric_group, model::ObjectId{id});
+        model::ControlNode member{model::ObjectId{id}, name, model::RadioButtonPayload{}};
+        member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
+        numeric_group.add_control(std::move(member));
+    }
+    const auto numeric_encoded = form_stream::encode_document(numeric_group);
+    expect(numeric_encoded.ok(), "named integer and fractional RadioButton groups must encode with independent numeric qualifiers");
+    const auto numeric_decoded = form_stream::decode_document(numeric_encoded.value(), "RadioButtonNumericGroup");
+    expect(numeric_decoded.ok(), "named integer and fractional RadioButton groups must decode");
+    const auto* decoded_head = numeric_decoded.value().find_control(model::ObjectId{103});
+    const auto* decoded_member = numeric_decoded.value().find_control(model::ObjectId{104});
+    expect(decoded_head && decoded_head->data_path && decoded_head->extension_properties.find(
+               model::PropertyId::from_name("FirstInGroup")) && decoded_member &&
+               decoded_member->properties().find(model::PropertyId::from_name("SelectionValue")) &&
+               std::get<model::DecimalValue>(decoded_member->properties().find(
+                   model::PropertyId::from_name("SelectionValue"))->value).canonical == "0",
+        "RadioButton group head binding and contextual zero remain named model properties");
+    const auto numeric_reencoded = form_stream::encode_document(numeric_decoded.value());
+    expect(numeric_reencoded.ok() && list_stream::dump_compact(numeric_reencoded.value()) ==
+               list_stream::dump_compact(numeric_encoded.value()),
+        "named integer and fractional RadioButton groups must round-trip without stream drift");
+    auto wrong_group_selection = numeric_group;
+    auto* wrong_member = const_cast<model::ControlNode*>(wrong_group_selection.find_control(model::ObjectId{104}));
+    wrong_member->properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"-1"});
+    expect_failure(form_stream::encode_document(wrong_group_selection), "OOF1122", "$/Form/ChildItems/6",
+        "RadioButton member selection outside the inherited nonnegative qualifiers must fail closed");
+    auto wrong_group_type = numeric_group;
+    auto* wrong_head = const_cast<model::ControlNode*>(wrong_group_type.find_control(model::ObjectId{103}));
+    numeric_entry.numeric.precision = 1;
+    wrong_head->extension_properties.set_explicit(model::PropertyId::from_name("ValueType"),
+        model::TypeDomainPatternValue{{numeric_entry}});
+    expect_failure(form_stream::encode_document(wrong_group_type), "OOF1122", "$/Form/ChildItems/6",
+        "RadioButton head ValueType must match its linked Attribute qualifiers");
 
     auto unsupported_default = default_encoded.value();
     auto& unsupported_data_header = unsupported_default.items[1].items[2].items[2].items[4].items[2].items[1];
@@ -3326,6 +3431,138 @@ void test_radio_button_basic_observed_record_and_rejections() {
         model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
     expect(!form_stream::decode_document(multilingual, "RadioButtonCodec"),
         "multilingual RadioButton Caption must be rejected without loss");
+}
+
+void test_radio_button_group_order_inherited_decimal_selection_and_boundaries() {
+    const auto numeric_type = [](std::uint32_t digits, std::uint32_t fraction, bool non_negative) {
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::numeric;
+        entry.numeric = {digits, fraction, non_negative};
+        return model::TypeDomainPatternValue{{entry}};
+    };
+    const auto add_head = [&](model::OrdinaryFormDocument& document, std::uint64_t id,
+                              std::uint64_t attribute_id, std::string name, std::string attribute_name,
+                              const model::TypeDomainPatternValue& type, std::string selection) {
+        document.add_attribute(model::Attribute{model::ObjectId{attribute_id}, std::move(attribute_name), type});
+        model::ControlNode head{model::ObjectId{id}, std::move(name), model::RadioButtonPayload{}};
+        head.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+        head.extension_properties.set_explicit(model::PropertyId::from_name("ValueType"), type);
+        head.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{std::move(selection)});
+        head.data_path = model::DataPath{model::AttributeRef{model::ObjectId{attribute_id}}, {}};
+        document.add_control(std::move(head));
+    };
+    const auto add_member = [](model::OrdinaryFormDocument& document, std::uint64_t id,
+                               std::string name, std::string selection) {
+        model::ControlNode member{model::ObjectId{id}, std::move(name), model::RadioButtonPayload{}};
+        member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"),
+            model::DecimalValue{std::move(selection)});
+        document.add_control(std::move(member));
+    };
+    const auto add_label = [](model::OrdinaryFormDocument& document, std::uint64_t id, std::string name) {
+        document.add_control(model::ControlNode{model::ObjectId{id}, std::move(name), model::LabelDecorationPayload{}});
+    };
+    const auto make_form = [](std::vector<model::ChildItemRef> children) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "RadioGroupOrder";
+        form.children = std::move(children);
+        return form;
+    };
+
+    const auto signed_fractional_type = numeric_type(10, 2, false);
+    model::OrdinaryFormDocument ordered(make_form({
+        model::ControlRef{model::ObjectId{901}},
+        model::ControlRef{model::ObjectId{17}},
+        model::ControlRef{model::ObjectId{70}},
+    }));
+    add_head(ordered, 901, 1001, "HeadLaterId", "Choice", signed_fractional_type, "1.25");
+    add_member(ordered, 17, "MemberEarlierId", "-12.34");
+    add_label(ordered, 70, "BoundaryLabel");
+
+    const auto ordered_encoded = form_stream::encode_document(ordered);
+    expect(ordered_encoded.ok(),
+        "ChildItems order must bind a lower-ID member to the preceding numeric head and accept an in-range decimal");
+    const auto ordered_decoded = form_stream::decode_document(ordered_encoded.value(), "RadioGroupOrder");
+    expect(ordered_decoded.ok(), "ordered numeric group with inherited member type must decode");
+    const auto& decoded_children = ordered_decoded.value().form().children;
+    expect(decoded_children.size() == 3 &&
+               std::get<model::ControlRef>(decoded_children[0]).id() == model::ObjectId{901} &&
+               std::get<model::ControlRef>(decoded_children[1]).id() == model::ObjectId{17} &&
+               std::get<model::ControlRef>(decoded_children[2]).id() == model::ObjectId{70},
+        "decoded ChildItems order must remain head then member despite the higher head ObjectId");
+    const auto* decoded_member = ordered_decoded.value().find_control(model::ObjectId{17});
+    const auto* decoded_selection = decoded_member == nullptr ? nullptr : decoded_member->properties().find(
+        model::PropertyId::from_name("SelectionValue"));
+    expect(decoded_selection && std::get<model::DecimalValue>(decoded_selection->value).canonical == "-12.34" &&
+               decoded_member->extension_properties.find(model::PropertyId::from_name("ValueType")) == nullptr,
+        "decoded member must preserve its named DecimalValue without materializing inherited ValueType locally");
+    const auto ordered_reencoded = form_stream::encode_document(ordered_decoded.value());
+    expect(ordered_reencoded.ok() && list_stream::dump_compact(ordered_reencoded.value()) ==
+               list_stream::dump_compact(ordered_encoded.value()),
+        "inherited member decimal selection must round-trip without normalization or drift");
+
+    auto reordered = ordered;
+    auto reordered_form = reordered.form();
+    std::swap(reordered_form.children[0], reordered_form.children[1]);
+    reordered.set_form(std::move(reordered_form));
+    expect_failure(form_stream::encode_document(reordered), "OOF1122", "$/Form/ChildItems/0",
+        "moving the selected member before its head must change its group assignment and reject its unbound nonzero value");
+
+    auto out_of_range = ordered;
+    auto* too_precise = const_cast<model::ControlNode*>(out_of_range.find_control(model::ObjectId{17}));
+    too_precise->properties().set_explicit(model::PropertyId::from_name("SelectionValue"),
+        model::DecimalValue{"-12.345"});
+    expect_failure(form_stream::encode_document(out_of_range), "OOF1122", "$/Form/ChildItems/2",
+        "inherited member decimal must respect the head precision without coercion");
+
+    auto oversized_stream = ordered_encoded.value();
+    auto& member_record = oversized_stream.items[1].items[2].items[2].items[1];
+    member_record.items[2].items[4] = list_stream::ListValue::list({
+        list_stream::ListValue::string_atom("N"), list_stream::ListValue::raw_atom("123456789")});
+    expect(!form_stream::decode_document(oversized_stream, "RadioGroupOrder"),
+        "decoder must reject member selection outside the inherited head precision");
+
+    model::Page nested_page;
+    nested_page.id = model::ObjectId{400};
+    nested_page.name = "NestedPage";
+    model::Position page_bounds;
+    for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+        model::AnchorBinding binding;
+        binding.coordinate = edge;
+        binding.target_coordinate = edge;
+        binding.target = model::ControlRef{model::ObjectId{300}};
+        page_bounds.bindings.anchors.push_back(std::move(binding));
+    }
+    nested_page.position.set(page_bounds);
+    nested_page.children = {model::ControlRef{model::ObjectId{901}}, model::ControlRef{model::ObjectId{17}}};
+    model::ControlNode nested_panel{model::ObjectId{300}, "NestedPanel", model::PanelPayload{}};
+    nested_panel.children = {model::PageRef{model::ObjectId{400}}};
+    model::OrdinaryFormDocument page_group(make_form({model::ControlRef{model::ObjectId{300}}}));
+    add_head(page_group, 901, 1001, "PageHead", "Choice", signed_fractional_type, "1.25");
+    add_member(page_group, 17, "PageMember", "-12.34");
+    page_group.add_page(std::move(nested_page));
+    page_group.add_control(std::move(nested_panel));
+    const auto page_group_encoded = form_stream::encode_document(page_group);
+    expect(page_group_encoded.ok(),
+        "RadioButton group context must be scoped to and preserved within a Panel page" +
+            (page_group_encoded ? std::string{} : ": " + page_group_encoded.diagnostics().front().path + " " +
+                page_group_encoded.diagnostics().front().message));
+
+    model::Page split_page;
+    split_page.id = model::ObjectId{400};
+    split_page.name = "SplitPage";
+    split_page.position.set(page_bounds);
+    split_page.children = {model::ControlRef{model::ObjectId{17}}};
+    model::ControlNode boundary_panel{model::ObjectId{300}, "BoundaryPanel", model::PanelPayload{}};
+    boundary_panel.children = {model::PageRef{model::ObjectId{400}}};
+    model::OrdinaryFormDocument split_by_page(make_form({
+        model::ControlRef{model::ObjectId{901}}, model::ControlRef{model::ObjectId{300}}}));
+    add_head(split_by_page, 901, 1001, "OuterPageHead", "Choice", signed_fractional_type, "1.25");
+    add_member(split_by_page, 17, "InnerPageMember", "-12.34");
+    split_by_page.add_page(std::move(split_page));
+    split_by_page.add_control(std::move(boundary_panel));
+    expect(!form_stream::encode_document(split_by_page),
+        "a RadioButton group must not cross from the form into a nested Panel page");
 }
 
 void test_text_document_field_persisted_profile_and_rejections() {
@@ -6846,6 +7083,157 @@ void test_anchor_bindings_round_trip_and_fanout() {
         "proportional tuple without a primary tuple must be rejected");
 }
 
+void test_chart_named_dense_roundtrip_with_sibling_geometry() {
+    std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+      <Chart id="2" name="Metrics"><Position><Top>0</Top><Height>40</Height><Left>0</Left><Width>120</Width></Position><Title>Новая диаграмма</Title><Series>)XML";
+    constexpr std::array<std::uint64_t, 5> series_ids{2, 8, 9, 10, 11};
+    constexpr std::array<std::string_view, 5> series_texts{"Повтор", "Повтор", "", "Series 4", "Series 5"};
+    constexpr std::array<std::string_view, 5> markers{"Auto", "Circle", "Rhomb", "Rect", "Alternation"};
+    for (std::size_t index = 0; index < series_ids.size(); ++index) {
+        xml += "<ChartSeries id=\"" + std::to_string(series_ids[index]) + "\"><Text>" +
+            std::string(series_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
+            std::to_string(40 + index * 30) + "\" green=\"" + std::to_string(90 + index * 20) +
+            "\" blue=\"" + std::to_string(120 + index * 10) + "\"/><Marker type=\"ChartMarkerType\" member=\"" +
+            std::string(markers[index]) + "\"/></ChartSeries>";
+    }
+    xml += "</Series><Points>";
+    constexpr std::array<std::uint64_t, 3> point_ids{1, 7, 12};
+    constexpr std::array<std::string_view, 3> point_texts{"", "Ось X", "Ось X"};
+    for (std::size_t index = 0; index < point_ids.size(); ++index) {
+        xml += "<ChartPoint id=\"" + std::to_string(point_ids[index]) + "\"><Text>" +
+            std::string(point_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
+            std::to_string(20 + index * 50) + "\" green=\"" + std::to_string(30 + index * 40) +
+            "\" blue=\"" + std::to_string(40 + index * 30) + "\"/></ChartPoint>";
+    }
+    xml += "</Points><Values>";
+    for (std::size_t reverse_series = series_ids.size(); reverse_series > 0; --reverse_series) {
+        const std::size_t series = reverse_series - 1;
+        for (std::size_t reverse_point = point_ids.size(); reverse_point > 0; --reverse_point) {
+            const std::size_t point = reverse_point - 1;
+            xml += "<ChartValue seriesRef=\"" + std::to_string(series_ids[series]) + "\" pointRef=\"" +
+                std::to_string(point_ids[point]) + "\">";
+            if (series == 0 && point == 0) xml += "<Undefined>undefined</Undefined>";
+            else if (series == 0 && point == 1) xml += "<Number>0</Number>";
+            else if (series == 4 && point == 2) xml += "<Number>-23.75</Number>";
+            else xml += "<Number>" + std::to_string(series * 3 + point + 1) + ".125</Number>";
+            xml += "</ChartValue>";
+        }
+    }
+    xml += R"XML(</Values></Chart>
+      <LabelDecoration id="3" name="Caption"><Position><Top>50</Top><Height>20</Height><Left>4</Left><Width>80</Width></Position></LabelDecoration>
+    </ChildItems></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    if (!parsed.ok()) throw std::runtime_error("Chart parse: " + parsed.diagnostics().front().code + " " + parsed.diagnostics().front().message + " " + parsed.diagnostics().front().path);
+    expect(parsed.ok(), "named dense Chart with sibling must parse");
+    auto encoded = form_stream::encode_document(parsed.value());
+    if (!encoded.ok()) throw std::runtime_error("Chart encode: " + encoded.diagnostics().front().code + " " + encoded.diagnostics().front().message + " expected=" + encoded.diagnostics().front().expected + " actual=" + encoded.diagnostics().front().actual + " " + encoded.diagnostics().front().path);
+    expect(encoded.ok(), "named dense Chart must encode in a full document");
+    auto decoded = form_stream::decode_document(encoded.value());
+    expect(decoded.ok(), "named dense Chart must decode from a full document");
+    const auto* chart_control = decoded.value().find_control(model::ObjectId{2});
+    expect(chart_control != nullptr && chart_control->kind() == model::ControlKind::chart, "Chart must remain the first control");
+    const auto* chart = std::get_if<model::ChartPayload>(&chart_control->payload);
+    expect(chart != nullptr && chart->series.size() == 5 && chart->points.size() == 3 && chart->values.size() == 15,
+        "Chart dimensions and dense cell count must survive the stream");
+    expect(chart->series[0].color.red == 40 && chart->series[0].color.green == 90 && chart->series[0].color.blue == 120 &&
+        chart->points[0].color.red == 20 && chart->points[0].color.green == 30 && chart->points[0].color.blue == 40,
+        "Chart RGB channels must preserve platform blue-green-red packing order");
+    expect(chart->series[0].text == "Повтор" && chart->series[1].text == "Повтор" && chart->series[2].text.empty() && chart->points[0].text.empty(),
+        "duplicate and empty Chart captions must survive the stream");
+    const auto* title = chart_control->properties().find(model::PropertyId::from_name("Title"));
+    expect(title != nullptr && std::get<std::string>(title->value) == "Новая диаграмма", "Chart Title must use its property descriptor surface");
+    const auto cell = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{11} && value.point_ref == model::ObjectId{12};
+    });
+    expect(cell != chart->values.end() && std::get<model::DecimalValue>(cell->value).canonical == "-23.75",
+        "Chart matrix must preserve named references and negative decimal values independent of source order");
+    const auto zero = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{2} && value.point_ref == model::ObjectId{7};
+    });
+    expect(zero != chart->values.end() && std::get<model::DecimalValue>(zero->value).canonical == "0",
+        "explicit Chart zero must remain a numeric cell");
+    const auto undefined = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{2} && value.point_ref == model::ObjectId{1};
+    });
+    expect(undefined != chart->values.end() && std::holds_alternative<model::UndefinedValue>(undefined->value),
+        "explicit Chart Undefined must remain distinct from numeric zero");
+    const auto* sibling = decoded.value().find_control(model::ObjectId{3});
+    expect(sibling != nullptr && sibling->position.top.value() == 50 && sibling->position.left.value() == 4,
+        "Chart geometry slot must not overwrite its sibling Position");
+
+    auto designer_normalized_cache = encoded.value();
+    auto* normalized_chart_record = find_chart_record(designer_normalized_cache);
+    expect(normalized_chart_record != nullptr, "encoded document must expose its Chart record for cache normalization testing");
+    const auto chart_middle_start = std::size_t{5} + (series_ids.size() + 1) * 11 + 2 + point_ids.size() * 11;
+    normalized_chart_record->items[3].items[chart_middle_start + 84] = list_stream::ListValue::raw_atom("0.25");
+    const auto chart_cells_end = chart_middle_start + 96 + series_ids.size() * point_ids.size() * 3;
+    const auto chart_render_start = chart_cells_end + 28 + series_ids.size() + 1 + 21 + point_ids.size() + series_ids.size() + 1;
+    normalized_chart_record->items[3].items[chart_render_start + 2] = list_stream::ListValue::raw_atom("0.25");
+    expect(form_stream::decode_document(designer_normalized_cache).ok(),
+        "proven render-cache scalar may be recomputed without relaxing adjacent named Chart fields");
+
+    auto strict_alternation_cache = encoded.value();
+    auto* strict_alternation_record = find_chart_record(strict_alternation_cache);
+    expect(strict_alternation_record != nullptr, "encoded document must expose its Chart record for derived marker testing");
+    strict_alternation_record->items[3].items[51] = list_stream::ListValue::raw_atom("1");
+    expect(form_stream::decode_document(strict_alternation_cache).ok(),
+        "Designer-resolved Alternation cache may differ while its named style remains intact");
+
+    auto wrong_marker_cache_type = encoded.value();
+    auto* wrong_marker_type_record = find_chart_record(wrong_marker_cache_type);
+    expect(wrong_marker_type_record != nullptr, "encoded document must expose its Chart record for marker type testing");
+    wrong_marker_type_record->items[3].items[51] = list_stream::ListValue::string_atom("1");
+    expect(!form_stream::decode_document(wrong_marker_cache_type),
+        "derived Marker cache must remain a raw integer value");
+
+    auto out_of_range_marker_cache = encoded.value();
+    auto* out_of_range_marker_record = find_chart_record(out_of_range_marker_cache);
+    expect(out_of_range_marker_record != nullptr, "encoded document must expose its Chart record for marker range testing");
+    out_of_range_marker_record->items[3].items[51] = list_stream::ListValue::raw_atom("6");
+    expect(!form_stream::decode_document(out_of_range_marker_cache),
+        "derived Marker cache outside the proven enum range must be rejected");
+
+    auto concrete_marker_mismatch = encoded.value();
+    auto* concrete_marker_record = find_chart_record(concrete_marker_mismatch);
+    expect(concrete_marker_record != nullptr, "encoded document must expose its Chart record for concrete marker testing");
+    concrete_marker_record->items[3].items[18] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(concrete_marker_mismatch),
+        "concrete Marker cache must match the named enum exactly");
+
+    auto unknown_chart_style = encoded.value();
+    auto* unknown_chart_record = find_chart_record(unknown_chart_style);
+    expect(unknown_chart_record != nullptr, "encoded document must expose its Chart record for negative testing");
+    unknown_chart_record->items[3].items[6] = list_stream::ListValue::raw_atom("777");
+    expect(!form_stream::decode_document(unknown_chart_style),
+        "Chart decoder must reject an unrecognized style-row value instead of dropping it");
+
+    constexpr std::string_view empty_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Empty"><Position/><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    auto empty = source::parse_form_xml(empty_xml);
+    expect(empty.ok(), "empty platform Chart must remain a valid named model");
+    auto empty_stream = form_stream::encode_document(empty.value());
+    expect(empty_stream.ok(), "empty platform Chart must encode without synthetic data");
+    auto empty_decoded = form_stream::decode_document(empty_stream.value());
+    expect(empty_decoded.ok(), "empty platform Chart must cold decode");
+    const auto* empty_chart_control = empty_decoded.value().find_control(model::ObjectId{2});
+    const auto* empty_chart = empty_chart_control == nullptr ? nullptr : std::get_if<model::ChartPayload>(&empty_chart_control->payload);
+    expect(empty_chart != nullptr && empty_chart->series.empty() && empty_chart->points.empty() && empty_chart->values.empty(),
+        "empty native Chart dimensions must not be rewritten as synthetic values");
+
+    constexpr std::string_view sparse_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Sparse"><Position/><Series><ChartSeries id="2"><Text>S</Text><Color kind="absolute" red="1"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text>P</Text><Color kind="absolute" red="2"/></ChartPoint><ChartPoint id="3"><Text>Q</Text><Color kind="absolute" red="3"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Number>1</Number></ChartValue></Values></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(sparse_xml).ok(), "incomplete Chart matrix must fail instead of filling zero");
+    constexpr std::string_view invalid_number_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="BadNumber"><Position/><Series><ChartSeries id="2"><Text>S</Text><Color kind="absolute" red="1"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text>P</Text><Color kind="absolute" red="2"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Number>NaN</Number></ChartValue></Values></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(invalid_number_xml).ok(), "non-decimal Chart Number must fail closed");
+
+    auto unsupported_auto_marker_xml = xml;
+    const auto second_series_marker = unsupported_auto_marker_xml.find("member=\"Circle\"");
+    expect(second_series_marker != std::string::npos, "test fixture must contain the second Series marker");
+    unsupported_auto_marker_xml.replace(second_series_marker, std::string("member=\"Circle\"").size(), "member=\"Auto\"");
+    const auto unsupported_auto_marker = source::parse_form_xml(unsupported_auto_marker_xml);
+    expect(unsupported_auto_marker.ok(), "unsupported Auto ordinal fixture must remain well-formed named XML");
+    expect(form_stream::encode_document(unsupported_auto_marker.value()).ok(),
+        "Auto is a named Marker value at any Series ordinal; its resolved row cache is derived");
+}
+
 void test_platform_empty_document_fixture() {
     constexpr std::string_view fixture = R"OOF(
 {27,{18,{{1,1,{"ru","Form"}},1,4294967295},{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}},{0}},400,300,1,0,1,4,4,3,400,300,96},{{-1},3,{0},{0}},{00000000-0000-0000-0000-000000000000,0},{0},1,4,1,0,0,0,{0},{0},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
@@ -7334,6 +7722,7 @@ int main() {
         test_splitter_observed_record_and_named_codec();
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();
+        test_radio_button_group_order_inherited_decimal_selection_and_boundaries();
         test_html_document_field_output_platform_record_and_guards();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_text_document_field_persisted_profile_and_rejections();
@@ -7365,6 +7754,7 @@ int main() {
         test_page_boundary_position_codec();
         test_page_table_codec();
         test_owner_aware_control_geometry_codec();
+        test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

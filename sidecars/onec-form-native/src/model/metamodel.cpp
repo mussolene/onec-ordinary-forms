@@ -719,6 +719,8 @@ void apply_proven_storage_overrides(
     classify_property(radio_button, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(radio_button, "Caption", StorageCodec::control_info, DefaultKind::string, "");
     classify_property(radio_button, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    classify_property(radio_button, "SelectionValue", StorageCodec::control_info, DefaultKind::undefined, "undefined");
+    std::ranges::find(radio_button, "SelectionValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::decimal;
 
     auto& html_document_field = properties[static_cast<std::size_t>(ControlKind::html_document_field)];
     classify_property(
@@ -1062,6 +1064,15 @@ struct Metamodel::Impl {
             panel_placement_properties,
             form_properties,
             events);
+        auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
+        // Публичное Title отображает путь Диаграмма.ОбластьЗаголовка.Текст, а не отдельное свойство диаграммы.
+        chart_properties.push_back({
+            PropertyId::from_name("Title"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::chart, chart_properties.size(), "Title", "TitleArea.Text",
+            u8"ОбластьЗаголовка.Текст", u8"Строка", ValueKind::string, ValueCodec::string,
+            ApiAccess::read_write, VersionMask::platform_8_5,
+            PersistenceClass::persisted_editable, StorageCodec::control_info,
+            {DefaultKind::string, ""}});
 
         // Help may repeat an inherited extension property on one concrete control.
         // The executable model keeps the shared extension as the single owner.

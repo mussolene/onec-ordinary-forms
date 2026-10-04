@@ -133,7 +133,8 @@ std::vector<std::uint8_t> read_bytes(const std::filesystem::path& path) {
 
 std::string read_text(const std::filesystem::path& path) {
     const auto bytes = read_bytes(path);
-    return std::string(bytes.begin(), bytes.end());
+    const bool has_bom = bytes.size() >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf;
+    return std::string(bytes.begin() + (has_bom ? 3 : 0), bytes.end());
 }
 
 void write_bytes(

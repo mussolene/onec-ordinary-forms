@@ -15,6 +15,38 @@
 #include <variant>
 
 namespace oof::storage::value_codec {
+
+std::string canonical_decimal(std::string_view text) {
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\t' || text.front() == '\r' || text.front() == '\n')) text.remove_prefix(1);
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '\r' || text.back() == '\n')) text.remove_suffix(1);
+    bool negative = false;
+    if (!text.empty() && (text.front() == '+' || text.front() == '-')) {
+        negative = text.front() == '-';
+        text.remove_prefix(1);
+    }
+    const auto point = text.find('.');
+    if (text.empty() || (point != std::string_view::npos && text.find('.', point + 1) != std::string_view::npos)) {
+        throw std::invalid_argument("invalid xs:decimal lexical value");
+    }
+    auto integer = point == std::string_view::npos ? text : text.substr(0, point);
+    auto fraction = point == std::string_view::npos ? std::string_view{} : text.substr(point + 1);
+    const auto digits_only = [](std::string_view value) {
+        return std::ranges::all_of(value, [](unsigned char ch) { return ch >= '0' && ch <= '9'; });
+    };
+    if ((!integer.empty() && !digits_only(integer)) || (!fraction.empty() && !digits_only(fraction)) ||
+        (integer.empty() && fraction.empty())) {
+        throw std::invalid_argument("invalid xs:decimal lexical value");
+    }
+    while (integer.size() > 1 && integer.front() == '0') integer.remove_prefix(1);
+    while (!fraction.empty() && fraction.back() == '0') fraction.remove_suffix(1);
+    const bool integer_zero = integer.empty() || std::ranges::all_of(integer, [](char ch) { return ch == '0'; });
+    if (integer_zero && fraction.empty()) return "0";
+    std::string result;
+    if (negative) result.push_back('-');
+    result.append(integer.empty() ? "0" : integer);
+    if (!fraction.empty()) { result.push_back('.'); result.append(fraction); }
+    return result;
+}
 namespace {
 
 constexpr std::uint32_t localized_string_version = 1;
