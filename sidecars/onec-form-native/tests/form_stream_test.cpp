@@ -275,6 +275,57 @@ void test_captured_table_column_record() {
         "independent captured Table/Column record must re-encode exactly apart from recompressed editor bytes");
 }
 
+void test_table_read_only_runtime_flags() {
+    for (const bool read_only : {true, false}) {
+        auto literal = captured_table_payload();
+        auto* record = find_record_with_guid(literal,
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(record != nullptr, "captured fixture must contain Table");
+        // Независимый опыт true/false/true меняет только этот флаг Table на 0x400.
+        const auto expected_flags = read_only ? "117643809" : "117644833";
+        record->items[2].items[2].items[1].items[1] = list_stream::ListValue::raw_atom(expected_flags);
+        auto decoded = form_stream::decode_document(literal, "LiteralTableReadOnly");
+        expect(decoded.ok(), "independent literal Table ReadOnly flags must decode");
+        const auto table = std::find_if(decoded.value().collections().controls.begin(),
+            decoded.value().collections().controls.end(), [](const auto& control) {
+                return control.kind() == model::ControlKind::table;
+            });
+        expect(table != decoded.value().collections().controls.end(), "literal Table must retain its named model");
+        const auto* property = table->properties().find(model::PropertyId::from_name("ReadOnly"));
+        expect(read_only ? property == nullptr : property != nullptr && !std::get<bool>(property->value),
+            "Table ReadOnly=true must remain the profile default and false must be explicit");
+        auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok(), xml ? "named Table ReadOnly must serialize to XML" :
+            xml.diagnostics().front().path + ": " + xml.diagnostics().front().message);
+        expect((xml.value().find("<ReadOnly>false</ReadOnly>") != std::string::npos) == !read_only,
+            "nondefault Table ReadOnly=false must be public XML");
+        auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "named Table ReadOnly XML must parse");
+        auto encoded = form_stream::encode_document(parsed.value());
+        expect(encoded.ok(), "Table ReadOnly must survive XML and storage roundtrip");
+        const auto* encoded_record = find_record_with_guid(encoded.value(),
+            model::metamodel::descriptor_for(model::ControlKind::table).guid);
+        expect(encoded_record != nullptr && encoded_record->items[2].items[2].items[1].items[1].atom == expected_flags,
+            "writer must use the independent true/false literal flags");
+        if (read_only) {
+            const_cast<model::ControlNode&>(*table).properties().set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+            auto explicit_true = form_stream::encode_document(decoded.value());
+            expect(explicit_true.ok(), "explicit Table ReadOnly=true must be supported");
+            const auto* explicit_record = find_record_with_guid(explicit_true.value(),
+                model::metamodel::descriptor_for(model::ControlKind::table).guid);
+            expect(explicit_record != nullptr &&
+                list_stream::dump_compact(*explicit_record) == list_stream::dump_compact(*encoded_record),
+                "explicit and omitted ReadOnly=true must have identical Table records");
+        }
+    }
+    auto unknown_flag = captured_table_payload();
+    auto* record = find_record_with_guid(unknown_flag,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    record->items[2].items[2].items[1].items[1] = list_stream::ListValue::raw_atom("117644835");
+    expect(!form_stream::decode_document(unknown_flag, "UnknownTableFlag"),
+        "changing any unproven Table flag must fail strict canonical validation");
+}
+
 void test_table_column_name_and_data_path_runtime_slots() {
     auto literal = captured_table_payload();
     auto* table_record = find_record_with_guid(
@@ -7873,6 +7924,7 @@ int main() {
         test_attribute_allocator_is_separate_from_control_ids();
         test_usual_group_named_record_round_trip_and_rejections();
         test_captured_table_column_record();
+        test_table_read_only_runtime_flags();
         test_table_column_name_and_data_path_runtime_slots();
         test_table_column_choice_and_check_box_profiles();
         test_captured_table_packet_rejections_and_alternate_deflate();

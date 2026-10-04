@@ -840,6 +840,14 @@ void test_choice_field_schema_contract(xmlSchemaPtr schema) {
         "named ChoiceField DataPath and proven Boolean properties must satisfy the XSD");
 }
 
+void test_table_read_only_schema_contract(xmlSchemaPtr schema) {
+    constexpr std::string_view table = R"XML(<Form id="1" name="TableReadOnly" ordinaryFormVersion="2.1"><ChildItems><Table id="2" name="Rows"><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header/><Control type="InputField"/></Column></Columns><ReadOnly>false</ReadOnly></Table></ChildItems></Form>)XML";
+    expect(validate_document(schema, table) == 0, "named Table ReadOnly=false must satisfy the compiled public schema");
+    std::string invalid(table);
+    invalid.replace(invalid.find("<ReadOnly>false</ReadOnly>"), 26, "<ReadOnly>notBoolean</ReadOnly>");
+    expect(validate_document(schema, invalid) != 0, "Table ReadOnly must reject nonboolean XML values");
+}
+
 void test_table_column_editor_schema(xmlNodePtr schema) {
     expect(enumeration_values(schema, "TableColumnEditorKindType") ==
             std::vector<std::string>{"InputField", "ChoiceField", "CheckBox"},
@@ -1337,6 +1345,7 @@ int main() {
         test_spreadsheet_document_schema(form_schema);
         test_choice_field_schema_contract(compiled_form.get());
         test_table_column_editor_schema(form_schema);
+        test_table_read_only_schema_contract(compiled_form.get());
         test_event_surfaces(metamodel, form_schema);
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
