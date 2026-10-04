@@ -68,6 +68,21 @@ run_cli(0 "initial dump" dump "${first_bin}" "${first_xml}" --json)
 require_contains("${CLI_STDOUT}" "\"ok\":true" "initial dump JSON result")
 require_file_equals("${test_root}/first/Form/Module.bsl" "${module_text}" "initial module preservation")
 
+# Сигнатура UTF-8 файла модуля не является символом текста BSL.
+string(ASCII 239 187 191 module_bom)
+file(WRITE "${module_file}" "${module_bom}${module_text}")
+set(bom_bin "${test_root}/bom.bin")
+set(bom_xml "${test_root}/bom/Form.xml")
+run_cli(0 "UTF-8 BOM module build" build "${source_xml}" "${bom_bin}" --json)
+file(READ "${first_bin}" plain_binary HEX)
+file(READ "${bom_bin}" bom_binary HEX)
+if(NOT plain_binary STREQUAL bom_binary)
+  message(FATAL_ERROR "UTF-8 module signature changed the serialized BSL text")
+endif()
+run_cli(0 "UTF-8 BOM module dump" dump "${bom_bin}" "${bom_xml}" --json)
+require_file_equals("${test_root}/bom/Form/Module.bsl" "${module_text}" "module signature must not become BSL text")
+file(WRITE "${module_file}" "${module_text}")
+
 # Edit a named public property, rebuild, and ensure it survives another dump.
 file(READ "${first_xml}" xml_text)
 string(REPLACE "<Caption>Before</Caption>" "<Caption>After</Caption>" edited_xml "${xml_text}")
