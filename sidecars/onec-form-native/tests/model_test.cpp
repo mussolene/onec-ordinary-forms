@@ -122,6 +122,23 @@ void test_descriptors() {
                check_box_font->default_value.kind == DefaultKind::font &&
                check_box_font->default_value.canonical == "automatic",
         "CheckBox Font descriptor must declare its editable automatic Font default");
+    const auto* splitter_orientation = find_property(ControlKind::splitter, "Orientation");
+    const auto* splitter_enabled = find_property(ControlKind::splitter, "Enabled");
+    const auto* splitter_back_color = find_property(ControlKind::splitter, "BackColor");
+    expect(splitter_orientation && splitter_orientation->persistence == PersistenceClass::persisted_editable &&
+               splitter_orientation->storage_codec == StorageCodec::control_info &&
+               splitter_orientation->value_codec == ValueCodec::enumeration &&
+               splitter_orientation->default_value.kind == DefaultKind::enumeration &&
+               splitter_orientation->default_value.canonical == "Auto",
+        "Splitter Orientation descriptor must declare its editable Auto default");
+    expect(splitter_enabled && splitter_enabled->storage_codec == StorageCodec::control_base &&
+               splitter_enabled->default_value.kind == DefaultKind::boolean &&
+               splitter_enabled->default_value.canonical == "true" &&
+               splitter_back_color && splitter_back_color->storage_codec == StorageCodec::control_base &&
+               splitter_back_color->value_codec == ValueCodec::color &&
+               splitter_back_color->default_value.kind == DefaultKind::color &&
+               splitter_back_color->default_value.canonical == "automatic",
+        "Splitter base descriptors must declare proven editable defaults");
     expect(picture_location && picture_location->storage_codec == StorageCodec::control_info &&
                picture_location->default_value.kind == DefaultKind::enumeration &&
                picture_location->default_value.canonical == "Left",

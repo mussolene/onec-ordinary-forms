@@ -683,6 +683,22 @@ model::ColorValue explicit_button_color(const model::PropertySet& properties, st
     return std::get<model::ColorValue>(entry->value);
 }
 
+model::ColorValue explicit_splitter_color(const model::PropertySet& properties, std::string_view name) {
+    const auto* entry = properties.find(model::PropertyId::from_name(name));
+    if (entry == nullptr) return model::ColorValue{};
+    if (!std::holds_alternative<model::ColorValue>(entry->value)) {
+        fail("OOF1122", std::string("$/Splitter/") + std::string(name), "ColorValue",
+            "different value type", "Splitter color property has the wrong value type");
+    }
+    const auto color = std::get<model::ColorValue>(entry->value);
+    if (color.kind != model::ColorKind::automatic && color.kind != model::ColorKind::absolute) {
+        fail("OOF1122", std::string("$/Splitter/") + std::string(name),
+            "automatic or absolute RGB color", "unobserved color kind",
+            "Splitter style colors are outside the supported storage profile");
+    }
+    return color;
+}
+
 LV encode_control_font(const model::FontValue& font, std::string_view property_path) {
     try {
         return list_stream::parse(value_codec::encode_font(font));
@@ -808,6 +824,23 @@ LV canonical_picture_properties(bool enabled, std::string_view tool_tip = {}) {
         R"({{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},20,0,0,{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,2,0,0,1,2},{0,0,0},1,1,0,0,{1,0},0,1,1,1})");
     properties.items[0] = canonical_button_base(enabled, tool_tip);
     return properties;
+}
+
+LV canonical_splitter_properties(bool enabled, std::int32_t orientation, std::string_view tool_tip,
+    const model::ColorValue& border_color, const model::ColorValue& back_color) {
+    auto base = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1,{4,4,{0},4},"
+        "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
+        "{3,0,{-18},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
+        "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    if (!base.is_list || base.items.size() != 21) {
+        throw std::logic_error("canonical Splitter base record is malformed");
+    }
+    base.items[1] = raw(enabled ? "1" : "0");
+    base.items[12] = encoded_localized(tool_tip);
+    base.items[2] = encode_button_color(back_color, "$/Splitter/BackColor");
+    base.items[6] = encode_button_color(border_color, "$/Splitter/BorderColor");
+    return list({std::move(base), raw("2"), raw(std::to_string(orientation)), raw("0")});
 }
 
 LV canonical_button_properties(
@@ -2573,6 +2606,75 @@ DecodedControl decode_picture_decoration(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::move(picture_asset), {}};
 }
 
+DecodedControl decode_splitter(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::splitter);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 Splitter ID", std::to_string(raw_id),
+            "Splitter ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 2, info_path);
+    require_raw_constant(info.items[0], "0", child_path(info_path, 0));
+    const auto& properties = info.items[1];
+    const auto properties_path = child_path(info_path, 1);
+    require_arity(properties, 4, properties_path);
+    const auto& base = properties.items[0];
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(base, 21, base_path);
+    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
+    const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
+    const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
+    if ((back_color.kind != model::ColorKind::automatic && back_color.kind != model::ColorKind::absolute) ||
+        (border_color.kind != model::ColorKind::automatic && border_color.kind != model::ColorKind::absolute)) {
+        fail("OOF1114", properties_path, "automatic or observed absolute Splitter colors", describe(properties),
+            "Splitter style colors are outside the supported storage profile");
+    }
+    const auto orientation_storage = integer_atom<std::int32_t>(properties.items[2], child_path(properties_path, 2));
+    std::string orientation_member;
+    if (orientation_storage == 2) orientation_member = "Auto";
+    else if (orientation_storage == 0) orientation_member = "Vertical";
+    else if (orientation_storage == 1) orientation_member = "Horizontal";
+    else fail("OOF1114", child_path(properties_path, 2), "Orientation Auto(2), Vertical(0), or Horizontal(1)",
+        std::to_string(orientation_storage), "Splitter orientation value is unsupported");
+
+    require_exact(properties,
+        canonical_splitter_properties(enabled, orientation_storage, tool_tip, border_color, back_color),
+        properties_path, "Splitter properties differ from the supported exact record");
+    const auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+        "Control name is required");
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "Splitter metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "Splitter cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::SplitterPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (orientation_member != "Auto") control.properties().set_explicit(
+        model::PropertyId::from_name("Orientation"), model::EnumerationValue{"Orientation", orientation_member});
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    if (back_color.kind != model::ColorKind::automatic) control.properties().set_explicit(
+        model::PropertyId::from_name("BackColor"), back_color);
+    if (border_color.kind != model::ColorKind::automatic) control.properties().set_explicit(
+        model::PropertyId::from_name("BorderColor"), border_color);
+    control.position = decoded_geometry.position;
+    return {std::move(control), std::nullopt, decoded_geometry.incoming, std::nullopt, {}};
+}
+
 DecodedControl decode_radio_button(
     const LV& record,
     std::string_view path,
@@ -3369,6 +3471,39 @@ LV encode_picture_decoration(
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
     });
+}
+
+LV encode_splitter(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::splitter || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "Splitter with positive int64 ID", control.name,
+            "Splitter is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/Splitter", "named Splitter without events, DataPath, extensions, or children and plain Position",
+            control.name, "Splitter uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Enabled", "Orientation", "ToolTip", "BorderColor", "BackColor"},
+        "$/Splitter");
+    if (!std::holds_alternative<model::SplitterPayload>(control.payload)) {
+        fail("OOF1122", "$/Splitter", "SplitterPayload", "different payload", "Splitter payload is invalid");
+    }
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const std::int32_t orientation = explicit_enum_storage_value(control.properties(), "Splitter", "Orientation",
+        "Orientation", 2, {{"Auto", 2}, {"Vertical", 0}, {"Horizontal", 1}});
+    const auto back_color = explicit_splitter_color(control.properties(), "BackColor");
+    const auto border_color = explicit_splitter_color(control.properties(), "BorderColor");
+    const auto properties = canonical_splitter_properties(enabled, orientation, tool_tip, border_color, back_color);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::splitter);
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        list({raw("0"), properties}), encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")})});
 }
 
 LV encode_label(const model::ControlNode& control, const GeometryContext& context) {
@@ -4388,6 +4523,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid)
                         child = decode_radio_button(record, record_path, context);
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::splitter).guid)
+                        child = decode_splitter(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
@@ -4781,6 +4918,8 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_radio_button(*control, context);
                 } else if (control->kind() == model::ControlKind::picture_decoration) {
                     record = encode_picture_decoration(*control, document, context);
+                } else if (control->kind() == model::ControlKind::splitter) {
+                    record = encode_splitter(*control, context);
                 } else if (control->kind() == model::ControlKind::label_decoration) {
                     record = encode_label(*control, context);
                 } else if (control->kind() == model::ControlKind::calendar_field) {
