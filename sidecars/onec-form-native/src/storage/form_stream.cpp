@@ -683,30 +683,30 @@ model::ColorValue explicit_button_color(const model::PropertySet& properties, st
     return std::get<model::ColorValue>(entry->value);
 }
 
-LV encode_button_font(const model::FontValue& font) {
+LV encode_control_font(const model::FontValue& font, std::string_view property_path) {
     try {
         return list_stream::parse(value_codec::encode_font(font));
     } catch (const std::exception& error) {
-        fail("OOF1122", "$/Button/Font", "supported named Font value", error.what(),
-            "Button Font cannot be represented by the supported platform codec");
+        fail("OOF1122", std::string(property_path), "supported named Font value", error.what(),
+            "Font cannot be represented by the supported platform codec");
     }
 }
 
-model::FontValue decode_button_font(const LV& value, std::string_view path) {
+model::FontValue decode_control_font(const LV& value, std::string_view path) {
     try {
         return value_codec::decode_font(list_stream::dump_compact(value));
     } catch (const std::exception& error) {
-        fail("OOF1114", std::string(path), "supported canonical Button Font record", error.what(),
-            "Button Font record is malformed or unsupported");
+        fail("OOF1114", std::string(path), "supported canonical Font record", error.what(),
+            "Font record is malformed or unsupported");
     }
 }
 
-model::FontValue explicit_button_font(const model::PropertySet& properties) {
+model::FontValue explicit_control_font(const model::PropertySet& properties, std::string_view property_path) {
     const auto* entry = properties.find(model::PropertyId::from_name("Font"));
     if (entry == nullptr) return {};
     if (!std::holds_alternative<model::FontValue>(entry->value)) {
-        fail("OOF1122", "$/Button/Font", "FontValue", "different value type",
-            "Button Font property has the wrong value type");
+        fail("OOF1122", std::string(property_path), "FontValue", "different value type",
+            "Font property has the wrong value type");
     }
     return std::get<model::FontValue>(entry->value);
 }
@@ -743,7 +743,7 @@ LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
     const model::ColorValue* border_color = nullptr,
     const model::ColorValue* button_text_color = nullptr,
     const model::ColorValue* button_back_color = nullptr,
-    const model::FontValue* font = nullptr) {
+    const model::FontValue* font = nullptr, std::string_view font_path = "$/Button/Font") {
     auto value = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
@@ -751,7 +751,7 @@ LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
     value.items[1] = raw(enabled ? "1" : "0");
     value.items[12] = encoded_localized(tool_tip);
-    if (font != nullptr) value.items[4] = encode_button_font(*font);
+    if (font != nullptr) value.items[4] = encode_control_font(*font, font_path);
     if (border_color != nullptr) value.items[6] = encode_button_color(*border_color, "$/Button/BorderColor");
     if (button_text_color != nullptr) value.items[10] = encode_button_color(*button_text_color, "$/Button/ButtonTextColor");
     if (button_back_color != nullptr) value.items[9] = encode_button_color(*button_back_color, "$/Button/ButtonBackColor");
@@ -843,12 +843,13 @@ LV canonical_label_properties(
 }
 
 
-LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_view tool_tip) {
+LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_view tool_tip,
+    const model::FontValue* font = nullptr) {
     return list({
         raw("1"),
         list({
             list({
-                canonical_button_base(enabled, tool_tip),
+                canonical_button_base(enabled, tool_tip, nullptr, nullptr, nullptr, font, "$/CheckBox/Font"),
                 raw("7"),
                 encoded_localized(caption),
                 raw("1"),
@@ -2132,7 +2133,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
     const auto button_back_color = decode_button_color(base.items[9], child_path(base_path, 9));
     const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
-    const auto font = decode_button_font(base.items[4], child_path(base_path, 4));
+    const auto font = decode_control_font(base.items[4], child_path(base_path, 4));
     const std::string observed_state = raw_atom(base.items[17], child_path(base_path, 17));
     if (observed_state != "1" && observed_state != "2") {
         fail(
@@ -2346,10 +2347,20 @@ DecodedControl decode_picture_decoration(
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base_properties.items[12], child_path(base_path, 12));
+    const std::string picture_slot_path = child_path(properties_path, 4);
+    const auto& picture_slot = picture_properties.items[4];
+    require_arity(picture_slot, 11, picture_slot_path);
+    const auto picture = decode_button_picture(
+        picture_slot.items[2], child_path(picture_slot_path, 2));
+    if (picture && !picture->standard_name) {
+        fail("OOF1114", child_path(picture_slot_path, 1), "supported standard PictureLib picture",
+            "external picture bytes", "PictureDecoration external picture assets are unsupported");
+    }
     auto normalized_properties = picture_properties;
     auto normalized_base = base_properties;
     normalized_base.items[12] = encoded_localized(tool_tip);
     normalized_properties.items[0] = std::move(normalized_base);
+    normalized_properties.items[4].items[2] = canonical_button_picture();
     require_exact(
         normalized_properties,
         canonical_picture_properties(enabled, tool_tip),
@@ -2387,6 +2398,11 @@ DecodedControl decode_picture_decoration(
     if (!tool_tip.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     }
+    if (picture && picture->standard_name) {
+        control.properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+                model::QualifiedName{*picture->standard_name}});
+    }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2417,8 +2433,9 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
         properties.items[2], child_path(properties_path, 2));
     const std::int32_t horizontal_align = integer_atom<std::int32_t>(
         properties.items[3], child_path(properties_path, 3));
-    if (horizontal_align != 0 && horizontal_align != 4) {
-        fail("OOF1122", child_path(properties_path, 3), "HorizontalAlign storage value 0 (Left) or 4 (Auto)",
+    if (horizontal_align != 0 && horizontal_align != 1 && horizontal_align != 2 && horizontal_align != 4) {
+        fail("OOF1122", child_path(properties_path, 3),
+            "LabelDecoration HorizontalAlign storage value 0 (Left), 1 (Center), 2 (Right), or 4 (Auto)",
             std::to_string(horizontal_align), "LabelDecoration.HorizontalAlign storage value is unsupported");
     }
     auto normalized_properties = properties;
@@ -2467,7 +2484,9 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     control.properties().set_explicit(
         model::PropertyId::from_name("HorizontalAlign"),
         model::EnumerationValue{
-            "HorizontalAlign", horizontal_align == 4 ? "Auto" : "Left"});
+            "HorizontalAlign",
+            horizontal_align == 4 ? "Auto" : horizontal_align == 2 ? "Right" :
+                horizontal_align == 1 ? "Center" : "Left"});
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2482,9 +2501,14 @@ LV canonical_progress_bar_properties(bool enabled, std::string_view tool_tip) {
     return properties;
 }
 
-LV canonical_progress_bar_info(bool enabled, std::string_view tool_tip) {
-    return list({canonical_progress_bar_properties(enabled, tool_tip), raw("3"), raw("0"), raw("100"),
-        raw("1"), raw("1"), raw("0"), raw("2")});
+LV canonical_progress_bar_info(
+    bool enabled,
+    std::string_view tool_tip,
+    std::int32_t max_value = 100,
+    std::int32_t min_value = 0,
+    std::int32_t step = 1) {
+    return list({canonical_progress_bar_properties(enabled, tool_tip), raw("3"), raw(std::to_string(min_value)),
+        raw(std::to_string(max_value)), raw(std::to_string(step)), raw("1"), raw("0"), raw("2")});
 }
 
 DecodedControl decode_progress_bar(
@@ -2512,11 +2536,20 @@ DecodedControl decode_progress_bar(
     require_arity(properties, 21, properties_path);
     const bool enabled = bool_atom(properties.items[1], child_path(properties_path, 1));
     const std::string tool_tip = decoded_single_language_text(properties.items[12], child_path(properties_path, 12));
+    const auto min_path = child_path(info_list_path, 2);
+    const auto max_path = child_path(info_list_path, 3);
+    const auto step_path = child_path(info_list_path, 4);
+    const std::int32_t min_value = integer_atom<std::int32_t>(info_list.items[2], min_path);
+    const std::int32_t max_value = integer_atom<std::int32_t>(info_list.items[3], max_path);
+    const std::int32_t step = integer_atom<std::int32_t>(info_list.items[4], step_path);
     auto normalized_properties = properties;
     normalized_properties.items[1] = raw("1");
     normalized_properties.items[12] = encoded_localized("");
     auto normalized_info = info_list;
     normalized_info.items[0] = std::move(normalized_properties);
+    normalized_info.items[2] = raw("0");
+    normalized_info.items[3] = raw("100");
+    normalized_info.items[4] = raw("1");
     require_exact(normalized_info, canonical_progress_bar_info(true, ""), info_list_path,
         "ProgressBar contains a property outside the supported profile");
 
@@ -2539,6 +2572,12 @@ DecodedControl decode_progress_bar(
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ProgressBarPayload{}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    if (max_value != 100) control.properties().set_explicit(
+        model::PropertyId::from_name("MaxValue"), static_cast<std::int64_t>(max_value));
+    if (min_value != 0) control.properties().set_explicit(
+        model::PropertyId::from_name("MinValue"), static_cast<std::int64_t>(min_value));
+    if (step != 1) control.properties().set_explicit(
+        model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2576,6 +2615,7 @@ DecodedControl decode_check_box(
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base_properties.items[12], child_path(base_path, 12));
+    const auto font = decode_control_font(base_properties.items[4], child_path(base_path, 4));
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     auto normalized_info = info;
@@ -2583,7 +2623,7 @@ DecodedControl decode_check_box(
     normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
     require_exact(
         normalized_info,
-        canonical_check_box_info(enabled, caption, tool_tip),
+        canonical_check_box_info(enabled, caption, tool_tip, &font),
         info_path,
         "CheckBox uses an unsupported property, event, or storage variation");
 
@@ -2608,6 +2648,9 @@ DecodedControl decode_check_box(
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    if (font != model::FontValue{}) {
+        control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
+    }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -2925,7 +2968,7 @@ LV encode_button(
     const auto border_color = explicit_button_color(control.properties(), "BorderColor");
     const auto button_text_color = explicit_button_color(control.properties(), "ButtonTextColor");
     const auto button_back_color = explicit_button_color(control.properties(), "ButtonBackColor");
-    const auto font = explicit_button_font(control.properties());
+    const auto font = explicit_control_font(control.properties(), "$/Button/Font");
     const model::PictureAsset* picture_asset = nullptr;
     const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
     if (const auto* picture_entry = control.properties().find(model::PropertyId::from_name("Picture"))) {
@@ -3013,14 +3056,36 @@ LV encode_picture_decoration(
         fail("OOF1122", "$/PictureDecoration", "plain PictureDecoration", control.name,
             "PictureDecoration uses a storage concept outside the executable slice");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip"}, "$/PictureDecoration");
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Picture"}, "$/PictureDecoration");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("Picture"))) {
+        if (!std::holds_alternative<model::PictureRef>(entry->value)) {
+            fail("OOF1122", "$/PictureDecoration/Picture", "PictureRef", "different value type",
+                "PictureDecoration.Picture has the wrong value type");
+        }
+        const auto& reference = std::get<model::PictureRef>(entry->value);
+        if (!reference.standard_name || reference.asset.id().value() != 0) {
+            fail("OOF1122", "$/PictureDecoration/Picture", "standard PictureLib reference",
+                reference.standard_name ? "conflicting asset target" : "external asset",
+                "PictureDecoration external picture assets are unsupported");
+        }
+        standard_picture = model::metamodel::find_standard_picture(reference.standard_name->value);
+        if (standard_picture == nullptr) {
+            fail("OOF1122", "$/PictureDecoration/Picture", "known PictureLib name",
+                reference.standard_name->value, "Standard picture name is unsupported");
+        }
+    }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
+    auto picture_properties = canonical_picture_properties(enabled, tool_tip);
+    if (standard_picture != nullptr) {
+        picture_properties.items[4].items[2] = encode_standard_button_picture(*standard_picture);
+    }
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("1"), canonical_picture_properties(enabled, tool_tip), list({raw("0")})}),
+        list({raw("1"), std::move(picture_properties), list({raw("0")})}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -3052,11 +3117,16 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
         }
         const auto& value = std::get<model::EnumerationValue>(entry->value);
         if (value.type_name != "HorizontalAlign" ||
-            (value.member != "Auto" && value.member != "Left")) {
-            fail("OOF1122", "$/LabelDecoration/HorizontalAlign", "HorizontalAlign Auto or Left",
+            (value.member != "Auto" && value.member != "Left" &&
+             value.member != "Center" && value.member != "Right")) {
+            fail("OOF1122", "$/LabelDecoration/HorizontalAlign",
+                "HorizontalAlign Auto, Left, Center, or Right",
                 value.type_name + "." + value.member, "LabelDecoration.HorizontalAlign value is unsupported");
         }
-        horizontal_align = value.member == "Auto" ? 4 : 0;
+        if (value.member == "Auto") horizontal_align = 4;
+        else if (value.member == "Left") horizontal_align = 0;
+        else if (value.member == "Center") horizontal_align = 1;
+        else horizontal_align = 2;
     }
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
     return list({
@@ -3083,14 +3153,17 @@ LV encode_progress_bar(const model::ControlNode& control, const GeometryContext&
         fail("OOF1122", "$/ProgressBar", "named ProgressBar without DataPath, ValueType, Events, or storage children",
             control.name, "ProgressBar uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip"}, "$/ProgressBar");
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step"}, "$/ProgressBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const std::int32_t max_value = explicit_integer(control.properties(), "MaxValue", 100, "$/ProgressBar/MaxValue");
+    const std::int32_t min_value = explicit_integer(control.properties(), "MinValue", 0, "$/ProgressBar/MinValue");
+    const std::int32_t step = explicit_integer(control.properties(), "Step", 1, "$/ProgressBar/Step");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("0"), canonical_progress_bar_info(enabled, tool_tip)}),
+        list({raw("0"), canonical_progress_bar_info(enabled, tool_tip, max_value, min_value, step)}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -3113,7 +3186,7 @@ LV encode_check_box(
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
             "CheckBox uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip"}, "$/CheckBox");
+    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip", "Font"}, "$/CheckBox");
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
         fail("OOF1123", "$/CheckBox/DataPath", "existing linked Attribute",
@@ -3126,11 +3199,12 @@ LV encode_check_box(
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto font = explicit_control_font(control.properties(), "$/CheckBox/Font");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_check_box_info(enabled, caption, tool_tip),
+        canonical_check_box_info(enabled, caption, tool_tip, &font),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

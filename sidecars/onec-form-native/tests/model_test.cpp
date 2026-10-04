@@ -115,6 +115,13 @@ void test_descriptors() {
                check_box_tool_tip->default_value.kind == DefaultKind::string &&
                check_box_tool_tip->default_value.canonical.empty(),
         "CheckBox ToolTip descriptor must declare its empty localized base-string default");
+    const auto* check_box_font = find_property(ControlKind::check_box, "Font");
+    expect(check_box_font && check_box_font->persistence == PersistenceClass::persisted_editable &&
+               check_box_font->storage_codec == StorageCodec::control_base &&
+               check_box_font->value_codec == ValueCodec::font &&
+               check_box_font->default_value.kind == DefaultKind::font &&
+               check_box_font->default_value.canonical == "automatic",
+        "CheckBox Font descriptor must declare its editable automatic Font default");
     expect(picture_location && picture_location->storage_codec == StorageCodec::control_info &&
                picture_location->default_value.kind == DefaultKind::enumeration &&
                picture_location->default_value.canonical == "Left",
@@ -143,6 +150,7 @@ void test_descriptors() {
         "LabelDecoration ToolTip must declare its editable empty string default");
     const auto* picture_enabled = find_property(ControlKind::picture_decoration, "Enabled");
     const auto* picture_tool_tip = find_property(ControlKind::picture_decoration, "ToolTip");
+    const auto* picture_value = find_property(ControlKind::picture_decoration, "Picture");
     expect(picture_enabled && picture_enabled->persistence == PersistenceClass::persisted_editable &&
                picture_enabled->storage_codec == StorageCodec::control_base &&
                picture_enabled->value_codec == ValueCodec::boolean &&
@@ -155,6 +163,11 @@ void test_descriptors() {
                picture_tool_tip->default_value.kind == DefaultKind::string &&
                picture_tool_tip->default_value.canonical.empty(),
         "PictureDecoration ToolTip must declare its editable empty string default");
+    expect(picture_value && picture_value->persistence == PersistenceClass::persisted_editable &&
+               picture_value->storage_codec == StorageCodec::picture_record &&
+               picture_value->value_codec == ValueCodec::picture &&
+               picture_value->default_value.kind == DefaultKind::none,
+        "PictureDecoration Picture must declare its typed editable picture record");
 }
 
 void test_standard_picture_descriptor_catalog() {
@@ -287,6 +300,9 @@ void test_progress_bar_storage_descriptors() {
     using namespace oof::model::metamodel;
     const auto* enabled = find_property(ControlKind::progress_bar, "Enabled");
     const auto* tool_tip = find_property(ControlKind::progress_bar, "ToolTip");
+    const auto* max_value = find_property(ControlKind::progress_bar, "MaxValue");
+    const auto* min_value = find_property(ControlKind::progress_bar, "MinValue");
+    const auto* step = find_property(ControlKind::progress_bar, "Step");
     expect(enabled && enabled->persistence == PersistenceClass::persisted_editable &&
                enabled->storage_codec == StorageCodec::control_info &&
                enabled->default_value.kind == DefaultKind::boolean &&
@@ -297,6 +313,21 @@ void test_progress_bar_storage_descriptors() {
                tool_tip->default_value.kind == DefaultKind::string &&
                tool_tip->default_value.canonical.empty(),
         "ProgressBar ToolTip must have its observed control-info codec and empty default");
+    expect(max_value && max_value->persistence == PersistenceClass::persisted_editable &&
+               max_value->storage_codec == StorageCodec::control_info &&
+               max_value->default_value.kind == DefaultKind::integer &&
+               max_value->default_value.canonical == "100" && max_value->value_codec == ValueCodec::integer32,
+        "ProgressBar MaxValue must use named int32 input, observed control-info storage, and default 100");
+    expect(min_value && min_value->persistence == PersistenceClass::persisted_editable &&
+               min_value->storage_codec == StorageCodec::control_info &&
+               min_value->default_value.kind == DefaultKind::integer &&
+               min_value->default_value.canonical == "0" && min_value->value_codec == ValueCodec::integer32,
+        "ProgressBar MinValue must use named int32 input, observed control-info storage, and default 0");
+    expect(step && step->persistence == PersistenceClass::persisted_editable &&
+               step->storage_codec == StorageCodec::control_info &&
+               step->default_value.kind == DefaultKind::integer &&
+               step->default_value.canonical == "1" && step->value_codec == ValueCodec::integer32,
+        "ProgressBar Step must use named int32 input, observed control-info storage, and default 1");
 }
 
 void test_help_metamodel() {

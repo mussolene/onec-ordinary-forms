@@ -36,10 +36,10 @@ Form.xml + Form/Module.bsl -> OrdinaryForm -> Form.bin
 | Публичный тип | Имя платформы | Вложенность по дескриптору | Данные и события | Form.bin | Что подтверждено / следующий опыт | Владелец работы |
 | --- | --- | --- | --- | --- | --- | --- |
 | `Button` | Кнопка | Нет | Click -> событие элемента; DataPath бинарно не поддержан | **PARTIAL** | ID, имя, Caption, Enabled, Position, Visible, Click handler; отличающиеся представления действия явно отклоняются | Интегратор |
-| `CalendarField` | ПолеКалендаря | Нет | DataPath и события не поддержаны | **PARTIAL** | ID, имя, Enabled, Position, Visible; CurrentDate, периоды и SelectedDates требуют именованного кодека | Группа CalendarField |
+| `CalendarField` | ПолеКалендаря | Нет | DataPath и события не поддержаны | **PARTIAL** | ID, имя, Enabled, Position, Visible; CurrentDate меняет только runtime; периоды и SelectedDates требуют исследования | Группа CalendarField |
 | `Chart` | Диаграмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить типизированный источник данных и базовые значения; не выводить из help | Группа CalendarField |
 | `PivotChart` | СводнаяДиаграмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить тип и значения после независимого сохранения Designer | Группа ProgressBar |
-| `CheckBox` | Флажок | Нет | DataPath -> Boolean Attribute; события бинарно не поддержаны | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Position, Visible, Boolean DataPath; остальные свойства и события не поддержаны | Интегратор |
+| `CheckBox` | Флажок | Нет | DataPath -> Boolean Attribute; события бинарно не поддержаны | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Font, Position, Visible, Boolean DataPath; остальные свойства и события не поддержаны | Интегратор |
 | `ChoiceField` | ПолеВыбора | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить ChoiceList и связанный вариант отдельно | Группа CalendarField |
 | `CommandBar` | КоманднаяПанель | Нет | Buttons коллекция; связь с Command не проверена | **NOT_SUPPORTED** | Проверить кнопку панели и Command owner/handler | Группа CommandBar |
 | `Dendrogram` | Дендрограмма | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Создать в Designer, сверить доступность по версии и свойства | Группа ProgressBar |
@@ -48,11 +48,11 @@ Form.xml + Form/Module.bsl -> OrdinaryForm -> Form.bin
 | `UsualGroup` | РамкаГруппы | Контролы | ChildPolicy допускает упорядоченные контролы; runtime не проверен | **NOT_SUPPORTED** | Проверить вложенность и порядок детей | Группа ProgressBar |
 | `HTMLDocumentField` | ПолеHTMLДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Нужен Windows-платформенный образец; отдельно проверить Document и события | Группа ProgressBar |
 | `InputField` | ПолеВвода | Нет | DataPath -> Attribute/TypeDomain; события владельца элемента не проверялись | **PARTIAL** | ID, имя, Position, Visible, DataPath; 21 подтвержденное сохраняемое свойство строкового профиля; другие типы и события не поддержаны | Интегратор |
-| `LabelDecoration` | Надпись | Нет | Click указан в каталоге, бинарно не проверен; DataPath не проверен | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Position, Visible, HorizontalAlign Auto/Left; события и остальные свойства не поддержаны | Интегратор |
+| `LabelDecoration` | Надпись | Нет | Click указан в каталоге, бинарно не проверен; DataPath не проверен | **PARTIAL** | ID, имя, Caption, Enabled, ToolTip, Position, Visible, HorizontalAlign Auto/Left/Center/Right; события и остальные свойства не поддержаны | Интегратор |
 | `ListBox` | ПолеСписка | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить список значений и связь с реквизитом отдельно | Группа CalendarField |
 | `Panel` | Панель | Контролы и страницы | Именованные Page и рекурсивные ChildItems в стандартном оформлении | **PARTIAL** | Два уровня вложенности, локальный порядок, ссылки на владельца и соседей; другие свойства панели не поддержаны | Интегратор |
-| `PictureDecoration` | ПолеКартинки | Нет | Picture и события не поддержаны | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible; содержимое картинки и события явно отклоняются | Интегратор |
-| `ProgressBar` | Индикатор | Нет | DataPath и значения не поддержаны | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible; значение, границы и числовая связь требуют кодека | Группа ProgressBar |
+| `PictureDecoration` | ПолеКартинки | Нет | Стандартный Picture поддержан; события не поддержаны | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible, PictureLib reference; внешние ресурсы пока отклоняются | Интегратор |
+| `ProgressBar` | Индикатор | Нет | DataPath и текущее значение не поддержаны | **PARTIAL** | ID, имя, Enabled, ToolTip, Position, Visible, MaxValue/MinValue/Step int32; числовая связь требует кодека | Группа ProgressBar |
 | `RadioButton` | Переключатель | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить значение группы и Boolean/enum домен | Группа CalendarField |
 | `Splitter` | Разделитель | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | Проверить пару связанных областей и геометрию | Группа ProgressBar |
 | `SpreadsheetDocumentField` | ПолеТабличногоДокумента | Нет | DataPath/event runtime не подтверждены | **NOT_SUPPORTED** | GUID коррелирован, сборка не подтверждена; проверить содержимое отдельно | Группа ProgressBar |
@@ -188,3 +188,28 @@ XML, Module.bsl, повторно собранный Form.bin и отсутст�
 Итоговая проверка этой партии: macOS 11/11 и Linux amd64 Release 11/11
 PASS, независимый просмотр текущего кода и платформенных результатов PASS.
 Доказательство: `ev_5221cb1f10f042b484fbfb810686046b`.
+
+## Расширение редактируемых свойств, 2026-10-04
+
+LabelDecoration.HorizontalAlign дополнен Center и Right; Justify отклоняется.
+CheckBox.Font использует существующий FontValue: automatic и absolute с
+именованными полями и различием между отсутствующим и явно false-флагом.
+PictureDecoration.Picture принимает стандартные PictureLib references.
+ProgressBar.MaxValue, MinValue и Step принимают нормализованные int32:
+модель int64 в допустимом диапазоне, XSD xs:int, defaults 100/0/1.
+Дроби и переполнение отклоняются, платформа может молча обрезать их только
+в исследовательском runtime API.
+
+Четыре XML-only сцены прошли строгую проверку Designer и обратную сборку.
+Холодная загрузка подтвердила 8 getter-проверок надписей, типизированные
+шрифты трех флажков, 3 картинки и 18 числовых свойств шести индикаторов.
+macOS и Linux amd64 Release: 11/11 наборов PASS. В трех наборах модель,
+поток и XML стало 89 именованных функций-сценариев вместо 85; число
+параметрических проверок отдельно этим счетчиком не измеряется.
+Доказательство: `ev_0ee9debb8425427190f119dc979e5813`.
+
+Охват типов остается 8/25 PARTIAL (32%), 0 FULL. Следующие конкретные
+пробелы: внешние PictureAsset, числовой DataPath и CommandBar owner model.
+Исследование CurrentDate календаря подтвердило getter даты без времени,
+но изменение полного потока формы затронуло только счетчик; сохраняемый
+слот не установлен (`ev_afe483778c69455190dae5d05d3fce3b`).

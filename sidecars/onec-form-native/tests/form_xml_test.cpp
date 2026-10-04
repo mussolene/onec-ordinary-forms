@@ -721,6 +721,51 @@ void test_check_box_tooltip_xml_round_trip() {
         "CheckBox ToolTip XML must serialize canonically after parsing");
 }
 
+void test_check_box_font_xml_round_trip() {
+    const auto make_document = [](std::optional<model::FontValue> font) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CheckBoxFont";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue type;
+        model::TypeDomainEntry entry;
+        entry.term = model::TypeDomainTerm::boolean;
+        type.entries.push_back(entry);
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Flag", type});
+        model::ControlNode check_box{model::ObjectId{2}, "FlagControl", model::CheckBoxPayload{}};
+        check_box.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        if (font) check_box.properties().set_explicit(model::PropertyId::from_name("Font"), *font);
+        document.add_control(std::move(check_box));
+        return document;
+    };
+
+    model::FontValue automatic;
+    const auto empty_xml = source::serialize_form_xml(make_document(automatic));
+    expect(empty_xml.ok() && empty_xml.value().find("<Font") == std::string::npos,
+        "automatic CheckBox Font must serialize as an omitted default");
+    const auto empty_parsed = source::parse_form_xml(empty_xml.value());
+    const auto* empty_control = empty_parsed.ok() ? empty_parsed.value().find_control(model::ObjectId{2}) : nullptr;
+    expect(empty_control && !empty_control->properties().find(model::PropertyId::from_name("Font")),
+        "omitted CheckBox Font must parse as its implicit default");
+
+    model::FontValue font;
+    font.kind = model::FontKind::absolute;
+    font.face_name = "Arial";
+    font.height = 12;
+    font.bold = true;
+    const auto serialized = source::serialize_form_xml(make_document(font));
+    expect(serialized.ok() && serialized.value().find("<Font kind=\"absolute\"") != std::string::npos,
+        "absolute CheckBox Font must serialize through the existing named Font XML surface");
+    const auto parsed = source::parse_form_xml(serialized.value());
+    expect(parsed.ok(), "absolute CheckBox Font XML must parse");
+    const auto* control = parsed.value().find_control(model::ObjectId{2});
+    const auto* parsed_font = control == nullptr ? nullptr :
+        control->properties().find(model::PropertyId::from_name("Font"));
+    expect(parsed_font && std::get<model::FontValue>(parsed_font->value) == font,
+        "absolute CheckBox Font XML must round-trip as FontValue");
+}
+
 void test_input_field_layout_xml_round_trip() {
     const auto make_xml = [](std::optional<std::string> horizontal,
                              std::optional<std::string> vertical,
@@ -1015,6 +1060,8 @@ void test_label_horizontal_align_xml_roundtrip() {
 <Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
   <LabelDecoration id="8" name="AutoLabel"><Position/><HorizontalAlign type="HorizontalAlign" member="Auto"/><Caption>Automatic</Caption></LabelDecoration>
   <LabelDecoration id="4" name="LeftLabel"><Position/><HorizontalAlign type="HorizontalAlign" member="Left"/><Caption>Left aligned</Caption></LabelDecoration>
+  <LabelDecoration id="9" name="CenterLabel"><Position/><HorizontalAlign type="HorizontalAlign" member="Center"/><Caption>Centered</Caption></LabelDecoration>
+  <LabelDecoration id="10" name="RightLabel"><Position/><HorizontalAlign type="HorizontalAlign" member="Right"/><Caption>Right aligned</Caption></LabelDecoration>
 </ChildItems></Form>
 )XML";
     auto parsed = source::parse_form_xml(xml);
@@ -1022,10 +1069,12 @@ void test_label_horizontal_align_xml_roundtrip() {
     auto serialized = source::serialize_form_xml(parsed.value());
     expect(serialized.ok(), "LabelDecoration HorizontalAlign values must serialize");
     expect(serialized.value().find("type=\"HorizontalAlign\" member=\"Auto\"") != std::string::npos &&
-               serialized.value().find("type=\"HorizontalAlign\" member=\"Left\"") != std::string::npos,
-        "LabelDecoration HorizontalAlign type and members must survive XML round-trip");
+               serialized.value().find("type=\"HorizontalAlign\" member=\"Left\"") != std::string::npos &&
+               serialized.value().find("type=\"HorizontalAlign\" member=\"Center\"") != std::string::npos &&
+               serialized.value().find("type=\"HorizontalAlign\" member=\"Right\"") != std::string::npos,
+        "LabelDecoration Auto, Left, Center, and Right XML values must survive named serialization");
     auto reparsed = source::parse_form_xml(serialized.value());
-    expect(reparsed.ok() && reparsed.value().collections().controls.size() == 2,
+    expect(reparsed.ok() && reparsed.value().collections().controls.size() == 4,
         "canonical LabelDecoration alignment XML must reparse");
 }
 
@@ -1119,6 +1168,37 @@ void test_picture_decoration_enabled_tooltip_xml_roundtrip() {
     expect(defaults_serialized.ok() && defaults_serialized.value().find("<Enabled>") == std::string::npos &&
                defaults_serialized.value().find("<ToolTip>") == std::string::npos,
         "explicit PictureDecoration Enabled=true and empty ToolTip must be omitted from public XML");
+}
+
+void test_picture_decoration_standard_picture_xml_roundtrip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "PictureReference";
+    form.children.push_back(model::ControlRef{model::ObjectId{2}});
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode picture{model::ObjectId{2}, "Illustration", model::PictureDecorationPayload{}};
+    picture.properties().set_explicit(model::PropertyId::from_name("Picture"),
+        model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+            model::QualifiedName{"PictureLib.Write"}});
+    document.add_control(std::move(picture));
+
+    const auto xml = source::serialize_form_xml(document);
+    expect(xml.ok() && xml.value().find("<Picture standardName=\"PictureLib.Write\"/>") !=
+               std::string::npos,
+        "PictureDecoration.Picture must serialize as a named standard-picture reference");
+    const auto parsed = source::parse_form_xml(xml.value());
+    const auto* restored = parsed.ok() ? parsed.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* property = restored == nullptr ? nullptr : restored->properties().find(
+        model::PropertyId::from_name("Picture"));
+    expect(property && std::get<model::PictureRef>(property->value).standard_name ==
+               model::QualifiedName{"PictureLib.Write"},
+        "PictureDecoration standard picture reference must survive XML-only roundtrip");
+
+    std::string unknown = xml.value();
+    const auto at = unknown.find("PictureLib.Write");
+    unknown.replace(at, std::string("PictureLib.Write").size(), "PictureLib.Unknown");
+    expect(!source::parse_form_xml(unknown).ok(),
+        "unknown PictureDecoration standard-picture names must be rejected");
 }
 
 void test_button_foreign_enum_default_is_retained() {
@@ -1262,6 +1342,7 @@ int main() {
         test_typed_values_and_canonicalization();
         test_input_field_tooltip_and_format_xml_round_trip();
         test_check_box_tooltip_xml_round_trip();
+        test_check_box_font_xml_round_trip();
         test_input_field_layout_xml_round_trip();
         test_button_shortcut_xml();
         test_boolean_type_domain_xml_roundtrip();
@@ -1276,6 +1357,7 @@ int main() {
         test_label_enabled_tooltip_xml_roundtrip();
         test_progress_bar_xml_only_contract();
         test_picture_decoration_enabled_tooltip_xml_roundtrip();
+        test_picture_decoration_standard_picture_xml_roundtrip();
     } catch (const std::exception& error) {
         std::cerr << "form XML tests: FAIL: " << error.what() << '\n';
         return 1;

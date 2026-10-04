@@ -487,8 +487,8 @@
           <Control name="ProgressBar" apiName="ProgressBar" russianName="Индикатор" children="none">
             <Properties>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
-              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="decimal"/>
-              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="integer32"/>
+              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Число" valueCodec="integer32"/>
               <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
               <Property name="ShowPercent" apiName="ShowPercent" russianName="ОтображатьПроценты" russianType="Булево" valueCodec="boolean"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
@@ -496,7 +496,7 @@
               <Property name="ShowStyle" apiName="ShowStyle" russianName="СтильОтображения" russianType="РежимСглаживанияИндикатора" valueCodec="enumeration"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
-              <Property name="Step" apiName="Step" russianName="Шаг" russianType="Число" valueCodec="decimal"/>
+              <Property name="Step" apiName="Step" russianName="Шаг" russianType="Число" valueCodec="integer32"/>
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
             </Properties>
             <Events>

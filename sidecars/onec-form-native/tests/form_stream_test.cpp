@@ -802,6 +802,71 @@ void test_check_box_tooltip_round_trip_and_validation() {
         "multilingual CheckBox ToolTip must be rejected without loss");
 }
 
+void test_check_box_font_round_trip_and_validation() {
+    const auto make_document = [](std::optional<model::FontValue> font) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CheckBoxFont";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::TypeDomainPatternValue boolean_type;
+        model::TypeDomainEntry boolean_entry;
+        boolean_entry.term = model::TypeDomainTerm::boolean;
+        boolean_type.entries.push_back(boolean_entry);
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "Flag", boolean_type});
+        model::ControlNode check_box{model::ObjectId{2}, "FlagControl", model::CheckBoxPayload{}};
+        check_box.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        if (font) check_box.properties().set_explicit(model::PropertyId::from_name("Font"), *font);
+        document.add_control(std::move(check_box));
+        return document;
+    };
+    const auto check_box_base = [](const list_stream::ListValue& encoded) -> const list_stream::ListValue& {
+        return encoded.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[0];
+    };
+
+    const auto default_encoded = form_stream::encode_document(make_document(std::nullopt));
+    model::FontValue automatic;
+    const auto explicit_automatic_encoded = form_stream::encode_document(make_document(automatic));
+    expect(default_encoded.ok() && explicit_automatic_encoded.ok(),
+        "default and explicit automatic CheckBox Font must encode");
+    expect(list_stream::dump_compact(default_encoded.value()) ==
+               list_stream::dump_compact(explicit_automatic_encoded.value()),
+        "explicit automatic CheckBox Font must normalize to the default storage");
+    const auto default_decoded = form_stream::decode_document(explicit_automatic_encoded.value(), "CheckBoxFont");
+    expect(default_decoded.ok(), "default CheckBox Font must decode");
+    const auto* default_check_box = default_decoded.value().find_control(model::ObjectId{2});
+    expect(default_check_box && !default_check_box->properties().find(model::PropertyId::from_name("Font")),
+        "automatic CheckBox Font must normalize to its implicit default");
+
+    model::FontValue font;
+    font.kind = model::FontKind::absolute;
+    font.face_name = "Arial";
+    font.height = 12;
+    font.bold = true;
+    const auto encoded = form_stream::encode_document(make_document(font));
+    expect(encoded.ok(), "supported absolute CheckBox Font must encode");
+    const auto& stored_font = check_box_base(encoded.value()).items[4];
+    expect(list_stream::dump_compact(stored_font) == value_codec::encode_font(font),
+        "CheckBox Font must use the observed Button base Font record profile");
+    const auto decoded = form_stream::decode_document(encoded.value(), "CheckBoxFont");
+    expect(decoded.ok(), "supported absolute CheckBox Font must decode");
+    const auto* check_box = decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_font = check_box == nullptr ? nullptr :
+        check_box->properties().find(model::PropertyId::from_name("Font"));
+    expect(decoded_font && std::get<model::FontValue>(decoded_font->value) == font,
+        "CheckBox Font must round-trip as its named FontValue");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "CheckBox Font storage must round-trip without drift");
+
+    model::FontValue unsupported;
+    unsupported.kind = model::FontKind::windows_font;
+    const auto unsupported_encoded = form_stream::encode_document(make_document(unsupported));
+    expect_failure(unsupported_encoded, "OOF1122", "$/CheckBox/Font",
+        "unsupported WindowsFont CheckBox value must be rejected without fallback");
+}
+
 void test_button_colors_round_trip_and_validation() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -1436,6 +1501,8 @@ void test_button_then_label_decoration_round_trip() {
         model::ControlRef{model::ObjectId{2}},
         model::ControlRef{model::ObjectId{3}},
         model::ControlRef{model::ObjectId{7}},
+        model::ControlRef{model::ObjectId{8}},
+        model::ControlRef{model::ObjectId{9}},
     };
     model::OrdinaryFormDocument document(std::move(form));
     document.add_control(model::ControlNode{
@@ -1468,6 +1535,14 @@ void test_button_then_label_decoration_round_trip() {
         model::PropertyId::from_name("HorizontalAlign"),
         model::EnumerationValue{"HorizontalAlign", "Left"});
     document.add_control(std::move(left_label));
+    model::ControlNode center_label{model::ObjectId{8}, "CenterLabel", model::LabelDecorationPayload{}};
+    center_label.properties().set_explicit(model::PropertyId::from_name("HorizontalAlign"),
+        model::EnumerationValue{"HorizontalAlign", "Center"});
+    document.add_control(std::move(center_label));
+    model::ControlNode right_label{model::ObjectId{9}, "RightLabel", model::LabelDecorationPayload{}};
+    right_label.properties().set_explicit(model::PropertyId::from_name("HorizontalAlign"),
+        model::EnumerationValue{"HorizontalAlign", "Right"});
+    document.add_control(std::move(right_label));
 
     const auto* align_descriptor = model::metamodel::find_property(
         model::ControlKind::label_decoration, "HorizontalAlign");
@@ -1482,10 +1557,12 @@ void test_button_then_label_decoration_round_trip() {
         encoded.diagnostics().front().code + ":" + encoded.diagnostics().front().path + ":" + encoded.diagnostics().front().message);
     const auto decoded = form_stream::decode_document(encoded.value(), "Main");
     expect(decoded.ok(), "Button followed by LabelDecoration must decode");
-    expect(decoded.value().form().children.size() == 3, "Button and two LabelDecorations order must survive");
+    expect(decoded.value().form().children.size() == 5, "Button and four LabelDecorations order must survive");
     expect(std::get<model::ControlRef>(decoded.value().form().children[0]).id() == model::ObjectId{2} &&
                std::get<model::ControlRef>(decoded.value().form().children[1]).id() == model::ObjectId{3} &&
-               std::get<model::ControlRef>(decoded.value().form().children[2]).id() == model::ObjectId{7},
+               std::get<model::ControlRef>(decoded.value().form().children[2]).id() == model::ObjectId{7} &&
+               std::get<model::ControlRef>(decoded.value().form().children[3]).id() == model::ObjectId{8} &&
+               std::get<model::ControlRef>(decoded.value().form().children[4]).id() == model::ObjectId{9},
         "mixed supported control IDs and order must survive");
     const auto* decoded_label = decoded.value().find_control(model::ObjectId{3});
     expect(decoded_label != nullptr && decoded_label->kind() == model::ControlKind::label_decoration,
@@ -1510,6 +1587,14 @@ void test_button_then_label_decoration_round_trip() {
                std::get<model::EnumerationValue>(decoded_left_align->value) ==
                    model::EnumerationValue{"HorizontalAlign", "Left"},
         "explicit LabelDecoration HorizontalAlign Left must round-trip");
+    for (const auto& [id, member] : {std::pair{model::ObjectId{8}, std::string_view{"Center"}},
+                                     std::pair{model::ObjectId{9}, std::string_view{"Right"}}}) {
+        const auto* label_control = decoded.value().find_control(id);
+        const auto* alignment = label_control->properties().find(model::PropertyId::from_name("HorizontalAlign"));
+        expect(alignment && std::get<model::EnumerationValue>(alignment->value) ==
+                   model::EnumerationValue{"HorizontalAlign", std::string(member)},
+            "LabelDecoration Center and Right must round-trip through their observed storage values");
+    }
 
     const auto rejects_alignment = [](model::EnumerationValue value) {
         model::Form invalid_form;
@@ -1526,12 +1611,12 @@ void test_button_then_label_decoration_round_trip() {
     };
     expect(rejects_alignment(model::EnumerationValue{"VerticalAlign", "Auto"}),
         "HorizontalAlign must reject an enumeration of another type");
-    expect(rejects_alignment(model::EnumerationValue{"HorizontalAlign", "Center"}),
-        "unsupported HorizontalAlign members must be rejected");
+    expect(rejects_alignment(model::EnumerationValue{"HorizontalAlign", "Justify"}),
+        "runtime-rejected LabelDecoration Justify must remain unsupported");
 
     auto unknown_storage_value = encoded.value();
     auto& unknown_label = unknown_storage_value.items[1].items[2].items[2].items[2];
-    unknown_label.items[2].items[1].items[3] = list_stream::ListValue::raw_atom("2");
+    unknown_label.items[2].items[1].items[3] = list_stream::ListValue::raw_atom("3");
     expect(
         !form_stream::decode_document(unknown_storage_value, "Main"),
         "unknown LabelDecoration.HorizontalAlign storage values must be rejected");
@@ -1544,6 +1629,174 @@ void test_button_then_label_decoration_round_trip() {
         "OOF1114",
         "$/1/2/2/2/3/6/2",
         "unsupported LabelDecoration storage leaves must fail closed");
+}
+
+void test_label_decoration_observed_center_right_records() {
+    const auto decode_observed = [](std::string_view record, std::string_view expected_member) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "ObservedLabelAlignment";
+        form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Run", model::ButtonPayload{}});
+        model::ControlNode label{model::ObjectId{3}, "Notice", model::LabelDecorationPayload{}};
+        label.position.left.set(10);
+        label.position.top.set(45);
+        label.position.width.set(160);
+        label.position.height.set(65);
+        document.add_control(std::move(label));
+        auto stream = form_stream::encode_document(document);
+        expect(stream.ok(), "seed stream must encode before inserting an observed LabelDecoration record");
+        stream.value().items[1].items[2].items[2].items[2] = list_stream::parse(record);
+        const auto decoded = form_stream::decode_document(stream.value(), "ObservedLabelAlignment");
+        expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().code + ":" +
+            decoded.diagnostics().front().path + ":" + decoded.diagnostics().front().message);
+        const auto* decoded_label = decoded.value().find_control(model::ObjectId{3});
+        const auto* alignment = decoded_label == nullptr ? nullptr : decoded_label->properties().find(
+            model::PropertyId::from_name("HorizontalAlign"));
+        expect(decoded_label != nullptr && decoded_label->name == "Notice" && alignment != nullptr &&
+                   std::get<model::EnumerationValue>(alignment->value) ==
+                       model::EnumerationValue{"HorizontalAlign", std::string(expected_member)},
+            "complete observed LabelDecoration record must decode its named alignment value");
+    };
+    decode_observed(R"OOF(
+{0fc7e20d-f241-460c-bdf4-5ad88e5474a5,3,
+{3,
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},11,
+{1,1,
+{"ru","Notice"}
+},1,1,0,0,0,
+{0,0,0},0,
+{1,0},1,
+{10,0,
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},100,2,0,0,1,2},4,0,0,0,0,0,0,0},
+{0}
+},
+{8,10,45,160,65,1,
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},0,0,0,0,0,0,0,1,2,0,0},
+{14,"Notice",4294967295,0,0,0},
+{0}
+}
+)OOF", "Center");
+    decode_observed(R"OOF(
+{0fc7e20d-f241-460c-bdf4-5ad88e5474a5,3,
+{3,
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},11,
+{1,1,
+{"ru","Notice"}
+},2,1,0,0,0,
+{0,0,0},0,
+{1,0},1,
+{10,0,
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},100,2,0,0,1,2},4,0,0,0,0,0,0,0},
+{0}
+},
+{8,10,45,160,65,1,
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},0,0,0,0,0,0,0,1,2,0,0},
+{14,"Notice",4294967295,0,0,0},
+{0}
+}
+)OOF", "Right");
 }
 
 void test_label_enabled_and_tooltip_round_trip() {
@@ -1760,9 +2013,122 @@ void test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections()
     const_cast<model::ControlNode*>(picture_property_document.find_control(model::ObjectId{2}))
         ->properties().set_explicit(model::PropertyId::from_name("Picture"),
             model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
-                model::QualifiedName{"PictureLib.ExecuteTask"}});
-    expect_failure(form_stream::encode_document(picture_property_document), "OOF1122",
-        "$/PictureDecoration", "unimplemented Picture must not be silently discarded");
+                model::QualifiedName{"PictureLib.Write"}});
+    const auto picture_encoded = form_stream::encode_document(picture_property_document);
+    expect(picture_encoded.ok(), "standard PictureDecoration.Picture must encode");
+    constexpr std::string_view observed_write_control_record = R"RAW(
+{151ef23e-6bb2-4681-83d0-35bc2217230c,2,
+{1,
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},20,0,0,
+{10,0,
+{4,1,
+{0,894cf65b-4109-4533-a1d7-c87b1fcc80a3},"",-1,-1,0,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},100,2,0,0,1,2},
+{0,0,0},1,1,0,0,
+{1,0},0,1,1,1},
+{0}
+},
+{8,20,20,140,90,1,
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},0,0,0,0,0,0,0,0,1,0,0},
+{14,"Picture",4294967295,0,0,0},
+{0}
+}
+)RAW";
+    auto actual_picture_stream = picture_encoded.value();
+    auto& actual_picture_record = actual_picture_stream.items[1].items[2].items[2].items[1];
+    actual_picture_record = list_stream::parse(observed_write_control_record);
+    const auto actual_picture_decoded = form_stream::decode_document(actual_picture_stream, "ObservedPictureWrite");
+    expect(actual_picture_decoded.ok(), "actual PictureDecoration record from runtime after PictureLib.Write must decode");
+    const auto actual_picture_reencoded = form_stream::encode_document(actual_picture_decoded.value());
+    expect(actual_picture_reencoded.ok() &&
+               list_stream::dump_compact(picture_record(actual_picture_reencoded.value())) ==
+                   list_stream::dump_compact(list_stream::parse(observed_write_control_record)),
+        "actual runtime PictureDecoration picture record must encode back canonically");
+    constexpr std::string_view observed_write_picture =
+        "{4,1,{0,894cf65b-4109-4533-a1d7-c87b1fcc80a3},\"\",-1,-1,0,0,\"\"}";
+    const auto& picture_properties = picture_record(picture_encoded.value()).items[2].items[1];
+    expect(
+               list_stream::dump_compact(picture_properties.items[4].items[2]) == observed_write_picture,
+        "PictureDecoration.Picture must use the exact observed PictureLib.Write record tuple");
+    const auto picture_decoded = form_stream::decode_document(picture_encoded.value(), "PictureDecorationPicture");
+    expect(picture_decoded.ok(), "standard PictureDecoration.Picture must decode");
+    const auto* decoded_control = picture_decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_picture = decoded_control == nullptr ? nullptr :
+        decoded_control->properties().find(model::PropertyId::from_name("Picture"));
+    expect(decoded_picture && std::holds_alternative<model::PictureRef>(decoded_picture->value) &&
+               std::get<model::PictureRef>(decoded_picture->value).standard_name ==
+               model::QualifiedName{"PictureLib.Write"},
+        "observed PictureDecoration picture identity must decode to a typed PictureRef");
+    const auto picture_reencoded = form_stream::encode_document(picture_decoded.value());
+    expect(picture_reencoded.ok() && list_stream::dump_compact(picture_reencoded.value()) ==
+               list_stream::dump_compact(picture_encoded.value()),
+        "standard PictureDecoration.Picture must re-encode canonically");
+
+    auto unknown_picture_document = make_document(false, true, "");
+    const_cast<model::ControlNode*>(unknown_picture_document.find_control(model::ObjectId{2}))
+        ->properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{model::ObjectId{0}},
+                model::QualifiedName{"PictureLib.Unknown"}});
+    expect_failure(form_stream::encode_document(unknown_picture_document), "OOF1123",
+        "$", "unknown standard PictureLib names must be rejected before encoding");
+
+    auto external_picture_document = make_document(false, true, "");
+    const_cast<model::ControlNode*>(external_picture_document.find_control(model::ObjectId{2}))
+        ->properties().set_explicit(model::PropertyId::from_name("Picture"),
+            model::PictureRef{model::PictureAssetRef{model::ObjectId{20}}});
+    external_picture_document.add_asset(model::PictureAsset{model::ObjectId{20},
+        "Items/Picture/Picture.gif", model::PictureFormat::gif,
+        {'G','I','F','8','9','a',0,1}, false});
+    expect_failure(form_stream::encode_document(external_picture_document), "OOF1122",
+        "$/PictureDecoration/Picture", "unverified external PictureDecoration assets must fail closed");
 
     auto unknown_property_document = make_document(false, true, "");
     const_cast<model::ControlNode*>(unknown_property_document.find_control(model::ObjectId{2}))
@@ -1887,6 +2253,18 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
     auto encoded = form_stream::encode_document(parsed.value());
     expect(encoded.ok(), "ProgressBar must encode from its named XML object model");
 
+    constexpr std::string_view explicit_defaults_xml =
+        R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><ChildItems><ProgressBar id="4" name="ProgressResearch"><Position/><MaxValue>100</MaxValue><MinValue>0</MinValue><Step>1</Step></ProgressBar></ChildItems></Form>)OOF";
+    const auto explicit_defaults = oof::source::parse_form_xml(explicit_defaults_xml);
+    expect(explicit_defaults.ok(), "explicit ProgressBar numeric defaults must parse");
+    if (explicit_defaults) {
+        const auto defaults_xml = oof::source::serialize_form_xml(explicit_defaults.value());
+        expect(defaults_xml.ok() && defaults_xml.value().find("<MaxValue>") == std::string::npos &&
+                   defaults_xml.value().find("<MinValue>") == std::string::npos &&
+                   defaults_xml.value().find("<Step>") == std::string::npos,
+            "XML writer must omit explicit ProgressBar values equal to DecimalValue defaults");
+    }
+
     constexpr std::string_view runtime_record = R"OOF({b1db1f86-abbb-4cf0-8852-fe6ae21650c2,4,{0,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},3,0,100,1,1,0,2}},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,1,2,0,0},{14,"ProgressResearch",4294967295,0,0,0},{0}})OOF";
     auto observed = list_stream::parse(runtime_record);
     auto* generated_record = static_cast<list_stream::ListValue*>(nullptr);
@@ -1911,6 +2289,60 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
     const auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
         "observed native ProgressBar default record must re-encode without drift");
+
+    constexpr std::string_view numeric_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><ChildItems><ProgressBar id="4" name="ProgressResearch"><Position/><MaxValue>321</MaxValue><MinValue>-17</MinValue><Step>25</Step></ProgressBar></ChildItems></Form>)OOF";
+    const auto numeric_parsed = oof::source::parse_form_xml(numeric_xml);
+    expect(numeric_parsed.ok(), "named ProgressBar numeric properties must parse from XML");
+    const auto numeric_encoded = form_stream::encode_document(numeric_parsed.value());
+    expect(numeric_encoded.ok(), "named ProgressBar integer values must encode from XML");
+    auto numeric_observed = observed;
+    numeric_observed.items[2].items[1].items[2] = list_stream::ListValue::raw_atom("-17");
+    numeric_observed.items[2].items[1].items[3] = list_stream::ListValue::raw_atom("321");
+    numeric_observed.items[2].items[1].items[4] = list_stream::ListValue::raw_atom("25");
+    auto numeric_stream = numeric_encoded.value();
+    auto* numeric_record = find_progress(find_progress, numeric_stream);
+    expect(numeric_record != nullptr, "numeric ProgressBar output must contain a named child record");
+    numeric_observed.items[3] = numeric_record->items[3];
+    *numeric_record = numeric_observed;
+    const auto numeric_decoded = form_stream::decode_document(numeric_stream, "ProgressNumeric");
+    expect(numeric_decoded.ok(), "observed numeric ProgressBar record must decode");
+    const auto* numeric_control = numeric_decoded.value().find_control(model::ObjectId{4});
+    const auto* decoded_max = numeric_control->properties().find(model::PropertyId::from_name("MaxValue"));
+    const auto* decoded_min = numeric_control->properties().find(model::PropertyId::from_name("MinValue"));
+    const auto* decoded_step = numeric_control->properties().find(model::PropertyId::from_name("Step"));
+    expect(decoded_max && std::get<std::int64_t>(decoded_max->value) == 321 &&
+               decoded_min && std::get<std::int64_t>(decoded_min->value) == -17 &&
+               decoded_step && std::get<std::int64_t>(decoded_step->value) == 25,
+        "observed MaxValue, MinValue, and Step must decode as named numeric properties");
+    const auto numeric_reencoded = form_stream::encode_document(numeric_decoded.value());
+    expect(numeric_reencoded.ok() &&
+               list_stream::dump_compact(numeric_reencoded.value()) == list_stream::dump_compact(numeric_stream),
+        "observed numeric ProgressBar properties must re-encode to their integer info slots");
+
+    for (const std::string_view property : {"MaxValue", "MinValue", "Step"}) {
+        const auto property_xml = [property](std::string_view value) {
+            return std::string("<Form id=\"1\" name=\"Progress\" ordinaryFormVersion=\"2.1\"><ChildItems><ProgressBar id=\"4\" name=\"P\"><Position/><") +
+                std::string(property) + ">" + std::string(value) + "</" + std::string(property) +
+                "></ProgressBar></ChildItems></Form>";
+        };
+        const auto fractional = oof::source::parse_form_xml(property_xml("12.5"));
+        expect(!fractional, "fractional ProgressBar XML must be rejected by the int32 contract");
+        const std::size_t storage_slot = property == "MaxValue" ? 3 : property == "MinValue" ? 2 : 4;
+        for (const std::string_view endpoint : {"2147483647", "-2147483648"}) {
+            const auto endpoint_parsed = oof::source::parse_form_xml(property_xml(endpoint));
+            expect(endpoint_parsed.ok(), "ProgressBar int32 endpoint must parse as a named integer");
+            const auto endpoint_encoded = form_stream::encode_document(endpoint_parsed.value());
+            expect(endpoint_encoded.ok(), "ProgressBar signed int32 endpoint must encode");
+            auto endpoint_stream = endpoint_encoded.value();
+            auto* endpoint_record = find_progress(find_progress, endpoint_stream);
+            expect(endpoint_record && endpoint_record->items[2].items[1].items[storage_slot].atom == endpoint,
+                "ProgressBar signed int32 endpoint must occupy its observed numeric info slot");
+        }
+        for (const std::string_view out_of_range : {"2147483648", "-2147483649"}) {
+            const auto parsed = oof::source::parse_form_xml(property_xml(out_of_range));
+            expect(!parsed, "ProgressBar XML outside signed int32 must be rejected before storage");
+        }
+    }
 
     model::Form changed_form;
     changed_form.id = model::ObjectId{1};
@@ -1941,13 +2373,6 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
         unsupported_decode ? "unclassified ProgressBar leaf unexpectedly decoded" :
             "unclassified ProgressBar leaf diagnostic was " + unsupported_decode.diagnostics().front().code +
                 " at " + unsupported_decode.diagnostics().front().path);
-
-    constexpr std::string_view unsupported_property_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><ChildItems><ProgressBar id="4" name="P"><Position/><MaxValue>100</MaxValue></ProgressBar></ChildItems></Form>)OOF";
-    const auto unsupported_property = oof::source::parse_form_xml(unsupported_property_xml);
-    expect(unsupported_property.ok(), "unclassified ProgressBar property must remain readable XML");
-    const auto unsupported_encode = form_stream::encode_document(unsupported_property.value());
-    expect(!unsupported_encode && unsupported_encode.diagnostics().front().code == "OOF1122",
-        "unclassified ProgressBar MaxValue must fail closed on encode");
 
     constexpr std::string_view data_path_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Amount"><TypeDomain><Entry term="string" length="64"/></TypeDomain></Attribute></Attributes><ChildItems><ProgressBar id="4" name="P"><DataPath attributeId="3"/><Position/></ProgressBar></ChildItems></Form>)OOF";
     const auto data_path = oof::source::parse_form_xml(data_path_xml);
@@ -4138,6 +4563,7 @@ int main() {
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
         test_check_box_tooltip_round_trip_and_validation();
+        test_check_box_font_round_trip_and_validation();
         test_button_colors_round_trip_and_validation();
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();
@@ -4145,6 +4571,7 @@ int main() {
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
+        test_label_decoration_observed_center_right_records();
         test_label_enabled_and_tooltip_round_trip();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
         test_fresh_checkbox_stream_decode();
