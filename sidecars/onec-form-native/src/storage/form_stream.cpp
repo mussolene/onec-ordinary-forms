@@ -2516,7 +2516,8 @@ LV canonical_progress_bar_info(
 DecodedControl decode_progress_bar(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    const AttributeRecord* linked_attribute) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -2524,6 +2525,12 @@ DecodedControl decode_progress_bar(
     if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", child_path(path, 1), "positive int64 ProgressBar ID", std::to_string(raw_id),
             "ProgressBar ID is invalid");
+    }
+    if (linked_attribute && !(linked_attribute->type.entries.size() == 1 &&
+        linked_attribute->type.entries.front().term == model::TypeDomainTerm::numeric &&
+        !linked_attribute->type.entries.front().type_uuid)) {
+        fail("OOF1122", "$/2/3", "link to a single numeric Attribute", linked_attribute->name,
+            "ProgressBar DataPath must target a single numeric attribute");
     }
 
     const auto& info = record.items[2];
@@ -2580,6 +2587,8 @@ DecodedControl decode_progress_bar(
         model::PropertyId::from_name("MinValue"), static_cast<std::int64_t>(min_value));
     if (step != 1) control.properties().set_explicit(
         model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
+    if (linked_attribute) control.data_path = model::DataPath{
+        model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -3156,19 +3165,31 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
     });
 }
 
-LV encode_progress_bar(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_progress_bar(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::progress_bar || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "ProgressBar with positive int64 ID", control.name,
             "ProgressBar is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/ProgressBar", "named ProgressBar without DataPath, ValueType, Events, or storage children",
+        fail("OOF1122", "$/ProgressBar", "named ProgressBar with optional direct DataPath, no ValueType, Events, or storage children",
             control.name, "ProgressBar uses a storage concept outside the supported profile");
+    }
+    if (control.data_path) {
+        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        if (attribute == nullptr) fail("OOF1123", "$/ProgressBar/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "ProgressBar DataPath does not resolve");
+        if (!(attribute->type.entries.size() == 1 &&
+            attribute->type.entries.front().term == model::TypeDomainTerm::numeric &&
+            !attribute->type.entries.front().type_uuid)) fail("OOF1122", "$/ProgressBar/DataPath",
+            "single numeric Attribute", attribute->name, "ProgressBar DataPath must target a single numeric attribute");
     }
     require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step"}, "$/ProgressBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -4083,7 +4104,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
-                    else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid) {
+                    else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
+                             guid == progress_bar_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                             fail("OOF1122", child_path(record_path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
@@ -4091,24 +4113,37 @@ Result<model::OrdinaryFormDocument> decode_document(
                         }
                         const auto candidate_key = static_cast<std::int64_t>(candidate_id);
                         const auto link_it = links_by_control.find(candidate_key);
-                        if (link_it == links_by_control.end()) fail("OOF1122", "$/2/3", "DataPath link for each InputField or CheckBox",
-                            std::to_string(candidate_id), "Linked control has no attribute link");
-                        if (!consumed_link_ids.insert(candidate_key).second) fail("OOF1122", "$/2/3", "one DataPath link per linked control",
-                            std::to_string(candidate_id), "Attribute link was consumed more than once");
-                        const auto& link = *link_it->second;
-                        if (!link.attribute_id.is_null || link.attribute_id.uuid.canonical != null_uuid) {
-                            fail("OOF1122", "$/2/3", "null-UUID attribute link", describe(record), "Control DataPath link uses an unsupported target");
+                        const bool required_link = guid != progress_bar_descriptor.guid;
+                        if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
+                            "DataPath link for each InputField or CheckBox", std::to_string(candidate_id),
+                            "Linked control has no attribute link");
+                        const AttributeRecord* linked_attribute = nullptr;
+                        if (link_it != links_by_control.end()) {
+                            if (!consumed_link_ids.insert(candidate_key).second) fail("OOF1122", "$/2/3",
+                                "one DataPath link per linked control", std::to_string(candidate_id),
+                                "Attribute link was consumed more than once");
+                            const auto& link = *link_it->second;
+                            if (!link.attribute_id.is_null || link.attribute_id.uuid.canonical != null_uuid) {
+                                fail("OOF1122", "$/2/3", "null-UUID attribute link", describe(record),
+                                    "Control DataPath link uses an unsupported target");
+                            }
+                            const auto attribute_it = attributes_by_id.find(link.attribute_id.object_id);
+                            if (attribute_it == attributes_by_id.end()) fail("OOF1122", "$/2/3",
+                                "link to an existing Attribute", std::to_string(link.attribute_id.object_id),
+                                "DataPath target is unresolved");
+                            linked_attribute = attribute_it->second;
                         }
-                        const auto attribute_it = attributes_by_id.find(link.attribute_id.object_id);
-                        if (attribute_it == attributes_by_id.end()) fail("OOF1122", "$/2/3", "link to an existing Attribute",
-                            std::to_string(link.attribute_id.object_id), "DataPath target is unresolved");
-                        child = guid == input_descriptor.guid
-                            ? decode_input_field(record, record_path, *attribute_it->second, context)
-                            : decode_check_box(record, record_path, *attribute_it->second, context);
-                        child.control.data_path = model::DataPath{
-                            model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attribute_it->second->id.object_id)}}, {}};
-                    } else if (guid == progress_bar_descriptor.guid) {
-                        child = decode_progress_bar(record, record_path, context);
+                        if (guid == input_descriptor.guid) {
+                            child = decode_input_field(record, record_path, *linked_attribute, context);
+                            child.control.data_path = model::DataPath{model::AttributeRef{
+                                model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                        } else if (guid == checkbox_descriptor.guid) {
+                            child = decode_check_box(record, record_path, *linked_attribute, context);
+                            child.control.data_path = model::DataPath{model::AttributeRef{
+                                model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                        } else {
+                            child = decode_progress_bar(record, record_path, context, linked_attribute);
+                        }
                     } else if (guid == panel_descriptor.guid) {
                         require_arity(record, 6, record_path);
                         const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -4192,7 +4227,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
         for (auto& page : nested_pages) document.add_page(std::move(page));
         if (consumed_link_ids.size() != links_by_control.size()) {
-            fail("OOF1122", "$/2/3", "one matching link per decoded InputField or CheckBox", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
+            fail("OOF1122", "$/2/3", "one matching link per decoded DataPath control", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
         }
 
         if (actual_max_id >= std::numeric_limits<std::uint32_t>::max()) {
@@ -4463,7 +4498,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::check_box) {
                     record = encode_check_box(document, *control, context);
                 } else if (control->kind() == model::ControlKind::progress_bar) {
-                    record = encode_progress_bar(*control, context);
+                    record = encode_progress_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::panel) {
                     if (!control->events.empty() || control->data_path || !control->extension_properties.empty()) {
                         fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",
@@ -4483,7 +4518,7 @@ Result<list_stream::ListValue> encode_document(
                     fail("OOF1122", std::string(path), "Button, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, or Panel", control->name,
                         "Control payload is unsupported");
                 }
-                if (control->kind() == model::ControlKind::input_field || control->kind() == model::ControlKind::check_box) {
+                if (control->data_path) {
                     ordered_control_links.push_back(form_stream::AttributeLink{
                         static_cast<std::int64_t>(control->id.value()),
                         model::CompositeIdValue{static_cast<std::int64_t>(control->data_path->attribute.id().value()),
@@ -4594,13 +4629,12 @@ Result<list_stream::ListValue> encode_document(
         });
         std::size_t linked_control_count = 0;
         for (const auto& control : document.collections().controls) {
-            if (control.kind() == model::ControlKind::input_field ||
-                control.kind() == model::ControlKind::check_box) {
+            if (control.data_path) {
                 ++linked_control_count;
             }
         }
         if (linked_control_count != attributes.links.size()) {
-            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField or CheckBox",
+            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField, CheckBox, or bound ProgressBar",
                 std::to_string(linked_control_count), "Linked control and DataPath link counts do not match");
         }
         if (max_id >= std::numeric_limits<std::uint32_t>::max()) {
