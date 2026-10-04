@@ -766,6 +766,44 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         "Spreadsheet Document cells require unique positive uint32 row and column coordinates in row-major order");
                     break;
                 }
+                if (cell.typed_value.has_value()) {
+                    const auto& typed = *cell.typed_value;
+                    bool supported = false;
+                    if (typed.type.entries.size() == 1) {
+                        const auto& entry = typed.type.entries.front();
+                        if (entry.term == TypeDomainTerm::string) {
+                            const bool unrelated_qualifiers_default = !entry.type_uuid.has_value() &&
+                                entry.numeric == NumericQualifiers{} && entry.binary == LengthQualifiers{} &&
+                                entry.date == DateQualifiers{};
+                            supported = unrelated_qualifiers_default &&
+                                std::holds_alternative<std::string>(typed.value);
+                        } else if (entry.term == TypeDomainTerm::numeric) {
+                            const bool unrelated_qualifiers_default = !entry.type_uuid.has_value() &&
+                                entry.string == LengthQualifiers{} && entry.binary == LengthQualifiers{} &&
+                                entry.date == DateQualifiers{};
+                            supported = unrelated_qualifiers_default &&
+                                (entry.numeric.length == 0 || entry.numeric.precision <= entry.numeric.length) &&
+                                std::holds_alternative<DecimalValue>(typed.value);
+                        } else if (entry.term == TypeDomainTerm::boolean) {
+                            supported = entry == TypeDomainEntry{.term = TypeDomainTerm::boolean} &&
+                                std::holds_alternative<bool>(typed.value);
+                        } else if (entry.term == TypeDomainTerm::date) {
+                            supported = !entry.type_uuid.has_value() && entry.numeric == NumericQualifiers{} &&
+                                entry.string == LengthQualifiers{} && entry.binary == LengthQualifiers{} &&
+                                entry.date == DateQualifiers{true, true} &&
+                                std::holds_alternative<DateValue>(typed.value);
+                        }
+                    }
+                    if (!cell.text.empty() || !supported) {
+                        add_violation(
+                            report,
+                            InvariantCode::invalid_property,
+                            control.id,
+                            control.id,
+                            "Spreadsheet typed cells require an empty Text and a supported ValueType/Value pair");
+                        break;
+                    }
+                }
                 previous = coordinate;
             }
         }

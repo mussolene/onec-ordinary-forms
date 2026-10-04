@@ -712,7 +712,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
 )XSD";
 
     output += R"XSD(  <xs:simpleType name="SpreadsheetCoordinateType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="4294967295"/></xs:restriction></xs:simpleType>
-  <xs:complexType name="SpreadsheetDocumentCellType"><xs:sequence><xs:element name="Text" type="xs:string" minOccurs="1" maxOccurs="1"/></xs:sequence><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
+  <xs:complexType name="SpreadsheetDocumentCellType"><xs:choice><xs:element name="Text" type="xs:string"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/></xs:sequence></xs:choice><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
   <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
 
 )XSD";

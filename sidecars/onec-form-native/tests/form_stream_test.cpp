@@ -5036,7 +5036,31 @@ void test_spreadsheet_document_field_round_trip() {
     model::ControlNode field{model::ObjectId{9}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
     auto& field_payload = std::get<model::SpreadsheetDocumentFieldPayload>(field.payload);
     field_payload.cells = {
-        {1, 1, "Документ"}, {2, 1, ""}, {2, 3, " Ω & текст "}};
+        {1, 1, "Документ", std::nullopt}, {2, 1, "", std::nullopt}, {2, 3, " Ω & текст ", std::nullopt}};
+    const auto typed_cell = [](std::uint32_t row, std::uint32_t column, model::TypeDomainTerm term,
+                               model::PropertyValue value) {
+        model::TypeDomainEntry entry;
+        entry.term = term;
+        if (term == model::TypeDomainTerm::string) entry.string = {100, true};
+        if (term == model::TypeDomainTerm::numeric) entry.numeric = {15, 3, false};
+        if (term == model::TypeDomainTerm::date) entry.date = {true, true};
+        model::TypeDomainPatternValue type{{entry}};
+        return model::SpreadsheetDocumentCell{row, column, {},
+            model::SpreadsheetDocumentCellValue{std::move(type), std::move(value)}};
+    };
+    field_payload.cells.push_back(typed_cell(4, 1, model::TypeDomainTerm::string, std::string("Unicode Привет 世界")));
+    field_payload.cells.push_back(typed_cell(4, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"-12.375"}));
+    field_payload.cells.push_back(typed_cell(4, 3, model::TypeDomainTerm::boolean, false));
+    field_payload.cells.push_back(typed_cell(4, 4, model::TypeDomainTerm::date, model::DateValue{"2026-10-04T12:30:45"}));
+    field_payload.cells.push_back(typed_cell(6, 1, model::TypeDomainTerm::string, std::string{}));
+    field_payload.cells.push_back(typed_cell(6, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"0"}));
+    field_payload.cells.push_back(typed_cell(6, 3, model::TypeDomainTerm::date, model::DateValue{"0001-01-01T00:00:00"}));
+    auto generic_string = typed_cell(7, 1, model::TypeDomainTerm::string, std::string("x"));
+    generic_string.typed_value->type.entries.front().string.length = 37;
+    field_payload.cells.push_back(std::move(generic_string));
+    auto generic_number = typed_cell(7, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"1.2345"});
+    generic_number.typed_value->type.entries.front().numeric = {12, 4, false};
+    field_payload.cells.push_back(std::move(generic_number));
     document.add_control(std::move(field));
 
     const auto encoded = form_stream::encode_document(document);
@@ -5046,11 +5070,115 @@ void test_spreadsheet_document_field_round_trip() {
     const auto* restored_control = decoded.value().find_control(model::ObjectId{9});
     expect(restored_control != nullptr, "SpreadsheetDocumentField must resolve after storage decode");
     const auto* restored = std::get_if<model::SpreadsheetDocumentFieldPayload>(&restored_control->payload);
-    expect(restored && restored->cells.size() == 3 && restored->cells[0].row == 1 &&
+    expect(restored && restored->cells.size() == 12 && restored->cells[0].row == 1 &&
         restored->cells[0].column == 1 && restored->cells[0].text == "Документ" &&
         restored->cells[1].row == 2 && restored->cells[1].column == 1 && restored->cells[1].text.empty() &&
         restored->cells[2].row == 2 && restored->cells[2].column == 3 && restored->cells[2].text == " Ω & текст ",
         "SpreadsheetDocumentField cells must preserve sparse coordinates, Unicode, whitespace, and empty content");
+    expect(restored && restored->cells[3].typed_value &&
+        std::get<std::string>(restored->cells[3].typed_value->value) == "Unicode Привет 世界" &&
+        restored->cells[3].typed_value->type.entries.front().string.length == 100 &&
+        restored->cells[4].typed_value &&
+        std::get<model::DecimalValue>(restored->cells[4].typed_value->value).canonical == "-12.375" &&
+        restored->cells[5].typed_value && !std::get<bool>(restored->cells[5].typed_value->value) &&
+        restored->cells[6].typed_value &&
+        std::get<model::DateValue>(restored->cells[6].typed_value->value).canonical == "2026-10-04T12:30:45",
+        "SpreadsheetDocumentField must preserve typed String, Number, Boolean, and Date values and qualifiers");
+    const auto& document_info = encoded.value().items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    expect(list_stream::dump_compact(document_info.items.at(32)) ==
+            list_stream::dump_compact(list_stream::parse(R"LS({2,1,{"S","Unicode Привет 世界"}})LS")) &&
+        list_stream::dump_compact(document_info.items.at(34)) ==
+            list_stream::dump_compact(list_stream::parse(R"LS({2,2,{"N",-12.375}})LS")) &&
+        list_stream::dump_compact(document_info.items.at(36)) == "{0,3}" &&
+        list_stream::dump_compact(document_info.items.at(38)) ==
+            list_stream::dump_compact(list_stream::parse(R"LS({2,4,{"D",20261004123045}})LS")) &&
+        list_stream::dump_compact(document_info.items.at(83)) == "{46137344,1,0,0}" &&
+        list_stream::dump_compact(document_info.items.at(84)) == "{46137344,1,1,0}" &&
+        list_stream::dump_compact(document_info.items.at(85)) == "{46137344,1,2,0}" &&
+        list_stream::dump_compact(document_info.items.at(86)) == "{46137344,1,3,0}",
+        "typed cell records and fresh TypeDomain references must match the observed named wire profile");
+
+    constexpr std::string_view observed_typed_document_info = R"LS({8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,3,0,0,2,0,{16,0,{1,1,{"ru","Первый"}},0},2,{16,0,{1,0},0},1,0,2,0,{16,0,{1,1,{"ru","二"}},0},2,{16,0,{1,1,{"ru","Four"}},0},3,0,4,0,{2,1,{"S","Unicode Привет 世界 🌍"}},1,{2,2,{"N",-12.375}},2,{0,3},3,{2,4,{"D",20261004123045}},{4,0,00000000-0000-0000-0000-000000000000,0},4,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,4,{46137344,1,0,0},{46137344,1,1,0},{46137344,1,2,0},{46137344,1,3,0},0,0,4,{"Pattern",{"S",100,1}},{"Pattern",{"N",15,3,0}},{"Pattern",{"B"}},{"Pattern",{"D"}},1,381ed624-9217-4e63-85db-c4c3cb87daae,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0})LS";
+    model::Form observed_form;
+    observed_form.id = model::ObjectId{1};
+    observed_form.name = "Main";
+    observed_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument observed_document(std::move(observed_form));
+    model::ControlNode observed_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    auto& observed_cells = std::get<model::SpreadsheetDocumentFieldPayload>(observed_field.payload).cells;
+    observed_cells = {{1, 1, "Первый", std::nullopt}, {1, 3, "", std::nullopt},
+        {2, 1, "二", std::nullopt}, {2, 3, "Four", std::nullopt}};
+    observed_cells.push_back(typed_cell(4, 1, model::TypeDomainTerm::string, std::string("Unicode Привет 世界 🌍")));
+    observed_cells.push_back(typed_cell(4, 2, model::TypeDomainTerm::numeric, model::DecimalValue{"-12.375"}));
+    observed_cells.push_back(typed_cell(4, 3, model::TypeDomainTerm::boolean, false));
+    observed_cells.push_back(typed_cell(4, 4, model::TypeDomainTerm::date, model::DateValue{"2026-10-04T12:30:45"}));
+    observed_document.add_control(std::move(observed_field));
+    auto observed_encoded = form_stream::encode_document(observed_document);
+    expect(observed_encoded.ok(), observed_encoded.ok() ? "" : observed_encoded.diagnostics().front().message);
+    auto observed_fixture = list_stream::parse(observed_typed_document_info);
+    auto& observed_control_record = observed_encoded.value().items.at(1).items.at(2).items.at(2).items.at(1);
+    const auto& produced_document_info = observed_control_record.items.at(2).items.at(11);
+    const auto produced_observed_info = list_stream::dump_compact(produced_document_info);
+    const auto expected_observed_info = list_stream::dump_compact(observed_fixture);
+    expect(produced_observed_info == expected_observed_info,
+        std::string("typed-cell writer must match the independent platform-observed complete DocumentInfo; got ") +
+            produced_observed_info + " expected " + expected_observed_info);
+    observed_control_record.items.at(2).items.at(11) = std::move(observed_fixture);
+    const auto observed_decoded = form_stream::decode_document(observed_encoded.value(), "Main");
+    expect(observed_decoded.ok(), observed_decoded.ok() ? "" : observed_decoded.diagnostics().front().message);
+    const auto* observed_control = observed_decoded.value().find_control(model::ObjectId{2});
+    const auto* observed_payload = observed_control == nullptr ? nullptr :
+        std::get_if<model::SpreadsheetDocumentFieldPayload>(&observed_control->payload);
+    expect(observed_payload && observed_payload->cells.size() == 8 &&
+        observed_payload->cells[4].typed_value &&
+        std::get<std::string>(observed_payload->cells[4].typed_value->value) == "Unicode Привет 世界 🌍" &&
+        observed_payload->cells[5].typed_value &&
+        std::get<model::DecimalValue>(observed_payload->cells[5].typed_value->value).canonical == "-12.375" &&
+        observed_payload->cells[6].typed_value && !std::get<bool>(observed_payload->cells[6].typed_value->value) &&
+        observed_payload->cells[7].typed_value &&
+        std::get<model::DateValue>(observed_payload->cells[7].typed_value->value).canonical == "2026-10-04T12:30:45",
+        "independent full DocumentInfo must decode into named typed cells and exact values");
+
+    model::Form shared_form;
+    shared_form.id = model::ObjectId{1};
+    shared_form.name = "Main";
+    shared_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument shared_document(std::move(shared_form));
+    model::ControlNode shared_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+    std::get<model::SpreadsheetDocumentFieldPayload>(shared_field.payload).cells = {
+        typed_cell(1, 1, model::TypeDomainTerm::string, std::string("first")),
+        typed_cell(1, 3, model::TypeDomainTerm::string, std::string("second"))};
+    shared_document.add_control(std::move(shared_field));
+    auto shared_encoded = form_stream::encode_document(shared_document);
+    expect(shared_encoded.ok(), shared_encoded.ok() ? "" : shared_encoded.diagnostics().front().message);
+    auto& shared_info = shared_encoded.value().items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    shared_info.items.at(22).items.at(1) = list_stream::ListValue::raw_atom("1");
+    shared_info.items.erase(shared_info.items.begin() + 52);
+    shared_info.items.at(50) = list_stream::ListValue::raw_atom("1");
+    shared_info.items.at(54) = list_stream::ListValue::raw_atom("1");
+    shared_info.items.erase(shared_info.items.begin() + 56);
+    const auto shared_decoded = form_stream::decode_document(shared_encoded.value(), "Main");
+    expect(shared_decoded.ok(), shared_decoded.ok() ? "" : shared_decoded.diagnostics().front().message);
+    const auto* shared_control = shared_decoded.value().find_control(model::ObjectId{2});
+    const auto* shared_payload = shared_control == nullptr ? nullptr :
+        std::get_if<model::SpreadsheetDocumentFieldPayload>(&shared_control->payload);
+    expect(shared_payload && shared_payload->cells.size() == 2 &&
+        std::get<std::string>(shared_payload->cells[0].typed_value->value) == "first" &&
+        std::get<std::string>(shared_payload->cells[1].typed_value->value) == "second" &&
+        shared_payload->cells[0].typed_value->type == shared_payload->cells[1].typed_value->type,
+        "typed cells may resolve a shared format and ValueType reference by their table mappings");
+    expect(restored && restored->cells[7].typed_value &&
+        std::get<std::string>(restored->cells[7].typed_value->value).empty() &&
+        restored->cells[8].typed_value &&
+        std::get<model::DecimalValue>(restored->cells[8].typed_value->value).canonical == "0" &&
+        restored->cells[9].typed_value &&
+        std::get<model::DateValue>(restored->cells[9].typed_value->value).canonical == "0001-01-01T00:00:00",
+        "default typed String, Number, and Date values must survive storage normalization");
+    expect(restored && restored->cells[10].typed_value &&
+        restored->cells[10].typed_value->type.entries.front().string.length == 37 &&
+        restored->cells[11].typed_value &&
+        restored->cells[11].typed_value->type.entries.front().numeric == model::NumericQualifiers{12, 4, false},
+        "non-default String and Number qualifiers must survive typed cell storage");
 
     constexpr std::string_view fresh_add_control = R"LS({236a17b3-7f44-46d9-a907-75f9cdc61ab5,2,{18,0,0,0,0,5,5,1,1,{4,4,{0},4},{3,1,{-18},0,0,0},{8,1,12,{"ru","ru",1,1,"ru","Русский","Русский",1},{128,72},{0},0,{0,0},{0,0},{0,0},{0,0},{0,0},{0,0},0,2,2,0,0,1,0,{16,0,{1,1,{"ru","Первый"}},0},1,0,1,2,{16,0,{1,1,{"ru","Второй"}},0},{3,0,00000000-0000-0000-0000-000000000000,0},2,0,0,0,0,0,0,0,0,{0},{0},{0},{0},"",{{0,6,6,{"N",1000},7,{"N",1000},8,{"N",1000},9,{"N",1000},10,{"N",1000},11,{"N",1000}}},{0,-1,-1,-1,-1,00000000-0000-0000-0000-000000000000},0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,2,{4,3,{-1},3},{4,3,{-3},3},0,0,0,"",0,{3,0,0,100,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"",0,0,0,0,0,0,0},{0},0,0,0,1,0,0,0},0,1,{3,0,0,100,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"ru",0,0,0,0,0,0,0},1,1,{0},0,0,0,0,0,1,0,1,1,0,0,0,0,1,1},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,0,1,0,0},{14,"Sheet",4294967295,0,0,0},{0}})LS";
     const auto platform_record = list_stream::parse(fresh_add_control);
@@ -5061,7 +5189,7 @@ void test_spreadsheet_document_field_round_trip() {
     model::OrdinaryFormDocument platform_document(std::move(platform_form));
     model::ControlNode platform_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
     std::get<model::SpreadsheetDocumentFieldPayload>(platform_field.payload).cells = {
-        {1, 1, "Первый"}, {2, 3, "Второй"}};
+        {1, 1, "Первый", std::nullopt}, {2, 3, "Второй", std::nullopt}};
     platform_document.add_control(std::move(platform_field));
     const auto platform_encode = form_stream::encode_document(platform_document);
     expect(platform_encode.ok(), platform_encode.ok() ? "" : platform_encode.diagnostics().front().message);
@@ -5086,7 +5214,7 @@ void test_spreadsheet_document_field_round_trip() {
     normalized_form.children = {model::ControlRef{model::ObjectId{2}}};
     model::OrdinaryFormDocument normalized_document(std::move(normalized_form));
     model::ControlNode normalized_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
-    std::get<model::SpreadsheetDocumentFieldPayload>(normalized_field.payload).cells = {{1, 1, "Текст"}};
+    std::get<model::SpreadsheetDocumentFieldPayload>(normalized_field.payload).cells = {{1, 1, "Текст", std::nullopt}};
     normalized_document.add_control(std::move(normalized_field));
     const auto normalized_encoded = form_stream::encode_document(normalized_document);
     expect(normalized_encoded.ok(), normalized_encoded.ok() ? "" : normalized_encoded.diagnostics().front().message);
@@ -5101,7 +5229,7 @@ void test_spreadsheet_document_field_round_trip() {
     const auto* normalized_control = normalized_decoded.value().find_control(model::ObjectId{2});
     const auto* normalized_payload = normalized_control == nullptr ? nullptr :
         std::get_if<model::SpreadsheetDocumentFieldPayload>(&normalized_control->payload);
-    expect(normalized_payload && normalized_payload->cells == std::vector<model::SpreadsheetDocumentCell>{{1, 1, "Текст"}},
+    expect(normalized_payload && normalized_payload->cells == std::vector<model::SpreadsheetDocumentCell>{{1, 1, "Текст", std::nullopt}},
         "independent normalized R1C1 record must decode to the same named cells as fresh Add");
 
     auto unsupported_row_flags = encoded.value();
@@ -5126,6 +5254,52 @@ void test_spreadsheet_document_field_round_trip() {
         list_stream::ListValue::raw_atom("4294967295");
     expect(!form_stream::decode_document(excessive_cell_count, "Main").ok(),
         "SpreadsheetDocumentField must reject an unrepresentable storage cell count before iterating");
+
+    auto bad_typed_reference = encoded.value();
+    auto& bad_reference_info = bad_typed_reference.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    bad_reference_info.items.at(32).items.at(1) = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(bad_typed_reference, "Main").ok(),
+        "SpreadsheetDocumentField must reject a reference conflicting with its typed value");
+    for (const std::string invalid_decimal : {"1e3", "bad", "0.00", "-0"}) {
+        auto malformed_number = encoded.value();
+        auto& malformed_info = malformed_number.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+        malformed_info.items.at(34).items.at(2).items.at(1) = list_stream::ListValue::raw_atom(invalid_decimal);
+        const auto rejected_number = form_stream::decode_document(malformed_number, "Main");
+        expect(!rejected_number.ok() &&
+            rejected_number.diagnostics().front().message.find("canonical decimal") != std::string::npos,
+            "typed Number decode must reject noncanonical atoms before producing an unserializable DecimalValue");
+        model::Form invalid_form;
+        invalid_form.id = model::ObjectId{1};
+        invalid_form.name = "Main";
+        invalid_form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument invalid_document(std::move(invalid_form));
+        model::ControlNode invalid_field{model::ObjectId{2}, "Sheet", model::SpreadsheetDocumentFieldPayload{}};
+        std::get<model::SpreadsheetDocumentFieldPayload>(invalid_field.payload).cells = {
+            typed_cell(1, 1, model::TypeDomainTerm::numeric, model::DecimalValue{invalid_decimal})};
+        invalid_document.add_control(std::move(invalid_field));
+        expect(!form_stream::encode_document(invalid_document).ok(),
+            "typed Number encode must reject a noncanonical DecimalValue without rounding");
+    }
+    auto unknown_type_reference = encoded.value();
+    auto& unknown_type_info = unknown_type_reference.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    unknown_type_info.items.at(83).items.at(0) = list_stream::ListValue::raw_atom("46137345");
+    expect(!form_stream::decode_document(unknown_type_reference, "Main").ok(),
+        "SpreadsheetDocumentField must reject an unknown typed-value reference marker");
+    auto unknown_document_tail = encoded.value();
+    auto& unknown_tail_info = unknown_document_tail.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    unknown_tail_info.items.at(57) = list_stream::ListValue::raw_atom("9");
+    expect(!form_stream::decode_document(unknown_document_tail, "Main").ok(),
+        "SpreadsheetDocumentField must reject an unknown non-table document-tail variation");
+    auto excessive_typed_count = encoded.value();
+    auto& excessive_typed_info = excessive_typed_count.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    excessive_typed_info.items.at(82) = list_stream::ListValue::raw_atom("4294967295");
+    expect(!form_stream::decode_document(excessive_typed_count, "Main").ok(),
+        "SpreadsheetDocumentField must reject an excessive typed-value count");
+    auto excessive_domain_count = encoded.value();
+    auto& excessive_domain_info = excessive_domain_count.items.at(1).items.at(2).items.at(2).items.at(1).items.at(2).items.at(11);
+    excessive_domain_info.items.at(94) = list_stream::ListValue::raw_atom("4294967295");
+    expect(!form_stream::decode_document(excessive_domain_count, "Main").ok(),
+        "SpreadsheetDocumentField must reject an excessive ValueType count");
 
     auto unsupported_area_marker = encoded.value();
     auto& marker_record = unsupported_area_marker.items.at(1).items.at(2).items.at(2).items.at(1);
