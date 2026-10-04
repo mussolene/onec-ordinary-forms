@@ -83,6 +83,31 @@ void test_quoted_strings() {
     expect(list_stream::dump_compact(value) == text, "quoted string output must be deterministic");
 }
 
+void test_logical_line_endings_use_utf16_continuations() {
+    // Литералы следуют общей грамматике from_stream, подтвержденной в core85.so.
+    for (const auto& [logical, expected] : std::vector<std::pair<std::string, std::string>>{
+        {"\r", R"(""\000D")"},
+        {"\n", R"(""\000A")"},
+        {"A\rB", R"("A"\000DB")"},
+        {"A\nB", R"("A"\000AB")"},
+        {"A\r\nB", R"("A"\000D"\000AB")"},
+        {"\r\n\r\n\n\r", R"(""\000D"\000A"\000D"\000A"\000A"\000D")"},
+        {std::string{R"(Ёжик 東京 "цитата" \000D)"} + "\r\n" + R"(\tail)",
+            R"("Ёжик 東京 ""цитата"" \000D"\000D"\000A\tail")"}}) {
+        const auto atom = list_stream::ListValue::string_atom(logical);
+        expect(list_stream::quote_string(logical) == expected,
+            "line endings must use independent UTF16 literals without normalizing the logical string");
+        expect(list_stream::parse(expected).atom == logical,
+            "standalone quoted continuations must preserve exact CR/LF, Unicode, quotes and literal backslash");
+        const auto nested = list_stream::ListValue::list({
+            list_stream::ListValue::list({atom}), atom});
+        expect(equal(nested, list_stream::parse(list_stream::dump_compact(nested))),
+            "compact stream roundtrip must preserve logical line endings in nested strings");
+        expect(equal(nested, list_stream::parse(list_stream::dump_listout(nested))),
+            "ListOut structural line breaks must not alter string line endings");
+    }
+}
+
 void test_platform_utf16_string_segments() {
     // Independent literal emitted by strict Designer export for the synthetic cell.
     const auto actual = list_stream::parse(R"({"S","Unicode Привет 世界 "\d83c"\df0d"})");
@@ -292,6 +317,7 @@ int main() {
     try {
         test_empty_and_nested_lists();
         test_quoted_strings();
+        test_logical_line_endings_use_utf16_continuations();
         test_platform_utf16_string_segments();
         test_bool_codec();
         test_integer_codecs();

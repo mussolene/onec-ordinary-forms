@@ -51,6 +51,10 @@ inline std::string quote_string(std::string_view value) {
     for (const char ch : value) {
         if (ch == '"') {
             out += "\"\"";
+        } else if (ch == '\r') {
+            out += R"("\000D)";
+        } else if (ch == '\n') {
+            out += R"("\000A)";
         } else {
             out += ch;
         }
