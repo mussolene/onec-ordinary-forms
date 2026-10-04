@@ -59,8 +59,9 @@ if [[ -n "${OOF_PLATFORM_CONTAINER:-}" ]]; then
     echo "OOF_PLATFORM_CONTAINER is not a running container: $OOF_PLATFORM_CONTAINER" >&2
     exit 2
   fi
-  container_base="/tmp/oof-platform-validate"
-  docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "rm -rf '$container_base' && mkdir -p '$container_base/input' '$container_base/out/dump' '$container_base/dbroot'"
+  container_base=$(docker exec "$OOF_PLATFORM_CONTAINER" mktemp -d /tmp/oof-platform-validate.XXXXXX)
+  trap 'docker exec "$OOF_PLATFORM_CONTAINER" rm -rf -- "$container_base" >/dev/null 2>&1 || true' EXIT
+  docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "mkdir -p '$container_base/input' '$container_base/out/dump' '$container_base/dbroot'"
   docker cp "$input_path" "$OOF_PLATFORM_CONTAINER:$container_base/input/$input_name"
   set +e
   docker exec "$OOF_PLATFORM_CONTAINER" sh -lc "set -eu
