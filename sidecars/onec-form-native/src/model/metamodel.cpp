@@ -787,6 +787,12 @@ void apply_proven_storage_overrides(
         StorageCodec::control_base,
         DefaultKind::boolean,
         "true");
+    classify_property(
+        calendar_field,
+        "BeginOfDisplayPeriod",
+        StorageCodec::control_info,
+        DefaultKind::undefined,
+        "undefined");
 
     auto& progress_bar = properties[static_cast<std::size_t>(ControlKind::progress_bar)];
     classify_property(
@@ -807,6 +813,26 @@ void apply_proven_storage_overrides(
     std::ranges::find(progress_bar, "MinValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     classify_property(progress_bar, "Step", StorageCodec::control_info, DefaultKind::integer, "1");
     std::ranges::find(progress_bar, "Step", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+
+    auto& track_bar = properties[static_cast<std::size_t>(ControlKind::track_bar)];
+    classify_property(
+        track_bar,
+        "Enabled",
+        StorageCodec::control_info,
+        DefaultKind::boolean,
+        "true");
+    classify_property(
+        track_bar,
+        "ToolTip",
+        StorageCodec::control_info,
+        DefaultKind::string,
+        "");
+    classify_property(track_bar, "MaxValue", StorageCodec::control_info, DefaultKind::integer, "100");
+    std::ranges::find(track_bar, "MaxValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    classify_property(track_bar, "MinValue", StorageCodec::control_info, DefaultKind::integer, "0");
+    std::ranges::find(track_bar, "MinValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
+    classify_property(track_bar, "Step", StorageCodec::control_info, DefaultKind::integer, "1");
+    std::ranges::find(track_bar, "Step", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
     classify_property(input_field, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
