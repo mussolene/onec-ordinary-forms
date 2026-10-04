@@ -6309,6 +6309,10 @@ DecodedControl decode_table(
     control.data_path = model::DataPath{model::AttributeRef{
         model::ObjectId{static_cast<std::uint64_t>(linked_attribute.id.object_id)}}, {}};
     control.position = geometry.position;
+    const bool first_in_group = bool_atom(record.items[4].items[5], child_path(metadata_path, 5));
+    if (first_in_group) {
+        control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
+    }
     auto& table = std::get<model::TablePayload>(control.payload);
     table.columns.reserve(stored_columns.items.size() - 1);
     for (std::size_t index = 1; index < stored_columns.items.size(); ++index) {
@@ -6329,7 +6333,7 @@ DecodedControl decode_table(
     require_exact(normalized_info, canonical_info, info_path,
         "Table contains a property or storage variation outside the typed profile");
     require_exact(record.items[4],
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
         metadata_path, "Table metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "Table cannot contain storage children");
@@ -7222,7 +7226,7 @@ LV encode_table(
             "Table is outside the supported storage profile");
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
-        !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
+        !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
@@ -7230,6 +7234,8 @@ LV encode_table(
             "Table uses a storage concept outside the supported profile");
     }
     require_allowed_properties(control.properties(), {"ReadOnly"}, "$/Table");
+    require_allowed_properties(control.extension_properties, {"FirstInGroup"}, "$/Table");
+    const bool first_in_group = explicit_bool(control.extension_properties, "FirstInGroup", false);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", true);
     const auto* attribute = document.find_attribute(control.data_path->attribute.id());
     if (attribute == nullptr) {
@@ -7246,7 +7252,7 @@ LV encode_table(
         raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
         canonical_table_control_info(attribute->type, table.columns, read_only, "$/Table"),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
-        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
         list({raw("0")})});
 }
 
