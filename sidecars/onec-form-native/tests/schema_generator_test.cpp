@@ -420,7 +420,8 @@ void expect_property_element(
     const PropertyDescriptor& descriptor,
     xmlNodePtr element
 ) {
-    expect(attribute(element, "name") == descriptor.xml_name, "property order drift");
+    expect(attribute(element, "name") == descriptor.xml_name,
+        "property order drift: expected " + std::string(descriptor.xml_name) + " got " + attribute(element, "name"));
     expect(attribute(element, "minOccurs") == "0", "property must be optional");
     expect(attribute(element, "maxOccurs") == "1", "property must occur at most once");
 
@@ -758,10 +759,13 @@ void test_control_surfaces_and_property_order(
             }
         }
         expect_element_shape(elements[cursor++], "Position", "PositionType", "1", "1");
-        cursor = expect_property_sequence(
-            metamodel.properties_for(control.kind),
-            elements,
-            cursor);
+        for (const auto& descriptor : metamodel.properties_for(control.kind)) {
+            if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
+                expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
+            } else {
+                expect_property_element(descriptor, elements[cursor++]);
+            }
+        }
         expect_element_shape(
             elements[cursor++],
             "Events",

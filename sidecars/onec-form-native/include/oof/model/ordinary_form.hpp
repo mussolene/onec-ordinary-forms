@@ -602,7 +602,21 @@ struct GeographicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::geographical_schema_field> {};
 struct GraphicalSchemaFieldPayload final
     : TypedControlPayload<ControlKind::graphical_schema_field> {};
-struct TablePayload final : TypedControlPayload<ControlKind::table> {};
+struct TableColumnControl {
+    ControlKind kind = ControlKind::input_field;
+    PropertySet properties;
+};
+
+struct TableColumn {
+    std::string name;
+    std::string data_path;
+    LocalizedStringValue header;
+    TableColumnControl control;
+};
+
+struct TablePayload final : TypedControlPayload<ControlKind::table> {
+    std::vector<TableColumn> columns;
+};
 struct SpreadsheetDocumentFieldPayload final
     : TypedControlPayload<ControlKind::spreadsheet_document_field> {};
 struct LabelDecorationPayload final
