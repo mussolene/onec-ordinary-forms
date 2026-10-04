@@ -1647,6 +1647,49 @@ void test_button_menu_model_roundtrip_and_rejections() {
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Submenu"><Order>Random</Order></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "unknown submenu order must be rejected");
 }
 
+void test_gantt_named_collections_roundtrip_and_rejections() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Gantt" ordinaryFormVersion="2.1"><ChildItems>
+      <GanttChart id="2" name="Schedule"><Position/><AutoFullInterval>false</AutoFullInterval><FullIntervalBegin>2027-01-01T00:00:00</FullIntervalBegin><FullIntervalEnd>2027-03-01T00:00:00</FullIntervalEnd>
+        <Series><GanttSeries id="7"><Value>series-value</Value><Text>Series</Text></GanttSeries></Series>
+        <Points><GanttPoint id="7"><Value>point-value</Value><Text>Point</Text></GanttPoint></Points>
+        <Intervals><GanttInterval pointRef="7" seriesRef="7"><StartDate>2027-01-10T00:00:00</StartDate><EndDate>2027-01-12T00:00:00</EndDate><Text>First</Text></GanttInterval><GanttInterval pointRef="7" seriesRef="7"><StartDate>2027-01-14T00:00:00</StartDate><EndDate>2027-01-16T00:00:00</EndDate><Text>Second</Text></GanttInterval></Intervals>
+      </GanttChart>
+    </ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto* control = parsed.value().find_control(model::ObjectId{2});
+    const auto* gantt = control ? std::get_if<model::GanttChartPayload>(&control->payload) : nullptr;
+    expect(gantt && gantt->series.size() == 1 && gantt->points.size() == 1 && gantt->intervals.size() == 2,
+        "named Gantt collections must retain independently scoped IDs and repeated intervals");
+    expect(gantt->series[0].id == model::ObjectId{7} && gantt->points[0].id == model::ObjectId{7} &&
+               gantt->intervals[0].point_ref == model::ObjectId{7} && gantt->intervals[0].series_ref == model::ObjectId{7} &&
+               gantt->intervals[1].text == "Second",
+        "Gantt intervals must preserve typed point and series references and order");
+    const auto* automatic = control->properties().find(model::PropertyId::from_name("AutoFullInterval"));
+    expect(automatic && !std::get<bool>(automatic->value), "Gantt manual-window mode must be a typed descriptor property");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok(), "named Gantt payload must serialize");
+    const auto reparsed = source::parse_form_xml(serialized.value());
+    expect(reparsed.ok(), "named Gantt payload must parse after serialization");
+    const auto* roundtripped = std::get_if<model::GanttChartPayload>(
+        &reparsed.value().find_control(model::ObjectId{2})->payload);
+    expect(roundtripped && roundtripped->intervals == gantt->intervals,
+        "Gantt intervals, including repeated references, must roundtrip exactly");
+
+    expect(source::parse_form_xml(
+        R"XML(<Form id="1" name="Gantt" ordinaryFormVersion="2.1"><ChildItems><GanttChart id="2" name="Schedule"><Position/><Series/><Series/></GanttChart></ChildItems></Form>)XML").ok() == false,
+        "duplicate Gantt collection singletons must be rejected");
+    expect(source::parse_form_xml(
+        R"XML(<Form id="1" name="Gantt" ordinaryFormVersion="2.1"><ChildItems><GanttChart id="2" name="Schedule"><Position/><Intervals><GanttInterval pointRef="missing" seriesRef="missing"><StartDate>2027-01-10T00:00:00</StartDate><EndDate>2027-01-12T00:00:00</EndDate><Text>Orphan</Text></GanttInterval></Intervals></GanttChart></ChildItems></Form>)XML").ok() == false,
+        "unresolved Gantt domain references must be rejected");
+    expect(source::parse_form_xml(
+        R"XML(<Form id="1" name="Gantt" ordinaryFormVersion="2.1"><ChildItems><GanttChart id="2" name="Schedule"><Position/><AutoFullInterval>true</AutoFullInterval></GanttChart></ChildItems></Form>)XML").ok(),
+        "automatic Gantt range must permit omitted explicit bounds");
+    expect(source::parse_form_xml(
+        R"XML(<Form id="1" name="Gantt" ordinaryFormVersion="2.1"><ChildItems><GanttChart id="2" name="Schedule"><Position/><FullIntervalBegin>ABCD-01-01T00:00:00</FullIntervalBegin></GanttChart></ChildItems></Form>)XML").ok() == false,
+        "Gantt dates must reject nonnumeric years");
+}
+
 void test_event_owner_invariant() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -1748,6 +1791,7 @@ int main() {
         test_button_foreign_enum_default_is_retained();
         test_standard_picture_xml_reference_roundtrip();
         test_button_menu_model_roundtrip_and_rejections();
+        test_gantt_named_collections_roundtrip_and_rejections();
         test_label_horizontal_align_xml_roundtrip();
         test_label_enabled_tooltip_xml_roundtrip();
         test_progress_bar_xml_only_contract();

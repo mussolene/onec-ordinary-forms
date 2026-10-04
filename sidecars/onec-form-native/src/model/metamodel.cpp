@@ -607,6 +607,32 @@ void classify_property(
     descriptor->default_value = {default_kind, default_value};
 }
 
+void add_gantt_chart_data_properties(
+    std::array<std::vector<PropertyDescriptor>, control_kind_count>& properties) {
+    auto& gantt = properties[static_cast<std::size_t>(ControlKind::gantt_chart)];
+    gantt.push_back({
+        PropertyId::from_name("AutoFullInterval"), DescriptorOwner::control,
+        PropertySurface::control_payload, ControlKind::gantt_chart, 5,
+        "AutoFullInterval", "AutoFullInterval", u8"АвтоОпределениеПолногоИнтервала", u8"Булево",
+        ValueKind::boolean, ValueCodec::boolean, ApiAccess::read_write,
+        VersionMask::platform_8_2_and_8_5, PersistenceClass::persisted_editable,
+        StorageCodec::control_info, {DefaultKind::boolean, "true"}});
+    gantt.push_back({
+        PropertyId::from_name("FullIntervalBegin"), DescriptorOwner::control,
+        PropertySurface::control_payload, ControlKind::gantt_chart, 6,
+        "FullIntervalBegin", "FullIntervalBegin", u8"НачалоПолногоИнтервала", u8"Дата",
+        ValueKind::date_time, ValueCodec::date, ApiAccess::read_only,
+        VersionMask::platform_8_2_and_8_5, PersistenceClass::persisted_readonly,
+        StorageCodec::control_info, {DefaultKind::undefined, "undefined"}});
+    gantt.push_back({
+        PropertyId::from_name("FullIntervalEnd"), DescriptorOwner::control,
+        PropertySurface::control_payload, ControlKind::gantt_chart, 7,
+        "FullIntervalEnd", "FullIntervalEnd", u8"КонецПолногоИнтервала", u8"Дата",
+        ValueKind::date_time, ValueCodec::date, ApiAccess::read_only,
+        VersionMask::platform_8_2_and_8_5, PersistenceClass::persisted_readonly,
+        StorageCodec::control_info, {DefaultKind::undefined, "undefined"}});
+}
+
 void apply_proven_storage_overrides(
     std::array<std::vector<PropertyDescriptor>, control_kind_count>& properties,
     std::vector<PropertyDescriptor>& panel_placement_properties,
@@ -1057,6 +1083,7 @@ struct Metamodel::Impl {
         for (auto descriptor : make_control_event_descriptors()) {
             events[static_cast<std::size_t>(descriptor.control_kind)].push_back(descriptor);
         }
+        add_gantt_chart_data_properties(properties);
         control_extension_properties = make_control_extension_property_descriptors();
         panel_placement_properties = make_panel_placement_property_descriptors();
         form_properties = make_form_property_descriptors();

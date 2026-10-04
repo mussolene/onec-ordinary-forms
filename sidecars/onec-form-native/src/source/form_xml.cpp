@@ -1464,6 +1464,9 @@ private:
         };
         auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
         bool position_seen = false;
+        bool gantt_series_seen = false;
+        bool gantt_points_seen = false;
+        bool gantt_intervals_seen = false;
         bool dendrogram_items_seen = false;
         bool dendrogram_links_seen = false;
         bool spreadsheet_document_seen = false;
@@ -1673,6 +1676,70 @@ private:
                 control.events = parse_control_events(child, id, descriptor->kind);
             } else if (name == "ChildItems") {
                 control.children = parse_child_items(child);
+            } else if (descriptor->kind == model::ControlKind::gantt_chart &&
+                       (name == "Series" || name == "Points" || name == "Intervals")) {
+                auto& gantt = std::get<model::GanttChartPayload>(control.payload);
+                {
+                    bool* seen = name == "Series" ? &gantt_series_seen :
+                        name == "Points" ? &gantt_points_seen : &gantt_intervals_seen;
+                    if (*seen) fail("OOF2003", child, id_text, name, "one collection", "duplicate", "Gantt collection is duplicated");
+                    *seen = true;
+                    if (name == "Series") {
+                        for (xmlNodePtr item : element_children(child)) {
+                            if (node_name(item) != "GanttSeries") fail("OOF2003", item, id_text, name, "GanttSeries", node_name(item), "Unexpected Series member");
+                            model::GanttSeries value;
+                            value.id = parse_object_id(required_attribute(item, "id", id_text), item, "id", id_text);
+                            bool value_seen = false;
+                            bool text_seen = false;
+                            for (xmlNodePtr field : element_children(item)) {
+                                if (node_name(field) == "Value" && !value_seen) { value.value = node_text(field); value_seen = true; }
+                                else if (node_name(field) == "Text" && !text_seen) { value.text = node_text(field); text_seen = true; }
+                                else if (node_name(field) == "Color" && !value.color) value.color = parse_color(field);
+                                else fail("OOF2003", field, id_text, node_name(field), "Value, Text, and optional Color", node_name(field), "Unexpected or duplicate Gantt Series property");
+                            }
+                            if (!value_seen || !text_seen) fail("OOF2003", item, id_text, "Value/Text", "required properties", "missing", "Gantt Series requires Value and Text");
+                            gantt.series.push_back(std::move(value));
+                        }
+                    } else if (name == "Points") {
+                        for (xmlNodePtr item : element_children(child)) {
+                            if (node_name(item) != "GanttPoint") fail("OOF2003", item, id_text, name, "GanttPoint", node_name(item), "Unexpected Points member");
+                            model::GanttPoint value;
+                            value.id = parse_object_id(required_attribute(item, "id", id_text), item, "id", id_text);
+                            bool value_seen = false;
+                            bool text_seen = false;
+                            for (xmlNodePtr field : element_children(item)) {
+                                if (node_name(field) == "Value" && !value_seen) { value.value = node_text(field); value_seen = true; }
+                                else if (node_name(field) == "Text" && !text_seen) { value.text = node_text(field); text_seen = true; }
+                                else if (node_name(field) == "Color" && !value.color) value.color = parse_color(field);
+                                else fail("OOF2003", field, id_text, node_name(field), "Value, Text, and optional Color", node_name(field), "Unexpected or duplicate Gantt Point property");
+                            }
+                            if (!value_seen || !text_seen) fail("OOF2003", item, id_text, "Value/Text", "required properties", "missing", "Gantt Point requires Value and Text");
+                            gantt.points.push_back(std::move(value));
+                        }
+                    } else {
+                        for (xmlNodePtr item : element_children(child)) {
+                            if (node_name(item) != "GanttInterval") fail("OOF2003", item, id_text, name, "GanttInterval", node_name(item), "Unexpected Intervals member");
+                            model::GanttInterval value;
+                            value.point_ref = parse_object_id(required_attribute(item, "pointRef", id_text), item, "pointRef", id_text);
+                            value.series_ref = parse_object_id(required_attribute(item, "seriesRef", id_text), item, "seriesRef", id_text);
+                            bool begin_seen = false;
+                            bool end_seen = false;
+                            bool text_seen = false;
+                            for (xmlNodePtr field : element_children(item)) {
+                                const std::string field_name = node_name(field);
+                                if (field_name == "StartDate" && !begin_seen) {
+                                    value.start_date = parse_gantt_date(field, id_text, field_name); begin_seen = true;
+                                } else if (field_name == "EndDate" && !end_seen) {
+                                    value.end_date = parse_gantt_date(field, id_text, field_name); end_seen = true;
+                                } else if (field_name == "Text" && !text_seen) {
+                                    value.text = node_text(field); text_seen = true;
+                                } else fail("OOF2003", field, id_text, field_name, "one StartDate, EndDate, and Text", field_name, "Unexpected or duplicate Gantt Interval property");
+                            }
+                            if (!begin_seen || !end_seen || !text_seen) fail("OOF2003", item, id_text, "StartDate/EndDate/Text", "required properties", "missing", "Gantt Interval requires both dates and Text");
+                            gantt.intervals.push_back(std::move(value));
+                        }
+                    }
+                }
             } else {
                 const mm::PropertyDescriptor* property =
                     metamodel_.property(descriptor->kind, name);
@@ -1701,6 +1768,18 @@ private:
         const model::ControlRef reference{id};
         objects_.controls.push_back(std::move(control));
         return reference;
+    }
+
+    model::DateValue parse_gantt_date(xmlNodePtr node, std::string_view owner_id, std::string_view name) {
+        const std::string text(trim_ascii(node_text(node)));
+        try {
+            (void)storage::value_codec::date_to_platform(text);
+        } catch (const std::exception& error) {
+            fail("OOF2003", node, std::string(owner_id), std::string(name),
+                "local date-time YYYY-MM-DDTHH:MM:SS", text,
+                std::string("Gantt date value is invalid: ") + error.what());
+        }
+        return model::DateValue{text};
     }
 
     std::vector<model::TableColumn> parse_table_columns(xmlNodePtr node, std::string_view owner) {
@@ -2788,6 +2867,42 @@ private:
         writer_.close("Buttons");
     }
 
+    void write_gantt_data(const model::GanttChartPayload& gantt) {
+        if (!gantt.series.empty()) {
+            writer_.open("Series");
+            for (const auto& item : gantt.series) {
+                writer_.open("GanttSeries", {{"id", object_id_text(item.id)}});
+                writer_.text("Value", item.value);
+                writer_.text("Text", item.text);
+                if (item.color) write_color("Color", *item.color, object_id_text(item.id));
+                writer_.close("GanttSeries");
+            }
+            writer_.close("Series");
+        }
+        if (!gantt.points.empty()) {
+            writer_.open("Points");
+            for (const auto& item : gantt.points) {
+                writer_.open("GanttPoint", {{"id", object_id_text(item.id)}});
+                writer_.text("Value", item.value);
+                writer_.text("Text", item.text);
+                if (item.color) write_color("Color", *item.color, object_id_text(item.id));
+                writer_.close("GanttPoint");
+            }
+            writer_.close("Points");
+        }
+        if (!gantt.intervals.empty()) {
+            writer_.open("Intervals");
+            for (const auto& item : gantt.intervals) {
+                writer_.open("GanttInterval", {{"pointRef", object_id_text(item.point_ref)}, {"seriesRef", object_id_text(item.series_ref)}});
+                writer_.text("StartDate", item.start_date.canonical);
+                writer_.text("EndDate", item.end_date.canonical);
+                writer_.text("Text", item.text);
+                writer_.close("GanttInterval");
+            }
+            writer_.close("Intervals");
+        }
+    }
+
     void write_dendrogram_payload(const model::DendrogramPayload& graph, std::string_view owner) {
         const auto max_rows = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max() - 1);
         if (graph.items.size() > max_rows || graph.links.size() > max_rows)
@@ -2915,6 +3030,9 @@ private:
             }
         } else {
             write_property_set(control.properties(), metamodel_.properties_for(control.kind()), id);
+        }
+        if (const auto* gantt = std::get_if<model::GanttChartPayload>(&control.payload)) {
+            write_gantt_data(*gantt);
         }
         if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
             writer_.open("Series");

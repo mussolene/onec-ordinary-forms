@@ -42,6 +42,17 @@ void test_descriptors() {
                begin_period->default_value.kind == DefaultKind::undefined &&
                begin_period->default_value.canonical == "undefined",
         "CalendarField BeginOfDisplayPeriod must be a classified Date property with Undefined default");
+    const auto* gantt_auto = find_property(ControlKind::gantt_chart, "AutoFullInterval");
+    const auto* gantt_begin = find_property(ControlKind::gantt_chart, "FullIntervalBegin");
+    const auto* gantt_end = find_property(ControlKind::gantt_chart, "FullIntervalEnd");
+    expect(gantt_auto && gantt_auto->value_codec == ValueCodec::boolean &&
+               gantt_auto->default_value.kind == DefaultKind::boolean &&
+               gantt_auto->default_value.canonical == "true" &&
+               gantt_begin && gantt_end && gantt_begin->value_codec == ValueCodec::date &&
+               gantt_end->value_codec == ValueCodec::date &&
+               gantt_begin->default_value.kind == DefaultKind::undefined &&
+               gantt_end->default_value.kind == DefaultKind::undefined,
+        "Gantt full interval properties must use named Boolean and Date descriptors with platform defaults");
 
     std::set<std::string_view> guids;
     std::set<std::string_view> public_names;
@@ -432,10 +443,10 @@ void test_help_metamodel() {
     const MetamodelCoverage& coverage = metamodel_coverage();
     expect(coverage.control_count == 26, "help catalog must cover 26 controls");
     expect(
-        coverage.control_property_occurrences == 420,
+        coverage.control_property_occurrences == 423,
         "executable metamodel must include Chart and spreadsheet properties");
     expect(
-        coverage.unique_control_property_names == 203,
+        coverage.unique_control_property_names == 206,
         "type-specific metamodel must exclude the inherited property duplicate");
     expect(
         coverage.control_event_occurrences == 79,
@@ -972,6 +983,33 @@ void test_property_reference_rejection() {
         "typed property references must participate in invariant validation");
 }
 
+void test_gantt_interval_date_validation() {
+    const auto make_document = [](std::string start, std::string end) {
+        Form form;
+        form.id = ObjectId{1};
+        form.children.push_back(ControlRef{ObjectId{2}});
+        OrdinaryFormDocument document(std::move(form));
+        GanttChartPayload payload;
+        payload.series.push_back({ObjectId{71}, "series", "Series", std::nullopt});
+        payload.points.push_back({ObjectId{83}, "point", "Point", std::nullopt});
+        payload.intervals.push_back({ObjectId{83}, ObjectId{71}, DateValue{std::move(start)},
+            DateValue{std::move(end)}, "Interval"});
+        document.add_control(ControlNode{ObjectId{2}, "Timeline", std::move(payload)});
+        return document;
+    };
+
+    const auto equal_bounds = make_document("2027-01-01T00:00:00", "2027-01-01T00:00:00");
+    expect(equal_bounds.validate().ok(), "Gantt interval may have equal start and end until platform semantics prove otherwise");
+
+    const auto malformed = make_document("2027-02-30T00:00:00", "2027-03-01T00:00:00");
+    expect(malformed.validate().has(InvariantCode::invalid_property),
+        "Gantt interval with an invalid calendar date must be rejected by model validation");
+
+    const auto reversed = make_document("2027-03-02T00:00:00", "2027-03-01T00:00:00");
+    expect(reversed.validate().has(InvariantCode::invalid_property),
+        "Gantt interval whose start follows its end must be rejected by model validation");
+}
+
 void test_property_applicability_and_type_validation() {
     Form form;
     form.id = ObjectId{1};
@@ -1177,6 +1215,7 @@ int main() {
         test_root_page_and_remaining_page_policies();
         test_dangling_and_child_policy_rejection();
         test_property_reference_rejection();
+        test_gantt_interval_date_validation();
         test_property_applicability_and_type_validation();
         test_event_sequence_invariants();
         test_duplicate_bindings_rejected();

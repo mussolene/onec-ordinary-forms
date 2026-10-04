@@ -1318,6 +1318,22 @@
   <xs:complexType name="SpreadsheetDocumentCellType"><xs:choice><xs:element name="Text" type="xs:string"/><xs:sequence><xs:element name="ContainsValue" type="xs:boolean" fixed="true"/><xs:element name="ValueType" type="TypeDomainValueType"/><xs:element name="Value" type="xs:string" minOccurs="0"/></xs:sequence></xs:choice><xs:attribute name="row" type="SpreadsheetCoordinateType" use="required"/><xs:attribute name="column" type="SpreadsheetCoordinateType" use="required"/></xs:complexType>
   <xs:complexType name="SpreadsheetDocumentType"><xs:sequence><xs:element name="Cell" type="SpreadsheetDocumentCellType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
 
+  <xs:complexType name="GanttSeriesType"><xs:sequence>
+    <xs:element name="Value" type="xs:string"/><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType" minOccurs="0"/>
+  </xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:element name="GanttSeries" type="GanttSeriesType"/>
+  <xs:complexType name="GanttPointType"><xs:sequence>
+    <xs:element name="Value" type="xs:string"/><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType" minOccurs="0"/>
+  </xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:element name="GanttPoint" type="GanttPointType"/>
+  <xs:complexType name="GanttIntervalType"><xs:sequence>
+    <xs:element name="StartDate" type="LocalDateValueType"/><xs:element name="EndDate" type="LocalDateValueType"/><xs:element name="Text" type="xs:string"/>
+  </xs:sequence><xs:attribute name="pointRef" type="ObjectIdType" use="required"/><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:element name="GanttInterval" type="GanttIntervalType"/>
+  <xs:complexType name="GanttSeriesCollectionType"><xs:sequence><xs:element ref="GanttSeries" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="GanttPointCollectionType"><xs:sequence><xs:element ref="GanttPoint" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="GanttIntervalCollectionType"><xs:sequence><xs:element ref="GanttInterval" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+
   <xs:complexType name="ControlChildItemsType">
     <xs:choice minOccurs="0" maxOccurs="unbounded">
       <xs:element ref="Panel"/>
@@ -2202,6 +2218,12 @@
       <xs:element name="PeriodicVariantRepetition" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="MaxWidth" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="AutoFullInterval" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FullIntervalBegin" type="DateValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="FullIntervalEnd" type="DateValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Series" type="GanttSeriesCollectionType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Points" type="GanttPointCollectionType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Intervals" type="GanttIntervalCollectionType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Events" type="GanttChartEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>

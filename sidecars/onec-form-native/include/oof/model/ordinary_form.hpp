@@ -611,7 +611,39 @@ struct ChartPayload final : TypedControlPayload<ControlKind::chart> {
     std::vector<ChartValue> values;
 };
 struct PivotChartPayload final : TypedControlPayload<ControlKind::pivot_chart> {};
-struct GanttChartPayload final : TypedControlPayload<ControlKind::gantt_chart> {};
+struct GanttSeries {
+    ObjectId id;
+    std::string value;
+    std::string text;
+    std::optional<ColorValue> color;
+
+    friend bool operator==(const GanttSeries&, const GanttSeries&) = default;
+};
+
+struct GanttPoint {
+    ObjectId id;
+    std::string value;
+    std::string text;
+    std::optional<ColorValue> color;
+
+    friend bool operator==(const GanttPoint&, const GanttPoint&) = default;
+};
+
+struct GanttInterval {
+    ObjectId point_ref;
+    ObjectId series_ref;
+    DateValue start_date;
+    DateValue end_date;
+    std::string text;
+
+    friend bool operator==(const GanttInterval&, const GanttInterval&) = default;
+};
+
+struct GanttChartPayload final : TypedControlPayload<ControlKind::gantt_chart> {
+    std::vector<GanttSeries> series;
+    std::vector<GanttPoint> points;
+    std::vector<GanttInterval> intervals;
+};
 struct DendrogramItem {
     std::string value;
     LocalizedStringValue text;

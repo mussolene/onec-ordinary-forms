@@ -796,6 +796,11 @@ void test_control_surfaces_and_property_order(
                 }
             }
         }
+        if (control.kind == oof::model::ControlKind::gantt_chart) {
+            expect_element_shape(elements[cursor++], "Series", "GanttSeriesCollectionType", "0", "1");
+            expect_element_shape(elements[cursor++], "Points", "GanttPointCollectionType", "0", "1");
+            expect_element_shape(elements[cursor++], "Intervals", "GanttIntervalCollectionType", "0", "1");
+        }
         expect_element_shape(
             elements[cursor++],
             "Events",

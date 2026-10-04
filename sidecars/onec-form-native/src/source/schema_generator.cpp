@@ -735,6 +735,24 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
 
 )XSD";
 
+    output += R"XSD(  <xs:complexType name="GanttSeriesType"><xs:sequence>
+    <xs:element name="Value" type="xs:string"/><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType" minOccurs="0"/>
+  </xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:element name="GanttSeries" type="GanttSeriesType"/>
+  <xs:complexType name="GanttPointType"><xs:sequence>
+    <xs:element name="Value" type="xs:string"/><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType" minOccurs="0"/>
+  </xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:element name="GanttPoint" type="GanttPointType"/>
+  <xs:complexType name="GanttIntervalType"><xs:sequence>
+    <xs:element name="StartDate" type="LocalDateValueType"/><xs:element name="EndDate" type="LocalDateValueType"/><xs:element name="Text" type="xs:string"/>
+  </xs:sequence><xs:attribute name="pointRef" type="ObjectIdType" use="required"/><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:element name="GanttInterval" type="GanttIntervalType"/>
+  <xs:complexType name="GanttSeriesCollectionType"><xs:sequence><xs:element ref="GanttSeries" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="GanttPointCollectionType"><xs:sequence><xs:element ref="GanttPoint" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="GanttIntervalCollectionType"><xs:sequence><xs:element ref="GanttInterval" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+
+)XSD";
+
     const auto controls = metamodel.controls();
     append_child_item_type(output, "ControlChildItemsType", controls, false);
     append_child_item_type(output, "PanelChildItemsType", controls, true);
@@ -847,6 +865,12 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
                     append_property_element(output, property, "      ");
                 }
             }
+        }
+        if (control.kind == model::ControlKind::gantt_chart) {
+            output +=
+                "      <xs:element name=\"Series\" type=\"GanttSeriesCollectionType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+                "      <xs:element name=\"Points\" type=\"GanttPointCollectionType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
+                "      <xs:element name=\"Intervals\" type=\"GanttIntervalCollectionType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
         }
 
         output += "      <xs:element name=\"Events\" type=\"";
@@ -991,6 +1015,15 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"Text\" russianName=\"Текст\"/><Property name=\"Explanation\" russianName=\"Пояснение\"/><Property name=\"ToolTip\" russianName=\"Подсказка\"/>\n"
         "          <Property name=\"Enabled\" russianName=\"Доступность\"/><Property name=\"Checked\" russianName=\"Пометка\"/><Property name=\"ChangesData\" russianName=\"ИзменяетДанные\"/>\n"
         "          <Property name=\"Representation\" russianName=\"Отображение\"/><Property name=\"Shortcut\" russianName=\"СочетаниеКлавиш\"/><Property name=\"Picture\" russianName=\"Картинка\"/><Property name=\"Action\" russianName=\"Действие\"/><Property name=\"Order\" russianName=\"ПорядокКнопок\"/><Property name=\"Buttons\" russianName=\"Кнопки\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"GanttSeries\" russianName=\"СерияДиаграммыГанта\"><Properties>\n"
+        "          <Property name=\"Value\" russianName=\"Значение\" russianType=\"Строка\"/><Property name=\"Text\" russianName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" russianName=\"Цвет\" russianType=\"Цвет\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"GanttPoint\" russianName=\"ТочкаДиаграммыГанта\"><Properties>\n"
+        "          <Property name=\"Value\" russianName=\"Значение\" russianType=\"Строка\"/><Property name=\"Text\" russianName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" russianName=\"Цвет\" russianType=\"Цвет\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"GanttInterval\" russianName=\"ИнтервалДиаграммыГанта\"><Properties>\n"
+        "          <Property name=\"pointRef\" russianName=\"Точка\"/><Property name=\"seriesRef\" russianName=\"Серия\"/><Property name=\"StartDate\" russianName=\"Начало\" russianType=\"Дата\"/><Property name=\"EndDate\" russianName=\"Окончание\" russianType=\"Дата\"/><Property name=\"Text\" russianName=\"Текст\" russianType=\"Строка\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"TableColumn\" russianName=\"КолонкаТабличногоПоля\"><Properties>\n"
         "          <Property name=\"Name\" russianName=\"Имя\"/><Property name=\"DataPath\" russianName=\"Данные\"/>\n"
