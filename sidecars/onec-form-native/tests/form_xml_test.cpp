@@ -1778,6 +1778,26 @@ void test_data_processor_form_extension_xml_contract() {
     expect(!source::serialize_form_xml(document).ok(), "Unknown extension kinds must fail explicit serialization");
 }
 
+void test_command_bar_default_button_xml_contract() {
+    const std::string xml = R"XML(<Form id="1" name="DefaultAction" ordinaryFormVersion="2.1"><ChildItems>
+      <CommandBar id="4" name="Tools"><Position/><Secondary>false</Secondary><Buttons>
+        <CommandBarButton name="Run" type="Action"><DefaultButton>true</DefaultButton><Action>RunHandler</Action></CommandBarButton>
+      </Buttons></CommandBar></ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<DefaultButton>true</DefaultButton>") != std::string::npos,
+        "default Action must have a named editable boolean property");
+    expect(source::parse_form_xml(serialized.value()).ok(), "default Action must survive XML serialization");
+    auto invalid = xml; invalid.replace(invalid.find("<Secondary>false</Secondary>"), std::string("<Secondary>false</Secondary>").size(), "<Secondary>true</Secondary>");
+    expect(!source::parse_form_xml(invalid), "secondary panel default is outside the verified public contract");
+    invalid = xml; const auto pos = invalid.find("<DefaultButton>true</DefaultButton>");
+    invalid.insert(pos, "<DefaultButton>false</DefaultButton>");
+    expect(!source::parse_form_xml(invalid), "duplicate DefaultButton must be rejected");
+    invalid = xml; invalid.replace(invalid.find("<DefaultButton>true"), std::string("<DefaultButton>true").size(), "<DefaultButton>bad");
+    expect(!source::parse_form_xml(invalid), "invalid boolean must be rejected");
+}
+
 void test_command_bar_buttons_xml_only_contract() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="CommandBar" ordinaryFormVersion="2.1"><ChildItems>
       <CommandBar id="4" name="Tools"><Position/><Enabled>false</Enabled><Buttons>
@@ -1842,6 +1862,7 @@ int main() {
         test_label_enabled_tooltip_xml_roundtrip();
         test_progress_bar_xml_only_contract();
         test_command_bar_buttons_xml_only_contract();
+        test_command_bar_default_button_xml_contract();
         test_picture_decoration_enabled_tooltip_xml_roundtrip();
         test_picture_decoration_standard_picture_xml_roundtrip();
     } catch (const std::exception& error) {

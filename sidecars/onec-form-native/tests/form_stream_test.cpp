@@ -2421,6 +2421,76 @@ void test_command_bar_owner_pair_and_strict_profile() {
         "one-entry menu max ID must be 1, independent of root owner ID 4");
 }
 
+void test_command_bar_default_button_round_trip_and_guards() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "DefaultAction";
+    form.children = {model::ControlRef{model::ObjectId{4}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode bar{model::ObjectId{4}, "Tools", model::CommandBarPayload{}};
+    bar.properties().set_explicit(model::PropertyId::from_name("Secondary"), false);
+    model::CommandBarButton action; action.name = "Run"; action.action = "RunHandler"; action.default_button = true;
+    model::CommandBarButton submenu; submenu.name = "More"; submenu.type = model::CommandBarButtonKind::submenu;
+    model::CommandBarButton nested; nested.name = "Nested"; nested.action = "NestedHandler";
+    submenu.buttons = {nested};
+    std::get<model::CommandBarPayload>(bar.payload).buttons = {submenu, action};
+    document.add_control(std::move(bar));
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    expect(encoded.value().items[1].items[1].items[2].atom == "4", "default Action must select its CommandBar owner in the form header");
+    const auto& properties = encoded.value().items[1].items[2].items[2].items[1].items[2].items[1];
+    expect(properties.items[11].atom == "3", "selected ID must include preceding submenu and nested items in preorder");
+    const auto decoded = form_stream::decode_document(encoded.value(), "DefaultAction");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    expect(std::get<model::CommandBarPayload>(decoded.value().find_control(model::ObjectId{4})->payload).buttons ==
+        std::get<model::CommandBarPayload>(document.find_control(model::ObjectId{4})->payload).buttons,
+        "default Action and surrounding menu must survive fresh round-trip");
+    auto relocated = encoded.value();
+    relocated.items[1].items[2].items[2].items[1].items[2].items[1].items[10] =
+        list_stream::ListValue::raw_atom("3ffd4fb3-770c-4579-9cbe-44187ca9b300");
+    expect(form_stream::decode_document(relocated, "RelocatedDefault").ok(), "platform source UUID relocation must preserve named selection");
+    const auto reject_property = [&](std::size_t index, std::string value) {
+        auto invalid = encoded.value();
+        invalid.items[1].items[2].items[2].items[1].items[2].items[1].items[index] = list_stream::ListValue::raw_atom(std::move(value));
+        expect(!form_stream::decode_document(invalid, "InvalidDefault"), "invalid selected action reference must be rejected");
+    };
+    reject_property(11, "99"); // Missing item.
+    reject_property(11, "1"); // Submenu.
+    reject_property(11, "2"); // Nested action has unproven default semantics.
+    reject_property(11, "0");
+    reject_property(10, "9d0a2e40-b978-11d4-84b6-008048da06df");
+    reject_property(10, "00000000-0000-0000-0000-000000000000");
+    reject_property(5, "1");
+    for (const auto value : {"0", "3", "4294967295"}) {
+        auto invalid = encoded.value(); invalid.items[1].items[1].items[2] = list_stream::ListValue::raw_atom(value);
+        expect(!form_stream::decode_document(invalid, "DanglingOwner"), "missing or mismatched default owner must be rejected");
+    }
+    auto two_defaults_form = document.form();
+    two_defaults_form.children.push_back(model::ControlRef{model::ObjectId{5}});
+    model::OrdinaryFormDocument two_defaults(std::move(two_defaults_form));
+    two_defaults.add_control(*document.find_control(model::ObjectId{4}));
+    auto second_bar = *document.find_control(model::ObjectId{4});
+    second_bar.id = model::ObjectId{5}; second_bar.name = "OtherTools";
+    two_defaults.add_control(std::move(second_bar));
+    const auto multiple_report = two_defaults.validate();
+    expect(std::ranges::any_of(multiple_report.violations, [](const auto& violation) {
+        return violation.message == "the form may have only one DefaultButton";
+    }) && !form_stream::encode_document(two_defaults), "two valid top-level defaults across primary bars must be rejected explicitly");
+    auto changed_bar = *document.find_control(model::ObjectId{4});
+    auto* payload = std::get_if<model::CommandBarPayload>(&changed_bar.payload);
+    const auto changed_document = [&]() {
+        model::OrdinaryFormDocument changed(document.form());
+        changed.add_control(changed_bar);
+        return changed;
+    };
+    payload->buttons.front().buttons.front().default_button = true;
+    expect(!changed_document().validate().ok() && !form_stream::encode_document(changed_document()), "multiple and nested defaults must be rejected in the public model");
+    payload->buttons.front().buttons.front().default_button = false;
+    payload->buttons.back().default_button = false;
+    const auto cleared = form_stream::encode_document(changed_document());
+    expect(cleared.ok() && cleared.value().items[1].items[1].items[2].atom == "4294967295", "clearing named default must clear the header reference");
+    auto orphan = cleared.value(); orphan.items[1].items[1].items[2] = list_stream::ListValue::raw_atom("4");
+    expect(!form_stream::decode_document(orphan, "OrphanOwner"), "a valid CommandBar ID without a selected Action must be rejected");
+}
+
 void test_captured_command_bar_control_record_literal() {
     constexpr std::string_view captured_record = R"OOF({e69bf21d-97b2-4f37-86db-675aea9ec2cb,4,{2,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},9,2,0,0,1,1,{5,f6183561-313a-4f39-a1cd-591a0c2b8493,1,1,1,{8,7919d563-1cca-46f4-809c-27d4d06a62a5,1,e1692cc2-605b-4535-84dd-28440238746c,{3,"ProbeHandler",{1,"",{1,0},{1,0},{1,0},{4,0,{0},"",-1,-1,1,0,""},{0,0,0}}},0,0,0},1,{5,b78f2e80-ec68-11d4-9dcf-0050bae2bc79,4,0,1,7919d563-1cca-46f4-809c-27d4d06a62a5,{8,"ProbeAction",0,1,{1,1,{"ru","Probe"}},1,f6183561-313a-4f39-a1cd-591a0c2b8493,1,1e2,0,0,1,0,1,0,0},{-1,0,{0}}}},b78f2e80-ec68-11d4-9dcf-0050bae2bc79,4,9d0a2e40-b978-11d4-84b6-008048da06df,0,0,0}},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,1,2,0,0},{14,"ResearchCommandBar",4294967295,0,0,0},{0}})OOF";
     const auto actual_record = list_stream::parse(captured_record);
@@ -9042,6 +9112,7 @@ int main() {
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
         test_command_bar_owner_pair_and_strict_profile();
+        test_command_bar_default_button_round_trip_and_guards();
         test_captured_command_bar_control_record_literal();
         test_outer_format_probe();
         test_layout_probe();

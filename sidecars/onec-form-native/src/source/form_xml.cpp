@@ -1945,6 +1945,7 @@ private:
             else if (name == "ToolTip") item.tooltip = node_text(child);
             else if (name == "Enabled") item.enabled = parse_boolean(node_text(child), child, "Enabled", owner);
             else if (name == "Checked") item.checked = parse_boolean(node_text(child), child, "Checked", owner);
+            else if (name == "DefaultButton") item.default_button = parse_boolean(node_text(child), child, "DefaultButton", owner);
             else if (name == "ChangesData") item.changes_data = parse_boolean(node_text(child), child, "ChangesData", owner);
             else if (name == "Representation") {
                 const auto rep = node_text(child);
@@ -2892,6 +2893,7 @@ private:
             if (!item.enabled) writer_.text("Enabled", "false");
             if (item.checked) writer_.text("Checked", "true");
             if (item.changes_data) writer_.text("ChangesData", "true");
+            if (item.default_button) writer_.text("DefaultButton", "true");
             const char* representation = item.representation == model::ButtonRepresentation::automatic ? "Auto" :
                 item.representation == model::ButtonRepresentation::picture ? "Picture" :
                 item.representation == model::ButtonRepresentation::text ? "Text" : "PictureText";
