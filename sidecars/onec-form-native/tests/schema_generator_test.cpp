@@ -182,7 +182,8 @@ void expect_element_shape(
     std::string_view max_occurs
 ) {
     expect(element != nullptr, "expected schema element");
-    expect(attribute(element, "name") == name, "schema element name drift");
+    expect(attribute(element, "name") == name,
+        "schema element name drift: expected " + std::string(name) + ", got " + attribute(element, "name"));
     expect(attribute(element, "type") == type, "schema element type drift");
     expect(attribute(element, "minOccurs") == min_occurs, "schema element minimum drift");
     expect(attribute(element, "maxOccurs") == max_occurs, "schema element maximum drift");
@@ -761,17 +762,38 @@ void test_control_surfaces_and_property_order(
             }
         }
         expect_element_shape(elements[cursor++], "Position", "PositionType", "1", "1");
-        if (control.kind == oof::model::ControlKind::spreadsheet_document_field) {
-            expect_element_shape(elements[cursor++], "Document", "SpreadsheetDocumentType", "0", "1");
-        }
-        for (const auto& descriptor : metamodel.properties_for(control.kind)) {
-            if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
-                expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
-            } else if (control.kind == oof::model::ControlKind::choice_field &&
-                descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only) {
-                continue;
-            } else {
-                expect_property_element(descriptor, elements[cursor++]);
+        if (control.kind == oof::model::ControlKind::chart) {
+            const auto chart_properties = metamodel.properties_for(control.kind);
+            std::vector<PropertyDescriptor> properties(chart_properties.begin(), chart_properties.end());
+            properties.erase(std::remove_if(properties.begin(), properties.end(), [](const auto& property) {
+                return property.api_name == "Series" || property.api_name == "Points";
+            }), properties.end());
+            cursor = expect_property_sequence(properties, elements, cursor);
+            expect_element_shape(elements[cursor++], "Series", "ChartSeriesCollectionType", "1", "1");
+            expect_element_shape(elements[cursor++], "Points", "ChartPointCollectionType", "1", "1");
+            expect_element_shape(elements[cursor++], "Values", "ChartValueCollectionType", "1", "1");
+            const auto series_fields = direct_children(sequence_for_type(schema, "ChartSeriesType"), "element");
+            expect(series_fields.size() == 3 && attribute(series_fields[0], "name") == "Text" &&
+                attribute(series_fields[1], "name") == "Color" && attribute(series_fields[1], "type") == "ColorValueType" &&
+                attribute(series_fields[2], "name") == "Marker" && attribute(series_fields[2], "type") == "EnumerationValueType",
+                "ChartSeries schema must expose named Text, Color, and Marker fields");
+            const auto point_fields = direct_children(sequence_for_type(schema, "ChartPointType"), "element");
+            expect(point_fields.size() == 2 && attribute(point_fields[0], "name") == "Text" &&
+                attribute(point_fields[1], "name") == "Color" && attribute(point_fields[1], "type") == "ColorValueType",
+                "ChartPoint schema must expose named Text and Color fields");
+        } else {
+            if (control.kind == oof::model::ControlKind::spreadsheet_document_field) {
+                expect_element_shape(elements[cursor++], "Document", "SpreadsheetDocumentType", "0", "1");
+            }
+            for (const auto& descriptor : metamodel.properties_for(control.kind)) {
+                if (control.kind == oof::model::ControlKind::table && descriptor.api_name == "Columns") {
+                    expect_element_shape(elements[cursor++], "Columns", "TableColumnsType", "1", "1");
+                } else if (control.kind == oof::model::ControlKind::choice_field &&
+                    descriptor.persistence == oof::model::metamodel::PersistenceClass::runtime_only) {
+                    continue;
+                } else {
+                    expect_property_element(descriptor, elements[cursor++]);
+                }
             }
         }
         expect_element_shape(

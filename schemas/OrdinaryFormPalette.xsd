@@ -407,6 +407,7 @@
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
               <Property name="LabelBackColor" apiName="LabelBackColor" russianName="ЦветФонаПодписей" russianType="Цвет" valueCodec="color"/>
               <Property name="LabelFont" apiName="LabelFont" russianName="ШрифтПодписей" russianType="Шрифт" valueCodec="font"/>
+              <Property name="Title" apiName="TitleArea.Text" russianName="ОбластьЗаголовка.Текст" russianType="Строка" valueCodec="string"/>
             </Properties>
             <Events>
               <Event name="Selection" apiName="Selection" russianName="Выбор"/>
@@ -448,6 +449,9 @@
               <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
               <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="Items" apiName="Items" russianName="Элементы" russianType="ЭлементыДендрограммы" valueCodec="dendrogram-items"/>
+              <Property name="Links" apiName="Links" russianName="Связи" russianType="СвязиДендрограммы" valueCodec="dendrogram-links"/>
+              <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="ОриентацияДендрограммы" valueCodec="enumeration"/>
             </Properties>
             <Events>
               <Event name="Selection" apiName="Selection" russianName="Выбор"/>
@@ -1033,6 +1037,12 @@
           <Picture name="PictureLib.ZoomIn" russianName="УвеличитьМасштаб" storageId="-16"/>
           <Picture name="PictureLib.ZoomOut" russianName="УменьшитьМасштаб" storageId="-15"/>
         </StandardPictures>
+        <NamedConcept name="ChartSeries" russianName="СерияДиаграммы"><Properties>
+          <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/><Property name="Marker" apiName="Маркер" russianType="ТипМаркераДиаграммы"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="ChartPoint" russianName="ТочкаДиаграммы"><Properties>
+          <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/>
+        </Properties></NamedConcept>
         <NamedConcept name="CommandBarButton" russianName="КнопкаКоманднойПанели"><Properties>
           <Property name="Name" russianName="Имя"/><Property name="Type" russianName="ТипКнопки"/>
           <Property name="Text" russianName="Текст"/><Property name="Explanation" russianName="Пояснение"/><Property name="ToolTip" russianName="Подсказка"/>

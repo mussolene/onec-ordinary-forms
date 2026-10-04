@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -10,6 +11,7 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -286,6 +288,7 @@ list_stream::ListValue encoded_type_domain(
 }
 
 using LV = list_stream::ListValue;
+namespace ls = list_stream;
 
 constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
 constexpr std::string_view root_panel_guid = "09ccdc77-ea1a-4a6d-ab1c-3435eada2433";
@@ -3517,6 +3520,554 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
+static std::vector<ls::ListValue> canonical_chart_series_defaults(){return {
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("11837108")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("e5cabe59-d992-4d31-8086-3116931aff81"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::string_atom("ru"),ls::ListValue::string_atom("Сводная")})}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::string_atom("U")}),
+ls::ListValue::list({ls::ListValue::string_atom("U")}),
+ls::ListValue::raw_atom("0"),
+};}
+static std::vector<ls::ListValue> canonical_chart_middle_defaults(){return {
+ls::ListValue::raw_atom("-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("4"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::string_atom(", "),
+ls::ListValue::raw_atom("4"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-3")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::string_atom("ru"),ls::ListValue::string_atom("Диаграмма1")})}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-22")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-22")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-22")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-1")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-1")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-1")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("16777215")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-3")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-3")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-3")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),
+ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),
+ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("e5cabe59-d992-4d31-8086-3116931aff81"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("4"),
+ls::ListValue::raw_atom("30"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("2"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("169")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("180"),
+ls::ListValue::raw_atom("5"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("4"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("11119017")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1.520833333333333e-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("8.479166666666666e-1"),
+ls::ListValue::raw_atom("4.083333333333333e-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("3.694444444444444e-1"),
+ls::ListValue::raw_atom("8.479166666666666e-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("9.611111111111111e-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-22")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+};}
+static std::vector<ls::ListValue> canonical_chart_data_defaults(){return {
+ls::ListValue::raw_atom("14"),
+ls::ListValue::raw_atom("2"),
+ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("95"),
+ls::ListValue::raw_atom("1e-1"),
+ls::ListValue::raw_atom("1e-1"),
+ls::ListValue::raw_atom("3e-2"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("e5cabe59-d992-4d31-8086-3116931aff81"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("2"),
+ls::ListValue::raw_atom("255"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"),
+ls::ListValue::raw_atom("0"),
+};}
+static std::vector<ls::ListValue> canonical_chart_style_defaults(){return {
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("2"),
+ls::ListValue::raw_atom("-2"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("10"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("20"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::raw_atom("0"),
+};}
+static std::vector<ls::ListValue> canonical_chart_render_defaults(){return {
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.152083333333333333333333333"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.847916666666666666666666667"),
+ls::ListValue::raw_atom("0.408333333333333333333333333"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.369444444444444444444444444"),
+ls::ListValue::raw_atom("0.847916666666666666666666667"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.961111111111111111111111111"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.17"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.83"),
+ls::ListValue::raw_atom("0.08"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.83"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.92"),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("14"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("14"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+};}
+static std::vector<ls::ListValue> canonical_chart_tail_defaults(){return {
+ls::ListValue::raw_atom(""),
+ls::ListValue::raw_atom("60"),
+ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+};}
+
+std::uint32_t chart_color_rgb(const model::ColorValue& value, std::string_view path) {
+    if (value.kind != model::ColorKind::absolute || value.alpha != 255 ||
+        !std::holds_alternative<std::monostate>(value.style)) {
+        fail("OOF1122", std::string(path), "automatic or absolute opaque RGB color", "unsupported ColorValue", "Chart color is outside the supported profile");
+    }
+    return (static_cast<std::uint32_t>(value.blue) << 16) |
+        (static_cast<std::uint32_t>(value.green) << 8) | static_cast<std::uint32_t>(value.red);
+}
+
+LV encode_chart_color_property(const model::ColorValue& value, std::string_view path) {
+    (void)chart_color_rgb(value, path);
+    return encode_button_color(value, path);
+}
+
+model::ColorValue decode_chart_color_property(const LV& value, std::string_view path) {
+    auto color = decode_button_color(value, path);
+    if (color.kind != model::ColorKind::absolute) {
+        fail("OOF1122", std::string(path), "automatic or absolute opaque RGB color", "unsupported ColorValue", "Chart color is outside the supported profile");
+    }
+    return color;
+}
+
+std::uint32_t chart_marker_value(const model::EnumerationValue& value, std::string_view path) {
+    if (value.type_name != "ChartMarkerType") fail("OOF1122", std::string(path), "ChartMarkerType enum", value.type_name, "Chart Marker has the wrong enumeration type");
+    if (value.member == "None") return 0;
+    if (value.member == "Rect") return 1;
+    if (value.member == "Circle") return 2;
+    if (value.member == "Rhomb") return 3;
+    if (value.member == "Auto") return 4;
+    if (value.member == "Alternation") return 5;
+    fail("OOF1122", std::string(path), "help-known Chart Marker member", value.member, "Chart Marker member is unsupported");
+}
+
+model::EnumerationValue decode_chart_marker(std::uint32_t value, std::string_view path) {
+    constexpr std::array<std::string_view, 6> members{"None", "Rect", "Circle", "Rhomb", "Auto", "Alternation"};
+    if (value >= members.size()) fail("OOF1115", std::string(path), "ChartMarkerType ordinal 0..5", std::to_string(value), "Chart Marker ordinal is unsupported");
+    return {"ChartMarkerType", std::string(members[value])};
+}
+
+std::uint32_t chart_marker_cache(const model::EnumerationValue& value, std::string_view path) {
+    const auto ordinal = chart_marker_value(value, path);
+    return value.member == "Auto" ? 3u : ordinal;
+}
+
+std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path) {
+    constexpr auto maximum = std::numeric_limits<std::size_t>::max();
+    if (series_count > maximum / 13 || point_count > maximum / 12 ||
+        (series_count != 0 && point_count > maximum / series_count)) {
+        fail("OOF1102", std::string(path), "non-overflowing Chart dimensions", "oversized dimensions", "Chart dimensions overflow the native record size");
+    }
+    const std::size_t series_items = 13 * series_count;
+    const std::size_t point_items = 12 * point_count;
+    const std::size_t cells = series_count * point_count;
+    if (cells > maximum / 4 || series_items > maximum - 222 ||
+        point_items > maximum - 222 - series_items || 4 * cells > maximum - 222 - series_items - point_items) {
+        fail("OOF1102", std::string(path), "non-overflowing Chart dimensions", "oversized dimensions", "Chart dimensions overflow the native record size");
+    }
+    return 222 + series_items + point_items + 4 * cells;
+}
+
+void apply_chart_render_cache(const LV& actual, LV& expected,
+    std::size_t middle_start, std::size_t render_start,
+    std::string_view path) {
+    constexpr std::array<std::size_t, 5> middle_cache_offsets{84, 86, 87, 89, 90};
+    constexpr std::array<std::size_t, 5> render_cache_offsets{2, 4, 5, 7, 8};
+    const auto normalize = [&](std::size_t index) {
+        if (index >= actual.items.size() || index >= expected.items.size()) {
+            fail("OOF1102", child_path(path, index), "existing Chart render-cache scalar", "out of range", "Chart cache offset exceeds its record");
+        }
+        const auto& value = actual.items[index];
+        if (value.is_list || value.atom.empty()) {
+            fail("OOF1115", child_path(path, index), "finite numeric Chart render-cache scalar", describe(value), "Chart render cache has an unsupported value shape");
+        }
+        double parsed = 0.0;
+        const auto* begin = value.atom.data();
+        const auto* end = begin + value.atom.size();
+        const auto result = std::from_chars(begin, end, parsed, std::chars_format::general);
+        if (result.ec != std::errc{} || result.ptr != end || !std::isfinite(parsed)) {
+            fail("OOF1115", child_path(path, index), "finite numeric Chart render-cache scalar", value.atom, "Chart render cache is not a finite number");
+        }
+        expected.items[index] = value;
+    };
+    for (const auto offset : middle_cache_offsets) normalize(middle_start + offset);
+    for (const auto offset : render_cache_offsets) normalize(render_start + offset);
+}
+
+LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
+    const auto series_count = chart.series.size();
+    const auto point_count = chart.points.size();
+    const auto expected = chart_info_item_count(series_count, point_count, "$/Chart/Info");
+    const auto expected_cell_count = series_count * point_count;
+    using ChartValueKey = std::pair<std::uint64_t, std::uint64_t>;
+    std::map<ChartValueKey, const model::ChartValue*> value_index;
+    for (const auto& value : chart.values) {
+        const auto key = ChartValueKey{value.series_ref.value(), value.point_ref.value()};
+        if (!value_index.emplace(key, &value).second) {
+            fail("OOF1122", "$/Chart/Values", "unique Series/Point references", std::to_string(key.first) + "/" + std::to_string(key.second), "Chart matrix contains a duplicate pair");
+        }
+    }
+    if (value_index.size() != expected_cell_count) {
+        fail("OOF1122", "$/Chart/Values", "complete Series by Point matrix", std::to_string(value_index.size()), "Chart matrix does not contain exactly one value for each pair");
+    }
+    const auto max_series_id = chart.series.empty() ? std::uint64_t{1} :
+        std::max_element(chart.series.begin(), chart.series.end(), [](const auto& left, const auto& right) { return left.id.value() < right.id.value(); })->id.value();
+    const auto max_point_id = chart.points.empty() ? std::uint64_t{0} :
+        std::max_element(chart.points.begin(), chart.points.end(), [](const auto& left, const auto& right) { return left.id.value() < right.id.value(); })->id.value();
+    std::vector<LV> info{raw("75"), raw(std::to_string(max_series_id)),
+        raw(std::to_string(max_point_id)), raw("1"), raw(std::to_string(series_count))};
+    const auto append = [&](std::vector<LV> values) {
+        info.insert(info.end(), std::make_move_iterator(values.begin()), std::make_move_iterator(values.end()));
+    };
+    std::vector<LV> rows;
+    rows.reserve(series_count);
+    for (std::size_t index = 0; index < series_count; ++index) {
+        const auto& item = chart.series[index];
+        auto row = canonical_chart_series_defaults();
+        row[0] = encode_chart_color_property(item.color, "$/Chart/Series/Color");
+        row[2] = raw(std::to_string(chart_marker_cache(item.marker, "$/Chart/Series/Marker")));
+        row[3] = encoded_localized(item.text);
+        row[4] = raw("1");
+        row[7] = raw(std::to_string(item.id.value()));
+        rows.insert(rows.end(), row.begin(), row.end());
+    }
+    append(std::move(rows));
+    append(canonical_chart_series_defaults());
+    info.push_back(raw("1"));
+    info.push_back(raw(std::to_string(point_count)));
+    for (std::size_t index = 0; index < point_count; ++index) {
+        const auto& item = chart.points[index];
+        const auto row = canonical_chart_series_defaults();
+        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_color_property(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], row[9], raw("0")});
+    }
+    auto middle = canonical_chart_middle_defaults();
+    if (middle.size() <= 11) fail("OOF1122", "$/Chart/Title", "canonical Chart title slot", std::to_string(middle.size()), "Chart defaults do not contain the title slot");
+    middle[11] = encoded_localized(title);
+    append(std::move(middle));
+    append({string_value(""), raw("0"), raw(chart.series.empty() || chart.points.empty() ? "1" : "0")});
+    for (const auto& series : chart.series) {
+        for (const auto& point : chart.points) {
+            const auto found = value_index.find(ChartValueKey{series.id.value(), point.id.value()});
+            if (found == value_index.end()) fail("OOF1122", "$/Chart/Values", "complete Series by Point matrix", "missing pair", "Chart matrix contains a missing pair");
+            if (const auto* decimal = std::get_if<model::DecimalValue>(&found->second->value)) append({list({string_value("N"), raw(decimal->canonical)}), list({string_value("U")}), string_value("")});
+            else append({list({string_value("U")}), list({string_value("U")}), string_value("")});
+        }
+    }
+    append(canonical_chart_data_defaults());
+    const auto companion = list({raw("0"), raw("0")});
+    for (std::size_t index = 0; index <= series_count; ++index) append({companion});
+    append(canonical_chart_style_defaults());
+    const auto no_text = list({raw("1"), raw("0")});
+    for (const auto& point : chart.points) append({list({encode_chart_color_property(point.color, "$/Chart/Points/Color")})});
+    for (std::size_t index = 0; index <= series_count; ++index) {
+        const bool summary = index == series_count;
+        const auto style_color = summary ? list({raw("4"), raw("4"), list({raw("0")}), raw("4")}) : encode_chart_color_property(chart.series[index].color, "$/Chart/Series/Color");
+        const auto marker = summary ? 4u : chart_marker_value(chart.series[index].marker, "$/Chart/Series/Marker");
+        const auto style = list({style_color, raw(std::to_string(marker)), raw("0"), raw("0"), raw("0"), string_value(""), no_text, no_text, no_text, raw("0")});
+        append({style});
+    }
+    append(canonical_chart_render_defaults());
+    for (std::size_t index = 0; index < series_count * point_count; ++index) {
+        append({list({list({raw("1"), no_text, raw("0")}), raw("0")})});
+    }
+    append(canonical_chart_tail_defaults());
+    if (info.size() != expected) fail("OOF1122", "$/Chart/Info", "count-derived Chart grammar", std::to_string(info.size()), "Chart Info cardinality does not match the supported collection profile");
+    return list(std::move(info));
+}
+
+
+LV encode_chart(const model::ControlNode& control, const GeometryContext& context) {
+    const auto* chart = std::get_if<model::ChartPayload>(&control.payload);
+    if (chart == nullptr || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Chart", "Chart payload with nonempty dimensions and positive ID", control.name, "Chart is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        control.properties().size() > 1 ||
+        (control.properties().size() == 1 && !control.properties().contains(model::PropertyId::from_name("Title"))) ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/Chart", "Chart named collections and plain Position", control.name, "Chart uses a storage concept outside the supported profile");
+    }
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
+    std::string title;
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
+        const auto* text = std::get_if<std::string>(&entry->value);
+        if (text == nullptr) fail("OOF1121", "$/Chart/Title", "string Title", "different value kind", "Chart Title has the wrong type");
+        title = *text;
+    }
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        list({raw("11")}), encode_chart_info(*chart, title),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")})});
+}
+
+DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context) {
+    require_arity(record, 7, path);
+    require_raw_constant(at(record, 0, path), model::metamodel::descriptor_for(model::ControlKind::chart).guid, child_path(path, 0));
+    require_exact(at(record, 2, path), list({raw("11")}), child_path(path, 2), "Chart geometry header is unsupported");
+    require_exact(at(record, 6, path), list({raw("0")}), child_path(path, 6), "Chart child-record section is unsupported");
+    const auto id = integer_atom<std::uint64_t>(at(record, 1, path), child_path(path, 1));
+    const auto& info = at(record, 3, path);
+    require_list(info, child_path(path, 3));
+    const auto info_path = child_path(path, 3);
+    if (info.items.size() < 222) fail("OOF1102", info_path, "Chart info base and collection counts", describe(info), "Chart Info is truncated");
+    require_raw_constant(at(info, 0, info_path), "75", child_path(info_path, 0));
+    const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
+    const auto series_size = static_cast<std::size_t>(series_count);
+    if (series_size >= std::numeric_limits<std::size_t>::max() / 11) {
+        fail("OOF1102", info_path, "non-overflowing Series count", std::to_string(series_count), "Chart Series count overflows its record offset");
+    }
+    const auto points_count_offset = std::size_t{5} + (series_size + 1) * 11 + 1;
+    if (points_count_offset >= info.items.size()) fail("OOF1102", info_path, "point count after Series records", describe(info), "Chart Info is truncated");
+    const auto point_count = integer_atom<std::uint32_t>(at(info, points_count_offset, info_path), child_path(info_path, points_count_offset));
+    const auto expected = chart_info_item_count(static_cast<std::size_t>(series_count), static_cast<std::size_t>(point_count), info_path);
+    if (info.items.size() != expected) fail("OOF1102", info_path, "supported dense Chart collection cardinality", std::to_string(info.items.size()), "Chart Info dimensions are unsupported");
+    model::ChartPayload payload;
+    for (std::size_t index = 0; index < series_count; ++index) {
+        const auto row_offset = std::size_t{5} + index * 11;
+        const auto series_id = integer_atom<std::uint64_t>(at(info, row_offset + 7, info_path), child_path(info_path, row_offset + 7));
+        model::ChartSeries series;
+        series.id = model::ObjectId{series_id};
+        series.text = decoded_single_language_text(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3));
+        payload.series.push_back(std::move(series));
+    }
+    const auto points_start = points_count_offset + 1;
+    for (std::size_t index = 0; index < point_count; ++index) {
+        const auto row_offset = points_start + index * 11;
+        const auto point_id = integer_atom<std::uint64_t>(at(info, row_offset + 2, info_path), child_path(info_path, row_offset + 2));
+        model::ChartPoint point;
+        point.id = model::ObjectId{point_id};
+        point.text = decoded_single_language_text(at(info, row_offset, info_path), child_path(info_path, row_offset));
+        payload.points.push_back(std::move(point));
+    }
+    const auto middle_start = points_start + static_cast<std::size_t>(point_count) * 11;
+    const auto title_offset = middle_start + 11;
+    const std::string title = decoded_single_language_text(at(info, title_offset, info_path), child_path(info_path, title_offset));
+    const auto middle_defaults = canonical_chart_middle_defaults();
+    const auto data_start = middle_start + middle_defaults.size() + 3;
+    for (std::size_t series = 0; series < series_count; ++series) {
+        for (std::size_t point = 0; point < point_count; ++point) {
+            const auto cell_offset = data_start + (series * point_count + point) * 3;
+            const auto& encoded = at(info, cell_offset, info_path);
+            require_list(encoded, child_path(info_path, cell_offset));
+            if (encoded.items.empty() || encoded.items.size() > 2) fail("OOF1102", child_path(info_path, cell_offset), "typed numeric or Undefined Chart cell", describe(encoded), "Chart cell has an unsupported value shape");
+            const auto type = string_atom(encoded.items[0], child_path(info_path, cell_offset));
+            require_exact(at(info, cell_offset + 1, info_path), list({string_value("U")}), child_path(info_path, cell_offset + 1), "Chart value info is unsupported");
+            require_exact(at(info, cell_offset + 2, info_path), string_value(""), child_path(info_path, cell_offset + 2), "Chart tooltip is unsupported");
+            model::ChartValue value;
+            value.series_ref = payload.series[series].id;
+            value.point_ref = payload.points[point].id;
+            if (type == "N" && encoded.items.size() == 2) value.value = model::DecimalValue{raw_atom(encoded.items[1], child_path(info_path, cell_offset + 1))};
+            else if (type == "U" && encoded.items.size() == 1) value.value = model::UndefinedValue{};
+            else fail("OOF1115", child_path(info_path, cell_offset), "N or U Chart value tag", type, "Chart cell uses an unsupported value kind");
+            payload.values.push_back(std::move(value));
+        }
+    }
+    const auto data_defaults = canonical_chart_data_defaults();
+    const auto style_defaults = canonical_chart_style_defaults();
+    const auto cells_end = data_start + static_cast<std::size_t>(series_count) * point_count * 3;
+    const auto series_companions_start = cells_end + data_defaults.size();
+    const auto style_defaults_start = series_companions_start + series_size + 1;
+    const auto point_styles_start = style_defaults_start + style_defaults.size();
+    const auto series_styles_start = point_styles_start + static_cast<std::size_t>(point_count);
+    std::vector<std::optional<std::uint32_t>> derived_marker_caches(series_count);
+    for (std::size_t point = 0; point < point_count; ++point) {
+        const auto style_path = child_path(info_path, point_styles_start + point);
+        const auto& point_style = at(info, point_styles_start + point, info_path);
+        require_arity(point_style, 1, style_path);
+        auto color = decode_chart_color_property(point_style.items[0], child_path(style_path, 0));
+        const auto row_offset = points_start + point * 11;
+        const auto row_color = decode_chart_color_property(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3));
+        if (chart_color_rgb(color, child_path(style_path, 0)) != chart_color_rgb(row_color, child_path(info_path, row_offset + 3))) {
+            fail("OOF1115", style_path, "Point Color matching resolved RGB", "mismatch", "Chart Point Color differs from its resolved native RGB");
+        }
+        payload.points[point].color = color;
+    }
+    for (std::size_t series = 0; series < series_count; ++series) {
+        const auto style_path = child_path(info_path, series_styles_start + series);
+        const auto& series_style = at(info, series_styles_start + series, info_path);
+        require_arity(series_style, 10, style_path);
+        auto color = decode_chart_color_property(series_style.items[0], child_path(style_path, 0));
+        const auto marker_id = integer_atom<std::uint32_t>(series_style.items[1], child_path(style_path, 1));
+        const auto marker = decode_chart_marker(marker_id, child_path(style_path, 1));
+        const auto row_offset = std::size_t{5} + series * 11;
+        const auto row_color = decode_chart_color_property(at(info, row_offset, info_path), child_path(info_path, row_offset));
+        if (chart_color_rgb(color, child_path(style_path, 0)) != chart_color_rgb(row_color, child_path(info_path, row_offset))) {
+            fail("OOF1115", style_path, "Series Color matching resolved RGB", "mismatch", "Chart Series Color differs from its resolved native RGB");
+        }
+        const auto marker_cache_path = child_path(info_path, row_offset + 2);
+        const auto rendered_marker = integer_atom<std::uint32_t>(at(info, row_offset + 2, info_path), marker_cache_path);
+        if (marker.member == "Auto" || marker.member == "Alternation") {
+            if (rendered_marker > 5) {
+                fail("OOF1115", marker_cache_path, "derived Marker cache ordinal 0..5", std::to_string(rendered_marker), "Chart Series Marker cache is outside the supported range");
+            }
+            derived_marker_caches[series] = rendered_marker;
+        } else if (rendered_marker != chart_marker_value(marker, child_path(style_path, 1))) {
+            fail("OOF1115", marker_cache_path, "concrete Marker cache matching its named Marker", std::to_string(rendered_marker), "Chart Series Marker differs from its resolved native marker");
+        }
+        payload.series[series].color = color;
+        payload.series[series].marker = marker;
+    }
+    model::ControlNode control{model::ObjectId{id}, string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)), std::move(payload)};
+    if (!title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), title);
+    const auto expected_info = encode_chart_info(std::get<model::ChartPayload>(control.payload), title);
+    const auto render_start = cells_end + data_defaults.size() + series_size + 1 + style_defaults.size() +
+        static_cast<std::size_t>(point_count) + series_size + 1;
+    auto normalized_expected_info = expected_info;
+    for (std::size_t series = 0; series < series_count; ++series) {
+        if (derived_marker_caches[series]) {
+            const auto row_offset = std::size_t{5} + series * 11;
+            normalized_expected_info.items[row_offset + 2] = raw(std::to_string(*derived_marker_caches[series]));
+        }
+    }
+    apply_chart_render_cache(info, normalized_expected_info, middle_start, render_start, info_path);
+    require_exact(info, normalized_expected_info, info_path, "Chart Info contains unsupported non-named values");
+    const auto expected_metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
+    require_exact(at(record, 5, path), expected_metadata, child_path(path, 5), "Chart metadata contains unsupported fields");
+    const auto geometry = decode_geometry(at(record, 4, path), child_path(path, 4), context);
+    control.position = geometry.position;
+    return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
+}
+
 LV canonical_control_base_properties(bool enabled, std::string_view tool_tip) {
     auto properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
@@ -4080,6 +4631,409 @@ DecodedControl decode_calendar_field(
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
+
+LV canonical_dendrogram_data(std::int32_t orientation) {
+    static constexpr std::string_view defaults = R"OOFDEF({0,{0,{11},{75,1,0,1,0,{4,0,{11837108},0},{4,0,{0},1,2,0,e5cabe59-d992-4d31-8086-3116931aff81,0},1,{1,1,{"ru","Сводная"}},0,0,0,1,{"U"},{"U"},0,1,0,-1,0,4,0,", ",4,{1,0},{1,0},{4,3,{-3},3},0,0,{1,0},1,0,{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,3,{-22},3},0,{4,3,{-1},3},1,{4,3,{-1},3},1,{4,3,{-1},3},0,{4,0,{16777215},0},{4,3,{-3},3},{4,3,{-3},3},{4,3,{-3},3},{8,3,0,1,100},{8,3,0,1,100},{8,3,0,1,100},1,1,1,1,1,{1,0},0,{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},{4,4,{0},4},1,1,0,4,30,1,0,0,0,0,1,0,0,0,0,1,1,2,{1,0},1,0,0,0,{4,0,{169},0},0,0,{1,0,0,0},0,180,5,1,0,4,{4,0,{11119017},0},1,0,1,0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,{4,3,{-22},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"",0,1,14,2,{8,3,0,1,100},1,{4,4,{0},4},{3,0,{0},1,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},1,1,1,0,0,95,1e-1,1e-1,3e-2,{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},{4,0,{0},0},2,255,0,0,00000000-0000-0000-0000-000000000000,0,{0,0},0,{0,0,{0,1,0,1,0},0,0},{0,0,{0,1,0,1,0},0,0},0,0,2,-2,1,10,1,20,0,0,{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},0,0,{4,4,{0},4},{4,4,{0},4},0,{{4,4,{0},4},4,0,0,0,"",{1,0},{1,0},{1,0},0},0,0,0,0,0,0,1,1,0,0,1,1,0,6,0,0,0,0.17,0,0.83,0.08,0,0,0.83,0,0,0.92,{0,0},{0,0},{0,0},{0,0},{0,14,{4,4,{0},4},{4,4,{0},4},0,0},{0,14,{4,4,{0},4},{4,4,{0},4},0,0},0,0,{0,0,0,0,0},{0,0,0,0},0,,60,{2,0,0,2,{1,0},{1,4,0.5,0.5,{8,3,0,1,100},{4,4,{0},4},{4,4,{0},4},1,{3,0,{0},0,1,0,48312c09-257f-4b29-b280-284dd89efc1e},{4,4,{0},4},4,2,0},2,0,0,{4,4,{0},4},{8,3,0,1,100},{4,4,{0},4},2,{1,0},0,{4,4,{0},4},0,0,0,0,0,0},{0,0,{0,1,0,1,0},0,0},0,0,0,0,0,0,0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4}}},{0,{3,0,1,0,{0,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761}},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},{0,{3,0,1,0,{0,{8,0,0,0,0,0,{"U"},{1,0},{"U"},0,4294901761},0,0,0},{0,1,{0,{4,0,{0},0},{4,0,{0},0}}},1,0}},0,1,6,12,{4,0,{8388608},0},{4,0,{0},1,1,0,e5cabe59-d992-4d31-8086-3116931aff81,0},0})OOFDEF";
+    auto data = parse_constant(defaults);
+    require_arity(data, 11, "$/Dendrogram/Data");
+    data.items[4] = raw(std::to_string(orientation));
+    return data;
+}
+
+void validate_dendrogram_distance(std::string_view value, std::string_view path);
+
+LV dendrogram_item_row(std::uint64_t key, std::uint64_t next_key, std::uint64_t cache_key,
+                       std::string_view value, const model::LocalizedStringValue& text) {
+    LV encoded_text;
+    try { encoded_text = list_stream::parse(value_codec::encode_localized_string(text)); }
+    catch (const std::exception& error) {
+        fail("OOF1108", "$/Dendrogram/Items/Text", "encodable LocalizedString", error.what(), "Dendrogram item text cannot be encoded");
+    }
+    return list({raw("8"), raw(std::to_string(key)), raw("0"), raw("0"), raw(std::to_string(next_key)), raw("0"),
+        list({string_value("S"), string_value(std::string(value))}), std::move(encoded_text), parse_constant("{\"U\"}"),
+        raw(std::to_string(cache_key)), raw("0")});
+}
+
+LV dendrogram_link_row(std::uint64_t key, std::uint64_t next_key, std::uint64_t cache_key,
+                       const model::DendrogramLink& link, std::uint64_t first_key, std::uint64_t second_key) {
+    LV encoded_title;
+    try { encoded_title = list_stream::parse(value_codec::encode_localized_string(link.title)); }
+    catch (const std::exception& error) {
+        fail("OOF1108", "$/Dendrogram/Links/Title", "encodable LocalizedString", error.what(), "Dendrogram link title cannot be encoded");
+    }
+    LV encoded_distance;
+    try { validate_dendrogram_distance(link.distance.canonical, "$/Dendrogram/Links/Distance"); encoded_distance = parse_constant(link.distance.canonical); }
+    catch (const std::exception& error) {
+        fail("OOF1122", "$/Dendrogram/Links/Distance", "canonical decimal", error.what(), "Dendrogram link distance cannot be encoded");
+    }
+    return list({raw("8"), raw(std::to_string(key)), raw("0"), raw("0"), raw(std::to_string(next_key)), raw("0"),
+        parse_constant("{\"U\"}"), std::move(encoded_title), parse_constant("{\"U\"}"), raw(std::to_string(cache_key)), raw("0"),
+        raw(std::to_string(first_key)), raw(std::to_string(second_key)), std::move(encoded_distance)});
+}
+
+LV dendrogram_sentinel(std::size_t last_key) {
+    auto sentinel = parse_constant(R"({8,0,0,1,0,0,{"U"},{1,0},{"U"},0,4294901761})");
+    sentinel.items[5] = raw(std::to_string(last_key));
+    return sentinel;
+}
+
+void validate_dendrogram_cache(const LV& sequence, bool links, std::string_view path) {
+    const auto defaults = canonical_dendrogram_data(0);
+    const auto& default_elements = defaults.items[2].items[1].items[5];
+    const auto& default_links = defaults.items[3].items[1].items[5];
+    const LV& cache = sequence.items[sequence.items.size() - 3];
+    const auto& expected_default = links ? default_links : default_elements;
+    if (list_stream::dump_compact(cache) == list_stream::dump_compact(expected_default)) return;
+    fail("OOF1114", std::string(path), "the single default appearance cache candidate", describe(cache), "Dendrogram appearance cache is unsupported");
+}
+
+void validate_dendrogram_distance(std::string_view value, std::string_view path) {
+    if (!value.empty() && (value.front() == '+' || value.front() == '-')) {
+        value.remove_prefix(1);
+    }
+    const auto point = value.find('.');
+    if (value.empty() || (point != std::string_view::npos && value.find('.', point + 1) != std::string_view::npos))
+        fail("OOF1122", std::string(path), "xs:decimal Distance without exponent notation", std::string(value), "Dendrogram link distance is invalid");
+    const auto integer = point == std::string_view::npos ? value : value.substr(0, point);
+    const auto fraction = point == std::string_view::npos ? std::string_view{} : value.substr(point + 1);
+    const auto digits_only = [](std::string_view digits) {
+        return std::all_of(digits.begin(), digits.end(), [](unsigned char character) {
+            return character >= '0' && character <= '9';
+        });
+    };
+    if ((!integer.empty() && !digits_only(integer)) || (!fraction.empty() && !digits_only(fraction)) ||
+        (integer.empty() && fraction.empty()))
+        fail("OOF1122", std::string(path), "xs:decimal Distance without exponent notation", std::string(value), "Dendrogram link distance is invalid");
+}
+
+void validate_dendrogram_graph(const model::DendrogramPayload& graph, std::string_view path) {
+    const auto max_key = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max() - 1);
+    const auto max_collection_rows = (std::vector<LV>{}.max_size() - 6) / 2 - 1;
+    const auto max_rows = std::min(max_key, max_collection_rows);
+    if (graph.items.size() > max_rows || graph.links.size() > max_rows)
+        fail("OOF1122", std::string(path), "Dendrogram collection size representable by uint32 keys and list arity",
+            std::to_string(graph.items.size()) + "/" + std::to_string(graph.links.size()), "Dendrogram graph exceeds the encodable collection range");
+    std::map<std::string, std::size_t> keys;
+    for (std::size_t index = 0; index < graph.items.size(); ++index) {
+        const auto& item = graph.items[index];
+        if (item.value.empty() || !keys.emplace(item.value, index + 1).second || item.text.items.empty())
+            fail("OOF1122", std::string(path), "unique non-empty item values with localized text", item.value, "Dendrogram item is invalid");
+        std::set<std::string> languages;
+        for (const auto& localized : item.text.items)
+            if (localized.language.empty() || !languages.insert(localized.language).second)
+                fail("OOF1122", std::string(path), "one text per language", localized.language, "Dendrogram item localization is invalid");
+    }
+    std::set<std::pair<std::string, std::string>> edges;
+    std::vector<std::size_t> parent(graph.items.size());
+    for (std::size_t index = 0; index < parent.size(); ++index) parent[index] = index;
+    for (const auto& link : graph.links) {
+        const auto first = keys.find(link.first_item), second = keys.find(link.second_item);
+        if (first == keys.end() || second == keys.end() || first == second || link.title.items.empty())
+            fail("OOF1122", std::string(path), "distinct resolved endpoints and localized title", link.first_item + "->" + link.second_item, "Dendrogram link is invalid");
+        const auto edge = std::minmax(link.first_item, link.second_item);
+        if (!edges.emplace(edge.first, edge.second).second)
+            fail("OOF1122", std::string(path), "unique link edges", link.first_item + "->" + link.second_item, "Duplicate Dendrogram link");
+        auto root = [&](std::size_t node) { while (parent[node] != node) node = parent[node]; return node; };
+        const auto first_root = root(first->second - 1), second_root = root(second->second - 1);
+        if (first_root == second_root) fail("OOF1122", std::string(path), "acyclic links", link.first_item + "->" + link.second_item, "Dendrogram cycle is unsupported");
+        parent[first_root] = second_root;
+        validate_dendrogram_distance(link.distance.canonical, child_path(path, 0));
+        std::set<std::string> languages;
+        for (const auto& localized : link.title.items)
+            if (localized.language.empty() || !languages.insert(localized.language).second)
+                fail("OOF1122", std::string(path), "one title per language", localized.language, "Dendrogram link localization is invalid");
+    }
+}
+
+void fill_dendrogram_collection(LV& wrapper, const std::vector<LV>& rows, const LV& sentinel,
+                                bool links, std::string_view path) {
+    if (rows.empty()) return;
+    const auto max_key = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max() - 1);
+    const auto max_collection_rows = (std::vector<LV>{}.max_size() - 6) / 2 - 1;
+    if (rows.size() > std::min(max_key, max_collection_rows))
+        fail("OOF1122", std::string(path), "Dendrogram collection size representable by uint32 keys and list arity",
+            std::to_string(rows.size()), "Dendrogram collection is too large to encode");
+    require_arity(wrapper, 2, path);
+    auto& sequence = wrapper.items[1];
+    require_arity(sequence, 8, child_path(path, 1));
+    const LV cache = sequence.items[5];
+    const LV auto_text = sequence.items[6];
+    const LV reverse = sequence.items[7];
+    std::vector<LV> fields{raw("3"), raw("0"), raw(std::to_string(rows.size() + 1)), raw("1")};
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        if (index != 0) fields.push_back(raw(std::to_string(index + 1)));
+        if (links) {
+            if (!rows[index].is_list || rows[index].items.size() != 14)
+                fail("OOF1114", std::string(path), "14-field internal link row", describe(rows[index]), "Dendrogram link row is malformed");
+            LV base_row = list(std::vector<LV>(rows[index].items.begin(), rows[index].items.begin() + 11));
+            fields.push_back(list({raw("0"), std::move(base_row), rows[index].items[11], rows[index].items[12], rows[index].items[13]}));
+        } else {
+            fields.push_back(list({raw("0"), rows[index]}));
+        }
+    }
+    fields.push_back(raw("0"));
+    fields.push_back(links ? list({raw("0"), sentinel, raw("0"), raw("0"), raw("0")}) : list({raw("0"), sentinel}));
+    fields.push_back(cache);
+    fields.push_back(auto_text);
+    fields.push_back(reverse);
+    sequence = list(std::move(fields));
+}
+
+struct DecodedDendrogramItems {
+    std::vector<model::DendrogramItem> values_in_chain_order;
+    std::map<std::uint32_t, std::string> values_by_key;
+};
+
+DecodedDendrogramItems decode_dendrogram_items(const LV& wrapper, std::string_view path) {
+    require_arity(wrapper, 2, path);
+    require_raw_constant(wrapper.items[0], "0", child_path(path, 0));
+    const auto& sequence = wrapper.items[1];
+    if (!sequence.is_list || sequence.items.size() < 8 || sequence.items[0].atom != "3" || sequence.items[1].atom != "0")
+        fail("OOF1114", std::string(path), "Dendrogram item collection", describe(sequence), "Dendrogram Items collection is malformed");
+    const auto count = integer_atom<std::uint32_t>(sequence.items[2], child_path(path, 1));
+    if (count == 0) fail("OOF1122", std::string(path), "one sentinel and an item collection", std::to_string(count), "Dendrogram item collection count is invalid");
+    if (count == 1) {
+        const auto defaults = canonical_dendrogram_data(0);
+        require_exact(wrapper, defaults.items[2], path, "Empty Dendrogram Items must retain the canonical factory collection");
+        return {};
+    }
+    const auto indexed_fields = sequence.items.size() - 6;
+    if (indexed_fields % 2 != 0 || indexed_fields / 2 != static_cast<std::size_t>(count))
+        fail("OOF1114", std::string(path), "canonical linked item sequence", describe(sequence), "Dendrogram Items linked sequence is malformed");
+    const auto row_count = static_cast<std::size_t>(count) - 1;
+    std::map<std::uint32_t, model::DendrogramItem> items_by_key;
+    std::map<std::uint32_t, std::uint32_t> next_by_key;
+    DecodedDendrogramItems result;
+    std::set<std::string> values;
+    for (std::size_t index = 0; index < row_count; ++index) {
+        const auto entry_index = 4 + index * 2;
+        const auto key_index = 3 + index * 2;
+        const auto pointer = integer_atom<std::uint32_t>(sequence.items[key_index], child_path(path, key_index));
+        const auto& wrapped = sequence.items[entry_index];
+        require_arity(wrapped, 2, child_path(path, entry_index));
+        require_raw_constant(wrapped.items[0], "0", child_path(path, entry_index));
+        const auto& row = wrapped.items[1];
+        require_arity(row, 11, child_path(path, entry_index));
+        if (integer_atom<std::uint32_t>(row.items[0], path) != 8 ||
+            integer_atom<std::uint32_t>(row.items[1], path) != pointer ||
+            integer_atom<std::uint32_t>(row.items[2], path) != 0 ||
+            integer_atom<std::uint32_t>(row.items[3], path) != 0 ||
+            integer_atom<std::uint32_t>(row.items[5], path) != 0 || integer_atom<std::uint32_t>(row.items[10], path) != 0)
+            fail("OOF1114", child_path(path, entry_index), "supported Dendrogram item row", describe(row), "Dendrogram item metadata is unsupported");
+        if (pointer == 0 || pointer > row_count || items_by_key.contains(pointer))
+            fail("OOF1114", child_path(path, key_index), "unique item key in the collection range", std::to_string(pointer), "Dendrogram item key is invalid");
+        const auto next_key = integer_atom<std::uint32_t>(row.items[4], child_path(child_path(path, entry_index), 4));
+        if (next_key > row_count)
+            fail("OOF1114", child_path(child_path(path, entry_index), 4), "next item key in the collection range or zero", std::to_string(next_key), "Dendrogram item chain key is invalid");
+        require_arity(row.items[6], 2, child_path(path, 6));
+        const auto value_kind = string_atom(row.items[6].items[0], child_path(child_path(path, 6), 0));
+        if (value_kind != "S") fail("OOF1122", child_path(path, 6), "string item Value", describe(row.items[6]), "Only string Dendrogram values are supported");
+        const auto value_text = string_atom(row.items[6].items[1], child_path(child_path(path, 6), 1));
+        model::LocalizedStringValue text;
+        try {
+            list_stream::ListInStream in(row.items[7]);
+            text = value_codec::read_localized_string(in);
+        } catch (const std::exception& error) {
+            fail("OOF1108", child_path(path, 7), "LocalizedString title", error.what(), "Dendrogram item text is malformed");
+        }
+        model::DendrogramItem item{value_text, std::move(text)};
+        if (item.value.empty() || !values.insert(item.value).second)
+            fail("OOF1122", child_path(path, 6), "unique non-empty string item Value", item.value, "Dendrogram item Value is invalid");
+        require_exact(row.items[8], parse_constant("{\"U\"}"), child_path(path, 8), "Dendrogram item details are unsupported");
+        if (integer_atom<std::uint32_t>(row.items[9], path) != 0)
+            fail("OOF1114", child_path(path, 9), "zero cache key for diagnostic candidate", describe(row.items[9]), "Dendrogram item cache key is unsupported");
+        result.values_by_key.emplace(pointer, item.value);
+        items_by_key.emplace(pointer, std::move(item));
+        next_by_key.emplace(pointer, next_key);
+    }
+    const auto sentinel_index = sequence.items.size() - 5;
+    if (sequence.items[sentinel_index].atom != "0") fail("OOF1114", std::string(path), "zero sentinel key", describe(sequence.items[sentinel_index]), "Dendrogram sentinel key is malformed");
+    const auto& sentinel = sequence.items[sentinel_index + 1];
+    require_arity(sentinel, 2, child_path(path, sentinel_index + 1));
+    require_raw_constant(sentinel.items[0], "0", child_path(path, sentinel_index + 1));
+    require_exact(sentinel.items[1], dendrogram_sentinel(count - 1), child_path(path, sentinel_index + 1), "Dendrogram item sentinel is unsupported");
+    require_raw_constant(sequence.items[sequence.items.size() - 2], "1", child_path(path, sequence.items.size() - 2));
+    require_raw_constant(sequence.items.back(), "0", child_path(path, sequence.items.size() - 1));
+    validate_dendrogram_cache(sequence, false, path);
+    const auto first_key = integer_atom<std::uint32_t>(sentinel.items[1].items[3], child_path(path, sentinel_index + 1));
+    const auto last_key = integer_atom<std::uint32_t>(sentinel.items[1].items[5], child_path(path, sentinel_index + 1));
+    std::set<std::uint32_t> visited;
+    auto current_key = first_key;
+    for (;;) {
+        const auto current = items_by_key.find(current_key);
+        if (current == items_by_key.end())
+            fail("OOF1114", std::string(path), "complete item chain from sentinel first key", std::to_string(current_key), "Dendrogram item chain references a missing key");
+        if (!visited.insert(current_key).second)
+            fail("OOF1114", std::string(path), "acyclic item chain", std::to_string(current_key), "Dendrogram item chain contains a cycle");
+        result.values_in_chain_order.push_back(std::move(current->second));
+        const auto next_key = next_by_key.at(current_key);
+        if (next_key == 0) {
+            if (current_key != last_key)
+                fail("OOF1114", std::string(path), "sentinel last key at the end of the item chain", std::to_string(current_key), "Dendrogram item chain ends before its sentinel tail");
+            break;
+        }
+        if (current_key == last_key)
+            fail("OOF1114", std::string(path), "zero next key after the sentinel last key", std::to_string(next_key), "Dendrogram item chain continues beyond its sentinel tail");
+        current_key = next_key;
+    }
+    if (visited.size() != row_count)
+        fail("OOF1114", std::string(path), "every item reachable from the sentinel first key", std::to_string(visited.size()), "Dendrogram item chain omits stored rows");
+    return result;
+}
+
+std::vector<model::DendrogramLink> decode_dendrogram_links(const LV& wrapper, const DecodedDendrogramItems& items,
+                                                           std::string_view path) {
+    require_arity(wrapper, 2, path);
+    require_raw_constant(wrapper.items[0], "0", child_path(path, 0));
+    const auto& sequence = wrapper.items[1];
+    if (!sequence.is_list || sequence.items.size() < 8 || sequence.items[0].atom != "3" || sequence.items[1].atom != "0")
+        fail("OOF1114", std::string(path), "Dendrogram link collection", describe(sequence), "Dendrogram Links collection is malformed");
+    const auto count = integer_atom<std::uint32_t>(sequence.items[2], child_path(path, 1));
+    if (count == 0) fail("OOF1122", std::string(path), "one sentinel and a link collection", std::to_string(count), "Dendrogram link collection count is invalid");
+    if (count == 1) {
+        const auto defaults = canonical_dendrogram_data(0);
+        require_exact(wrapper, defaults.items[3], path, "Empty Dendrogram Links must retain the canonical factory collection");
+        return {};
+    }
+    const auto indexed_fields = sequence.items.size() - 6;
+    if (indexed_fields % 2 != 0 || indexed_fields / 2 != static_cast<std::size_t>(count))
+        fail("OOF1114", std::string(path), "canonical linked link sequence", describe(sequence), "Dendrogram Links linked sequence is malformed");
+    const auto row_count = static_cast<std::size_t>(count) - 1;
+    std::map<std::uint32_t, model::DendrogramLink> links_by_key;
+    std::map<std::uint32_t, std::uint32_t> next_by_key;
+    for (std::size_t index = 0; index < row_count; ++index) {
+        const auto entry_index = 4 + index * 2;
+        const auto key_index = 3 + index * 2;
+        const auto pointer = integer_atom<std::uint32_t>(sequence.items[key_index], child_path(path, key_index));
+        const auto& wrapped = sequence.items[entry_index];
+        require_arity(wrapped, 5, child_path(path, entry_index));
+        require_raw_constant(wrapped.items[0], "0", child_path(path, entry_index));
+        const auto& row = wrapped.items[1];
+        require_arity(row, 11, child_path(path, entry_index));
+        if (integer_atom<std::uint32_t>(row.items[0], path) != 8 ||
+            integer_atom<std::uint32_t>(row.items[1], path) != pointer || integer_atom<std::uint32_t>(row.items[2], path) != 0 ||
+            integer_atom<std::uint32_t>(row.items[3], path) != 0 ||
+            integer_atom<std::uint32_t>(row.items[5], path) != 0 || integer_atom<std::uint32_t>(row.items[10], path) != 0)
+            fail("OOF1114", child_path(path, entry_index), "supported Dendrogram link row", describe(row), "Dendrogram link metadata is unsupported");
+        if (pointer == 0 || pointer > row_count || links_by_key.contains(pointer))
+            fail("OOF1114", child_path(path, key_index), "unique link key in the collection range", std::to_string(pointer), "Dendrogram link key is invalid");
+        const auto next_key = integer_atom<std::uint32_t>(row.items[4], child_path(child_path(path, entry_index), 4));
+        if (next_key > row_count)
+            fail("OOF1114", child_path(child_path(path, entry_index), 4), "next link key in the collection range or zero", std::to_string(next_key), "Dendrogram link chain key is invalid");
+        require_exact(row.items[6], parse_constant("{\"U\"}"), child_path(path, 6), "Dendrogram link value is unsupported");
+        model::LocalizedStringValue title;
+        try { list_stream::ListInStream in(row.items[7]); title = value_codec::read_localized_string(in); }
+        catch (const std::exception& error) { fail("OOF1108", child_path(path, 7), "LocalizedString title", error.what(), "Dendrogram link title is malformed"); }
+        require_exact(row.items[8], parse_constant("{\"U\"}"), child_path(path, 8), "Dendrogram link details are unsupported");
+        const auto first_key = integer_atom<std::uint32_t>(wrapped.items[2], child_path(path, entry_index + 2));
+        const auto second_key = integer_atom<std::uint32_t>(wrapped.items[3], child_path(path, entry_index + 3));
+        if (first_key == 0 || second_key == 0 || !items.values_by_key.contains(first_key) || !items.values_by_key.contains(second_key))
+            fail("OOF1122", std::string(path), "endpoints resolving to named items", describe(row), "Dendrogram link endpoint is unresolved");
+        model::DendrogramLink link;
+        link.first_item = items.values_by_key.at(first_key);
+        link.second_item = items.values_by_key.at(second_key);
+        link.title = std::move(title);
+        const auto distance = list_stream::dump_compact(wrapped.items[4]);
+        validate_dendrogram_distance(distance, child_path(path, entry_index + 4));
+        link.distance = model::DecimalValue{distance};
+        if (integer_atom<std::uint32_t>(row.items[9], path) != 0)
+            fail("OOF1114", child_path(path, 9), "zero cache key for diagnostic candidate", describe(row.items[9]), "Dendrogram link cache key is unsupported");
+        links_by_key.emplace(pointer, std::move(link));
+        next_by_key.emplace(pointer, next_key);
+    }
+    const auto sentinel_index = sequence.items.size() - 5;
+    if (sequence.items[sentinel_index].atom != "0") fail("OOF1114", std::string(path), "zero sentinel key", describe(sequence.items[sentinel_index]), "Dendrogram link sentinel key is malformed");
+    const auto& sentinel = sequence.items[sentinel_index + 1];
+    require_arity(sentinel, 5, child_path(path, sentinel_index + 1));
+    require_raw_constant(sentinel.items[0], "0", child_path(path, sentinel_index + 1));
+    require_exact(sentinel.items[1], dendrogram_sentinel(count - 1), child_path(path, sentinel_index + 1), "Dendrogram link sentinel is unsupported");
+    require_raw_constant(sentinel.items[2], "0", child_path(path, sentinel_index + 1));
+    require_raw_constant(sentinel.items[3], "0", child_path(path, sentinel_index + 1));
+    require_raw_constant(sentinel.items[4], "0", child_path(path, sentinel_index + 1));
+    require_raw_constant(sequence.items[sequence.items.size() - 2], "1", child_path(path, sequence.items.size() - 2));
+    require_raw_constant(sequence.items.back(), "0", child_path(path, sequence.items.size() - 1));
+    validate_dendrogram_cache(sequence, true, path);
+    const auto first_key = integer_atom<std::uint32_t>(sentinel.items[1].items[3], child_path(path, sentinel_index + 1));
+    const auto last_key = integer_atom<std::uint32_t>(sentinel.items[1].items[5], child_path(path, sentinel_index + 1));
+    std::vector<model::DendrogramLink> result;
+    std::set<std::uint32_t> visited;
+    auto current_key = first_key;
+    for (;;) {
+        const auto current = links_by_key.find(current_key);
+        if (current == links_by_key.end())
+            fail("OOF1114", std::string(path), "complete link chain from sentinel first key", std::to_string(current_key), "Dendrogram link chain references a missing key");
+        if (!visited.insert(current_key).second)
+            fail("OOF1114", std::string(path), "acyclic link chain", std::to_string(current_key), "Dendrogram link chain contains a cycle");
+        result.push_back(std::move(current->second));
+        const auto next_key = next_by_key.at(current_key);
+        if (next_key == 0) {
+            if (current_key != last_key)
+                fail("OOF1114", std::string(path), "sentinel last key at the end of the link chain", std::to_string(current_key), "Dendrogram link chain ends before its sentinel tail");
+            break;
+        }
+        if (current_key == last_key)
+            fail("OOF1114", std::string(path), "zero next key after the sentinel last key", std::to_string(next_key), "Dendrogram link chain continues beyond its sentinel tail");
+        current_key = next_key;
+    }
+    if (visited.size() != row_count)
+        fail("OOF1114", std::string(path), "every link reachable from the sentinel first key", std::to_string(visited.size()), "Dendrogram link chain omits stored rows");
+    return result;
+}
+
+DecodedControl decode_dendrogram(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::dendrogram);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 Dendrogram ID", std::to_string(raw_id),
+            "Dendrogram ID is invalid");
+    }
+    require_arity(record.items[2], 11, child_path(path, 2));
+    const auto orientation = integer_atom<std::int32_t>(at(record.items[2], 4, child_path(path, 2)),
+        child_path(child_path(path, 2), 4));
+    if (orientation != 0 && orientation != 1) {
+        fail("OOF1122", child_path(child_path(path, 2), 4), "Dendrogram orientation storage value 0 or 1",
+            std::to_string(orientation), "Dendrogram orientation is unsupported");
+    }
+    auto normalized_data = record.items[2];
+    auto expected_data = canonical_dendrogram_data(orientation);
+    const auto data_path = child_path(path, 2);
+    auto items = decode_dendrogram_items(record.items[2].items[2], child_path(data_path, 2));
+    auto links = decode_dendrogram_links(record.items[2].items[3], items, child_path(data_path, 3));
+    model::DendrogramPayload graph;
+    graph.items = items.values_in_chain_order;
+    graph.links = links;
+    validate_dendrogram_graph(graph, child_path(data_path, 2));
+    normalized_data.items[2] = expected_data.items[2];
+    normalized_data.items[3] = expected_data.items[3];
+    require_exact(normalized_data, expected_data, data_path,
+        "Dendrogram contains unsupported tree style or extension values");
+    auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto metadata_path = child_path(path, 4);
+    require_arity(record.items[4], 6, metadata_path);
+    require_raw_constant(record.items[4].items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(record.items[4].items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty Dendrogram name", "empty",
+            "Dendrogram name is required");
+    }
+    require_exact(record.items[4], list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "Dendrogram metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "Dendrogram cannot contain storage children");
+    model::ControlNode control{model::ObjectId{raw_id}, name, std::move(graph)};
+    if (orientation != 0) {
+        control.properties().set_explicit(model::PropertyId::from_name("Orientation"), model::EnumerationValue{
+            "DendrogramOrientation", "Down"});
+    }
+    control.position = std::move(geometry.position);
+    return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
+}
+
 
 DecodedControl decode_spreadsheet_document_field(
     const LV& record,
@@ -5218,6 +6172,49 @@ LV encode_calendar_field(const model::ControlNode& control, const GeometryContex
     });
 }
 
+LV encode_dendrogram(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::dendrogram || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "Dendrogram with positive int64 ID", control.name,
+            "Dendrogram is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/Dendrogram", "named Dendrogram with plain Position", control.name,
+            "Dendrogram uses a storage concept outside the supported profile");
+    }
+    require_allowed_properties(control.properties(), {"Orientation"}, "$/Dendrogram");
+    const auto orientation = explicit_enum_storage_value(control.properties(), "Dendrogram", "Orientation",
+        "DendrogramOrientation", 0, {{"Up", 0}, {"Down", 1}});
+    const auto& graph = std::get<model::DendrogramPayload>(control.payload);
+    validate_dendrogram_graph(graph, "$/Dendrogram");
+    LV data = canonical_dendrogram_data(orientation);
+    std::vector<LV> item_rows;
+    std::map<std::string, std::uint64_t> item_keys;
+    for (std::size_t index = 0; index < graph.items.size(); ++index) {
+        const auto key = static_cast<std::uint64_t>(index + 1);
+        item_keys.emplace(graph.items[index].value, key);
+        item_rows.push_back(dendrogram_item_row(key, index + 1 < graph.items.size() ? key + 1 : 0, 0,
+            graph.items[index].value, graph.items[index].text));
+    }
+    fill_dendrogram_collection(data.items[2], item_rows, dendrogram_sentinel(item_rows.size()), false, "$/Dendrogram/Items");
+    std::vector<LV> link_rows;
+    for (std::size_t index = 0; index < graph.links.size(); ++index) {
+        const auto& link = graph.links[index];
+        link_rows.push_back(dendrogram_link_row(index + 1, index + 1 < graph.links.size() ? index + 2 : 0, 0,
+            link, item_keys.at(link.first_item), item_keys.at(link.second_item)));
+    }
+    fill_dendrogram_collection(data.items[3], link_rows, dendrogram_sentinel(link_rows.size()), true, "$/Dendrogram/Links");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::dendrogram);
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        std::move(data), encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")})});
+}
+
 LV encode_input_field(
     const model::OrdinaryFormDocument& document,
     const model::ControlNode& control,
@@ -6014,6 +7011,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& input_descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
         const auto& checkbox_descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
         const auto& progress_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
+        const auto& dendrogram_descriptor = model::metamodel::descriptor_for(model::ControlKind::dendrogram);
         const auto& track_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
         const auto& list_box_descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
         const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
@@ -6036,8 +7034,10 @@ Result<model::OrdinaryFormDocument> decode_document(
                 const auto& record = child_table.items[index + 1];
                 require_list(record, record_path);
                 static_cast<void>(raw_atom(at(record, 1, record_path), child_path(record_path, 1)));
-                const auto geometry_path = child_path(record_path, 3);
-                const auto& geometry = at(record, 3, record_path);
+                const std::string child_guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
+                const std::size_t geometry_slot = child_guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid ? 4 : 3;
+                const auto geometry_path = child_path(record_path, geometry_slot);
+                const auto& geometry = at(record, geometry_slot, record_path);
                 std::size_t ordinal_slot = 0;
                 const auto page_ordinal = geometry_page_ordinal(geometry, geometry_path, ordinal_slot);
                 if (page_ordinal.page >= pages.size()) {
@@ -6061,7 +7061,9 @@ Result<model::OrdinaryFormDocument> decode_document(
                 const auto record_count = static_cast<std::size_t>(std::count_if(
                     child_table.items.begin() + 1, child_table.items.end(), [&](const LV& record) {
                         std::size_t ordinal_slot = 0;
-                        const auto page_ordinal = geometry_page_ordinal(at(record, 3, path), path, ordinal_slot);
+                        const auto guid = raw_atom(at(record, 0, path), child_path(path, 0));
+                        const auto slot = guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid ? 4 : 3;
+                        const auto page_ordinal = geometry_page_ordinal(at(record, slot, path), path, ordinal_slot);
                         return page_ordinal.page == page_index;
                     }));
                 if (page_records.size() != record_count) {
@@ -6083,7 +7085,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const GeometryContext context{owner, static_cast<std::uint32_t>(page_index), slot->ordinal};
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
-                    if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
+                    if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context);
+                    else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
                     else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
                         child = decode_usual_group(record, record_path, context);
@@ -6095,6 +7098,16 @@ Result<model::OrdinaryFormDocument> decode_document(
                         child = decode_splitter(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
+                    else if (guid == dendrogram_descriptor.guid) {
+                        const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path),
+                            child_path(record_path, 1));
+                        if (candidate_id <= static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) &&
+                            links_by_control.contains(static_cast<std::int64_t>(candidate_id))) {
+                            fail("OOF1122", "$/2/3", "no DataPath link for Dendrogram",
+                                std::to_string(candidate_id), "Dendrogram DataPath storage is unsupported");
+                        }
+                        child = decode_dendrogram(record, record_path, context);
+                    }
                     else if (guid == spreadsheet_descriptor.guid) child = decode_spreadsheet_document_field(record, record_path, context);
                     else if (guid == text_document_descriptor.guid) child = decode_text_document_field(record, record_path, context);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
@@ -6505,7 +7518,9 @@ Result<list_stream::ListValue> encode_document(
                     "page-local ordinal within uint32 range", std::to_string(ordinal), "Child ordinal overflows");
                 const GeometryContext context{owner, page_index, static_cast<std::uint32_t>(ordinal)};
                 LV record;
-                if (control->kind() == model::ControlKind::command_bar) {
+                if (control->kind() == model::ControlKind::chart) {
+                    record = encode_chart(*control, context);
+                } else if (control->kind() == model::ControlKind::command_bar) {
                     record = encode_command_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
@@ -6546,6 +7561,8 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_label(*control, context);
                 } else if (control->kind() == model::ControlKind::calendar_field) {
                     record = encode_calendar_field(*control, context);
+                } else if (control->kind() == model::ControlKind::dendrogram) {
+                    record = encode_dendrogram(*control, context);
                 } else if (control->kind() == model::ControlKind::spreadsheet_document_field) {
                     record = encode_spreadsheet_document_field(*control, context);
                 } else if (control->kind() == model::ControlKind::text_document_field) {
@@ -6641,7 +7658,7 @@ Result<list_stream::ListValue> encode_document(
             for (auto& child : children) {
                 const auto found = child_incoming.find(child.control->id.value());
                 const IncomingAnchorLists empty;
-                child.record.items[3] = encode_geometry(child.control->position,
+                child.record.items[child.control->kind() == model::ControlKind::chart ? 4 : 3] = encode_geometry(child.control->position,
                     GeometryContext{owner, child.page_index, static_cast<std::uint32_t>(child.ordinal)},
                     found == child_incoming.end() ? empty : found->second);
             }
