@@ -412,6 +412,14 @@ ValidationReport OrdinaryFormDocument::validate() const {
     };
 
     record_id(form_.id, ObjectCategory::form);
+    if (form_.main_attribute.id() && find_attribute(form_.main_attribute.id()) == nullptr) {
+        add_violation(report, InvariantCode::dangling_reference, form_.id, form_.main_attribute.id(),
+            "main form attribute must reference an existing Attribute");
+    }
+    if (form_.extension && *form_.extension != metamodel::data_processor_form_extension.kind) {
+        add_violation(report, InvariantCode::invalid_property, form_.id, form_.id,
+            "form extension is not declared by the executable metamodel");
+    }
     for (const auto& control : collections_.controls) {
         record_id(control.id, ObjectCategory::control);
     }

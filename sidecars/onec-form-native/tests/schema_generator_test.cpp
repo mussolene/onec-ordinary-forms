@@ -372,7 +372,7 @@ void test_schema_version_and_controls(
     expect(
         enumeration_values(schema, "TypeDomainTermType") ==
             std::vector<std::string>({
-                "unknown", "list", "boolean", "binary", "date", "numeric",
+                "unknown", "object", "list", "boolean", "binary", "date", "numeric",
                 "reference", "string", "type", "valueList", "valueTable"}),
         "type-domain term vocabulary drift");
 
@@ -552,6 +552,10 @@ void test_document_package_types(
     std::size_t cursor = expect_property_sequence(
         metamodel.form_properties(),
         form_elements);
+    expect_element_shape(form_elements[cursor++], "MainAttribute", "", "0", "1");
+    expect_element_shape(form_elements[cursor++], "DataProcessorFormExtension", "", "0", "1");
+    expect(direct_children(form_elements[cursor - 1], "complexType").size() == 1,
+        "Form extension must use an empty named default type, without raw settings");
     constexpr std::array form_surface_names{
         "Events",
         "Attributes",

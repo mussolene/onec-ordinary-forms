@@ -7353,6 +7353,23 @@ LV encode_table(
         list({raw("0")})});
 }
 
+void validate_form_extension_context(const model::OrdinaryFormDocument& document, std::string_view path) {
+    if (document.form().main_attribute.id() && !document.form().extension)
+        fail("OOF1122", std::string(path), "declared extension for the main object context",
+            "absent extension", "MainAttribute context has no supported form extension");
+    if (document.form().extension) {
+        const auto* main = document.find_attribute(document.form().main_attribute.id());
+        if (!main || main->type.entries.size() != 1 ||
+            main->type.entries.front().term != model::TypeDomainTerm::object ||
+            !main->type.entries.front().type_uuid)
+            fail("OOF1122", std::string(path), "one concrete object Attribute selected by MainAttribute",
+                "missing or incompatible object type", "DataProcessorFormExtension requires its object context");
+        if (main->main.value() || main->stored_data.value())
+            fail("OOF1122", std::string(path), "default flags for the main object Attribute",
+                "nondefault flags", "DataProcessorFormExtension main Attribute flags are not supported");
+    }
+}
+
 }  // namespace
 
 Result<model::Position> decode_page_position(
@@ -7626,11 +7643,13 @@ Result<AttributesRecord> decode_attributes(
     std::string_view path) {
     return capture_decode_failure<AttributesRecord>([&record, path] {
         require_arity(record, 4, path);
-        const auto& version = at(record, 0, path);
-        require_arity(version, 1, child_path(path, 0));
-        require_raw_constant(version.items[0], "-1", child_path(child_path(path, 0), 0));
-
         AttributesRecord result;
+        const auto main_attribute = composite_id(at(record, 0, path), child_path(path, 0));
+        if (!main_attribute.is_null || main_attribute.uuid.canonical != null_uuid ||
+            (main_attribute.object_id <= 0 && main_attribute.object_id != -1))
+            fail("OOF1107", child_path(path, 0), "absent or positive one-component main Attribute reference",
+                describe(at(record, 0, path)), "Main Attribute identity cannot be represented without loss");
+        if (main_attribute.object_id != -1) result.main_attribute = main_attribute;
         result.slot_count = integer_atom<std::uint32_t>(
             at(record, 1, path),
             child_path(path, 1));
@@ -7670,6 +7689,10 @@ Result<AttributesRecord> decode_attributes(
             attribute.type = type_domain(item.items[5], child_path(record_path, 5));
             result.attributes.push_back(std::move(attribute));
         }
+        if (result.main_attribute && std::none_of(result.attributes.begin(), result.attributes.end(),
+            [&](const auto& attribute) { return attribute.id == *result.main_attribute; }))
+            fail("OOF1107", child_path(path, 0), "main reference to a declared Attribute",
+                describe(at(record, 0, path)), "Main Attribute reference is dangling");
 
         const auto& links = at(record, 3, path);
         require_list(links, child_path(path, 3));
@@ -7863,7 +7886,7 @@ Result<list_stream::ListValue> encode_attributes(const AttributesRecord& record)
         }
 
         auto encoded = list_stream::ListValue::list({
-            list_stream::ListValue::list({list_stream::ListValue::raw_atom("-1")}),
+            record.main_attribute ? encoded_composite_id(*record.main_attribute, "$/2/0") : list({raw("-1")}),
             list_stream::ListValue::raw_atom(std::to_string(record.slot_count)),
             list_stream::ListValue::list(std::move(attributes)),
             list_stream::ListValue::list(std::move(links)),
@@ -7896,11 +7919,25 @@ Result<model::OrdinaryFormDocument> decode_document(
             fail("OOF1115", "$", "non-empty form name", "empty", "Form name is required");
         }
 
-        require_exact(
-            payload.items[3],
-            parse_constant("{00000000-0000-0000-0000-000000000000,0}"),
-            "$/3",
-            "Unsupported root identity record");
+        std::optional<model::FormExtensionKind> form_extension;
+        const auto& extension = payload.items[3];
+        require_list(extension, "$/3");
+        if (extension.items.empty())
+            fail("OOF1114", "$/3", "declared Form extension or absent extension", "empty",
+                "Form extension record is incomplete");
+        const auto extension_guid = uuid_atom(extension.items[0], "$/3/0").canonical;
+        if (extension_guid == null_uuid) {
+            require_exact(extension, parse_constant("{00000000-0000-0000-0000-000000000000,0}"),
+                "$/3", "Absent Form extension must not contain settings");
+        } else {
+            const auto& descriptor = model::metamodel::data_processor_form_extension;
+            require_arity(extension, 3, "$/3");
+            require_raw_constant(extension.items[0], descriptor.guid, "$/3/0");
+            require_raw_constant(extension.items[1], "1", "$/3/1");
+            require_exact(extension.items[2], parse_constant("{2,0,{0,0},{0},1}"), "$/3/2",
+                "DataProcessorFormExtension contains unsupported nondefault settings");
+            form_extension = descriptor.kind;
+        }
         const auto form_close_handler = decode_form_close_events(payload.items[4], "$/4");
         require_raw_constant(payload.items[5], "1", "$/5");
         require_raw_constant(payload.items[6], "4", "$/6");
@@ -7992,6 +8029,9 @@ Result<model::OrdinaryFormDocument> decode_document(
 
         model::Form form;
         form.id = model::ObjectId{1};
+        form.extension = form_extension;
+        if (attributes.main_attribute)
+            form.main_attribute = model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attributes.main_attribute->object_id)}};
         form.name = std::string(form_name);
         if (!caption.empty()) {
             form.properties.set_explicit(model::PropertyId::from_name("Caption"), caption);
@@ -8438,6 +8478,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                 std::to_string(report.violations.size()) + " invariant violations: " + report.violations.front().message,
                 "Decoded storage does not satisfy the product object model");
         }
+        validate_form_extension_context(document, "$/2/0");
         return document;
     });
 }
@@ -8471,6 +8512,7 @@ Result<list_stream::ListValue> encode_document(
                 "unsupported document collections",
                 "Document contains a storage concept without an executable codec");
         }
+        validate_form_extension_context(document, "$/MainAttribute");
         std::unordered_set<std::uint64_t> referenced_picture_ids;
         for (const auto& control : document.collections().controls) {
             const auto* picture = control.properties().find(model::PropertyId::from_name("Picture"));
@@ -8788,6 +8830,10 @@ Result<list_stream::ListValue> encode_document(
         }
 
         AttributesRecord attributes;
+        if (document.form().main_attribute.id())
+            attributes.main_attribute = model::CompositeIdValue{
+                static_cast<std::int64_t>(document.form().main_attribute.id().value()),
+                model::UuidValue{std::string(null_uuid)}, true};
         std::uint64_t max_attribute_id = 0;
         for (const auto& attribute : document.collections().attributes) {
             if (attribute.id.value() == 0 ||
@@ -8863,11 +8909,17 @@ Result<list_stream::ListValue> encode_document(
             raw(std::to_string(height)),
             raw("96"),
         });
+        LV encoded_extension = parse_constant("{00000000-0000-0000-0000-000000000000,0}");
+        if (document.form().extension) {
+            const auto& descriptor = model::metamodel::data_processor_form_extension;
+            encoded_extension = list({raw(std::string(descriptor.guid)), raw("1"),
+                parse_constant("{2,0,{0,0},{0},1}")});
+        }
         const auto encoded = list({
             raw("27"),
             form_section,
             encoded_attributes_result.value(),
-            parse_constant("{00000000-0000-0000-0000-000000000000,0}"),
+            std::move(encoded_extension),
             encode_form_close_events(document),
             raw("1"),
             raw("4"),

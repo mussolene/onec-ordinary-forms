@@ -86,6 +86,7 @@
   <xs:simpleType name="TypeDomainTermType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="unknown"/>
+      <xs:enumeration value="object"/>
       <xs:enumeration value="list"/>
       <xs:enumeration value="boolean"/>
       <xs:enumeration value="binary"/>
@@ -1677,6 +1678,8 @@
       <xs:element name="Width" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Controls" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ThisForm" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="MainAttribute" minOccurs="0" maxOccurs="1"><xs:complexType><xs:attribute name="attributeId" type="ObjectIdType" use="required"/></xs:complexType></xs:element>
+      <xs:element name="DataProcessorFormExtension" minOccurs="0" maxOccurs="1"><xs:complexType/></xs:element>
       <xs:element name="Events" type="FormEventsType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Attributes" type="AttributesType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Commands" type="CommandsType" minOccurs="0" maxOccurs="1"/>

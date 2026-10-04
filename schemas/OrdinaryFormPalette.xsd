@@ -84,6 +84,8 @@
           <Property name="Collapse" apiName="Collapse" russianName="Свертка" russianType="РежимСверткиЭлементаУправления" valueCodec="enumeration"/>
           <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="integer32"/>
         </SharedProperties>
+        <NamedConcept name="MainAttribute" russianName="Основной реквизит"/>
+        <NamedConcept name="DataProcessorFormExtension" russianName="Расширение формы обработки"/>
         <Controls>
           <Control name="Panel" apiName="Panel" russianName="Панель" children="controlsAndPages">
             <Properties>

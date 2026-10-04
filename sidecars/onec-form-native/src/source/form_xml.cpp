@@ -521,8 +521,9 @@ model::CompositeIdValue parse_composite_id(xmlNodePtr node) {
 }
 
 model::TypeDomainTerm parse_type_domain_term(std::string_view value, xmlNodePtr node) {
-    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 11> terms{{
+    static constexpr std::array<std::pair<std::string_view, model::TypeDomainTerm>, 12> terms{{
         {"unknown", model::TypeDomainTerm::unknown},
+        {"object", model::TypeDomainTerm::object},
         {"list", model::TypeDomainTerm::list},
         {"boolean", model::TypeDomainTerm::boolean},
         {"binary", model::TypeDomainTerm::binary},
@@ -562,7 +563,7 @@ model::TypeDomainPatternValue parse_type_domain(xmlNodePtr node) {
         const auto time = optional_attribute(entry_node, "time");
 
         const bool reference_like =
-            entry.term == model::TypeDomainTerm::unknown ||
+            entry.term == model::TypeDomainTerm::object ||
             entry.term == model::TypeDomainTerm::list ||
             entry.term == model::TypeDomainTerm::reference ||
             entry.term == model::TypeDomainTerm::type;
@@ -571,6 +572,7 @@ model::TypeDomainPatternValue parse_type_domain(xmlNodePtr node) {
         const bool binary = entry.term == model::TypeDomainTerm::binary;
         const bool date_term = entry.term == model::TypeDomainTerm::date;
         const bool invalid_attributes =
+            (entry.term == model::TypeDomainTerm::object && !type_uuid.has_value()) ||
             (!reference_like && type_uuid.has_value()) ||
             (!numeric && (precision.has_value() || non_negative.has_value())) ||
             (!(numeric || string || binary) && length.has_value()) ||
@@ -1148,7 +1150,11 @@ public:
 
         for (xmlNodePtr child : element_children(root)) {
             const std::string name = node_name(child);
-            if (name == "Events") {
+            if (name == "MainAttribute") {
+                form.main_attribute = model::AttributeRef{parse_object_id(required_attribute(child, "attributeId"), child)};
+            } else if (name == mm::data_processor_form_extension.xml_name) {
+                form.extension = mm::data_processor_form_extension.kind;
+            } else if (name == "Events") {
                 form.events = parse_form_events(child, form.id);
             } else if (name == "Attributes") {
                 parse_attributes(child);
@@ -2202,6 +2208,7 @@ private:
 std::string_view type_domain_term_name(model::TypeDomainTerm term) {
     switch (term) {
         case model::TypeDomainTerm::unknown: return "unknown";
+        case model::TypeDomainTerm::object: return "object";
         case model::TypeDomainTerm::list: return "list";
         case model::TypeDomainTerm::boolean: return "boolean";
         case model::TypeDomainTerm::binary: return "binary";
@@ -2274,6 +2281,11 @@ public:
             {"ordinaryFormVersion", std::string(ordinary_form_xml_version)},
         });
         write_property_set(form.properties, metamodel_.form_properties(), form_id);
+        if (form.main_attribute.id())
+            writer_.empty("MainAttribute", {{"attributeId", object_id_text(form.main_attribute.id())}});
+        if (form.extension) {
+            writer_.empty(mm::data_processor_form_extension.xml_name);
+        }
         write_events("Events", form.events, metamodel_.form_events(), form_id);
         write_attributes();
         write_commands();
@@ -2367,6 +2379,15 @@ private:
             XmlAttributes attributes{{"term", std::string(type_domain_term_name(entry.term))}};
             switch (entry.term) {
                 case model::TypeDomainTerm::unknown:
+                    if (entry.type_uuid)
+                        serialization_fail(std::string(object_id), "TypeDomain", "encoding unknown type", "object UUID",
+                            "A concrete object UUID requires the named object term");
+                    break;
+                case model::TypeDomainTerm::object:
+                    if (!entry.type_uuid)
+                        serialization_fail(std::string(object_id), "TypeDomain", "encoding object type", "missing UUID",
+                            "A concrete object type requires its UUID");
+                    [[fallthrough]];
                 case model::TypeDomainTerm::list:
                 case model::TypeDomainTerm::reference:
                 case model::TypeDomainTerm::type:
