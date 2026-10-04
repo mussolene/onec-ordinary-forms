@@ -98,7 +98,7 @@
               <Property name="TabOrder" apiName="TabOrder" russianName="ПорядокОбхода" russianType="Число" valueCodec="decimal"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
               <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="РазмерКартинки" valueCodec="enumeration"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="SeparateByPage" apiName="SeparateByPage" russianName="РаспределятьПоСтраницам" russianType="Булево" valueCodec="boolean"/>
               <Property name="ScrollPageMode" apiName="ScrollPageMode" russianName="РежимПрокручиваемыхСтраниц" russianType="Булево" valueCodec="boolean"/>
               <Property name="Pages" apiName="Pages" russianName="Страницы" russianType="СтраницыПанели" valueCodec="unclassified"/>
@@ -122,7 +122,7 @@
               <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="ButtonTextColor" apiName="ButtonTextColor" russianName="ЦветТекстаКнопки" russianType="Цвет" valueCodec="color"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
@@ -167,7 +167,7 @@
               <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="РазмерКартинки" valueCodec="enumeration"/>
               <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
               <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
               <Property name="NonselectedPictureText" apiName="NonselectedPictureText" russianName="ТекстНевыбраннойКартинки" russianType="Строка" valueCodec="string"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
@@ -192,7 +192,7 @@
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="TitleLocation" apiName="TitleLocation" russianName="ПоложениеЗаголовка" russianType="ПоложениеЗаголовка" valueCodec="enumeration"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="ThreeState" apiName="ThreeState" russianName="ТриСостояния" russianType="Булево" valueCodec="boolean"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
@@ -218,7 +218,7 @@
               <Property name="SpinButton" apiName="SpinButton" russianName="КнопкаРегулирования" russianType="Булево" valueCodec="boolean"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="ChoiceList" apiName="ChoiceList" russianName="СписокВыбора" russianType="СписокЗначений" valueCodec="unclassified"/>
               <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
@@ -249,7 +249,7 @@
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="TitleLocation" apiName="TitleLocation" russianName="ПоложениеЗаголовка" russianType="ПоложениеЗаголовка" valueCodec="enumeration"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
               <Property name="FieldTextColor" apiName="FieldTextColor" russianName="ЦветТекстаПоля" russianType="Цвет" valueCodec="color"/>
@@ -290,7 +290,7 @@
               <Property name="MarkIncomplete" apiName="MarkIncomplete" russianName="ОтметкаНезаполненного" russianType="Булево" valueCodec="boolean"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="ExtendedEdit" apiName="ExtendedEdit" russianName="РасширенноеРедактирование" russianType="Булево" valueCodec="boolean"/>
               <Property name="TextEdit" apiName="TextEdit" russianName="РедактированиеТекста" russianType="Булево" valueCodec="boolean"/>
               <Property name="ListChoiceMode" apiName="ListChoiceMode" russianName="РежимВыбораИзСписка" russianType="Булево" valueCodec="boolean"/>
@@ -327,7 +327,7 @@
               <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
@@ -341,7 +341,7 @@
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
               <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
             </Properties>
@@ -389,8 +389,8 @@
               <Property name="TransparentLabel" apiName="TransparentLabel" russianName="ПрозрачныйФонПодписей" russianType="Булево" valueCodec="boolean"/>
               <Property name="HideBaseValue" apiName="HideBaseValue" russianName="ПропускатьБазовоеЗначение" russianType="Булево" valueCodec="boolean"/>
               <Property name="LabelDelimiter" apiName="LabelDelimiter" russianName="РазделительПодписей" russianType="Строка" valueCodec="string"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
-              <Property name="LabelBorder" apiName="LabelBorder" russianName="РамкаПодписей" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="LabelBorder" apiName="LabelBorder" russianName="РамкаПодписей" russianType="Рамка" valueCodec="border"/>
               <Property name="SpaceMode" apiName="SpaceMode" russianName="РежимПробелов" russianType="РежимПробеловДиаграммы" valueCodec="enumeration"/>
               <Property name="Light" apiName="Light" russianName="Свет" russianType="Булево" valueCodec="boolean"/>
               <Property name="SummarySeries" apiName="SummarySeries" russianName="СводнаяСерия" russianType="СерияДиаграммы" valueCodec="unclassified"/>
@@ -467,7 +467,7 @@
             <Properties>
               <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
               <Property name="Document" apiName="Document" russianName="Документ" russianType="COMОбъект" valueCodec="unclassified"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
             </Properties>
             <Events>
@@ -480,7 +480,7 @@
               <Property name="ShowPicture" apiName="ShowPicture" russianName="ОтображатьКартинку" russianType="Булево" valueCodec="boolean"/>
               <Property name="ShowCheckBox" apiName="ShowCheckBox" russianName="ОтображатьПометку" russianType="Булево" valueCodec="boolean"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="CurrentRow" apiName="CurrentRow" russianName="ТекущаяСтрока" russianType="ЭлементСпискаЗначений" valueCodec="unclassified"/>
               <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
@@ -501,7 +501,7 @@
               <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
               <Property name="ShowPercent" apiName="ShowPercent" russianName="ОтображатьПроценты" russianType="Булево" valueCodec="boolean"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="ShowStyle" apiName="ShowStyle" russianName="СтильОтображения" russianType="РежимСглаживанияИндикатора" valueCodec="enumeration"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
@@ -521,7 +521,7 @@
               <Property name="MarkingAppearance" apiName="MarkingAppearance" russianName="ОтображениеРазметки" russianType="ОтображениеРазметкиПолосыРегулирования" valueCodec="enumeration"/>
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
               <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
@@ -544,7 +544,7 @@
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
               <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="SelectionMode" apiName="SelectionMode" russianName="РежимВыделения" russianType="РежимВыделенияДаты" valueCodec="enumeration"/>
               <Property name="CurrentDate" apiName="CurrentDate" russianName="ТекущаяДата" russianType="Дата" valueCodec="date"/>
               <Property name="HolidayColor" apiName="HolidayColor" russianName="ЦветВыходныхДней" russianType="Цвет" valueCodec="color"/>
@@ -572,7 +572,7 @@
             <Properties>
               <Property name="SelectedText" apiName="SelectedText" russianName="ВыделенныйТекст" russianType="Строка" valueCodec="string"/>
               <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
               <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
             </Properties>
@@ -637,7 +637,7 @@
               <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
               <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
               <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="RowInputMode" apiName="RowInputMode" russianName="РежимВводаСтрок" russianType="РежимВводаСтрокТабличногоПоля" valueCodec="enumeration"/>
               <Property name="ChoiceMode" apiName="ChoiceMode" russianName="РежимВыбора" russianType="Булево" valueCodec="boolean"/>
               <Property name="SelectionMode" apiName="SelectionMode" russianName="РежимВыделения" russianType="РежимВыделенияТабличногоПоля" valueCodec="enumeration"/>
@@ -697,7 +697,7 @@
               <Property name="ShowSelection" apiName="ShowSelection" russianName="ОтображатьВыделение" russianType="ТипОтображенияВыделенияТабличногоДокумента" valueCodec="enumeration"/>
               <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
               <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
             </Properties>
             <Events>
@@ -725,7 +725,7 @@
               <Property name="LabelPictureLocation" apiName="LabelPictureLocation" russianName="ПоложениеКартинкиНадписи" russianType="ПоложениеКартинкиНадписи" valueCodec="enumeration"/>
               <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
               <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="РазмерКартинки" valueCodec="enumeration"/>
-              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
               <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
               <Property name="Format" apiName="Format" russianName="Формат" russianType="Строка" valueCodec="string"/>
               <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>

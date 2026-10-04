@@ -16,6 +16,36 @@
 #include "oof/storage/value_codec.hpp"
 
 namespace oof::model {
+
+bool valid_border_value(const BorderValue& value) noexcept {
+    if (static_cast<unsigned>(value.border_type) > static_cast<unsigned>(ControlBorderType::rounded) ||
+        value.width > 5) return false;
+    switch (value.kind) {
+        case BorderKind::absolute:
+            return std::holds_alternative<std::monostate>(value.style) &&
+                (value.border_type != ControlBorderType::without_border || value.width <= 1) &&
+                (value.border_type != ControlBorderType::rounded || value.width == 1);
+        case BorderKind::style_reference:
+            if (value.border_type != ControlBorderType::without_border || value.width != 0) return false;
+            if (const auto* name = std::get_if<QualifiedName>(&value.style)) return !name->value.empty();
+            if (const auto* composite = std::get_if<CompositeIdValue>(&value.style)) {
+                const auto& uuid = composite->uuid.canonical;
+                if (composite->is_null || uuid.size() != 36 ||
+                    (composite->object_id == 0 && uuid == "00000000-0000-0000-0000-000000000000")) return false;
+                for (std::size_t index = 0; index < uuid.size(); ++index) {
+                    if (index == 8 || index == 13 || index == 18 || index == 23) {
+                        if (uuid[index] != '-') return false;
+                    } else if (!((uuid[index] >= '0' && uuid[index] <= '9') ||
+                                 (uuid[index] >= 'a' && uuid[index] <= 'f') ||
+                                 (uuid[index] >= 'A' && uuid[index] <= 'F'))) return false;
+                }
+                return true;
+            }
+            return false;
+    }
+    return false;
+}
+
 namespace {
 
 void add_violation(
@@ -63,6 +93,8 @@ bool property_value_matches(
                 return expected == metamodel::ValueCodec::type_domain;
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
                 return expected == metamodel::ValueCodec::enumeration;
+            } else if constexpr (std::is_same_v<Value, BorderValue>) {
+                return expected == metamodel::ValueCodec::border && valid_border_value(typed_value);
             } else if constexpr (std::is_same_v<Value, ColorValue>) {
                 return expected == metamodel::ValueCodec::color;
             } else if constexpr (std::is_same_v<Value, FontValue>) {

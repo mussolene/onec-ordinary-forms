@@ -109,6 +109,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "EnumerationValueType";
         case ValueCodec::color:
             return "ColorValueType";
+        case ValueCodec::border:
+            return "BorderValueType";
         case ValueCodec::font:
             return "FontValueType";
         case ValueCodec::picture:
@@ -397,6 +399,40 @@ void append_value_types(std::string& output) {
       <xs:enumeration value="styleReference"/>
     </xs:restriction>
   </xs:simpleType>
+
+  <xs:simpleType name="BorderKindType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="absolute"/>
+      <xs:enumeration value="styleReference"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="ControlBorderTypeValueType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="WithoutBorder"/>
+      <xs:enumeration value="Single"/>
+      <xs:enumeration value="Double"/>
+      <xs:enumeration value="Embossed"/>
+      <xs:enumeration value="Indented"/>
+      <xs:enumeration value="Underline"/>
+      <xs:enumeration value="DoubleUnderline"/>
+      <xs:enumeration value="Overline"/>
+      <xs:enumeration value="Rounded"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:simpleType name="BorderWidthType">
+    <xs:restriction base="xs:unsignedInt">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="5"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="BorderValueType">
+    <xs:attribute name="kind" type="BorderKindType" use="required"/>
+    <xs:attribute name="borderType" type="ControlBorderTypeValueType" use="optional"/>
+    <xs:attribute name="width" type="BorderWidthType" use="optional"/>
+    <xs:attribute name="styleName" type="NonEmptyTokenType" use="optional"/>
+    <xs:attribute name="styleObjectId" type="xs:long" use="optional"/>
+    <xs:attribute name="styleUuid" type="UuidValueType" use="optional"/>
+  </xs:complexType>
 
   <xs:complexType name="ColorValueType">
     <xs:attribute name="kind" type="ColorKindType" use="required"/>

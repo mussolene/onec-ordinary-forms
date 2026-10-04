@@ -64,6 +64,8 @@ ValueCodec initial_value_codec(ValueKind kind, std::u8string_view platform_type)
             return ValueCodec::color;
         case ValueKind::font:
             return ValueCodec::font;
+        case ValueKind::border:
+            return ValueCodec::border;
         case ValueKind::shortcut:
             return ValueCodec::shortcut;
         case ValueKind::identifier:
@@ -74,7 +76,6 @@ ValueCodec initial_value_codec(ValueKind kind, std::u8string_view platform_type)
             return platform_type == u8"ОписаниеТипов" ? ValueCodec::type_domain
                                                        : ValueCodec::unclassified;
         case ValueKind::unknown:
-        case ValueKind::border:
         case ValueKind::binary:
         case ValueKind::collection:
         case ValueKind::variant:
@@ -656,6 +657,7 @@ void apply_proven_storage_overrides(
     main_panel->persistence = PersistenceClass::persisted_editable;
     main_panel->storage_codec = StorageCodec::root_record;
     auto& command_bar = properties[static_cast<std::size_t>(ControlKind::command_bar)];
+    classify_property(command_bar, "Border", StorageCodec::control_base, DefaultKind::border, "WithoutBorder:0");
     classify_property(command_bar, "Secondary", StorageCodec::control_info, DefaultKind::boolean, "true");
     classify_property(command_bar, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(command_bar, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
@@ -1656,6 +1658,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "type-domain";
         case ValueCodec::enumeration:
             return "enumeration";
+        case ValueCodec::border:
+            return "border";
         case ValueCodec::color:
             return "color";
         case ValueCodec::font:
