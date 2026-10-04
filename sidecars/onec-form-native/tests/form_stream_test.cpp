@@ -2458,6 +2458,50 @@ void test_command_bar_owner_pair_and_strict_profile() {
         "zero footer must remain unsupported for a nonempty collection");
 }
 
+void test_command_bar_creation_state_and_strict_record_guards() {
+    for (const auto nonempty : {false, true}) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "CommandBarCreationState";
+        form.children = {model::ControlRef{model::ObjectId{4}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode bar{model::ObjectId{4}, "Tools", model::CommandBarPayload{}};
+        bar.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Own state test"));
+        if (nonempty) {
+            bar.properties().set_explicit(model::PropertyId::from_name("Secondary"), false);
+            model::CommandBarButton action; action.name = "Run"; action.action = "RunHandler"; action.default_button = true;
+            std::get<model::CommandBarPayload>(bar.payload).buttons = {action};
+        }
+        document.add_control(std::move(bar));
+        const auto canonical = form_stream::encode_document(document);
+        expect(canonical.ok(), "own CommandBar fixture must encode");
+        auto created = canonical.value();
+        const auto base_at = [](auto& tree) -> auto& {
+            return tree.items[1].items[2].items[2].items[1].items[2].items[1].items[0];
+        };
+        base_at(created).items[17] = list_stream::ListValue::raw_atom("1");
+        const auto decoded = form_stream::decode_document(created, "CommandBarCreationState");
+        expect(decoded.ok(), "observed creation state must decode for empty and default-action menus");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        const auto canonical_document = form_stream::decode_document(canonical.value(), "CommandBarCreationState");
+        const auto canonical_xml = source::serialize_form_xml(canonical_document.value());
+        expect(xml.ok() && canonical_xml.ok() && xml.value() == canonical_xml.value(),
+            "creation state must not become a public property or alter named menu semantics");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "named CommandBar XML must parse");
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(canonical.value()),
+            "XML-only rebuild must derive canonical runtime state while retaining default action and tooltip");
+        for (const auto state : {"0", "3", "-1", "01"}) {
+            auto invalid = created; base_at(invalid).items[17] = list_stream::ListValue::raw_atom(state);
+            expect(!form_stream::decode_document(invalid, "UnknownCreationState"), "unproven internal states must reject");
+        }
+        auto quoted = created; base_at(quoted).items[17] = list_stream::ListValue::string_atom("1");
+        expect(!form_stream::decode_document(quoted, "QuotedCreationState"), "state must be a raw integer atom");
+        auto unrelated = created; base_at(unrelated).items[16] = list_stream::ListValue::raw_atom("1");
+        expect(!form_stream::decode_document(unrelated, "UnprovenAdjacentField"),
+            "known state must not hide an unmodeled adjacent variation");
+    }
+}
+
 void test_command_bar_border_named_round_trip_and_guards() {
     const auto make_document = [](const model::BorderValue& border) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "CommandBarBorder";
@@ -9444,6 +9488,7 @@ int main() {
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
         test_command_bar_owner_pair_and_strict_profile();
+        test_command_bar_creation_state_and_strict_record_guards();
         test_command_bar_border_named_round_trip_and_guards();
         test_command_bar_colors_named_round_trip_and_guards();
         test_command_bar_default_button_round_trip_and_guards();
