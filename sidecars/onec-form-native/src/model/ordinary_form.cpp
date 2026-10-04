@@ -80,6 +80,25 @@ bool property_value_matches(
         value);
 }
 
+bool canonical_chart_decimal(std::string_view value) {
+    if (value.empty()) return false;
+    if (value.front() == '-') value.remove_prefix(1);
+    if (value.empty()) return false;
+    const auto point = value.find('.');
+    if (point != std::string_view::npos && value.find('.', point + 1) != std::string_view::npos) return false;
+    const auto integer = point == std::string_view::npos ? value : value.substr(0, point);
+    const auto fraction = point == std::string_view::npos ? std::string_view{} : value.substr(point + 1);
+    const auto digits = [](std::string_view part) {
+        return std::ranges::all_of(part, [](unsigned char c) { return c >= '0' && c <= '9'; });
+    };
+    if ((!integer.empty() && !digits(integer)) || (!fraction.empty() && !digits(fraction)) ||
+        (integer.empty() && fraction.empty())) return false;
+    if (integer.size() > 1 && integer.front() == '0') return false;
+    if (!fraction.empty() && fraction.back() == '0') return false;
+    if (fraction.empty() && point != std::string_view::npos) return false;
+    return !(value == "-0");
+}
+
 }  // namespace
 
 const PropertyEntry* PropertySet::find(PropertyId id) const noexcept {
@@ -880,6 +899,61 @@ ValidationReport OrdinaryFormDocument::validate() const {
             [](const metamodel::PropertyDescriptor& descriptor) {
                 return descriptor.surface == metamodel::PropertySurface::control_payload;
             });
+        if (const auto* chart = std::get_if<ChartPayload>(&control.payload)) {
+            const auto invalid_chart = [&](std::string reason) {
+                add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
+            };
+            if (control.kind() != ControlKind::chart) {
+                invalid_chart("Chart payload is attached to a non-Chart control");
+            }
+            if (!chart->points.empty() && chart->series.size() >
+                std::numeric_limits<std::size_t>::max() / chart->points.size()) {
+                invalid_chart("Chart dense Values dimensions overflow");
+            } else if (chart->values.size() != chart->series.size() * chart->points.size()) {
+                invalid_chart("Chart Values must be a dense Series by Point matrix");
+            }
+            std::unordered_set<ObjectId, ObjectIdHash> series_ids;
+            for (const auto& series : chart->series) {
+                if (!series.id || series.id.value() == 1 || !series_ids.insert(series.id).second) {
+                    invalid_chart("Chart Series IDs must be unique, positive, and distinct from reserved summary ID 1");
+                }
+                const bool absolute_color = series.color.kind == ColorKind::absolute && series.color.alpha == 255 &&
+                    std::holds_alternative<std::monostate>(series.color.style);
+                if (!absolute_color) {
+                    invalid_chart("Chart Series Color must be an absolute opaque RGB value");
+                }
+                if (series.marker.type_name != "ChartMarkerType" ||
+                    (series.marker.member != "Auto" && series.marker.member != "Alternation" &&
+                     series.marker.member != "Rect" && series.marker.member != "Circle" &&
+                     series.marker.member != "None" && series.marker.member != "Rhomb")) {
+                    invalid_chart("Chart Series Marker must name a supported ТипМаркераДиаграммы member");
+                }
+            }
+            std::unordered_set<ObjectId, ObjectIdHash> point_ids;
+            for (const auto& point : chart->points) {
+                if (!point.id || !point_ids.insert(point.id).second) {
+                    invalid_chart("Chart Point IDs must be positive and unique");
+                }
+                const bool absolute_color = point.color.kind == ColorKind::absolute && point.color.alpha == 255 &&
+                    std::holds_alternative<std::monostate>(point.color.style);
+                if (!absolute_color) {
+                    invalid_chart("Chart Point Color must be an absolute opaque RGB value");
+                }
+            }
+            std::set<std::pair<ObjectId, ObjectId>> value_pairs;
+            for (const auto& value : chart->values) {
+                if (!series_ids.contains(value.series_ref) || !point_ids.contains(value.point_ref)) {
+                    invalid_chart("Chart Value references must resolve to a Series and a Point");
+                }
+                if (!value_pairs.emplace(value.series_ref, value.point_ref).second) {
+                    invalid_chart("Chart Value pairs must be unique");
+                }
+                if (const auto* number = std::get_if<DecimalValue>(&value.value);
+                    number != nullptr && !canonical_chart_decimal(number->canonical)) {
+                    invalid_chart("Chart Value Number must contain a decimal value");
+                }
+            }
+        }
     }
 
     for (const auto& page : collections_.pages) {

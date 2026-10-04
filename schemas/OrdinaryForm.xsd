@@ -183,6 +183,13 @@
       </xs:extension>
     </xs:simpleContent>
   </xs:complexType>
+  <xs:complexType name="ChartSeriesType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Marker" type="EnumerationValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:complexType name="ChartValueType"><xs:choice><xs:element name="Number" type="xs:decimal"/><xs:element name="Undefined" type="UndefinedValueType"/></xs:choice><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/><xs:attribute name="pointRef" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:complexType name="ChartSeriesCollectionType"><xs:sequence><xs:element name="ChartSeries" type="ChartSeriesType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="ChartPointCollectionType"><xs:sequence><xs:element name="ChartPoint" type="ChartPointType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="ChartValueCollectionType"><xs:sequence><xs:element name="ChartValue" type="ChartValueType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+
 
   <xs:simpleType name="ShortcutKeyType">
     <xs:restriction base="xs:string">
@@ -2119,12 +2126,10 @@
       <xs:element name="SpaceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Light" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SummarySeries" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Series" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SeriesInRows" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChartType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="GaugeBushThickness" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
       <xs:element name="GaugeThickness" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Points" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ValueLabelFormat" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="PercentLabelFormat" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="GaugeBushColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
@@ -2134,6 +2139,10 @@
       <xs:element name="BackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LabelBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LabelFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Title" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Series" type="ChartSeriesCollectionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Points" type="ChartPointCollectionType" minOccurs="1" maxOccurs="1"/>
+      <xs:element name="Values" type="ChartValueCollectionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Events" type="ChartEventsType" minOccurs="0" maxOccurs="1"/>
     </xs:sequence>
     <xs:attribute name="name" type="xs:string" use="required"/>

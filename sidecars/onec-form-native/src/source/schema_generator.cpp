@@ -451,6 +451,15 @@ void append_value_types(std::string& output) {
   </xs:complexType>
 )XSD";
 
+    output += R"XSD(  <xs:complexType name="ChartSeriesType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Marker" type="EnumerationValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:complexType name="ChartValueType"><xs:choice><xs:element name="Number" type="xs:decimal"/><xs:element name="Undefined" type="UndefinedValueType"/></xs:choice><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/><xs:attribute name="pointRef" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:complexType name="ChartSeriesCollectionType"><xs:sequence><xs:element name="ChartSeries" type="ChartSeriesType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="ChartPointCollectionType"><xs:sequence><xs:element name="ChartPoint" type="ChartPointType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:complexType name="ChartValueCollectionType"><xs:sequence><xs:element name="ChartValue" type="ChartValueType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+
+)XSD";
+
     output += "\n  <xs:simpleType name=\"ShortcutKeyType\">\n    <xs:restriction base=\"xs:string\">\n";
     for (const auto& key : model::metamodel::shortcut_key_descriptors()) {
         output += "      <xs:enumeration value=\"";
@@ -803,19 +812,30 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             metamodel.control_extension_properties());
         output +=
             "      <xs:element name=\"Position\" type=\"PositionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
-        if (control.kind == model::ControlKind::spreadsheet_document_field) {
-            output +=
-                "      <xs:element name=\"Document\" type=\"SpreadsheetDocumentType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
-        }
-        for (const auto& property : metamodel.properties_for(control.kind)) {
-            if (control.kind == ControlKind::table && property.api_name == "Columns") {
+        if (control.kind == model::ControlKind::chart) {
+            std::vector<model::metamodel::PropertyDescriptor> chart_properties;
+            for (const auto& property : metamodel.properties_for(control.kind)) {
+                if (property.api_name != "Series" && property.api_name != "Points") chart_properties.push_back(property);
+            }
+            append_property_elements(output, chart_properties);
+            output += "      <xs:element name=\"Series\" type=\"ChartSeriesCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+            output += "      <xs:element name=\"Points\" type=\"ChartPointCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+            output += "      <xs:element name=\"Values\" type=\"ChartValueCollectionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+        } else {
+            if (control.kind == model::ControlKind::spreadsheet_document_field) {
                 output +=
-                    "      <xs:element name=\"Columns\" type=\"TableColumnsType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
-            } else if (control.kind == ControlKind::choice_field &&
-                property.persistence == model::metamodel::PersistenceClass::runtime_only) {
-                continue;
-            } else {
-                append_property_element(output, property, "      ");
+                    "      <xs:element name=\"Document\" type=\"SpreadsheetDocumentType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
+            }
+            for (const auto& property : metamodel.properties_for(control.kind)) {
+                if (control.kind == model::ControlKind::table && property.api_name == "Columns") {
+                    output +=
+                        "      <xs:element name=\"Columns\" type=\"TableColumnsType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+                } else if (control.kind == model::ControlKind::choice_field &&
+                    property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+                    continue;
+                } else {
+                    append_property_element(output, property, "      ");
+                }
             }
         }
 
@@ -950,6 +970,12 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
     }
     output +=
         "        </StandardPictures>\n"
+        "        <NamedConcept name=\"ChartSeries\" russianName=\"СерияДиаграммы\"><Properties>\n"
+        "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/><Property name=\"Marker\" apiName=\"Маркер\" russianType=\"ТипМаркераДиаграммы\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"ChartPoint\" russianName=\"ТочкаДиаграммы\"><Properties>\n"
+        "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/>\n"
+        "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"CommandBarButton\" russianName=\"КнопкаКоманднойПанели\"><Properties>\n"
         "          <Property name=\"Name\" russianName=\"Имя\"/><Property name=\"Type\" russianName=\"ТипКнопки\"/>\n"
         "          <Property name=\"Text\" russianName=\"Текст\"/><Property name=\"Explanation\" russianName=\"Пояснение\"/><Property name=\"ToolTip\" russianName=\"Подсказка\"/>\n"
