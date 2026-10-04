@@ -2418,6 +2418,73 @@ void test_radio_button_basic_observed_record_and_rejections() {
         "multilingual RadioButton Caption must be rejected without loss");
 }
 
+void test_text_document_field_persisted_profile_and_rejections() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "TextDocumentForm";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode field{model::ObjectId{2}, "DocumentText", model::TextDocumentFieldPayload{}};
+    field.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    model::ColorValue color;
+    color.kind = model::ColorKind::absolute;
+    color.red = 255;
+    field.properties().set_explicit(model::PropertyId::from_name("BorderColor"), color);
+    model::FontValue font;
+    font.kind = model::FontKind::absolute;
+    font.face_name = "Verdana";
+    font.height = 20;
+    font.bold = true;
+    field.properties().set_explicit(model::PropertyId::from_name("Font"), font);
+    document.add_control(std::move(field));
+
+    for (const auto name : {"Enabled", "BorderColor", "Font"}) {
+        const auto* descriptor = model::metamodel::find_property(model::ControlKind::text_document_field, name);
+        expect(descriptor != nullptr && descriptor->persistence == model::metamodel::PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == model::metamodel::StorageCodec::control_base,
+            "TextDocumentField persisted properties must use their typed base descriptor");
+    }
+    expect(model::metamodel::find_property(model::ControlKind::text_document_field, "Border")->persistence ==
+        model::metamodel::PersistenceClass::unclassified,
+        "unverified Border value remains unclassified");
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "TextDocumentField must encode from named properties" :
+        encoded.diagnostics().front().code + ":" + encoded.diagnostics().front().path + ":" + encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "TextDocumentForm");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ":" + decoded.diagnostics().front().message);
+    if (!decoded.ok()) return;
+    const auto* round_trip = decoded.value().find_control(model::ObjectId{2});
+    expect(round_trip != nullptr && round_trip->kind() == model::ControlKind::text_document_field && round_trip->name == "DocumentText",
+        "TextDocumentField identity must survive native stream round-trip");
+    if (round_trip == nullptr) return;
+    const auto* enabled = round_trip->properties().find(model::PropertyId::from_name("Enabled"));
+    const auto* actual_color = round_trip->properties().find(model::PropertyId::from_name("BorderColor"));
+    const auto* actual_font = round_trip->properties().find(model::PropertyId::from_name("Font"));
+    expect(enabled != nullptr && !std::get<bool>(enabled->value), "Enabled=false must survive TextDocumentField round-trip");
+    expect(actual_color != nullptr && std::get<model::ColorValue>(actual_color->value) == color,
+        "BorderColor must survive TextDocumentField round-trip");
+    expect(actual_font != nullptr && std::get<model::FontValue>(actual_font->value) == font,
+        "Font must survive TextDocumentField round-trip");
+
+    auto changed = encoded.value();
+    std::function<list_stream::ListValue*(list_stream::ListValue&)> find_text_document_record;
+    find_text_document_record = [&](list_stream::ListValue& value) -> list_stream::ListValue* {
+        if (value.is_list && value.items.size() == 6 && !value.items.empty() &&
+            !value.items[0].is_list && value.items[0].atom == model::metamodel::descriptor_for(model::ControlKind::text_document_field).guid)
+            return &value;
+        for (auto& item : value.items) if (auto* found = find_text_document_record(item)) return found;
+        return nullptr;
+    };
+    auto* text_doc_record = find_text_document_record(changed);
+    expect(text_doc_record != nullptr, "encoded TextDocumentField record must be discoverable in the stream");
+    if (text_doc_record == nullptr) return;
+    text_doc_record->items[2].items[1] = list_stream::ListValue::raw_atom("7");
+    expect_failure(form_stream::decode_document(changed, "TextDocumentForm"), "OOF1114",
+        "$/1/2/2/1/2", "unknown TextDocumentField record variant must fail closed");
+
+}
+
 void test_calendar_field_enabled_round_trip_and_rejections() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -4933,6 +5000,7 @@ int main() {
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();
         test_calendar_field_enabled_round_trip_and_rejections();
+        test_text_document_field_persisted_profile_and_rejections();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();
         test_progress_data_path_mixed_with_existing_links();
