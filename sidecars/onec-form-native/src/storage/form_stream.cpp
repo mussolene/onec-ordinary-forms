@@ -819,6 +819,23 @@ LV canonical_command_bar_properties(bool enabled, std::string_view tool_tip,
     return list(std::move(properties));
 }
 
+
+LV canonical_usual_group_properties(bool enabled, std::string_view caption, std::string_view tool_tip) {
+    auto base = parse_constant(
+        "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,4,700,1,100},0,{4,4,{0},4},{4,4,{0},4},"
+        "{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
+        "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
+    base.items[1] = raw(enabled ? "1" : "0");
+    base.items[12] = encoded_localized(tool_tip);
+    return list({raw("0"), list({
+        std::move(base),
+        raw("8"),
+        encoded_localized(caption),
+        parse_constant("{3,0,{0},6,1,0,cf48d3ca-5bd4-45b9-bb8f-a0922a8335f2}"),
+        raw("0"),
+    })});
+}
+
 LV canonical_picture_properties(bool enabled, std::string_view tool_tip = {}) {
     auto properties = parse_constant(
         R"({{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},20,0,0,{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,2,0,0,1,2},{0,0,0},1,1,0,0,{1,0},0,1,1,1})");
@@ -2299,6 +2316,59 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     std::get<model::CommandBarPayload>(control.payload).buttons = std::move(menu.entries);
     control.position = geometry.position;
     return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, std::move(menu.assets)};
+}
+
+
+DecodedControl decode_usual_group(const LV& record, std::string_view path, const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::usual_group);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 UsualGroup ID", std::to_string(raw_id),
+            "UsualGroup ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 2, info_path);
+    require_raw_constant(info.items[0], "0", child_path(info_path, 0));
+    const auto& properties = info.items[1];
+    const auto properties_path = child_path(info_path, 1);
+    require_arity(properties, 5, properties_path);
+    const auto& base = properties.items[0];
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(base, 21, base_path);
+    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
+    const std::string caption = decoded_single_language_text(properties.items[2], child_path(properties_path, 2));
+    auto normalized = properties;
+    auto normalized_base = base;
+    normalized_base.items[12] = encoded_localized(tool_tip);
+    normalized.items[0] = std::move(normalized_base);
+    normalized.items[2] = encoded_localized(caption);
+    require_exact(normalized, canonical_usual_group_properties(enabled, caption, tool_tip).items[1],
+        properties_path, "UsualGroup contains an unsupported property or event variation");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const auto name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+        "Control name is required");
+    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "UsualGroup metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "UsualGroup children are not supported by the executable storage profile");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::UsualGroupPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
 DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context) {
@@ -4702,6 +4772,9 @@ Result<model::OrdinaryFormDocument> decode_document(
                     DecodedControl child;
                     if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
                     else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
+                        child = decode_usual_group(record, record_path, context);
+
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid)
                         child = decode_radio_button(record, record_path, context);
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
@@ -5098,6 +5171,31 @@ Result<list_stream::ListValue> encode_document(
                     record = encode_command_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
+                } else if (control->kind() == model::ControlKind::usual_group) {
+                    if (control->id.value() == 0 || control->id.value() > static_cast<std::uint64_t>(
+                            std::numeric_limits<std::int64_t>::max())) {
+                        fail("OOF1122", "$/UsualGroup/ID", "positive int64 UsualGroup ID",
+                            std::to_string(control->id.value()), "UsualGroup ID is invalid");
+                    }
+                    if (control->name.empty() || control->data_path || !control->extension_properties.empty() ||
+                        !control->children.empty() || !control->events.empty() ||
+                        control->position.default_control.is_explicit() || control->position.tab_order.is_explicit() ||
+                        control->position.z_order.is_explicit() || control->position.collapse.is_explicit() ||
+                        !control->position.bindings.dimensions.empty()) {
+                        fail("OOF1122", child_path(path, ordinal), "plain childless UsualGroup with basic Position",
+                            control->name, "UsualGroup uses an unsupported storage concept");
+                    }
+                    require_allowed_properties(control->properties(), {"Caption", "Enabled", "ToolTip"},
+                        child_path(path, ordinal) + "/UsualGroup");
+                    const bool enabled = explicit_bool(control->properties(), "Enabled", true);
+                    const auto caption = explicit_string(control->properties(), "Caption");
+                    const auto tool_tip = explicit_string(control->properties(), "ToolTip");
+                    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::usual_group);
+                    record = list({raw(std::string(descriptor.guid)), raw(std::to_string(control->id.value())),
+                        canonical_usual_group_properties(enabled, caption, tool_tip),
+                        encode_geometry(control->position, context, IncomingAnchorLists{}),
+                        list({raw("14"), string_value(control->name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+                        list({raw("0")})});
                 } else if (control->kind() == model::ControlKind::radio_button) {
                     record = encode_radio_button(*control, context);
                 } else if (control->kind() == model::ControlKind::picture_decoration) {
@@ -5132,7 +5230,7 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, TrackBar, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "UsualGroup, Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, TrackBar, or Panel", control->name,
                         "Control payload is unsupported");
                 }
                 if (control->data_path) {
