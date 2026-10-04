@@ -8863,10 +8863,114 @@ void test_owner_aware_control_geometry_codec() {
         "references other than target zero must decode as their explicit control IDs");
 }
 
+
+void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
+    const auto parsed = oof::source::parse_form_xml(R"XML(<Form id="1" name="DefaultSchemas" ordinaryFormVersion="2.1"><ChildItems>
+      <GraphicalSchemaField id="19" name="Flow"><Position><Top>20</Top><Height>90</Height><Left>10</Left><TabOrder>2</TabOrder><Width>140</Width></Position></GraphicalSchemaField>
+      <GeographicalSchemaField id="2" name="Map"><Position><Top>25</Top><Height>120</Height><Left>170</Left><TabOrder>1</TabOrder><Width>180</Width><Bindings><AnchorBinding coordinate="right" targetCoordinate="right" offset="-20"/></Bindings></Position></GeographicalSchemaField>
+    </ChildItems></Form>)XML");
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    const auto& records = encoded.value().items[1].items[2].items[2];
+    expect(records.items.size() == 3 && records.items[1].items[0].atom == "ad37194e-555e-4305-b718-5dca84baf145" &&
+        records.items[1].items.size() == 7 && records.items[2].items[0].atom == "42248403-7748-49da-b782-e4438fd7bff3" &&
+        records.items[2].items.size() == 6, "Map separate document must shift its geometry slot without shifting Flow geometry");
+    const auto decoded = form_stream::decode_document(encoded.value(), "DefaultSchemas");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    expect(decoded.value().form().children == parsed.value().form().children,
+        "Physical ID sorting must preserve logical order for both schema fields");
+    const auto* map = decoded.value().find_control(model::ObjectId{2});
+    const auto* flow = decoded.value().find_control(model::ObjectId{19});
+    expect(map && flow && map->name == "Map" && flow->name == "Flow" && map->position.left.value() == 170 &&
+        map->position.width.value() == 180 && flow->position.top.value() == 20 &&
+        map->position.tab_order.value() == std::optional<std::int32_t>{1} &&
+        flow->position.tab_order.value() == std::optional<std::int32_t>{2} &&
+        map->position.bindings.anchors.size() == 1,
+        "Names, rectangles, independent TabOrder and owner binding must survive fresh serialization");
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Default schema fields must rebuild byte exact without a baseline");
+    const auto xml = oof::source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<GraphicalSchemaField") != std::string::npos &&
+        xml.value().find("<GeographicalSchemaField") != std::string::npos &&
+        xml.value().find("ListStream") == std::string::npos,
+        "Both default controls must use named public XML");
+    auto sibling_bound = parsed.value();
+    auto* sibling_flow = const_cast<model::ControlNode*>(sibling_bound.find_control(model::ObjectId{19}));
+    model::AnchorBinding sibling_anchor;
+    sibling_anchor.coordinate = model::BindingCoordinate::left;
+    sibling_anchor.target = model::ControlRef{model::ObjectId{2}};
+    sibling_anchor.target_coordinate = model::BindingCoordinate::right;
+    sibling_anchor.offset.set(-5);
+    sibling_flow->position.bindings.anchors.push_back(sibling_anchor);
+    const auto sibling_encoded = form_stream::encode_document(sibling_bound);
+    expect(sibling_encoded.ok(), "New schema fields must participate in sibling bindings");
+    auto missing_incoming = sibling_encoded.value();
+    auto& map_geometry = missing_incoming.items[1].items[2].items[2].items[1].items[4];
+    expect(map_geometry.items[15].atom == "1" && map_geometry.items[16].is_list,
+        "Map geometry must contain the Flow incoming right-edge tuple");
+    map_geometry.items[15] = list_stream::ListValue::raw_atom("0");
+    map_geometry.items.erase(map_geometry.items.begin() + 16);
+    const auto missing_result = form_stream::decode_document(missing_incoming, "DefaultSchemas");
+    expect(!missing_result && missing_result.diagnostics().front().path == "$/1/2/2/1/4/3",
+        "Map incoming graph error must point to geometry slot4, not its separate document slot3");
+    for (const auto record_index : {1u, 2u}) {
+        auto nondefault = encoded.value();
+        auto& record = nondefault.items[1].items[2].items[2].items[record_index];
+        if (record_index == 1) record.items[3].items[4] = list_stream::ListValue::raw_atom("1");
+        else record.items[2].items[2].items[0].items[2] = list_stream::ListValue::raw_atom("1");
+        expect(!form_stream::decode_document(nondefault, "DefaultSchemas"),
+            "Unmodeled document contents must be rejected, never discarded or retained as raw data");
+        auto unknown_property = parsed.value();
+        auto* control = const_cast<model::ControlNode*>(unknown_property.find_control(
+            model::ObjectId{record_index == 1 ? 2u : 19u}));
+        control->properties().set_explicit(model::PropertyId::from_name("BorderColor"), model::ColorValue{});
+        expect(!form_stream::encode_document(unknown_property),
+            "Unverified explicit property must not silently become a default");
+    }
+}
+
+
+void test_pivot_chart_default_factory_round_trip_and_rejections() {
+    const auto parsed = oof::source::parse_form_xml(R"XML(<Form id="1" name="DefaultPivot" ordinaryFormVersion="2.1"><ChildItems>
+      <PivotChart id="77" name="Pivot"><Position><Top>25</Top><Height>140</Height><Left>40</Left><Width>200</Width></Position></PivotChart>
+    </ChildItems></Form>)XML");
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& record = encoded.value().items[1].items[2].items[2].items[1];
+    const auto& info = record.items[2];
+    expect(record.items[0].atom == "a26da99e-184a-4823-b0d6-62816d38dc4e" && record.items.size() == 6 &&
+        info.items.size() == 13 && info.items[0].atom == "3" && info.items[1].items[2].items.size() == 386 &&
+        info.items[1].items[2].items[4].atom == "4" && info.items[2].items[3].items[1].atom == "0",
+        "Default Pivot includes the native sample renderer and no source values, not an empty ordinary Chart wrapper");
+    const auto decoded = form_stream::decode_document(encoded.value(), "DefaultPivot");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    const auto* pivot = decoded.value().find_control(model::ObjectId{77});
+    expect(pivot && pivot->kind() == model::ControlKind::pivot_chart && pivot->name == "Pivot" &&
+        pivot->position.left.value() == 40 && pivot->position.height.value() == 140,
+        "Pivot identity and position must be independent of the factory sample renderer");
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Named default Pivot must rebuild exactly without a baseline");
+    for (const auto slot : {3u, 4u, 5u, 6u, 7u, 8u, 9u, 12u}) {
+        auto changed = encoded.value();
+        changed.items[1].items[2].items[2].items[1].items[2].items[slot] = list_stream::ListValue::raw_atom("99");
+        expect(!form_stream::decode_document(changed, "DefaultPivot"), "Unsupported Pivot settings must fail explicitly");
+    }
+    auto changed_renderer = encoded.value();
+    changed_renderer.items[1].items[2].items[2].items[1].items[2].items[1].items[2].items[4] = list_stream::ListValue::raw_atom("0");
+    expect(!form_stream::decode_document(changed_renderer, "DefaultPivot"),
+        "A changed renderer must not be erased or silently replaced by the factory default");
+}
+
 }  // namespace
 
 int main() {
     try {
+        test_pivot_chart_default_factory_round_trip_and_rejections();
+        test_default_schema_fields_fresh_xml_geometry_and_rejections();
         test_command_bar_owner_pair_and_strict_profile();
         test_captured_command_bar_control_record_literal();
         test_outer_format_probe();
