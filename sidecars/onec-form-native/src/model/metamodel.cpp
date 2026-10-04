@@ -615,6 +615,11 @@ void apply_proven_storage_overrides(
     auto& button = properties[static_cast<std::size_t>(ControlKind::button)];
     classify_property(button, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
     std::ranges::find(button, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
+    auto& command_bar = properties[static_cast<std::size_t>(ControlKind::command_bar)];
+    classify_property(command_bar, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(command_bar, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    classify_property(command_bar, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
+    std::ranges::find(command_bar, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
     classify_property(
         button,
         "Enabled",
@@ -705,6 +710,11 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::shortcut,
         "None");
+
+    auto& radio_button = properties[static_cast<std::size_t>(ControlKind::radio_button)];
+    classify_property(radio_button, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(radio_button, "Caption", StorageCodec::control_info, DefaultKind::string, "");
+    classify_property(radio_button, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
 
     auto& picture_decoration = properties[static_cast<std::size_t>(ControlKind::picture_decoration)];
     classify_property(

@@ -1236,6 +1236,117 @@ void test_named_button_menu_round_trip_and_invalid_references() {
     expect(!form_stream::decode_document(huge_order_footer, "Menu"), "oversized menu order footer count must be rejected");
 }
 
+void test_command_bar_owner_pair_and_strict_profile() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "CommandBarOwnerPair";
+    form.children = {model::ControlRef{model::ObjectId{1}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode command_bar{model::ObjectId{1}, "Tools", model::CommandBarPayload{}};
+    command_bar.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    command_bar.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Run tools"));
+    model::CommandBarButton action; action.name = "Run"; action.action = "RunHandler";
+    action.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.ActivateTask"}};
+    model::CommandBarButton submenu; submenu.name = "More";
+    submenu.type = model::CommandBarButtonKind::submenu;
+    submenu.buttons = {action};
+    std::get<model::CommandBarPayload>(command_bar.payload).buttons = {submenu};
+    document.add_control(std::move(command_bar));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "CommandBar with owner and submenu ID 1 must encode" :
+        encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "CommandBarOwnerPair");
+    expect(decoded.ok(), decoded ? "CommandBar root pair and submenu pair must decode" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* control = decoded.value().find_control(model::ObjectId{1});
+    expect(control != nullptr && control->kind() == model::ControlKind::command_bar &&
+        std::get<model::CommandBarPayload>(control->payload).buttons ==
+            std::get<model::CommandBarPayload>(document.find_control(model::ObjectId{1})->payload).buttons,
+        "root (marker,1) and submenu (header owner,1) must remain separate groups");
+    expect(!std::get<bool>(control->properties().find(model::PropertyId::from_name("Enabled"))->value) &&
+        std::get<std::string>(control->properties().find(model::PropertyId::from_name("ToolTip"))->value) == "Run tools",
+        "CommandBar named Enabled and ToolTip values must round-trip independently of Buttons");
+
+    auto unknown_default = encoded.value();
+    auto& control_record = unknown_default.items[1].items[2].items[2].items[1];
+    control_record.items[2].items[1].items[1] = list_stream::ListValue::raw_atom("1");
+    const auto rejected = form_stream::decode_document(unknown_default, "CommandBarUnknownDefault");
+    expect(!rejected, "noncanonical unmodeled CommandBar default slot must be rejected");
+
+    auto wrong_root_marker = encoded.value();
+    wrong_root_marker.items[1].items[2].items[2].items[1].items[2].items[1].items[8] =
+        list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+    expect(!form_stream::decode_document(wrong_root_marker, "CommandBarWrongRootMarker"),
+        "unsupported root owner marker must be rejected");
+    auto wrong_root_id = encoded.value();
+    wrong_root_id.items[1].items[2].items[2].items[1].items[2].items[1].items[9] =
+        list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(wrong_root_id, "CommandBarWrongRootId"),
+        "root group ID that differs from control ID must be rejected");
+    auto unsupported_base_leaf = encoded.value();
+    unsupported_base_leaf.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[20] =
+        list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(unsupported_base_leaf, "CommandBarUnknownBaseLeaf"),
+        "noncanonical unmodeled CommandBar base leaf must be rejected");
+
+    const auto encode_owner_four = [](std::vector<model::CommandBarButton> entries) {
+        model::Form owner_form; owner_form.id = model::ObjectId{1}; owner_form.name = "CommandBarOwnerFour";
+        owner_form.children = {model::ControlRef{model::ObjectId{4}}};
+        model::OrdinaryFormDocument owner_document(std::move(owner_form));
+        model::ControlNode owner_bar{model::ObjectId{4}, "Tools", model::CommandBarPayload{}};
+        std::get<model::CommandBarPayload>(owner_bar.payload).buttons = std::move(entries);
+        owner_document.add_control(std::move(owner_bar));
+        return form_stream::encode_document(owner_document);
+    };
+    const auto menu_for_owner_four = [](const list_stream::ListValue& payload) -> const list_stream::ListValue& {
+        const auto& records = payload.items[1].items[2].items[2].items;
+        const auto record = std::ranges::find(records, std::string("4"), [](const auto& row) {
+            return row.items.size() > 1 ? row.items[1].atom : std::string{};
+        });
+        if (record == records.end()) throw std::runtime_error("CommandBar owner ID 4 record is absent");
+        return record->items[2].items[1].items[7];
+    };
+    const auto empty_owner_four = encode_owner_four({});
+    expect(empty_owner_four.ok() && menu_for_owner_four(empty_owner_four.value()).items[2].atom == "0",
+        "empty menu max ID must stay in menu-entry namespace even when root ID is 4");
+    model::CommandBarButton one_entry; one_entry.name = "Only"; one_entry.action = "OnlyHandler";
+    const auto one_entry_owner_four = encode_owner_four({one_entry});
+    expect(one_entry_owner_four.ok() && menu_for_owner_four(one_entry_owner_four.value()).items[2].atom == "1",
+        "one-entry menu max ID must be 1, independent of root owner ID 4");
+}
+
+void test_captured_command_bar_control_record_literal() {
+    constexpr std::string_view captured_record = R"OOF({e69bf21d-97b2-4f37-86db-675aea9ec2cb,4,{2,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},9,2,0,0,1,1,{5,f6183561-313a-4f39-a1cd-591a0c2b8493,1,1,1,{8,7919d563-1cca-46f4-809c-27d4d06a62a5,1,e1692cc2-605b-4535-84dd-28440238746c,{3,"ProbeHandler",{1,"",{1,0},{1,0},{1,0},{4,0,{0},"",-1,-1,1,0,""},{0,0,0}}},0,0,0},1,{5,b78f2e80-ec68-11d4-9dcf-0050bae2bc79,4,0,1,7919d563-1cca-46f4-809c-27d4d06a62a5,{8,"ProbeAction",0,1,{1,1,{"ru","Probe"}},1,f6183561-313a-4f39-a1cd-591a0c2b8493,1,1e2,0,0,1,0,1,0,0},{-1,0,{0}}}},b78f2e80-ec68-11d4-9dcf-0050bae2bc79,4,9d0a2e40-b978-11d4-84b6-008048da06df,0,0,0}},{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,1,2,0,0},{14,"ResearchCommandBar",4294967295,0,0,0},{0}})OOF";
+    const auto actual_record = list_stream::parse(captured_record);
+    expect(actual_record.is_list && actual_record.items.size() == 6,
+        "captured literal CommandBar tuple must retain all six top-level fields");
+    expect(actual_record.items[2].items[1].items[7].items[2].atom == "1" &&
+        actual_record.items[2].items[1].items[9].atom == "4",
+        "captured owner ID 4 tuple confirms menu max ID 1 is not the root ID");
+
+    model::Form form; form.id = model::ObjectId{1}; form.name = "CapturedCommandBar";
+    form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{4}}};
+    model::OrdinaryFormDocument seeded(std::move(form));
+    seeded.add_control(model::ControlNode{model::ObjectId{2}, "Seed", model::ButtonPayload{}});
+    seeded.add_control(model::ControlNode{model::ObjectId{4}, "ResearchCommandBar", model::CommandBarPayload{}});
+    auto payload = form_stream::encode_document(seeded);
+    expect(payload.ok(), "known Form plus control ID 2 seed must encode before literal injection");
+    auto& records = payload.value().items[1].items[2].items[2].items;
+    const auto target = std::ranges::find(records, std::string("4"), [](const auto& row) {
+        return row.items.size() > 1 ? row.items[1].atom : std::string{};
+    });
+    expect(target != records.end(), "seeded known Form must expose the CommandBar owner record");
+    *target = actual_record;
+    const auto decoded = form_stream::decode_document(payload.value(), "CapturedCommandBar");
+    expect(decoded.ok(), decoded ? "captured full control tuple must decode without rewriting geometry or info" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* control = decoded.value().find_control(model::ObjectId{4});
+    expect(control != nullptr && control->kind() == model::ControlKind::command_bar &&
+        control->name == "ResearchCommandBar" &&
+        !std::get<model::CommandBarPayload>(control->payload).buttons.empty(),
+        "literal actual CommandBar control must be decoded with its named owner and entries");
+}
+
 void test_button_menu_mode_round_trip_and_validation() {
     static constexpr std::string_view members[] = {"DontUse", "Use", "UseExtra"};
     const std::string menu_block =
@@ -2204,6 +2315,110 @@ void test_fresh_checkbox_stream_decode() {
         "fresh CheckBox linked Attribute must decode exact Boolean token");
 }
 
+void test_radio_button_basic_observed_record_and_rejections() {
+    const auto make_document = [](std::string caption = {}, bool enabled = true, std::string tool_tip = {}) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "RadioButtonCodec";
+        for (std::uint64_t id = 100; id <= 103; ++id) form.children.push_back(model::ControlRef{model::ObjectId{id}});
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_control(model::ControlNode{model::ObjectId{100}, "CalendarFieldDefault", model::CalendarFieldPayload{}});
+        document.add_control(model::ControlNode{model::ObjectId{101}, "CalendarFieldDisabled", model::CalendarFieldPayload{}});
+        document.add_control(model::ControlNode{model::ObjectId{102}, "CalendarFieldHidden", model::CalendarFieldPayload{}});
+        model::ControlNode radio{model::ObjectId{103}, "RadioRuntime", model::RadioButtonPayload{}};
+        if (!caption.empty()) radio.properties().set_explicit(model::PropertyId::from_name("Caption"), std::move(caption));
+        if (!enabled) radio.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+        if (!tool_tip.empty()) radio.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::move(tool_tip));
+        document.add_control(std::move(radio));
+        return document;
+    };
+    constexpr std::string_view observed_radio_control_record = R"RAW(
+{782e569a-79a7-4a4f-a936-b48d013936ec,103,
+{4,{"Pattern"},
+{{
+{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},7,{1,0},1,0,1,0,100,1},4,0,0,0,0},0,{"U"},{0}},
+{8,0,0,0,0,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},0,0,0,0,0,0,0,3,4,0,0},
+{14,"RadioRuntime",4294967295,0,0,0},{0}}
+)RAW";
+    const auto expected_observed_record = list_stream::parse(observed_radio_control_record);
+    const auto default_encoded = form_stream::encode_document(make_document());
+    expect(default_encoded.ok(), "default RadioButton from the observed unbound profile must encode");
+    const auto& default_records = default_encoded.value().items[1].items[2].items[2].items;
+    expect(default_records.size() == 5 &&
+               list_stream::dump_compact(default_records[4]) == list_stream::dump_compact(expected_observed_record),
+        "RadioButton writer must reproduce the full observed default control record");
+    const auto default_decoded = form_stream::decode_document(default_encoded.value(), "RadioButtonCodec");
+    expect(default_decoded.ok(), "full observed default RadioButton must decode");
+    const auto* default_radio = default_decoded.value().find_control(model::ObjectId{103});
+    expect(default_radio && default_radio->kind() == model::ControlKind::radio_button &&
+               default_radio->name == "RadioRuntime" && default_radio->position.visible.value() &&
+               default_radio->properties().find(model::PropertyId::from_name("Enabled")) == nullptr &&
+               default_radio->properties().find(model::PropertyId::from_name("Caption")) == nullptr &&
+               default_radio->properties().find(model::PropertyId::from_name("ToolTip")) == nullptr,
+        "RadioButton identity, Visible, and implicit Caption/Enabled/ToolTip defaults must decode by name");
+    const auto default_reencoded = form_stream::encode_document(default_decoded.value());
+    expect(default_reencoded.ok() && list_stream::dump_compact(default_reencoded.value()) ==
+               list_stream::dump_compact(default_encoded.value()),
+        "default RadioButton document must round-trip canonically");
+
+    const std::string caption = "Radio Ω <tag> & текст";
+    const std::string tool_tip = "Radio hint Ω <tag> & текст";
+    const auto changed_encoded = form_stream::encode_document(make_document(caption, false, tool_tip));
+    expect(changed_encoded.ok(), "RadioButton Caption, Enabled, and ToolTip must encode");
+    const auto& changed_records = changed_encoded.value().items[1].items[2].items[2].items;
+    const auto& changed_info = changed_records[4].items[2];
+    const auto& changed_properties = changed_info.items[2].items[0];
+    expect(changed_properties.items[0].items[1].atom == "0" &&
+               list_stream::dump_compact(changed_properties.items[2]) == value_codec::encode_localized_string(
+                   model::LocalizedStringValue{{{"ru", caption}}}) &&
+               list_stream::dump_compact(changed_properties.items[0].items[12]) == value_codec::encode_localized_string(
+                   model::LocalizedStringValue{{{"ru", tool_tip}}}),
+        "RadioButton properties must occupy the observed Enabled, Caption, and ToolTip slots");
+    const auto changed_decoded = form_stream::decode_document(changed_encoded.value(), "RadioButtonCodec");
+    expect(changed_decoded.ok(), "RadioButton Caption, Enabled, and ToolTip must decode");
+    const auto* decoded_radio = changed_decoded.value().find_control(model::ObjectId{103});
+    const auto* decoded_enabled = decoded_radio == nullptr ? nullptr :
+        decoded_radio->properties().find(model::PropertyId::from_name("Enabled"));
+    const auto* decoded_caption = decoded_radio == nullptr ? nullptr :
+        decoded_radio->properties().find(model::PropertyId::from_name("Caption"));
+    const auto* decoded_tool_tip = decoded_radio == nullptr ? nullptr :
+        decoded_radio->properties().find(model::PropertyId::from_name("ToolTip"));
+    expect(decoded_radio && decoded_enabled && decoded_caption && decoded_tool_tip &&
+               !std::get<bool>(decoded_enabled->value) &&
+               std::get<std::string>(decoded_caption->value) == caption &&
+               std::get<std::string>(decoded_tool_tip->value) == tool_tip,
+        "RadioButton properties must round-trip their runtime-set values");
+    const auto changed_reencoded = form_stream::encode_document(changed_decoded.value());
+    expect(changed_reencoded.ok() && list_stream::dump_compact(changed_reencoded.value()) ==
+               list_stream::dump_compact(changed_encoded.value()),
+        "changed RadioButton document must round-trip without drift");
+
+    auto data_path_document = make_document();
+    model::TypeDomainPatternValue string_type;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_type.entries.push_back(string_entry);
+    data_path_document.add_attribute(model::Attribute{model::ObjectId{200}, "Pattern", string_type});
+    auto* radio_with_data = const_cast<model::ControlNode*>(data_path_document.find_control(model::ObjectId{103}));
+    radio_with_data->data_path = model::DataPath{model::AttributeRef{model::ObjectId{200}}, {}};
+    expect_failure(form_stream::encode_document(data_path_document), "OOF1122", "$/RadioButton",
+        "RadioButton DataPath must be explicitly rejected outside the proven profile");
+
+    auto unsupported_default = default_encoded.value();
+    auto& unsupported_data_header = unsupported_default.items[1].items[2].items[2].items[4].items[2].items[1];
+    unsupported_data_header = list_stream::ListValue::list({list_stream::ListValue::string_atom("Unobserved")});
+    expect(!form_stream::decode_document(unsupported_default, "RadioButtonCodec"),
+        "unobserved RadioButton data header must fail closed");
+
+    auto multilingual = changed_encoded.value();
+    auto& multilingual_caption = multilingual.items[1].items[2].items[2].items[4]
+        .items[2].items[2].items[0].items[2];
+    multilingual_caption = list_stream::parse(value_codec::encode_localized_string(
+        model::LocalizedStringValue{{{"ru", "Текст"}, {"en", "Text"}}}));
+    expect(!form_stream::decode_document(multilingual, "RadioButtonCodec"),
+        "multilingual RadioButton Caption must be rejected without loss");
+}
+
 void test_calendar_field_enabled_round_trip_and_rejections() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -2401,10 +2616,72 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
             "unclassified ProgressBar leaf diagnostic was " + unsupported_decode.diagnostics().front().code +
                 " at " + unsupported_decode.diagnostics().front().path);
 
-    constexpr std::string_view data_path_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Amount"><TypeDomain><Entry term="string" length="64"/></TypeDomain></Attribute></Attributes><ChildItems><ProgressBar id="4" name="P"><DataPath attributeId="3"/><Position/></ProgressBar></ChildItems></Form>)OOF";
+    constexpr std::string_view data_path_xml = R"OOF(<Form id="1" name="Progress" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Amount"><TypeDomain><Entry term="numeric" length="10" precision="2" nonNegative="true"/></TypeDomain></Attribute></Attributes><ChildItems><ProgressBar id="4" name="P"><DataPath attributeId="3"/><Position/></ProgressBar></ChildItems></Form>)OOF";
     const auto data_path = oof::source::parse_form_xml(data_path_xml);
-    expect(data_path.ok() && !form_stream::encode_document(data_path.value()),
-        "unobserved ProgressBar DataPath must stay unsupported by the primary codec");
+    expect(data_path.ok(), "ProgressBar direct numeric DataPath with named qualifiers must parse");
+    const auto data_path_encoded = form_stream::encode_document(data_path.value());
+    expect(data_path_encoded.ok(), data_path_encoded ? "" : data_path_encoded.diagnostics().front().message);
+    const auto& progress_links = data_path_encoded.value().items[2].items[3];
+    expect(progress_links.items.size() == 2 && progress_links.items[1].items[0].atom == "4" &&
+               progress_links.items[1].items[1].items[1].items[0].atom == "3",
+        "ProgressBar DataPath must encode as control 4 linked to local Attribute 3");
+    const auto data_path_decoded = form_stream::decode_document(data_path_encoded.value(), "Progress");
+    expect(data_path_decoded.ok() && data_path_decoded.value().find_control(model::ObjectId{4})->data_path &&
+               data_path_decoded.value().find_control(model::ObjectId{4})->data_path->attribute.id() == model::ObjectId{3},
+        "ProgressBar direct numeric DataPath must survive decode");
+    const auto data_path_reencoded = form_stream::encode_document(data_path_decoded.value());
+    expect(data_path_reencoded.ok() && list_stream::dump_compact(data_path_reencoded.value()) ==
+               list_stream::dump_compact(data_path_encoded.value()),
+        "ProgressBar direct numeric DataPath must survive encode-decode-encode");
+
+    const auto xml_for_domain = [](std::string_view domain, std::string_view target = "3") {
+        return std::string("<Form id=\"1\" name=\"Progress\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"3\" name=\"Amount\"><TypeDomain>") +
+            std::string(domain) + "</TypeDomain></Attribute></Attributes><ChildItems><ProgressBar id=\"4\" name=\"P\"><DataPath attributeId=\"" +
+            std::string(target) + "\"/><Position/></ProgressBar></ChildItems></Form>";
+    };
+    for (const auto [domain, label] : std::array<std::pair<std::string_view, std::string_view>, 4>{{
+             {"<Entry term=\"string\" length=\"64\"/>", "nonNumeric"},
+             {"<Entry term=\"numeric\" length=\"10\"/><Entry term=\"numeric\" length=\"8\"/>", "compound"},
+             {"<Entry term=\"unknown\" typeUuid=\"01234567-89AB-CDEF-0123-456789ABCDEF\"/>", "unknown"},
+             {"<Entry term=\"numeric\" length=\"10\"/><Entry term=\"string\" length=\"2\"/>", "variant"},
+         }}) {
+        const auto invalid = oof::source::parse_form_xml(xml_for_domain(domain));
+        expect(invalid.ok() && !form_stream::encode_document(invalid.value()),
+            std::string("ProgressBar must reject a ") + std::string(label) + " Attribute domain");
+    }
+    const auto dangling_xml = oof::source::parse_form_xml(xml_for_domain(
+        "<Entry term=\"numeric\" length=\"10\" precision=\"2\"/>", "99"));
+    expect(!dangling_xml || !form_stream::encode_document(dangling_xml.value()),
+        "ProgressBar must reject a dangling DataPath Attribute ID");
+    auto compound_xml_text = xml_for_domain(
+        "<Entry term=\"numeric\" length=\"10\" precision=\"2\"/>");
+    const auto empty_path_end = compound_xml_text.find("/><Position/>");
+    compound_xml_text.replace(empty_path_end, std::string("/><Position/>").size(),
+        "><Member>Nested</Member></DataPath><Position/>");
+    const auto compound_path_xml = oof::source::parse_form_xml(compound_xml_text);
+    expect(compound_path_xml.ok() && !form_stream::encode_document(compound_path_xml.value()),
+        "ProgressBar must reject compound DataPath members");
+    auto metadata_uuid = data_path_encoded.value();
+    metadata_uuid.items[2].items[3].items[1].items[1].items[1] =
+        list_stream::ListValue::list({list_stream::ListValue::raw_atom("3"),
+            list_stream::ListValue::raw_atom("01234567-89AB-CDEF-0123-456789ABCDEF")});
+    expect(!form_stream::decode_document(metadata_uuid, "Progress"),
+        "ProgressBar must reject metadata UUID Attribute links");
+    auto dangling_link = data_path_encoded.value();
+    dangling_link.items[2].items[3].items[1].items[1].items[1].items[0] =
+        list_stream::ListValue::raw_atom("99");
+    expect(!form_stream::decode_document(dangling_link, "Progress"),
+        "ProgressBar decoder must reject dangling Attribute links");
+    auto non_numeric_link = data_path_encoded.value();
+    model::TypeDomainPatternValue linked_string_type;
+    model::TypeDomainEntry linked_string_entry;
+    linked_string_entry.term = model::TypeDomainTerm::string;
+    linked_string_entry.string = model::LengthQualifiers{64, false};
+    linked_string_type.entries.push_back(linked_string_entry);
+    non_numeric_link.items[2].items[2].items[1].items[5] =
+        list_stream::parse(value_codec::encode_type_domain(linked_string_type));
+    expect(!form_stream::decode_document(non_numeric_link, "Progress"),
+        "ProgressBar decoder must reject a linked nonNumeric Attribute");
 
     model::Form overflow_form;
     overflow_form.id = model::ObjectId{1};
@@ -2598,6 +2875,57 @@ void test_track_bar_observed_record_and_named_round_trip() {
     expect(mixed_decoded.ok() && mixed_decoded.value().find_control(model::ObjectId{2})->kind() == model::ControlKind::button &&
                mixed_decoded.value().find_control(model::ObjectId{4})->kind() == model::ControlKind::track_bar,
         "mixed Button and TrackBar records must decode in named control order");
+}
+
+void test_progress_data_path_mixed_with_existing_links() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "MixedProgressLinks";
+    form.children = {model::ControlRef{model::ObjectId{42}}, model::ControlRef{model::ObjectId{5}},
+        model::ControlRef{model::ObjectId{9}}, model::ControlRef{model::ObjectId{10}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::TypeDomainEntry numeric_entry;
+    numeric_entry.term = model::TypeDomainTerm::numeric;
+    numeric_entry.numeric = model::NumericQualifiers{10, 2, true};
+    model::TypeDomainPatternValue numeric_type;
+    numeric_type.entries.push_back(numeric_entry);
+    model::TypeDomainPatternValue string_type;
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = model::LengthQualifiers{64, false};
+    string_type.entries.push_back(string_entry);
+    model::TypeDomainPatternValue boolean_type;
+    model::TypeDomainEntry boolean_entry;
+    boolean_entry.term = model::TypeDomainTerm::boolean;
+    boolean_type.entries.push_back(boolean_entry);
+    document.add_attribute(model::Attribute{model::ObjectId{17}, "Amount", numeric_type});
+    document.add_attribute(model::Attribute{model::ObjectId{6}, "Text", string_type});
+    document.add_attribute(model::Attribute{model::ObjectId{7}, "Flag", boolean_type});
+    model::ControlNode bound{model::ObjectId{42}, "BoundProgress", model::ProgressBarPayload{}};
+    bound.data_path = model::DataPath{model::AttributeRef{model::ObjectId{17}}, {}};
+    document.add_control(std::move(bound));
+    document.add_control(model::ControlNode{model::ObjectId{5}, "UnboundProgress", model::ProgressBarPayload{}});
+    model::ControlNode input{model::ObjectId{9}, "Input", model::InputFieldPayload{}};
+    input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{6}}, {}};
+    document.add_control(std::move(input));
+    model::ControlNode checkbox{model::ObjectId{10}, "Check", model::CheckBoxPayload{}};
+    checkbox.data_path = model::DataPath{model::AttributeRef{model::ObjectId{7}}, {}};
+    document.add_control(std::move(checkbox));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& links = encoded.value().items[2].items[3];
+    expect(links.items.size() == 4 && links.items[0].atom == "3" &&
+               links.items[1].items[0].atom == "9" && links.items[2].items[0].atom == "10" &&
+               links.items[3].items[0].atom == "42",
+        "bound ProgressBar, InputField, and CheckBox must produce exactly three correctly counted links");
+    const auto decoded = form_stream::decode_document(encoded.value(), "MixedProgressLinks");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    expect(decoded.value().find_control(model::ObjectId{42})->data_path.has_value() &&
+               !decoded.value().find_control(model::ObjectId{5})->data_path.has_value() &&
+               decoded.value().find_control(model::ObjectId{9})->data_path.has_value() &&
+               decoded.value().find_control(model::ObjectId{10})->data_path.has_value(),
+        "bound and unbound ProgressBars must coexist with required InputField and CheckBox links");
 }
 
 void test_calendar_field_observed_record_decode() {
@@ -4760,6 +5088,8 @@ void test_owner_aware_control_geometry_codec() {
 
 int main() {
     try {
+        test_command_bar_owner_pair_and_strict_profile();
+        test_captured_command_bar_control_record_literal();
         test_outer_format_probe();
         test_layout_probe();
         test_runtime_envelope();
@@ -4784,10 +5114,12 @@ int main() {
         test_label_enabled_and_tooltip_round_trip();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
         test_fresh_checkbox_stream_decode();
+        test_radio_button_basic_observed_record_and_rejections();
         test_calendar_field_enabled_round_trip_and_rejections();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();
         test_track_bar_observed_record_and_named_round_trip();
+        test_progress_data_path_mixed_with_existing_links();
         test_button_label_input_field_round_trip();
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
