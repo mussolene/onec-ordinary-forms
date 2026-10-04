@@ -155,6 +155,27 @@ void test_descriptors() {
                label_tool_tip->default_value.kind == DefaultKind::string &&
                label_tool_tip->default_value.canonical.empty(),
         "LabelDecoration ToolTip must declare its editable empty string default");
+    const auto* radio_enabled = find_property(ControlKind::radio_button, "Enabled");
+    const auto* radio_caption = find_property(ControlKind::radio_button, "Caption");
+    const auto* radio_tool_tip = find_property(ControlKind::radio_button, "ToolTip");
+    expect(radio_enabled && radio_enabled->persistence == PersistenceClass::persisted_editable &&
+               radio_enabled->storage_codec == StorageCodec::control_base &&
+               radio_enabled->value_codec == ValueCodec::boolean &&
+               radio_enabled->default_value.kind == DefaultKind::boolean &&
+               radio_enabled->default_value.canonical == "true",
+        "RadioButton Enabled must declare its editable Boolean true default");
+    expect(radio_caption && radio_caption->persistence == PersistenceClass::persisted_editable &&
+               radio_caption->storage_codec == StorageCodec::control_info &&
+               radio_caption->value_codec == ValueCodec::string &&
+               radio_caption->default_value.kind == DefaultKind::string &&
+               radio_caption->default_value.canonical.empty(),
+        "RadioButton Caption must declare its editable empty string default");
+    expect(radio_tool_tip && radio_tool_tip->persistence == PersistenceClass::persisted_editable &&
+               radio_tool_tip->storage_codec == StorageCodec::control_base &&
+               radio_tool_tip->value_codec == ValueCodec::string &&
+               radio_tool_tip->default_value.kind == DefaultKind::string &&
+               radio_tool_tip->default_value.canonical.empty(),
+        "RadioButton ToolTip must declare its editable empty string default");
     const auto* picture_enabled = find_property(ControlKind::picture_decoration, "Enabled");
     const auto* picture_tool_tip = find_property(ControlKind::picture_decoration, "ToolTip");
     const auto* picture_value = find_property(ControlKind::picture_decoration, "Picture");

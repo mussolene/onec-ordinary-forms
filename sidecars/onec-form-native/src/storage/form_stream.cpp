@@ -843,6 +843,28 @@ LV canonical_label_properties(
 }
 
 
+LV canonical_radio_button_info(bool enabled, std::string_view caption, std::string_view tool_tip) {
+    const auto properties = list({
+        canonical_button_base(enabled, tool_tip),
+        raw("7"),
+        encoded_localized(caption),
+        raw("1"),
+        raw("0"),
+        raw("1"),
+        raw("0"),
+        raw("100"),
+        raw("1"),
+    });
+    return list({
+        raw("4"),
+        list({string_value("Pattern")}),
+        list({std::move(properties), raw("4"), raw("0"), raw("0"), raw("0"), raw("0")}),
+        raw("0"),
+        list({string_value("U")}),
+        list({raw("0")}),
+    });
+}
+
 LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_view tool_tip,
     const model::FontValue* font = nullptr) {
     return list({
@@ -2409,6 +2431,73 @@ DecodedControl decode_picture_decoration(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::move(picture_asset), {}};
 }
 
+DecodedControl decode_radio_button(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context) {
+    require_arity(record, 6, path);
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
+    require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
+    const auto raw_id = integer_atom<std::uint64_t>(record.items[1], child_path(path, 1));
+    if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", child_path(path, 1), "positive int64 RadioButton ID", std::to_string(raw_id),
+            "RadioButton ID is invalid");
+    }
+
+    const auto& info = record.items[2];
+    const auto info_path = child_path(path, 2);
+    require_arity(info, 6, info_path);
+    require_raw_constant(info.items[0], "4", child_path(info_path, 0));
+    require_exact(info.items[1], list({string_value("Pattern")}), child_path(info_path, 1),
+        "RadioButton data header is outside the observed unbound profile");
+    const auto& control_info = info.items[2];
+    const auto control_info_path = child_path(info_path, 2);
+    require_arity(control_info, 6, control_info_path);
+    const auto& properties = control_info.items[0];
+    const auto properties_path = child_path(control_info_path, 0);
+    require_arity(properties, 9, properties_path);
+    const auto& base_properties = properties.items[0];
+    const auto base_path = child_path(properties_path, 0);
+    require_arity(base_properties, 21, base_path);
+    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
+    const std::string tool_tip = decoded_single_language_text(
+        base_properties.items[12], child_path(base_path, 12));
+    const std::string caption = decoded_single_language_text(
+        properties.items[2], child_path(properties_path, 2));
+    auto normalized_info = info;
+    auto normalized_properties = properties;
+    auto normalized_base = base_properties;
+    normalized_base.items[12] = encoded_localized(tool_tip);
+    normalized_properties.items[0] = std::move(normalized_base);
+    normalized_properties.items[2] = encoded_localized(caption);
+    normalized_info.items[2].items[0] = std::move(normalized_properties);
+    require_exact(normalized_info, canonical_radio_button_info(enabled, caption, tool_tip), info_path,
+        "RadioButton contains a property, binding, event, or storage variation outside the observed basic profile");
+
+    auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
+    const auto& metadata = record.items[4];
+    const auto metadata_path = child_path(path, 4);
+    require_arity(metadata, 6, metadata_path);
+    require_raw_constant(metadata.items[0], "14", child_path(metadata_path, 0));
+    const std::string name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    if (name.empty()) {
+        fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
+            "Control name is required");
+    }
+    require_exact(metadata,
+        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        metadata_path, "RadioButton metadata record is unsupported");
+    require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
+        "RadioButton cannot contain storage children");
+
+    model::ControlNode control{model::ObjectId{raw_id}, name, model::RadioButtonPayload{}};
+    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
+    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    control.position = std::move(decoded_geometry.position);
+    return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
+}
+
 DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
@@ -2516,7 +2605,8 @@ LV canonical_progress_bar_info(
 DecodedControl decode_progress_bar(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    const AttributeRecord* linked_attribute) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -2524,6 +2614,12 @@ DecodedControl decode_progress_bar(
     if (raw_id == 0 || raw_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", child_path(path, 1), "positive int64 ProgressBar ID", std::to_string(raw_id),
             "ProgressBar ID is invalid");
+    }
+    if (linked_attribute && !(linked_attribute->type.entries.size() == 1 &&
+        linked_attribute->type.entries.front().term == model::TypeDomainTerm::numeric &&
+        !linked_attribute->type.entries.front().type_uuid)) {
+        fail("OOF1122", "$/2/3", "link to a single numeric Attribute", linked_attribute->name,
+            "ProgressBar DataPath must target a single numeric attribute");
     }
 
     const auto& info = record.items[2];
@@ -2580,6 +2676,8 @@ DecodedControl decode_progress_bar(
         model::PropertyId::from_name("MinValue"), static_cast<std::int64_t>(min_value));
     if (step != 1) control.properties().set_explicit(
         model::PropertyId::from_name("Step"), static_cast<std::int64_t>(step));
+    if (linked_attribute) control.data_path = model::DataPath{
+        model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -3172,19 +3270,31 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
     });
 }
 
-LV encode_progress_bar(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_progress_bar(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::progress_bar || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "ProgressBar with positive int64 ID", control.name,
             "ProgressBar is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/ProgressBar", "named ProgressBar without DataPath, ValueType, Events, or storage children",
+        fail("OOF1122", "$/ProgressBar", "named ProgressBar with optional direct DataPath, no ValueType, Events, or storage children",
             control.name, "ProgressBar uses a storage concept outside the supported profile");
+    }
+    if (control.data_path) {
+        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        if (attribute == nullptr) fail("OOF1123", "$/ProgressBar/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "ProgressBar DataPath does not resolve");
+        if (!(attribute->type.entries.size() == 1 &&
+            attribute->type.entries.front().term == model::TypeDomainTerm::numeric &&
+            !attribute->type.entries.front().type_uuid)) fail("OOF1122", "$/ProgressBar/DataPath",
+            "single numeric Attribute", attribute->name, "ProgressBar DataPath must target a single numeric attribute");
     }
     require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step"}, "$/ProgressBar");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -3238,6 +3348,35 @@ LV encode_check_box(
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
         canonical_check_box_info(enabled, caption, tool_tip, &font),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")}),
+    });
+}
+
+LV encode_radio_button(const model::ControlNode& control, const GeometryContext& context) {
+    if (control.kind() != model::ControlKind::radio_button || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Form/ChildItems", "RadioButton with positive int64 ID", control.name,
+            "RadioButton is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/RadioButton", "named unbound RadioButton with plain Position", control.name,
+            "RadioButton uses a storage concept outside the supported basic profile");
+    }
+    require_allowed_properties(control.properties(), {"Enabled", "Caption", "ToolTip"}, "$/RadioButton");
+    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const std::string caption = explicit_string(control.properties(), "Caption");
+    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
+    return list({
+        raw(std::string(descriptor.guid)),
+        raw(std::to_string(control.id.value())),
+        canonical_radio_button_info(enabled, caption, tool_tip),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -4111,10 +4250,13 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
                     if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
+                    else if (guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid)
+                        child = decode_radio_button(record, record_path, context);
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
                     else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
-                    else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid) {
+                    else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
+                             guid == progress_bar_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                             fail("OOF1122", child_path(record_path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
@@ -4122,24 +4264,37 @@ Result<model::OrdinaryFormDocument> decode_document(
                         }
                         const auto candidate_key = static_cast<std::int64_t>(candidate_id);
                         const auto link_it = links_by_control.find(candidate_key);
-                        if (link_it == links_by_control.end()) fail("OOF1122", "$/2/3", "DataPath link for each InputField or CheckBox",
-                            std::to_string(candidate_id), "Linked control has no attribute link");
-                        if (!consumed_link_ids.insert(candidate_key).second) fail("OOF1122", "$/2/3", "one DataPath link per linked control",
-                            std::to_string(candidate_id), "Attribute link was consumed more than once");
-                        const auto& link = *link_it->second;
-                        if (!link.attribute_id.is_null || link.attribute_id.uuid.canonical != null_uuid) {
-                            fail("OOF1122", "$/2/3", "null-UUID attribute link", describe(record), "Control DataPath link uses an unsupported target");
+                        const bool required_link = guid != progress_bar_descriptor.guid;
+                        if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
+                            "DataPath link for each InputField or CheckBox", std::to_string(candidate_id),
+                            "Linked control has no attribute link");
+                        const AttributeRecord* linked_attribute = nullptr;
+                        if (link_it != links_by_control.end()) {
+                            if (!consumed_link_ids.insert(candidate_key).second) fail("OOF1122", "$/2/3",
+                                "one DataPath link per linked control", std::to_string(candidate_id),
+                                "Attribute link was consumed more than once");
+                            const auto& link = *link_it->second;
+                            if (!link.attribute_id.is_null || link.attribute_id.uuid.canonical != null_uuid) {
+                                fail("OOF1122", "$/2/3", "null-UUID attribute link", describe(record),
+                                    "Control DataPath link uses an unsupported target");
+                            }
+                            const auto attribute_it = attributes_by_id.find(link.attribute_id.object_id);
+                            if (attribute_it == attributes_by_id.end()) fail("OOF1122", "$/2/3",
+                                "link to an existing Attribute", std::to_string(link.attribute_id.object_id),
+                                "DataPath target is unresolved");
+                            linked_attribute = attribute_it->second;
                         }
-                        const auto attribute_it = attributes_by_id.find(link.attribute_id.object_id);
-                        if (attribute_it == attributes_by_id.end()) fail("OOF1122", "$/2/3", "link to an existing Attribute",
-                            std::to_string(link.attribute_id.object_id), "DataPath target is unresolved");
-                        child = guid == input_descriptor.guid
-                            ? decode_input_field(record, record_path, *attribute_it->second, context)
-                            : decode_check_box(record, record_path, *attribute_it->second, context);
-                        child.control.data_path = model::DataPath{
-                            model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(attribute_it->second->id.object_id)}}, {}};
-                    } else if (guid == progress_bar_descriptor.guid) {
-                        child = decode_progress_bar(record, record_path, context);
+                        if (guid == input_descriptor.guid) {
+                            child = decode_input_field(record, record_path, *linked_attribute, context);
+                            child.control.data_path = model::DataPath{model::AttributeRef{
+                                model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                        } else if (guid == checkbox_descriptor.guid) {
+                            child = decode_check_box(record, record_path, *linked_attribute, context);
+                            child.control.data_path = model::DataPath{model::AttributeRef{
+                                model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
+                        } else {
+                            child = decode_progress_bar(record, record_path, context, linked_attribute);
+                        }
                     } else if (guid == panel_descriptor.guid) {
                         require_arity(record, 6, record_path);
                         const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -4223,7 +4378,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         }
         for (auto& page : nested_pages) document.add_page(std::move(page));
         if (consumed_link_ids.size() != links_by_control.size()) {
-            fail("OOF1122", "$/2/3", "one matching link per decoded InputField or CheckBox", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
+            fail("OOF1122", "$/2/3", "one matching link per decoded DataPath control", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
         }
 
         if (actual_max_id >= std::numeric_limits<std::uint32_t>::max()) {
@@ -4483,6 +4638,8 @@ Result<list_stream::ListValue> encode_document(
                 LV record;
                 if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
+                } else if (control->kind() == model::ControlKind::radio_button) {
+                    record = encode_radio_button(*control, context);
                 } else if (control->kind() == model::ControlKind::picture_decoration) {
                     record = encode_picture_decoration(*control, document, context);
                 } else if (control->kind() == model::ControlKind::label_decoration) {
@@ -4494,7 +4651,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::check_box) {
                     record = encode_check_box(document, *control, context);
                 } else if (control->kind() == model::ControlKind::progress_bar) {
-                    record = encode_progress_bar(*control, context);
+                    record = encode_progress_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::panel) {
                     if (!control->events.empty() || control->data_path || !control->extension_properties.empty()) {
                         fail("OOF1122", child_path(path, ordinal), "Panel without Events, DataPath, or extension properties",
@@ -4511,10 +4668,10 @@ Result<list_stream::ListValue> encode_document(
                         std::move(panel_properties), encode_geometry(control->position, context, IncomingAnchorLists{}),
                         info, std::move(panel_owner.child_table)});
                 } else {
-                    fail("OOF1122", std::string(path), "Button, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, or Panel", control->name,
+                    fail("OOF1122", std::string(path), "Button, RadioButton, PictureDecoration, LabelDecoration, CalendarField, InputField, CheckBox, ProgressBar, or Panel", control->name,
                         "Control payload is unsupported");
                 }
-                if (control->kind() == model::ControlKind::input_field || control->kind() == model::ControlKind::check_box) {
+                if (control->data_path) {
                     ordered_control_links.push_back(form_stream::AttributeLink{
                         static_cast<std::int64_t>(control->id.value()),
                         model::CompositeIdValue{static_cast<std::int64_t>(control->data_path->attribute.id().value()),
@@ -4625,13 +4782,12 @@ Result<list_stream::ListValue> encode_document(
         });
         std::size_t linked_control_count = 0;
         for (const auto& control : document.collections().controls) {
-            if (control.kind() == model::ControlKind::input_field ||
-                control.kind() == model::ControlKind::check_box) {
+            if (control.data_path) {
                 ++linked_control_count;
             }
         }
         if (linked_control_count != attributes.links.size()) {
-            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField or CheckBox",
+            fail("OOF1122", "$/Form/ChildItems", "one DataPath link per InputField, CheckBox, or bound ProgressBar",
                 std::to_string(linked_control_count), "Linked control and DataPath link counts do not match");
         }
         if (max_id >= std::numeric_limits<std::uint32_t>::max()) {

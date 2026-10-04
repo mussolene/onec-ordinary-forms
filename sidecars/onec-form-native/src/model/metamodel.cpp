@@ -706,6 +706,11 @@ void apply_proven_storage_overrides(
         DefaultKind::shortcut,
         "None");
 
+    auto& radio_button = properties[static_cast<std::size_t>(ControlKind::radio_button)];
+    classify_property(radio_button, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(radio_button, "Caption", StorageCodec::control_info, DefaultKind::string, "");
+    classify_property(radio_button, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+
     auto& picture_decoration = properties[static_cast<std::size_t>(ControlKind::picture_decoration)];
     classify_property(
         picture_decoration,
