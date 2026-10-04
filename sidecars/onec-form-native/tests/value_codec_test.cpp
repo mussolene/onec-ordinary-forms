@@ -153,8 +153,23 @@ void test_type_domain() {
     }
     expect(codec::decode_type_domain(
         "{\"Pattern\",{\"#\",d47d59f8-73f0-481c-8b5e-f6384c0a4804}}")
-        .entries.front().term == model::TypeDomainTerm::unknown,
-        "unrelated unknown type UUID must not normalize to ValueTable");
+        .entries.front().term == model::TypeDomainTerm::object,
+        "unrelated object type UUID must remain a named object rather than ValueTable");
+    model::TypeDomainEntry object_entry;
+    object_entry.term = model::TypeDomainTerm::object;
+    object_entry.type_uuid = model::UuidValue{"11111111-1111-1111-1111-111111111111"};
+    const model::TypeDomainPatternValue object_domain{{object_entry}};
+    const auto object_stream = codec::encode_type_domain(object_domain);
+    expect(object_stream == "{\"Pattern\",{\"#\",11111111-1111-1111-1111-111111111111}}" &&
+        codec::decode_type_domain(object_stream) == object_domain,
+        "Concrete object type must map to the native UUID descriptor without becoming unknown");
+    object_entry.term = model::TypeDomainTerm::unknown;
+    expect_rejected([&] { static_cast<void>(codec::encode_type_domain(model::TypeDomainPatternValue{{object_entry}})); },
+        "The old unknown term must not remain an alternate path for concrete objects");
+    object_entry.term = model::TypeDomainTerm::object;
+    object_entry.type_uuid.reset();
+    expect_rejected([&] { static_cast<void>(codec::encode_type_domain(model::TypeDomainPatternValue{{object_entry}})); },
+        "An object type cannot omit its UUID");
     model::TypeDomainEntry invalid_value_table = value_table_entry;
     invalid_value_table.type_uuid = model::UuidValue{"d47d59f8-73f0-481c-8b5e-f6384c0a4804"};
     expect_rejected(

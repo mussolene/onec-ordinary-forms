@@ -1751,6 +1751,33 @@ void test_progress_bar_xml_only_contract() {
         "ProgressBar XML-only object model must round-trip");
 }
 
+void test_data_processor_form_extension_xml_contract() {
+    const auto parsed = source::parse_form_xml(
+        "<Form id=\"1\" name=\"Processor\" ordinaryFormVersion=\"2.1\"><DataProcessorFormExtension/></Form>");
+    expect(parsed.ok() && parsed.value().form().extension == model::FormExtensionKind::data_processor,
+        "The platform form extension must be a typed named concept");
+    expect(!source::parse_form_xml("<Form id=\"1\" name=\"Processor\" ordinaryFormVersion=\"2.1\"><MainAttribute attributeId=\"42\"/></Form>").ok(),
+        "A dangling main Attribute reference must fail the object model invariant");
+    const auto xml = source::serialize_form_xml(parsed.value());
+    expect(xml.ok() && source::parse_form_xml(xml.value()).value().form().extension == parsed.value().form().extension,
+        "XML-only round-trip must retain the extension kind");
+    for (const auto domain : {"<Entry term=\"object\"/>", "<Entry term=\"unknown\" typeUuid=\"11111111-1111-1111-1111-111111111111\"/>"})
+        expect(!source::parse_form_xml(std::string("<Form id=\"1\" name=\"P\" ordinaryFormVersion=\"2.1\"><Attributes><Attribute id=\"2\" name=\"Value\"><TypeDomain>") + domain + "</TypeDomain></Attribute></Attributes></Form>").ok(),
+            "Concrete object types require UUID and cannot use the old unknown term");
+    for (const auto invalid : {"<DataProcessorFormExtension/><DataProcessorFormExtension/>",
+        "<DataProcessorFormExtension raw=\"x\"/>", "<DataProcessorFormExtension><Field>0</Field></DataProcessorFormExtension>",
+        "<DataProcessorFormExtension>0</DataProcessorFormExtension>"}) {
+        const auto rejected = source::parse_form_xml(std::string("<Form id=\"1\" name=\"Processor\" ordinaryFormVersion=\"2.1\">") + invalid + "</Form>");
+        expect(!rejected.ok(), "XSD must reject duplicate, indexed, raw or unnamed extension values");
+    }
+    auto document = parsed.value();
+    auto form = document.form();
+    form.extension = static_cast<model::FormExtensionKind>(255);
+    document.set_form(std::move(form));
+    expect(!document.validate().ok(), "Unknown extension kinds must violate the object model invariant");
+    expect(!source::serialize_form_xml(document).ok(), "Unknown extension kinds must fail explicit serialization");
+}
+
 void test_command_bar_buttons_xml_only_contract() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="CommandBar" ordinaryFormVersion="2.1"><ChildItems>
       <CommandBar id="4" name="Tools"><Position/><Enabled>false</Enabled><Buttons>
@@ -1780,6 +1807,7 @@ void test_command_bar_buttons_xml_only_contract() {
 
 int main() {
     try {
+        test_data_processor_form_extension_xml_contract();
         test_complete_document_roundtrip();
         test_usual_group_named_xml_round_trip();
         test_root_page_tree_xml_roundtrip();

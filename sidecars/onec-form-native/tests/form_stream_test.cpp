@@ -870,9 +870,9 @@ void test_attributes() {
         "attribute count mismatch must be rejected");
     expect_failure(
         form_stream::decode_attributes(list_stream::parse("{{1},0,{0},{0}}")),
-        "OOF1106",
-        "$/2/0/0",
-        "attribute version mismatch must be rejected");
+        "OOF1107",
+        "$/2/0",
+        "dangling main Attribute reference must be rejected");
     expect_failure(
         form_stream::decode_attributes(list_stream::parse(
             "{{-1},2,{1,{{1,01234567-89ab-cdef-0123-456789abcdef},1,0,1,\"Value\","
@@ -4518,7 +4518,7 @@ void test_fresh_progress_bar_runtime_record_and_rejections() {
     for (const auto [domain, label] : std::array<std::pair<std::string_view, std::string_view>, 4>{{
              {"<Entry term=\"string\" length=\"64\"/>", "nonNumeric"},
              {"<Entry term=\"numeric\" length=\"10\"/><Entry term=\"numeric\" length=\"8\"/>", "compound"},
-             {"<Entry term=\"unknown\" typeUuid=\"01234567-89AB-CDEF-0123-456789ABCDEF\"/>", "unknown"},
+             {"<Entry term=\"object\" typeUuid=\"01234567-89AB-CDEF-0123-456789ABCDEF\"/>", "unknown"},
              {"<Entry term=\"numeric\" length=\"10\"/><Entry term=\"string\" length=\"2\"/>", "variant"},
          }}) {
         const auto invalid = oof::source::parse_form_xml(xml_for_domain(domain));
@@ -8864,6 +8864,75 @@ void test_owner_aware_control_geometry_codec() {
 }
 
 
+void test_data_processor_form_extension_named_round_trip_and_guards() {
+    auto parsed = oof::source::parse_form_xml(R"XML(<Form id="1" name="Processor" ordinaryFormVersion="2.1"><Height>120</Height><Width>240</Width><MainAttribute attributeId="2"/><DataProcessorFormExtension/><Attributes><Attribute id="2" name="ProcessorObject"><TypeDomain><Entry term="object" typeUuid="11111111-1111-1111-1111-111111111111"/></TypeDomain></Attribute></Attributes></Form>)XML");
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    expect(parsed.value().form().extension == model::FormExtensionKind::data_processor,
+        "Named XML must select the processing form controller");
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    expect(list_stream::dump_compact(encoded.value().items[2].items[0]) == "{2}",
+        "MainAttribute must persist as a named reference independent of attribute flags");
+    const auto& extension = encoded.value().items[3];
+    expect(extension.items.size() == 3 && extension.items[0].atom == "59d6c227-97d3-46f6-84a0-584c5a2807e1" &&
+        list_stream::dump_compact(extension.items[2]) == "{2,0,{0,0},{0},1}",
+        "Fresh encoding must instantiate the proven processing controller default");
+    const auto decoded = form_stream::decode_document(encoded.value(), "Processor");
+    expect(decoded.ok() && decoded.value().form().extension == model::FormExtensionKind::data_processor &&
+        decoded.value().form().main_attribute.id() == model::ObjectId{2},
+        "The controller must survive the binary object model round-trip");
+    const auto xml = oof::source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("<DataProcessorFormExtension/>") != std::string::npos &&
+        xml.value().find("59d6c227") == std::string::npos,
+        "Public XML must retain the named extension without exposing its stream or CLSID");
+    const auto rebuilt = form_stream::encode_document(oof::source::parse_form_xml(xml.value()).value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "Named XML must rebuild the extension without any input binary");
+    for (const auto slot : {1u, 4u}) {
+        auto corrupt = encoded.value();
+        corrupt.items[3].items[2].items[slot] = list_stream::ListValue::raw_atom(slot == 1 ? "1" : "0");
+        expect_failure(form_stream::decode_document(corrupt, "Processor"), "OOF1114", "$/3/2",
+            "Unmapped controller settings must not be dropped");
+    }
+    auto unsupported = encoded.value();
+    unsupported.items[2].items[0] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("-1")});
+    expect_failure(form_stream::decode_document(unsupported, "Processor"), "OOF1122", "$/2/0",
+        "A present extension requires a selected main object during decoding");
+    unsupported = encoded.value();
+    unsupported.items[3] = list_stream::parse("{00000000-0000-0000-0000-000000000000,0}");
+    expect_failure(form_stream::decode_document(unsupported, "Processor"), "OOF1122", "$/2/0",
+        "A main object context requires a supported extension during decoding");
+    for (const auto flag : {1u, 2u}) {
+        unsupported = encoded.value();
+        unsupported.items[2].items[2].items[1].items[flag] = list_stream::ListValue::raw_atom("1");
+        expect_failure(form_stream::decode_document(unsupported, "Processor"), "OOF1122", "$/2/0",
+            "Nondefault main object flags must not yield unrebuildable XML");
+    }
+    unsupported = encoded.value();
+    unsupported.items[2].items[2].items[1].items[5] = list_stream::parse("{\"Pattern\",{\"R\",11111111-1111-1111-1111-111111111111}}");
+    expect_failure(form_stream::decode_document(unsupported, "Processor"), "OOF1122", "$/2/0",
+        "A reference type cannot replace the concrete main object context");
+    auto unknown = encoded.value();
+    unknown.items[3].items[0] = list_stream::ListValue::raw_atom("11111111-1111-1111-1111-111111111111");
+    expect_failure(form_stream::decode_document(unknown, "Processor"), "OOF1106", "$/3/0",
+        "An unknown extension must not be interpreted as a processing form");
+    auto malformed = encoded.value();
+    malformed.items[3].items[1] = list_stream::ListValue::raw_atom("0");
+    expect_failure(form_stream::decode_document(malformed, "Processor"), "OOF1106", "$/3/1",
+        "Present controller must have a consistent presence marker");
+    auto form = parsed.value().form();
+    form.extension.reset();
+    parsed.value().set_form(std::move(form));
+    expect_failure(form_stream::encode_document(parsed.value()), "OOF1122", "$/MainAttribute",
+        "A main object context must not silently use an absent extension");
+    form = parsed.value().form();
+    form.main_attribute = model::AttributeRef{};
+    parsed.value().set_form(std::move(form));
+    const auto removed = form_stream::encode_document(parsed.value());
+    expect(removed.ok() && list_stream::dump_compact(removed.value().items[3]) ==
+        "{00000000-0000-0000-0000-000000000000,0}", "Removing the named extension must remove its controller");
+}
+
 void test_default_schema_fields_fresh_xml_geometry_and_rejections() {
     const auto parsed = oof::source::parse_form_xml(R"XML(<Form id="1" name="DefaultSchemas" ordinaryFormVersion="2.1"><ChildItems>
       <GraphicalSchemaField id="19" name="Flow"><Position><Top>20</Top><Height>90</Height><Left>10</Left><TabOrder>2</TabOrder><Width>140</Width></Position></GraphicalSchemaField>
@@ -8969,6 +9038,7 @@ void test_pivot_chart_default_factory_round_trip_and_rejections() {
 
 int main() {
     try {
+        test_data_processor_form_extension_named_round_trip_and_guards();
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
         test_command_bar_owner_pair_and_strict_profile();

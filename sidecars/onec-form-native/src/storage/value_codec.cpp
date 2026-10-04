@@ -62,6 +62,7 @@ constexpr std::string_view value_table_type_uuid = "acf6192e-81ca-46ef-93a6-5a69
 std::string_view term_token(model::TypeDomainTerm term) {
     switch (term) {
         case model::TypeDomainTerm::unknown:
+        case model::TypeDomainTerm::object:
             return "#";
         case model::TypeDomainTerm::list:
             return "L";
@@ -357,6 +358,13 @@ void write_type_domain(
             case model::TypeDomainTerm::reference:
             case model::TypeDomainTerm::list:
             case model::TypeDomainTerm::unknown:
+            case model::TypeDomainTerm::object:
+                if ((entry.term == model::TypeDomainTerm::object && !entry.type_uuid) ||
+                    (entry.term == model::TypeDomainTerm::unknown && entry.type_uuid))
+                    throw std::runtime_error("Object type requires UUID; unknown type cannot carry an object UUID");
+                if (entry.term == model::TypeDomainTerm::object &&
+                    (entry.type_uuid->canonical == value_list_type_uuid || entry.type_uuid->canonical == value_table_type_uuid))
+                    throw std::runtime_error("Known collection types require the named ValueList or ValueTable term");
                 if (entry.type_uuid.has_value()) {
                     out.write_guid(entry.type_uuid->canonical);
                 }
@@ -431,6 +439,7 @@ model::TypeDomainPatternValue read_type_domain(list_stream::ListInStream& in) {
             case model::TypeDomainTerm::reference:
             case model::TypeDomainTerm::list:
             case model::TypeDomainTerm::unknown:
+            case model::TypeDomainTerm::object:
                 if (in.has_next()) {
                     entry.type_uuid = model::UuidValue{in.read_guid()};
                     if (entry.term == model::TypeDomainTerm::unknown &&
@@ -441,6 +450,8 @@ model::TypeDomainPatternValue read_type_domain(list_stream::ListInStream& in) {
                         entry.type_uuid->canonical == value_table_type_uuid) {
                         entry.term = model::TypeDomainTerm::value_table;
                         entry.type_uuid.reset();
+                    } else if (entry.term == model::TypeDomainTerm::unknown) {
+                        entry.term = model::TypeDomainTerm::object;
                     }
                 }
                 break;

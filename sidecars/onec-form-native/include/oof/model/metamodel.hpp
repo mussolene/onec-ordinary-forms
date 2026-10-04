@@ -168,6 +168,20 @@ struct ControlDescriptor {
     ChildPolicy child_policy = ChildPolicy::forbidden;
 };
 
+struct FormExtensionDescriptor {
+    FormExtensionKind kind;
+    std::string_view guid;
+    std::string_view xml_name;
+    std::u8string_view russian_name;
+};
+
+inline constexpr FormExtensionDescriptor data_processor_form_extension{
+    FormExtensionKind::data_processor,
+    "59d6c227-97d3-46f6-84a0-584c5a2807e1",
+    "DataProcessorFormExtension",
+    u8"Расширение формы обработки",
+};
+
 struct PropertyDescriptor {
     PropertyId id{};
     DescriptorOwner owner = DescriptorOwner::control;

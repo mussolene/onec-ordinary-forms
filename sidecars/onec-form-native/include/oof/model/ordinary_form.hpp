@@ -238,6 +238,7 @@ enum class TypeDomainTerm : std::uint8_t {
     type,
     value_list,
     value_table,
+    object,
 };
 
 struct NumericQualifiers {
@@ -792,12 +793,18 @@ struct Page {
     std::vector<ChildItemRef> children;
 };
 
+enum class FormExtensionKind : std::uint8_t {
+    data_processor,
+};
+
 struct Form {
     ObjectId id{};
     std::string name;
     PropertySet properties;
     std::vector<EventRef> events;
     std::vector<ChildItemRef> children;
+    std::optional<FormExtensionKind> extension;
+    AttributeRef main_attribute;
 };
 
 struct FormModule {

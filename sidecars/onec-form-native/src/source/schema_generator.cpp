@@ -352,6 +352,7 @@ void append_value_types(std::string& output) {
   <xs:simpleType name="TypeDomainTermType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="unknown"/>
+      <xs:enumeration value="object"/>
       <xs:enumeration value="list"/>
       <xs:enumeration value="boolean"/>
       <xs:enumeration value="binary"/>
@@ -782,6 +783,10 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
 
     output += "  <xs:complexType name=\"FormType\">\n    <xs:sequence>\n";
     append_property_elements(output, metamodel.form_properties());
+    output += "      <xs:element name=\"MainAttribute\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType><xs:attribute name=\"attributeId\" type=\"ObjectIdType\" use=\"required\"/></xs:complexType></xs:element>\n";
+    output += "      <xs:element name=\"";
+    append_xml_escaped(output, model::metamodel::data_processor_form_extension.xml_name);
+    output += "\" minOccurs=\"0\" maxOccurs=\"1\"><xs:complexType/></xs:element>\n";
     output +=
         "      <xs:element name=\"Events\" type=\"FormEventsType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
         "      <xs:element name=\"Attributes\" type=\"AttributesType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n"
@@ -974,7 +979,10 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         output,
         metamodel.panel_placement_properties(),
         "          ");
-    output += "        </SharedProperties>\n        <Controls>\n";
+    output += "        </SharedProperties>\n        <NamedConcept name=\"MainAttribute\" russianName=\"Основной реквизит\"/>\n        <NamedConcept";
+    append_attribute(output, "name", model::metamodel::data_processor_form_extension.xml_name);
+    append_attribute(output, "russianName", as_utf8(model::metamodel::data_processor_form_extension.russian_name));
+    output += "/>\n        <Controls>\n";
 
     for (const auto& control : metamodel.controls()) {
         output += "          <Control";

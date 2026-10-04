@@ -63,6 +63,7 @@ struct AttributesRecord {
     std::uint32_t slot_count = 0;
     std::vector<AttributeRecord> attributes;
     std::vector<AttributeLink> links;
+    std::optional<model::CompositeIdValue> main_attribute;
 
     friend bool operator==(const AttributesRecord&, const AttributesRecord&) = default;
 };
