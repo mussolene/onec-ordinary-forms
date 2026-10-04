@@ -356,6 +356,20 @@ void test_shortcut() {
         "unknown named Shortcut key must be rejected");
 }
 
+void test_platform_date_codec() {
+    expect(codec::date_to_platform("2024-02-29T00:00:00") == "20240229000000",
+        "local leap-day date must encode to the canonical platform atom");
+    expect(codec::date_from_platform("20311107234510") == "2031-11-07T23:45:10",
+        "platform seconds and time fields must decode without loss");
+    for (const std::string_view invalid : {
+             "2023-02-29T00:00:00", "2024-13-01T00:00:00", "2024-04-31T00:00:00",
+             "2024-01-01T24:00:00", "2024-01-01T00:60:00", "2024-01-01T00:00:60",
+             "2024-01-01T00:00:00Z", "2024-01-01T00:00:00.1"}) {
+        expect_rejected([invalid] { static_cast<void>(codec::date_to_platform(invalid)); },
+            "invalid, zoned, or fractional date must be rejected");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -368,6 +382,7 @@ int main() {
         test_color();
         test_font();
         test_shortcut();
+        test_platform_date_codec();
     } catch (const std::exception& error) {
         std::cerr << "value codec tests: FAIL: " << error.what() << '\n';
         return 1;

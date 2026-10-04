@@ -2475,9 +2475,10 @@ void test_calendar_field_enabled_round_trip_and_rejections() {
 
     auto changed_date_atom = encoded.value();
     auto& calendar_record = changed_date_atom.items[1].items[2].items[2].items[2];
-    calendar_record.items[2].items[1].items[5] = list_stream::ListValue::raw_atom("00010101000001");
-    expect_failure(form_stream::decode_document(changed_date_atom, "CalendarForm"), "OOF1114",
-        "$/1/2/2/2/2", "unmapped CalendarField date-like leaf variation must fail closed");
+    calendar_record.items[2].items[1].items[5] = list_stream::ListValue::raw_atom("20230229000000");
+    const auto malformed_calendar_date = form_stream::decode_document(changed_date_atom, "CalendarForm");
+    expect(!malformed_calendar_date && malformed_calendar_date.diagnostics().front().code == "OOF1122",
+        "malformed CalendarField date atom must fail closed");
 
     auto changed_flag_atom = encoded.value();
     auto& changed_flag_properties = changed_flag_atom.items[1].items[2].items[2].items[2]
@@ -2485,6 +2486,123 @@ void test_calendar_field_enabled_round_trip_and_rejections() {
     changed_flag_properties.items[13] = list_stream::ListValue::raw_atom("1");
     expect_failure(form_stream::decode_document(changed_flag_atom, "CalendarForm"), "OOF1114",
         "$/1/2/2/2/2", "unmapped CalendarField flag-like leaf variation must fail closed");
+}
+
+void test_calendar_field_begin_display_period() {
+    const auto* descriptor = model::metamodel::find_property(
+        model::ControlKind::calendar_field, "BeginOfDisplayPeriod");
+    expect(descriptor != nullptr && descriptor->value_codec == model::metamodel::ValueCodec::date &&
+               descriptor->storage_codec == model::metamodel::StorageCodec::control_info &&
+               descriptor->default_value.kind == model::metamodel::DefaultKind::undefined,
+        "BeginOfDisplayPeriod must use the existing Date codec and have an Undefined descriptor default");
+
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "CalendarPeriod";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode calendar{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}};
+    calendar.properties().set_explicit(model::PropertyId::from_name("BeginOfDisplayPeriod"),
+        model::DateValue{"2024-02-29T00:00:00"});
+    document.add_control(std::move(calendar));
+
+    auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "named calendar date must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    auto find_calendar = [&](auto&& self, list_stream::ListValue& value) -> list_stream::ListValue* {
+        if (!value.is_list) return nullptr;
+        if (value.items.size() == 6 && !value.items[0].is_list &&
+            value.items[0].atom == "e3c063d8-ef92-41be-9c89-b70290b5368b") return &value;
+        for (auto& item : value.items) if (auto* found = self(self, item)) return found;
+        return nullptr;
+    };
+    auto* encoded_calendar = find_calendar(find_calendar, encoded.value());
+    expect(encoded_calendar != nullptr && encoded_calendar->items[2].items[1].items[5].atom == "20240229000000",
+        "BeginOfDisplayPeriod must occupy observed calendar info slot 5");
+    const auto decoded = form_stream::decode_document(encoded.value(), "CalendarPeriod");
+    const auto* decoded_calendar = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* date = decoded_calendar ? decoded_calendar->properties().find(
+        model::PropertyId::from_name("BeginOfDisplayPeriod")) : nullptr;
+    expect(decoded.ok() && date != nullptr && std::get<model::DateValue>(date->value).canonical ==
+               "2024-02-29T00:00:00",
+        "BeginOfDisplayPeriod Date must survive storage round-trip");
+
+    model::Form late_form;
+    late_form.id = model::ObjectId{1}; late_form.name = "CalendarPeriodLate";
+    late_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument late_document(std::move(late_form));
+    model::ControlNode late_source_calendar{model::ObjectId{2}, "Calendar", model::CalendarFieldPayload{}};
+    late_source_calendar.properties().set_explicit(model::PropertyId::from_name("BeginOfDisplayPeriod"),
+        model::DateValue{"2031-11-07T23:45:10"});
+    late_document.add_control(std::move(late_source_calendar));
+    const auto late_encoded = form_stream::encode_document(late_document);
+    expect(late_encoded.ok(), "BeginOfDisplayPeriod with a non-midnight time must encode");
+    const auto late_decoded = form_stream::decode_document(late_encoded.value(), "CalendarPeriod");
+    const auto* late_calendar = late_decoded ? late_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* late_date = late_calendar ? late_calendar->properties().find(
+        model::PropertyId::from_name("BeginOfDisplayPeriod")) : nullptr;
+    expect(late_encoded.ok() && late_decoded.ok() && late_date != nullptr &&
+               std::get<model::DateValue>(late_date->value).canonical == "2031-11-07T23:45:10",
+        "BeginOfDisplayPeriod must preserve a non-midnight time through storage round-trip");
+
+    const auto xml = oof::source::serialize_form_xml(document);
+    expect(xml.ok() && xml.value().find("<BeginOfDisplayPeriod>2024-02-29T00:00:00</BeginOfDisplayPeriod>") !=
+            std::string::npos, "named BeginOfDisplayPeriod Date must serialize as public XML");
+    const auto parsed_date_xml = oof::source::parse_form_xml(xml.value());
+    expect(parsed_date_xml.ok(), "serialized BeginOfDisplayPeriod XML must parse as a named date");
+    const auto xml_encoded = form_stream::encode_document(parsed_date_xml.value());
+    expect(xml_encoded.ok(), "XML-only BeginOfDisplayPeriod source must encode without a baseline");
+    const auto xml_decoded = form_stream::decode_document(xml_encoded.value(), "CalendarPeriod");
+    const auto* xml_calendar = xml_decoded ? xml_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* xml_date = xml_calendar ? xml_calendar->properties().find(
+        model::PropertyId::from_name("BeginOfDisplayPeriod")) : nullptr;
+    expect(xml_decoded.ok() && xml_date != nullptr &&
+               std::get<model::DateValue>(xml_date->value).canonical == "2024-02-29T00:00:00",
+        "named Date XML-only round-trip must preserve its canonical value");
+    const std::string default_xml = R"XML(<Form id="1" name="CalendarDefault" ordinaryFormVersion="2.1"><ChildItems><CalendarField id="2" name="Calendar"><Position/><BeginOfDisplayPeriod>undefined</BeginOfDisplayPeriod></CalendarField></ChildItems></Form>)XML";
+    auto default_document = oof::source::parse_form_xml(default_xml);
+    expect(default_document.ok(), "Undefined BeginOfDisplayPeriod must parse");
+    const auto default_output = oof::source::serialize_form_xml(default_document.value());
+    expect(default_output.ok() && default_output.value().find("BeginOfDisplayPeriod") == std::string::npos,
+        "Undefined BeginOfDisplayPeriod equal to its descriptor default must be omitted from XML");
+    const auto undefined_encoded = form_stream::encode_document(default_document.value());
+    expect(undefined_encoded.ok(), "explicit Undefined BeginOfDisplayPeriod must encode to its named default slot");
+    const auto undefined_decoded = form_stream::decode_document(undefined_encoded.value(), "CalendarDefault");
+    const auto* undefined_calendar = undefined_decoded ? undefined_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    expect(undefined_decoded.ok() && undefined_calendar != nullptr &&
+               undefined_calendar->properties().find(model::PropertyId::from_name("BeginOfDisplayPeriod")) == nullptr,
+        "Undefined slot round-trip must restore the descriptor's implicit Undefined default");
+
+    for (const std::string_view invalid : {"2023-02-29T00:00:00", "2024-13-01T00:00:00",
+             "2024-04-31T00:00:00", "2024-01-01T24:00:00", "2024-01-01T00:60:00",
+             "2024-01-01T00:00:60", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00.1"}) {
+        const std::string bad_xml = std::string("<Form id=\"1\" name=\"CalendarBad\" ordinaryFormVersion=\"2.1\"><ChildItems><CalendarField id=\"2\" name=\"Calendar\"><Position/><BeginOfDisplayPeriod>") +
+            std::string(invalid) + "</BeginOfDisplayPeriod></CalendarField></ChildItems></Form>";
+        expect(!oof::source::parse_form_xml(bad_xml), "invalid local calendar date must be rejected");
+    }
+    model::Form sentinel_form;
+    sentinel_form.id = model::ObjectId{1}; sentinel_form.name = "CalendarSentinel";
+    sentinel_form.children = {model::ControlRef{model::ObjectId{3}}};
+    model::OrdinaryFormDocument sentinel_document(std::move(sentinel_form));
+    model::ControlNode sentinel_calendar{model::ObjectId{3}, "Calendar", model::CalendarFieldPayload{}};
+    sentinel_calendar.properties().set_explicit(model::PropertyId::from_name("BeginOfDisplayPeriod"),
+        model::DateValue{"0001-01-01T00:00:00"});
+    sentinel_document.add_control(std::move(sentinel_calendar));
+    expect(!form_stream::encode_document(sentinel_document),
+        "explicit Date colliding with the Undefined storage sentinel must fail");
+
+    for (const std::string_view unsupported : {"EndOfDisplayPeriod", "CurrentDate"}) {
+        model::Form unsupported_form;
+        unsupported_form.id = model::ObjectId{1}; unsupported_form.name = "UnsupportedCalendarDate";
+        unsupported_form.children = {model::ControlRef{model::ObjectId{4}}};
+        model::OrdinaryFormDocument unsupported_document(std::move(unsupported_form));
+        model::ControlNode unsupported_calendar{model::ObjectId{4}, "Calendar", model::CalendarFieldPayload{}};
+        unsupported_calendar.properties().set_explicit(model::PropertyId::from_name(unsupported),
+            model::DateValue{"2024-02-29T00:00:00"});
+        unsupported_document.add_control(std::move(unsupported_calendar));
+        expect(!form_stream::encode_document(unsupported_document),
+            "unsupported CalendarField date properties must remain outside this storage allowlist");
+    }
 }
 
 void test_fresh_progress_bar_runtime_record_and_rejections() {
@@ -2877,6 +2995,288 @@ void test_track_bar_observed_record_and_named_round_trip() {
         "mixed Button and TrackBar records must decode in named control order");
 }
 
+void test_calendar_field_captured_begin_period_record_decode() {
+    constexpr std::string_view captured = R"CAPTURED({"#",5c83cba4-7a20-4102-a5be-add0ee74f6a1,
+{27,
+{18,
+{
+{1,0},102,4294967295},
+{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,
+{1,
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,0,
+{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},26,0,0,0,0,0,0,
+{10,1,
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,
+{1,1,
+{6,
+{1,1,
+{"ru","Страница1"}
+},
+{10,0,
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},1}
+},1,1,0,4,
+{2,8,1,1,1,0,0,0,0},
+{2,8,0,1,2,0,0,0,0},
+{2,422,1,1,3,0,0,8,0},
+{2,252,0,1,4,0,0,8,0},0,4294967295,5,64,0,
+{4,4,
+{0},4},0,0,57,0,0},
+{0}
+},
+{3,
+{e3c063d8-ef92-41be-9c89-b70290b5368b,100,
+{1,
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,1,
+{-18},0,0,0},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},9,
+{4,3,
+{-16},3},
+{4,3,
+{-14},3},
+{4,3,
+{-15},3},20240229000000,00010101000000,1,1,0,0,0,0,1},
+{0}
+},
+{8,10,15,360,55,1,
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},0,0,0,0,0,0,0,0,1,0,0},
+{14,"CalendarFieldDefault",4294967295,0,0,0},
+{0}
+},
+{e3c063d8-ef92-41be-9c89-b70290b5368b,101,
+{1,
+{
+{19,0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,1,
+{-18},0,0,0},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},9,
+{4,3,
+{-16},3},
+{4,3,
+{-14},3},
+{4,3,
+{-15},3},00010101000000,00010101000000,1,1,0,0,0,0,1},
+{0}
+},
+{8,10,70,360,110,1,
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},0,0,0,0,0,0,0,1,2,0,0},
+{14,"CalendarFieldDisabled",4294967295,0,0,0},
+{0}
+},
+{e3c063d8-ef92-41be-9c89-b70290b5368b,102,
+{1,
+{
+{19,1,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{8,3,0,1,100},0,
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,4,
+{0},4},
+{4,3,
+{-7},3},
+{4,3,
+{-21},3},
+{3,1,
+{-18},0,0,0},
+{1,0},0,0,100,2,2,1,2,
+{4,4,
+{0},4}
+},9,
+{4,3,
+{-16},3},
+{4,3,
+{-14},3},
+{4,3,
+{-15},3},00010101000000,00010101000000,1,1,0,0,0,0,1},
+{0}
+},
+{8,10,125,360,165,0,
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},
+{0,
+{2,-1,6,0},
+{2,-1,6,0}
+},0,0,0,0,0,0,0,2,3,0,0},
+{14,"CalendarFieldHidden",4294967295,0,0,0},
+{0}
+}
+}
+},430,260,1,0,1,4,4,24,430,260,96},
+{
+{-1},103,
+{0},
+{0}
+},
+{00000000-0000-0000-0000-000000000000,0},
+{0},1,4,1,0,0,0,
+{0},
+{0},
+{10,0,
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},
+{4,0,
+{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
+})CAPTURED";
+    auto parsed = list_stream::parse(captured);
+    expect(parsed.is_list && parsed.items.size() == 3,
+        "captured native snapshot must contain the storage envelope and payload");
+    const auto decoded = form_stream::decode_document(parsed.items[2], "CapturedBeginPeriod");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* calendar = decoded.value().find_control(model::ObjectId{100});
+    const auto* begin = calendar == nullptr ? nullptr : calendar->properties().find(
+        model::PropertyId::from_name("BeginOfDisplayPeriod"));
+    expect(calendar != nullptr, "captured native changed1 record must retain CalendarField ID 100");
+    expect(calendar->name == "CalendarFieldDefault", "captured native changed1 record must retain its actual name");
+    expect(begin != nullptr, "captured native changed1 record must decode its BeginOfDisplayPeriod");
+    expect(std::get<model::DateValue>(begin->value).canonical == "2024-02-29T00:00:00",
+        "captured native changed1 record must decode its actual slot value");
+}
+
 void test_progress_data_path_mixed_with_existing_links() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -2969,7 +3369,7 @@ void test_calendar_field_observed_record_decode() {
 {4,3,
 {-14},3},
 {4,3,
-{-15},3},00010101000000,00010101000000,1,1,0,0,0,0,1},
+{-15},3},20240229000000,00010101000000,1,1,0,0,0,0,1},
 {0}
 },
 {8,0,0,0,0,1,
@@ -3025,9 +3425,10 @@ void test_calendar_field_observed_record_decode() {
 
     auto changed_date = stream.value();
     auto& date_slot = changed_date.items[1].items[2].items[2].items[2].items[2].items[1].items[5];
-    date_slot = list_stream::ListValue::raw_atom("00010101000001");
-    expect_failure(form_stream::decode_document(changed_date, "ObservedCalendar"), "OOF1114",
-        "$/1/2/2/2/2", "unmapped observed CalendarField date variation must fail closed");
+    date_slot = list_stream::ListValue::raw_atom("20230229000000");
+    const auto invalid_date = form_stream::decode_document(changed_date, "ObservedCalendar");
+    expect(!invalid_date && invalid_date.diagnostics().front().code == "OOF1122",
+        "malformed leap-day date in the observed CalendarField record must fail closed");
 
     auto changed_events = stream.value();
     auto& events_slot = changed_events.items[1].items[2].items[2].items[2].items[2].items[2];
@@ -5116,6 +5517,8 @@ int main() {
         test_fresh_checkbox_stream_decode();
         test_radio_button_basic_observed_record_and_rejections();
         test_calendar_field_enabled_round_trip_and_rejections();
+        test_calendar_field_begin_display_period();
+        test_calendar_field_captured_begin_period_record_decode();
         test_calendar_field_observed_record_decode();
         test_fresh_progress_bar_runtime_record_and_rejections();
         test_track_bar_observed_record_and_named_round_trip();

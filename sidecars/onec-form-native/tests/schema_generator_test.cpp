@@ -432,6 +432,12 @@ void expect_property_element(
             type == "UnclassifiedValueType",
             "unclassified property must use the rejecting type");
     } else {
+        if (descriptor.control_kind == oof::model::ControlKind::calendar_field &&
+            descriptor.api_name == "BeginOfDisplayPeriod") {
+            expect(
+                type == "CalendarBeginDateValueType",
+                "calendar begin date must use its bounded date type");
+        }
         if (descriptor.value_codec == ValueCodec::command_bar_buttons)
             expect(type == "CommandBarButtonsType", "menu collection must use its descriptor-backed schema type");
         expect(
@@ -441,6 +447,82 @@ void expect_property_element(
             descriptor.value_codec == ValueCodec::string || type != "xs:string",
             "only the exact string codec may use xs:string");
     }
+}
+
+std::string calendar_instance(
+    std::string_view property_name = {},
+    std::string_view value = {}
+) {
+    std::string xml =
+        "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<CalendarField id=\"2\" name=\"Calendar\"><Position/>";
+    if (!property_name.empty()) {
+        xml += "<";
+        xml += property_name;
+        xml += ">";
+        xml += value;
+        xml += "</";
+        xml += property_name;
+        xml += ">";
+    }
+    xml += "</CalendarField></ChildItems></Form>";
+    return xml;
+}
+
+void test_date_values(xmlSchemaPtr schema) {
+    const auto valid = [&](std::string_view property, std::string_view value) {
+        return validate_document(schema, calendar_instance(property, value)) == 0;
+    };
+    const auto invalid = [&](std::string_view property, std::string_view value) {
+        return validate_document(schema, calendar_instance(property, value)) != 0;
+    };
+
+    expect(
+        validate_document(schema, calendar_instance()) == 0,
+        "omitted calendar date properties must retain their schema defaults");
+    expect(valid("CurrentDate", "2031-11-07T23:45:10"),
+           "canonical local date-time must validate");
+    expect(valid("CurrentDate", "2024-02-29T00:00:00"),
+           "Gregorian leap-day midnight must validate");
+    expect(valid("CurrentDate", "0001-01-01T00:00:00"),
+           "earliest local date-time must remain valid for generic date properties");
+    expect(valid("BeginOfDisplayPeriod", "undefined"),
+           "undefined must remain valid for the calendar begin date");
+    expect(valid("BeginOfDisplayPeriod", "2031-11-07T23:45:10"),
+           "calendar begin date must preserve the canonical timed-date contract");
+    expect(valid("BeginOfDisplayPeriod", "2024-02-29T00:00:00"),
+           "calendar begin date must accept Gregorian leap-day midnight");
+    expect(valid("BeginOfDisplayPeriod", "4000-01-01T00:00:00"),
+           "query literal limits must not restrict the observed calendar date contract");
+    expect(valid("BeginOfDisplayPeriod", "0001-01-01T00:00:01"),
+           "calendar begin date must accept values after its lower bound");
+    expect(invalid("CurrentDate", "2023-02-29T00:00:00"),
+           "invalid Gregorian leap day must be rejected");
+
+    constexpr std::array invalid_lexemes{
+        "2031-11-07T23:45:10Z",
+        "2031-11-07T23:45:10+01:00",
+        "2031-11-07T23:45:10-01:00",
+        "2031-11-07T23:45:10.1",
+        "2031-11-07T23:45:10.0000",
+        "0000-01-01T00:00:00",
+        "10000-01-01T00:00:00",
+        "-0001-01-01T00:00:00",
+        "2024-01-01T24:00:00",
+        "2024-01-01T00:60:00",
+        "2024-01-01T00:00:60",
+        "prefix2031-11-07T23:45:10",
+        "2031-11-07T23:45:10suffix",
+    };
+    for (const std::string_view value : invalid_lexemes) {
+        for (const std::string_view property : {"CurrentDate", "BeginOfDisplayPeriod"}) {
+            expect(invalid(property, value),
+                   "noncanonical local date-time lexeme must be rejected: " +
+                       std::string(property) + ": " + std::string(value));
+        }
+    }
+    expect(invalid("BeginOfDisplayPeriod", "0001-01-01T00:00:00"),
+           "calendar begin date lower bound must be exclusive");
 }
 
 std::size_t expect_property_sequence(
@@ -1138,6 +1220,7 @@ int main() {
         test_child_policy(metamodel, form_schema);
         test_palette(metamodel, palette_schema);
         test_document_instances(compiled_form.get());
+        test_date_values(compiled_form.get());
         test_schema_structure_coverage_does_not_imply_codec_coverage(
             metamodel,
             compiled_form.get());

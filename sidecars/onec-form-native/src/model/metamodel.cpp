@@ -779,6 +779,12 @@ void apply_proven_storage_overrides(
         StorageCodec::control_base,
         DefaultKind::boolean,
         "true");
+    classify_property(
+        calendar_field,
+        "BeginOfDisplayPeriod",
+        StorageCodec::control_info,
+        DefaultKind::undefined,
+        "undefined");
 
     auto& progress_bar = properties[static_cast<std::size_t>(ControlKind::progress_bar)];
     classify_property(
