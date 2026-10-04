@@ -612,6 +612,10 @@ void apply_proven_storage_overrides(
     std::vector<PropertyDescriptor>& panel_placement_properties,
     std::vector<PropertyDescriptor>& form_properties,
     std::array<std::vector<EventDescriptor>, control_kind_count>& events) {
+    auto& usual_group = properties[static_cast<std::size_t>(ControlKind::usual_group)];
+    classify_property(usual_group, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(usual_group, "Caption", StorageCodec::control_info, DefaultKind::string, "");
+    classify_property(usual_group, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
     auto& button = properties[static_cast<std::size_t>(ControlKind::button)];
     classify_property(button, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
     std::ranges::find(button, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
@@ -735,6 +739,14 @@ void apply_proven_storage_overrides(
         StorageCodec::picture_record,
         DefaultKind::none,
         "");
+
+    auto& splitter = properties[static_cast<std::size_t>(ControlKind::splitter)];
+    classify_property(splitter, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(splitter, "Orientation", StorageCodec::control_info, DefaultKind::enumeration, "Auto");
+    std::ranges::find(splitter, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
+    classify_property(splitter, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    classify_property(splitter, "BorderColor", StorageCodec::control_base, DefaultKind::color, "automatic");
+    classify_property(splitter, "BackColor", StorageCodec::control_base, DefaultKind::color, "automatic");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(

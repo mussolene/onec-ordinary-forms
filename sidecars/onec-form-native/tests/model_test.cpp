@@ -97,6 +97,16 @@ void test_descriptors() {
     expect(
         find_by_russian_name(u8"РамкаГруппы")->kind == ControlKind::usual_group,
         "Russian-name lookup must resolve UsualGroup");
+    const auto* group_enabled = find_property(ControlKind::usual_group, "Enabled");
+    const auto* group_caption = find_property(ControlKind::usual_group, "Caption");
+    const auto* group_tool_tip = find_property(ControlKind::usual_group, "ToolTip");
+    expect(group_enabled && group_enabled->storage_codec == StorageCodec::control_base &&
+               group_enabled->default_value.kind == DefaultKind::boolean && group_enabled->default_value.canonical == "true" &&
+               group_caption && group_caption->storage_codec == StorageCodec::control_info &&
+               group_caption->default_value.kind == DefaultKind::string && group_caption->default_value.canonical.empty() &&
+               group_tool_tip && group_tool_tip->storage_codec == StorageCodec::control_base &&
+               group_tool_tip->default_value.kind == DefaultKind::string && group_tool_tip->default_value.canonical.empty(),
+        "UsualGroup named property descriptors must expose observed storage and defaults");
 
     const auto* horizontal = find_property(ControlKind::button, "HorizontalAlign");
     const auto* vertical = find_property(ControlKind::button, "VerticalAlign");
@@ -129,6 +139,23 @@ void test_descriptors() {
                check_box_font->default_value.kind == DefaultKind::font &&
                check_box_font->default_value.canonical == "automatic",
         "CheckBox Font descriptor must declare its editable automatic Font default");
+    const auto* splitter_orientation = find_property(ControlKind::splitter, "Orientation");
+    const auto* splitter_enabled = find_property(ControlKind::splitter, "Enabled");
+    const auto* splitter_back_color = find_property(ControlKind::splitter, "BackColor");
+    expect(splitter_orientation && splitter_orientation->persistence == PersistenceClass::persisted_editable &&
+               splitter_orientation->storage_codec == StorageCodec::control_info &&
+               splitter_orientation->value_codec == ValueCodec::enumeration &&
+               splitter_orientation->default_value.kind == DefaultKind::enumeration &&
+               splitter_orientation->default_value.canonical == "Auto",
+        "Splitter Orientation descriptor must declare its editable Auto default");
+    expect(splitter_enabled && splitter_enabled->storage_codec == StorageCodec::control_base &&
+               splitter_enabled->default_value.kind == DefaultKind::boolean &&
+               splitter_enabled->default_value.canonical == "true" &&
+               splitter_back_color && splitter_back_color->storage_codec == StorageCodec::control_base &&
+               splitter_back_color->value_codec == ValueCodec::color &&
+               splitter_back_color->default_value.kind == DefaultKind::color &&
+               splitter_back_color->default_value.canonical == "automatic",
+        "Splitter base descriptors must declare proven editable defaults");
     expect(picture_location && picture_location->storage_codec == StorageCodec::control_info &&
                picture_location->default_value.kind == DefaultKind::enumeration &&
                picture_location->default_value.canonical == "Left",
