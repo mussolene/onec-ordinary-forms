@@ -115,6 +115,14 @@ std::string_view xsd_type(ValueCodec codec) {
     throw std::logic_error("unknown ordinary-form value codec");
 }
 
+std::string_view xsd_type(const PropertyDescriptor& property) {
+    if (property.control_kind == model::ControlKind::calendar_field &&
+        property.api_name == "BeginOfDisplayPeriod") {
+        return "CalendarBeginDateValueType";
+    }
+    return xsd_type(property.value_codec);
+}
+
 std::string_view child_policy_name(ChildPolicy policy) {
     switch (policy) {
         case ChildPolicy::forbidden:
@@ -282,8 +290,24 @@ void append_value_types(std::string& output) {
     </xs:restriction>
   </xs:simpleType>
 
+  <xs:simpleType name="LocalDateValueType">
+    <xs:restriction base="xs:dateTime">
+      <xs:pattern value="[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]"/>
+    </xs:restriction>
+  </xs:simpleType>
+
   <xs:simpleType name="DateValueType">
-    <xs:union memberTypes="xs:dateTime UndefinedValueType"/>
+    <xs:union memberTypes="LocalDateValueType UndefinedValueType"/>
+  </xs:simpleType>
+
+  <xs:simpleType name="CalendarBeginLocalDateValueType">
+    <xs:restriction base="LocalDateValueType">
+      <xs:minExclusive value="0001-01-01T00:00:00"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="CalendarBeginDateValueType">
+    <xs:union memberTypes="CalendarBeginLocalDateValueType UndefinedValueType"/>
   </xs:simpleType>
 
   <xs:simpleType name="NonEmptyTokenType">
@@ -576,7 +600,7 @@ void append_property_element(
     output.append(indent);
     output += "<xs:element";
     append_attribute(output, "name", property.xml_name);
-    append_attribute(output, "type", xsd_type(property.value_codec));
+    append_attribute(output, "type", xsd_type(property));
     output += " minOccurs=\"0\" maxOccurs=\"1\"/>\n";
 }
 
