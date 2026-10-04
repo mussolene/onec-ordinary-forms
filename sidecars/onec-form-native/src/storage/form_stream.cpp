@@ -1437,7 +1437,6 @@ struct DecodedGeometry {
     model::Position position;
     IncomingAnchorLists incoming;
     std::uint32_t ordinal = 0;
-    std::uint32_t next = 0;
 };
 
 void validate_geometry_context(const GeometryContext& context, std::string_view path) {
@@ -1447,9 +1446,9 @@ void validate_geometry_context(const GeometryContext& context, std::string_view 
         fail("OOF1122", child_path(path, 0), "positive int64 Panel ID",
             std::to_string(panel->id().value()), "Geometry owner Panel ID is invalid");
     }
-    if (context.sibling_ordinal == std::numeric_limits<std::uint32_t>::max()) {
-        fail("OOF1122", child_path(path, 2), "sibling ordinal below uint32 maximum", "uint32 maximum",
-            "Control geometry next index would overflow");
+    if (context.sibling_ordinal >= static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
+        fail("OOF1122", child_path(path, 2), "sibling ordinal below int32 maximum", "ordinal overflow",
+            "Default control TabOrder would overflow");
     }
 }
 
@@ -1604,12 +1603,15 @@ DecodedGeometry decode_geometry(
             std::to_string(page), "Geometry page index does not match its owner context");
     }
     decoded.ordinal = integer_atom<std::uint32_t>(geometry.items[cursor + 1], child_path(path, cursor + 1));
-    decoded.next = integer_atom<std::uint32_t>(geometry.items[cursor + 2], child_path(path, cursor + 2));
-    if (context.sibling_ordinal == std::numeric_limits<std::uint32_t>::max() ||
-        decoded.ordinal != context.sibling_ordinal || decoded.next != context.sibling_ordinal + 1) {
-        fail("OOF1114", child_path(path, cursor + 1), "logical ordinal and next index", describe(geometry),
-            "Geometry child ordinal or next index is inconsistent");
+    if (decoded.ordinal != context.sibling_ordinal) {
+        fail("OOF1114", child_path(path, cursor + 1), "logical child ordinal", describe(geometry),
+            "Geometry child ordinal is inconsistent");
     }
+    const auto tab_order = integer_atom<std::int32_t>(geometry.items[cursor + 2], child_path(path, cursor + 2));
+    if (tab_order <= 0) fail("OOF1114", child_path(path, cursor + 2), "positive TabOrder", std::to_string(tab_order),
+        "Geometry TabOrder must be positive");
+    if (static_cast<std::uint64_t>(tab_order) != static_cast<std::uint64_t>(context.sibling_ordinal) + 1)
+        position.tab_order.set(std::optional<std::int32_t>{tab_order});
     const bool manual_horizontal = bool_atom(geometry.items[cursor + 3], child_path(path, cursor + 3));
     const bool manual_vertical = bool_atom(geometry.items[cursor + 4], child_path(path, cursor + 4));
     if (manual_horizontal) position.bindings.manual_horizontal.set(true);
@@ -1617,7 +1619,7 @@ DecodedGeometry decode_geometry(
     return decoded;
 }
 
-struct GeometryPageOrdinal { std::uint32_t page; std::uint32_t ordinal; };
+struct GeometryPageOrdinal { std::uint32_t page; std::uint32_t ordinal; std::int32_t tab_order; };
 
 GeometryPageOrdinal geometry_page_ordinal(
     const LV& geometry,
@@ -1643,12 +1645,12 @@ GeometryPageOrdinal geometry_page_ordinal(
     const auto page = integer_atom<std::uint32_t>(geometry.items[cursor], child_path(path, cursor));
     const auto ordinal = integer_atom<std::uint32_t>(geometry.items[cursor + 1], child_path(path, cursor + 1));
     ordinal_slot = cursor + 1;
-    const auto next = integer_atom<std::uint32_t>(geometry.items[cursor + 2], child_path(path, cursor + 2));
-    if (ordinal == std::numeric_limits<std::uint32_t>::max() || next != ordinal + 1) {
-        fail("OOF1114", child_path(path, cursor + 2), "next index equal to ordinal plus one", std::to_string(next),
-            "Geometry next index is inconsistent");
+    const auto tab_order = integer_atom<std::int32_t>(geometry.items[cursor + 2], child_path(path, cursor + 2));
+    if (ordinal == std::numeric_limits<std::uint32_t>::max() || tab_order <= 0) {
+        fail("OOF1114", child_path(path, cursor + 2), "positive TabOrder and safe child ordinal", std::to_string(tab_order),
+            "Geometry order values are invalid");
     }
-    return {page, ordinal};
+    return {page, ordinal, tab_order};
 }
 
 std::vector<GeometryIncomingAnchor> sorted_incoming(std::vector<GeometryIncomingAnchor> incoming) {
@@ -1664,7 +1666,7 @@ LV encode_geometry(
     const GeometryContext& context,
     const IncomingAnchorLists& incoming) {
     validate_geometry_context(context, "$/Position");
-    if (position.default_control.is_explicit() || position.tab_order.is_explicit() ||
+    if (position.default_control.is_explicit() ||
         position.z_order.is_explicit() || position.collapse.is_explicit() ||
         !position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Position", "geometry Position without unsupported control or dimension properties",
@@ -1752,7 +1754,11 @@ LV encode_geometry(
     }
     values.push_back(raw(std::to_string(context.page_index)));
     values.push_back(raw(std::to_string(context.sibling_ordinal)));
-    values.push_back(raw(std::to_string(context.sibling_ordinal + 1)));
+    const auto tab_order = position.tab_order.is_explicit()
+        ? position.tab_order.value() : std::optional<std::int32_t>{static_cast<std::int32_t>(context.sibling_ordinal + 1)};
+    if (!tab_order || *tab_order <= 0) fail("OOF1122", "$/Position/TabOrder", "positive integer TabOrder", "invalid value",
+        "Control TabOrder must be a positive integer");
+    values.push_back(raw(std::to_string(*tab_order)));
     values.push_back(raw(position.bindings.manual_horizontal.value() ? "1" : "0"));
     values.push_back(raw(position.bindings.manual_vertical.value() ? "1" : "0"));
     return list(std::move(values));
@@ -4645,7 +4651,7 @@ LV encode_chart(const model::ControlNode& control, const GeometryContext& contex
         control.properties().size() > 1 ||
         (control.properties().size() == 1 && !control.properties().contains(model::PropertyId::from_name("Title"))) ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Chart", "Chart named collections and plain Position", control.name, "Chart uses a storage concept outside the supported profile");
@@ -6457,7 +6463,7 @@ LV encode_button(
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
         !control.children.empty() || control.position.default_control.is_explicit() ||
-        control.position.tab_order.is_explicit() || control.position.z_order.is_explicit() ||
+        control.position.z_order.is_explicit() ||
         control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$", "plain Button", control.name, "Button uses a storage concept outside the executable slice");
     }
@@ -6575,7 +6581,7 @@ LV encode_picture_decoration(
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/PictureDecoration", "plain PictureDecoration", control.name,
@@ -6639,7 +6645,7 @@ LV encode_splitter(const model::ControlNode& control, const GeometryContext& con
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Splitter", "named Splitter without events, DataPath, extensions, or children and plain Position",
@@ -6671,7 +6677,7 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
@@ -6722,7 +6728,7 @@ LV encode_progress_bar(
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/ProgressBar", "named ProgressBar with optional direct DataPath, no ValueType, Events, or storage children",
@@ -6762,7 +6768,7 @@ LV encode_track_bar(const model::ControlNode& control, const GeometryContext& co
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/TrackBar", "named TrackBar without DataPath, Events, or storage children",
@@ -6808,7 +6814,7 @@ LV encode_list_box(
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/ListBox", "named ListBox with direct DataPath and ordinary Position",
@@ -6853,7 +6859,7 @@ LV encode_check_box(
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/CheckBox", "named CheckBox with direct DataPath and plain Position", control.name,
@@ -6895,7 +6901,7 @@ LV encode_choice_field(
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
@@ -6937,7 +6943,7 @@ LV encode_radio_button(
     }
     if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/RadioButton", "named RadioButton with plain Position", control.name,
@@ -7021,7 +7027,7 @@ LV encode_html_document_field(const model::ControlNode& control, const GeometryC
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/HTMLDocumentField", "named HTMLDocumentField with plain Position and no DataPath, Events, extensions, or children",
@@ -7047,7 +7053,7 @@ LV encode_text_document_field(const model::ControlNode& control, const GeometryC
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", "$/Form/ChildItems", "TextDocumentField with positive int64 ID", control.name, "TextDocumentField is outside the supported profile");
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() || control.position.z_order.is_explicit() ||
+        control.position.default_control.is_explicit() || control.position.z_order.is_explicit() ||
         control.position.collapse.is_explicit() || !control.position.bindings.dimensions.empty())
         fail("OOF1122", "$/TextDocumentField", "named unbound TextDocumentField with plain Position", control.name, "TextDocumentField uses an unsupported storage concept");
     require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Font"}, "$/TextDocumentField");
@@ -7069,7 +7075,7 @@ LV encode_calendar_field(const model::ControlNode& control, const GeometryContex
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/CalendarField", "named CalendarField with plain Position", control.name,
@@ -7111,7 +7117,7 @@ LV encode_dendrogram(const model::ControlNode& control, const GeometryContext& c
     }
     if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Dendrogram", "named Dendrogram with plain Position", control.name,
@@ -7156,7 +7162,7 @@ LV encode_input_field(
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/InputField", "named InputField with direct DataPath and plain Position", control.name, "InputField uses a storage concept outside the supported profile");
@@ -7212,7 +7218,7 @@ LV encode_table(
     }
     if (control.name.empty() || !control.data_path || !control.data_path->members.empty() ||
         !control.extension_properties.empty() || !control.children.empty() || !control.events.empty() ||
-        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
         fail("OOF1122", "$/Table", "named Table with direct DataPath and basic Position", control.name,
@@ -7959,7 +7965,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             if (child_table.items.size() != static_cast<std::size_t>(count) + 1) {
                 fail("OOF1102", std::string(path), "control count matching records", describe(child_table), "Control table count does not match its records");
             }
-            struct RecordSlot { const LV* record; std::string path; std::uint32_t ordinal; };
+            struct RecordSlot { const LV* record; std::string path; std::uint32_t ordinal; std::int32_t tab_order; std::string tab_order_path; };
             std::vector<std::vector<std::optional<RecordSlot>>> ordered(pages.size());
             for (std::uint32_t index = 0; index < count; ++index) {
                 const auto record_path = child_path(path, static_cast<std::size_t>(index) + 1);
@@ -7986,7 +7992,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     fail("OOF1114", child_path(geometry_path, ordinal_slot), "unique page-local ordinal",
                         std::to_string(page_ordinal.ordinal), "Control geometry ordinal is duplicated");
                 }
-                page_records[page_ordinal.ordinal] = RecordSlot{&record, record_path, page_ordinal.ordinal};
+                page_records[page_ordinal.ordinal] = RecordSlot{&record, record_path, page_ordinal.ordinal, page_ordinal.tab_order, child_path(geometry_path, ordinal_slot + 1)};
             }
             for (std::size_t page_index = 0; page_index < ordered.size(); ++page_index) {
                 auto& page_records = ordered[page_index];
@@ -8001,6 +8007,13 @@ Result<model::OrdinaryFormDocument> decode_document(
                 if (page_records.size() != record_count) {
                     fail("OOF1114", std::string(path), "contiguous page-local ChildItems ordinals",
                         std::to_string(page_index), "Page child ordinals do not form a permutation");
+                }
+                std::set<std::int32_t> tab_orders;
+                for (const auto& slot : page_records) {
+                    if (!slot) continue;
+                    if (static_cast<std::size_t>(slot->tab_order) > record_count || !tab_orders.insert(slot->tab_order).second)
+                        fail("OOF1114", slot->tab_order_path, "page-local TabOrder permutation 1..count",
+                            std::to_string(slot->tab_order), "Control TabOrder is out of range or duplicated");
                 }
                 for (std::size_t ordinal = 0; ordinal < page_records.size(); ++ordinal) {
                     if (!page_records[ordinal]) fail("OOF1114", std::string(path), "page-local ordinal permutation",
@@ -8460,7 +8473,7 @@ Result<list_stream::ListValue> encode_document(
                     if (control->id.value() == 0 || control->id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()) ||
                         control->name.empty() || control->data_path || !control->children.empty() || !control->events.empty() ||
                         !control->extension_properties.empty() || control->position.default_control.is_explicit() ||
-                        control->position.tab_order.is_explicit() || control->position.z_order.is_explicit() ||
+                        control->position.z_order.is_explicit() ||
                         control->position.collapse.is_explicit() || !control->position.bindings.dimensions.empty())
                         fail("OOF1122", child_path(path, ordinal), "childless GanttChart with basic Position", control->name,
                             "GanttChart uses an unsupported storage concept");
@@ -8482,7 +8495,7 @@ Result<list_stream::ListValue> encode_document(
                     }
                     if (control->name.empty() || control->data_path || !control->extension_properties.empty() ||
                         !control->children.empty() || !control->events.empty() ||
-                        control->position.default_control.is_explicit() || control->position.tab_order.is_explicit() ||
+                        control->position.default_control.is_explicit() ||
                         control->position.z_order.is_explicit() || control->position.collapse.is_explicit() ||
                         !control->position.bindings.dimensions.empty()) {
                         fail("OOF1122", child_path(path, ordinal), "plain childless UsualGroup with basic Position",
@@ -8577,6 +8590,18 @@ Result<list_stream::ListValue> encode_document(
                         "Owner child sequence contains an unsupported item");
                     append_control(*control_ref, 0, ordinal);
                 }
+            }
+            std::map<std::uint32_t, std::size_t> page_child_counts;
+            for (const auto& child : children) ++page_child_counts[child.page_index];
+            std::map<std::uint32_t, std::set<std::int32_t>> page_tab_orders;
+            for (const auto& child : children) {
+                const auto& property = child.control->position.tab_order;
+                const auto order = property.is_explicit() ? property.value()
+                    : std::optional<std::int32_t>{static_cast<std::int32_t>(child.ordinal + 1)};
+                if (!order || *order <= 0 || static_cast<std::size_t>(*order) > page_child_counts.at(child.page_index) ||
+                    !page_tab_orders[child.page_index].insert(*order).second)
+                    fail("OOF1122", std::string(path) + "/Position/TabOrder", "page-local TabOrder permutation 1..count",
+                        order ? std::to_string(*order) : "undefined", "Control TabOrder is invalid, out of range, or duplicated");
             }
             std::unordered_set<std::uint64_t> immediate_ids;
             for (const auto& child : children) immediate_ids.insert(child.control->id.value());
