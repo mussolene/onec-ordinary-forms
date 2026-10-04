@@ -2199,7 +2199,7 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
         throw std::logic_error("canonical Table Column property record has the wrong arity");
     }
     properties.items[1] = encoded_localized(column.header);
-    properties.items[30] = string_value(column.data_path);
+    properties.items[30] = string_value(column.name);
     properties.items[35] = encoded_type_domain(model::TypeDomainPatternValue{}, std::string(path) + "/Control/TypeRestriction");
     properties.items[38] = raw(std::string(model::metamodel::descriptor_for(column.control.kind).guid));
     properties.items[39] = encode_table_column_editor_packet(
@@ -2207,7 +2207,7 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
     return list({
         raw("737535a4-21e6-4971-8513-3e3173a9fedd"),
         list({raw("8"), list({raw("8"), std::move(properties), list({raw("-1")}), list({raw("-1")}), list({raw("-1")})}),
-            string_value(column.name), string_value(""), string_value(""), raw("0")})});
+            string_value(column.data_path), string_value(""), string_value(""), raw("0")})});
 }
 
 LV canonical_table_control_info(
@@ -4558,8 +4558,8 @@ model::TableColumn decode_table_column(const LV& value, std::string_view path) {
     require_arity(properties, 52, properties_path);
 
     model::TableColumn column;
-    column.name = string_atom(body.items[2], child_path(body_path, 2));
-    column.data_path = string_atom(properties.items[30], child_path(properties_path, 30));
+    column.name = string_atom(properties.items[30], child_path(properties_path, 30));
+    column.data_path = string_atom(body.items[2], child_path(body_path, 2));
     try {
         list_stream::ListInStream localized(properties.items[1]);
         column.header = value_codec::read_localized_string(localized);

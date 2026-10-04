@@ -265,6 +265,45 @@ void test_captured_table_column_record() {
         "independent captured Table/Column record must re-encode exactly apart from recompressed editor bytes");
 }
 
+void test_table_column_name_and_data_path_runtime_slots() {
+    auto literal = captured_table_payload();
+    auto* table_record = find_record_with_guid(
+        literal, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table_record != nullptr, "independent captured fixture must contain Table");
+    auto& column_body = table_record->items[2].items[2].items[1].items[23].items[1].items[1];
+    auto& column_properties = column_body.items[1].items[1];
+    // Независимые чтения свойств платформой дают Name=Code и Data=Choice для этих позиций.
+    column_properties.items[30] = list_stream::ListValue::string_atom("Code");
+    column_body.items[2] = list_stream::ListValue::string_atom("Choice");
+    auto decoded = form_stream::decode_document(literal, "LiteralTableColumnSlots");
+    expect(decoded.ok(), "getter-derived literal Name/Data slots must decode independently of the writer");
+    auto table = std::find_if(decoded.value().collections().controls.begin(),
+        decoded.value().collections().controls.end(), [](const auto& control) {
+            return control.kind() == model::ControlKind::table;
+        });
+    expect(table != decoded.value().collections().controls.end(), "literal model must retain its Table");
+    auto& named_column = std::get<model::TablePayload>(const_cast<model::ControlNode&>(*table).payload).columns.front();
+    expect(named_column.name == "Code" && named_column.data_path == "Choice",
+        "Column Name must decode from property slot 30 and DataPath from outer body slot 2");
+
+    named_column.name = "Choice";
+    named_column.data_path = "Code";
+    auto encoded = form_stream::encode_document(decoded.value());
+    expect(encoded.ok(), "independent named Column alias must serialize");
+    table_record = find_record_with_guid(
+        encoded.value(), model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table_record != nullptr, "serialized alias must retain its Table");
+    const auto& encoded_body = table_record->items[2].items[2].items[1].items[23].items[1].items[1];
+    const auto& encoded_name = encoded_body.items[1].items[1].items[30];
+    const auto& encoded_data_path = encoded_body.items[2];
+    expect(!encoded_name.is_list && encoded_name.atom_kind == list_stream::ListValue::AtomKind::string &&
+               encoded_name.atom == "Choice",
+        "writer must put the independently named Column in property slot 30");
+    expect(!encoded_data_path.is_list && encoded_data_path.atom_kind == list_stream::ListValue::AtomKind::string &&
+               encoded_data_path.atom == "Code",
+        "writer must put the source DataPath in outer body slot 2 without replacing the alias");
+}
+
 void test_table_column_choice_and_check_box_profiles() {
     const auto make_document = [](model::ControlKind invalid_kind = model::ControlKind::input_field,
                                   bool mismatched_property = false) {
@@ -7272,6 +7311,7 @@ int main() {
         test_attribute_allocator_is_separate_from_control_ids();
         test_usual_group_named_record_round_trip_and_rejections();
         test_captured_table_column_record();
+        test_table_column_name_and_data_path_runtime_slots();
         test_table_column_choice_and_check_box_profiles();
         test_captured_table_packet_rejections_and_alternate_deflate();
         test_two_button_sibling_index();
