@@ -1186,7 +1186,7 @@ void test_multiple_top_level_buttons_round_trip() {
     expect_failure(
         form_stream::decode_document(wrong_sibling_index, "Main"),
         "OOF1114",
-        "$/1/2/2/2/3/20",
+        "$/1/2/2/2/3/19",
         "Button geometry with an incorrect sibling index must be rejected");
 }
 
@@ -3655,6 +3655,8 @@ void test_radio_button_basic_observed_record_and_rejections() {
         member.properties().set_explicit(model::PropertyId::from_name("SelectionValue"), model::DecimalValue{"0"});
         numeric_group.add_control(std::move(member));
     }
+    const_cast<model::ControlNode*>(numeric_group.find_control(model::ObjectId{103}))->position.tab_order.set(std::optional<std::int32_t>{5});
+    const_cast<model::ControlNode*>(numeric_group.find_control(model::ObjectId{104}))->position.tab_order.set(std::optional<std::int32_t>{4});
     const auto numeric_encoded = form_stream::encode_document(numeric_group);
     expect(numeric_encoded.ok(), "named integer and fractional RadioButton groups must encode with independent numeric qualifiers");
     const auto numeric_decoded = form_stream::decode_document(numeric_encoded.value(), "RadioButtonNumericGroup");
@@ -3667,6 +3669,10 @@ void test_radio_button_basic_observed_record_and_rejections() {
                std::get<model::DecimalValue>(decoded_member->properties().find(
                    model::PropertyId::from_name("SelectionValue"))->value).canonical == "0",
         "RadioButton group head binding and contextual zero remain named model properties");
+    expect(numeric_decoded.value().form().children == numeric_group.form().children &&
+        decoded_head->position.tab_order.value() == std::optional<std::int32_t>{5} &&
+        decoded_member->position.tab_order.value() == std::optional<std::int32_t>{4},
+        "TabOrder swap must preserve numeric RadioButton grouping, FirstInGroup and logical ChildItems");
     const auto numeric_reencoded = form_stream::encode_document(numeric_decoded.value());
     expect(numeric_reencoded.ok() && list_stream::dump_compact(numeric_reencoded.value()) ==
                list_stream::dump_compact(numeric_encoded.value()),
@@ -6259,7 +6265,7 @@ void test_single_input_field_round_trip() {
     expect_failure(
         form_stream::decode_document(wrong_sibling_reference, "Main"),
         "OOF1114",
-        "$/1/2/2/1/3/20",
+        "$/1/2/2/1/3/19",
         "single InputField must reject triple-profile geometry references");
 }
 
@@ -7187,7 +7193,7 @@ void test_two_button_sibling_index() {
     expect_failure(
         form_stream::decode_document(wrong_sibling_index, "Main"),
         "OOF1114",
-        "$/1/2/2/2/3/20",
+        "$/1/2/2/2/3/19",
         "second Button must reject a sibling index of zero");
 }
 
@@ -7282,8 +7288,8 @@ void test_six_reordered_controls_use_logical_geometry_ordinals() {
     auto wrong_next_index = encoded.value();
     wrong_next_index.items[1].items[2].items[2].items[6].items[3].items[geometry_tail_start(wrong_next_index.items[1].items[2].items[2].items[6].items[3]) + 2] =
         list_stream::ListValue::raw_atom("2");
-    expect_failure(form_stream::decode_document(wrong_next_index, "Reordered"), "OOF1114", "$/1/2/2/6/3/20",
-        "geometry next index must equal logical ordinal plus one");
+    expect_failure(form_stream::decode_document(wrong_next_index, "Reordered"), "OOF1114", "$/1/2/2/4/3/20",
+        "duplicate page-local TabOrder must be rejected");
 }
 
 void test_root_pages_round_trip_with_page_local_control_order() {
@@ -7450,6 +7456,18 @@ void test_root_pages_round_trip_with_page_local_control_order() {
     expect(retained && retained->name == "Custom" && !retained->enabled.value() &&
            retained->title.value() == customized.title.value() && retained->position.value().left.value() == 7,
         "single Page metadata and changed geometry must not collapse into the implicit default");
+    for (const auto [id, order] : {std::pair{20ULL,2},std::pair{9ULL,1},std::pair{4ULL,2},std::pair{5ULL,1}})
+        const_cast<model::ControlNode*>(document.find_control(model::ObjectId{id}))->position.tab_order.set(std::optional<std::int32_t>{order});
+    const auto independent_pages = form_stream::encode_document(document);
+    expect(independent_pages.ok(), "the same TabOrder values may repeat in different Pages");
+    const auto decoded_pages = form_stream::decode_document(independent_pages.value(), "Paged");
+    expect(decoded_pages.ok() && decoded_pages.value().collections().pages.size() == 2,
+        "independent page-local TabOrder permutations must decode");
+    const auto page_rebuilt = form_stream::encode_document(decoded_pages.value());
+    expect(page_rebuilt.ok() && list_stream::dump_compact(page_rebuilt.value()) == list_stream::dump_compact(independent_pages.value()),
+        "Page-local traversal order must round-trip without moving ChildItems across Pages");
+    const_cast<model::ControlNode*>(document.find_control(model::ObjectId{4}))->position.tab_order.set(std::optional<std::int32_t>{3});
+    expect(!form_stream::encode_document(document).ok(), "TabOrder must be bounded by its own Page rather than total owner count");
 }
 
 void test_recursive_panel_pages_keep_owner_geometry_separate() {
@@ -8293,6 +8311,55 @@ void test_page_table_codec() {
         "Page ID assignment overflow must fail before allocating rows");
 }
 
+
+void test_independent_tab_order_observed_geometry_and_guards() {
+    // Независимые снимки опыта 67445: изменено только OrderSecond.ПорядокОбхода.
+    for (const auto& [literal, ordinal, tab] : std::vector<std::tuple<std::string, std::uint32_t, std::int32_t>>{
+        {R"({8,120,12,220,37,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,3,0,25},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,3,2,100},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},1,{0,3,1},0,1,{0,3,3},0,0,0,0,1,1,0,0})",1,1},
+        {R"({8,10,12,110,37,1,{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,90,0,25},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,90,2,100},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},{0,{2,-1,6,0},{2,-1,6,0}},1,{0,90,1},0,1,{0,90,3},0,0,0,0,0,2,0,0})",0,2}}) {
+        const auto geometry = list_stream::parse(literal);
+        const form_stream::GeometryContext context{model::ControlRef{model::ObjectId{42}},0,ordinal};
+        const auto decoded = form_stream::decode_control_geometry(geometry, context);
+        expect(decoded.ok() && decoded.value().position.tab_order.value() == std::optional<std::int32_t>{tab},
+            "observed geometry must decode named TabOrder independently of unchanged child ordinal");
+        const auto rebuilt = form_stream::encode_control_geometry(decoded.value(), context);
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(geometry),
+            "observed TabOrder geometry must round-trip all coordinates and bindings exactly");
+    }
+    model::Form form; form.id=model::ObjectId{1}; form.name="IndependentOrder";
+    form.children={model::ControlRef{model::ObjectId{90}},model::ControlRef{model::ObjectId{3}},model::ControlRef{model::ObjectId{40}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    for (const auto id : {90ULL,3ULL,40ULL})
+        document.add_control(model::ControlNode{model::ObjectId{id},"Button"+std::to_string(id),model::ButtonPayload{}});
+    auto* first=const_cast<model::ControlNode*>(document.find_control(model::ObjectId{90}));
+    auto* second=const_cast<model::ControlNode*>(document.find_control(model::ObjectId{3}));
+    first->position.tab_order.set(std::optional<std::int32_t>{2});
+    second->position.tab_order.set(std::optional<std::int32_t>{1});
+    const auto encoded=form_stream::encode_document(document);
+    expect(encoded.ok(), "independent TabOrder permutation with implicit third value must encode");
+    const auto decoded=form_stream::decode_document(encoded.value(),"IndependentOrder");
+    expect(decoded.ok() && decoded.value().form().children==document.form().children &&
+        decoded.value().find_control(model::ObjectId{90})->position.tab_order.value()==std::optional<std::int32_t>{2} &&
+        !decoded.value().find_control(model::ObjectId{40})->position.tab_order.is_explicit(),
+        "unsorted IDs and explicit TabOrder must preserve ChildItems and omit default orders");
+    const auto xml=oof::source::serialize_form_xml(decoded.value());
+    const auto parsed=oof::source::parse_form_xml(xml.value());
+    const auto rebuilt=form_stream::encode_document(parsed.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value())==list_stream::dump_compact(encoded.value()),
+        "named XML TabOrder permutation must rebuild without a baseline");
+    for (const auto invalid : {0,-1,4,2,3}) {
+        second->position.tab_order.set(std::optional<std::int32_t>{invalid});
+        expect(!form_stream::encode_document(document).ok(),"invalid or duplicate TabOrder including implicit defaults must fail");
+    }
+    second->position.tab_order.set(std::nullopt);
+    expect(!form_stream::encode_document(document).ok(),"explicit undefined TabOrder must fail");
+    for (const auto invalid : {"0","4","2","1.5"}) {
+        auto corrupt=encoded.value(); auto& geometry=corrupt.items[1].items[2].items[2].items[1].items[3];
+        geometry.items[geometry_tail_start(geometry)+2]=list_stream::ListValue::raw_atom(invalid);
+        expect(!form_stream::decode_document(corrupt,"InvalidOrder").ok(),"invalid native TabOrder must not be normalized");
+    }
+}
+
 void test_owner_aware_control_geometry_codec() {
     const model::ControlRef owner{model::ObjectId{42}};
     const form_stream::GeometryContext context{owner, 3, 7};
@@ -8339,9 +8406,9 @@ void test_owner_aware_control_geometry_codec() {
         "geometry with a different page index must fail against its owner context");
     bad = encoded.value();
     bad.items[cursor + 2] = list_stream::ListValue::raw_atom("9");
-    expect_failure(form_stream::decode_control_geometry(bad, context), "OOF1114",
-        "$/" + std::to_string(cursor + 1),
-        "geometry with a mismatched next index must be rejected");
+    const auto changed_tab = form_stream::decode_control_geometry(bad, context);
+    expect(changed_tab.ok() && changed_tab.value().position.tab_order.value() == std::optional<std::int32_t>{9},
+        "standalone geometry must decode independent TabOrder without assuming sibling count");
     bad = encoded.value();
     bad.items[cursor + 1] = list_stream::ListValue::raw_atom("6");
     expect_failure(form_stream::decode_control_geometry(bad, context), "OOF1114",
@@ -8369,8 +8436,9 @@ void test_owner_aware_control_geometry_codec() {
         "$/Position", "explicit DefaultControl must be rejected by standalone geometry encoding");
     unsupported_position = source;
     unsupported_position.position.tab_order.set(std::optional<std::int32_t>{2});
-    expect_failure(form_stream::encode_control_geometry(unsupported_position, context), "OOF1122",
-        "$/Position", "explicit TabOrder must be rejected by standalone geometry encoding");
+    const auto explicit_tab = form_stream::encode_control_geometry(unsupported_position, context);
+    expect(explicit_tab.ok() && explicit_tab.value().items[cursor + 2].atom == "2",
+        "explicit TabOrder must encode independently of the child ordinal");
     unsupported_position = source;
     unsupported_position.position.z_order.set(std::optional<std::int32_t>{3});
     expect_failure(form_stream::encode_control_geometry(unsupported_position, context), "OOF1122",
@@ -8504,6 +8572,7 @@ int main() {
         test_page_boundary_position_codec();
         test_page_table_codec();
         test_owner_aware_control_geometry_codec();
+        test_independent_tab_order_observed_geometry_and_guards();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
