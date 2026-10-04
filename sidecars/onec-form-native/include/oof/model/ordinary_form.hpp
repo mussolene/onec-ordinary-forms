@@ -384,6 +384,7 @@ struct CommandBarButton {
     std::optional<PictureRef> picture;
     std::optional<std::string> action;
     std::vector<CommandBarButton> buttons;
+    bool default_button = false;
     friend bool operator==(const CommandBarButton&, const CommandBarButton&) = default;
 };
 

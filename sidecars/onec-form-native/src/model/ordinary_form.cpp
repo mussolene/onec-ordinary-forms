@@ -774,6 +774,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
         register_parent(form_.id, child);
     }
 
+    std::size_t default_button_count = 0;
     for (const auto& control : collections_.controls) {
         const std::vector<CommandBarButton>* owned_buttons = nullptr;
         if (const auto* button = std::get_if<ButtonPayload>(&control.payload)) owned_buttons = &button->buttons;
@@ -789,6 +790,14 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     const auto invalid = [&](std::string reason) {
                         add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
                     };
+                    if (item.default_button) {
+                        const auto* secondary = control.properties().find(PropertyId::from_name("Secondary"));
+                        if (control.kind() != ControlKind::command_bar || secondary == nullptr ||
+                            !std::holds_alternative<bool>(secondary->value) || std::get<bool>(secondary->value) ||
+                            item.type != CommandBarButtonKind::action || depth != 0)
+                            invalid("DefaultButton requires a top-level Action on a primary CommandBar (Secondary=false)");
+                        if (++default_button_count > 1) invalid("the form may have only one DefaultButton");
+                    }
                     if (item.type != CommandBarButtonKind::action && item.type != CommandBarButtonKind::submenu && item.type != CommandBarButtonKind::separator) invalid("unknown menu item type");
                     if (item.representation != ButtonRepresentation::automatic && item.representation != ButtonRepresentation::picture && item.representation != ButtonRepresentation::text && item.representation != ButtonRepresentation::picture_text) invalid("unknown menu representation");
                     if (item.name.empty() || !names.insert(item.name).second) invalid("button menu item names must be non-empty and unique within each collection");
