@@ -110,6 +110,16 @@ list_stream::ListValue* find_usual_group_record(list_stream::ListValue& value) {
     return nullptr;
 }
 
+list_stream::ListValue* find_chart_record(list_stream::ListValue& value) {
+    constexpr std::string_view guid = "a8b97779-1a4b-4059-b09c-807f86d2a461";
+    if (value.is_list && value.items.size() == 7 && !value.items[0].is_list && value.items[0].atom == guid) return &value;
+    if (!value.is_list) return nullptr;
+    for (auto& item : value.items) {
+        if (auto* found = find_chart_record(item)) return found;
+    }
+    return nullptr;
+}
+
 void test_outer_format_probe() {
     const auto format27 = form_stream::probe_outer_format(list_stream::parse("{27}"));
     expect(
@@ -5596,6 +5606,157 @@ void test_anchor_bindings_round_trip_and_fanout() {
         "proportional tuple without a primary tuple must be rejected");
 }
 
+void test_chart_named_dense_roundtrip_with_sibling_geometry() {
+    std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
+      <Chart id="2" name="Metrics"><Position><Top>0</Top><Height>40</Height><Left>0</Left><Width>120</Width></Position><Title>Новая диаграмма</Title><Series>)XML";
+    constexpr std::array<std::uint64_t, 5> series_ids{2, 8, 9, 10, 11};
+    constexpr std::array<std::string_view, 5> series_texts{"Повтор", "Повтор", "", "Series 4", "Series 5"};
+    constexpr std::array<std::string_view, 5> markers{"Auto", "Circle", "Rhomb", "Rect", "Alternation"};
+    for (std::size_t index = 0; index < series_ids.size(); ++index) {
+        xml += "<ChartSeries id=\"" + std::to_string(series_ids[index]) + "\"><Text>" +
+            std::string(series_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
+            std::to_string(40 + index * 30) + "\" green=\"" + std::to_string(90 + index * 20) +
+            "\" blue=\"" + std::to_string(120 + index * 10) + "\"/><Marker type=\"ChartMarkerType\" member=\"" +
+            std::string(markers[index]) + "\"/></ChartSeries>";
+    }
+    xml += "</Series><Points>";
+    constexpr std::array<std::uint64_t, 3> point_ids{1, 7, 12};
+    constexpr std::array<std::string_view, 3> point_texts{"", "Ось X", "Ось X"};
+    for (std::size_t index = 0; index < point_ids.size(); ++index) {
+        xml += "<ChartPoint id=\"" + std::to_string(point_ids[index]) + "\"><Text>" +
+            std::string(point_texts[index]) + "</Text><Color kind=\"absolute\" red=\"" +
+            std::to_string(20 + index * 50) + "\" green=\"" + std::to_string(30 + index * 40) +
+            "\" blue=\"" + std::to_string(40 + index * 30) + "\"/></ChartPoint>";
+    }
+    xml += "</Points><Values>";
+    for (std::size_t reverse_series = series_ids.size(); reverse_series > 0; --reverse_series) {
+        const std::size_t series = reverse_series - 1;
+        for (std::size_t reverse_point = point_ids.size(); reverse_point > 0; --reverse_point) {
+            const std::size_t point = reverse_point - 1;
+            xml += "<ChartValue seriesRef=\"" + std::to_string(series_ids[series]) + "\" pointRef=\"" +
+                std::to_string(point_ids[point]) + "\">";
+            if (series == 0 && point == 0) xml += "<Undefined>undefined</Undefined>";
+            else if (series == 0 && point == 1) xml += "<Number>0</Number>";
+            else if (series == 4 && point == 2) xml += "<Number>-23.75</Number>";
+            else xml += "<Number>" + std::to_string(series * 3 + point + 1) + ".125</Number>";
+            xml += "</ChartValue>";
+        }
+    }
+    xml += R"XML(</Values></Chart>
+      <LabelDecoration id="3" name="Caption"><Position><Top>50</Top><Height>20</Height><Left>4</Left><Width>80</Width></Position></LabelDecoration>
+    </ChildItems></Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    if (!parsed.ok()) throw std::runtime_error("Chart parse: " + parsed.diagnostics().front().code + " " + parsed.diagnostics().front().message + " " + parsed.diagnostics().front().path);
+    expect(parsed.ok(), "named dense Chart with sibling must parse");
+    auto encoded = form_stream::encode_document(parsed.value());
+    if (!encoded.ok()) throw std::runtime_error("Chart encode: " + encoded.diagnostics().front().code + " " + encoded.diagnostics().front().message + " expected=" + encoded.diagnostics().front().expected + " actual=" + encoded.diagnostics().front().actual + " " + encoded.diagnostics().front().path);
+    expect(encoded.ok(), "named dense Chart must encode in a full document");
+    auto decoded = form_stream::decode_document(encoded.value());
+    expect(decoded.ok(), "named dense Chart must decode from a full document");
+    const auto* chart_control = decoded.value().find_control(model::ObjectId{2});
+    expect(chart_control != nullptr && chart_control->kind() == model::ControlKind::chart, "Chart must remain the first control");
+    const auto* chart = std::get_if<model::ChartPayload>(&chart_control->payload);
+    expect(chart != nullptr && chart->series.size() == 5 && chart->points.size() == 3 && chart->values.size() == 15,
+        "Chart dimensions and dense cell count must survive the stream");
+    expect(chart->series[0].color.red == 40 && chart->series[0].color.green == 90 && chart->series[0].color.blue == 120 &&
+        chart->points[0].color.red == 20 && chart->points[0].color.green == 30 && chart->points[0].color.blue == 40,
+        "Chart RGB channels must preserve platform blue-green-red packing order");
+    expect(chart->series[0].text == "Повтор" && chart->series[1].text == "Повтор" && chart->series[2].text.empty() && chart->points[0].text.empty(),
+        "duplicate and empty Chart captions must survive the stream");
+    const auto* title = chart_control->properties().find(model::PropertyId::from_name("Title"));
+    expect(title != nullptr && std::get<std::string>(title->value) == "Новая диаграмма", "Chart Title must use its property descriptor surface");
+    const auto cell = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{11} && value.point_ref == model::ObjectId{12};
+    });
+    expect(cell != chart->values.end() && std::get<model::DecimalValue>(cell->value).canonical == "-23.75",
+        "Chart matrix must preserve named references and negative decimal values independent of source order");
+    const auto zero = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{2} && value.point_ref == model::ObjectId{7};
+    });
+    expect(zero != chart->values.end() && std::get<model::DecimalValue>(zero->value).canonical == "0",
+        "explicit Chart zero must remain a numeric cell");
+    const auto undefined = std::find_if(chart->values.begin(), chart->values.end(), [](const auto& value) {
+        return value.series_ref == model::ObjectId{2} && value.point_ref == model::ObjectId{1};
+    });
+    expect(undefined != chart->values.end() && std::holds_alternative<model::UndefinedValue>(undefined->value),
+        "explicit Chart Undefined must remain distinct from numeric zero");
+    const auto* sibling = decoded.value().find_control(model::ObjectId{3});
+    expect(sibling != nullptr && sibling->position.top.value() == 50 && sibling->position.left.value() == 4,
+        "Chart geometry slot must not overwrite its sibling Position");
+
+    auto designer_normalized_cache = encoded.value();
+    auto* normalized_chart_record = find_chart_record(designer_normalized_cache);
+    expect(normalized_chart_record != nullptr, "encoded document must expose its Chart record for cache normalization testing");
+    const auto chart_middle_start = std::size_t{5} + (series_ids.size() + 1) * 11 + 2 + point_ids.size() * 11;
+    normalized_chart_record->items[3].items[chart_middle_start + 84] = list_stream::ListValue::raw_atom("0.25");
+    const auto chart_cells_end = chart_middle_start + 96 + series_ids.size() * point_ids.size() * 3;
+    const auto chart_render_start = chart_cells_end + 28 + series_ids.size() + 1 + 21 + point_ids.size() + series_ids.size() + 1;
+    normalized_chart_record->items[3].items[chart_render_start + 2] = list_stream::ListValue::raw_atom("0.25");
+    expect(form_stream::decode_document(designer_normalized_cache).ok(),
+        "proven render-cache scalar may be recomputed without relaxing adjacent named Chart fields");
+
+    auto strict_alternation_cache = encoded.value();
+    auto* strict_alternation_record = find_chart_record(strict_alternation_cache);
+    expect(strict_alternation_record != nullptr, "encoded document must expose its Chart record for derived marker testing");
+    strict_alternation_record->items[3].items[51] = list_stream::ListValue::raw_atom("1");
+    expect(form_stream::decode_document(strict_alternation_cache).ok(),
+        "Designer-resolved Alternation cache may differ while its named style remains intact");
+
+    auto wrong_marker_cache_type = encoded.value();
+    auto* wrong_marker_type_record = find_chart_record(wrong_marker_cache_type);
+    expect(wrong_marker_type_record != nullptr, "encoded document must expose its Chart record for marker type testing");
+    wrong_marker_type_record->items[3].items[51] = list_stream::ListValue::string_atom("1");
+    expect(!form_stream::decode_document(wrong_marker_cache_type),
+        "derived Marker cache must remain a raw integer value");
+
+    auto out_of_range_marker_cache = encoded.value();
+    auto* out_of_range_marker_record = find_chart_record(out_of_range_marker_cache);
+    expect(out_of_range_marker_record != nullptr, "encoded document must expose its Chart record for marker range testing");
+    out_of_range_marker_record->items[3].items[51] = list_stream::ListValue::raw_atom("6");
+    expect(!form_stream::decode_document(out_of_range_marker_cache),
+        "derived Marker cache outside the proven enum range must be rejected");
+
+    auto concrete_marker_mismatch = encoded.value();
+    auto* concrete_marker_record = find_chart_record(concrete_marker_mismatch);
+    expect(concrete_marker_record != nullptr, "encoded document must expose its Chart record for concrete marker testing");
+    concrete_marker_record->items[3].items[18] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(concrete_marker_mismatch),
+        "concrete Marker cache must match the named enum exactly");
+
+    auto unknown_chart_style = encoded.value();
+    auto* unknown_chart_record = find_chart_record(unknown_chart_style);
+    expect(unknown_chart_record != nullptr, "encoded document must expose its Chart record for negative testing");
+    unknown_chart_record->items[3].items[6] = list_stream::ListValue::raw_atom("777");
+    expect(!form_stream::decode_document(unknown_chart_style),
+        "Chart decoder must reject an unrecognized style-row value instead of dropping it");
+
+    constexpr std::string_view empty_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Empty"><Position/><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    auto empty = source::parse_form_xml(empty_xml);
+    expect(empty.ok(), "empty platform Chart must remain a valid named model");
+    auto empty_stream = form_stream::encode_document(empty.value());
+    expect(empty_stream.ok(), "empty platform Chart must encode without synthetic data");
+    auto empty_decoded = form_stream::decode_document(empty_stream.value());
+    expect(empty_decoded.ok(), "empty platform Chart must cold decode");
+    const auto* empty_chart_control = empty_decoded.value().find_control(model::ObjectId{2});
+    const auto* empty_chart = empty_chart_control == nullptr ? nullptr : std::get_if<model::ChartPayload>(&empty_chart_control->payload);
+    expect(empty_chart != nullptr && empty_chart->series.empty() && empty_chart->points.empty() && empty_chart->values.empty(),
+        "empty native Chart dimensions must not be rewritten as synthetic values");
+
+    constexpr std::string_view sparse_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Sparse"><Position/><Series><ChartSeries id="2"><Text>S</Text><Color kind="absolute" red="1"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text>P</Text><Color kind="absolute" red="2"/></ChartPoint><ChartPoint id="3"><Text>Q</Text><Color kind="absolute" red="3"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Number>1</Number></ChartValue></Values></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(sparse_xml).ok(), "incomplete Chart matrix must fail instead of filling zero");
+    constexpr std::string_view invalid_number_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="BadNumber"><Position/><Series><ChartSeries id="2"><Text>S</Text><Color kind="absolute" red="1"/><Marker type="ChartMarkerType" member="Auto"/></ChartSeries></Series><Points><ChartPoint id="1"><Text>P</Text><Color kind="absolute" red="2"/></ChartPoint></Points><Values><ChartValue seriesRef="2" pointRef="1"><Number>NaN</Number></ChartValue></Values></Chart></ChildItems></Form>)XML";
+    expect(!source::parse_form_xml(invalid_number_xml).ok(), "non-decimal Chart Number must fail closed");
+
+    auto unsupported_auto_marker_xml = xml;
+    const auto second_series_marker = unsupported_auto_marker_xml.find("member=\"Circle\"");
+    expect(second_series_marker != std::string::npos, "test fixture must contain the second Series marker");
+    unsupported_auto_marker_xml.replace(second_series_marker, std::string("member=\"Circle\"").size(), "member=\"Auto\"");
+    const auto unsupported_auto_marker = source::parse_form_xml(unsupported_auto_marker_xml);
+    expect(unsupported_auto_marker.ok(), "unsupported Auto ordinal fixture must remain well-formed named XML");
+    expect(form_stream::encode_document(unsupported_auto_marker.value()).ok(),
+        "Auto is a named Marker value at any Series ordinal; its resolved row cache is derived");
+}
+
 void test_platform_empty_document_fixture() {
     constexpr std::string_view fixture = R"OOF(
 {27,{18,{{1,1,{"ru","Form"}},1,4294967295},{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}},{0}},400,300,1,0,1,4,4,3,400,300,96},{{-1},3,{0},{0}},{00000000-0000-0000-0000-000000000000,0},{0},1,4,1,0,0,0,{0},{0},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
@@ -6104,6 +6265,7 @@ int main() {
         test_page_boundary_position_codec();
         test_page_table_codec();
         test_owner_aware_control_geometry_codec();
+        test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';

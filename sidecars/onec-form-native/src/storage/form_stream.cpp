@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
 #include <limits>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -283,6 +285,7 @@ list_stream::ListValue encoded_type_domain(
 }
 
 using LV = list_stream::ListValue;
+namespace ls = list_stream;
 
 constexpr std::string_view null_uuid = "00000000-0000-0000-0000-000000000000";
 constexpr std::string_view root_panel_guid = "09ccdc77-ea1a-4a6d-ab1c-3435eada2433";
@@ -2975,6 +2978,554 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
+static std::vector<ls::ListValue> canonical_chart_series_defaults(){return {
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("11837108")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("e5cabe59-d992-4d31-8086-3116931aff81"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::string_atom("ru"),ls::ListValue::string_atom("Сводная")})}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::string_atom("U")}),
+ls::ListValue::list({ls::ListValue::string_atom("U")}),
+ls::ListValue::raw_atom("0"),
+};}
+static std::vector<ls::ListValue> canonical_chart_middle_defaults(){return {
+ls::ListValue::raw_atom("-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("4"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::string_atom(", "),
+ls::ListValue::raw_atom("4"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-3")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::string_atom("ru"),ls::ListValue::string_atom("Диаграмма1")})}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-22")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-22")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-22")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-1")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-1")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-1")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("16777215")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-3")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-3")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-3")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),
+ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),
+ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("e5cabe59-d992-4d31-8086-3116931aff81"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("4"),
+ls::ListValue::raw_atom("30"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("2"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("169")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("180"),
+ls::ListValue::raw_atom("5"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("4"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("11119017")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("1.520833333333333e-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("8.479166666666666e-1"),
+ls::ListValue::raw_atom("4.083333333333333e-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("3.694444444444444e-1"),
+ls::ListValue::raw_atom("8.479166666666666e-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("9.611111111111111e-1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("3"),ls::ListValue::list({ls::ListValue::raw_atom("-22")}),ls::ListValue::raw_atom("3")}),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+};}
+static std::vector<ls::ListValue> canonical_chart_data_defaults(){return {
+ls::ListValue::raw_atom("14"),
+ls::ListValue::raw_atom("2"),
+ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("95"),
+ls::ListValue::raw_atom("1e-1"),
+ls::ListValue::raw_atom("1e-1"),
+ls::ListValue::raw_atom("3e-2"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("e5cabe59-d992-4d31-8086-3116931aff81"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("2"),
+ls::ListValue::raw_atom("255"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"),
+ls::ListValue::raw_atom("0"),
+};}
+static std::vector<ls::ListValue> canonical_chart_style_defaults(){return {
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("2"),
+ls::ListValue::raw_atom("-2"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("10"),
+ls::ListValue::raw_atom("1"),
+ls::ListValue::raw_atom("20"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::raw_atom("0"),
+};}
+static std::vector<ls::ListValue> canonical_chart_render_defaults(){return {
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.152083333333333333333333333"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.847916666666666666666666667"),
+ls::ListValue::raw_atom("0.408333333333333333333333333"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.369444444444444444444444444"),
+ls::ListValue::raw_atom("0.847916666666666666666666667"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.961111111111111111111111111"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.17"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.83"),
+ls::ListValue::raw_atom("0.08"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.83"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0.92"),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("14"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("14"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+};}
+static std::vector<ls::ListValue> canonical_chart_tail_defaults(){return {
+ls::ListValue::raw_atom(""),
+ls::ListValue::raw_atom("60"),
+ls::ListValue::list({ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("0.5"),ls::ListValue::raw_atom("0.5"),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("1"),ls::ListValue::list({ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("48312c09-257f-4b29-b280-284dd89efc1e")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("2"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::list({ls::ListValue::raw_atom("8"),ls::ListValue::raw_atom("3"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("100")}),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("2"),ls::ListValue::list({ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0"),ls::ListValue::list({ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("1"),ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("0"),ls::ListValue::raw_atom("0")}),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::raw_atom("0"),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+ls::ListValue::list({ls::ListValue::raw_atom("4"),ls::ListValue::raw_atom("4"),ls::ListValue::list({ls::ListValue::raw_atom("0")}),ls::ListValue::raw_atom("4")}),
+};}
+
+std::uint32_t chart_color_rgb(const model::ColorValue& value, std::string_view path) {
+    if (value.kind != model::ColorKind::absolute || value.alpha != 255 ||
+        !std::holds_alternative<std::monostate>(value.style)) {
+        fail("OOF1122", std::string(path), "automatic or absolute opaque RGB color", "unsupported ColorValue", "Chart color is outside the supported profile");
+    }
+    return (static_cast<std::uint32_t>(value.blue) << 16) |
+        (static_cast<std::uint32_t>(value.green) << 8) | static_cast<std::uint32_t>(value.red);
+}
+
+LV encode_chart_color_property(const model::ColorValue& value, std::string_view path) {
+    (void)chart_color_rgb(value, path);
+    return encode_button_color(value, path);
+}
+
+model::ColorValue decode_chart_color_property(const LV& value, std::string_view path) {
+    auto color = decode_button_color(value, path);
+    if (color.kind != model::ColorKind::absolute) {
+        fail("OOF1122", std::string(path), "automatic or absolute opaque RGB color", "unsupported ColorValue", "Chart color is outside the supported profile");
+    }
+    return color;
+}
+
+std::uint32_t chart_marker_value(const model::EnumerationValue& value, std::string_view path) {
+    if (value.type_name != "ChartMarkerType") fail("OOF1122", std::string(path), "ChartMarkerType enum", value.type_name, "Chart Marker has the wrong enumeration type");
+    if (value.member == "None") return 0;
+    if (value.member == "Rect") return 1;
+    if (value.member == "Circle") return 2;
+    if (value.member == "Rhomb") return 3;
+    if (value.member == "Auto") return 4;
+    if (value.member == "Alternation") return 5;
+    fail("OOF1122", std::string(path), "help-known Chart Marker member", value.member, "Chart Marker member is unsupported");
+}
+
+model::EnumerationValue decode_chart_marker(std::uint32_t value, std::string_view path) {
+    constexpr std::array<std::string_view, 6> members{"None", "Rect", "Circle", "Rhomb", "Auto", "Alternation"};
+    if (value >= members.size()) fail("OOF1115", std::string(path), "ChartMarkerType ordinal 0..5", std::to_string(value), "Chart Marker ordinal is unsupported");
+    return {"ChartMarkerType", std::string(members[value])};
+}
+
+std::uint32_t chart_marker_cache(const model::EnumerationValue& value, std::string_view path) {
+    const auto ordinal = chart_marker_value(value, path);
+    return value.member == "Auto" ? 3u : ordinal;
+}
+
+std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_count, std::string_view path) {
+    constexpr auto maximum = std::numeric_limits<std::size_t>::max();
+    if (series_count > maximum / 13 || point_count > maximum / 12 ||
+        (series_count != 0 && point_count > maximum / series_count)) {
+        fail("OOF1102", std::string(path), "non-overflowing Chart dimensions", "oversized dimensions", "Chart dimensions overflow the native record size");
+    }
+    const std::size_t series_items = 13 * series_count;
+    const std::size_t point_items = 12 * point_count;
+    const std::size_t cells = series_count * point_count;
+    if (cells > maximum / 4 || series_items > maximum - 222 ||
+        point_items > maximum - 222 - series_items || 4 * cells > maximum - 222 - series_items - point_items) {
+        fail("OOF1102", std::string(path), "non-overflowing Chart dimensions", "oversized dimensions", "Chart dimensions overflow the native record size");
+    }
+    return 222 + series_items + point_items + 4 * cells;
+}
+
+void apply_chart_render_cache(const LV& actual, LV& expected,
+    std::size_t middle_start, std::size_t render_start,
+    std::string_view path) {
+    constexpr std::array<std::size_t, 5> middle_cache_offsets{84, 86, 87, 89, 90};
+    constexpr std::array<std::size_t, 5> render_cache_offsets{2, 4, 5, 7, 8};
+    const auto normalize = [&](std::size_t index) {
+        if (index >= actual.items.size() || index >= expected.items.size()) {
+            fail("OOF1102", child_path(path, index), "existing Chart render-cache scalar", "out of range", "Chart cache offset exceeds its record");
+        }
+        const auto& value = actual.items[index];
+        if (value.is_list || value.atom.empty()) {
+            fail("OOF1115", child_path(path, index), "finite numeric Chart render-cache scalar", describe(value), "Chart render cache has an unsupported value shape");
+        }
+        double parsed = 0.0;
+        const auto* begin = value.atom.data();
+        const auto* end = begin + value.atom.size();
+        const auto result = std::from_chars(begin, end, parsed, std::chars_format::general);
+        if (result.ec != std::errc{} || result.ptr != end || !std::isfinite(parsed)) {
+            fail("OOF1115", child_path(path, index), "finite numeric Chart render-cache scalar", value.atom, "Chart render cache is not a finite number");
+        }
+        expected.items[index] = value;
+    };
+    for (const auto offset : middle_cache_offsets) normalize(middle_start + offset);
+    for (const auto offset : render_cache_offsets) normalize(render_start + offset);
+}
+
+LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
+    const auto series_count = chart.series.size();
+    const auto point_count = chart.points.size();
+    const auto expected = chart_info_item_count(series_count, point_count, "$/Chart/Info");
+    const auto expected_cell_count = series_count * point_count;
+    using ChartValueKey = std::pair<std::uint64_t, std::uint64_t>;
+    std::map<ChartValueKey, const model::ChartValue*> value_index;
+    for (const auto& value : chart.values) {
+        const auto key = ChartValueKey{value.series_ref.value(), value.point_ref.value()};
+        if (!value_index.emplace(key, &value).second) {
+            fail("OOF1122", "$/Chart/Values", "unique Series/Point references", std::to_string(key.first) + "/" + std::to_string(key.second), "Chart matrix contains a duplicate pair");
+        }
+    }
+    if (value_index.size() != expected_cell_count) {
+        fail("OOF1122", "$/Chart/Values", "complete Series by Point matrix", std::to_string(value_index.size()), "Chart matrix does not contain exactly one value for each pair");
+    }
+    const auto max_series_id = chart.series.empty() ? std::uint64_t{1} :
+        std::max_element(chart.series.begin(), chart.series.end(), [](const auto& left, const auto& right) { return left.id.value() < right.id.value(); })->id.value();
+    const auto max_point_id = chart.points.empty() ? std::uint64_t{0} :
+        std::max_element(chart.points.begin(), chart.points.end(), [](const auto& left, const auto& right) { return left.id.value() < right.id.value(); })->id.value();
+    std::vector<LV> info{raw("75"), raw(std::to_string(max_series_id)),
+        raw(std::to_string(max_point_id)), raw("1"), raw(std::to_string(series_count))};
+    const auto append = [&](std::vector<LV> values) {
+        info.insert(info.end(), std::make_move_iterator(values.begin()), std::make_move_iterator(values.end()));
+    };
+    std::vector<LV> rows;
+    rows.reserve(series_count);
+    for (std::size_t index = 0; index < series_count; ++index) {
+        const auto& item = chart.series[index];
+        auto row = canonical_chart_series_defaults();
+        row[0] = encode_chart_color_property(item.color, "$/Chart/Series/Color");
+        row[2] = raw(std::to_string(chart_marker_cache(item.marker, "$/Chart/Series/Marker")));
+        row[3] = encoded_localized(item.text);
+        row[4] = raw("1");
+        row[7] = raw(std::to_string(item.id.value()));
+        rows.insert(rows.end(), row.begin(), row.end());
+    }
+    append(std::move(rows));
+    append(canonical_chart_series_defaults());
+    info.push_back(raw("1"));
+    info.push_back(raw(std::to_string(point_count)));
+    for (std::size_t index = 0; index < point_count; ++index) {
+        const auto& item = chart.points[index];
+        const auto row = canonical_chart_series_defaults();
+        append({encoded_localized(item.text), raw("1"), raw(std::to_string(item.id.value())), encode_chart_color_property(item.color, "$/Chart/Points/Color"), row[1], raw("4"), raw("0"), raw("0"), row[8], row[9], raw("0")});
+    }
+    auto middle = canonical_chart_middle_defaults();
+    if (middle.size() <= 11) fail("OOF1122", "$/Chart/Title", "canonical Chart title slot", std::to_string(middle.size()), "Chart defaults do not contain the title slot");
+    middle[11] = encoded_localized(title);
+    append(std::move(middle));
+    append({string_value(""), raw("0"), raw(chart.series.empty() || chart.points.empty() ? "1" : "0")});
+    for (const auto& series : chart.series) {
+        for (const auto& point : chart.points) {
+            const auto found = value_index.find(ChartValueKey{series.id.value(), point.id.value()});
+            if (found == value_index.end()) fail("OOF1122", "$/Chart/Values", "complete Series by Point matrix", "missing pair", "Chart matrix contains a missing pair");
+            if (const auto* decimal = std::get_if<model::DecimalValue>(&found->second->value)) append({list({string_value("N"), raw(decimal->canonical)}), list({string_value("U")}), string_value("")});
+            else append({list({string_value("U")}), list({string_value("U")}), string_value("")});
+        }
+    }
+    append(canonical_chart_data_defaults());
+    const auto companion = list({raw("0"), raw("0")});
+    for (std::size_t index = 0; index <= series_count; ++index) append({companion});
+    append(canonical_chart_style_defaults());
+    const auto no_text = list({raw("1"), raw("0")});
+    for (const auto& point : chart.points) append({list({encode_chart_color_property(point.color, "$/Chart/Points/Color")})});
+    for (std::size_t index = 0; index <= series_count; ++index) {
+        const bool summary = index == series_count;
+        const auto style_color = summary ? list({raw("4"), raw("4"), list({raw("0")}), raw("4")}) : encode_chart_color_property(chart.series[index].color, "$/Chart/Series/Color");
+        const auto marker = summary ? 4u : chart_marker_value(chart.series[index].marker, "$/Chart/Series/Marker");
+        const auto style = list({style_color, raw(std::to_string(marker)), raw("0"), raw("0"), raw("0"), string_value(""), no_text, no_text, no_text, raw("0")});
+        append({style});
+    }
+    append(canonical_chart_render_defaults());
+    for (std::size_t index = 0; index < series_count * point_count; ++index) {
+        append({list({list({raw("1"), no_text, raw("0")}), raw("0")})});
+    }
+    append(canonical_chart_tail_defaults());
+    if (info.size() != expected) fail("OOF1122", "$/Chart/Info", "count-derived Chart grammar", std::to_string(info.size()), "Chart Info cardinality does not match the supported collection profile");
+    return list(std::move(info));
+}
+
+
+LV encode_chart(const model::ControlNode& control, const GeometryContext& context) {
+    const auto* chart = std::get_if<model::ChartPayload>(&control.payload);
+    if (chart == nullptr || control.id.value() == 0 ||
+        control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
+        fail("OOF1122", "$/Chart", "Chart payload with nonempty dimensions and positive ID", control.name, "Chart is outside the supported profile");
+    }
+    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+        control.properties().size() > 1 ||
+        (control.properties().size() == 1 && !control.properties().contains(model::PropertyId::from_name("Title"))) ||
+        !control.children.empty() || !control.events.empty() ||
+        control.position.default_control.is_explicit() || control.position.tab_order.is_explicit() ||
+        control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
+        !control.position.bindings.dimensions.empty()) {
+        fail("OOF1122", "$/Chart", "Chart named collections and plain Position", control.name, "Chart uses a storage concept outside the supported profile");
+    }
+    const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::chart);
+    std::string title;
+    if (const auto* entry = control.properties().find(model::PropertyId::from_name("Title"))) {
+        const auto* text = std::get_if<std::string>(&entry->value);
+        if (text == nullptr) fail("OOF1121", "$/Chart/Title", "string Title", "different value kind", "Chart Title has the wrong type");
+        title = *text;
+    }
+    return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
+        list({raw("11")}), encode_chart_info(*chart, title),
+        encode_geometry(control.position, context, IncomingAnchorLists{}),
+        list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+        list({raw("0")})});
+}
+
+DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context) {
+    require_arity(record, 7, path);
+    require_raw_constant(at(record, 0, path), model::metamodel::descriptor_for(model::ControlKind::chart).guid, child_path(path, 0));
+    require_exact(at(record, 2, path), list({raw("11")}), child_path(path, 2), "Chart geometry header is unsupported");
+    require_exact(at(record, 6, path), list({raw("0")}), child_path(path, 6), "Chart child-record section is unsupported");
+    const auto id = integer_atom<std::uint64_t>(at(record, 1, path), child_path(path, 1));
+    const auto& info = at(record, 3, path);
+    require_list(info, child_path(path, 3));
+    const auto info_path = child_path(path, 3);
+    if (info.items.size() < 222) fail("OOF1102", info_path, "Chart info base and collection counts", describe(info), "Chart Info is truncated");
+    require_raw_constant(at(info, 0, info_path), "75", child_path(info_path, 0));
+    const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
+    const auto series_size = static_cast<std::size_t>(series_count);
+    if (series_size >= std::numeric_limits<std::size_t>::max() / 11) {
+        fail("OOF1102", info_path, "non-overflowing Series count", std::to_string(series_count), "Chart Series count overflows its record offset");
+    }
+    const auto points_count_offset = std::size_t{5} + (series_size + 1) * 11 + 1;
+    if (points_count_offset >= info.items.size()) fail("OOF1102", info_path, "point count after Series records", describe(info), "Chart Info is truncated");
+    const auto point_count = integer_atom<std::uint32_t>(at(info, points_count_offset, info_path), child_path(info_path, points_count_offset));
+    const auto expected = chart_info_item_count(static_cast<std::size_t>(series_count), static_cast<std::size_t>(point_count), info_path);
+    if (info.items.size() != expected) fail("OOF1102", info_path, "supported dense Chart collection cardinality", std::to_string(info.items.size()), "Chart Info dimensions are unsupported");
+    model::ChartPayload payload;
+    for (std::size_t index = 0; index < series_count; ++index) {
+        const auto row_offset = std::size_t{5} + index * 11;
+        const auto series_id = integer_atom<std::uint64_t>(at(info, row_offset + 7, info_path), child_path(info_path, row_offset + 7));
+        model::ChartSeries series;
+        series.id = model::ObjectId{series_id};
+        series.text = decoded_single_language_text(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3));
+        payload.series.push_back(std::move(series));
+    }
+    const auto points_start = points_count_offset + 1;
+    for (std::size_t index = 0; index < point_count; ++index) {
+        const auto row_offset = points_start + index * 11;
+        const auto point_id = integer_atom<std::uint64_t>(at(info, row_offset + 2, info_path), child_path(info_path, row_offset + 2));
+        model::ChartPoint point;
+        point.id = model::ObjectId{point_id};
+        point.text = decoded_single_language_text(at(info, row_offset, info_path), child_path(info_path, row_offset));
+        payload.points.push_back(std::move(point));
+    }
+    const auto middle_start = points_start + static_cast<std::size_t>(point_count) * 11;
+    const auto title_offset = middle_start + 11;
+    const std::string title = decoded_single_language_text(at(info, title_offset, info_path), child_path(info_path, title_offset));
+    const auto middle_defaults = canonical_chart_middle_defaults();
+    const auto data_start = middle_start + middle_defaults.size() + 3;
+    for (std::size_t series = 0; series < series_count; ++series) {
+        for (std::size_t point = 0; point < point_count; ++point) {
+            const auto cell_offset = data_start + (series * point_count + point) * 3;
+            const auto& encoded = at(info, cell_offset, info_path);
+            require_list(encoded, child_path(info_path, cell_offset));
+            if (encoded.items.empty() || encoded.items.size() > 2) fail("OOF1102", child_path(info_path, cell_offset), "typed numeric or Undefined Chart cell", describe(encoded), "Chart cell has an unsupported value shape");
+            const auto type = string_atom(encoded.items[0], child_path(info_path, cell_offset));
+            require_exact(at(info, cell_offset + 1, info_path), list({string_value("U")}), child_path(info_path, cell_offset + 1), "Chart value info is unsupported");
+            require_exact(at(info, cell_offset + 2, info_path), string_value(""), child_path(info_path, cell_offset + 2), "Chart tooltip is unsupported");
+            model::ChartValue value;
+            value.series_ref = payload.series[series].id;
+            value.point_ref = payload.points[point].id;
+            if (type == "N" && encoded.items.size() == 2) value.value = model::DecimalValue{raw_atom(encoded.items[1], child_path(info_path, cell_offset + 1))};
+            else if (type == "U" && encoded.items.size() == 1) value.value = model::UndefinedValue{};
+            else fail("OOF1115", child_path(info_path, cell_offset), "N or U Chart value tag", type, "Chart cell uses an unsupported value kind");
+            payload.values.push_back(std::move(value));
+        }
+    }
+    const auto data_defaults = canonical_chart_data_defaults();
+    const auto style_defaults = canonical_chart_style_defaults();
+    const auto cells_end = data_start + static_cast<std::size_t>(series_count) * point_count * 3;
+    const auto series_companions_start = cells_end + data_defaults.size();
+    const auto style_defaults_start = series_companions_start + series_size + 1;
+    const auto point_styles_start = style_defaults_start + style_defaults.size();
+    const auto series_styles_start = point_styles_start + static_cast<std::size_t>(point_count);
+    std::vector<std::optional<std::uint32_t>> derived_marker_caches(series_count);
+    for (std::size_t point = 0; point < point_count; ++point) {
+        const auto style_path = child_path(info_path, point_styles_start + point);
+        const auto& point_style = at(info, point_styles_start + point, info_path);
+        require_arity(point_style, 1, style_path);
+        auto color = decode_chart_color_property(point_style.items[0], child_path(style_path, 0));
+        const auto row_offset = points_start + point * 11;
+        const auto row_color = decode_chart_color_property(at(info, row_offset + 3, info_path), child_path(info_path, row_offset + 3));
+        if (chart_color_rgb(color, child_path(style_path, 0)) != chart_color_rgb(row_color, child_path(info_path, row_offset + 3))) {
+            fail("OOF1115", style_path, "Point Color matching resolved RGB", "mismatch", "Chart Point Color differs from its resolved native RGB");
+        }
+        payload.points[point].color = color;
+    }
+    for (std::size_t series = 0; series < series_count; ++series) {
+        const auto style_path = child_path(info_path, series_styles_start + series);
+        const auto& series_style = at(info, series_styles_start + series, info_path);
+        require_arity(series_style, 10, style_path);
+        auto color = decode_chart_color_property(series_style.items[0], child_path(style_path, 0));
+        const auto marker_id = integer_atom<std::uint32_t>(series_style.items[1], child_path(style_path, 1));
+        const auto marker = decode_chart_marker(marker_id, child_path(style_path, 1));
+        const auto row_offset = std::size_t{5} + series * 11;
+        const auto row_color = decode_chart_color_property(at(info, row_offset, info_path), child_path(info_path, row_offset));
+        if (chart_color_rgb(color, child_path(style_path, 0)) != chart_color_rgb(row_color, child_path(info_path, row_offset))) {
+            fail("OOF1115", style_path, "Series Color matching resolved RGB", "mismatch", "Chart Series Color differs from its resolved native RGB");
+        }
+        const auto marker_cache_path = child_path(info_path, row_offset + 2);
+        const auto rendered_marker = integer_atom<std::uint32_t>(at(info, row_offset + 2, info_path), marker_cache_path);
+        if (marker.member == "Auto" || marker.member == "Alternation") {
+            if (rendered_marker > 5) {
+                fail("OOF1115", marker_cache_path, "derived Marker cache ordinal 0..5", std::to_string(rendered_marker), "Chart Series Marker cache is outside the supported range");
+            }
+            derived_marker_caches[series] = rendered_marker;
+        } else if (rendered_marker != chart_marker_value(marker, child_path(style_path, 1))) {
+            fail("OOF1115", marker_cache_path, "concrete Marker cache matching its named Marker", std::to_string(rendered_marker), "Chart Series Marker differs from its resolved native marker");
+        }
+        payload.series[series].color = color;
+        payload.series[series].marker = marker;
+    }
+    model::ControlNode control{model::ObjectId{id}, string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)), std::move(payload)};
+    if (!title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), title);
+    const auto expected_info = encode_chart_info(std::get<model::ChartPayload>(control.payload), title);
+    const auto render_start = cells_end + data_defaults.size() + series_size + 1 + style_defaults.size() +
+        static_cast<std::size_t>(point_count) + series_size + 1;
+    auto normalized_expected_info = expected_info;
+    for (std::size_t series = 0; series < series_count; ++series) {
+        if (derived_marker_caches[series]) {
+            const auto row_offset = std::size_t{5} + series * 11;
+            normalized_expected_info.items[row_offset + 2] = raw(std::to_string(*derived_marker_caches[series]));
+        }
+    }
+    apply_chart_render_cache(info, normalized_expected_info, middle_start, render_start, info_path);
+    require_exact(info, normalized_expected_info, info_path, "Chart Info contains unsupported non-named values");
+    const auto expected_metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
+    require_exact(at(record, 5, path), expected_metadata, child_path(path, 5), "Chart metadata contains unsupported fields");
+    const auto geometry = decode_geometry(at(record, 4, path), child_path(path, 4), context);
+    control.position = geometry.position;
+    return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
+}
+
 LV canonical_progress_bar_properties(bool enabled, std::string_view tool_tip) {
     auto properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
@@ -5049,8 +5600,10 @@ Result<model::OrdinaryFormDocument> decode_document(
                 const auto& record = child_table.items[index + 1];
                 require_list(record, record_path);
                 static_cast<void>(raw_atom(at(record, 1, record_path), child_path(record_path, 1)));
-                const auto geometry_path = child_path(record_path, 3);
-                const auto& geometry = at(record, 3, record_path);
+                const std::string child_guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
+                const std::size_t geometry_slot = child_guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid ? 4 : 3;
+                const auto geometry_path = child_path(record_path, geometry_slot);
+                const auto& geometry = at(record, geometry_slot, record_path);
                 std::size_t ordinal_slot = 0;
                 const auto page_ordinal = geometry_page_ordinal(geometry, geometry_path, ordinal_slot);
                 if (page_ordinal.page >= pages.size()) {
@@ -5074,7 +5627,9 @@ Result<model::OrdinaryFormDocument> decode_document(
                 const auto record_count = static_cast<std::size_t>(std::count_if(
                     child_table.items.begin() + 1, child_table.items.end(), [&](const LV& record) {
                         std::size_t ordinal_slot = 0;
-                        const auto page_ordinal = geometry_page_ordinal(at(record, 3, path), path, ordinal_slot);
+                        const auto guid = raw_atom(at(record, 0, path), child_path(path, 0));
+                        const auto slot = guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid ? 4 : 3;
+                        const auto page_ordinal = geometry_page_ordinal(at(record, slot, path), path, ordinal_slot);
                         return page_ordinal.page == page_index;
                     }));
                 if (page_records.size() != record_count) {
@@ -5096,7 +5651,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const GeometryContext context{owner, static_cast<std::uint32_t>(page_index), slot->ordinal};
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
-                    if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
+                    if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context);
+                    else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
                     else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
                         child = decode_usual_group(record, record_path, context);
@@ -5500,7 +6056,9 @@ Result<list_stream::ListValue> encode_document(
                     "page-local ordinal within uint32 range", std::to_string(ordinal), "Child ordinal overflows");
                 const GeometryContext context{owner, page_index, static_cast<std::uint32_t>(ordinal)};
                 LV record;
-                if (control->kind() == model::ControlKind::command_bar) {
+                if (control->kind() == model::ControlKind::chart) {
+                    record = encode_chart(*control, context);
+                } else if (control->kind() == model::ControlKind::command_bar) {
                     record = encode_command_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::button) {
                     record = encode_button(document, *control, context);
@@ -5630,7 +6188,7 @@ Result<list_stream::ListValue> encode_document(
             for (auto& child : children) {
                 const auto found = child_incoming.find(child.control->id.value());
                 const IncomingAnchorLists empty;
-                child.record.items[3] = encode_geometry(child.control->position,
+                child.record.items[child.control->kind() == model::ControlKind::chart ? 4 : 3] = encode_geometry(child.control->position,
                     GeometryContext{owner, child.page_index, static_cast<std::uint32_t>(child.ordinal)},
                     found == child_incoming.end() ? empty : found->second);
             }

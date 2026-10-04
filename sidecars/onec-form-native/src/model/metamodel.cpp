@@ -1031,6 +1031,15 @@ struct Metamodel::Impl {
             panel_placement_properties,
             form_properties,
             events);
+        auto& chart_properties = properties[static_cast<std::size_t>(ControlKind::chart)];
+        // Публичное Title отображает путь Диаграмма.ОбластьЗаголовка.Текст, а не отдельное свойство диаграммы.
+        chart_properties.push_back({
+            PropertyId::from_name("Title"), DescriptorOwner::control,
+            PropertySurface::control_payload, ControlKind::chart, chart_properties.size(), "Title", "TitleArea.Text",
+            u8"ОбластьЗаголовка.Текст", u8"Строка", ValueKind::string, ValueCodec::string,
+            ApiAccess::read_write, VersionMask::platform_8_5,
+            PersistenceClass::persisted_editable, StorageCodec::control_info,
+            {DefaultKind::string, ""}});
 
         // Help may repeat an inherited extension property on one concrete control.
         // The executable model keeps the shared extension as the single owner.

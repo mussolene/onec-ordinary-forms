@@ -319,7 +319,13 @@ void test_all_control_variants() {
     for (const auto& descriptor : model::metamodel::control_descriptors()) {
         xml += "<" + std::string(descriptor.public_name) + " id=\"" +
                std::to_string(id) + "\" name=\"C" + std::to_string(id) +
-               "\"><Position/></" + std::string(descriptor.public_name) + ">";
+               "\"><Position/>";
+        if (descriptor.kind == model::ControlKind::chart) {
+            xml += "<Title>Title</Title><Series><ChartSeries id=\"2\"><Text>Series</Text><Color kind=\"absolute\" red=\"1\"/><Marker type=\"ChartMarkerType\" member=\"Auto\"/></ChartSeries></Series>"
+                   "<Points><ChartPoint id=\"1\"><Text>Point</Text><Color kind=\"absolute\" red=\"2\"/></ChartPoint></Points>"
+                   "<Values><ChartValue seriesRef=\"2\" pointRef=\"1\"><Number>1</Number></ChartValue></Values>";
+        }
+        xml += "</" + std::string(descriptor.public_name) + ">";
         ++id;
     }
     xml += "</ChildItems></Form>";
