@@ -776,6 +776,15 @@ void apply_proven_storage_overrides(
         DefaultKind::none,
         "");
 
+    auto& choice_field = properties[static_cast<std::size_t>(ControlKind::choice_field)];
+    classify_property(choice_field, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(choice_field, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    if (const auto choice_list = std::ranges::find(choice_field, "ChoiceList", &PropertyDescriptor::api_name);
+        choice_list != choice_field.end()) {
+        choice_list->persistence = PersistenceClass::runtime_only;
+        choice_list->storage_codec = StorageCodec::none;
+    }
+
     auto& check_box = properties[static_cast<std::size_t>(ControlKind::check_box)];
     classify_property(
         check_box,

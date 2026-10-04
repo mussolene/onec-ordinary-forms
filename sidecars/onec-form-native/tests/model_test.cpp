@@ -462,6 +462,22 @@ void test_help_metamodel() {
     expect(
         property_descriptors(ControlKind::input_field).size() == 45,
         "InputField must retain the exact 45-property TextBox surface");
+    const auto* choice_enabled = find_property(ControlKind::choice_field, "Enabled");
+    const auto* choice_tool_tip = find_property(ControlKind::choice_field, "ToolTip");
+    const auto* choice_list = find_property(ControlKind::choice_field, "ChoiceList");
+    expect(choice_enabled && choice_enabled->persistence == PersistenceClass::persisted_editable &&
+            choice_enabled->storage_codec == StorageCodec::control_base &&
+            choice_enabled->default_value.kind == DefaultKind::boolean &&
+            choice_enabled->default_value.canonical == "true",
+        "ChoiceField Enabled must use the observed true base default");
+    expect(choice_tool_tip && choice_tool_tip->persistence == PersistenceClass::persisted_editable &&
+            choice_tool_tip->storage_codec == StorageCodec::control_base &&
+            choice_tool_tip->default_value.kind == DefaultKind::string &&
+            choice_tool_tip->default_value.canonical.empty(),
+        "ChoiceField ToolTip must use the observed empty base string default");
+    expect(choice_list && choice_list->persistence == PersistenceClass::runtime_only &&
+            choice_list->storage_codec == StorageCodec::none,
+        "ChoiceField ChoiceList must remain runtime-only rather than a persisted XML value");
     expect(
         event_descriptors(ControlKind::input_field).size() == 9,
         "InputField must retain the exact 9-event TextBox surface");

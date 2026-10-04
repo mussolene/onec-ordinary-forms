@@ -611,9 +611,14 @@ void append_property_element(
 void append_property_elements(
     std::string& output,
     std::span<const PropertyDescriptor> properties,
-    std::string_view indent = "      "
+    std::string_view indent = "      ",
+    bool include_runtime_only = true
 ) {
     for (const auto& property : properties) {
+        if (!include_runtime_only &&
+            property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+            continue;
+        }
         append_property_element(output, property, indent);
     }
 }
@@ -787,8 +792,11 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             if (control.kind == ControlKind::table && property.api_name == "Columns") {
                 output +=
                     "      <xs:element name=\"Columns\" type=\"TableColumnsType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
+            } else if (control.kind == ControlKind::choice_field &&
+                property.persistence == model::metamodel::PersistenceClass::runtime_only) {
+                continue;
             } else {
-                append_property_elements(output, std::span<const PropertyDescriptor>(&property, 1));
+                append_property_element(output, property, "      ");
             }
         }
 
