@@ -298,7 +298,7 @@ Buttons содержит именованные CommandBarButton с типом A
 Separator. Поддержаны Name, Type, Text, Explanation, ToolTip, Enabled,
 Checked, ChangesData, Representation, Shortcut, Picture, Action, Order и вложенные
 Buttons. Action содержит обработчик, имя и локализованные Text, ToolTip и
-Description; Separator не имеет дополнительных полей, Submenu может содержать
+Description; Separator допускает только ClientInterfaceVariant, Submenu может содержать
 рекурсивную коллекцию. Имена уникальны в своей
 коллекции. Это отдельные пункты меню, а не контролы ChildItems или глобальные
 Commands. Русские имена находятся в appinfo OrdinaryFormPalette.xsd.
@@ -958,6 +958,20 @@ CommandBarButton.ClientInterfaceVariant хранит именованный ко
 интерфейса платформы, использовании поля при выборе оформления, перечне
 ClientInterfaceVariant в платформенной XSD и собственном сохранении Designer.
 Другие варианты явно отвергаются, не заменяются значением по умолчанию.
+
+Контекст ClientInterfaceVariant применим также к Separator. Его значение
+Version8_0 проходит именованный XML и повторное сохранение Designer; default
+Version8_2_OrdinaryApp опускается. Поле Representation у Separator не является
+активным свойством: getter Отображение возвращает Неопределено для всех четырех
+сохраненных вариантов и обоих контекстов интерфейса. Нестандартное известное
+значение читается с OOF1140 и reconstructionComplete=false; writer строит
+каноническое состояние из именованной модели. Неизвестное значение перечисления
+остается ошибкой, Representation в XML Separator запрещен. Собственный опыт:
+ev_4476d09c4c8945faaa0bbeafa8580317. Каноническое меню из восьми Separator
+прошло строгий Designer, XML, модуль и повторный BIN совпали:
+ev_55e71f4cc77d47658558a4feb9ef43cf. Полный эталон после этой правки прошел
+строгий Designer и повторную сборку именованной проекции:
+ev_87eeb5b904f74e03b7392b2bb3692d34.
 
 Собственное меню, сохраненное GUI, прошло dump, сборку только из XML и модуля,
 загрузку EPF и строгую выгрузку Designer 8.5.1.1343. Повторные канонические

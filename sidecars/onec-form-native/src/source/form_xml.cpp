@@ -2218,8 +2218,12 @@ private:
             fail("OOF2003", node, std::string(owner), "Order", "Submenu only", "present", "Only Submenu items may declare an order");
         if (item.type != model::CommandBarButtonKind::submenu && !item.buttons.empty())
             fail("OOF2003", node, std::string(owner), "Buttons", "Submenu only", "present", "Only Submenu items may contain buttons");
-        if (item.type == model::CommandBarButtonKind::separator && seen.size() != 0)
-            fail("OOF2003", node, std::string(owner), "fields", "no separator fields", "present", "Separator cannot have fields");
+        if (item.type == model::CommandBarButtonKind::separator &&
+            std::any_of(seen.begin(), seen.end(), [](const auto& field) {
+                return field != "ClientInterfaceVariant";
+            }))
+            fail("OOF2003", node, std::string(owner), "fields", "ClientInterfaceVariant only", "unsupported field",
+                "Separator contains an unsupported field");
         return item;
     }
 

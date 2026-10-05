@@ -91,7 +91,7 @@ void expect_header_bound_projection(const list_stream::ListValue& encoded, std::
         expect(repeated_xml.ok() && repeated_xml.value() == baseline_xml.value(),
             "repeated named XML must preserve the canonical synthetic identities");
     }
-    for (const auto bad_bound : {std::to_string(actual_max - 1), std::string("4294967295"),
+    for (const auto& bad_bound : {std::to_string(actual_max - 1), std::string("4294967295"),
                                 std::string("18446744073709551615"), std::string("invalid")}) {
         auto invalid = encoded;
         invalid.items[1].items[1].items[1] = list_stream::ListValue::raw_atom(bad_bound);
@@ -10395,6 +10395,100 @@ void test_manual_bindings_are_not_silently_discarded() {
     }
 }
 
+void test_separator_inactive_representation_projection() {
+    for (const std::string owner : {"Button", "CommandBar"}) {
+        for (const auto& [variant, variant_xml] : {
+                 std::pair{model::ClientInterfaceVariant::version8_0, std::string("Version8_0")},
+                 std::pair{model::ClientInterfaceVariant::version8_2_ordinary_app, std::string("Version8_2_OrdinaryApp")}}) {
+            const auto xml = std::string("<Form id=\"1\" name=\"SeparatorSample\" ordinaryFormVersion=\"2.1\"><ChildItems><") +
+                owner + " id=\"2\" name=\"Tools\"><Position/><Buttons><CommandBarButton name=\"Sep\" type=\"Separator\">" +
+                "<ClientInterfaceVariant>" + variant_xml + "</ClientInterfaceVariant></CommandBarButton></Buttons>" +
+                (owner == "Button" ? "<MenuMode type=\"MenuMode\" member=\"UseExtra\"/>" : "") +
+                "</" + owner + "></ChildItems></Form>";
+            const auto parsed = source::parse_form_xml(xml);
+            expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+            const auto canonical_xml = source::serialize_form_xml(parsed.value());
+            expect(canonical_xml.ok() && canonical_xml.value().find("<Representation>") == std::string::npos,
+                "Separator canonical XML must omit the shared but unrepresented Representation property");
+            const auto variant_tag = "<ClientInterfaceVariant>" + variant_xml + "</ClientInterfaceVariant>";
+            expect((canonical_xml.value().find(variant_tag) != std::string::npos) ==
+                       (variant == model::ClientInterfaceVariant::version8_0),
+                "canonical Separator XML must emit only a nondefault ClientInterfaceVariant");
+            expect(source::parse_form_xml(canonical_xml.value()).ok(), "canonical Separator XML must parse again");
+            const auto encoded = form_stream::encode_document(parsed.value());
+            expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+            const auto decoded = form_stream::decode_document(encoded.value(), "SeparatorSample");
+            expect(decoded.ok() && decoded.value().reconstruction_complete(),
+                "named ClientInterfaceVariant must complete the native menu cycle");
+            const auto* decoded_owner = decoded.value().find_control(model::ObjectId{2});
+            const auto* decoded_buttons = decoded_owner == nullptr ? nullptr : owner == "Button"
+                ? &std::get<model::ButtonPayload>(decoded_owner->payload).buttons
+                : &std::get<model::CommandBarPayload>(decoded_owner->payload).buttons;
+            expect(decoded_buttons != nullptr && decoded_buttons->size() == 1 &&
+                       decoded_buttons->front().client_interface_variant == variant,
+                "decoded Separator must retain its named ClientInterfaceVariant value");
+            const auto restored_xml = source::serialize_form_xml(decoded.value());
+            expect(restored_xml.ok() && restored_xml.value() == canonical_xml.value(),
+                "Separator ClientInterfaceVariant must survive XML, model and storage");
+
+            const auto find_separator_properties = [&](auto&& self, list_stream::ListValue& value,
+                                                       std::vector<list_stream::ListValue*>& found) -> void {
+                if (!value.is_list) return;
+                if (value.items.size() == 16 && !value.items[0].is_list &&
+                    value.items[0].atom_kind == list_stream::ListValue::AtomKind::raw && value.items[0].atom == "8" &&
+                    !value.items[1].is_list && value.items[1].atom_kind == list_stream::ListValue::AtomKind::string &&
+                    value.items[1].atom == "Sep" && !value.items[9].is_list &&
+                    value.items[9].atom_kind == list_stream::ListValue::AtomKind::raw && value.items[9].atom == "2") {
+                    found.push_back(&value);
+                }
+                for (auto& child : value.items) self(self, child, found);
+            };
+            for (const auto stored_value : {"1", "2", "3"}) {
+                auto changed = encoded.value();
+                std::vector<list_stream::ListValue*> matches;
+                find_separator_properties(find_separator_properties, changed, matches);
+                expect(matches.size() == 1, "the encoded Separator properties record must be uniquely identifiable");
+                matches.front()->items[10] = list_stream::ListValue::raw_atom(stored_value);
+                const auto partial = form_stream::decode_document(changed, "SeparatorSample");
+                expect(partial.ok() && !partial.value().reconstruction_complete() &&
+                           std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
+                               return diagnostic.code == "OOF1140";
+                           }), "known nondefault Separator Representation must warn and mark reconstruction incomplete");
+                const auto* owner_control = partial.value().find_control(model::ObjectId{2});
+                const auto* decoded_buttons = owner_control == nullptr ? nullptr : owner == "Button"
+                    ? &std::get<model::ButtonPayload>(owner_control->payload).buttons
+                    : &std::get<model::CommandBarPayload>(owner_control->payload).buttons;
+                expect(decoded_buttons != nullptr && decoded_buttons->size() == 1 &&
+                           decoded_buttons->front().representation == model::ButtonRepresentation::automatic &&
+                           decoded_buttons->front().client_interface_variant == variant,
+                    "unrepresented Separator Representation must normalize while retaining the named interface variant");
+                const auto rebuilt = form_stream::encode_document(partial.value());
+                expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                    "the canonical writer must rebuild Separator storage from named values without retaining the raw enum");
+            }
+
+            auto unknown = encoded.value();
+            std::vector<list_stream::ListValue*> matches;
+            find_separator_properties(find_separator_properties, unknown, matches);
+            expect(matches.size() == 1, "the encoded Separator properties record must be uniquely identifiable");
+            matches.front()->items[10] = list_stream::ListValue::raw_atom("4");
+            const auto unknown_result = form_stream::decode_document(unknown, "SeparatorSample");
+            expect(!unknown_result && unknown_result.diagnostics().size() == 1 &&
+                       unknown_result.diagnostics().front().code == "OOF1114",
+                "unknown Separator Representation values must remain hard failures");
+        }
+    }
+    for (const std::string field : {"<Representation>Auto</Representation>", "<Representation>Picture</Representation>",
+             "<Representation>Text</Representation>", "<Representation>PictureText</Representation>",
+             "<ClientInterfaceVariant>UnknownVariant</ClientInterfaceVariant>", "<Text>Unsupported</Text>",
+             "<Order>Ascending</Order>", "<Enabled>false</Enabled>"}) {
+        const auto xml = std::string("<Form id=\"1\" name=\"InvalidSeparator\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
+            "<CommandBar id=\"2\" name=\"Tools\"><Position/><Buttons><CommandBarButton name=\"Sep\" type=\"Separator\">" +
+            field + "</CommandBarButton></Buttons></CommandBar></ChildItems></Form>";
+        expect(!source::parse_form_xml(xml), "unknown enum values and other Separator properties must stay unsupported");
+    }
+}
+
 void test_command_bar_unrepresented_self_dependency() {
     const auto make_document = [](bool command_bar, bool has_binding,
                                   model::BindingCoordinate target, bool proportional, bool nested = false) {
@@ -12020,6 +12114,7 @@ int main() {
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();
         test_command_bar_unrepresented_self_dependency();
+        test_separator_inactive_representation_projection();
         test_center_target_coordinates();
         test_page_boundary_position_codec();
         test_page_table_codec();

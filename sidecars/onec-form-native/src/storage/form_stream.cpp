@@ -3384,6 +3384,10 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto representation = integer_atom<unsigned>(props.items[10], path);
             if (representation > 3) fail("OOF1114", std::string(path), "known representation", std::to_string(representation), "Menu representation is unsupported");
             entry.representation = representation == 0 ? model::ButtonRepresentation::automatic : representation == 1 ? model::ButtonRepresentation::text : representation == 2 ? model::ButtonRepresentation::picture : model::ButtonRepresentation::picture_text;
+            // Separator.Отображение returns Undefined. A nondefault stored representation
+            // remains an unrepresented value and is reported by the profile comparison below.
+            if (entry.type == model::CommandBarButtonKind::separator)
+                entry.representation = model::ButtonRepresentation::automatic;
             entry.enabled = bool_atom(props.items[11], path);
             entry.checked = bool_atom(props.items[12], path);
             auto normalized = props;
