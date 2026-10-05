@@ -1990,7 +1990,8 @@ void test_choice_field_static_profile_round_trip_and_validation() {
                                   bool boolean_attribute = false,
                                   bool with_data_path = true,
                                   bool with_unmapped_property = false,
-                                  std::optional<model::ColorValue> border_color = std::nullopt) {
+                                  std::optional<model::ColorValue> border_color = std::nullopt,
+                                  bool empty_attribute_type = false) {
         model::Form form;
         form.id = model::ObjectId{1};
         form.name = "ChoiceFieldProfile";
@@ -1999,11 +2000,11 @@ void test_choice_field_static_profile_round_trip_and_validation() {
         model::TypeDomainPatternValue value_type;
         model::TypeDomainEntry value_entry;
         value_entry.term = boolean_attribute ? model::TypeDomainTerm::boolean : model::TypeDomainTerm::string;
-        if (!boolean_attribute) {
+        if (!boolean_attribute && !empty_attribute_type) {
             value_entry.string.length = 64;
             value_entry.string.variable = false;
         }
-        value_type.entries.push_back(value_entry);
+        if (!empty_attribute_type) value_type.entries.push_back(value_entry);
         document.add_attribute(model::Attribute{model::ObjectId{3}, "Choice", value_type});
         model::ControlNode choice_field{model::ObjectId{2}, "ChoiceField", model::ChoiceFieldPayload{}};
         if (with_data_path) {
@@ -2051,6 +2052,31 @@ void test_choice_field_static_profile_round_trip_and_validation() {
                default_choice->data_path->attribute.id() == model::ObjectId{3} &&
                !default_choice->properties().find(model::PropertyId::from_name("ToolTip")),
         "default ChoiceField must preserve direct DataPath and omit empty ToolTip");
+
+    const auto empty_type_encoded = form_stream::encode_document(
+        make_document(std::nullopt, true, false, true, false, std::nullopt, true));
+    expect(empty_type_encoded.ok(), "ChoiceField may link to an Attribute with an empty TypeDomain");
+    const auto empty_type_decoded = form_stream::decode_document(empty_type_encoded.value(), "ChoiceFieldEmptyType");
+    expect(empty_type_decoded.ok(), "linked empty-TypeDomain ChoiceField storage must decode");
+    const auto* empty_type_attribute = empty_type_decoded.value().find_attribute(model::ObjectId{3});
+    const auto* empty_type_choice = empty_type_decoded.value().find_control(model::ObjectId{2});
+    expect(empty_type_attribute && empty_type_attribute->type.entries.empty() &&
+               empty_type_choice && empty_type_choice->data_path &&
+               empty_type_choice->data_path->attribute.id() == model::ObjectId{3},
+        "native round-trip must preserve both the empty Attribute TypeDomain and its ChoiceField link");
+    const auto empty_type_reencoded = form_stream::encode_document(empty_type_decoded.value());
+    expect(empty_type_reencoded.ok() && list_stream::dump_compact(empty_type_reencoded.value()) ==
+               list_stream::dump_compact(empty_type_encoded.value()),
+        "empty-TypeDomain ChoiceField storage must re-encode without drift");
+    const auto empty_type_xml = source::serialize_form_xml(empty_type_decoded.value());
+    expect(empty_type_xml.ok() && empty_type_xml.value().find("<TypeDomain/>") != std::string::npos,
+        "empty Attribute TypeDomain must serialize as a named empty TypeDomain element");
+    const auto empty_type_xml_parsed = source::parse_form_xml(empty_type_xml.value());
+    expect(empty_type_xml_parsed.ok(), "named XML with an empty linked TypeDomain must parse");
+    const auto empty_type_xml_reencoded = form_stream::encode_document(empty_type_xml_parsed.value());
+    expect(empty_type_xml_reencoded.ok() && list_stream::dump_compact(empty_type_xml_reencoded.value()) ==
+               list_stream::dump_compact(empty_type_encoded.value()),
+        "named empty-TypeDomain XML must preserve the ChoiceField link through native encoding");
 
     auto unbound_encoded = form_stream::encode_document(make_document(std::nullopt, true, false, false));
     expect(unbound_encoded.ok(), "unbound ChoiceField default profile must encode");

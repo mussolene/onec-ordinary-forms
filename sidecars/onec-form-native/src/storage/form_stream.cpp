@@ -5833,9 +5833,10 @@ DecodedControl decode_choice_field(
         fail("OOF1122", child_path(path, 1), "positive int64 ChoiceField ID", std::to_string(raw_id),
             "ChoiceField ID is invalid");
     }
-    if (linked_attribute != nullptr && !is_single_string_type_domain(linked_attribute->type)) {
-        fail("OOF1122", "$/2/3", "link to a single String Attribute", linked_attribute->name,
-            "ChoiceField DataPath must target a single String attribute");
+    if (linked_attribute != nullptr && !linked_attribute->type.entries.empty() &&
+        !is_single_string_type_domain(linked_attribute->type)) {
+        fail("OOF1122", "$/2/3", "link to an empty TypeDomain or single String Attribute", linked_attribute->name,
+            "ChoiceField DataPath must target an empty TypeDomain or single String attribute");
     }
 
     const auto& info = record.items[2];
@@ -7596,9 +7597,9 @@ LV encode_choice_field(
             fail("OOF1123", "$/ChoiceField/DataPath", "existing linked Attribute",
                 std::to_string(control.data_path->attribute.id().value()), "ChoiceField DataPath does not resolve");
         }
-        if (!is_single_string_type_domain(attribute->type)) {
-            fail("OOF1122", "$/ChoiceField/DataPath", "linked String Attribute", attribute->name,
-                "ChoiceField DataPath must target a single String attribute");
+        if (!attribute->type.entries.empty() && !is_single_string_type_domain(attribute->type)) {
+            fail("OOF1122", "$/ChoiceField/DataPath", "linked empty TypeDomain or single String Attribute",
+                attribute->name, "ChoiceField DataPath must target an empty TypeDomain or single String attribute");
         }
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
