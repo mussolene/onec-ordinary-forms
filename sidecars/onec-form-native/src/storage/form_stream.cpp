@@ -2133,6 +2133,66 @@ std::string decode_action(const LV& payload, ActionMetadataPolicy policy, std::s
     return handler;
 }
 
+LV encode_menu_action(const model::CommandBarAction& action, std::string_view path) {
+    if (action.handler.empty()) {
+        fail("OOF1122", std::string(path), "non-empty Action handler", "empty", "Action handler cannot be empty");
+    }
+    validate_localized_languages(action.text, child_path(path, 0));
+    validate_localized_languages(action.tooltip, child_path(path, 1));
+    validate_localized_languages(action.description, child_path(path, 2));
+    try {
+        return list({raw("3"), string_value(action.handler), list({
+            raw("1"), string_value(action.name), encoded_localized(action.text),
+            encoded_localized(action.tooltip), encoded_localized(action.description),
+            parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"), parse_constant("{0,0,0}")})});
+    } catch (const DecodeFailure&) {
+        throw;
+    } catch (const std::exception& error) {
+        fail("OOF1108", std::string(path), "encodable localized Action values", error.what(),
+            "Action localized values cannot be encoded");
+    }
+}
+
+model::LocalizedStringValue decode_action_localized(const LV& value, std::string_view path) {
+    model::LocalizedStringValue decoded;
+    try {
+        list_stream::ListInStream in(value);
+        decoded = value_codec::read_localized_string(in);
+        if (in.has_next()) {
+            fail("OOF1108", std::string(path), "complete LocalizedString record", describe(value),
+                "Action localized value has trailing fields");
+        }
+    } catch (const DecodeFailure&) {
+        throw;
+    } catch (const std::exception& error) {
+        fail("OOF1108", std::string(path), "LocalizedString record", describe(value), error.what());
+    }
+    validate_localized_languages(decoded, path);
+    return decoded;
+}
+
+model::CommandBarAction decode_menu_action(const LV& payload, std::string_view path) {
+    require_arity(payload, 3, path);
+    require_raw_constant(payload.items[0], "3", child_path(path, 0));
+    model::CommandBarAction action;
+    action.handler = string_atom(payload.items[1], child_path(path, 1));
+    if (action.handler.empty()) {
+        fail("OOF1115", child_path(path, 1), "non-empty Action handler", "empty", "Action handler cannot be empty");
+    }
+    const auto& metadata = payload.items[2];
+    const auto metadata_path = child_path(path, 2);
+    require_arity(metadata, 7, metadata_path);
+    require_raw_constant(metadata.items[0], "1", child_path(metadata_path, 0));
+    action.name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    action.text = decode_action_localized(metadata.items[2], child_path(metadata_path, 2));
+    action.tooltip = decode_action_localized(metadata.items[3], child_path(metadata_path, 3));
+    action.description = decode_action_localized(metadata.items[4], child_path(metadata_path, 4));
+    const auto expected = encode_menu_action(action, path).items[2];
+    require_exact(metadata.items[5], expected.items[5], child_path(metadata_path, 5), "Action style record is unsupported");
+    require_exact(metadata.items[6], expected.items[6], child_path(metadata_path, 6), "Action tail record is unsupported");
+    return action;
+}
+
 LV canonical_event_table(std::optional<std::string_view> handler) {
     if (!handler) {
         return list({raw("0")});
@@ -2818,7 +2878,7 @@ LV menu_entry_properties(const model::CommandBarButton& entry, std::string_view 
         entry.representation == model::ButtonRepresentation::text ? 1 :
         entry.representation == model::ButtonRepresentation::picture ? 2 : 3;
     return list({raw("8"), string_value(entry.name), raw(entry.changes_data ? "1" : "0"), raw("1"),
-        encoded_localized(entry.text), raw(entry.text.empty() ? "0" : "1"), raw(std::string(owner)),
+        encoded_localized(entry.text.value_or(std::string{})), raw(entry.text ? "1" : "0"), raw(std::string(owner)),
         raw(std::to_string(id)), raw("1e2"), raw(std::to_string(type)), raw(std::to_string(representation)),
         raw(entry.enabled ? "1" : "0"), raw(entry.checked ? "1" : "0"),
         raw(entry.type == model::CommandBarButtonKind::separator ? "0" : "1"), raw("0"), raw("0")});
@@ -2863,17 +2923,17 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const auto& entry = *it->entry;
         LV action = entry.type == model::CommandBarButtonKind::action
-            ? encode_action(*entry.action, ActionMetadataPolicy::empty, "$/Button/Buttons/Action")
+            ? encode_menu_action(*entry.action, "$/Button/Buttons/Action")
             : entry.type == model::CommandBarButtonKind::submenu
                 ? list({raw("1"), raw(owner), raw(std::to_string(it->id))})
                 : parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}");
-        unsigned mask = (entry.picture ? 1 : 0) | (!entry.tooltip.empty() ? 2 : 0) |
-            (!entry.explanation.empty() ? 4 : 0) | (entry.shortcut != model::ShortcutValue{} ? 8 : 0);
+        unsigned mask = (entry.picture ? 1 : 0) | (entry.tooltip ? 2 : 0) |
+            (entry.explanation ? 4 : 0) | (entry.shortcut != model::ShortcutValue{} ? 8 : 0);
         std::vector<LV> record{raw("8"), raw(it->action_id), raw("1"),
             raw(std::string(entry.type == model::CommandBarButtonKind::action ? menu_action_guid : menu_reference_guid)),
             std::move(action), raw(std::to_string(mask))};
-        if (!entry.tooltip.empty()) record.push_back(encoded_localized(entry.tooltip));
-        if (!entry.explanation.empty()) record.push_back(encoded_localized(entry.explanation));
+        if (entry.tooltip) record.push_back(encoded_localized(*entry.tooltip));
+        if (entry.explanation) record.push_back(encoded_localized(*entry.explanation));
         if (entry.picture) record.push_back(menu_picture(*entry.picture, document));
         if (entry.shortcut != model::ShortcutValue{}) record.push_back(encode_button_shortcut(entry.shortcut));
         record.push_back(raw("0")); record.push_back(raw("0"));
@@ -2999,7 +3059,13 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             entry.name = string_atom(props.items[1], path);
             if (entry.name.empty() || !names.insert(entry.name).second) fail("OOF1114", std::string(path), "unique named items", entry.name, "Menu name is empty or duplicated");
             entry.changes_data = bool_atom(props.items[2], path);
-            entry.text = decoded_single_language_text(props.items[4], path);
+            const bool text_present = bool_atom(props.items[5], path);
+            if (text_present) {
+                entry.text = decoded_single_language_text(props.items[4], path);
+            } else {
+                require_exact(props.items[4], encoded_localized(std::string_view{}), path,
+                    "absent button Text must use its empty localized value");
+            }
             const auto id = integer_atom<std::uint64_t>(props.items[7], path);
             if (id == 0 || id > max_id || !entry_ids.insert(id).second)
                 fail("OOF1114", std::string(path), "positive unique item ID within maximum", std::to_string(id), "Menu identity is invalid");
@@ -3041,7 +3107,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             require_raw_constant(action.items[0], "8", path); require_raw_constant(action.items[2], "1", path);
             require_raw_constant(action.items[3], type == 0 ? menu_action_guid : menu_reference_guid, path);
             if (type == 0) {
-                entry.action = decode_action(action.items[4], ActionMetadataPolicy::empty, path);
+                entry.action = decode_menu_action(action.items[4], path);
             } else {
                 require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
                     parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"), path, "Menu action target is unsupported");

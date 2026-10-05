@@ -2065,7 +2065,47 @@ private:
                 else fail("OOF2003", child, std::string(owner), name, "Auto, Picture, Text, or PictureText", rep, "Unknown button representation");
             } else if (name == "Shortcut") item.shortcut = parse_shortcut(child);
             else if (name == "Picture") item.picture = parse_picture_reference(child, "Picture", owner);
-            else if (name == "Action") item.action = node_text(child);
+            else if (name == "Action") {
+                for (xmlAttrPtr attr = child->properties; attr != nullptr; attr = attr->next) {
+                    const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                    if (attr_name != "handler" && attr_name != "name") {
+                        fail("OOF2003", child, std::string(owner), std::string(attr_name),
+                            "handler and name attributes", std::string(attr_name), "Unsupported Action attribute");
+                    }
+                }
+                model::CommandBarAction action;
+                action.handler = required_attribute(child, "handler", owner);
+                action.name = required_attribute(child, "name", owner);
+                std::set<std::string> action_fields;
+                bool has_text = false;
+                bool has_tooltip = false;
+                bool has_description = false;
+                for (xmlNodePtr action_field : element_children(child)) {
+                    const std::string field_name = node_name(action_field);
+                    if (!action_fields.insert(field_name).second) {
+                        fail("OOF2003", action_field, std::string(owner), field_name,
+                            "Action field at most once", field_name, "Duplicate Action field");
+                    }
+                    if (field_name == "Text") {
+                        action.text = parse_localized_string(action_field);
+                        has_text = true;
+                    } else if (field_name == "ToolTip") {
+                        action.tooltip = parse_localized_string(action_field);
+                        has_tooltip = true;
+                    } else if (field_name == "Description") {
+                        action.description = parse_localized_string(action_field);
+                        has_description = true;
+                    } else {
+                        fail("OOF2003", action_field, std::string(owner), field_name,
+                            "Text, ToolTip, and Description", field_name, "Unknown Action field");
+                    }
+                }
+                if (!has_text || !has_tooltip || !has_description) {
+                    fail("OOF2003", child, std::string(owner), "Action fields",
+                        "Text, ToolTip, and Description", "incomplete", "Action requires all three localized values");
+                }
+                item.action = std::move(action);
+            }
             else if (name == "Order") {
                 has_order = true;
                 const auto order = node_text(child);
@@ -2077,10 +2117,10 @@ private:
             else if (name == "Buttons") item.buttons = parse_command_bar_buttons(child, owner);
             else fail("OOF2003", child, std::string(owner), name, "declared button menu field", name, "Unknown button menu field");
         }
-        if (item.type == model::CommandBarButtonKind::action && (!item.action || item.action->empty()))
+        if (item.type == model::CommandBarButtonKind::action && (!item.action || item.action->handler.empty()))
             fail("OOF2003", node, std::string(owner), "Action", "non-empty action handler", "missing", "Action item requires a handler");
         if (item.type != model::CommandBarButtonKind::action && item.action)
-            fail("OOF2003", node, std::string(owner), "Action", "Action item only", "present", "Only Action items may declare a handler");
+            fail("OOF2003", node, std::string(owner), "Action", "Action item only", "present", "Only Action items may declare an Action value");
         if (item.type != model::CommandBarButtonKind::submenu && has_order)
             fail("OOF2003", node, std::string(owner), "Order", "Submenu only", "present", "Only Submenu items may declare an order");
         if (item.type != model::CommandBarButtonKind::submenu && !item.buttons.empty())
@@ -3053,9 +3093,9 @@ private:
             const char* type = item.type == model::CommandBarButtonKind::action ? "Action" :
                 item.type == model::CommandBarButtonKind::submenu ? "Submenu" : "Separator";
             writer_.open("CommandBarButton", {{"name", item.name}, {"type", type}});
-            if (!item.text.empty()) writer_.text("Text", item.text);
-            if (!item.explanation.empty()) writer_.text("Explanation", item.explanation);
-            if (!item.tooltip.empty()) writer_.text("ToolTip", item.tooltip);
+            if (item.text) writer_.text("Text", *item.text);
+            if (item.explanation) writer_.text("Explanation", *item.explanation);
+            if (item.tooltip) writer_.text("ToolTip", *item.tooltip);
             if (!item.enabled) writer_.text("Enabled", "false");
             if (item.checked) writer_.text("Checked", "true");
             if (item.changes_data) writer_.text("ChangesData", "true");
@@ -3072,7 +3112,13 @@ private:
                 writer_.close("Shortcut");
             }
             if (item.picture) write_picture_reference("Picture", *item.picture, owner);
-            if (item.action) writer_.text("Action", *item.action);
+            if (item.action) {
+                writer_.open("Action", {{"handler", item.action->handler}, {"name", item.action->name}});
+                write_localized("Text", item.action->text, owner);
+                write_localized("ToolTip", item.action->tooltip, owner);
+                write_localized("Description", item.action->description, owner);
+                writer_.close("Action");
+            }
             if (item.type == model::CommandBarButtonKind::submenu && item.order != model::CommandBarButtonOrder::none) {
                 writer_.text("Order", item.order == model::CommandBarButtonOrder::ascending ? "Ascending" : "Descending");
             }

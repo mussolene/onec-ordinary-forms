@@ -1367,7 +1367,7 @@ void test_shared_action_metadata_policies_and_rejections() {
     button.events = {model::EventRef{model::ObjectId{4}}};
     document.add_event(model::Event{model::ObjectId{4}, "Click", "Handler", model::ControlRef{model::ObjectId{2}}});
     button.properties().set_explicit(model::PropertyId::from_name("MenuMode"), model::EnumerationValue{"MenuMode", "UseExtra"});
-    model::CommandBarButton command; command.name = "Command"; command.action = "Handler";
+    model::CommandBarButton command; command.name = "Command"; command.action = model::CommandBarAction{"Handler", "", {}, {}, {}};
     std::get<model::ButtonPayload>(button.payload).buttons = {command};
     document.add_control(std::move(button));
     const auto encoded = form_stream::encode_document(document);
@@ -1389,7 +1389,19 @@ void test_shared_action_metadata_policies_and_rejections() {
             "each owner must retain its exact independent Action literal");
         auto cross_policy = encoded.value();
         action_at(cross_policy).items[2] = (owner == 1 ? empty : derived).items[2];
-        expect(!form_stream::decode_document(cross_policy, "Actions"), "metadata from another owner policy must reject");
+        if (owner < 2) {
+            expect(!form_stream::decode_document(cross_policy, "Actions"), "event metadata from another owner policy must reject");
+        } else {
+            const auto independent_menu_metadata = form_stream::decode_document(cross_policy, "Actions");
+            const auto* decoded_button = independent_menu_metadata
+                ? independent_menu_metadata.value().find_control(model::ObjectId{2}) : nullptr;
+            const auto* decoded_payload = decoded_button
+                ? std::get_if<model::ButtonPayload>(&decoded_button->payload) : nullptr;
+            expect(decoded_payload && decoded_payload->buttons.front().action &&
+                decoded_payload->buttons.front().action->name == "Handler" &&
+                decoded_payload->buttons.front().action->text.items == std::vector<model::LocalizedStringItem>{{"ru", "Handler"}},
+                "menu Action metadata must round-trip independently of event owner policies");
+        }
         for (unsigned field = 0; field < 7; ++field) {
             auto bad = encoded.value();
             action_at(bad).items[2].items[field] = list_stream::ListValue::raw_atom("999");
@@ -1414,6 +1426,62 @@ void test_shared_action_metadata_policies_and_rejections() {
     const auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
         "the combined form, button and menu stream must round-trip without drift");
+}
+
+void test_menu_action_values_and_optional_overrides_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1}; form.name = "ActionValues";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode button{model::ObjectId{2}, "Menu", model::ButtonPayload{}};
+    button.properties().set_explicit(model::PropertyId::from_name("MenuMode"), model::EnumerationValue{"MenuMode", "UseExtra"});
+
+    model::CommandBarButton explicit_empty;
+    explicit_empty.name = "EmptyOverrides";
+    explicit_empty.action = model::CommandBarAction{
+        "RunHandler",
+        "DifferentActionName",
+        model::LocalizedStringValue{{{"ru", "Action text"}, {"en", "Action title"}}},
+        model::LocalizedStringValue{{{"ru", "Action tooltip"}}},
+        model::LocalizedStringValue{{{"ru", "Action description"}}},
+    };
+    explicit_empty.text = std::string{};
+    explicit_empty.tooltip = std::string{};
+
+    model::CommandBarButton absent_overrides;
+    absent_overrides.name = "AbsentOverrides";
+    absent_overrides.action = model::CommandBarAction{
+        "AnotherHandler",
+        "",
+        model::LocalizedStringValue{{{"ru", "Second text"}}},
+        model::LocalizedStringValue{{{"en", "Second tooltip"}}},
+        model::LocalizedStringValue{{{"ru", "Second description"}, {"en", "Second description EN"}}},
+    };
+    absent_overrides.explanation = std::string{};
+
+    std::get<model::ButtonPayload>(button.payload).buttons = {explicit_empty, absent_overrides};
+    document.add_control(std::move(button));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded.ok() ? "" : "independent menu Action encode failed: " +
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    const auto decoded = form_stream::decode_document(encoded.value(), "ActionValues");
+    expect(decoded.ok(), "independent menu Action metadata and optional overrides must decode");
+    const auto* decoded_button = decoded.value().find_control(model::ObjectId{2});
+    const auto* payload = decoded_button ? std::get_if<model::ButtonPayload>(&decoded_button->payload) : nullptr;
+    expect(payload && payload->buttons.size() == 2, "both menu actions must be restored");
+    if (!payload || payload->buttons.size() != 2) return;
+    expect(payload->buttons[0].action == explicit_empty.action &&
+        payload->buttons[0].text == std::optional<std::string>{""} &&
+        payload->buttons[0].tooltip == std::optional<std::string>{""} &&
+        !payload->buttons[0].explanation,
+        "explicit empty button Text and ToolTip must differ from absent Explanation");
+    expect(payload->buttons[1].action == absent_overrides.action &&
+        !payload->buttons[1].text && !payload->buttons[1].tooltip &&
+        payload->buttons[1].explanation == std::optional<std::string>{""},
+        "absent button Text and ToolTip must differ from explicit empty Explanation");
+    expect(payload->buttons == std::vector<model::CommandBarButton>{explicit_empty, absent_overrides},
+        "handler, independent Action name/localizations, and override presence must round-trip exactly");
 }
 
 void test_form_close_strict_action_guards() {
@@ -2278,7 +2346,7 @@ void test_named_button_menu_round_trip_and_invalid_references() {
     model::ControlNode button{model::ObjectId{2}, "Run", model::ButtonPayload{}};
     button.properties().set_explicit(model::PropertyId::from_name("MenuMode"), model::EnumerationValue{"MenuMode", "UseExtra"});
     model::CommandBarButton action;
-    action.name = "ActionOne"; action.action = "RunHandler"; action.text = "Первое";
+    action.name = "ActionOne"; action.action = model::CommandBarAction{"RunHandler", "", {}, {}, {}}; action.text = "Первое";
     action.explanation = "Пояснение"; action.tooltip = "Подсказка";
     action.enabled = false; action.checked = true; action.changes_data = true;
     action.representation = model::ButtonRepresentation::picture_text;
@@ -2350,7 +2418,7 @@ void test_command_bar_owner_pair_and_strict_profile() {
     model::ControlNode command_bar{model::ObjectId{1}, "Tools", model::CommandBarPayload{}};
     command_bar.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     command_bar.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Run tools"));
-    model::CommandBarButton action; action.name = "Run"; action.action = "RunHandler";
+    model::CommandBarButton action; action.name = "Run"; action.action = model::CommandBarAction{"RunHandler", "", {}, {}, {}};
     action.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{"PictureLib.ActivateTask"}};
     model::CommandBarButton submenu; submenu.name = "More";
     submenu.type = model::CommandBarButtonKind::submenu;
@@ -2447,7 +2515,7 @@ void test_command_bar_owner_pair_and_strict_profile() {
         list_stream::ListValue::raw_atom("1");
     expect(!form_stream::decode_document(wrong_empty_footer, "EmptyCommandBarWrongFooter"),
         "zero footer must not bypass the remaining empty collection contract");
-    model::CommandBarButton one_entry; one_entry.name = "Only"; one_entry.action = "OnlyHandler";
+    model::CommandBarButton one_entry; one_entry.name = "Only"; one_entry.action = model::CommandBarAction{"OnlyHandler", "", {}, {}, {}};
     const auto one_entry_owner_four = encode_owner_four({one_entry});
     expect(one_entry_owner_four.ok() && menu_for_owner_four(one_entry_owner_four.value()).items[2].atom == "1",
         "one-entry menu max ID must be 1, independent of root owner ID 4");
@@ -2580,7 +2648,7 @@ void test_command_bar_creation_state_and_strict_record_guards() {
         bar.properties().set_explicit(model::PropertyId::from_name("ToolTip"), std::string("Own state test"));
         if (nonempty) {
             bar.properties().set_explicit(model::PropertyId::from_name("Secondary"), false);
-            model::CommandBarButton action; action.name = "Run"; action.action = "RunHandler"; action.default_button = true;
+            model::CommandBarButton action; action.name = "Run"; action.action = model::CommandBarAction{"RunHandler", "", {}, {}, {}}; action.default_button = true;
             std::get<model::CommandBarPayload>(bar.payload).buttons = {action};
         }
         document.add_control(std::move(bar));
@@ -2795,9 +2863,9 @@ void test_command_bar_default_button_round_trip_and_guards() {
     model::OrdinaryFormDocument document(std::move(form));
     model::ControlNode bar{model::ObjectId{4}, "Tools", model::CommandBarPayload{}};
     bar.properties().set_explicit(model::PropertyId::from_name("Secondary"), false);
-    model::CommandBarButton action; action.name = "Run"; action.action = "RunHandler"; action.default_button = true;
+    model::CommandBarButton action; action.name = "Run"; action.action = model::CommandBarAction{"RunHandler", "", {}, {}, {}}; action.default_button = true;
     model::CommandBarButton submenu; submenu.name = "More"; submenu.type = model::CommandBarButtonKind::submenu;
-    model::CommandBarButton nested; nested.name = "Nested"; nested.action = "NestedHandler";
+    model::CommandBarButton nested; nested.name = "Nested"; nested.action = model::CommandBarAction{"NestedHandler", "", {}, {}, {}};
     submenu.buttons = {nested};
     std::get<model::CommandBarPayload>(bar.payload).buttons = {submenu, action};
     document.add_control(std::move(bar));
@@ -9629,6 +9697,7 @@ int main() {
         test_multiple_top_level_buttons_round_trip();
         test_form_close_strict_action_guards();
         test_shared_action_metadata_policies_and_rejections();
+        test_menu_action_values_and_optional_overrides_round_trip();
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();
         test_check_box_tooltip_round_trip_and_validation();

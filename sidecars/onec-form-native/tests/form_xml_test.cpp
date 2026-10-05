@@ -1632,24 +1632,38 @@ void test_standard_picture_xml_reference_roundtrip() {
 }
 
 void test_button_menu_model_roundtrip_and_rejections() {
-    constexpr std::string_view xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="run" type="Action"><Text>Run</Text><Shortcut Alt="false" Ctrl="true" Shift="false"><Key>R</Key></Shortcut><Action>RunHandler</Action></CommandBarButton><CommandBarButton name="more" type="Submenu"><Text>More</Text><Order>Ascending</Order><Buttons><CommandBarButton name="sep" type="Separator"/></Buttons></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
+    constexpr std::string_view xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="run" type="Action"><Text>Run</Text><Explanation/><ToolTip/><Shortcut Alt="false" Ctrl="true" Shift="false"><Key>R</Key></Shortcut><Action handler="RunHandler" name="ActionName"><Text><Item language="ru">Action caption</Item><Item language="en">Action title</Item></Text><ToolTip><Item language="ru">Action tip</Item></ToolTip><Description><Item language="ru">Action description</Item></Description></Action></CommandBarButton><CommandBarButton name="more" type="Submenu"><Text>More</Text><Order>Ascending</Order><Buttons><CommandBarButton name="sep" type="Separator"/><CommandBarButton name="inherited" type="Action"><Action handler="NestedHandler" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
     const auto parsed = source::parse_form_xml(xml);
     expect(parsed.ok(), parsed.diagnostics().empty() ? "typed Button.Buttons tree must parse" : parsed.diagnostics().front().message);
     const auto* button = parsed.value().find_control(model::ObjectId{2});
     const auto* payload = button ? std::get_if<model::ButtonPayload>(&button->payload) : nullptr;
-    expect(payload && payload->buttons.size() == 2 && payload->buttons[1].buttons.size() == 1,
+    expect(payload && payload->buttons.size() == 2 && payload->buttons[1].buttons.size() == 2,
         "button menu and recursive submenu must live in ButtonPayload");
-    expect(payload->buttons[0].action == "RunHandler" && payload->buttons[0].shortcut.key == "R",
-        "handler and typed shortcut must be retained");
+    expect(payload->buttons[0].action && payload->buttons[0].action->handler == "RunHandler" &&
+        payload->buttons[0].action->name == "ActionName" &&
+        payload->buttons[0].action->text.items == std::vector<model::LocalizedStringItem>{{"ru", "Action caption"}, {"en", "Action title"}} &&
+        payload->buttons[0].action->tooltip.items == std::vector<model::LocalizedStringItem>{{"ru", "Action tip"}} &&
+        payload->buttons[0].action->description.items == std::vector<model::LocalizedStringItem>{{"ru", "Action description"}} &&
+        payload->buttons[0].text == std::optional<std::string>{"Run"} && payload->buttons[0].shortcut.key == "R",
+        "action metadata, explicit button Text and typed shortcut must be retained independently");
+    expect(payload->buttons[0].explanation == std::optional<std::string>{""} &&
+        payload->buttons[0].tooltip == std::optional<std::string>{""} &&
+        !payload->buttons[1].buttons[1].text && !payload->buttons[1].buttons[1].explanation &&
+        !payload->buttons[1].buttons[1].tooltip,
+        "XML must distinguish explicit empty button overrides from absent overrides");
     const auto serialized = source::serialize_form_xml(parsed.value());
     expect(serialized.ok() && serialized.value().find("<CommandBarButton name=\"sep\" type=\"Separator\">") != std::string::npos,
         "button menu must serialize in named XML");
+    expect(serialized.value().find("<Action handler=\"RunHandler\" name=\"ActionName\">") != std::string::npos &&
+        serialized.value().find("<Description>") != std::string::npos &&
+        serialized.value().find("Action description") != std::string::npos,
+        "Action metadata must serialize as named fields independently from button Text");
     const auto reparsed = source::parse_form_xml(serialized.value());
     expect(reparsed.ok(), "serialized button menu must parse again");
     const auto* restored = std::get_if<model::ButtonPayload>(&reparsed.value().find_control(model::ObjectId{2})->payload);
     expect(restored && restored->buttons == payload->buttons, "recursive button menu must roundtrip exactly");
     expect(serialized.value().find("<Order>Ascending</Order>") != std::string::npos, "submenu order must serialize by its named XML value");
-    constexpr std::string_view picture_xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><PictureAssets><PictureAsset id="4" relativePath="Items/Run/Buttons/More/Buttons/Item/Picture.gif" format="gif"/></PictureAssets><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Picture>4</Picture><Action>RunHandler</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
+    constexpr std::string_view picture_xml = R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><PictureAssets><PictureAsset id="4" relativePath="Items/Run/Buttons/More/Buttons/Item/Picture.gif" format="gif"/></PictureAssets><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Picture>4</Picture><Action handler="RunHandler" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML";
     expect(source::parse_form_xml(picture_xml).ok(), "named menu picture paths must parse within source package");
     auto unsafe = std::string(picture_xml);
     unsafe.replace(unsafe.find("Buttons/More"), 12, "Buttons/../More");
@@ -1658,9 +1672,12 @@ void test_button_menu_model_roundtrip_and_rejections() {
     malformed_path.replace(malformed_path.find("Buttons/More"), 12, "Other/More");
     expect(!source::parse_form_xml(malformed_path).ok(), "menu paths may only use named Buttons ownership segments");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"/></Buttons></Button></ChildItems></Form>)XML").ok(), "Action requires handler");
-    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action>One</Action></CommandBarButton><CommandBarButton name="x" type="Action"><Action>Two</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "duplicate names in a collection must be rejected");
-    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Submenu"><Action>Bad</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "non-Action handler must be rejected");
-    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action>Run</Action><Order>DontOrder</Order></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "Order must be rejected on Action even when it is the default");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action>RunHandler</Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "legacy text-only Action must be rejected");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action handler="RunHandler" name=""><Text/><ToolTip/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "Action requires all localized metadata fields");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action handler="RunHandler" name="">unexpected<Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "Action mixed text content must be rejected by schema validation");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action handler="One" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton><CommandBarButton name="x" type="Action"><Action handler="Two" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "duplicate names in a collection must be rejected");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Submenu"><Action handler="Bad" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "non-Action handler must be rejected");
+    expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action><Order>DontOrder</Order></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "Order must be rejected on Action even when it is the default");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Separator"><Order>Ascending</Order></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "Order must be rejected on Separator");
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Submenu"><Order>Random</Order></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "unknown submenu order must be rejected");
 }
@@ -1810,7 +1827,7 @@ void test_main_panel_typed_xml_contract() {
 void test_command_bar_default_button_xml_contract() {
     const std::string xml = R"XML(<Form id="1" name="DefaultAction" ordinaryFormVersion="2.1"><ChildItems>
       <CommandBar id="4" name="Tools"><Position/><Secondary>false</Secondary><Buttons>
-        <CommandBarButton name="Run" type="Action"><DefaultButton>true</DefaultButton><Action>RunHandler</Action></CommandBarButton>
+        <CommandBarButton name="Run" type="Action"><DefaultButton>true</DefaultButton><Action handler="RunHandler" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton>
       </Buttons></CommandBar></ChildItems></Form>)XML";
     const auto parsed = source::parse_form_xml(xml);
     expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
@@ -1830,8 +1847,8 @@ void test_command_bar_default_button_xml_contract() {
 void test_command_bar_buttons_xml_only_contract() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="CommandBar" ordinaryFormVersion="2.1"><ChildItems>
       <CommandBar id="4" name="Tools"><Position/><Enabled>false</Enabled><Buttons>
-        <CommandBarButton name="Run" type="Action"><Text>Start</Text><Action>RunHandler</Action></CommandBarButton>
-        <CommandBarButton name="More" type="Submenu"><Buttons><CommandBarButton name="Stop" type="Action"><Action>StopHandler</Action></CommandBarButton></Buttons></CommandBarButton>
+        <CommandBarButton name="Run" type="Action"><Text>Start</Text><Action handler="RunHandler" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton>
+        <CommandBarButton name="More" type="Submenu"><Buttons><CommandBarButton name="Stop" type="Action"><Action handler="StopHandler" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></CommandBarButton>
       </Buttons><ToolTip>Actions</ToolTip></CommandBar>
     </ChildItems></Form>)XML";
     const auto parsed = source::parse_form_xml(xml);
@@ -1856,10 +1873,10 @@ void test_command_bar_action_source_xml_contract() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="ActionSource" ordinaryFormVersion="2.1">
   <Attributes><Attribute id="10" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
   <ChildItems>
-    <CommandBar id="2" name="FormSource"><ActionSource formId="1"/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action>Run</Action></CommandBarButton></Buttons></CommandBar>
-    <CommandBar id="3" name="TableSource"><ActionSource controlId="6"/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action>Run</Action></CommandBarButton></Buttons></CommandBar>
-    <CommandBar id="4" name="HtmlSource"><ActionSource controlId="7"/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action>Run</Action></CommandBarButton></Buttons></CommandBar>
-    <CommandBar id="5" name="UndefinedSource"><ActionSource/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action>Run</Action></CommandBarButton></Buttons></CommandBar>
+    <CommandBar id="2" name="FormSource"><ActionSource formId="1"/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></CommandBar>
+    <CommandBar id="3" name="TableSource"><ActionSource controlId="6"/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></CommandBar>
+    <CommandBar id="4" name="HtmlSource"><ActionSource controlId="7"/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></CommandBar>
+    <CommandBar id="5" name="UndefinedSource"><ActionSource/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></CommandBar>
     <Table id="6" name="Rows"><DataPath attributeId="10"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns></Table>
     <HTMLDocumentField id="7" name="Html"><Position/></HTMLDocumentField>
     <InputField id="8" name="Input"><Position/></InputField>

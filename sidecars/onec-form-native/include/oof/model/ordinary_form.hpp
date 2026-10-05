@@ -397,20 +397,29 @@ enum class CommandBarButtonKind : std::uint8_t { action, submenu, separator };
 enum class CommandBarButtonOrder : std::uint8_t { none, ascending, descending };
 enum class ButtonRepresentation : std::uint8_t { automatic, picture, text, picture_text };
 
+struct CommandBarAction {
+    std::string handler;
+    std::string name;
+    LocalizedStringValue text;
+    LocalizedStringValue tooltip;
+    LocalizedStringValue description;
+    friend bool operator==(const CommandBarAction&, const CommandBarAction&) = default;
+};
+
 struct CommandBarButton {
     std::string name;
     CommandBarButtonKind type = CommandBarButtonKind::action;
     CommandBarButtonOrder order = CommandBarButtonOrder::none;
-    std::string text;
-    std::string explanation;
-    std::string tooltip;
+    std::optional<std::string> text;
+    std::optional<std::string> explanation;
+    std::optional<std::string> tooltip;
     bool enabled = true;
     bool checked = false;
     bool changes_data = false;
     ButtonRepresentation representation = ButtonRepresentation::automatic;
     ShortcutValue shortcut{};
     std::optional<PictureRef> picture;
-    std::optional<std::string> action;
+    std::optional<CommandBarAction> action;
     std::vector<CommandBarButton> buttons;
     bool default_button = false;
     friend bool operator==(const CommandBarButton&, const CommandBarButton&) = default;

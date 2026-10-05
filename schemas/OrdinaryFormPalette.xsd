@@ -1055,6 +1055,9 @@
           <Property name="DefaultButton" russianName="КнопкаПоУмолчанию"/>
           <Property name="Representation" russianName="Отображение"/><Property name="Shortcut" russianName="СочетаниеКлавиш"/><Property name="Picture" russianName="Картинка"/><Property name="Action" russianName="Действие"/><Property name="Order" russianName="ПорядокКнопок"/><Property name="Buttons" russianName="Кнопки"/>
         </Properties></NamedConcept>
+        <NamedConcept name="Action" russianName="Действие"><Properties>
+          <Property name="handler" russianName="Обработчик"/><Property name="Name" russianName="Имя"/><Property name="Text" russianName="Текст"/><Property name="ToolTip" russianName="Подсказка"/><Property name="Description" russianName="Пояснение"/>
+        </Properties></NamedConcept>
         <NamedConcept name="GanttSeries" russianName="СерияДиаграммыГанта"><Properties>
           <Property name="Value" russianName="Значение" russianType="Строка"/><Property name="Text" russianName="Текст" russianType="Строка"/><Property name="Color" russianName="Цвет" russianType="Цвет"/>
         </Properties></NamedConcept>
