@@ -1401,8 +1401,19 @@ void test_shared_action_metadata_policies_and_rejections() {
             "each owner must retain its exact independent Action literal");
         auto cross_policy = encoded.value();
         action_at(cross_policy).items[2] = (owner == 1 ? empty : derived).items[2];
-        if (owner < 2) {
-            expect(!form_stream::decode_document(cross_policy, "Actions"), "event metadata from another owner policy must reject");
+        if (owner == 0) {
+            expect(!form_stream::decode_document(cross_policy, "Actions"), "Form.OnClose metadata from another owner policy must reject");
+        } else if (owner == 1) {
+            const auto partial_button = form_stream::decode_document(cross_policy, "Actions");
+            expect(partial_button.ok() && !partial_button.value().reconstruction_complete() &&
+                       std::any_of(partial_button.diagnostics().begin(), partial_button.diagnostics().end(),
+                           [](const auto& diagnostic) {
+                               return diagnostic.code == "OOF1140" &&
+                                   diagnostic.severity == oof::DiagnosticSeverity::warning;
+                           }) &&
+                       partial_button.value().find_event(
+                           partial_button.value().find_control(model::ObjectId{2})->events.front().id())->handler == "Handler",
+                "valid Button action metadata differences must warn while retaining its handler");
         } else {
             const auto independent_menu_metadata = form_stream::decode_document(cross_policy, "Actions");
             const auto* decoded_button = independent_menu_metadata
@@ -1438,6 +1449,121 @@ void test_shared_action_metadata_policies_and_rejections() {
     const auto reencoded = form_stream::encode_document(decoded.value());
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) == list_stream::dump_compact(encoded.value()),
         "the combined form, button and menu stream must round-trip without drift");
+}
+
+void test_button_click_action_metadata_warning_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "ButtonActionMetadata";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument seed(std::move(form));
+    model::ControlNode button{model::ObjectId{2}, "Run", model::ButtonPayload{}};
+    button.events = {model::EventRef{model::ObjectId{3}}};
+    button.properties().set_explicit(model::PropertyId::from_name("Caption"), std::string("Run"));
+    button.position.left.set(17);
+    button.position.top.set(23);
+    button.position.width.set(111);
+    button.position.height.set(29);
+    seed.add_event(model::Event{model::ObjectId{3}, "Click", "RunHandler", model::ControlRef{model::ObjectId{2}}});
+    seed.add_control(std::move(button));
+    const auto encoded = form_stream::encode_document(seed);
+    expect(encoded.ok(), "Button.Click metadata fixture must encode");
+
+    auto changed = encoded.value();
+    auto* record = find_record_with_guid(changed, model::metamodel::descriptor_for(model::ControlKind::button).guid);
+    expect(record != nullptr, "Button.Click fixture must contain its Button record");
+    auto& action = record->items.at(2).items.at(2).items.at(1).items.at(2);
+    action.items[2].items[1] = list_stream::ListValue::string_atom("OtherActionName");
+    action.items[2].items[2] = list_stream::parse(R"({1,1,{"ru","Different presentation"}})");
+
+    const auto decoded = form_stream::decode_document(changed, "ButtonActionMetadata");
+    expect(decoded.ok() && !decoded.value().reconstruction_complete() &&
+               std::any_of(decoded.diagnostics().begin(), decoded.diagnostics().end(), [](const auto& diagnostic) {
+                   return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+               }),
+        "valid Button action metadata differences must return an incomplete model with OOF1140");
+    const auto* decoded_button = decoded.value().find_control(model::ObjectId{2});
+    const auto* click = decoded_button && !decoded_button->events.empty()
+        ? decoded.value().find_event(decoded_button->events.front().id()) : nullptr;
+    const auto* caption = decoded_button
+        ? decoded_button->properties().find(model::PropertyId::from_name("Caption")) : nullptr;
+    const auto* click_owner = click ? std::get_if<model::ControlRef>(&click->owner) : nullptr;
+    expect(decoded_button && decoded_button->name == "Run" && click && click->name == "Click" &&
+               click->handler == "RunHandler" && click_owner != nullptr && click_owner->id() == model::ObjectId{2} &&
+               decoded_button->position.left.value() == 17 && decoded_button->position.top.value() == 23 &&
+               decoded_button->position.width.value() == 111 && decoded_button->position.height.value() == 29 &&
+               caption != nullptr && std::get_if<std::string>(&caption->value) != nullptr &&
+               *std::get_if<std::string>(&caption->value) == "Run",
+        "Button identity, Click handler and owner, geometry, and Caption must survive the profile warning");
+
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("reconstructionComplete=\"false\"") != std::string::npos &&
+               xml.value().find("RunHandler") != std::string::npos,
+        "partial Button event model must serialize to named XML with completeness metadata");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok() && !parsed.value().reconstruction_complete(),
+        "Button event XML parsing must retain incompleteness");
+    const auto rebuilt = oof::save_form_bin(parsed.value());
+    expect(rebuilt.ok() && !rebuilt.value().empty() &&
+               std::any_of(rebuilt.diagnostics().begin(), rebuilt.diagnostics().end(), [](const auto& diagnostic) {
+                   return diagnostic.severity == oof::DiagnosticSeverity::warning;
+               }),
+        "partial Button event XML must build Form.bin while reporting omitted unsupported profile metadata");
+
+    for (unsigned metadata_field = 1; metadata_field <= 4; ++metadata_field) {
+        auto varied = encoded.value();
+        auto* varied_record = find_record_with_guid(varied,
+            model::metamodel::descriptor_for(model::ControlKind::button).guid);
+        auto& varied_action = varied_record->items.at(2).items.at(2).items.at(1).items.at(2);
+        if (metadata_field == 1) {
+            varied_action.items.at(2).items.at(metadata_field) =
+                list_stream::ListValue::string_atom("OtherActionName");
+        } else {
+            const auto localized = std::string("Different field ") + std::to_string(metadata_field);
+            varied_action.items.at(2).items.at(metadata_field) = list_stream::ListValue::list({
+                list_stream::ListValue::raw_atom("1"), list_stream::ListValue::raw_atom("1"),
+                list_stream::ListValue::list({list_stream::ListValue::string_atom("ru"),
+                    list_stream::ListValue::string_atom(localized)})});
+        }
+        const auto partial = form_stream::decode_document(varied, "ButtonActionMetadataVariation");
+        const auto* varied_button = partial ? partial.value().find_control(model::ObjectId{2}) : nullptr;
+        const auto* varied_event = varied_button && !varied_button->events.empty()
+            ? partial.value().find_event(varied_button->events.front().id()) : nullptr;
+        expect(partial.ok() && !partial.value().reconstruction_complete() &&
+                   std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
+                       return diagnostic.code == "OOF1140" &&
+                           diagnostic.severity == oof::DiagnosticSeverity::warning;
+                   }) && varied_event != nullptr && varied_event->handler == "RunHandler",
+            "each valid Button Action name or presentation mismatch must warn and retain its handler");
+    }
+
+    auto invalid_version = changed;
+    auto* invalid_version_record = find_record_with_guid(invalid_version,
+        model::metamodel::descriptor_for(model::ControlKind::button).guid);
+    invalid_version_record->items.at(2).items.at(2).items.at(1).items.at(2).items.at(2).items.at(0) =
+        list_stream::ListValue::raw_atom("4");
+    expect(!form_stream::decode_document(invalid_version, "ButtonActionBadVersion"),
+        "Button action metadata version remains a structural rejection");
+    auto invalid_arity = changed;
+    auto* invalid_arity_record = find_record_with_guid(invalid_arity,
+        model::metamodel::descriptor_for(model::ControlKind::button).guid);
+    invalid_arity_record->items.at(2).items.at(2).items.at(1).items.at(2).items.at(2).items.pop_back();
+    expect(!form_stream::decode_document(invalid_arity, "ButtonActionBadArity"),
+        "Button action metadata arity remains a structural rejection");
+    auto invalid_localized_type = changed;
+    auto* invalid_localized_record = find_record_with_guid(invalid_localized_type,
+        model::metamodel::descriptor_for(model::ControlKind::button).guid);
+    invalid_localized_record->items.at(2).items.at(2).items.at(1).items.at(2).items.at(2).items.at(2) =
+        list_stream::ListValue::raw_atom("123");
+    expect(!form_stream::decode_document(invalid_localized_type, "ButtonActionBadLocalizedType"),
+        "malformed Button localized Action metadata remains a strict type error");
+    auto empty_handler = changed;
+    auto* empty_handler_record = find_record_with_guid(empty_handler,
+        model::metamodel::descriptor_for(model::ControlKind::button).guid);
+    empty_handler_record->items.at(2).items.at(2).items.at(1).items.at(2).items.at(1) =
+        list_stream::ListValue::string_atom("");
+    expect(!form_stream::decode_document(empty_handler, "ButtonActionEmptyHandler"),
+        "empty Button.Click handler remains a strict rejection");
 }
 
 void test_menu_action_values_and_optional_overrides_round_trip() {
@@ -4528,6 +4654,40 @@ void test_splitter_observed_record_and_named_codec() {
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
                list_stream::dump_compact(changed_stream.value()),
         "changed Splitter storage must round-trip canonically");
+
+    auto style_document = make_document("SplitterStyleColors");
+    auto* style_splitter = const_cast<model::ControlNode*>(style_document.find_control(model::ObjectId{2}));
+    const model::ColorValue button_back_style{model::ColorKind::style_reference, 0, 0, 0, 255,
+        model::QualifiedName{"StyleColors.ButtonBackColor"}};
+    const model::ColorValue border_style{model::ColorKind::style_reference, 0, 0, 0, 255,
+        model::QualifiedName{"StyleColors.BorderColor"}};
+    style_splitter->properties().set_explicit(model::PropertyId::from_name("BackColor"), button_back_style);
+    style_splitter->properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_style);
+    const auto style_xml = source::serialize_form_xml(style_document);
+    expect(style_xml.ok(), "named Splitter style colors must serialize to XML");
+    const auto style_parsed = source::parse_form_xml(style_xml.value());
+    expect(style_parsed.ok(), "named Splitter style colors must parse from XML");
+    const auto style_stream = form_stream::encode_document(style_parsed.value());
+    expect(style_stream.ok(), "named Splitter style colors must encode to Form.bin stream");
+    const auto style_decoded = form_stream::decode_document(style_stream.value(), "SplitterStyleColors");
+    const auto* decoded_style_splitter = style_decoded
+        ? style_decoded.value().find_control(model::ObjectId{2}) : nullptr;
+    const auto* decoded_style_back = decoded_style_splitter
+        ? decoded_style_splitter->properties().find(model::PropertyId::from_name("BackColor")) : nullptr;
+    const auto* decoded_style_border = decoded_style_splitter
+        ? decoded_style_splitter->properties().find(model::PropertyId::from_name("BorderColor")) : nullptr;
+    const auto* decoded_style_back_value = decoded_style_back
+        ? std::get_if<model::ColorValue>(&decoded_style_back->value) : nullptr;
+    const auto* decoded_style_border_value = decoded_style_border
+        ? std::get_if<model::ColorValue>(&decoded_style_border->value) : nullptr;
+    expect(style_decoded.ok() && decoded_style_back_value != nullptr &&
+               decoded_style_border_value != nullptr && *decoded_style_back_value == button_back_style &&
+               *decoded_style_border_value == border_style,
+        "Splitter BackColor and BorderColor style references must survive XML-to-BIN round-trip");
+    const auto style_reencoded = form_stream::encode_document(style_decoded.value());
+    expect(style_reencoded.ok() && list_stream::dump_compact(style_reencoded.value()) ==
+               list_stream::dump_compact(style_stream.value()),
+        "Splitter style references must remain stable after decoding and rebuilding");
 
     auto explicit_auto = make_document("SplitterProbe");
     const_cast<model::ControlNode*>(explicit_auto.find_control(model::ObjectId{2}))
@@ -8423,8 +8583,18 @@ void test_two_input_fields_round_trip() {
     auto& first_action = unsupported_action_text.items[1].items[2].items[2].items[2]
         .items[2].items[2].items[1].items[2].items[2];
     first_action.items[2] = list_stream::parse("{1,1,{\"ru\",\"different presentation\"}}");
-    expect_failure(form_stream::decode_document(unsupported_action_text, "Mixed"), "OOF1114", "$/1/2/2/2/2/2/1/2/2/2",
-        "noncanonical Button action presentation must fail closed");
+    const auto partial_action_text = form_stream::decode_document(unsupported_action_text, "Mixed");
+    const auto* partial_action_button = partial_action_text
+        ? partial_action_text.value().find_control(model::ObjectId{5}) : nullptr;
+    const auto* partial_action_event = partial_action_button && !partial_action_button->events.empty()
+        ? partial_action_text.value().find_event(partial_action_button->events.front().id()) : nullptr;
+    expect(partial_action_text.ok() && !partial_action_text.value().reconstruction_complete() &&
+               std::any_of(partial_action_text.diagnostics().begin(), partial_action_text.diagnostics().end(),
+                   [](const auto& diagnostic) {
+                       return diagnostic.code == "OOF1140" &&
+                           diagnostic.severity == oof::DiagnosticSeverity::warning;
+                   }) && partial_action_event != nullptr && partial_action_event->handler == "RunProbe",
+        "valid noncanonical Button Action presentation must warn while retaining its handler");
 }
 
 void test_two_button_sibling_index() {
@@ -10330,6 +10500,7 @@ int main() {
         test_multiple_top_level_buttons_round_trip();
         test_form_close_strict_action_guards();
         test_shared_action_metadata_policies_and_rejections();
+        test_button_click_action_metadata_warning_round_trip();
         test_menu_action_values_and_optional_overrides_round_trip();
         test_button_multiline_round_trip_and_validation();
         test_button_alignments_and_tooltip_round_trip();

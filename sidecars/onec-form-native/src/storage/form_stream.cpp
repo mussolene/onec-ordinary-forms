@@ -870,13 +870,7 @@ model::ColorValue explicit_splitter_color(const model::PropertySet& properties, 
         fail("OOF1122", std::string("$/Splitter/") + std::string(name), "ColorValue",
             "different value type", "Splitter color property has the wrong value type");
     }
-    const auto color = std::get<model::ColorValue>(entry->value);
-    if (color.kind != model::ColorKind::automatic && color.kind != model::ColorKind::absolute) {
-        fail("OOF1122", std::string("$/Splitter/") + std::string(name),
-            "automatic or absolute RGB color", "unobserved color kind",
-            "Splitter style colors are outside the supported storage profile");
-    }
-    return color;
+    return std::get<model::ColorValue>(entry->value);
 }
 
 LV encode_control_font(const model::FontValue& font, std::string_view property_path) {
@@ -2093,6 +2087,18 @@ bool is_single_value_table_type_domain(const model::TypeDomainPatternValue& valu
 
 enum class ActionMetadataPolicy { handler_derived, empty };
 
+struct DecodedAction {
+    std::string handler;
+    bool incomplete_profile = false;
+};
+
+void warn_incomplete_profile(
+    Diagnostics& warnings,
+    bool& reconstruction_complete,
+    std::uint64_t raw_id,
+    std::string_view path,
+    std::string_view kind);
+
 LV encode_action(std::string_view handler, ActionMetadataPolicy policy, std::string_view path) {
     if (handler.empty()) {
         fail("OOF1122", std::string(path), "non-empty Action handler", "empty", "Action handler cannot be empty");
@@ -2104,7 +2110,7 @@ LV encode_action(std::string_view handler, ActionMetadataPolicy policy, std::str
         parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"), parse_constant("{0,0,0}")})});
 }
 
-std::string decode_action(const LV& payload, ActionMetadataPolicy policy, std::string_view path) {
+DecodedAction decode_action(const LV& payload, ActionMetadataPolicy policy, std::string_view path) {
     require_arity(payload, 3, path);
     require_raw_constant(payload.items[0], "3", child_path(path, 0));
     const auto handler = string_atom(payload.items[1], child_path(path, 1));
@@ -2117,22 +2123,27 @@ std::string decode_action(const LV& payload, ActionMetadataPolicy policy, std::s
     // Build the exact defaults through the same invariant boundary used by the writer.
     const auto expected = encode_action(handler, policy, path).items[2];
     require_exact(metadata.items[0], expected.items[0], child_path(metadata_path, 0), "Action metadata version is unsupported");
-    require_exact(metadata.items[1], expected.items[1], child_path(metadata_path, 1), "Action name differs from its metadata policy");
+    const auto metadata_name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    bool incomplete_profile = false;
+    if (policy == ActionMetadataPolicy::handler_derived) {
+        incomplete_profile = metadata_name != handler;
+    } else {
+        require_exact(metadata.items[1], expected.items[1], child_path(metadata_path, 1),
+            "Action name must be empty");
+    }
     for (std::size_t index = 2; index <= 4; ++index) {
         const auto field_path = child_path(metadata_path, index);
         if (policy == ActionMetadataPolicy::handler_derived) {
             // Preserve the existing localized-string reader and its line-ending normalization.
             const auto presentation = decoded_single_language_text(metadata.items[index], field_path);
-            if (presentation != handler) {
-                fail("OOF1114", field_path, handler, presentation, "Action presentation differs from its handler");
-            }
+            if (presentation != handler) incomplete_profile = true;
         } else {
             require_exact(metadata.items[index], expected.items[index], field_path, "Action presentation must be empty");
         }
     }
     require_exact(metadata.items[5], expected.items[5], child_path(metadata_path, 5), "Action style record is unsupported");
     require_exact(metadata.items[6], expected.items[6], child_path(metadata_path, 6), "Action tail record is unsupported");
-    return handler;
+    return {handler, incomplete_profile};
 }
 
 LV encode_menu_action(const model::CommandBarAction& action, std::string_view path) {
@@ -2207,7 +2218,9 @@ LV canonical_event_table(std::optional<std::string_view> handler) {
         encode_action(*handler, ActionMetadataPolicy::handler_derived, "$/Button/Events/Click")})});
 }
 
-std::optional<std::string> decode_button_event(const LV& value, std::string_view path) {
+std::optional<std::string> decode_button_event(
+    const LV& value, std::string_view path, std::uint64_t raw_id,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_list(value, path);
     if (value.items.empty()) {
         fail("OOF1103", child_path(path, 0), "event count", "missing", "Event table has no count");
@@ -2239,7 +2252,11 @@ std::optional<std::string> decode_button_event(const LV& value, std::string_view
         descriptor->storage_tag,
         child_path(event_path, 1));
 
-    return decode_action(event_record.items[2], ActionMetadataPolicy::handler_derived, child_path(event_path, 2));
+    const auto action = decode_action(event_record.items[2], ActionMetadataPolicy::handler_derived,
+        child_path(event_path, 2));
+    if (action.incomplete_profile)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(event_path, 2), "Button");
+    return action.handler;
 }
 
 LV encode_form_close_events(const model::OrdinaryFormDocument& document) {
@@ -2273,7 +2290,7 @@ std::optional<std::string> decode_form_close_events(const LV& value, std::string
     if (descriptor == nullptr || descriptor->storage_codec != model::metamodel::StorageCodec::event_record || descriptor->storage_tag.empty())
         throw std::logic_error("Form.OnClose has no executable storage descriptor");
     require_raw_constant(event.items[1], descriptor->storage_tag, child_path(event_path, 1));
-    return decode_action(event.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2));
+    return decode_action(event.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2)).handler;
 }
 
 struct DecodedPictureDescriptor {
@@ -4087,7 +4104,8 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
             button_back_color, font, shortcut)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "Button");
 
-    const auto click_handler = decode_button_event(info.items[2], child_path(info_path, 2));
+    const auto click_handler = decode_button_event(
+        info.items[2], child_path(info_path, 2), raw_id, warnings, reconstruction_complete);
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -4317,11 +4335,6 @@ DecodedControl decode_splitter(
     const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
     const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
     const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
-    if ((back_color.kind != model::ColorKind::automatic && back_color.kind != model::ColorKind::absolute) ||
-        (border_color.kind != model::ColorKind::automatic && border_color.kind != model::ColorKind::absolute)) {
-        fail("OOF1114", properties_path, "automatic or observed absolute Splitter colors", describe(properties),
-            "Splitter style colors are outside the supported storage profile");
-    }
     const auto orientation_storage = integer_atom<std::int32_t>(properties.items[2], child_path(properties_path, 2));
     std::string orientation_member;
     if (orientation_storage == 2) orientation_member = "Auto";
