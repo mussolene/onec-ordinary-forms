@@ -1397,6 +1397,11 @@ const list_stream::ListValue& input_field_flag_value(
 
 using InputFieldFlagValues = std::array<bool, input_field_flag_mappings.size()>;
 
+bool is_single_date_only_type_domain(const model::TypeDomainPatternValue& value) {
+    return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::date &&
+        value.entries.front().date == model::DateQualifiers{true, false};
+}
+
 struct InputFieldTextValues {
     std::string tool_tip;
     std::string format;
@@ -1461,8 +1466,10 @@ LV canonical_input_field_info(
         value.items[2].items[0].items[14] = raw("0");
     } else if (type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::string) {
         value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().string.length));
+    } else if (is_single_date_only_type_domain(type)) {
+        value.items[2].items[0].items[14] = raw("0");
     } else {
-        throw std::logic_error("canonical InputField profile only supports empty or single-string TypeDomain");
+        throw std::logic_error("canonical InputField profile only supports empty, single-string, or Date-only TypeDomain");
     }
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
@@ -6640,11 +6647,13 @@ DecodedControl decode_input_field(
     require_arity(info, 10, info_path);
     require_raw_constant(info.items[0], "9", child_path(info_path, 0));
     const auto control_type = type_domain(info.items[1], child_path(info_path, 1));
-    if (!is_single_string_type_domain(control_type) || control_type != linked_attribute.type) {
+    const bool supported_type = is_single_string_type_domain(control_type) ||
+        is_single_date_only_type_domain(control_type);
+    if (!supported_type || control_type != linked_attribute.type) {
         fail(
             "OOF1122",
             child_path(info_path, 1),
-            "single-string InputField TypeDomainPattern matching linked Attribute",
+            "single-string or Date-only InputField TypeDomainPattern matching linked Attribute",
             describe(info.items[1]),
             "InputField type must match its linked attribute");
     }
@@ -6660,9 +6669,14 @@ DecodedControl decode_input_field(
     require_arity(base_info, 21, base_info_path);
     require_raw_constant(base_info.items[0], "19", child_path(base_info_path, 0));
     const auto stored_length = integer_atom<std::uint32_t>(payload.items[14], child_path(payload_path, 14));
-    if (stored_length != control_type.entries.front().string.length) {
+    if (is_single_string_type_domain(control_type) &&
+        stored_length != control_type.entries.front().string.length) {
         fail("OOF1114", info_path, "String length matching the named ValueType", {},
             "InputField payload length differs from its named String type");
+    }
+    if (is_single_date_only_type_domain(control_type) && stored_length != 0) {
+        fail("OOF1114", child_path(payload_path, 14), "zero Date-only InputField payload value",
+            std::to_string(stored_length), "Date-only InputField payload slot must be zero");
     }
     const bool enabled = bool_atom(base_info.items[1], child_path(base_info_path, 1));
     const std::string tool_tip = decoded_single_language_text(
@@ -7802,8 +7816,10 @@ LV encode_input_field(
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
     }
-    if (!is_single_string_type_domain(attribute->type)) {
-        fail("OOF1122", "$/InputField/DataPath", "linked single-string Attribute", attribute->name, "InputField type is outside the supported profile");
+    if (!is_single_string_type_domain(attribute->type) &&
+        !is_single_date_only_type_domain(attribute->type)) {
+        fail("OOF1122", "$/InputField/DataPath", "linked single-string or Date-only Attribute",
+            attribute->name, "InputField type is outside the supported profile");
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", false);

@@ -7553,6 +7553,117 @@ void test_button_label_input_field_round_trip() {
         "OOF1122", "$/InputField", "unsupported explicit TextEdit=false must fail encoding");
 }
 
+void test_input_field_date_only_type_domain_round_trip() {
+    const auto make_type = [](model::TypeDomainTerm term, model::DateQualifiers date = {true, false}) {
+        model::TypeDomainEntry entry;
+        entry.term = term;
+        if (term == model::TypeDomainTerm::date) entry.date = date;
+        if (term == model::TypeDomainTerm::string) entry.string = {10, true};
+        if (term == model::TypeDomainTerm::numeric) entry.numeric = {10, 0, false};
+        return model::TypeDomainPatternValue{{entry}};
+    };
+    const auto make_document = [](const model::TypeDomainPatternValue& type) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "DateInput";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "DateValue", type});
+        model::ControlNode input{model::ObjectId{2}, "DateField", model::InputFieldPayload{}};
+        input.data_path = model::DataPath{model::AttributeRef{model::ObjectId{3}}, {}};
+        input.properties().set_explicit(model::PropertyId::from_name("Wrap"), false);
+        input.properties().set_explicit(model::PropertyId::from_name("ChoiceButton"), true);
+        document.add_control(std::move(input));
+        return document;
+    };
+    const auto date_only = make_type(model::TypeDomainTerm::date);
+    const auto encoded = form_stream::encode_document(make_document(date_only));
+    expect(encoded.ok(), encoded ? "Date-only InputField must encode" :
+        encoded.diagnostics().front().path + ": " + encoded.diagnostics().front().message);
+    const auto& input_record = encoded.value().items[1].items[2].items[2].items[1];
+    const auto& input_info = input_record.items[2];
+    const auto& input_payload = input_info.items[2].items[0];
+    expect(list_stream::dump_compact(input_info.items[1]) == value_codec::encode_type_domain(date_only),
+        "Date-only InputField must write its named date TypeDomain");
+    expect(input_payload.items[14].atom == "0",
+        "Date-only InputField payload slot 14 must be zero");
+    expect(input_payload.items[4].atom == "0" && input_payload.items[7].atom == "1",
+        "Date-only InputField must preserve the observed Wrap=false and ChoiceButton=true flags");
+    auto nonzero_date_payload = encoded.value();
+    nonzero_date_payload.items[1].items[2].items[2].items[1]
+        .items[2].items[2].items[0].items[14] = list_stream::ListValue::raw_atom("1");
+    expect_failure(form_stream::decode_document(nonzero_date_payload, "DateInput"), "OOF1114",
+        "$/1/2/2/1/2/2/0/14", "Date-only InputField reader must require payload slot 14 to be zero");
+
+    const auto decoded = form_stream::decode_document(encoded.value(), "DateInput");
+    expect(decoded.ok() && decoded.value().reconstruction_complete(), decoded ?
+        "Date-only InputField must decode as a complete named model" :
+        decoded.diagnostics().front().path + ": " + decoded.diagnostics().front().message);
+    const auto* attribute = decoded.value().find_attribute(model::ObjectId{3});
+    const auto* input = decoded.value().find_control(model::ObjectId{2});
+    const auto* wrap = input == nullptr ? nullptr : input->properties().find(model::PropertyId::from_name("Wrap"));
+    const auto* choice_button = input == nullptr ? nullptr : input->properties().find(
+        model::PropertyId::from_name("ChoiceButton"));
+    expect(attribute && attribute->type == date_only && input && input->data_path &&
+               input->data_path->attribute.id() == model::ObjectId{3} && wrap &&
+               !std::get<bool>(wrap->value) && choice_button && std::get<bool>(choice_button->value),
+        "Date-only type, DataPath, and observed non-default flags must decode by name");
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "Date-only InputField must round-trip through the native stream without drift");
+
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok(), "Date-only InputField model must serialize to public XML");
+    const auto xml_document = source::parse_form_xml(xml.value());
+    expect(xml_document.ok(), "Date-only InputField public XML must parse");
+    const auto* xml_attribute = xml_document.value().find_attribute(model::ObjectId{3});
+    const auto* xml_input = xml_document.value().find_control(model::ObjectId{2});
+    const auto* xml_wrap = xml_input == nullptr ? nullptr :
+        xml_input->properties().find(model::PropertyId::from_name("Wrap"));
+    const auto* xml_choice_button = xml_input == nullptr ? nullptr : xml_input->properties().find(
+        model::PropertyId::from_name("ChoiceButton"));
+    expect(xml_attribute && xml_attribute->type == date_only && xml_input && xml_input->data_path &&
+               xml_input->data_path->attribute.id() == model::ObjectId{3} && xml_wrap &&
+               !std::get<bool>(xml_wrap->value) && xml_choice_button &&
+               std::get<bool>(xml_choice_button->value),
+        "public XML must preserve Date-only type, DataPath, and observed flag values");
+    const auto xml_encoded = form_stream::encode_document(xml_document.value());
+    expect(xml_encoded.ok() && list_stream::dump_compact(xml_encoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "Date-only InputField must survive public XML and native reconstruction");
+
+    std::vector<model::TypeDomainPatternValue> unsupported_types{
+        make_type(model::TypeDomainTerm::date, {true, true}),
+        make_type(model::TypeDomainTerm::date, {false, true}),
+        make_type(model::TypeDomainTerm::numeric),
+        model::TypeDomainPatternValue{{model::TypeDomainEntry{.term = model::TypeDomainTerm::date,
+            .date = {true, false}}, model::TypeDomainEntry{.term = model::TypeDomainTerm::string,
+            .string = {10, true}}}},
+    };
+    for (const auto& unsupported_type : unsupported_types) {
+        expect_failure(form_stream::encode_document(make_document(unsupported_type)), "OOF1122",
+            "$/InputField/DataPath", "InputField must reject DateTime, time-only, numeric, and mixed domains");
+
+        auto unsupported_stream = encoded.value();
+        const auto serialized_type = list_stream::parse(value_codec::encode_type_domain(unsupported_type));
+        unsupported_stream.items[2].items[2].items[1].items[5] = serialized_type;
+        unsupported_stream.items[1].items[2].items[2].items[1].items[2].items[1] = serialized_type;
+        expect_failure(form_stream::decode_document(unsupported_stream, "DateInput"), "OOF1122",
+            "$/1/2/2/1/2/1",
+            "InputField reader must reject unsupported TypeDomains even when the linked Attribute matches");
+    }
+
+    auto mismatched_attribute = encoded.value();
+    model::TypeDomainEntry string_entry;
+    string_entry.term = model::TypeDomainTerm::string;
+    string_entry.string = {10, true};
+    mismatched_attribute.items[1].items[2].items[2].items[1].items[2].items[1] =
+        list_stream::parse(value_codec::encode_type_domain(model::TypeDomainPatternValue{{string_entry}}));
+    expect_failure(form_stream::decode_document(mismatched_attribute, "DateInput"), "OOF1122",
+        "$/1/2/2/1/2/1", "Date-only InputField TypeDomain must still match its linked Attribute");
+}
+
 void test_input_field_tooltip_and_format_round_trip() {
     struct TextProperties {
         std::optional<std::string> tool_tip;
@@ -10865,6 +10976,7 @@ int main() {
         test_list_box_captured_runtime_record_roundtrip();
         test_progress_data_path_mixed_with_existing_links();
         test_button_label_input_field_round_trip();
+        test_input_field_date_only_type_domain_round_trip();
         test_input_field_tooltip_and_format_round_trip();
         test_input_field_alignment_and_choice_list_height_round_trip();
         test_single_input_field_round_trip();
