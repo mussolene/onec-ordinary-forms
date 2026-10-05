@@ -4908,14 +4908,14 @@ std::size_t chart_info_item_count(std::size_t series_count, std::size_t point_co
 void apply_chart_render_cache(const LV& actual, LV& expected,
     std::size_t middle_start, std::size_t render_start,
     std::string_view path) {
-    constexpr std::array<std::size_t, 5> middle_cache_offsets{84, 86, 87, 89, 90};
-    constexpr std::array<std::size_t, 5> render_cache_offsets{2, 4, 5, 7, 8};
+    constexpr std::array<std::size_t, 7> middle_cache_offsets{84, 86, 87, 89, 90, 92, 93};
+    constexpr std::array<std::size_t, 7> render_cache_offsets{2, 4, 5, 7, 8, 10, 11};
     const auto normalize = [&](std::size_t index) {
         if (index >= actual.items.size() || index >= expected.items.size()) {
             fail("OOF1102", child_path(path, index), "existing Chart render-cache scalar", "out of range", "Chart cache offset exceeds its record");
         }
         const auto& value = actual.items[index];
-        if (value.is_list || value.atom.empty()) {
+        if (value.is_list || value.atom.empty() || value.atom_kind != LV::AtomKind::raw) {
             fail("OOF1115", child_path(path, index), "finite numeric Chart render-cache scalar", describe(value), "Chart render cache has an unsupported value shape");
         }
         double parsed = 0.0;
