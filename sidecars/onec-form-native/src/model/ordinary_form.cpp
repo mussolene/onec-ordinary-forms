@@ -1334,6 +1334,27 @@ ValidationReport OrdinaryFormDocument::validate() const {
         validate_position(control.id, control.position);
         if (control.data_path.has_value()) {
             require_attribute(control.id, control.data_path->attribute);
+            const bool calendar_field = control.kind() == ControlKind::calendar_field;
+            const bool track_bar = control.kind() == ControlKind::track_bar;
+            if (calendar_field || track_bar) {
+                const auto invalid_data_path = [&](std::string reason) {
+                    add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
+                };
+                if (!control.data_path->members.empty()) {
+                    invalid_data_path("CalendarField and TrackBar DataPath must reference an Attribute directly");
+                } else if (const Attribute* attribute = find_attribute(control.data_path->attribute.id());
+                           attribute != nullptr) {
+                    TypeDomainEntry expected;
+                    expected.term = calendar_field ? TypeDomainTerm::date : TypeDomainTerm::numeric;
+                    if (calendar_field) expected.date = DateQualifiers{true, true};
+                    else expected.numeric = NumericQualifiers{10, 0, true};
+                    if (attribute->type.entries.size() != 1 || attribute->type.entries.front() != expected) {
+                        invalid_data_path(calendar_field ?
+                            "CalendarField DataPath must reference a single DateTime Attribute" :
+                            "TrackBar DataPath must reference a single Numeric(10,0,nonnegative) Attribute");
+                    }
+                }
+            }
         }
         if (const auto* gantt = std::get_if<GanttChartPayload>(&control.payload)) {
             const auto invalid_gantt = [&](std::string message) {

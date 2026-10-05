@@ -1458,6 +1458,20 @@ bool is_single_date_only_type_domain(const model::TypeDomainPatternValue& value)
         value.entries.front().date == model::DateQualifiers{true, false};
 }
 
+bool is_single_date_time_type_domain(const model::TypeDomainPatternValue& value) {
+    model::TypeDomainEntry expected;
+    expected.term = model::TypeDomainTerm::date;
+    expected.date = model::DateQualifiers{true, true};
+    return value.entries.size() == 1 && value.entries.front() == expected;
+}
+
+bool is_single_track_bar_type_domain(const model::TypeDomainPatternValue& value) {
+    model::TypeDomainEntry expected;
+    expected.term = model::TypeDomainTerm::numeric;
+    expected.numeric = model::NumericQualifiers{10, 0, true};
+    return value.entries.size() == 1 && value.entries.front() == expected;
+}
+
 struct InputFieldTextValues {
     std::string tool_tip;
     std::string format;
@@ -5789,6 +5803,7 @@ DecodedControl decode_progress_bar(
 DecodedControl decode_track_bar(
     const LV& record,
     std::string_view path,
+    const AttributeRecord* linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
@@ -5832,6 +5847,10 @@ DecodedControl decode_track_bar(
         fail("OOF1122", child_path(payload_path, 4), "positive TrackBar Step", std::to_string(step),
             "TrackBar Step at or below zero was not accepted by the platform runtime");
     }
+    if (linked_attribute != nullptr && !is_single_track_bar_type_domain(linked_attribute->type)) {
+        fail("OOF1122", "$/2/3", "single Numeric(10,0,nonnegative) Attribute for TrackBar",
+            linked_attribute->name, "TrackBar DataPath TypeDomain is unsupported");
+    }
 
     auto normalized_info = info;
     normalized_info.items[1].items[0].items[1] = raw("1");
@@ -5860,6 +5879,8 @@ DecodedControl decode_track_bar(
         "TrackBar cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::TrackBarPayload{}};
+    if (linked_attribute != nullptr) control.data_path = model::DataPath{
+        model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     if (max_value != 100) control.properties().set_explicit(
@@ -6134,6 +6155,7 @@ DecodedControl decode_text_document_field(
 DecodedControl decode_calendar_field(
     const LV& record,
     std::string_view path,
+    const AttributeRecord* linked_attribute,
     const GeometryContext& context,
     Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
@@ -6171,6 +6193,10 @@ DecodedControl decode_calendar_field(
                 std::string("CalendarField BeginOfDisplayPeriod is invalid: ") + error.what());
         }
     }
+    if (linked_attribute != nullptr && !is_single_date_time_type_domain(linked_attribute->type)) {
+        fail("OOF1122", "$/2/3", "single DateTime Attribute for CalendarField",
+            linked_attribute->name, "CalendarField DataPath TypeDomain is unsupported");
+    }
     if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_calendar_field_info(enabled, begin_atom)))
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CalendarField");
 
@@ -6194,6 +6220,8 @@ DecodedControl decode_calendar_field(
         "CalendarField cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CalendarFieldPayload{}};
+    if (linked_attribute != nullptr) control.data_path = model::DataPath{
+        model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (begin_atom != "00010101000000") {
         control.properties().set_explicit(
@@ -7808,19 +7836,30 @@ LV encode_progress_bar(
     });
 }
 
-LV encode_track_bar(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_track_bar(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::track_bar || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "TrackBar with positive int64 ID", control.name,
             "TrackBar is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/TrackBar", "named TrackBar without DataPath, Events, or storage children",
+        fail("OOF1122", "$/TrackBar", "named TrackBar with optional direct DataPath, no Events or storage children",
             control.name, "TrackBar uses a storage concept outside the supported profile");
+    }
+    if (control.data_path) {
+        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        if (attribute == nullptr) fail("OOF1123", "$/TrackBar/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "TrackBar DataPath does not resolve");
+        if (!is_single_track_bar_type_domain(attribute->type)) fail("OOF1122", "$/TrackBar/DataPath",
+            "single Numeric(10,0,nonnegative) Attribute", attribute->name,
+            "TrackBar DataPath must target the supported numeric domain");
     }
     require_allowed_properties(
         control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step"}, "$/TrackBar");
@@ -8141,19 +8180,30 @@ LV encode_default_complex_control(const model::ControlNode& control, const Geome
     return list(std::move(fields));
 }
 
-LV encode_calendar_field(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_calendar_field(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::calendar_field || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "CalendarField with positive int64 ID", control.name,
             "CalendarField is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/CalendarField", "named CalendarField with plain Position", control.name,
+        fail("OOF1122", "$/CalendarField", "named CalendarField with optional direct DataPath and plain Position", control.name,
             "CalendarField uses a storage concept outside the supported profile");
+    }
+    if (control.data_path) {
+        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        if (attribute == nullptr) fail("OOF1123", "$/CalendarField/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "CalendarField DataPath does not resolve");
+        if (!is_single_date_time_type_domain(attribute->type)) fail("OOF1122", "$/CalendarField/DataPath",
+            "single DateTime Attribute", attribute->name,
+            "CalendarField DataPath must target a DateTime attribute");
     }
     require_allowed_properties(control.properties(), {"Enabled", "BeginOfDisplayPeriod"}, "$/CalendarField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -9170,8 +9220,6 @@ Result<model::OrdinaryFormDocument> decode_document(
                         child = decode_splitter(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == label_descriptor.guid)
                         child = decode_label(record, record_path, context, warnings, reconstruction_complete);
-                    else if (guid == calendar_descriptor.guid)
-                        child = decode_calendar_field(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == dendrogram_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path),
                             child_path(record_path, 1));
@@ -9196,7 +9244,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                              guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid ||
                              guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid ||
-                             guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
+                             guid == model::metamodel::descriptor_for(model::ControlKind::table).guid ||
+                             guid == calendar_descriptor.guid || guid == track_bar_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                             fail("OOF1122", child_path(record_path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
@@ -9208,9 +9257,12 @@ Result<model::OrdinaryFormDocument> decode_document(
                             guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid;
                         const bool radio_button_guid =
                             guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid;
-                        const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid && !radio_button_guid;
+                        const bool calendar_field_guid = guid == calendar_descriptor.guid;
+                        const bool track_bar_guid = guid == track_bar_descriptor.guid;
+                        const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid &&
+                            !radio_button_guid && !calendar_field_guid && !track_bar_guid;
                         if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
-                            "DataPath link for each InputField, CheckBox, or ListBox", std::to_string(candidate_id),
+                            "DataPath link for each required linked control", std::to_string(candidate_id),
                             "Linked control has no attribute link");
                         const AttributeRecord* linked_attribute = nullptr;
                         if (link_it != links_by_control.end()) {
@@ -9228,7 +9280,11 @@ Result<model::OrdinaryFormDocument> decode_document(
                                 "DataPath target is unresolved");
                             linked_attribute = attribute_it->second;
                         }
-                        if (choice_field_guid) {
+                        if (calendar_field_guid) {
+                            child = decode_calendar_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
+                        } else if (track_bar_guid) {
+                            child = decode_track_bar(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
+                        } else if (choice_field_guid) {
                             child = decode_choice_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                             if (linked_attribute != nullptr) {
                                 child.control.data_path = model::DataPath{model::AttributeRef{
@@ -9253,8 +9309,6 @@ Result<model::OrdinaryFormDocument> decode_document(
                         } else {
                             child = decode_progress_bar(record, record_path, context, linked_attribute, warnings, reconstruction_complete);
                         }
-                    } else if (guid == track_bar_descriptor.guid) {
-                        child = decode_track_bar(record, record_path, context, warnings, reconstruction_complete);
                     } else if (guid == model::metamodel::descriptor_for(model::ControlKind::gantt_chart).guid) {
                         child = decode_gantt_chart(record, record_path, context, warnings, reconstruction_complete);
                     } else if (guid == panel_descriptor.guid) {
@@ -9705,7 +9759,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::label_decoration) {
                     record = encode_label(*control, context);
                 } else if (control->kind() == model::ControlKind::calendar_field) {
-                    record = encode_calendar_field(*control, context);
+                    record = encode_calendar_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::dendrogram) {
                     record = encode_dendrogram(*control, context);
                 } else if (control->kind() == model::ControlKind::spreadsheet_document_field) {
@@ -9725,7 +9779,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::progress_bar) {
                     record = encode_progress_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::track_bar) {
-                    record = encode_track_bar(*control, context);
+                    record = encode_track_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::list_box) {
                     record = encode_list_box(document, *control, context);
                 } else if (control->kind() == model::ControlKind::table) {

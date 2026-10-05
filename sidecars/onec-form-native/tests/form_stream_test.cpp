@@ -7271,8 +7271,8 @@ void test_track_bar_observed_record_and_named_round_trip() {
     constexpr std::string_view data_path_xml =
         R"OOF(<Form id="1" name="TrackBarForm" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Amount"><TypeDomain><Entry term="numeric" length="10" precision="2"/></TypeDomain></Attribute></Attributes><ChildItems><TrackBar id="4" name="P"><DataPath attributeId="3"/><Position/></TrackBar></ChildItems></Form>)OOF";
     const auto data_path = oof::source::parse_form_xml(data_path_xml);
-    expect(data_path.ok() && !form_stream::encode_document(data_path.value()),
-        "unobserved TrackBar DataPath must stay unsupported by the primary codec");
+    expect(!data_path.ok(),
+        "TrackBar DataPath with unsupported fractional qualifiers must fail model validation");
 
     constexpr std::string_view mixed_xml =
         R"OOF(<Form id="1" name="TrackBarMixed" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Caption>Run</Caption></Button><TrackBar id="4" name="Range"><Position/><MinValue>17</MinValue></TrackBar></ChildItems></Form>)OOF";
@@ -7708,6 +7708,96 @@ void test_progress_data_path_mixed_with_existing_links() {
                decoded.value().find_control(model::ObjectId{9})->data_path.has_value() &&
                decoded.value().find_control(model::ObjectId{10})->data_path.has_value(),
         "bound and unbound ProgressBars must coexist with required InputField and CheckBox links");
+}
+
+void test_calendar_track_bar_optional_data_path_links() {
+    const auto make_type = [](model::TypeDomainTerm term) {
+        model::TypeDomainEntry entry;
+        entry.term = term;
+        if (term == model::TypeDomainTerm::numeric) entry.numeric = model::NumericQualifiers{10, 0, true};
+        if (term == model::TypeDomainTerm::date) entry.date = model::DateQualifiers{true, true};
+        model::TypeDomainPatternValue type;
+        type.entries.push_back(entry);
+        return type;
+    };
+    const auto make_document = [&](const model::TypeDomainPatternValue& date_type,
+                                   const model::TypeDomainPatternValue& numeric_type,
+                                   bool bound,
+                                   std::uint64_t calendar_target = 2,
+                                   std::uint64_t track_target = 3,
+                                   bool nested_track_path = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "CalendarTrackLinks";
+        form.children = {model::ControlRef{model::ObjectId{4}}, model::ControlRef{model::ObjectId{5}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_attribute(model::Attribute{model::ObjectId{2}, "CalendarValue", date_type});
+        document.add_attribute(model::Attribute{model::ObjectId{3}, "SliderValue", numeric_type});
+        model::ControlNode calendar{model::ObjectId{4}, "Calendar", model::CalendarFieldPayload{}};
+        model::ControlNode track{model::ObjectId{5}, "Slider", model::TrackBarPayload{}};
+        if (bound) {
+            calendar.data_path = model::DataPath{model::AttributeRef{model::ObjectId{calendar_target}}, {}};
+            track.data_path = model::DataPath{model::AttributeRef{model::ObjectId{track_target}}, {}};
+            if (nested_track_path) track.data_path->members.push_back("Nested");
+        }
+        document.add_control(std::move(calendar));
+        document.add_control(std::move(track));
+        return document;
+    };
+
+    const auto date_type = make_type(model::TypeDomainTerm::date);
+    const auto numeric_type = make_type(model::TypeDomainTerm::numeric);
+    const auto bound = make_document(date_type, numeric_type, true);
+    const auto encoded = form_stream::encode_document(bound);
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    const auto& links = encoded.value().items[2].items[3];
+    expect(links.items.size() == 3 && links.items[0].atom == "2" &&
+               links.items[1].items[0].atom == "4" && links.items[2].items[0].atom == "5",
+        "CalendarField and TrackBar must emit optional AttributeLinks through the shared link table");
+    const auto decoded = form_stream::decode_document(encoded.value(), "CalendarTrackLinks");
+    expect(decoded.ok(), decoded ? "" : decoded.diagnostics().front().message);
+    for (const auto [control_id, attribute_id] :
+         {std::pair{4U, 2U}, std::pair{5U, 3U}}) {
+        const auto* control = decoded.value().find_control(model::ObjectId{control_id});
+        expect(control != nullptr && control->data_path &&
+                   control->data_path->attribute.id() == model::ObjectId{attribute_id},
+            "bound CalendarField and TrackBar must retain their direct Attribute DataPath");
+    }
+    const auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+               list_stream::dump_compact(encoded.value()),
+        "CalendarField and TrackBar direct DataPaths must survive native decode and re-encode");
+
+    const auto unbound = make_document(date_type, numeric_type, false);
+    const auto unbound_encoded = form_stream::encode_document(unbound);
+    expect(unbound_encoded.ok(), unbound_encoded ? "" : unbound_encoded.diagnostics().front().message);
+    expect(unbound_encoded.value().items[2].items[3].items[0].atom == "0",
+        "unbound CalendarField and TrackBar must keep the existing zero-link profile");
+    const auto unbound_decoded = form_stream::decode_document(unbound_encoded.value(), "CalendarTrackLinks");
+    expect(unbound_decoded.ok() &&
+               !unbound_decoded.value().find_control(model::ObjectId{4})->data_path &&
+               !unbound_decoded.value().find_control(model::ObjectId{5})->data_path,
+        "unbound CalendarField and TrackBar must remain unbound after native decode");
+
+    auto wrong_date = make_type(model::TypeDomainTerm::date);
+    wrong_date.entries.front().date = model::DateQualifiers{true, false};
+    expect(!form_stream::encode_document(make_document(wrong_date, numeric_type, true)),
+        "CalendarField must reject a Date-only Attribute TypeDomain");
+    auto wrong_numeric = make_type(model::TypeDomainTerm::numeric);
+    wrong_numeric.entries.front().numeric = model::NumericQualifiers{10, 2, true};
+    expect(!form_stream::encode_document(make_document(date_type, wrong_numeric, true)),
+        "TrackBar must reject Numeric attributes outside Numeric(10,0,nonnegative)");
+
+    auto dangling = make_document(date_type, numeric_type, true, 99);
+    expect(!form_stream::encode_document(dangling), "CalendarField must reject a dangling DataPath Attribute");
+    auto nested = make_document(date_type, numeric_type, true, 2, 3, true);
+    expect(!form_stream::encode_document(nested), "TrackBar must reject non-direct DataPath members");
+
+    auto dangling_link = encoded.value();
+    dangling_link.items[2].items[3].items[1].items[1].items[1].items[0] =
+        list_stream::ListValue::raw_atom("99");
+    expect(!form_stream::decode_document(dangling_link, "CalendarTrackLinks"),
+        "CalendarField decoder must reject an unresolved AttributeLink target");
 }
 
 void test_calendar_field_observed_record_decode() {
@@ -11754,6 +11844,7 @@ int main() {
         test_list_box_value_list_data_path_and_supported_properties();
         test_list_box_captured_runtime_record_roundtrip();
         test_progress_data_path_mixed_with_existing_links();
+        test_calendar_track_bar_optional_data_path_links();
         test_button_label_input_field_round_trip();
         test_input_field_date_only_type_domain_round_trip();
         test_input_field_tooltip_and_format_round_trip();
