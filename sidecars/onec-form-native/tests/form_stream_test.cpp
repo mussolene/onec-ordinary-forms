@@ -225,6 +225,65 @@ void set_captured_packet(list_stream::ListValue& payload, const std::vector<std:
     }
 }
 
+list_stream::ListValue table_column_editor_info(list_stream::ListValue& payload, std::size_t column_index) {
+    auto* table = find_record_with_guid(
+        payload, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table != nullptr, "typed Table fixture must contain a Table record");
+    auto& columns = table->items[2].items[2].items[1].items[23].items;
+    auto& packet = columns.at(column_index + 1).items[1].items[1].items[1].items[39];
+    std::string base64;
+    for (std::size_t index = 0; index < packet.items[0].items.size(); ++index) {
+        const auto& chunk = packet.items[0].items[index].atom;
+        base64 += index == 0 ? chunk.substr(8) : chunk;
+    }
+    const auto envelope = test_raw_inflate(test_base64_decode(base64));
+    expect(envelope.size() >= 11, "typed Table editor envelope must contain its size and BOM");
+    std::uint64_t declared_size = 0;
+    for (std::size_t index = 0; index < sizeof(declared_size); ++index) {
+        declared_size |= static_cast<std::uint64_t>(envelope[index]) << (index * 8);
+    }
+    expect(declared_size == envelope.size() - sizeof(declared_size),
+        "typed Table editor declared size must match its inflated envelope");
+    expect(envelope[8] == 0xef && envelope[9] == 0xbb && envelope[10] == 0xbf,
+        "typed Table editor packet must contain a UTF-8 BOM");
+    return list_stream::parse(std::string_view(
+        reinterpret_cast<const char*>(envelope.data() + 11), envelope.size() - 11));
+}
+
+void replace_table_column_editor_info(
+    list_stream::ListValue& payload, std::size_t column_index, const list_stream::ListValue& editor_info) {
+    auto* table = find_record_with_guid(
+        payload, model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table != nullptr, "typed Table fixture must contain a Table record");
+    auto& columns = table->items[2].items[2].items[1].items[23].items;
+    auto& packet = columns.at(column_index + 1).items[1].items[1].items[1].items[39];
+    std::string original_base64;
+    for (std::size_t index = 0; index < packet.items[0].items.size(); ++index) {
+        const auto& chunk = packet.items[0].items[index].atom;
+        original_base64 += index == 0 ? chunk.substr(8) : chunk;
+    }
+    auto bytes = test_base64_decode(original_base64);
+    expect(bytes.size() > 18, "typed Table editor packet must contain its fixed header");
+    bytes.resize(18);
+    const std::string text = list_stream::dump_listout(editor_info);
+    const std::uint64_t declared_size = text.size() + 3;
+    std::vector<std::uint8_t> envelope(sizeof(declared_size));
+    for (std::size_t index = 0; index < sizeof(declared_size); ++index) {
+        envelope[index] = static_cast<std::uint8_t>((declared_size >> (index * 8)) & 0xff);
+    }
+    envelope.insert(envelope.end(), {0xef, 0xbb, 0xbf});
+    envelope.insert(envelope.end(), text.begin(), text.end());
+    const auto compressed = test_raw_deflate(envelope, Z_DEFAULT_COMPRESSION);
+    bytes.insert(bytes.end(), compressed.begin(), compressed.end());
+    const auto base64 = test_base64_encode(bytes);
+    std::vector<list_stream::ListValue> chunks;
+    for (std::size_t index = 0; index < base64.size(); index += 64) {
+        chunks.push_back(list_stream::ListValue::raw_atom(
+            (index == 0 ? "#base64:" : "") + base64.substr(index, std::min<std::size_t>(64, base64.size() - index))));
+    }
+    packet.items[0] = list_stream::ListValue::list(std::move(chunks));
+}
+
 list_stream::ListValue captured_table_payload() {
     constexpr std::string_view captured_text =
 #include "fixtures/table-after-create-columns.inc"
@@ -323,8 +382,12 @@ void test_table_read_only_runtime_flags() {
     auto* record = find_record_with_guid(unknown_flag,
         model::metamodel::descriptor_for(model::ControlKind::table).guid);
     record->items[2].items[2].items[1].items[1] = list_stream::ListValue::raw_atom("117644835");
-    expect(!form_stream::decode_document(unknown_flag, "UnknownTableFlag"),
-        "changing any unproven Table flag must fail strict canonical validation");
+    const auto partial_flag = form_stream::decode_document(unknown_flag, "UnknownTableFlag");
+    expect(partial_flag.ok() && !partial_flag.value().reconstruction_complete() &&
+               std::ranges::any_of(partial_flag.diagnostics(), [](const auto& diagnostic) {
+                   return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+               }),
+        "valid unmodelled Table flag bits must warn and mark reconstruction incomplete");
 }
 
 void test_table_first_in_group_observed_metadata() {
@@ -378,8 +441,14 @@ void test_table_first_in_group_observed_metadata() {
     auto* record = find_record_with_guid(reordered,
         model::metamodel::descriptor_for(model::ControlKind::table).guid);
     record->items[4].items[4] = list_stream::ListValue::raw_atom("1");
-    expect(!form_stream::decode_document(reordered, "ReorderedTableFirstInGroup"),
-        "FirstInGroup in an unproven neighboring metadata slot must fail closed");
+    const auto partial = form_stream::decode_document(reordered, "ReorderedTableFirstInGroup");
+    expect(partial.ok() && !partial.value().reconstruction_complete(),
+        "unrepresented neighboring metadata must warn without changing FirstInGroup");
+    const auto table = std::ranges::find_if(partial.value().collections().controls,
+        [](const auto& control) { return control.kind() == model::ControlKind::table; });
+    expect(table != partial.value().collections().controls.end() &&
+        !table->extension_properties.contains(model::PropertyId::from_name("FirstInGroup")),
+        "unrepresented metadata must not become a named FirstInGroup value");
 }
 
 void test_table_first_in_group_fresh_model_xml_bin() {
@@ -582,6 +651,189 @@ void test_table_column_choice_and_check_box_profiles() {
         "ChoiceField must reject a mismatched InputField property even at its default value");
     expect(!form_stream::encode_document(make_document(model::ControlKind::spreadsheet_document_field)).ok(),
         "unsupported Table Column editor kind must fail closed");
+}
+
+void test_table_input_field_value_type_round_trip() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "TypedColumns";
+    form.children = {model::ControlRef{model::ObjectId{3}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::TypeDomainPatternValue table_type;
+    model::TypeDomainEntry table_entry;
+    table_entry.term = model::TypeDomainTerm::value_table;
+    table_type.entries.push_back(table_entry);
+    document.add_attribute(model::Attribute{model::ObjectId{2}, "Rows", table_type});
+    model::ControlNode table{model::ObjectId{3}, "Rows", model::TablePayload{}};
+    table.data_path = model::DataPath{model::AttributeRef{model::ObjectId{2}}, {}};
+    auto& columns = std::get<model::TablePayload>(table.payload).columns;
+    const std::array terms{model::TypeDomainTerm::string, model::TypeDomainTerm::numeric,
+        model::TypeDomainTerm::date, model::TypeDomainTerm::boolean, model::TypeDomainTerm::value_list};
+    std::array<model::TypeDomainPatternValue, 5> expected_types;
+    for (std::size_t index = 0; index < terms.size(); ++index) {
+        model::TypeDomainEntry entry;
+        entry.term = terms[index];
+        if (entry.term == model::TypeDomainTerm::string) entry.string = {64, false};
+        if (entry.term == model::TypeDomainTerm::numeric) entry.numeric = {12, 2, true};
+        if (entry.term == model::TypeDomainTerm::date) entry.date = {true, false};
+        model::TableColumn column;
+        column.name = "Column" + std::to_string(index);
+        column.data_path = column.name;
+        column.header.items.push_back({"en", column.name});
+        column.control.kind = model::ControlKind::input_field;
+        column.control.value_type = model::TypeDomainPatternValue{{entry}};
+        expected_types[index] = *column.control.value_type;
+        if (index == 0) {
+            column.control.properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
+            column.control.properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+        }
+        columns.push_back(std::move(column));
+    }
+    document.add_control(std::move(table));
+
+    auto xml = source::serialize_form_xml(document);
+    expect(xml.ok(), "five typed Table InputField columns must serialize as named XML");
+    auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok(), "five named Table InputField ValueTypes must parse");
+    auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "five named Table InputField ValueTypes must encode without a baseline");
+    const auto value_list_editor = table_column_editor_info(encoded.value(), 4);
+    const auto expected_value_list_pair = list_stream::parse(
+        std::string("{1,{") + "83a29520-06e8-4348-989c-abe69e8e33e2" + ",{0,{\"Pattern\"}}}}");
+    expect(list_stream::dump_compact(value_list_editor.items[3]) ==
+            list_stream::dump_compact(expected_value_list_pair),
+        "named ValueList must emit its proven typed factory pair and empty TypeDomain restriction");
+    auto decoded = form_stream::decode_document(encoded.value(), "TypedTableColumns");
+    expect(decoded.ok(), "five typed Table InputField columns must decode");
+    const auto* decoded_table = decoded.value().find_control(model::ObjectId{3});
+    expect(decoded_table != nullptr, "decoded typed Table must remain addressable");
+    const auto& decoded_columns = std::get<model::TablePayload>(decoded_table->payload).columns;
+    expect(decoded_columns.size() == terms.size(), "all five typed columns must be retained");
+    for (std::size_t index = 0; index < terms.size(); ++index) {
+        expect(decoded_columns[index].control.value_type == expected_types[index],
+            "each outer and embedded InputField ValueType must survive native round-trip");
+    }
+    const auto* enabled = decoded_columns[0].control.properties.find(model::PropertyId::from_name("Enabled"));
+    const auto* read_only = decoded_columns[0].control.properties.find(model::PropertyId::from_name("ReadOnly"));
+    expect(enabled != nullptr && !std::get<bool>(enabled->value) && read_only != nullptr &&
+            std::get<bool>(read_only->value),
+        "known InputField Enabled and ReadOnly values must survive native round-trip");
+    auto reencoded = form_stream::encode_document(decoded.value());
+    expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+            list_stream::dump_compact(encoded.value()),
+        "typed Table columns must re-encode without semantic drift");
+
+    auto scalar_without_pair = encoded.value();
+    auto scalar_editor = table_column_editor_info(scalar_without_pair, 0);
+    scalar_editor.items[3] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("0")});
+    replace_table_column_editor_info(scalar_without_pair, 0, scalar_editor);
+    const auto scalar_without_pair_result = form_stream::decode_document(
+        scalar_without_pair, "TypedTableScalarWithoutPair");
+    expect(scalar_without_pair_result.ok() && !scalar_without_pair_result.value().reconstruction_complete() &&
+               std::ranges::any_of(scalar_without_pair_result.diagnostics(), [](const auto& diagnostic) {
+                   return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+               }),
+        "scalar ValueType with the valid absent-pair marker must decode with an incomplete-profile warning");
+
+    auto incomplete_scalar_pair = encoded.value();
+    scalar_editor = table_column_editor_info(incomplete_scalar_pair, 0);
+    scalar_editor.items[3] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")});
+    replace_table_column_editor_info(incomplete_scalar_pair, 0, scalar_editor);
+    expect(!form_stream::decode_document(incomplete_scalar_pair, "TypedTableIncompleteScalarPair").ok(),
+        "scalar ValueType paired marker without its entry must remain a hard failure");
+
+    auto empty_type_without_pair = encoded.value();
+    auto* empty_type_table = find_record_with_guid(empty_type_without_pair,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(empty_type_table != nullptr, "typed stream must contain a Table for empty-type pair checks");
+    auto& empty_type_columns = empty_type_table->items[2].items[2].items[1].items[23].items;
+    empty_type_columns[1].items[1].items[1].items[1].items[35] =
+        list_stream::parse(value_codec::encode_type_domain(model::TypeDomainPatternValue{}));
+    auto empty_type_editor = table_column_editor_info(empty_type_without_pair, 0);
+    empty_type_editor.items[1] =
+        list_stream::parse(value_codec::encode_type_domain(model::TypeDomainPatternValue{}));
+    empty_type_editor.items[3] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("0")});
+    empty_type_editor.items[2].items[0].items[4] = list_stream::ListValue::raw_atom("bad");
+    replace_table_column_editor_info(empty_type_without_pair, 0, empty_type_editor);
+    expect(!form_stream::decode_document(empty_type_without_pair, "BadWrapEmptyTypeAbsentPair").ok(),
+        "empty ValueType and absent pair must still reject a malformed known Wrap Boolean");
+
+    auto bad_wrap_value_list = encoded.value();
+    auto bad_wrap_editor = table_column_editor_info(bad_wrap_value_list, 4);
+    bad_wrap_editor.items[2].items[0].items[4] = list_stream::ListValue::raw_atom("bad");
+    replace_table_column_editor_info(bad_wrap_value_list, 4, bad_wrap_editor);
+    expect(!form_stream::decode_document(bad_wrap_value_list, "BadWrapValueListPair").ok(),
+        "ValueList paired metadata must not bypass known payload Boolean validation");
+
+    auto unrepresented_boolean = empty_type_without_pair;
+    auto unrepresented_boolean_editor = table_column_editor_info(unrepresented_boolean, 0);
+    unrepresented_boolean_editor.items[2].items[0].items[4] = list_stream::ListValue::raw_atom("1");
+    unrepresented_boolean_editor.items[2].items[0].items[7] = list_stream::ListValue::raw_atom("1");
+    replace_table_column_editor_info(unrepresented_boolean, 0, unrepresented_boolean_editor);
+    const auto unrepresented_boolean_result = form_stream::decode_document(
+        unrepresented_boolean, "UnrepresentedTableInputFlag");
+    expect(unrepresented_boolean_result.ok() &&
+               !unrepresented_boolean_result.value().reconstruction_complete() &&
+               std::ranges::any_of(unrepresented_boolean_result.diagnostics(), [](const auto& diagnostic) {
+                   return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+               }),
+        "well-typed but unrepresented Table InputField Boolean must be retained as a warning profile");
+
+    auto missing_value_list_entry = encoded.value();
+    auto malformed_value_list_editor = table_column_editor_info(missing_value_list_entry, 4);
+    malformed_value_list_editor.items[3] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")});
+    replace_table_column_editor_info(missing_value_list_entry, 4, malformed_value_list_editor);
+    expect(!form_stream::decode_document(missing_value_list_entry, "MissingValueListPairEntry").ok(),
+        "ValueList paired marker without its typed entry must remain a hard failure");
+
+    auto unknown_value_list_guid = encoded.value();
+    malformed_value_list_editor = table_column_editor_info(unknown_value_list_guid, 4);
+    malformed_value_list_editor.items[3].items[1].items[0] =
+        list_stream::ListValue::raw_atom("00000000-0000-4000-8000-000000000000");
+    replace_table_column_editor_info(unknown_value_list_guid, 4, malformed_value_list_editor);
+    expect(!form_stream::decode_document(unknown_value_list_guid, "UnknownValueListPairGuid").ok(),
+        "ValueList paired record must reject an unknown type descriptor GUID");
+
+    auto restricted_value_list = encoded.value();
+    malformed_value_list_editor = table_column_editor_info(restricted_value_list, 4);
+    model::TypeDomainPatternValue nonempty_restriction;
+    model::TypeDomainEntry string_restriction;
+    string_restriction.term = model::TypeDomainTerm::string;
+    string_restriction.string = {12, false};
+    nonempty_restriction.entries.push_back(string_restriction);
+    malformed_value_list_editor.items[3].items[1].items[1].items[1] =
+        list_stream::parse(value_codec::encode_type_domain(nonempty_restriction));
+    replace_table_column_editor_info(restricted_value_list, 4, malformed_value_list_editor);
+    expect(!form_stream::decode_document(restricted_value_list, "RestrictedValueListPair").ok(),
+        "ValueList paired record must reject an unproven nonempty TypeDomain restriction");
+
+    auto mismatch = encoded.value();
+    auto* table_record = find_record_with_guid(mismatch,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    expect(table_record != nullptr, "typed stream must contain its Table record");
+    auto& records = table_record->items[2].items[2].items[1].items[23].items;
+    records[1].items[1].items[1].items[1].items[35] = records[2].items[1].items[1].items[1].items[35];
+    expect(!form_stream::decode_document(mismatch, "MismatchedTypedColumn").ok(),
+        "outer and embedded Table Column ValueType disagreement must remain a hard failure");
+
+    auto corrupt_marker = encoded.value();
+    table_record = find_record_with_guid(corrupt_marker,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    auto& marker_columns = table_record->items[2].items[2].items[1].items[23].items;
+    marker_columns[1].items[1].items[1].items[1].items[0] = list_stream::ListValue::raw_atom("22");
+    expect(!form_stream::decode_document(corrupt_marker, "CorruptTableColumnMarker").ok(),
+        "corrupted Table Column version marker must remain a hard structural failure");
+
+    auto residual_table = encoded.value();
+    table_record = find_record_with_guid(residual_table,
+        model::metamodel::descriptor_for(model::ControlKind::table).guid);
+    table_record->items[2].items[2].items[1].items[38] = list_stream::ListValue::raw_atom("3");
+    auto partial_table = form_stream::decode_document(residual_table, "TableResidualProfile");
+    expect(partial_table.ok() && !partial_table.value().reconstruction_complete() &&
+               std::ranges::any_of(partial_table.diagnostics(), [](const auto& diagnostic) {
+                   return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+               }) && partial_table.value().find_control(model::ObjectId{3}) != nullptr,
+        "valid Table residual profile data must warn while retaining the typed Table");
 }
 
 void expect_captured_table_rejected(list_stream::ListValue payload, std::string_view message) {
@@ -1196,10 +1448,61 @@ void test_gantt_chart_named_storage_round_trip() {
 
     auto wrong_default = reordered;
     auto* wrong_default_gantt = find_gantt_record(find_gantt_record, wrong_default);
-    wrong_default_gantt->items[2].items[3].items[1].items[4].items[1].items[10] =
-        list_stream::ListValue::raw_atom("0");
+    wrong_default_gantt->items[2].items[3].items[1].items[4].items[1].items[0] =
+        list_stream::ListValue::raw_atom("7");
     expect(!form_stream::decode_document(wrong_default, "GanttCorruptDefaultRow").ok(),
         "Gantt reordered default row must still match its exact sentinel contract");
+
+    const auto mutate_gantt_default_word = [&](list_stream::ListValue& value, std::size_t table_slot,
+                                                std::string_view word) {
+        auto* control = find_gantt_record(find_gantt_record, value);
+        expect(control != nullptr, "Gantt default-word fixture must contain its control");
+        if (control == nullptr) return;
+        auto& rows = control->items[2].items[table_slot].items[1].items;
+        const auto dimensions = static_cast<std::size_t>(std::stoul(rows[2].atom)) - 1;
+        const auto default_cursor = 3 + 2 * dimensions;
+        rows[default_cursor + 1].items[1].items[10] = list_stream::ListValue::raw_atom(std::string(word));
+    };
+    const std::array<std::pair<std::size_t, std::string_view>, 2> default_words{{
+        {2, "4294949825"}, {3, "4294902785"}}};
+    for (const auto& [table_slot, word] : default_words) {
+        auto unrepresented_default = encoded.value();
+        mutate_gantt_default_word(unrepresented_default, table_slot, word);
+        const auto partial = form_stream::decode_document(unrepresented_default, "GanttDefaultWord");
+        expect(partial.ok() && !partial.value().reconstruction_complete() &&
+            std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
+                return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+            }), "unrepresented Gantt default numeric word must warn and mark reconstruction incomplete");
+        if (partial.ok()) {
+            const auto* partial_control = partial.value().find_control(model::ObjectId{2});
+            const auto* partial_payload = partial_control ? std::get_if<model::GanttChartPayload>(&partial_control->payload) : nullptr;
+            expect(partial_payload && partial_payload->series.size() == 2 && partial_payload->points.size() == 3 &&
+                partial_payload->intervals.size() == 2, "Gantt named dimensions and intervals must survive an unknown default word");
+            const auto rebuilt = form_stream::encode_document(partial.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                "Gantt rebuild must use fresh canonical named data after warning about the default word");
+        }
+    }
+    auto nonnumeric_gantt_default = encoded.value();
+    mutate_gantt_default_word(nonnumeric_gantt_default, 2, "not-a-uint32");
+    expect(!form_stream::decode_document(nonnumeric_gantt_default, "GanttInvalidDefaultWord").ok(),
+        "non-numeric Gantt default word must remain a hard failure");
+    auto malformed_gantt_key = encoded.value();
+    auto* malformed_key_control = find_gantt_record(find_gantt_record, malformed_gantt_key);
+    expect(malformed_key_control != nullptr, "Gantt invalid-key fixture must contain its control");
+    if (malformed_key_control == nullptr) return;
+    auto& malformed_point_rows = malformed_key_control->items[2].items[2].items[1].items;
+    const auto malformed_point_default = 3 + 2 * (static_cast<std::size_t>(std::stoul(malformed_point_rows[2].atom)) - 1);
+    malformed_point_rows[malformed_point_default] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(malformed_gantt_key, "GanttInvalidDefaultKey").ok(),
+        "Gantt default row key mismatch must remain a hard failure");
+    auto malformed_gantt_count = encoded.value();
+    auto* malformed_count_control = find_gantt_record(find_gantt_record, malformed_gantt_count);
+    expect(malformed_count_control != nullptr, "Gantt invalid-count fixture must contain its control");
+    if (malformed_count_control == nullptr) return;
+    malformed_count_control->items[2].items[2].items[1].items[2] = list_stream::ListValue::raw_atom("99");
+    expect(!form_stream::decode_document(malformed_gantt_count, "GanttInvalidDimensionCount").ok(),
+        "Gantt dimension count mismatch must remain a hard failure");
 
     auto platform_layout = encoded.value();
     auto* platform_gantt = find_gantt_record(find_gantt_record, platform_layout);
@@ -2045,6 +2348,19 @@ void test_choice_field_static_profile_round_trip_and_validation() {
     expect(list_stream::dump_compact(default_encoded.value()) ==
                list_stream::dump_compact(explicit_empty_encoded.value()),
         "explicit empty ChoiceField ToolTip must normalize to the default storage");
+    auto residual_choice_result = form_stream::encode_document(make_document(std::nullopt, false));
+    expect(residual_choice_result.ok(), "known disabled ChoiceField profile must encode before residual mutation");
+    auto residual_choice = residual_choice_result.value();
+    auto& residual_choice_info = residual_choice.items[1].items[2].items[2].items[1].items[2];
+    residual_choice_info.items[1].items[0].items[17] = list_stream::ListValue::raw_atom("4");
+    auto partial_choice = form_stream::decode_document(residual_choice, "ChoiceFieldResidualProfile");
+    expect(partial_choice.ok() && !partial_choice.value().reconstruction_complete() &&
+               std::ranges::any_of(partial_choice.diagnostics(), [](const auto& diagnostic) {
+                   return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+               }) && partial_choice.value().find_control(model::ObjectId{2}) != nullptr &&
+               !std::get<bool>(partial_choice.value().find_control(model::ObjectId{2})->properties().find(
+                   model::PropertyId::from_name("Enabled"))->value),
+        "valid ChoiceField residual profile data must warn while retaining the named control");
     const auto default_decoded = form_stream::decode_document(default_encoded.value(), "ChoiceFieldProfile");
     expect(default_decoded.ok(), "default ChoiceField storage must decode");
     const auto* default_choice = default_decoded.value().find_control(model::ObjectId{2});
@@ -2204,8 +2520,12 @@ void test_choice_field_static_profile_round_trip_and_validation() {
     auto malformed = encoded.value();
     malformed.items[1].items[2].items[2].items[1].items[2].items[1].items[13] =
         list_stream::ListValue::raw_atom("1");
-    expect_failure(form_stream::decode_document(malformed, "ChoiceFieldProfile"), "OOF1114",
-        "$/1/2/2/1/2", "unmapped ChoiceField base flags must fail closed");
+    const auto partial_profile = form_stream::decode_document(malformed, "ChoiceFieldProfile");
+    expect(partial_profile.ok() && !partial_profile.value().reconstruction_complete() &&
+               std::ranges::any_of(partial_profile.diagnostics(), [](const auto& diagnostic) {
+                   return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+               }),
+        "unrepresented ChoiceField base fields must warn and mark the named projection incomplete");
 }
 
 void test_check_box_font_round_trip_and_validation() {
@@ -6154,7 +6474,7 @@ void test_dendrogram_orientation_named_codec() {
     control_record_pointer->items[2].items[1].items[0] =
         list_stream::ListValue::raw_atom("1");
     expect_failure(form_stream::decode_document(changed_tree, "DendrogramForm"), "OOF1114",
-        "$/1/2/2/1/2", "nondefault graph data must be rejected by the Orientation-only profile");
+        "$/1/2/2/1/2/1/0", "invalid embedded Chart marker must remain a hard Dendrogram error");
 }
 
 
@@ -6201,6 +6521,43 @@ void test_dendrogram_strict_native_fixture() {
                model::EnumerationValue{"DendrogramOrientation", "Down"},
         "strict native fixture must retain Down orientation");
 
+    const auto canonical_empty_rebuild = form_stream::encode_document(decoded.value());
+    expect(canonical_empty_rebuild.ok(), "strict empty Dendrogram fixture must rebuild from named data");
+    auto unknown_empty_word = stream;
+    carrier_record = nullptr;
+    find_record(unknown_empty_word, oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid);
+    carrier_record->items[2].items[2].items[1].items[4].items[1].items[10] =
+        list_stream::ListValue::raw_atom("4294901793");
+    const auto partial_empty = form_stream::decode_document(unknown_empty_word, "NativeFixtureUnknownEmptyWord");
+    expect(partial_empty.ok() && !partial_empty.value().reconstruction_complete() &&
+        std::any_of(partial_empty.diagnostics().begin(), partial_empty.diagnostics().end(), [](const auto& diagnostic) {
+            return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+        }), "unrepresented empty Dendrogram sentinel word must warn and mark reconstruction incomplete");
+    if (partial_empty.ok()) {
+        const auto* partial_control = partial_empty.value().find_control(model::ObjectId{15});
+        const auto* partial_graph = partial_control ? std::get_if<model::DendrogramPayload>(&partial_control->payload) : nullptr;
+        expect(partial_graph && partial_graph->items.empty() && partial_graph->links.empty(),
+            "empty Dendrogram Items and Links must remain empty in the named model");
+        const auto rebuilt = form_stream::encode_document(partial_empty.value());
+        expect(rebuilt.ok() && canonical_empty_rebuild.ok() &&
+            list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(canonical_empty_rebuild.value()),
+            "empty Dendrogram rebuild must use fresh canonical named data after warning");
+    }
+    auto nonnumeric_empty_word = stream;
+    carrier_record = nullptr;
+    find_record(nonnumeric_empty_word, oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid);
+    carrier_record->items[2].items[2].items[1].items[4].items[1].items[10] =
+        list_stream::ListValue::raw_atom("not-a-uint32");
+    expect(!form_stream::decode_document(nonnumeric_empty_word, "NativeFixtureInvalidEmptyWord").ok(),
+        "non-numeric empty Dendrogram sentinel word must remain a hard failure");
+    auto malformed_empty_sentinel_key = stream;
+    carrier_record = nullptr;
+    find_record(malformed_empty_sentinel_key, oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid);
+    carrier_record->items[2].items[2].items[1].items[4].items[1].items[3] =
+        list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(malformed_empty_sentinel_key, "NativeFixtureInvalidEmptySentinelKey").ok(),
+        "empty Dendrogram sentinel keys must remain strict");
+
     auto malformed = stream;
     carrier_record = nullptr;
     find_record(malformed, oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid);
@@ -6229,6 +6586,13 @@ void test_dendrogram_strict_native_fixture() {
     carrier_record->items[2].items[4] = list_stream::ListValue::raw_atom("2");
     expect_failure(form_stream::decode_document(unknown_orientation, "NativeFixture"), "OOF1122",
         "$/1/2/2/1/2/4", "unknown Dendrogram orientation must be rejected");
+
+    auto malformed_empty_count = stream;
+    carrier_record = nullptr;
+    find_record(malformed_empty_count, oof::model::metamodel::descriptor_for(model::ControlKind::dendrogram).guid);
+    carrier_record->items[2].items[2].items[1].items[2] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(malformed_empty_count, "NativeFixtureEmptyCount").ok(),
+        "empty Dendrogram collection count must retain its exact factory structure");
 
     constexpr std::string_view linked_carrier_xml = R"OOF(<Form id="1" name="LinkedFixture" ordinaryFormVersion="2.1"><Attributes><Attribute id="3" name="Text"><TypeDomain><Entry term="string" length="20"/></TypeDomain></Attribute></Attributes><ChildItems><InputField id="4" name="Carrier"><DataPath attributeId="3"/><Position/></InputField></ChildItems></Form>)OOF";
     const auto linked_carrier = oof::source::parse_form_xml(linked_carrier_xml);
@@ -6291,6 +6655,38 @@ void test_dendrogram_named_graph_candidate_roundtrip() {
         visit(root);
         return found;
     };
+
+    auto unknown_nonempty_item_word = encoded.value();
+    auto* unknown_nonempty_control = find_dendrogram_record(unknown_nonempty_item_word);
+    expect(unknown_nonempty_control != nullptr, "Dendrogram non-empty-word fixture must contain its control");
+    if (unknown_nonempty_control == nullptr) return;
+    unknown_nonempty_control->items[2].items[2].items[1].items[4].items[1].items[10] =
+        list_stream::ListValue::raw_atom("4294901793");
+    expect(!form_stream::decode_document(unknown_nonempty_item_word, "DendrogramUnknownNonemptyWord").ok(),
+        "unproven non-empty Dendrogram item word must remain a hard failure");
+    auto nonnumeric_item_word = encoded.value();
+    auto* nonnumeric_word_control = find_dendrogram_record(nonnumeric_item_word);
+    expect(nonnumeric_word_control != nullptr, "Dendrogram invalid-word fixture must contain its control");
+    if (nonnumeric_word_control == nullptr) return;
+    nonnumeric_word_control->items[2].items[2].items[1].items[4].items[1].items[10] =
+        list_stream::ListValue::raw_atom("not-a-uint32");
+    expect(!form_stream::decode_document(nonnumeric_item_word, "DendrogramInvalidItemWord").ok(),
+        "non-numeric Dendrogram item word must remain a hard failure");
+    auto invalid_item_key = encoded.value();
+    auto* invalid_key_control = find_dendrogram_record(invalid_item_key);
+    expect(invalid_key_control != nullptr, "Dendrogram invalid-key fixture must contain its control");
+    if (invalid_key_control == nullptr) return;
+    invalid_key_control->items[2].items[2].items[1].items[3] = list_stream::ListValue::raw_atom("0");
+    expect(!form_stream::decode_document(invalid_item_key, "DendrogramInvalidItemKey").ok(),
+        "Dendrogram item key mismatch must remain a hard failure");
+    auto invalid_item_count = encoded.value();
+    auto* invalid_count_control = find_dendrogram_record(invalid_item_count);
+    expect(invalid_count_control != nullptr, "Dendrogram invalid-count fixture must contain its control");
+    if (invalid_count_control == nullptr) return;
+    invalid_count_control->items[2].items[2].items[1].items[2] = list_stream::ListValue::raw_atom("99");
+    expect(!form_stream::decode_document(invalid_item_count, "DendrogramInvalidItemCount").ok(),
+        "Dendrogram item count mismatch must remain a hard failure");
+
     auto unknown_cache = encoded.value();
     auto* cache_control = find_dendrogram_record(unknown_cache);
     expect(cache_control != nullptr, "encoded Dendrogram must be locatable for strict negative checks");
@@ -10008,6 +10404,75 @@ void test_anchor_bindings_round_trip_and_fanout() {
         "proportional tuple without a primary tuple must be rejected");
 }
 
+void test_embedded_chart_typed_variants_and_guards() {
+    const auto find_record = [](auto&& self, list_stream::ListValue& value, model::ControlKind kind) -> list_stream::ListValue* {
+        if (value.is_list && value.items.size() == 6 && !value.items[0].is_list &&
+            value.items[0].atom == model::metamodel::descriptor_for(kind).guid) return &value;
+        for (auto& child : value.items) if (auto* found = self(self, child, kind)) return found;
+        return nullptr;
+    };
+    const auto has_incomplete_warning = [](const auto& result) {
+        return result.ok() && !result.value().reconstruction_complete() &&
+            std::any_of(result.diagnostics().begin(), result.diagnostics().end(), [](const auto& diagnostic) {
+                return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+            });
+    };
+    for (const auto kind : {model::ControlKind::gantt_chart, model::ControlKind::dendrogram}) {
+        const std::string xml = kind == model::ControlKind::gantt_chart ?
+            R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><GanttChart id="2" name="Schedule"><Position><Height>80</Height><Width>120</Width></Position></GanttChart></ChildItems></Form>)XML" :
+            R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Dendrogram id="2" name="Tree"><Position><Height>80</Height><Width>120</Width></Position><Orientation type="DendrogramOrientation" member="Down"/></Dendrogram></ChildItems></Form>)XML";
+        const auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), "minimal owner fixture must parse");
+        const auto encoded = form_stream::encode_document(parsed.value());
+        expect(encoded.ok(), "minimal owner fixture must encode");
+        auto variant = encoded.value();
+        auto* record = find_record(find_record, variant, kind);
+        expect(record != nullptr, "owner fixture must expose embedded Chart");
+        record->items[2].items[1].items[2].items[49] = list_stream::parse("{8,2,0,{-20},1,100}");
+        const auto partial = form_stream::decode_document(variant, "Main");
+        expect(has_incomplete_warning(partial), "valid unrepresented embedded Chart Font must warn and mark owner incomplete");
+        const auto restored_xml = source::serialize_form_xml(partial.value());
+        expect(restored_xml.ok(), "embedded Font warning must allow named XML projection");
+        const auto restored = source::parse_form_xml(restored_xml.value());
+        expect(restored.ok() && !restored.value().reconstruction_complete(), "embedded Font warning must survive named XML cycle");
+        const auto restored_binary = form_stream::encode_document(restored.value());
+        expect(restored_binary.ok() && list_stream::dump_compact(restored_binary.value()) == list_stream::dump_compact(encoded.value()),
+            "embedded Font variant must retain owner projection without preserving unavailable raw fields");
+        for (const auto mutation : {0, 1, 2}) {
+            auto invalid = encoded.value();
+            auto& chart = find_record(find_record, invalid, kind)->items[2].items[1].items[2];
+            if (mutation == 0) chart.items[49] = list_stream::parse("{8,2,0,{-20},1,99}");
+            else if (mutation == 1) chart.items[4] = list_stream::ListValue::raw_atom("1");
+            else chart.items[0] = list_stream::ListValue::raw_atom("76");
+            expect(!form_stream::decode_document(invalid, "Main"), "malformed embedded Chart Font, count or header must remain an error");
+        }
+        if (kind == model::ControlKind::gantt_chart) {
+            for (const auto index : {std::size_t{12}, std::size_t{13}, std::size_t{14}, std::size_t{15}, std::size_t{25}}) {
+                auto residual = encoded.value();
+                auto& info = find_record(find_record, residual, kind)->items[2];
+                if (index <= 14) info.items[index] = list_stream::ListValue::raw_atom("20270101000000");
+                else if (index == 15) info.items[index] = list_stream::ListValue::raw_atom("42");
+                else info.items[index] = list_stream::parse("{4,0,{1644953},0}");
+                const auto projected = form_stream::decode_document(residual, "Main");
+                expect(has_incomplete_warning(projected), "valid unrepresented Gantt typed residual must warn");
+                const auto projected_xml = source::serialize_form_xml(projected.value());
+                expect(projected_xml.ok(), "valid Gantt typed residual must allow named XML");
+                const auto projected_document = source::parse_form_xml(projected_xml.value());
+                expect(projected_document.ok() && form_stream::encode_document(projected_document.value()).ok(),
+                    "valid Gantt typed residual must allow XML reconstruction");
+            }
+            for (const auto index : {std::size_t{12}, std::size_t{13}, std::size_t{14}, std::size_t{15}, std::size_t{25}}) {
+                auto malformed = encoded.value();
+                auto& info = find_record(find_record, malformed, kind)->items[2];
+                if (index <= 14) info.items[index] = list_stream::ListValue::raw_atom("20270230000000");
+                else if (index == 15) info.items[index] = list_stream::ListValue::raw_atom("-1");
+                else info.items[index] = list_stream::parse("{4,0,{16777216},0}");
+                expect(!form_stream::decode_document(malformed, "Main"), "malformed Gantt residual Date, UInt32 or Color must remain an error");
+            }
+        }
+    }
+}
+
 void test_chart_named_dense_roundtrip_with_sibling_geometry() {
     std::string xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems>
       <Chart id="2" name="Metrics"><Position><Top>0</Top><Height>40</Height><Left>0</Left><Width>120</Width></Position><Title>Новая диаграмма</Title><Series>)XML";
@@ -10224,8 +10689,63 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
     auto unknown_automatic_cache = form_stream::encode_document(automatic.value()).value();
     record = find_chart_record(unknown_automatic_cache);
     record->items[3].items[5].items[2].items[0] = list_stream::ListValue::raw_atom("1644953");
-    expect(!form_stream::decode_document(unknown_automatic_cache, "Main"),
-        "unproven automatic SummarySeries RGB must not become an implicit absolute Color");
+    const auto partial_automatic = form_stream::decode_document(unknown_automatic_cache, "Main");
+    expect(partial_automatic.ok() && !partial_automatic.value().reconstruction_complete() &&
+        std::any_of(partial_automatic.diagnostics().begin(), partial_automatic.diagnostics().end(), [](const auto& diagnostic) {
+            return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+        }) && std::get<model::ChartPayload>(partial_automatic.value().find_control(model::ObjectId{2})->payload).summary_series.color == model::ColorValue{},
+        "unrepresented automatic SummarySeries cache must warn while retaining named automatic Color");
+    expect(form_stream::encode_document(partial_automatic.value()).ok(), "incomplete automatic Chart must rebuild from named values");
+
+    auto optional_profile = encoded.value();
+    record = find_chart_record(optional_profile);
+    record->items[3].items[68] = list_stream::ListValue::raw_atom("1");
+    const auto partial = form_stream::decode_document(optional_profile, "Main");
+    expect(partial.ok() && !partial.value().reconstruction_complete() &&
+        std::any_of(partial.diagnostics().begin(), partial.diagnostics().end(), [](const auto& diagnostic) {
+            return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+        }) && std::get<model::ChartPayload>(partial.value().find_control(model::ObjectId{2})->payload).summary_series.color ==
+            std::get<model::ChartPayload>(parsed.value().find_control(model::ObjectId{2})->payload).summary_series.color &&
+        std::get<model::ChartPayload>(partial.value().find_control(model::ObjectId{2})->payload).summary_series.marker ==
+            std::get<model::ChartPayload>(parsed.value().find_control(model::ObjectId{2})->payload).summary_series.marker,
+        "unrepresented optional Chart field must warn while retaining named Color and Marker");
+    const auto partial_xml = source::serialize_form_xml(partial.value());
+    expect(partial_xml.ok() && partial_xml.value().find("reconstructionComplete=\"false\"") != std::string::npos,
+        "incomplete Chart XML must expose reconstruction status");
+    const auto partial_xml_document = source::parse_form_xml(partial_xml.value());
+    expect(partial_xml_document.ok() && !partial_xml_document.value().reconstruction_complete() &&
+        form_stream::encode_document(partial_xml_document.value()).ok(), "incomplete Chart XML must rebuild successfully");
+    const auto partial_rebuilt = form_stream::encode_document(partial.value());
+    expect(partial_rebuilt.ok() && list_stream::dump_compact(partial_rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "optional Chart profile data must be omitted from fresh named reconstruction");
+    auto style_fonts = encoded.value();
+    record = find_chart_record(style_fonts);
+    for (const auto index : {std::size_t{49}, std::size_t{50}, std::size_t{51}}) {
+        record->items[3].items[index] = list_stream::parse("{8,2,0,{-20},1,100}");
+    }
+    const auto partial_fonts = form_stream::decode_document(style_fonts, "Main");
+    expect(partial_fonts.ok() && !partial_fonts.value().reconstruction_complete() &&
+        std::any_of(partial_fonts.diagnostics().begin(), partial_fonts.diagnostics().end(), [](const auto& diagnostic) {
+            return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+        }) && std::get<model::ChartPayload>(partial_fonts.value().find_control(model::ObjectId{2})->payload).summary_series.color ==
+            std::get<model::ChartPayload>(parsed.value().find_control(model::ObjectId{2})->payload).summary_series.color,
+        "valid unrepresented Chart Font variants must warn while retaining named Color");
+    const auto fonts_rebuilt = form_stream::encode_document(partial_fonts.value());
+    expect(fonts_rebuilt.ok() && list_stream::dump_compact(fonts_rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "unrepresented Chart Fonts must not be preserved in fresh named reconstruction");
+    const auto fonts_xml = source::serialize_form_xml(partial_fonts.value());
+    expect(fonts_xml.ok(), "Chart with valid unrepresented Fonts must serialize named XML");
+    const auto fonts_xml_document = source::parse_form_xml(fonts_xml.value());
+    expect(fonts_xml_document.ok() && !fonts_xml_document.value().reconstruction_complete() &&
+        form_stream::encode_document(fonts_xml_document.value()).ok(), "Chart Font warning state must survive native XML reconstruction");
+    for (const auto index : {std::size_t{49}, std::size_t{50}, std::size_t{51}}) {
+        auto malformed_font = encoded.value();
+        find_chart_record(malformed_font)->items[3].items[index] = list_stream::parse("{8,2,0,{-20},1,99}");
+        expect(!form_stream::decode_document(malformed_font, "Main"), "malformed unrepresented Chart Font must fail typed validation");
+    }
+    auto malformed_collection = encoded.value();
+    find_chart_record(malformed_collection)->items[3].items[68] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")});
+    expect(!form_stream::decode_document(malformed_collection, "Main"), "non-Font Chart collection shape mismatch must remain an error");
     auto unsupported_style = encoded.value();
     record = find_chart_record(unsupported_style);
     record->items[3].items[164].items[0] = list_stream::parse("{4,3,{-22},3}");
@@ -10288,8 +10808,11 @@ void test_chart_empty_render_cache_normalization_and_guards() {
     auto* adjacent_record = find_chart_record(adjacent_unproven_cache);
     expect(adjacent_record != nullptr, "adjacent-cache fixture must expose its Chart record");
     adjacent_record->items[3].items[middle_start + 91] = list_stream::ListValue::raw_atom("1");
-    expect(!form_stream::decode_document(adjacent_unproven_cache, "AdjacentUnprovenEmptyChartCache"),
-        "neighboring unproven Chart cache slot must remain strict");
+    const auto partial_cache = form_stream::decode_document(adjacent_unproven_cache, "AdjacentUnprovenEmptyChartCache");
+    expect(partial_cache.ok() && !partial_cache.value().reconstruction_complete() &&
+        std::any_of(partial_cache.diagnostics().begin(), partial_cache.diagnostics().end(), [](const auto& diagnostic) {
+            return diagnostic.code == "OOF1140" && diagnostic.severity == oof::DiagnosticSeverity::warning;
+        }), "neighboring unrepresented Chart cache must warn without extending normalization");
 }
 
 void test_platform_empty_document_fixture() {
@@ -11183,6 +11706,7 @@ int main() {
         test_table_first_in_group_fresh_model_xml_bin();
         test_table_column_name_and_data_path_runtime_slots();
         test_table_column_choice_and_check_box_profiles();
+        test_table_input_field_value_type_round_trip();
         test_captured_table_packet_rejections_and_alternate_deflate();
         test_two_button_sibling_index();
         test_multiple_top_level_buttons_round_trip();
@@ -11251,6 +11775,7 @@ int main() {
         test_owner_aware_control_geometry_codec();
         test_independent_tab_order_observed_geometry_and_guards();
         test_chart_value_tooltip_named_pair_and_xml_text();
+        test_embedded_chart_typed_variants_and_guards();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
         test_chart_summary_series_color_roundtrip_and_guards();
         test_chart_empty_render_cache_normalization_and_guards();

@@ -802,6 +802,7 @@ struct SpreadsheetDocumentCell final {
 };
 struct TableColumnControl {
     ControlKind kind = ControlKind::input_field;
+    std::optional<TypeDomainPatternValue> value_type;
     PropertySet properties;
 };
 

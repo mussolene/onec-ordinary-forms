@@ -944,8 +944,9 @@ void test_table_column_editor_schema(xmlNodePtr schema) {
     xmlNodePtr type = schema_component(schema, "complexType", "TableColumnControlType");
     expect(type != nullptr, "Table Column Control must have its named type");
     const auto elements = direct_children(direct_child(type, "sequence"), "element");
-    const std::array<std::pair<std::string_view, std::string_view>, 5> expected{{
-        {"Enabled", "xs:boolean"}, {"ReadOnly", "xs:boolean"}, {"Caption", "xs:string"},
+    const std::array<std::pair<std::string_view, std::string_view>, 6> expected{{
+        {"ValueType", "TypeDomainValueType"}, {"Enabled", "xs:boolean"},
+        {"ReadOnly", "xs:boolean"}, {"Caption", "xs:string"},
         {"ToolTip", "xs:string"}, {"Font", "FontValueType"},
     }};
     expect(elements.size() == expected.size(), "Table Column Control must expose only named properties");
@@ -1300,7 +1301,7 @@ void test_document_instances(xmlSchemaPtr schema) {
 <Form id="1" name="RowsForm" ordinaryFormVersion="2.1">
   <Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
   <ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns>
-    <Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column>
+    <Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"><ValueType><Entry term="date" date="true" time="false"/></ValueType></Control></Column>
     <Column name="Choice"><DataPath>Code</DataPath><Header><Item language="en">Choice</Item></Header><Control type="ChoiceField"><Enabled>true</Enabled><ToolTip/></Control></Column>
     <Column name="Checked"><DataPath>Active</DataPath><Header><Item language="en">Checked</Item></Header><Control type="CheckBox"><Enabled>true</Enabled><Caption/><ToolTip/><Font kind="automatic"/></Control></Column>
   </Columns></Table></ChildItems>

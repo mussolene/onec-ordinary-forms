@@ -1451,6 +1451,8 @@ const list_stream::ListValue& input_field_flag_value(
 
 using InputFieldFlagValues = std::array<bool, input_field_flag_mappings.size()>;
 
+enum class InputFieldPairMode { payload_only, require_matching_pair };
+
 bool is_single_date_only_type_domain(const model::TypeDomainPatternValue& value) {
     return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::date &&
         value.entries.front().date == model::DateQualifiers{true, false};
@@ -1467,11 +1469,14 @@ struct InputFieldLayoutValues {
     std::int32_t choice_list_height = 0;
 };
 
-InputFieldFlagValues decode_input_field_flags(const LV& info, std::string_view path) {
+InputFieldFlagValues decode_input_field_flags(
+    const LV& info, std::string_view path, InputFieldPairMode pair_mode) {
     const auto paired_path = child_path(path, 3);
-    require_arity(info.items[3], 2, paired_path);
-    require_arity(info.items[3].items[1], 2, child_path(paired_path, 1));
-    require_arity(info.items[3].items[1].items[1], 7, child_path(child_path(paired_path, 1), 1));
+    if (pair_mode == InputFieldPairMode::require_matching_pair) {
+        require_arity(info.items[3], 2, paired_path);
+        require_arity(info.items[3].items[1], 2, child_path(paired_path, 1));
+        require_arity(info.items[3].items[1].items[1], 7, child_path(child_path(paired_path, 1), 1));
+    }
     InputFieldFlagValues flags{};
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
@@ -1480,7 +1485,7 @@ InputFieldFlagValues decode_input_field_flags(const LV& info, std::string_view p
                 child_path(child_path(child_path(child_path(path, 2), 0), 0), mapping.slot) :
                 child_path(child_path(child_path(path, 2), 0), mapping.slot);
         flags[index] = bool_atom(input_field_flag_value(info, mapping), flag_path);
-        if (mapping.paired_slot != no_paired_slot) {
+        if (pair_mode == InputFieldPairMode::require_matching_pair && mapping.paired_slot != no_paired_slot) {
             const auto paired_value = bool_atom(
                 info.items[3].items[1].items[1].items[mapping.paired_slot],
                 child_path(child_path(child_path(child_path(path, 3), 1), 1), mapping.paired_slot));
@@ -1966,6 +1971,24 @@ void warn_incomplete_profile(
     std::uint64_t raw_id,
     std::string_view path,
     std::string_view kind);
+
+bool same_list_stream_shape(const LV& left, const LV& right) {
+    if (left.is_list != right.is_list) return false;
+    if (!left.is_list) return left.atom_kind == right.atom_kind;
+    if (left.items.size() != right.items.size()) return false;
+    for (std::size_t index = 0; index < left.items.size(); ++index) {
+        if (!same_list_stream_shape(left.items[index], right.items[index])) return false;
+    }
+    return true;
+}
+
+void require_list_stream_shape(const LV& actual, const LV& expected, std::string_view path,
+    std::string_view description) {
+    if (!same_list_stream_shape(actual, expected)) {
+        fail("OOF1114", std::string(path), std::string(description), describe(actual),
+            "Stored record has an unsupported structural shape");
+    }
+}
 
 struct DecodedOwnerPages {
     std::vector<model::Page> pages;
@@ -2730,6 +2753,14 @@ std::string explicit_string(
     std::string_view name,
     std::string_view default_value = {});
 
+constexpr std::string_view table_value_list_editor_type_guid = "83a29520-06e8-4348-989c-abe69e8e33e2";
+
+LV canonical_table_value_list_type_pair(std::string_view path) {
+    const model::TypeDomainPatternValue empty_type;
+    return list({raw("1"), list({raw(std::string(table_value_list_editor_type_guid)),
+        list({raw("0"), encoded_type_domain(empty_type, path)})})});
+}
+
 LV canonical_table_column_editor_info(const model::TableColumnControl& control) {
     constexpr std::string_view path = "$/Table/Columns/Column/Control";
     if (control.kind == model::ControlKind::input_field) {
@@ -2739,16 +2770,42 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control) 
             flags[index] = input_field_flag_mappings[index].default_value;
         }
         const model::TypeDomainPatternValue empty_type;
+        const auto& value_type = control.value_type.value_or(empty_type);
+        if (!value_type.entries.empty()) {
+            if (value_type.entries.size() != 1) {
+                fail("OOF1122", std::string(path) + "/ValueType",
+                    "single String, Numeric, Date-only, Boolean, or ValueList TypeDomain",
+                    std::to_string(value_type.entries.size()) + " entries",
+                    "Table Column InputField ValueType is outside the proven typed profile");
+            }
+            const auto term = value_type.entries.front().term;
+            const bool supported = term == model::TypeDomainTerm::string ||
+                term == model::TypeDomainTerm::numeric || term == model::TypeDomainTerm::boolean ||
+                term == model::TypeDomainTerm::value_list || is_single_date_only_type_domain(value_type);
+            if (!supported) {
+                fail("OOF1122", std::string(path) + "/ValueType",
+                    "single String, Numeric, Date-only, Boolean, or ValueList TypeDomain",
+                    std::to_string(static_cast<unsigned>(term)),
+                    "Table Column InputField ValueType is outside the proven typed profile");
+            }
+        }
         const bool enabled = explicit_bool(control.properties, "Enabled", true);
         const bool read_only = explicit_bool(control.properties, "ReadOnly", false);
-        if (!enabled || read_only) {
-            fail("OOF1122", std::string(path), "Enabled=true and ReadOnly=false",
-                enabled ? "ReadOnly=true" : "Enabled=false",
-                "Table Column editor property value is outside the supported persisted profile");
-        }
         LV info = canonical_input_field_info(
             empty_type, enabled, read_only, flags, InputFieldTextValues{}, InputFieldLayoutValues{});
-        info.items[3] = list({raw("0")});
+        info.items[1] = encoded_type_domain(value_type, std::string(path) + "/ValueType");
+        if (!value_type.entries.empty() && value_type.entries.size() == 1 &&
+            value_type.entries.front().term == model::TypeDomainTerm::string) {
+            info.items[2].items[0].items[14] = raw(std::to_string(value_type.entries.front().string.length));
+        } else {
+            info.items[2].items[0].items[14] = raw("0");
+        }
+        if (value_type.entries.size() == 1 &&
+            value_type.entries.front().term == model::TypeDomainTerm::value_list) {
+            info.items[3] = canonical_table_value_list_type_pair(std::string(path) + "/ValueType");
+        } else if (value_type.entries.empty()) {
+            info.items[3] = list({raw("0")});
+        }
         return info;
     }
     if (control.kind == model::ControlKind::choice_field) {
@@ -2792,7 +2849,9 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
     }
     properties.items[1] = encoded_localized(column.header);
     properties.items[30] = string_value(column.name);
-    properties.items[35] = encoded_type_domain(model::TypeDomainPatternValue{}, std::string(path) + "/Control/TypeRestriction");
+    properties.items[35] = encoded_type_domain(
+        column.control.value_type.value_or(model::TypeDomainPatternValue{}),
+        std::string(path) + "/Control/ValueType");
     properties.items[38] = raw(std::string(model::metamodel::descriptor_for(column.control.kind).guid));
     properties.items[39] = encode_table_column_editor_packet(
         canonical_table_column_editor_info(column.control), std::string(path) + "/Control");
@@ -3424,6 +3483,32 @@ struct DecodedControl {
     std::vector<model::PictureAsset> menu_assets;
 };
 
+struct DecodedChartInfo {
+    model::ChartPayload payload;
+    std::string title;
+};
+
+DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete);
+
+// Общий блок диаграммы проверяется тем же кодеком у всех его владельцев.
+void validate_embedded_chart_info(const LV& actual, const LV& expected,
+    const std::string& path, std::uint64_t owner_id, std::string_view owner_kind,
+    Diagnostics& warnings, bool& reconstruction_complete) {
+    require_arity(actual, 3, path);
+    require_exact(actual.items[0], expected.items[0], child_path(path, 0),
+        "Embedded Chart marker is unsupported");
+    require_exact(actual.items[1], expected.items[1], child_path(path, 1),
+        "Embedded Chart geometry header is unsupported");
+    Diagnostics chart_warnings;
+    bool chart_complete = true;
+    static_cast<void>(decode_chart_info(actual.items[2], child_path(path, 2), owner_id,
+        chart_warnings, chart_complete));
+    // Эти свойства еще не представлены у владельца, поэтому проекция неполна.
+    if (list_stream::dump_compact(actual) != list_stream::dump_compact(expected))
+        warn_incomplete_profile(warnings, reconstruction_complete, owner_id, path, owner_kind);
+}
+
 std::size_t control_geometry_slot(std::string_view guid) {
     return guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid ||
         guid == model::metamodel::descriptor_for(model::ControlKind::geographical_schema_field).guid ? 4 : 3;
@@ -3804,7 +3889,8 @@ std::vector<std::tuple<model::ObjectId, std::string, std::string>> decode_gantt_
 }
 
 void require_gantt_dimension_table_match(const LV& actual, const LV& expected,
-                                         std::string_view path) {
+                                         std::string_view path, std::uint64_t control_id,
+                                         Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(actual, 2, path);
     require_arity(expected, 2, path);
     if (list_stream::dump_compact(actual.items[0]) != list_stream::dump_compact(expected.items[0]))
@@ -3826,20 +3912,50 @@ void require_gantt_dimension_table_match(const LV& actual, const LV& expected,
                 list_stream::dump_compact(expected_rows.items[i]), list_stream::dump_compact(actual_rows.items[i]),
                 "Gantt dimension table header differs from its canonical value");
     }
+    struct KeyedRow {
+        const LV* entry{};
+        std::string value_tail_path;
+    };
     const auto keyed_rows = [&](const LV& rows, std::string_view rows_path) {
-        std::map<std::uint64_t, std::string> by_key;
+        std::map<std::uint64_t, KeyedRow> by_key;
         for (std::size_t i = 0; i <= count; ++i) {
             const auto cursor = 3 + 2 * i;
             const auto key = integer_atom<std::uint64_t>(rows.items[cursor], child_path(rows_path, cursor));
-            if (!by_key.emplace(key, list_stream::dump_compact(rows.items[cursor + 1])).second)
+            const auto entry_path = child_path(rows_path, cursor + 1);
+            const auto& entry = rows.items[cursor + 1];
+            if (!by_key.emplace(key, KeyedRow{&entry, child_path(child_path(entry_path, 1), 10)}).second)
                 fail("OOF1114", child_path(rows_path, cursor), "unique dimension ID", std::to_string(key), "Gantt dimension ID is duplicated");
         }
         return by_key;
     };
     const auto actual_by_key = keyed_rows(actual_rows, child_path(path, 1));
     const auto expected_by_key = keyed_rows(expected_rows, child_path(path, 1));
-    if (actual_by_key != expected_by_key)
-        fail("OOF1114", child_path(path, 1), "same named row records by dimension ID", "row content differs", "Gantt dimension row differs from its canonical named value");
+    if (actual_by_key.size() != expected_by_key.size())
+        fail("OOF1114", child_path(path, 1), "same named row records by dimension ID", "row count differs", "Gantt dimension row differs from its canonical named value");
+    for (const auto& [key, expected_row] : expected_by_key) {
+        const auto actual_it = actual_by_key.find(key);
+        if (actual_it == actual_by_key.end())
+            fail("OOF1114", child_path(path, 1), "same named row IDs", "row ID is missing", "Gantt dimension row differs from its canonical named value");
+        const LV& actual_entry = *actual_it->second.entry;
+        const LV& expected_entry = *expected_row.entry;
+        LV comparable_actual = actual_entry;
+        if (key == 0) {
+            require_arity(actual_entry, actual.items[0].atom == "1" ? 4 : 2, child_path(path, 1));
+            require_arity(expected_entry, actual.items[0].atom == "1" ? 4 : 2, child_path(path, 1));
+            require_arity(actual_entry.items[1], 11, actual_it->second.value_tail_path.substr(0, actual_it->second.value_tail_path.rfind('/')));
+            require_arity(expected_entry.items[1], 11, child_path(path, 1));
+            const auto actual_tail = integer_atom<std::uint32_t>(actual_entry.items[1].items[10], actual_it->second.value_tail_path);
+            const auto expected_tail = integer_atom<std::uint32_t>(expected_entry.items[1].items[10], expected_row.value_tail_path);
+            if (actual_tail != expected_tail) {
+                warn_incomplete_profile(warnings, reconstruction_complete, control_id,
+                    actual_it->second.value_tail_path, "GanttChart");
+                comparable_actual.items[1].items[10] = expected_entry.items[1].items[10];
+            }
+        }
+        if (list_stream::dump_compact(comparable_actual) != list_stream::dump_compact(expected_entry))
+            fail("OOF1114", child_path(path, 1), "same row records by dimension ID apart from the unrepresented default numeric word",
+                "row content differs", "Gantt dimension row differs from its canonical named value");
+    }
     const std::size_t tail = 5 + 2 * count;
     for (std::size_t i = tail; i < actual_rows.items.size(); ++i) {
         if (list_stream::dump_compact(actual_rows.items[i]) != list_stream::dump_compact(expected_rows.items[i]))
@@ -3873,7 +3989,8 @@ void normalize_gantt_runtime_layout_values(const LV& actual, LV& normalized, std
 
 
 DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
-                                  const GeometryContext& context) {
+                                  const GeometryContext& context, Diagnostics& warnings,
+                                  bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::gantt_chart);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -3947,13 +4064,33 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
             model::DateValue{value_codec::date_from_platform(raw_atom(info.items[13 + shift], child_path(info_path, 13 + shift)))});
     }
     const LV expected = encode_gantt_chart_info(control);
-    require_gantt_dimension_table_match(info.items[2], expected.items[2], child_path(info_path, 2));
-    require_gantt_dimension_table_match(info.items[3], expected.items[3], child_path(info_path, 3));
+    require_gantt_dimension_table_match(info.items[2], expected.items[2], child_path(info_path, 2), id,
+        warnings, reconstruction_complete);
+    require_gantt_dimension_table_match(info.items[3], expected.items[3], child_path(info_path, 3), id,
+        warnings, reconstruction_complete);
     LV normalized = info;
     normalized.items[2] = expected.items[2];
     normalized.items[3] = expected.items[3];
     LV expected_with_platform_layout = expected;
     normalize_gantt_runtime_layout_values(info, expected_with_platform_layout, info_path);
+    validate_embedded_chart_info(info.items[1], expected_with_platform_layout.items[1],
+        child_path(info_path, 1), id, "GanttChart", warnings, reconstruction_complete);
+    normalized.items[1] = expected_with_platform_layout.items[1];
+    for (const auto offset : {std::size_t{12}, std::size_t{13}, std::size_t{14}}) {
+        const auto index = offset + shift;
+        static_cast<void>(value_codec::date_from_platform(raw_atom(info.items[index], child_path(info_path, index))));
+        if (offset == 14 || auto_full) normalized.items[index] = expected.items[index];
+    }
+    static_cast<void>(integer_atom<std::uint32_t>(info.items[15 + shift], child_path(info_path, 15 + shift)));
+    static_cast<void>(decode_control_color(info.items[25 + shift], child_path(info_path, 25 + shift)));
+    normalized.items[15 + shift] = expected.items[15 + shift];
+    normalized.items[25 + shift] = expected.items[25 + shift];
+    for (const auto offset : {std::size_t{12}, std::size_t{13}, std::size_t{14}, std::size_t{15}, std::size_t{25}}) {
+        const auto index = offset + shift;
+        if (list_stream::dump_compact(info.items[index]) != list_stream::dump_compact(normalized.items[index])) {
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(info_path, index), "GanttChart");
+        }
+    }
     if (list_stream::dump_compact(expected_with_platform_layout) != list_stream::dump_compact(normalized))
         fail("OOF1114", info_path, "canonical Gantt info generated from named data", "unsupported private settings or table fields", "Gantt info differs from the proven typed storage profile");
 
@@ -5305,15 +5442,9 @@ LV encode_chart(const model::ControlNode& control, const GeometryContext& contex
         list({raw("0")})});
 }
 
-DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context) {
-    require_arity(record, 7, path);
-    require_raw_constant(at(record, 0, path), model::metamodel::descriptor_for(model::ControlKind::chart).guid, child_path(path, 0));
-    require_exact(at(record, 2, path), list({raw("11")}), child_path(path, 2), "Chart geometry header is unsupported");
-    require_exact(at(record, 6, path), list({raw("0")}), child_path(path, 6), "Chart child-record section is unsupported");
-    const auto id = integer_atom<std::uint64_t>(at(record, 1, path), child_path(path, 1));
-    const auto& info = at(record, 3, path);
-    require_list(info, child_path(path, 3));
-    const auto info_path = child_path(path, 3);
+DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete) {
+    require_list(info, info_path);
     if (info.items.size() < 222) fail("OOF1102", info_path, "Chart info base and collection counts", describe(info), "Chart Info is truncated");
     require_raw_constant(at(info, 0, info_path), "75", child_path(info_path, 0));
     const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
@@ -5438,9 +5569,7 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
         summary_marker.member == "Auto" ? "1" : "3", summary_marker_cache_path);
     payload.summary_series.marker = summary_marker;
     payload.summary_series.color = summary_color;
-    model::ControlNode control{model::ObjectId{id}, string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)), std::move(payload)};
-    if (!title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), title);
-    const auto expected_info = encode_chart_info(std::get<model::ChartPayload>(control.payload), title);
+    const auto expected_info = encode_chart_info(payload, title);
     const auto render_start = cells_end + data_defaults.size() + series_size + 1 + style_defaults.size() +
         static_cast<std::size_t>(point_count) + series_size + 1;
     auto normalized_expected_info = expected_info;
@@ -5451,7 +5580,39 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
         }
     }
     apply_chart_render_cache(info, normalized_expected_info, middle_start, render_start, info_path);
-    require_exact(info, normalized_expected_info, info_path, "Chart Info contains unsupported non-named values");
+    const auto tooltip_companions_start = render_start + canonical_chart_render_defaults().size();
+    for (std::size_t cell = 0; cell < payload.values.size(); ++cell) {
+        const auto index = tooltip_companions_start + cell;
+        require_exact(at(info, index, info_path), at(expected_info, index, info_path), child_path(info_path, index),
+            "Chart Tooltip text fragment differs from its named value");
+    }
+    auto shape_info = info;
+    for (const auto offset : {std::size_t{31}, std::size_t{32}, std::size_t{33}}) {
+        const auto index = middle_start + offset;
+        static_cast<void>(decode_control_font(at(info, index, info_path), child_path(info_path, index)));
+        shape_info.items[index] = normalized_expected_info.items[index];
+    }
+    require_list_stream_shape(shape_info, normalized_expected_info, info_path,
+        "Chart profile with valid record arity and atom types");
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(normalized_expected_info)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, id, info_path, "Chart");
+    }
+    return {std::move(payload), title};
+}
+
+DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
+    require_arity(record, 7, path);
+    require_raw_constant(at(record, 0, path), model::metamodel::descriptor_for(model::ControlKind::chart).guid, child_path(path, 0));
+    require_exact(at(record, 2, path), list({raw("11")}), child_path(path, 2), "Chart geometry header is unsupported");
+    require_exact(at(record, 6, path), list({raw("0")}), child_path(path, 6), "Chart child-record section is unsupported");
+    const auto id = integer_atom<std::uint64_t>(at(record, 1, path), child_path(path, 1));
+    auto decoded = decode_chart_info(at(record, 3, path), child_path(path, 3), id,
+        warnings, reconstruction_complete);
+    model::ControlNode control{model::ObjectId{id},
+        string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)),
+        std::move(decoded.payload)};
+    if (!decoded.title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), decoded.title);
     const auto expected_metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
     require_exact(at(record, 5, path), expected_metadata, child_path(path, 5), "Chart metadata contains unsupported fields");
     const auto geometry = decode_geometry(at(record, 4, path), child_path(path, 4), context);
@@ -5863,7 +6024,9 @@ DecodedControl decode_choice_field(
     const LV& record,
     std::string_view path,
     const AttributeRecord* linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings,
+    bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5885,18 +6048,25 @@ DecodedControl decode_choice_field(
     const auto& info_properties = info.items[1];
     const auto info_properties_path = child_path(info_path, 1);
     require_arity(info_properties, 46, info_properties_path);
+    require_raw_constant(info_properties.items[1], "31", child_path(info_properties_path, 1));
     const auto& base_properties = info_properties.items[0];
     const auto base_path = child_path(info_properties_path, 0);
     const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{false, true});
     const bool enabled = common.enabled;
     const auto& border_color = *common.border_color;
     const auto& tool_tip = common.tool_tip;
+    require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
+        "ChoiceField cannot contain storage children");
     auto normalized_info = info;
     normalized_info.items[1].items[0].items[6] =
         encode_control_color(border_color, child_path(base_path, 6));
     normalized_info.items[1].items[0].items[12] = encoded_localized(tool_tip);
-    require_exact(normalized_info, canonical_choice_field_info(enabled, tool_tip, border_color), info_path,
-        "ChoiceField contains a property, event, or storage variation outside the observed basic profile");
+    const LV canonical_info = canonical_choice_field_info(enabled, tool_tip, border_color);
+    require_list_stream_shape(normalized_info, canonical_info, info_path,
+        "ChoiceField profile with valid record arity and atom types");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_info)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "ChoiceField");
+    }
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -5908,9 +6078,14 @@ DecodedControl decode_choice_field(
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
             "ChoiceField name is required");
     }
-    require_exact(metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "ChoiceField metadata record is unsupported");
+    for (std::size_t index = 3; index < metadata.items.size(); ++index) {
+        static_cast<void>(integer_atom<std::int64_t>(metadata.items[index], child_path(metadata_path, index)));
+    }
+    require_raw_constant(metadata.items[2], "4294967295", child_path(metadata_path, 2));
+    if (list_stream::dump_compact(metadata) != list_stream::dump_compact(
+            list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}))) {
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, metadata_path, "ChoiceField");
+    }
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "ChoiceField cannot contain storage children");
 
@@ -6179,6 +6354,7 @@ void fill_dendrogram_collection(LV& wrapper, const std::vector<LV>& rows, const 
 struct DecodedDendrogramItems {
     std::vector<model::DendrogramItem> values_in_chain_order;
     std::map<std::uint32_t, std::string> values_by_key;
+    std::optional<std::string> unrepresented_word_path;
 };
 
 DecodedDendrogramItems decode_dendrogram_items(const LV& wrapper, std::string_view path) {
@@ -6189,10 +6365,30 @@ DecodedDendrogramItems decode_dendrogram_items(const LV& wrapper, std::string_vi
         fail("OOF1114", std::string(path), "Dendrogram item collection", describe(sequence), "Dendrogram Items collection is malformed");
     const auto count = integer_atom<std::uint32_t>(sequence.items[2], child_path(path, 1));
     if (count == 0) fail("OOF1122", std::string(path), "one sentinel and an item collection", std::to_string(count), "Dendrogram item collection count is invalid");
+    DecodedDendrogramItems result;
     if (count == 1) {
         const auto defaults = canonical_dendrogram_data(0);
-        require_exact(wrapper, defaults.items[2], path, "Empty Dendrogram Items must retain the canonical factory collection");
-        return {};
+        const auto sequence_path = child_path(path, 1);
+        require_arity(sequence, 8, sequence_path);
+        require_raw_constant(sequence.items[0], "3", child_path(sequence_path, 0));
+        require_raw_constant(sequence.items[1], "0", child_path(sequence_path, 1));
+        require_raw_constant(sequence.items[2], "1", child_path(sequence_path, 2));
+        require_raw_constant(sequence.items[3], "0", child_path(sequence_path, 3));
+        const auto sentinel_path = child_path(sequence_path, 4);
+        require_arity(sequence.items[4], 2, sentinel_path);
+        require_raw_constant(sequence.items[4].items[0], "0", child_path(sentinel_path, 0));
+        const auto sentinel_value_path = child_path(sentinel_path, 1);
+        require_arity(sequence.items[4].items[1], 11, sentinel_value_path);
+        const auto final_word_path = child_path(sentinel_value_path, 10);
+        const auto final_word = integer_atom<std::uint32_t>(sequence.items[4].items[1].items[10], final_word_path);
+        LV comparable = wrapper;
+        const auto& expected_wrapper = defaults.items[2];
+        const auto expected_word = integer_atom<std::uint32_t>(expected_wrapper.items[1].items[4].items[1].items[10], final_word_path);
+        if (final_word != expected_word) result.unrepresented_word_path = final_word_path;
+        comparable.items[1].items[4].items[1].items[10] = expected_wrapper.items[1].items[4].items[1].items[10];
+        require_exact(comparable, expected_wrapper, path,
+            "Empty Dendrogram Items must retain the canonical collection except its unrepresented numeric word");
+        return result;
     }
     const auto indexed_fields = sequence.items.size() - 6;
     if (indexed_fields % 2 != 0 || indexed_fields / 2 != static_cast<std::size_t>(count))
@@ -6200,7 +6396,6 @@ DecodedDendrogramItems decode_dendrogram_items(const LV& wrapper, std::string_vi
     const auto row_count = static_cast<std::size_t>(count) - 1;
     std::map<std::uint32_t, model::DendrogramItem> items_by_key;
     std::map<std::uint32_t, std::uint32_t> next_by_key;
-    DecodedDendrogramItems result;
     std::set<std::string> values;
     for (std::size_t index = 0; index < row_count; ++index) {
         const auto entry_index = 4 + index * 2;
@@ -6215,7 +6410,8 @@ DecodedDendrogramItems decode_dendrogram_items(const LV& wrapper, std::string_vi
             integer_atom<std::uint32_t>(row.items[1], path) != pointer ||
             integer_atom<std::uint32_t>(row.items[2], path) != 0 ||
             integer_atom<std::uint32_t>(row.items[3], path) != 0 ||
-            integer_atom<std::uint32_t>(row.items[5], path) != 0 || integer_atom<std::uint32_t>(row.items[10], path) != 0)
+            integer_atom<std::uint32_t>(row.items[5], path) != 0 ||
+            integer_atom<std::uint32_t>(row.items[10], child_path(child_path(child_path(child_path(path, 1), entry_index), 1), 10)) != 0)
             fail("OOF1114", child_path(path, entry_index), "supported Dendrogram item row", describe(row), "Dendrogram item metadata is unsupported");
         if (pointer == 0 || pointer > row_count || items_by_key.contains(pointer))
             fail("OOF1114", child_path(path, key_index), "unique item key in the collection range", std::to_string(pointer), "Dendrogram item key is invalid");
@@ -6380,7 +6576,9 @@ std::vector<model::DendrogramLink> decode_dendrogram_links(const LV& wrapper, co
 DecodedControl decode_dendrogram(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings,
+    bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::dendrogram);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -6401,12 +6599,17 @@ DecodedControl decode_dendrogram(
     const auto data_path = child_path(path, 2);
     auto items = decode_dendrogram_items(record.items[2].items[2], child_path(data_path, 2));
     auto links = decode_dendrogram_links(record.items[2].items[3], items, child_path(data_path, 3));
+    if (items.unrepresented_word_path)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, *items.unrepresented_word_path, "Dendrogram");
     model::DendrogramPayload graph;
     graph.items = items.values_in_chain_order;
     graph.links = links;
     validate_dendrogram_graph(graph, child_path(data_path, 2));
     normalized_data.items[2] = expected_data.items[2];
     normalized_data.items[3] = expected_data.items[3];
+    validate_embedded_chart_info(record.items[2].items[1], expected_data.items[1],
+        child_path(data_path, 1), raw_id, "Dendrogram", warnings, reconstruction_complete);
+    normalized_data.items[1] = expected_data.items[1];
     require_exact(normalized_data, expected_data, data_path,
         "Dendrogram contains unsupported tree style or extension values");
     auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -6805,7 +7008,8 @@ DecodedControl decode_input_field(
     }
     const auto choice_list_height = integer_atom<std::int32_t>(
         payload.items[31], child_path(payload_path, 31));
-    const auto input_field_flags = decode_input_field_flags(info, info_path);
+    const auto input_field_flags = decode_input_field_flags(
+        info, info_path, InputFieldPairMode::require_matching_pair);
     const InputFieldTextValues text_values{tool_tip, format};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height};
     if (list_stream::dump_compact(info) != list_stream::dump_compact(
@@ -6858,7 +7062,9 @@ DecodedControl decode_input_field(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
-model::TableColumn decode_table_column(const LV& value, std::string_view path) {
+model::TableColumn decode_table_column(
+    const LV& value, std::string_view path, std::uint64_t table_id,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(value, 2, path);
     require_raw_constant(value.items[0], "737535a4-21e6-4971-8513-3e3173a9fedd", child_path(path, 0));
     const auto body_path = child_path(path, 1);
@@ -6872,6 +7078,7 @@ model::TableColumn decode_table_column(const LV& value, std::string_view path) {
     const auto properties_path = child_path(info_path, 1);
     const auto& properties = info.items[1];
     require_arity(properties, 52, properties_path);
+    require_raw_constant(properties.items[0], "23", child_path(properties_path, 0));
 
     model::TableColumn column;
     column.name = string_atom(properties.items[30], child_path(properties_path, 30));
@@ -6897,7 +7104,7 @@ model::TableColumn decode_table_column(const LV& value, std::string_view path) {
         fail("OOF1122", child_path(properties_path, 38), "InputField, ChoiceField, or CheckBox GUID",
             describe(editor_guid), "Table Column editor kind is unsupported");
     }
-    static_cast<void>(type_domain(properties.items[35], child_path(properties_path, 35)));
+    const auto column_type = type_domain(properties.items[35], child_path(properties_path, 35));
     const auto inflated = decode_table_column_editor_packet(
         properties.items[39], child_path(properties_path, 39));
     constexpr std::size_t envelope_prefix_size = sizeof(std::uint64_t) + 3;
@@ -6912,28 +7119,126 @@ model::TableColumn decode_table_column(const LV& value, std::string_view path) {
     }
     column.control.kind = editor_kind;
     const auto editor_path = child_path(properties_path, 39);
+    bool input_field_pair_absent = false;
+    bool input_field_scalar_pair = false;
     if (editor_kind == model::ControlKind::input_field) {
         require_arity(editor_info, 10, editor_path);
+        require_raw_constant(editor_info.items[0], "9", child_path(editor_path, 0));
         require_arity(editor_info.items[2], 1, child_path(editor_path, 2));
         const auto payload_path = editor_path + "/payload";
         const auto base_path = editor_path + "/base";
         require_arity(editor_info.items[2].items[0], 46, payload_path);
+        require_raw_constant(editor_info.items[2].items[0].items[1], "31", child_path(payload_path, 1));
         require_arity(editor_info.items[2].items[0].items[0], 21, base_path);
+        require_raw_constant(editor_info.items[2].items[0].items[0].items[0], "19", child_path(base_path, 0));
+        auto embedded_type = type_domain(editor_info.items[1], child_path(editor_path, 1));
+        if (embedded_type != column_type) {
+            fail("OOF1122", child_path(editor_path, 1), "ValueType matching Table Column ValueType",
+                describe(editor_info.items[1]), "Embedded editor and Table Column ValueType disagree");
+        }
+        const auto paired_path = child_path(editor_path, 3);
+        require_list(editor_info.items[3], paired_path);
+        if (editor_info.items[3].items.size() == 1) {
+            require_exact(editor_info.items[3], list({raw("0")}), paired_path,
+                "Table Column InputField has an unsupported empty paired record");
+            input_field_pair_absent = true;
+        } else {
+            require_arity(editor_info.items[3], 2, paired_path);
+            require_raw_constant(editor_info.items[3].items[0], "1", child_path(paired_path, 0));
+            if (embedded_type.entries.size() == 1 &&
+                embedded_type.entries.front().term == model::TypeDomainTerm::value_list) {
+                require_exact(editor_info.items[3], canonical_table_value_list_type_pair(
+                    child_path(editor_path, 1)), paired_path,
+                    "Table Column ValueList editor type restriction is unsupported");
+            } else if (embedded_type.entries.size() == 1 &&
+                (embedded_type.entries.front().term == model::TypeDomainTerm::string ||
+                 embedded_type.entries.front().term == model::TypeDomainTerm::numeric ||
+                 embedded_type.entries.front().term == model::TypeDomainTerm::boolean ||
+                 is_single_date_only_type_domain(embedded_type))) {
+                InputFieldFlagValues defaults{};
+                for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+                    defaults[index] = input_field_flag_mappings[index].default_value;
+                }
+                const model::TypeDomainPatternValue empty_type;
+                const LV standard_info = canonical_input_field_info(
+                    empty_type, true, false, defaults, InputFieldTextValues{}, InputFieldLayoutValues{});
+                const auto& standard_pair = standard_info.items[3];
+                require_arity(standard_pair, 2, paired_path);
+                require_arity(standard_pair.items[1], 2, child_path(paired_path, 1));
+                require_arity(editor_info.items[3].items[1], 2, child_path(paired_path, 1));
+                require_exact(editor_info.items[3].items[1].items[0], standard_pair.items[1].items[0],
+                    child_path(child_path(paired_path, 1), 0),
+                    "Table Column InputField paired type descriptor is unsupported");
+                input_field_scalar_pair = true;
+            } else {
+                fail("OOF1122", paired_path,
+                    "absent pair or proven scalar/ValueList InputField pair",
+                    describe(editor_info.items[3]),
+                    "Table Column InputField paired metadata does not match its named ValueType");
+            }
+        }
+        static_cast<void>(decode_input_field_flags(editor_info, editor_path,
+            input_field_scalar_pair ? InputFieldPairMode::require_matching_pair : InputFieldPairMode::payload_only));
+        if (!embedded_type.entries.empty()) column.control.value_type = std::move(embedded_type);
         const bool enabled = bool_atom(editor_info.items[2].items[0].items[0].items[1], editor_path);
         const bool read_only = bool_atom(editor_info.items[2].items[0].items[13], editor_path);
-        if (!enabled || read_only) {
-            fail("OOF1122", editor_path, "Enabled=true and ReadOnly=false",
-                enabled ? "ReadOnly=true" : "Enabled=false",
-                "Table Column InputField is outside its persisted profile");
+        if (!enabled) column.control.properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
+        if (read_only) column.control.properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+    } else {
+        if (!column_type.entries.empty()) {
+            fail("OOF1122", child_path(properties_path, 35), "empty ValueType for non-InputField editor",
+                describe(properties.items[35]), "Table Column ValueType is supported only for an InputField editor");
+        }
+        const auto embedded_payload_path = child_path(editor_path, 1);
+        const LV* enabled_atom = nullptr;
+        if (editor_kind == model::ControlKind::choice_field) {
+            require_arity(editor_info, 3, editor_path);
+            require_raw_constant(editor_info.items[0], "2", child_path(editor_path, 0));
+            require_arity(editor_info.items[1], 46, embedded_payload_path);
+            require_raw_constant(editor_info.items[1].items[1], "31", child_path(embedded_payload_path, 1));
+            require_arity(editor_info.items[1].items[0], 21, child_path(embedded_payload_path, 0));
+            require_raw_constant(editor_info.items[1].items[0].items[0], "19",
+                child_path(child_path(embedded_payload_path, 0), 0));
+            require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
+                "Table Column ChoiceField cannot contain storage children");
+            enabled_atom = &editor_info.items[1].items[0].items[1];
+        } else {
+            require_arity(editor_info, 3, editor_path);
+            require_raw_constant(editor_info.items[0], "1", child_path(editor_path, 0));
+            require_arity(editor_info.items[1], 7, embedded_payload_path);
+            require_arity(editor_info.items[1].items[0], 9, child_path(embedded_payload_path, 0));
+            require_raw_constant(editor_info.items[1].items[0].items[1], "7",
+                child_path(child_path(embedded_payload_path, 0), 1));
+            require_arity(editor_info.items[1].items[0].items[0], 21,
+                child_path(child_path(embedded_payload_path, 0), 0));
+            require_raw_constant(editor_info.items[1].items[0].items[0].items[0], "19",
+                child_path(child_path(child_path(embedded_payload_path, 0), 0), 0));
+            require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
+                "Table Column CheckBox cannot contain storage children");
+            enabled_atom = &editor_info.items[1].items[0].items[0].items[1];
+        }
+        const bool enabled = bool_atom(*enabled_atom, editor_path);
+        if (!enabled) {
+            fail("OOF1122", editor_path, "Enabled=true for non-InputField editor", "Enabled=false",
+                "Table Column ChoiceField and CheckBox Enabled=false is outside the proven profile");
         }
     }
-    require_exact(editor_info, canonical_table_column_editor_info(column.control), editor_path,
-        "embedded Table Column editor is outside its typed default property profile");
+    const LV canonical_editor = canonical_table_column_editor_info(column.control);
+    LV shape_editor = editor_info;
+    if (input_field_pair_absent) shape_editor.items[3] = canonical_editor.items[3];
+    require_list_stream_shape(shape_editor, canonical_editor, editor_path,
+        "typed Table Column editor with valid record arity and atom types");
+    if (list_stream::dump_compact(editor_info) != list_stream::dump_compact(canonical_editor)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, table_id, editor_path, "TableColumn");
+    }
     LV normalized = value;
     const LV canonical = canonical_table_column_record(column, path);
     normalized.items[1].items[1].items[1].items[39] = canonical.items[1].items[1].items[1].items[39];
-    require_exact(normalized, canonical, path,
-        "Table Column contains an unsupported property, event, or storage variation");
+    require_list_stream_shape(normalized, canonical, path,
+        "Table Column with valid record arity and atom types");
+    if (list_stream::dump_compact(normalized) != list_stream::dump_compact(canonical)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, table_id, path, "TableColumn");
+    }
     return column;
 }
 
@@ -6941,7 +7246,9 @@ DecodedControl decode_table(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings,
+    bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -6957,13 +7264,23 @@ DecodedControl decode_table(
     const auto& info = record.items[2];
     require_arity(info, 5, info_path);
     require_raw_constant(info.items[0], "5", child_path(info_path, 0));
+    require_arity(info.items[2], 2, child_path(info_path, 2));
+    require_arity(info.items[2].items[1], 39, child_path(child_path(info_path, 2), 1));
+    require_arity(info.items[2].items[0], 21, child_path(child_path(info_path, 2), 0));
+    require_raw_constant(info.items[2].items[0].items[0], "19",
+        child_path(child_path(child_path(info_path, 2), 0), 0));
+    require_raw_constant(info.items[2].items[1].items[0], "23",
+        child_path(child_path(child_path(info_path, 2), 1), 0));
+    require_exact(info.items[3],
+        list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})}),
+        child_path(info_path, 3), "Table editor envelope header is unsupported");
+    require_exact(info.items[4], list({raw("0")}), child_path(info_path, 4),
+        "Table cannot contain storage children");
     const auto stored_type = type_domain(info.items[1], child_path(info_path, 1));
     if (stored_type != linked_attribute.type) {
         fail("OOF1122", child_path(info_path, 1), "Table ValueType matching linked ValueTable Attribute",
             describe(info.items[1]), "Table DataPath and ValueType disagree");
     }
-    require_arity(info.items[2], 2, child_path(info_path, 2));
-    require_arity(info.items[2].items[1], 39, child_path(child_path(info_path, 2), 1));
     const auto columns_path = child_path(child_path(child_path(info_path, 2), 1), 23);
     const auto& stored_columns = info.items[2].items[1].items[23];
     require_list(stored_columns, columns_path);
@@ -6984,13 +7301,17 @@ DecodedControl decode_table(
         model::ObjectId{static_cast<std::uint64_t>(linked_attribute.id.object_id)}}, {}};
     control.position = geometry.position;
     const bool first_in_group = bool_atom(record.items[4].items[5], child_path(metadata_path, 5));
+    static_cast<void>(integer_atom<std::int64_t>(record.items[4].items[3], child_path(metadata_path, 3)));
+    static_cast<void>(integer_atom<std::int64_t>(record.items[4].items[4], child_path(metadata_path, 4)));
     if (first_in_group) {
         control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
     }
     auto& table = std::get<model::TablePayload>(control.payload);
     table.columns.reserve(stored_columns.items.size() - 1);
     for (std::size_t index = 1; index < stored_columns.items.size(); ++index) {
-        table.columns.push_back(decode_table_column(stored_columns.items[index], child_path(columns_path, index)));
+        table.columns.push_back(decode_table_column(
+            stored_columns.items[index], child_path(columns_path, index), raw_id,
+            warnings, reconstruction_complete));
     }
     LV normalized_info = info;
     const auto flags = integer_atom<std::uint32_t>(info.items[2].items[1].items[1],
@@ -7004,11 +7325,16 @@ DecodedControl decode_table(
         normalized_columns.items[index].items[1].items[1].items[1].items[39] =
             canonical_columns.items[index].items[1].items[1].items[1].items[39];
     }
-    require_exact(normalized_info, canonical_info, info_path,
-        "Table contains a property or storage variation outside the typed profile");
-    require_exact(record.items[4],
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
-        metadata_path, "Table metadata record is unsupported");
+    require_list_stream_shape(normalized_info, canonical_info, info_path,
+        "Table with valid property and column record arity and atom types");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_info)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "Table");
+    }
+    require_raw_constant(record.items[4].items[2], "4294967295", child_path(metadata_path, 2));
+    const LV expected_metadata = list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")});
+    if (list_stream::dump_compact(record.items[4]) != list_stream::dump_compact(expected_metadata)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, metadata_path, "Table");
+    }
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "Table cannot contain storage children");
     return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
@@ -8831,7 +9157,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const GeometryContext context{owner, static_cast<std::uint32_t>(page_index), slot->ordinal};
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
-                    if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context);
+                    if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
@@ -8854,7 +9180,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                             fail("OOF1122", "$/2/3", "no DataPath link for Dendrogram",
                                 std::to_string(candidate_id), "Dendrogram DataPath storage is unsupported");
                         }
-                        child = decode_dendrogram(record, record_path, context);
+                        child = decode_dendrogram(record, record_path, context, warnings, reconstruction_complete);
                     }
                     else if (guid == spreadsheet_descriptor.guid)
                         child = decode_spreadsheet_document_field(record, record_path, context, warnings, reconstruction_complete);
@@ -8903,7 +9229,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                             linked_attribute = attribute_it->second;
                         }
                         if (choice_field_guid) {
-                            child = decode_choice_field(record, record_path, linked_attribute, context);
+                            child = decode_choice_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                             if (linked_attribute != nullptr) {
                                 child.control.data_path = model::DataPath{model::AttributeRef{
                                     model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
@@ -8923,14 +9249,14 @@ Result<model::OrdinaryFormDocument> decode_document(
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
-                            child = decode_table(record, record_path, *linked_attribute, context);
+                            child = decode_table(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                         } else {
                             child = decode_progress_bar(record, record_path, context, linked_attribute, warnings, reconstruction_complete);
                         }
                     } else if (guid == track_bar_descriptor.guid) {
                         child = decode_track_bar(record, record_path, context, warnings, reconstruction_complete);
                     } else if (guid == model::metamodel::descriptor_for(model::ControlKind::gantt_chart).guid) {
-                        child = decode_gantt_chart(record, record_path, context);
+                        child = decode_gantt_chart(record, record_path, context, warnings, reconstruction_complete);
                     } else if (guid == panel_descriptor.guid) {
                         require_arity(record, 6, record_path);
                         const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));

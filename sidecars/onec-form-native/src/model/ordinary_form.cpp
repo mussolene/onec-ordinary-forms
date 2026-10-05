@@ -272,9 +272,13 @@ bool table_column_editor_property_allowed(ControlKind kind, std::string_view nam
     }
 }
 
-bool table_column_editor_property_default(std::string_view name, const PropertyValue& value) {
-    if (name == "Enabled") return std::holds_alternative<bool>(value) && std::get<bool>(value);
-    if (name == "ReadOnly") return std::holds_alternative<bool>(value) && !std::get<bool>(value);
+bool table_column_editor_property_value_supported(
+    ControlKind kind, std::string_view name, const PropertyValue& value) {
+    if (name == "Enabled") {
+        return std::holds_alternative<bool>(value) &&
+            (kind == ControlKind::input_field || std::get<bool>(value));
+    }
+    if (name == "ReadOnly") return kind == ControlKind::input_field && std::holds_alternative<bool>(value);
     if (name == "Caption" || name == "ToolTip") {
         return std::holds_alternative<std::string>(value) && std::get<std::string>(value).empty();
     }
@@ -1425,12 +1429,23 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         invalid_table("Table Column Header languages must be non-empty and unique");
                     }
                 }
+                if (column.control.value_type.has_value()) {
+                    if (column.control.kind != ControlKind::input_field) {
+                        invalid_table("Table Column ValueType is supported only for an InputField editor");
+                    } else {
+                        try {
+                            (void)storage::value_codec::encode_type_domain(*column.control.value_type);
+                        } catch (const std::exception&) {
+                            invalid_table("Table Column InputField ValueType is not supported by the typed codec");
+                        }
+                    }
+                }
                 column.control.properties.for_each_explicit([&](const PropertyEntry& entry) {
                     const auto* property = metamodel::find_property(column.control.kind, entry.id);
                     if (!table_column_editor_property_allowed(column.control.kind,
                             property == nullptr ? std::string_view{} : property->api_name) ||
                         !property_value_matches(*property, entry.value) ||
-                        !table_column_editor_property_default(property->api_name, entry.value)) {
+                        !table_column_editor_property_value_supported(column.control.kind, property->api_name, entry.value)) {
                         invalid_table("Table Column editor has an incompatible, unsupported, or nondefault property");
                         return;
                     }

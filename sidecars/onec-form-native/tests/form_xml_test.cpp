@@ -1237,7 +1237,7 @@ void test_table_columns_named_profile() {
   <Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
   <ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns>
     <Column name="Code"><DataPath>Code</DataPath><Header><Item language="ru">Код</Item></Header>
-      <Control type="InputField"><Enabled>true</Enabled><ReadOnly>false</ReadOnly></Control>
+      <Control type="InputField"><ValueType><Entry term="date" date="true" time="false"/></ValueType><Enabled>false</Enabled><ReadOnly>true</ReadOnly></Control>
     </Column>
     <Column name="CodeCopy"><DataPath>Code</DataPath><Header><Item language="en">Code copy</Item></Header>
       <Control type="InputField"/>
@@ -1257,10 +1257,15 @@ void test_table_columns_named_profile() {
     expect(table != nullptr && std::get<model::TablePayload>(table->payload).columns.size() == 4,
         "Table must own its ordered typed Columns");
     const auto& columns = std::get<model::TablePayload>(table->payload).columns;
-    expect(columns[0].data_path == columns[1].data_path && columns[0].data_path == columns[2].data_path &&
+    expect(columns[0].control.value_type.has_value() && columns[0].control.value_type->entries.size() == 1 &&
+               columns[0].control.value_type->entries[0].term == model::TypeDomainTerm::date &&
+               columns[0].control.value_type->entries[0].date == model::DateQualifiers{true, false} &&
+               std::get<bool>(columns[0].control.properties.find(model::PropertyId::from_name("Enabled"))->value) == false &&
+               std::get<bool>(columns[0].control.properties.find(model::PropertyId::from_name("ReadOnly"))->value) == true &&
+               columns[0].data_path == columns[1].data_path && columns[0].data_path == columns[2].data_path &&
                columns[2].control.kind == model::ControlKind::choice_field &&
                columns[3].control.kind == model::ControlKind::check_box &&
-               columns[0].control.properties.empty() && columns[2].control.properties.empty() &&
+               columns[2].control.properties.empty() &&
                columns[3].control.properties.empty(),
         "duplicate DataPath is allowed and typed editor defaults normalize away");
     auto serialized = source::serialize_form_xml(parsed.value());
@@ -1275,6 +1280,12 @@ void test_table_columns_named_profile() {
                std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
                        .columns[3].control.kind == model::ControlKind::check_box,
         "Table Column XML must survive a source roundtrip");
+    expect(serialized.value().find("<ValueType>") != std::string::npos &&
+               std::get<model::TablePayload>(reparsed.value().find_control(model::ObjectId{3})->payload)
+                   .columns[0].control.value_type == columns[0].control.value_type &&
+               serialized.value().find("<Enabled>false</Enabled>") != std::string::npos &&
+               serialized.value().find("<ReadOnly>true</ReadOnly>") != std::string::npos,
+        "Table InputField TypeDomain, Enabled, and ReadOnly must remain named in XML");
 
     std::string duplicate_name(valid);
     const auto duplicate_pos = duplicate_name.find("name=\"CodeCopy\"");
@@ -1300,10 +1311,19 @@ void test_table_columns_named_profile() {
     expect(!source::parse_form_xml(check_caption).ok(),
         "CheckBox must reject a ChoiceField property even when it carries the platform default");
 
-    std::string nondefault_editor(valid);
-    const auto enabled_pos = nondefault_editor.find("<Enabled>true</Enabled>");
-    nondefault_editor.replace(enabled_pos, std::string("<Enabled>true</Enabled>").size(), "<Enabled>false</Enabled>");
-    expect(!source::parse_form_xml(nondefault_editor).ok(), "unverified persisted editor Enabled=false must fail closed");
+    std::string choice_value_type(valid);
+    const auto choice_type_pos = choice_value_type.find("<Control type=\"ChoiceField\">");
+    choice_value_type.insert(choice_type_pos + std::string("<Control type=\"ChoiceField\">").size(),
+        "<ValueType><Entry term=\"string\" length=\"64\" variable=\"false\"/></ValueType>");
+    expect(!source::parse_form_xml(choice_value_type).ok(),
+        "Table editor ValueType must remain restricted to the proven InputField owner");
+
+    std::string choice_disabled(valid);
+    const auto choice_enabled_pos = choice_disabled.find("<Control type=\"ChoiceField\">");
+    choice_disabled.insert(choice_enabled_pos + std::string("<Control type=\"ChoiceField\">").size(),
+        "<Enabled>false</Enabled>");
+    expect(!source::parse_form_xml(choice_disabled).ok(),
+        "Table ChoiceField Enabled=false must remain unsupported until separately proven");
 
     std::string wrong_source(valid);
     const auto type_pos = wrong_source.find("term=\"valueTable\"");

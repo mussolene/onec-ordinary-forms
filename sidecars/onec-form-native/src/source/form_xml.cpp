@@ -1102,15 +1102,17 @@ bool equals_descriptor_default(
     return false;
 }
 
-bool equals_table_column_editor_default(
+bool valid_table_column_editor_property(
     model::ControlKind kind,
     const mm::PropertyDescriptor& descriptor,
     const model::PropertyValue& value) {
-    if (kind == model::ControlKind::input_field) {
-        if (descriptor.api_name == "Enabled") return std::holds_alternative<bool>(value) && std::get<bool>(value);
-        if (descriptor.api_name == "ReadOnly") return std::holds_alternative<bool>(value) && !std::get<bool>(value);
-        return false;
+    if (descriptor.api_name == "Enabled") {
+        return std::holds_alternative<bool>(value) &&
+            (kind == model::ControlKind::input_field || std::get<bool>(value));
     }
+    if (descriptor.api_name == "ReadOnly")
+        return kind == model::ControlKind::input_field && std::holds_alternative<bool>(value);
+    if (kind == model::ControlKind::input_field) return false;
     return equals_descriptor_default(descriptor, value);
 }
 
@@ -2004,6 +2006,27 @@ private:
                     std::set<std::string> control_properties;
                     for (xmlNodePtr property_node : element_children(field)) {
                         const std::string property_name = node_name(property_node);
+                        if (property_name == "ValueType") {
+                            if (column.control.kind != model::ControlKind::input_field) {
+                                fail("OOF2003", property_node, std::string(owner), property_name,
+                                    "ValueType on an InputField editor", property_name,
+                                    "Table Column editor ValueType is supported only for InputField");
+                            }
+                            for (xmlAttrPtr attr = property_node->properties; attr != nullptr; attr = attr->next) {
+                                fail("OOF2003", property_node, std::string(owner),
+                                    std::string(reinterpret_cast<const char*>(attr->name)),
+                                    "ValueType without attributes", "attribute present",
+                                    "Table Column ValueType does not accept attributes");
+                            }
+                            if (!control_properties.insert(property_name).second) {
+                                fail("OOF2003", property_node, std::string(owner), property_name,
+                                    "ValueType at most once", "duplicate",
+                                    "Duplicate Table Column editor ValueType");
+                            }
+                            auto value_type = parse_type_domain(property_node);
+                            if (!value_type.entries.empty()) column.control.value_type = std::move(value_type);
+                            continue;
+                        }
                         const bool supported_property =
                             (column.control.kind == model::ControlKind::input_field &&
                                 (property_name == "Enabled" || property_name == "ReadOnly")) ||
@@ -2025,10 +2048,13 @@ private:
                         }
                         const model::PropertyValue value = parse_property_value(
                             property_node, descriptor->value_codec, owner);
-                        if (!equals_table_column_editor_default(column.control.kind, *descriptor, value)) {
+                        if (!valid_table_column_editor_property(column.control.kind, *descriptor, value)) {
                             fail("OOF2003", property_node, std::string(owner), property_name,
-                                "the observed default value", node_text(property_node),
-                                "Table Column editor only supports observed default property values");
+                                "a supported typed property value", node_text(property_node),
+                                "Table Column editor property value is unsupported");
+                        }
+                        if (!equals_descriptor_default(*descriptor, value)) {
+                            column.control.properties.set_explicit(descriptor->id, value);
                         }
                     }
                     control_seen = true;
@@ -3467,17 +3493,50 @@ private:
                      (column.control.kind == model::ControlKind::check_box &&
                         (descriptor->api_name == "Enabled" || descriptor->api_name == "Caption" ||
                             descriptor->api_name == "ToolTip" || descriptor->api_name == "Font")));
-                if (!supported || !equals_table_column_editor_default(column.control.kind, *descriptor, entry.value)) {
+                if (!supported || !valid_table_column_editor_property(column.control.kind, *descriptor, entry.value)) {
                     serialization_fail(std::string(owner), "Column/Control/" +
                         (descriptor == nullptr ? std::string("unknown") : std::string(descriptor->xml_name)),
-                        "compatible observed default property", "unsupported or nondefault value",
-                        "Table Column editor property is outside its typed default profile");
+                        "compatible typed property", "unsupported value",
+                        "Table Column editor property is outside its supported typed profile");
                 }
             });
             writer_.open("Column", {{"name", column.name}});
             writer_.text("DataPath", column.data_path);
             write_localized("Header", column.header, owner);
             writer_.open("Control", {{"type", std::string(control_type)}});
+            if (column.control.value_type.has_value()) {
+                if (column.control.kind != model::ControlKind::input_field) {
+                    serialization_fail(std::string(owner), "Column/Control/ValueType",
+                        "InputField ValueType", "other editor kind",
+                        "Table Column ValueType is supported only for InputField");
+                }
+                if (!column.control.value_type->entries.empty())
+                    write_type_domain("ValueType", *column.control.value_type, owner);
+            }
+            const auto write_editor_property = [&](std::string_view name) {
+                const auto* descriptor = metamodel_.property(column.control.kind, name);
+                if (descriptor == nullptr) return;
+                const auto* entry = column.control.properties.find(descriptor->id);
+                if (entry == nullptr || equals_descriptor_default(*descriptor, entry->value)) return;
+                if (!valid_table_column_editor_property(column.control.kind, *descriptor, entry->value)) {
+                    serialization_fail(std::string(owner), "Column/Control/" + std::string(descriptor->xml_name),
+                        "supported typed property value", "unsupported value",
+                        "Table Column editor property value is unsupported");
+                }
+                write_property(*descriptor, entry->value, owner);
+            };
+            if (column.control.kind == model::ControlKind::input_field) {
+                write_editor_property("Enabled");
+                write_editor_property("ReadOnly");
+            } else if (column.control.kind == model::ControlKind::choice_field) {
+                write_editor_property("Enabled");
+                write_editor_property("ToolTip");
+            } else {
+                write_editor_property("Enabled");
+                write_editor_property("Caption");
+                write_editor_property("ToolTip");
+                write_editor_property("Font");
+            }
             writer_.close("Control");
             writer_.close("Column");
         }
