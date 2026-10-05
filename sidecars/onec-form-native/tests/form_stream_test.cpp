@@ -3043,7 +3043,7 @@ void test_command_bar_standard_menu_action_round_trip_and_guards() {
         model::CommandBarButton close;
         close.name = "Close";
         close.standard_action = model::StandardMenuAction{
-            model::StandardMenuCommand::close, model::ControlRef{command_bar_id}, source};
+            model::StandardMenuCommand::close, model::ControlRef{command_bar_id}, source, model::StandardMenuActionContext::command_bar, {}};
         std::get<model::CommandBarPayload>(secondary.payload).buttons = {close};
         document.add_control(std::move(secondary));
         return document;
@@ -3086,14 +3086,14 @@ void test_command_bar_standard_menu_action_round_trip_and_guards() {
         expect(decoded.ok() && decoded_payload && decoded_payload->buttons.size() == 1 &&
                    decoded_payload->buttons.front().name == "Close" &&
                    decoded_payload->buttons.front().standard_action == model::StandardMenuAction{
-                       model::StandardMenuCommand::close, model::ControlRef{model::ObjectId{4}}, menu_source} &&
+                       model::StandardMenuCommand::close, model::ControlRef{model::ObjectId{4}}, menu_source, model::StandardMenuActionContext::command_bar, {}} &&
                    !decoded_payload->buttons.front().action && decoded.value().collections().events.empty(),
             "standard action must retain its named command and CommandBar reference without a handler");
         const auto rebuilt = form_stream::encode_document(decoded.value());
         expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
             "standard menu action must round-trip through Form.bin without drift");
         const auto xml = source::serialize_form_xml(decoded.value());
-        expect(xml.ok() && xml.value().find("<StandardAction command=\"Close\" commandBarId=\"4\"") !=
+        expect(xml.ok() && xml.value().find("<StandardAction command=\"Close\" context=\"CommandBar\" commandBarId=\"4\"") !=
                    std::string::npos && xml.value().find("handler=\"") == std::string::npos,
             "StandardAction XML must expose named command/reference fields without a synthetic handler");
         const auto parsed = source::parse_form_xml(xml.value());
@@ -3140,10 +3140,10 @@ void test_command_bar_standard_menu_action_round_trip_and_guards() {
         }, "unknown StandardAction context GUID must reject");
         rejects_wire_mutation([](auto& payload) {
             payload.items.at(1) = list_stream::ListValue::raw_atom("9");
-        }, "unknown StandardAction source value must reject");
+        }, "dangling StandardAction source control must reject");
         rejects_wire_mutation([](auto& payload) {
-            payload.items.at(1) = list_stream::ListValue::raw_atom("7");
-        }, "unsupported StandardAction source control must reject");
+            payload.items.at(1) = list_stream::ListValue::raw_atom("2147483648");
+        }, "StandardAction source beyond positive int32 must reject");
     }
 
     expect(!form_stream::encode_document(make_document(model::StandardMenuActionSource::form,
@@ -3163,6 +3163,99 @@ void test_command_bar_standard_menu_action_round_trip_and_guards() {
     conflicting.add_control(std::move(conflicting_secondary));
     expect(!form_stream::encode_document(conflicting),
         "one menu item cannot carry both a handler Action and a StandardAction");
+}
+
+void test_standard_menu_action_default_context_and_control_source() {
+    const auto make_xml = [](std::string_view context, std::string_view source_name) {
+        return std::string("<Form id=\"1\" name=\"StandardDefault\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
+            "<CommandBar id=\"4\" name=\"Tools\"><Position/><Buttons><CommandBarButton name=\"Close\" type=\"Action\">" +
+            "<StandardAction command=\"Close\" context=\"" + std::string(context) + "\"" +
+            (context == "CommandBar" ? " commandBarId=\"4\"" : "") + " source=\"" + std::string(source_name) + "\"" +
+            (source_name == "Control" ? " sourceControlId=\"5\"" : "") + "/></CommandBarButton></Buttons></CommandBar>" +
+            "<Button id=\"5\" name=\"LaterSource\"><Position/></Button></ChildItems></Form>";
+    };
+    const auto find_action = [](auto& tree) -> auto& {
+        auto& records = tree.items.at(1).items.at(2).items.at(2).items;
+        auto record = std::ranges::find(records, std::string("4"), [](const auto& candidate) {
+            return candidate.is_list && candidate.items.size() > 1 && !candidate.items[1].is_list
+                ? candidate.items[1].atom : std::string{};
+        });
+        if (record == records.end()) throw std::runtime_error("StandardAction fixture control is missing");
+        return record->items.at(2).items.at(1).items.at(7).items.at(5).items.at(4);
+    };
+    const auto get_action = [](const auto& document) -> const model::StandardMenuAction& {
+        return *std::get<model::CommandBarPayload>(document.find_control(model::ObjectId{4})->payload)
+            .buttons.front().standard_action;
+    };
+    for (const auto context : {"Default", "CommandBar"}) {
+        for (const auto source_name : {"Form", "AllSources", "Control"}) {
+            const auto parsed = source::parse_form_xml(make_xml(context, source_name));
+            expect(parsed.ok(), parsed ? "named StandardAction variants must parse" : parsed.diagnostics().front().message);
+            const auto encoded = form_stream::encode_document(parsed.value());
+            expect(encoded.ok(), "each named StandardAction source/context combination must encode");
+            const auto& wire = find_action(encoded.value());
+            expect(wire.items.at(1).atom == (std::string_view(source_name) == "Form" ? "4294967295" :
+                std::string_view(source_name) == "AllSources" ? "0" : "5"), "source must encode independently of context");
+            expect(wire.items.at(4).items.at(1).atom == (std::string_view(context) == "Default" ? "0" : "99"),
+                "named context must select its exact platform descriptor");
+            if (std::string_view(context) == "Default")
+                expect(wire.items.at(4).items.at(3).atom == "2147483647", "Default context uses the platform constructor sentinel");
+            const auto decoded = form_stream::decode_document(encoded.value(), "StandardDefault");
+            expect(decoded.ok() && get_action(decoded.value()) == get_action(parsed.value()),
+                "control source declared after its action must resolve after all controls are decoded");
+            const auto xml = source::serialize_form_xml(decoded.value());
+            expect(xml.ok(), "named StandardAction must serialize to XML");
+            const auto reparsed = source::parse_form_xml(xml.value());
+            expect(reparsed.ok() && get_action(reparsed.value()) == get_action(parsed.value()), "named variants must round-trip through XML");
+            const auto rebuilt = form_stream::encode_document(reparsed.value());
+            expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()), "named variants must rebuild without storage drift");
+            const auto rejects = [&](const auto& mutate) {
+                auto invalid = encoded.value();
+                mutate(find_action(invalid));
+                expect(!form_stream::decode_document(invalid, "InvalidStandardDefault"), "malformed StandardAction state must reject");
+            };
+            rejects([](auto& action) { action.items.at(1) = list_stream::ListValue::raw_atom("999"); });
+            rejects([](auto& action) { action.items.at(1) = list_stream::ListValue::raw_atom("2147483648"); });
+            rejects([](auto& action) { action.items.at(4).items.at(1) = list_stream::ListValue::raw_atom("1"); });
+            rejects([](auto& action) { action.items.at(4).items.at(4) = list_stream::ListValue::raw_atom("1"); });
+            rejects([](auto& action) { action.items.at(5) = list_stream::ListValue::raw_atom("1"); });
+            if (std::string_view(context) == "Default") {
+                rejects([](auto& action) { action.items.at(4).items.at(2) = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000"); });
+                rejects([](auto& action) { action.items.at(4).items.at(3) = list_stream::ListValue::raw_atom("4"); });
+                rejects([](auto& action) { action.items.at(4).items.at(1) = list_stream::ListValue::raw_atom("99"); });
+            }
+        }
+    }
+    auto renumbered_xml = make_xml("Default", "Control");
+    for (const auto marker : {"sourceControlId=\"5\"", "Button id=\"5\""}) {
+        const auto at = renumbered_xml.find(marker);
+        expect(at != std::string::npos, "control renumber fixture marker must exist");
+        auto replacement = std::string(marker);
+        replacement[replacement.size() - 2] = '7';
+        renumbered_xml.replace(at, std::string_view(marker).size(), replacement);
+    }
+    const auto renumbered = source::parse_form_xml(renumbered_xml);
+    const auto encoded = form_stream::encode_document(renumbered.value());
+    const auto decoded = form_stream::decode_document(encoded.value(), "StandardRenumbered");
+    expect(decoded.ok() && get_action(decoded.value()).source_control == model::ControlRef{model::ObjectId{7}} &&
+        find_action(encoded.value()).items.at(1).atom == "7", "source reference must follow the editable control ID through XML and native storage");
+    const auto valid = source::parse_form_xml(make_xml("Default", "Control"));
+    const auto rejects_model = [&](const auto& mutate) {
+        auto invalid = valid.value();
+        auto bar = *invalid.find_control(model::ObjectId{4});
+        mutate(*std::get<model::CommandBarPayload>(bar.payload).buttons.front().standard_action);
+        invalid.add_control(std::move(bar));
+        expect(!invalid.validate().ok() && !form_stream::encode_document(invalid) && !source::serialize_form_xml(invalid),
+            "inconsistent typed StandardAction state must reject at model, native, and XML boundaries");
+    };
+    rejects_model([](auto& action) { action.command_bar = model::ControlRef{model::ObjectId{4}}; });
+    rejects_model([](auto& action) { action.source_control = model::ControlRef{}; });
+    rejects_model([](auto& action) { action.source_control = model::ControlRef{model::ObjectId{999}}; });
+    rejects_model([](auto& action) { action.source_control = model::ControlRef{model::ObjectId{2147483648ULL}}; });
+    rejects_model([](auto& action) { action.source = model::StandardMenuActionSource::form; });
+    rejects_model([](auto& action) { action.context = model::StandardMenuActionContext::command_bar; });
+    rejects_model([](auto& action) { action.context = static_cast<model::StandardMenuActionContext>(255); });
+    rejects_model([](auto& action) { action.source = static_cast<model::StandardMenuActionSource>(255); });
 }
 
 void test_command_bar_creation_state_and_strict_record_guards() {
@@ -10968,6 +11061,7 @@ int main() {
         test_command_bar_five_named_properties_and_invalid_variants();
         test_command_bar_named_action_source_references();
         test_command_bar_standard_menu_action_round_trip_and_guards();
+        test_standard_menu_action_default_context_and_control_source();
         test_command_bar_creation_state_and_strict_record_guards();
         test_command_bar_border_named_round_trip_and_guards();
         test_command_bar_colors_named_round_trip_and_guards();

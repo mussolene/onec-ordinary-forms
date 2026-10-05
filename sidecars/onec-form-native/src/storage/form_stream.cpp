@@ -2893,22 +2893,47 @@ constexpr std::string_view menu_action_guid = "e1692cc2-605b-4535-84dd-284402387
 constexpr std::string_view menu_reference_guid = "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6";
 constexpr std::string_view standard_menu_action_guid = "fbe38877-b914-4fd5-8540-07dde06ba2e1";
 
+// ControlCommandHandler constructor in frame.so: ELF 0x2034b04, kind 0, INT32_MAX, flag 0.
+constexpr std::string_view standard_menu_default_context_marker = "357c6a54-357d-425d-a2bd-22f4f6e86c87";
+
 LV encode_standard_menu_action(const model::StandardMenuAction& action,
                               const model::OrdinaryFormDocument& document, std::string_view path) {
     if (action.command != model::metamodel::standard_menu_close.kind)
         fail("OOF1122", std::string(path), "known standard menu command", "unknown", "Standard command is unsupported");
-    const auto* command_bar = document.find_control(action.command_bar.id());
-    if (!command_bar || command_bar->kind() != model::ControlKind::command_bar)
-        fail("OOF1123", std::string(path), "existing CommandBar context", "missing or wrong control kind", "Standard command context is invalid");
+    LV context;
+    switch (action.context) {
+        case model::StandardMenuActionContext::default_context:
+            if (action.command_bar.id().value() != 0)
+                fail("OOF1123", std::string(path), "Default context without CommandBar reference", "commandBarId", "Standard command context is invalid");
+            context = list({raw("1"), raw("0"), raw(std::string(standard_menu_default_context_marker)),
+                raw(std::to_string(std::numeric_limits<std::int32_t>::max())), raw("0")});
+            break;
+        case model::StandardMenuActionContext::command_bar: {
+            const auto* command_bar = document.find_control(action.command_bar.id());
+            if (!command_bar || command_bar->kind() != model::ControlKind::command_bar)
+                fail("OOF1123", std::string(path), "existing CommandBar context", "missing or wrong control kind", "Standard command context is invalid");
+            context = list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)),
+                raw(std::to_string(command_bar->id.value())), raw("0")});
+            break;
+        }
+        default: fail("OOF1122", std::string(path), "Default or CommandBar", "unknown", "Standard command context is unsupported");
+    }
     std::uint32_t source;
     switch (action.source) {
         case model::StandardMenuActionSource::form: source = std::numeric_limits<std::uint32_t>::max(); break;
         case model::StandardMenuActionSource::all_sources: source = 0; break;
-        default: fail("OOF1122", std::string(path), "Form or AllSources", "unknown", "Standard command source is unsupported");
+        case model::StandardMenuActionSource::control: {
+            const auto id = action.source_control.id().value();
+            if (id == 0 || id > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) ||
+                !document.find_control(action.source_control.id()))
+                fail("OOF1123", std::string(path), "positive int32 control reference", "missing or invalid", "Standard command source is invalid");
+            source = static_cast<std::uint32_t>(id);
+            break;
+        }
+        default: fail("OOF1122", std::string(path), "Form, AllSources, or Control", "unknown", "Standard command source is unsupported");
     }
     return list({raw("6"), raw(std::to_string(source)), raw(std::string(null_uuid)), raw(std::to_string(model::metamodel::standard_menu_close.storage_id)),
-        list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)),
-            raw(std::to_string(command_bar->id.value())), raw("0")}), raw("0"), raw("1")});
+        std::move(context), raw("0"), raw("1")});
 }
 
 model::StandardMenuAction decode_standard_menu_action(const LV& value, std::string_view path) {
@@ -2921,21 +2946,31 @@ model::StandardMenuAction decode_standard_menu_action(const LV& value, std::stri
     const auto& context = value.items[4];
     require_arity(context, 5, context_path);
     require_raw_constant(context.items[0], "1", child_path(context_path, 0));
-    require_raw_constant(context.items[1], "99", child_path(context_path, 1));
-    require_raw_constant(context.items[2], command_bar_root_marker, child_path(context_path, 2));
-    const auto context_id = integer_atom<std::uint64_t>(context.items[3], child_path(context_path, 3));
-    if (context_id == 0)
-        fail("OOF1123", child_path(context_path, 3), "nonzero CommandBar collection identity", "zero", "Standard command context is invalid");
     require_raw_constant(context.items[4], "0", child_path(context_path, 4));
     require_raw_constant(value.items[5], "0", child_path(path, 5));
     require_raw_constant(value.items[6], "1", child_path(path, 6));
     model::StandardMenuAction action;
     action.command = model::metamodel::standard_menu_close.kind;
-    // Resolved to a named ControlRef after all CommandBar collection identities are known.
-    action.command_bar = model::ControlRef{model::ObjectId{context_id}};
+    const auto kind = integer_atom<std::uint64_t>(context.items[1], child_path(context_path, 1));
+    if (kind == 0) {
+        require_raw_constant(context.items[2], standard_menu_default_context_marker, child_path(context_path, 2));
+        require_raw_constant(context.items[3], std::to_string(std::numeric_limits<std::int32_t>::max()), child_path(context_path, 3));
+        action.context = model::StandardMenuActionContext::default_context;
+    } else if (kind == 99) {
+        require_raw_constant(context.items[2], command_bar_root_marker, child_path(context_path, 2));
+        const auto context_id = integer_atom<std::uint64_t>(context.items[3], child_path(context_path, 3));
+        if (context_id == 0)
+            fail("OOF1123", child_path(context_path, 3), "nonzero CommandBar collection identity", "zero", "Standard command context is invalid");
+        action.context = model::StandardMenuActionContext::command_bar;
+        // Resolved after all CommandBar collection identities are known.
+        action.command_bar = model::ControlRef{model::ObjectId{context_id}};
+    } else fail("OOF1114", child_path(context_path, 1), "Default or CommandBar context", std::to_string(kind), "Standard command context is unsupported");
     if (source == std::numeric_limits<std::uint32_t>::max()) action.source = model::StandardMenuActionSource::form;
     else if (source == 0) action.source = model::StandardMenuActionSource::all_sources;
-    else fail("OOF1114", child_path(path, 1), "Form or AllSources", std::to_string(source), "Standard command source is unsupported");
+    else if (source <= static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
+        action.source = model::StandardMenuActionSource::control;
+        action.source_control = model::ControlRef{model::ObjectId{source}};
+    } else fail("OOF1114", child_path(path, 1), "Form, AllSources, or positive int32 control reference", std::to_string(source), "Standard command source is unsupported");
     return action;
 }
 
@@ -9031,7 +9066,7 @@ Result<model::OrdinaryFormDocument> decode_document(
             }
             const auto resolve_standard_contexts = [&](const auto& self, auto& entries) -> void {
                 for (auto& entry : entries) {
-                    if (entry.standard_action) {
+                    if (entry.standard_action && entry.standard_action->context == model::StandardMenuActionContext::command_bar) {
                         const auto found = command_bar_contexts.find(entry.standard_action->command_bar.id().value());
                         if (found == command_bar_contexts.end() || found->second.size() != 1)
                             fail("OOF1123", "$/Buttons/StandardAction", "unique CommandBar collection context",

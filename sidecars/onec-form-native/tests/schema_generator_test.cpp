@@ -1406,6 +1406,23 @@ void test_schema_structure_coverage_does_not_imply_codec_coverage(
         "classified Boolean value must validate");
 }
 
+void test_standard_menu_action_schema(xmlSchemaPtr schema) {
+    const auto make_xml = [](std::string_view attributes) {
+        return std::string("<Form id=\"1\" name=\"StandardSchema\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
+            "<CommandBar id=\"4\" name=\"Tools\"><Position/><Buttons><CommandBarButton name=\"Close\" type=\"Action\">" +
+            "<StandardAction command=\"Close\" " + std::string(attributes) + "/></CommandBarButton></Buttons></CommandBar></ChildItems></Form>";
+    };
+    for (const auto attributes : {"context=\"Default\" source=\"Form\"", "context=\"Default\" source=\"AllSources\"",
+        "context=\"Default\" source=\"Control\" sourceControlId=\"2147483647\"",
+        "context=\"CommandBar\" commandBarId=\"4\" source=\"Control\" sourceControlId=\"4\""})
+        expect(validate_document(schema, make_xml(attributes)) == 0, "named StandardAction variants must be schema-valid");
+    for (const auto attributes : {"context=\"Form\" source=\"Form\"", "source=\"Form\"",
+        "context=\"Default\" source=\"Other\"", "context=\"Default\" source=\"Control\" sourceControlId=\"0\"",
+        "context=\"Default\" source=\"Control\" sourceControlId=\"-1\"",
+        "context=\"Default\" source=\"Control\" sourceControlId=\"2147483648\""})
+        expect(validate_document(schema, make_xml(attributes)) != 0, "unsupported StandardAction enums and source ranges must fail XSD");
+}
+
 void test_tracked_schema_drift(const GeneratedSchemas& schemas) {
     const std::filesystem::path root = find_repository_root();
     expect(
@@ -1463,6 +1480,7 @@ int main() {
         test_schema_structure_coverage_does_not_imply_codec_coverage(
             metamodel,
             compiled_form.get());
+        test_standard_menu_action_schema(compiled_form.get());
         test_tracked_schema_drift(schemas);
     } catch (const std::exception& error) {
         std::cerr << "schema generator tests: FAIL: " << error.what() << '\n';

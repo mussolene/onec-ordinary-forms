@@ -879,9 +879,25 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     if (item.standard_action) {
                         const auto& standard = *item.standard_action;
                         if (standard.command != StandardMenuCommand::close) invalid("unknown StandardAction command");
-                        if (standard.source != StandardMenuActionSource::form && standard.source != StandardMenuActionSource::all_sources) invalid("unknown StandardAction source");
-                        const ControlNode* command_bar = find_control(standard.command_bar.id());
-                        if (command_bar == nullptr || command_bar->kind() != ControlKind::command_bar) invalid("StandardAction commandBarId must resolve to a CommandBar control");
+                        if (standard.context == StandardMenuActionContext::command_bar) {
+                            const ControlNode* command_bar = find_control(standard.command_bar.id());
+                            if (command_bar == nullptr || command_bar->kind() != ControlKind::command_bar)
+                                invalid("StandardAction commandBarId must resolve to a CommandBar control");
+                        } else if (standard.context == StandardMenuActionContext::default_context) {
+                            if (standard.command_bar.id().value() != 0)
+                                invalid("Default StandardAction context cannot have commandBarId");
+                        } else invalid("unknown StandardAction context");
+                        if (standard.source == StandardMenuActionSource::control) {
+                            const auto id = standard.source_control.id();
+                            if (id.value() == 0 || id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) ||
+                                find_control(id) == nullptr)
+                                invalid("StandardAction sourceControlId must be a positive int32 reference to an existing control");
+                        } else {
+                            if (standard.source != StandardMenuActionSource::form && standard.source != StandardMenuActionSource::all_sources)
+                                invalid("unknown StandardAction source");
+                            if (standard.source_control.id().value() != 0)
+                                invalid("StandardAction sourceControlId requires source Control");
+                        }
                     }
                     if (item.order != CommandBarButtonOrder::none && item.order != CommandBarButtonOrder::ascending && item.order != CommandBarButtonOrder::descending) invalid("unknown menu order");
                     if (item.type != CommandBarButtonKind::submenu && item.order != CommandBarButtonOrder::none) invalid("only Submenu menu items may have an order");

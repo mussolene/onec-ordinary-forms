@@ -1056,7 +1056,7 @@
           <Property name="Representation" russianName="Отображение"/><Property name="ClientInterfaceVariant" russianName="ВариантИнтерфейсаКлиентскогоПриложения" source="IClientInterfaceForCommand"/><Property name="Shortcut" russianName="СочетаниеКлавиш"/><Property name="Picture" russianName="Картинка"/><Property name="Action" russianName="Действие"/><Property name="StandardAction" russianName="СтандартноеДействие"/><Property name="Order" russianName="ПорядокКнопок"/><Property name="Buttons" russianName="Кнопки"/>
         </Properties></NamedConcept>
         <NamedConcept name="StandardAction" russianName="СтандартноеДействие"><Properties>
-          <Property name="command" russianName="Команда"/><Property name="commandBarId" russianName="КоманднаяПанель"/><Property name="source" russianName="Источник"/>
+          <Property name="command" russianName="Команда"/><Property name="context" russianName="Контекст"/><Property name="commandBarId" russianName="КоманднаяПанель"/><Property name="source" russianName="Источник"/><Property name="sourceControlId" russianName="ЭлементИсточника" source="IControlIdConvertor"/>
         </Properties></NamedConcept>
         <NamedConcept name="Action" russianName="Действие"><Properties>
           <Property name="handler" russianName="Обработчик"/><Property name="Name" russianName="Имя"/><Property name="Text" russianName="Текст"/><Property name="ToolTip" russianName="Подсказка"/><Property name="Description" russianName="Пояснение"/>

@@ -1925,7 +1925,7 @@ void test_standard_menu_action_xml_contract() {
             "<Button id=\"2\" name=\"Other\"><Position/></Button>" +
             "<CommandBar id=\"4\" name=\"Main\"><Position/><Buttons/></CommandBar>" +
             "<CommandBar id=\"5\" name=\"Secondary\"><Position/><Buttons>" +
-            "<CommandBarButton name=\"Close\" type=\"Action\"><StandardAction command=\"Close\" commandBarId=\"4\" source=\"" +
+            "<CommandBarButton name=\"Close\" type=\"Action\"><StandardAction command=\"Close\" context=\"CommandBar\" commandBarId=\"4\" source=\"" +
             std::string(source_name) + "\"/></CommandBarButton></Buttons></CommandBar>" +
             "</ChildItems></Form>";
     };
@@ -1939,12 +1939,12 @@ void test_standard_menu_action_xml_contract() {
         const auto* payload = secondary ? std::get_if<model::CommandBarPayload>(&secondary->payload) : nullptr;
         expect(payload && payload->buttons.size() == 1 && payload->buttons.front().name == "Close" &&
                    payload->buttons.front().standard_action == model::StandardMenuAction{
-                       model::StandardMenuCommand::close, model::ControlRef{model::ObjectId{4}}, source_value} &&
+                       model::StandardMenuCommand::close, model::ControlRef{model::ObjectId{4}}, source_value, model::StandardMenuActionContext::command_bar, {}} &&
                    !payload->buttons.front().action,
             "StandardAction XML must produce a named command and CommandBar reference without a handler");
         const auto serialized = source::serialize_form_xml(parsed.value());
         expect(serialized.ok() && serialized.value().find(
-                   std::string("<StandardAction command=\"Close\" commandBarId=\"4\" source=\"") +
+                   std::string("<StandardAction command=\"Close\" context=\"CommandBar\" commandBarId=\"4\" source=\"") +
                        source_name + "\"/>") != std::string::npos &&
                    serialized.value().find("handler=\"") == std::string::npos,
             "StandardAction serialization must retain its named source and avoid a synthetic handler");
@@ -1971,10 +1971,36 @@ void test_standard_menu_action_xml_contract() {
     expect(!source::parse_form_xml(replace_once(valid_xml, "commandBarId=\"4\"", "commandBarId=\"2\"")),
         "StandardAction reference to a non-CommandBar control must be rejected");
     expect(!source::parse_form_xml(replace_once(valid_xml,
-        "<StandardAction command=\"Close\" commandBarId=\"4\" source=\"Form\"/>",
+        "<StandardAction command=\"Close\" context=\"CommandBar\" commandBarId=\"4\" source=\"Form\"/>",
         "<Action handler=\"FakeHandler\" name=\"\"><Text/><ToolTip/><Description/></Action>"
-        "<StandardAction command=\"Close\" commandBarId=\"4\" source=\"Form\"/>")),
+        "<StandardAction command=\"Close\" context=\"CommandBar\" commandBarId=\"4\" source=\"Form\"/>")),
         "an item cannot combine handler Action and StandardAction");
+    const auto default_control = replace_once(replace_once(valid_xml, "context=\"CommandBar\" commandBarId=\"4\"", "context=\"Default\""),
+        "source=\"Form\"", "source=\"Control\" sourceControlId=\"2\"");
+    const auto parsed_control = source::parse_form_xml(default_control);
+    expect(parsed_control.ok(), "Default context and generic Button control source must parse");
+    const auto& control_action = *std::get<model::CommandBarPayload>(parsed_control.value().find_control(model::ObjectId{5})->payload)
+        .buttons.front().standard_action;
+    expect(control_action.context == model::StandardMenuActionContext::default_context && !control_action.command_bar &&
+        control_action.source == model::StandardMenuActionSource::control && control_action.source_control == model::ControlRef{model::ObjectId{2}},
+        "Default must have no CommandBar context reference and Control must have a typed source reference");
+    for (const auto bad_id : {"0", "-1", "2147483648", "999", "1"})
+        expect(!source::parse_form_xml(replace_once(default_control, "sourceControlId=\"2\"",
+            std::string("sourceControlId=\"") + bad_id + "\"")), "invalid, dangling, or form source control ID must reject");
+    expect(!source::parse_form_xml(replace_once(default_control, " sourceControlId=\"2\"", "")),
+        "Control source requires sourceControlId");
+    expect(!source::parse_form_xml(replace_once(default_control, "context=\"Default\"", "context=\"Default\" commandBarId=\"4\"")),
+        "Default context rejects mutually exclusive commandBarId");
+    expect(!source::parse_form_xml(replace_once(default_control, "context=\"Default\"", "context=\"CommandBar\"")),
+        "CommandBar context requires commandBarId");
+    expect(!source::parse_form_xml(replace_once(default_control, "context=\"Default\"", "context=\"Form\"")),
+        "unproven Form context must reject");
+    for (const auto source_name : {"Form", "AllSources"})
+        expect(!source::parse_form_xml(replace_once(default_control, "source=\"Control\"",
+            std::string("source=\"") + source_name + "\"")), "non-Control source rejects sourceControlId");
+    expect(!source::parse_form_xml(replace_once(default_control, " context=\"Default\"", "")),
+        "StandardAction requires an explicit named context");
+
 }
 
 void test_command_bar_action_source_xml_contract() {

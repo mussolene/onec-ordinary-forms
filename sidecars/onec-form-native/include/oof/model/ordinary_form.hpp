@@ -398,12 +398,15 @@ enum class CommandBarButtonOrder : std::uint8_t { none, ascending, descending };
 enum class ButtonRepresentation : std::uint8_t { automatic, picture, text, picture_text };
 enum class ClientInterfaceVariant : std::uint8_t { version8_0, version8_2_ordinary_app };
 enum class StandardMenuCommand : std::uint8_t { close };
-enum class StandardMenuActionSource : std::uint8_t { form, all_sources };
+enum class StandardMenuActionSource : std::uint8_t { form, all_sources, control };
+enum class StandardMenuActionContext : std::uint8_t { command_bar, default_context };
 
 struct StandardMenuAction {
     StandardMenuCommand command = StandardMenuCommand::close;
     ControlRef command_bar;
     StandardMenuActionSource source = StandardMenuActionSource::all_sources;
+    StandardMenuActionContext context = StandardMenuActionContext::command_bar;
+    ControlRef source_control;
     friend bool operator==(const StandardMenuAction&, const StandardMenuAction&) = default;
 };
 

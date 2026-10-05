@@ -2120,9 +2120,9 @@ private:
             else if (name == "StandardAction") {
                 for (xmlAttrPtr attr = child->properties; attr != nullptr; attr = attr->next) {
                     const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
-                    if (attr_name != "command" && attr_name != "commandBarId" && attr_name != "source") {
+                    if (attr_name != "command" && attr_name != "context" && attr_name != "commandBarId" && attr_name != "source" && attr_name != "sourceControlId") {
                         fail("OOF2003", child, std::string(owner), std::string(attr_name),
-                            "command, commandBarId, and source attributes", std::string(attr_name), "Unsupported StandardAction attribute");
+                            "command, context, commandBarId, source, and sourceControlId attributes", std::string(attr_name), "Unsupported StandardAction attribute");
                     }
                 }
                 model::StandardMenuAction action;
@@ -2130,11 +2130,29 @@ private:
                 if (command != mm::standard_menu_close.public_name)
                     fail("OOF2003", child, std::string(owner), "command", "Close", command, "Unknown standard menu command");
                 action.command = mm::standard_menu_close.kind;
-                action.command_bar = model::ControlRef{parse_object_id(required_attribute(child, "commandBarId", owner), child, "commandBarId", owner)};
+                const auto context = required_attribute(child, "context", owner);
+                const auto command_bar_id = optional_attribute(child, "commandBarId");
+                if (context == "CommandBar") {
+                    action.context = model::StandardMenuActionContext::command_bar;
+                    action.command_bar = model::ControlRef{parse_object_id(required_attribute(child, "commandBarId", owner), child, "commandBarId", owner)};
+                } else if (context == "Default") {
+                    action.context = model::StandardMenuActionContext::default_context;
+                    if (command_bar_id)
+                        fail("OOF2003", child, std::string(owner), "commandBarId", "absent for Default context", *command_bar_id, "Default context cannot have commandBarId");
+                } else fail("OOF2003", child, std::string(owner), "context", "Default or CommandBar", context, "Unknown standard menu action context");
                 const auto source = required_attribute(child, "source", owner);
+                const auto source_control_id = optional_attribute(child, "sourceControlId");
                 if (source == "Form") action.source = model::StandardMenuActionSource::form;
                 else if (source == "AllSources") action.source = model::StandardMenuActionSource::all_sources;
-                else fail("OOF2003", child, std::string(owner), "source", "Form or AllSources", source, "Unknown standard menu action source");
+                else if (source == "Control") {
+                    action.source = model::StandardMenuActionSource::control;
+                    const auto id = parse_object_id(required_attribute(child, "sourceControlId", owner), child, "sourceControlId", owner);
+                    if (id.value() == 0 || id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()))
+                        fail("OOF2003", child, std::string(owner), "sourceControlId", "positive int32 control reference", std::to_string(id.value()), "Standard action source reference is invalid");
+                    action.source_control = model::ControlRef{id};
+                } else fail("OOF2003", child, std::string(owner), "source", "Form, AllSources, or Control", source, "Unknown standard menu action source");
+                if (source != "Control" && source_control_id)
+                    fail("OOF2003", child, std::string(owner), "sourceControlId", "absent unless source is Control", *source_control_id, "Standard action source attributes are inconsistent");
                 item.standard_action = std::move(action);
             }
             else if (name == "Order") {
@@ -3169,10 +3187,19 @@ private:
                 const auto& action = *item.standard_action;
                 const char* command = action.command == mm::standard_menu_close.kind ? mm::standard_menu_close.public_name.data() : nullptr;
                 const char* source = action.source == model::StandardMenuActionSource::form ? "Form" :
-                    action.source == model::StandardMenuActionSource::all_sources ? "AllSources" : nullptr;
-                if (command == nullptr || source == nullptr)
-                    throw std::invalid_argument("Unknown StandardAction command or source");
-                writer_.empty("StandardAction", {{"command", command}, {"commandBarId", object_id_text(action.command_bar.id())}, {"source", source}});
+                    action.source == model::StandardMenuActionSource::all_sources ? "AllSources" :
+                    action.source == model::StandardMenuActionSource::control ? "Control" : nullptr;
+                const char* context = action.context == model::StandardMenuActionContext::default_context ? "Default" :
+                    action.context == model::StandardMenuActionContext::command_bar ? "CommandBar" : nullptr;
+                if (command == nullptr || source == nullptr || context == nullptr)
+                    throw std::invalid_argument("Unknown StandardAction command, context, or source");
+                XmlAttributes attributes{{"command", command}, {"context", context}};
+                if (action.context == model::StandardMenuActionContext::command_bar)
+                    attributes.emplace_back("commandBarId", object_id_text(action.command_bar.id()));
+                attributes.emplace_back("source", source);
+                if (action.source == model::StandardMenuActionSource::control)
+                    attributes.emplace_back("sourceControlId", object_id_text(action.source_control.id()));
+                writer_.empty("StandardAction", attributes);
             }
             if (item.type == model::CommandBarButtonKind::submenu && item.order != model::CommandBarButtonOrder::none) {
                 writer_.text("Order", item.order == model::CommandBarButtonOrder::ascending ? "Ascending" : "Descending");
