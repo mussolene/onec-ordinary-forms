@@ -61,6 +61,45 @@ model::CompositeIdValue composite(std::int64_t id, std::string uuid) {
     return model::CompositeIdValue{id, model::UuidValue{std::move(uuid)}, false};
 }
 
+void expect_header_bound_projection(const list_stream::ListValue& encoded, std::string_view form_name) {
+    const auto baseline = form_stream::decode_document(encoded, form_name);
+    expect(baseline.ok(), baseline ? "" : baseline.diagnostics().front().message);
+    const auto baseline_xml = source::serialize_form_xml(baseline.value());
+    expect(baseline_xml.ok(), "canonical model must serialize");
+    const auto actual_max = std::stoull(encoded.items[1].items[1].items[1].atom);
+    for (const auto stored_bound : {actual_max + 1,
+             static_cast<unsigned long long>(std::numeric_limits<std::uint32_t>::max() - 1)}) {
+        auto larger = encoded;
+        larger.items[1].items[1].items[1] = list_stream::ListValue::raw_atom(std::to_string(stored_bound));
+        auto decoded = form_stream::decode_document(larger, form_name);
+        expect(decoded.ok() && !decoded.value().reconstruction_complete() &&
+                   std::any_of(decoded.diagnostics().begin(), decoded.diagnostics().end(), [](const auto& item) {
+                       return item.code == "OOF1140" && item.path == "$/1/1/1";
+                   }), "a larger valid header bound must warn about incomplete reconstruction");
+        expect(decoded.value().validate().ok(), "synthetic identities and references must remain valid");
+        const auto rebuilt = form_stream::encode_document(decoded.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded),
+            "the canonical writer must derive the header from declared object identities");
+        // Compare all named identities independently of the already asserted provenance flag.
+        decoded.value().set_reconstruction_complete(baseline.value().reconstruction_complete());
+        const auto normalized_xml = source::serialize_form_xml(decoded.value());
+        expect(normalized_xml.ok() && normalized_xml.value() == baseline_xml.value(),
+            "root and nested Page IDs, event IDs and all references must be independent of unused header capacity");
+        const auto repeated = form_stream::decode_document(rebuilt.value(), form_name);
+        expect(repeated.ok(), repeated ? "" : repeated.diagnostics().front().message);
+        const auto repeated_xml = source::serialize_form_xml(repeated.value());
+        expect(repeated_xml.ok() && repeated_xml.value() == baseline_xml.value(),
+            "repeated named XML must preserve the canonical synthetic identities");
+    }
+    for (const auto bad_bound : {std::to_string(actual_max - 1), std::string("4294967295"),
+                                std::string("18446744073709551615"), std::string("invalid")}) {
+        auto invalid = encoded;
+        invalid.items[1].items[1].items[1] = list_stream::ListValue::raw_atom(bad_bound);
+        expect(!form_stream::decode_document(invalid, form_name),
+            "too-small, overflowing and malformed object-ID bounds must be rejected");
+    }
+}
+
 list_stream::ListValue versioned_record(std::uint32_t version, std::size_t arity) {
     std::vector<list_stream::ListValue> items(
         arity,
@@ -9796,6 +9835,7 @@ void test_root_pages_round_trip_with_page_local_control_order() {
 
     const auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), encoded ? "named root Pages must encode" : encoded.diagnostics().front().message);
+    expect_header_bound_projection(encoded.value(), "RootPages");
     auto payload = encoded.value().items[1].items[2].items[1].items[1];
     std::size_t incoming_end = 2;
     for (std::size_t edge = 0; edge < 6; ++edge) {
@@ -10132,6 +10172,7 @@ void test_recursive_panel_pages_keep_owner_geometry_separate() {
     expect(preflight.ok(), "recursive Panel fixture must satisfy model invariants");
     const auto encoded = form_stream::encode_document(document);
     expect(encoded.ok(), encoded ? "recursive Panel graph must encode" : encoded.diagnostics().front().message);
+    expect_header_bound_projection(encoded.value(), "NestedPanels");
     auto find_record = [](auto&& self, list_stream::ListValue& table, std::uint64_t id) -> list_stream::ListValue* {
         if (!table.is_list || table.items.empty()) return nullptr;
         for (std::size_t index = 1; index < table.items.size(); ++index) {

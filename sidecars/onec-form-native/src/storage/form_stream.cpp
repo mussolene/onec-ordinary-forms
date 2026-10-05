@@ -8987,6 +8987,9 @@ Result<model::OrdinaryFormDocument> decode_document(
         if (default_owner_id == 0) fail("OOF1114", "$/1/1/2", "default owner ID or uint32 sentinel", "0", "Default action owner is invalid");
         if (form_close_handler && stored_max_id == std::numeric_limits<std::uint64_t>::max())
             fail("OOF1120", "$/4", "allocatable Form.OnClose ID", "uint64 max", "Synthetic event ID overflows");
+        if (stored_max_id >= std::numeric_limits<std::uint32_t>::max())
+            fail("OOF1120", "$/1/1/1", "object-ID bound below uint32 max", std::to_string(stored_max_id),
+                "Form header object-ID bound exceeds the supported allocator range");
 
         const std::int32_t width = integer_atom<std::int32_t>(form_section.items[3], "$/1/3");
         const std::int32_t height = integer_atom<std::int32_t>(form_section.items[4], "$/1/4");
@@ -9414,15 +9417,6 @@ Result<model::OrdinaryFormDocument> decode_document(
             }
         };
         decode_child_table(root_panel.items[2], root_pages, GeometryOwner{FormGeometryOwner{}}, root_incoming, "$/1/2/2");
-        if (implicit_default_page) {
-            for (const auto& child : root_pages[0].children) form.children.push_back(child);
-        } else {
-            for (const auto& page : root_pages) form.children.push_back(model::PageRef{page.id});
-        }
-        if (!implicit_default_page) {
-            for (auto& page : root_pages) document.add_page(std::move(page));
-        }
-        for (auto& page : nested_pages) document.add_page(std::move(page));
         if (consumed_link_ids.size() != links_by_control.size()) {
             fail("OOF1122", "$/2/3", "one matching link per decoded DataPath control", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
         }
@@ -9461,17 +9455,54 @@ Result<model::OrdinaryFormDocument> decode_document(
                 std::to_string(attributes.slot_count),
                 "Attribute slot count disagrees with the platform object-ID allocator");
         }
-        if (stored_max_id != actual_max_id) {
+        if (stored_max_id < actual_max_id) {
             fail(
                 "OOF1114",
                 "$/1/1/1",
                 std::to_string(actual_max_id),
                 std::to_string(stored_max_id),
-                "Form header max object ID disagrees with decoded objects");
+                "Form header object-ID bound is below a decoded object ID");
         }
+        if (stored_max_id > actual_max_id) {
+            const auto delta = stored_max_id - actual_max_id;
+            std::unordered_map<std::uint64_t, model::ObjectId> page_ids;
+            const auto renumber_page = [&](model::Page& page) {
+                const auto old_id = page.id.value();
+                if (old_id <= stored_max_id || old_id >= next_page_id ||
+                    !page_ids.emplace(old_id, model::ObjectId{old_id - delta}).second)
+                    fail("OOF1123", "$/1/1/1", "unique synthetic Page IDs above the stored bound", "invalid Page ID",
+                        "Synthetic Page allocation is inconsistent");
+                page.id = page_ids.at(old_id);
+            };
+            for (auto& page : root_pages) renumber_page(page);
+            for (auto& page : nested_pages) renumber_page(page);
+            const auto remap_page_refs = [&](std::vector<model::ChildItemRef>& children) {
+                for (auto& child : children) if (auto* reference = std::get_if<model::PageRef>(&child)) {
+                    const auto found = page_ids.find(reference->id().value());
+                    if (found == page_ids.end())
+                        fail("OOF1123", "$/1/1/1", "resolved synthetic Page reference", "missing Page ID",
+                            "Synthetic Page reference is inconsistent");
+                    *reference = model::PageRef{found->second};
+                }
+            };
+            for (auto& page : root_pages) remap_page_refs(page.children);
+            for (auto& page : nested_pages) remap_page_refs(page.children);
+            for (auto& child : pending_controls) remap_page_refs(child.control.children);
+            next_page_id -= delta;
+            warn_incomplete_profile(warnings, reconstruction_complete, form.id.value(), "$/1/1/1", "Form");
+        }
+        if (implicit_default_page) {
+            for (const auto& child : root_pages[0].children) form.children.push_back(child);
+        } else {
+            for (const auto& page : root_pages) form.children.push_back(model::PageRef{page.id});
+        }
+        if (!implicit_default_page) {
+            for (auto& page : root_pages) document.add_page(std::move(page));
+        }
+        for (auto& page : nested_pages) document.add_page(std::move(page));
 
         std::uint64_t synthetic_event_offset = 0;
-        const std::uint64_t event_id_base = std::max(stored_max_id, next_page_id - 1);
+        const std::uint64_t event_id_base = std::max(actual_max_id, next_page_id - 1);
         std::vector<model::PictureAsset> decoded_picture_assets;
         if (form_close_handler) {
             if (event_id_base == std::numeric_limits<std::uint64_t>::max()) fail("OOF1120", "$/4", "allocatable Form.OnClose ID", "uint64 max", "Synthetic event ID overflows");
