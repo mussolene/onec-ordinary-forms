@@ -8830,6 +8830,65 @@ void test_chart_named_dense_roundtrip_with_sibling_geometry() {
         "Auto is a named Marker value at any Series ordinal; its resolved row cache is derived");
 }
 
+void test_chart_empty_render_cache_normalization_and_guards() {
+    constexpr std::string_view empty_xml = R"XML(<Form id="1" name="Main" ordinaryFormVersion="2.1"><ChildItems><Chart id="2" name="Empty"><Position><Height>64</Height><Width>110</Width></Position><Series/><Points/><Values/></Chart></ChildItems></Form>)XML";
+    const auto parsed = source::parse_form_xml(empty_xml);
+    expect(parsed.ok(), "empty Chart XML must parse for render-cache testing");
+    const auto encoded = form_stream::encode_document(parsed.value());
+    expect(encoded.ok(), "empty Chart model must encode before platform cache mutation");
+
+    constexpr std::size_t middle_start = 18;
+    constexpr std::size_t render_start = 165;
+    constexpr std::array<std::size_t, 10> platform_cache_indices{
+        105, 107, 108, 110, 111, 170, 172, 173, 175, 176};
+    auto platform_normalized = encoded.value();
+    auto* chart_record = find_chart_record(platform_normalized);
+    expect(chart_record != nullptr, "encoded empty document must expose its Chart record");
+    for (const auto index : platform_cache_indices)
+        chart_record->items[3].items[index] = list_stream::ListValue::raw_atom("1");
+
+    const auto decoded = form_stream::decode_document(platform_normalized, "Main");
+    expect(decoded.ok(), "proven empty-Chart render caches must decode as computed values");
+    const auto* control = decoded.value().find_control(model::ObjectId{2});
+    const auto* chart = control == nullptr ? nullptr : std::get_if<model::ChartPayload>(&control->payload);
+    expect(control != nullptr && control->kind() == model::ControlKind::chart && control->name == "Empty" &&
+        control->position.height.value() == 64 && control->position.width.value() == 110 &&
+        chart != nullptr && chart->series.empty() && chart->points.empty() && chart->values.empty(),
+        "render-cache normalization must preserve the exact zero-Series/zero-Point named model");
+    const auto original_xml = source::serialize_form_xml(parsed.value());
+    const auto decoded_xml = source::serialize_form_xml(decoded.value());
+    expect(original_xml.ok() && decoded_xml.ok() && decoded_xml.value() == original_xml.value(),
+        "empty Chart model XML must remain identical across render-cache decode");
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "fresh serializer must rebuild canonical empty-Chart caches from the named model");
+
+    constexpr std::array<std::size_t, 4> newly_proven_indices{
+        middle_start + 92, middle_start + 93, render_start + 10, render_start + 11};
+    const std::array<list_stream::ListValue, 4> invalid_cache_values{
+        list_stream::ListValue::raw_atom("NaN"),
+        list_stream::ListValue::raw_atom("inf"),
+        list_stream::ListValue::list({list_stream::ListValue::raw_atom("1")}),
+        list_stream::ListValue::string_atom("1"),
+    };
+    for (const auto index : newly_proven_indices) {
+        for (const auto& value : invalid_cache_values) {
+            auto invalid = encoded.value();
+            auto* invalid_record = find_chart_record(invalid);
+            expect(invalid_record != nullptr, "invalid-cache fixture must expose its Chart record");
+            invalid_record->items[3].items[index] = value;
+            expect(!form_stream::decode_document(invalid, "InvalidEmptyChartRenderCache"),
+                "nonfinite, list-shaped, or quoted render-cache value must fail closed");
+        }
+    }
+    auto adjacent_unproven_cache = encoded.value();
+    auto* adjacent_record = find_chart_record(adjacent_unproven_cache);
+    expect(adjacent_record != nullptr, "adjacent-cache fixture must expose its Chart record");
+    adjacent_record->items[3].items[middle_start + 91] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(adjacent_unproven_cache, "AdjacentUnprovenEmptyChartCache"),
+        "neighboring unproven Chart cache slot must remain strict");
+}
+
 void test_platform_empty_document_fixture() {
     constexpr std::string_view fixture = R"OOF(
 {27,{18,{{1,1,{"ru","Form"}},1,4294967295},{09ccdc77-ea1a-4a6d-ab1c-3435eada2433,{1,{{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},26,0,0,0,0,0,0,{10,1,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},0,1,{1,1,{6,{1,1,{"ru","Страница1"}},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},-1,1,1,"Страница1",1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},1}},1,1,0,4,{2,8,1,1,1,0,0,0,0},{2,8,0,1,2,0,0,0,0},{2,392,1,1,3,0,0,8,0},{2,292,0,1,4,0,0,8,0},0,4294967295,5,64,0,{4,4,{0},4},0,0,57,0,0},{0}},{0}},400,300,1,0,1,4,4,3,400,300,96},{{-1},3,{0},{0}},{00000000-0000-0000-0000-000000000000,0},{0},1,4,1,0,0,0,{0},{0},{10,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},100,0,0,0,0,0},1,2,0,0,1,1}
@@ -9685,6 +9744,7 @@ int main() {
         test_independent_tab_order_observed_geometry_and_guards();
         test_chart_value_tooltip_named_pair_and_xml_text();
         test_chart_named_dense_roundtrip_with_sibling_geometry();
+        test_chart_empty_render_cache_normalization_and_guards();
         test_platform_empty_document_fixture();
     } catch (const std::exception& error) {
         std::cerr << "form stream tests: FAIL: " << error.what() << '\n';
