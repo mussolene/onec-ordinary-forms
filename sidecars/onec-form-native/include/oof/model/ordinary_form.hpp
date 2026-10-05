@@ -664,6 +664,7 @@ struct ChartValue {
 
 struct ChartSummarySeries {
     ColorValue color;
+    EnumerationValue marker{"ChartMarkerType", "Auto"};
 };
 
 struct ChartPayload final : TypedControlPayload<ControlKind::chart> {

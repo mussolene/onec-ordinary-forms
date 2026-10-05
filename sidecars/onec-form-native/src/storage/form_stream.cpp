@@ -5214,7 +5214,13 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
         rows.insert(rows.end(), row.begin(), row.end());
     }
     append(std::move(rows));
+    if (chart.summary_series.marker.type_name != "ChartMarkerType" ||
+        (chart.summary_series.marker.member != "Auto" && chart.summary_series.marker.member != "Rhomb")) {
+        fail("OOF1122", "$/Chart/SummarySeries/Marker", "ChartMarkerType Auto or Rhomb",
+            "unsupported Marker", "Chart SummarySeries Marker is outside the proven profile");
+    }
     auto summary_row = canonical_chart_series_defaults();
+    if (chart.summary_series.marker.member == "Rhomb") summary_row[2] = raw("3");
     if (chart.summary_series.color.kind == model::ColorKind::absolute) {
         summary_row[0] = encode_chart_color_property(chart.summary_series.color, "$/Chart/SummarySeries/Color");
     } else if (chart.summary_series.color != model::ColorValue{}) {
@@ -5251,7 +5257,7 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
     for (std::size_t index = 0; index <= series_count; ++index) {
         const bool summary = index == series_count;
         const auto style_color = summary ? encode_control_color(chart.summary_series.color, "$/Chart/SummarySeries/Color") : encode_chart_color_property(chart.series[index].color, "$/Chart/Series/Color");
-        const auto marker = summary ? 4u : chart_marker_value(chart.series[index].marker, "$/Chart/Series/Marker");
+        const auto marker = summary ? chart_marker_value(chart.summary_series.marker, "$/Chart/SummarySeries/Marker") : chart_marker_value(chart.series[index].marker, "$/Chart/Series/Marker");
         const auto style = list({style_color, raw(std::to_string(marker)), raw("0"), raw("0"), raw("0"), string_value(""), no_text, no_text, no_text, raw("0")});
         append({style});
     }
@@ -5422,6 +5428,15 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
         fail("OOF1122", child_path(summary_style_path, 0), "automatic or absolute opaque RGB color",
             "unsupported ColorValue", "Chart SummarySeries Color is unsupported");
     }
+    const auto summary_marker = decode_chart_marker(integer_atom<std::uint32_t>(summary_style.items[1], child_path(summary_style_path, 1)), child_path(summary_style_path, 1));
+    if (summary_marker.member != "Auto" && summary_marker.member != "Rhomb") {
+        fail("OOF1122", child_path(summary_style_path, 1), "ChartMarkerType Auto or Rhomb",
+            "unsupported Marker", "Chart SummarySeries Marker is outside the proven profile");
+    }
+    const auto summary_marker_cache_path = child_path(info_path, std::size_t{7} + series_size * 11);
+    require_raw_constant(at(info, std::size_t{7} + series_size * 11, info_path),
+        summary_marker.member == "Auto" ? "1" : "3", summary_marker_cache_path);
+    payload.summary_series.marker = summary_marker;
     payload.summary_series.color = summary_color;
     model::ControlNode control{model::ObjectId{id}, string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)), std::move(payload)};
     if (!title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), title);

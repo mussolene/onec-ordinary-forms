@@ -1337,13 +1337,16 @@ void test_chart_number_lexical_validation() {
 
 void test_chart_summary_series_color_invariants() {
     using namespace oof::model;
-    const auto validate = [](ColorValue color) {
+    const auto validate = [](ColorValue color, EnumerationValue marker = {"ChartMarkerType", "Auto"}) {
         Form form; form.id = ObjectId{1}; form.children.push_back(ControlRef{ObjectId{2}});
         OrdinaryFormDocument document(std::move(form));
-        ChartPayload chart; chart.summary_series.color = std::move(color);
+        ChartPayload chart; chart.summary_series.color = std::move(color); chart.summary_series.marker = std::move(marker);
         document.add_control(ControlNode{ObjectId{2}, "Chart", std::move(chart)});
         return document.validate();
     };
+    expect(validate(ColorValue{}, {"ChartMarkerType", "Rhomb"}).ok(), "proven SummarySeries Rhomb must validate");
+    expect(!validate(ColorValue{}, {"ChartMarkerType", "Alternation"}).ok(), "unproven SummarySeries Marker must fail");
+    expect(!validate(ColorValue{}, {"OtherType", "Auto"}).ok(), "foreign SummarySeries Marker enum must fail");
     ColorValue color;
     expect(validate(color).ok(), "default SummarySeries Color must validate");
     color.kind = ColorKind::absolute; color.red = 153; color.green = 25; color.blue = 25;

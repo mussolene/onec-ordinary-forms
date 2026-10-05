@@ -1045,8 +1045,9 @@
         <NamedConcept name="ChartSeries" russianName="СерияДиаграммы"><Properties>
           <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/><Property name="Marker" apiName="Маркер" russianType="ТипМаркераДиаграммы"/>
         </Properties></NamedConcept>
-        <NamedConcept name="ChartSummarySeries" apiName="SummarySeries" russianName="СводнаяСерия" russianType="СерияДиаграммы" source="Chart.SummarySeries; 8.5.1.1343 ValueToFile API" evidenceRefs="ev_418fc1414bc745bbbb90a22694e5cae1 ev_bac7628d14574b96a6ecb1c49db9d823"><Properties>
+        <NamedConcept name="ChartSummarySeries" apiName="SummarySeries" russianName="СводнаяСерия" russianType="СерияДиаграммы" source="Chart.SummarySeries; 8.5.1.1343 ValueToFile API" evidenceRefs="ev_418fc1414bc745bbbb90a22694e5cae1 ev_bac7628d14574b96a6ecb1c49db9d823 ev_0bf2de977ee74d0e8e69e117b819f78c"><Properties>
           <Property name="Color" apiName="Color" russianName="Цвет" russianType="Цвет" valueCodec="color"/>
+          <Property name="Marker" apiName="Marker" russianName="Маркер" russianType="ТипМаркераДиаграммы" valueCodec="enumeration"/>
         </Properties></NamedConcept>
         <NamedConcept name="ChartPoint" russianName="ТочкаДиаграммы"><Properties>
           <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/>

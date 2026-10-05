@@ -1599,10 +1599,15 @@ private:
                 chart_summary_series_seen = true;
                 auto& summary = std::get<model::ChartPayload>(control.payload).summary_series;
                 bool color_seen = false;
+                bool marker_seen = false;
                 for (xmlNodePtr field : element_children(child)) {
-                    if (node_name(field) != "Color" || color_seen) fail("OOF2003", field, id_text, node_name(field), "one Color", node_name(field), "Unknown or duplicate SummarySeries field");
-                    color_seen = true;
-                    summary.color = parse_color(field);
+                    if (node_name(field) == "Color" && !color_seen) {
+                        color_seen = true;
+                        summary.color = parse_color(field);
+                    } else if (node_name(field) == "Marker" && !marker_seen) {
+                        marker_seen = true;
+                        summary.marker = parse_enumeration(field);
+                    } else fail("OOF2003", field, id_text, node_name(field), "one Color or Marker", node_name(field), "Unknown or duplicate SummarySeries field");
                 }
             } else if (descriptor->kind == model::ControlKind::chart &&
                        (name == "Series" || name == "Points" || name == "Values")) {
@@ -3396,9 +3401,12 @@ private:
             write_gantt_data(*gantt);
         }
         if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
-            if (chart->summary_series.color != model::ColorValue{}) {
+            if (chart->summary_series.color != model::ColorValue{} ||
+                chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"}) {
                 writer_.open("SummarySeries");
-                write_color("Color", chart->summary_series.color, id);
+                if (chart->summary_series.color != model::ColorValue{}) write_color("Color", chart->summary_series.color, id);
+                if (chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"})
+                    write_enumeration("Marker", chart->summary_series.marker);
                 writer_.close("SummarySeries");
             }
             writer_.open("Series");

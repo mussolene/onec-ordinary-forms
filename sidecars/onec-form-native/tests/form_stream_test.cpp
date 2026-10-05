@@ -10188,6 +10188,29 @@ void test_chart_summary_series_color_roundtrip_and_guards() {
                 "SummarySeries named XML must remain stable through native storage");
         }
     }
+    for (const bool populated : {false, true}) {
+        auto marker_xml = make_xml(populated, false);
+        const auto insertion = marker_xml.find("<Series>") != std::string::npos ? marker_xml.find("<Series>") : marker_xml.find("<Series/>");
+        marker_xml.insert(insertion, R"XML(<SummarySeries><Marker type="ChartMarkerType" member="Rhomb"/></SummarySeries>)XML");
+        auto marker_document = source::parse_form_xml(marker_xml);
+        expect(marker_document.ok(), "SummarySeries Rhomb fixture must parse");
+        auto marker_encoded = form_stream::encode_document(marker_document.value());
+        expect(marker_encoded.ok(), "SummarySeries Rhomb must encode");
+        auto marker_decoded = form_stream::decode_document(marker_encoded.value(), "Main");
+        expect(marker_decoded.ok() && std::get<model::ChartPayload>(marker_decoded.value().find_control(model::ObjectId{2})->payload).summary_series.marker.member == "Rhomb",
+            "SummarySeries Rhomb must roundtrip with empty or populated series");
+        auto stable = form_stream::encode_document(marker_decoded.value());
+        expect(stable.ok() && list_stream::dump_compact(stable.value()) == list_stream::dump_compact(marker_encoded.value()),
+            "SummarySeries Rhomb must rebuild without drift");
+        if (!populated) {
+            auto bad_cache = marker_encoded.value();
+            find_chart_record(bad_cache)->items[3].items[7] = list_stream::ListValue::raw_atom("1");
+            expect(!form_stream::decode_document(bad_cache, "Main"), "SummarySeries concrete Marker cache mismatch must fail");
+            auto unproven = marker_encoded.value();
+            find_chart_record(unproven)->items[3].items[164].items[1] = list_stream::ListValue::raw_atom("5");
+            expect(!form_stream::decode_document(unproven, "Main"), "unproven SummarySeries Alternation must fail");
+        }
+    }
     const auto parsed = source::parse_form_xml(make_xml(false, true));
     const auto encoded = form_stream::encode_document(parsed.value());
     auto mismatch = encoded.value();

@@ -242,7 +242,7 @@
     </xs:simpleContent>
   </xs:complexType>
   <xs:complexType name="ChartSeriesType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Marker" type="EnumerationValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
-  <xs:complexType name="ChartSummarySeriesType"><xs:sequence><xs:element name="Color" type="ColorValueType" minOccurs="0" maxOccurs="1"/></xs:sequence></xs:complexType>
+  <xs:complexType name="ChartSummarySeriesType"><xs:sequence><xs:element name="Color" type="ColorValueType" minOccurs="0" maxOccurs="1"/><xs:element name="Marker" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/></xs:sequence></xs:complexType>
   <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartValueType"><xs:sequence><xs:choice><xs:element name="Number" type="xs:decimal"/><xs:element name="Undefined" type="UndefinedValueType"/></xs:choice><xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/></xs:sequence><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/><xs:attribute name="pointRef" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartSeriesCollectionType"><xs:sequence><xs:element name="ChartSeries" type="ChartSeriesType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>

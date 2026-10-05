@@ -2169,6 +2169,21 @@ void test_chart_summary_series_color_xml() {
     auto roundtrip = source::parse_form_xml(serialized.value());
     expect(roundtrip.ok() && std::get<model::ChartPayload>(roundtrip.value().collections().controls.front().payload).summary_series.color == color,
         "SummarySeries Color must roundtrip");
+    auto marker = source::parse_form_xml(xml("<SummarySeries><Marker type=\"ChartMarkerType\" member=\"Rhomb\"/></SummarySeries>"));
+    expect(marker.ok(), "proven SummarySeries Rhomb must parse");
+    auto marker_xml = source::serialize_form_xml(marker.value());
+    expect(marker_xml.ok() && marker_xml.value().find("member=\"Rhomb\"") != std::string::npos &&
+        marker_xml.value().find("<Color ") == std::string::npos, "Marker-only SummarySeries must omit default Color");
+    auto marker_roundtrip = source::parse_form_xml(marker_xml.value());
+    expect(marker_roundtrip.ok() && std::get<model::ChartPayload>(marker_roundtrip.value().collections().controls.front().payload).summary_series.marker.member == "Rhomb",
+        "SummarySeries Marker must roundtrip");
+    auto default_marker = source::parse_form_xml(xml("<SummarySeries><Marker type=\"ChartMarkerType\" member=\"Auto\"/></SummarySeries>"));
+    expect(default_marker.ok() && source::serialize_form_xml(default_marker.value()).value().find("<SummarySeries>") == std::string::npos,
+        "default SummarySeries Auto Marker must be omitted");
+    expect(!source::parse_form_xml(xml("<SummarySeries><Marker type=\"ChartMarkerType\" member=\"Circle\"/></SummarySeries>")).ok(),
+        "unproven SummarySeries Marker must fail");
+    expect(!source::parse_form_xml(xml("<SummarySeries><Marker type=\"ChartMarkerType\" member=\"Rhomb\"/><Marker type=\"ChartMarkerType\" member=\"Rhomb\"/></SummarySeries>")).ok(),
+        "duplicate SummarySeries Marker must fail");
     auto empty = source::parse_form_xml(xml("<SummarySeries/>"));
     expect(empty.ok(), "empty SummarySeries must mean default automatic Color");
     auto empty_serialized = source::serialize_form_xml(empty.value());

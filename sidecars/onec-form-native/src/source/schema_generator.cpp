@@ -520,7 +520,7 @@ void append_value_types(std::string& output) {
 )XSD";
 
     output += R"XSD(  <xs:complexType name="ChartSeriesType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Marker" type="EnumerationValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
-  <xs:complexType name="ChartSummarySeriesType"><xs:sequence><xs:element name="Color" type="ColorValueType" minOccurs="0" maxOccurs="1"/></xs:sequence></xs:complexType>
+  <xs:complexType name="ChartSummarySeriesType"><xs:sequence><xs:element name="Color" type="ColorValueType" minOccurs="0" maxOccurs="1"/><xs:element name="Marker" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/></xs:sequence></xs:complexType>
   <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartValueType"><xs:sequence><xs:choice><xs:element name="Number" type="xs:decimal"/><xs:element name="Undefined" type="UndefinedValueType"/></xs:choice><xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/></xs:sequence><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/><xs:attribute name="pointRef" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartSeriesCollectionType"><xs:sequence><xs:element name="ChartSeries" type="ChartSeriesType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
@@ -1111,8 +1111,9 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "        <NamedConcept name=\"ChartSeries\" russianName=\"СерияДиаграммы\"><Properties>\n"
         "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/><Property name=\"Marker\" apiName=\"Маркер\" russianType=\"ТипМаркераДиаграммы\"/>\n"
         "        </Properties></NamedConcept>\n"
-        "        <NamedConcept name=\"ChartSummarySeries\" apiName=\"SummarySeries\" russianName=\"СводнаяСерия\" russianType=\"СерияДиаграммы\" source=\"Chart.SummarySeries; 8.5.1.1343 ValueToFile API\" evidenceRefs=\"ev_418fc1414bc745bbbb90a22694e5cae1 ev_bac7628d14574b96a6ecb1c49db9d823\"><Properties>\n"
+        "        <NamedConcept name=\"ChartSummarySeries\" apiName=\"SummarySeries\" russianName=\"СводнаяСерия\" russianType=\"СерияДиаграммы\" source=\"Chart.SummarySeries; 8.5.1.1343 ValueToFile API\" evidenceRefs=\"ev_418fc1414bc745bbbb90a22694e5cae1 ev_bac7628d14574b96a6ecb1c49db9d823 ev_0bf2de977ee74d0e8e69e117b819f78c\"><Properties>\n"
         "          <Property name=\"Color\" apiName=\"Color\" russianName=\"Цвет\" russianType=\"Цвет\" valueCodec=\"color\"/>\n"
+        "          <Property name=\"Marker\" apiName=\"Marker\" russianName=\"Маркер\" russianType=\"ТипМаркераДиаграммы\" valueCodec=\"enumeration\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"ChartPoint\" russianName=\"ТочкаДиаграммы\"><Properties>\n"
         "          <Property name=\"Text\" apiName=\"Текст\" russianType=\"Строка\"/><Property name=\"Color\" apiName=\"Цвет\" russianType=\"Цвет\"/>\n"
