@@ -1,19 +1,14 @@
-# Changelog
+# Журнал изменений
 
-## 1.0.0 - Unreleased
+## 1.0.0 - Не выпущен
 
-- Establishes the native descriptor-backed ordinary form object graph as the
-  canonical product architecture, with `Form.xml` and `Form.bin` as
-  projections of that object graph.
-- Breaking change: legacy `Form.xml` with top-level `<Pages>`, deprecated
-  `version="*"` attributes, and public raw/list-stream/profile/slot structures
-  are not accepted. Re-run `dump-bin` from the original `Form.bin` instead of
-  migrating old XML by hand.
-- Public `Form.xml` now uses managed-form-style `ChildItems` nesting and
-  `ordinaryFormVersion="2.0"` per `OrdinaryForm.xsd`.
-- Release is not ready until the release gate passes: all 417 known
-  ordinary-form property rows classified and handled, corpus semantic diff
-  gates clean, strict Designer validation clean, and Linux/macOS/Windows wheels
-  plus sdist published to GitHub Release and PyPI.
-- Platform palette metadata lives in `OrdinaryFormPalette.xsd`; the public
-  release gate rejects unmapped, no-public-XML, and XSD-only property gaps.
+- Добавлены библиотека `liboof` и CLI `oof` для команд `dump` и `build`.
+- Обычная форма представляется именованной моделью, XML версии 2.1, модулем `Module.bsl` и файлами ресурсов.
+- Реализованы чтение и сборка проверенных сочетаний контролов и свойств. Для неподдержанных данных выводятся предупреждения и признак `reconstructionComplete="false"`.
+- Проверено чтение всех 38 контролов эталонной формы и прохождение собранной именованной проекции через строгий Designer. Это подтверждает полезную проекцию и ее повторяемость, но не полное восстановление произвольной формы.
+- Целевая задача первой версии включает информационное сравнение доступных свойств. Отсутствие различий в XML само по себе не доказывает отсутствие изменений в исходном `Form.bin`.
+- Ограничены размер входных файлов, глубина и число токенов, память и обход блоков контейнера. Модуль и картинки проверяются на принадлежность пакету; опасные символические и жесткие ссылки отклоняются.
+- Закреплены версии GitHub Actions по хешам коммитов, ввод тега выпуска отделен от shell-кода и проверяется до использования.
+- Исследовательские платформенные скрипты проверяют каталог вывода до создания, используют новые каталоги и передают значения в статический shell-код через аргументы.
+
+Версия не готова к выпуску: `release_ready=false`, release-gate остается заглушкой. Текущий статус и ограничения указаны в [README](README.md) и [целевом состоянии](docs/repository-target-state.md).
