@@ -3320,7 +3320,7 @@ void test_command_bar_five_named_properties_and_invalid_variants() {
     for (const auto& [orientation, orientation_code] : std::array<std::pair<std::string, int>, 3>{{{"Vertical", 0}, {"Horizontal", 1}, {"Auto", 2}}})
         for (const auto& [alignment, alignment_code] : std::array<std::pair<std::string, int>, 3>{{{"Left", 0}, {"Center", 1}, {"Right", 2}}})
             for (const auto auto_fill : {false, true}) for (const auto transparent : {false, true})
-                for (const auto color : {model::ColorValue{}, rgb}) {
+                for (const auto& color : {model::ColorValue{}, rgb}) {
                     const auto document = make_document(orientation, alignment, auto_fill, transparent, color);
                     const auto encoded = form_stream::encode_document(document);
                     expect(encoded.ok(), "typed CommandBar property combination must encode");
@@ -3397,7 +3397,7 @@ void test_command_bar_named_action_source_references() {
         expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
             "ActionSource canonical stream must round-trip");
     }
-    for (const auto invalid : {model::PropertyValue{model::FormRef{model::ObjectId{9}}},
+    for (const auto& invalid : {model::PropertyValue{model::FormRef{model::ObjectId{9}}},
                               model::PropertyValue{model::ControlRef{model::ObjectId{9}}},
                               model::PropertyValue{model::ControlRef{model::ObjectId{2}}},
                               model::PropertyValue{true}})

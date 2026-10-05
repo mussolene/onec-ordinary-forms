@@ -17,6 +17,9 @@
 
 namespace oof::storage::list_stream {
 
+inline constexpr std::size_t max_list_depth = 256;
+inline constexpr std::size_t max_list_tokens = 1024 * 1024;
+
 struct ListValue {
     enum class AtomKind { raw, string };
 
@@ -154,6 +157,9 @@ inline std::vector<Token> tokenize(std::string_view text) {
         if (index == text.size()) {
             break;
         }
+        if (tokens.size() >= max_list_tokens) {
+            throw std::runtime_error("ListInStream resource limit: token count exceeds 1048576");
+        }
         const std::size_t start = index;
         if (text[index] == '{') {
             tokens.push_back({Token::Kind::open, "{", start, preceded_by_whitespace});
@@ -277,7 +283,7 @@ public:
     explicit ListParser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {}
 
     ListValue parse_document() {
-        ListValue value = parse_value();
+        ListValue value = parse_value(0);
         if (index_ != tokens_.size()) {
             throw std::runtime_error("ListInStream trailing token at offset " + std::to_string(tokens_[index_].offset));
         }
@@ -285,13 +291,16 @@ public:
     }
 
 private:
-    ListValue parse_value() {
+    ListValue parse_value(std::size_t depth) {
         if (index_ >= tokens_.size()) {
             throw std::runtime_error("ListInStream unexpected end of input");
         }
         const Token token = tokens_[index_++];
         if (token.kind == Token::Kind::open) {
-            return parse_list();
+            if (depth >= max_list_depth) {
+                throw std::runtime_error("ListInStream resource limit: list nesting exceeds 256 levels");
+            }
+            return parse_list(depth + 1);
         }
         if (token.kind == Token::Kind::raw_atom) {
             return ListValue::raw_atom(token.value);
@@ -302,7 +311,7 @@ private:
         throw std::runtime_error("ListInStream unexpected token at offset " + std::to_string(token.offset));
     }
 
-    ListValue parse_list() {
+    ListValue parse_list(std::size_t depth) {
         std::vector<ListValue> items;
         bool expecting_value = true;
         bool saw_separator = false;
@@ -339,7 +348,7 @@ private:
                         "ListInStream missing comma before value at offset " + std::to_string(token.offset));
                 }
             }
-            items.push_back(parse_value());
+            items.push_back(parse_value(depth));
             expecting_value = false;
             saw_separator = false;
         }

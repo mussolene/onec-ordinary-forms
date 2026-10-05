@@ -282,7 +282,7 @@ model::LocalizedStringValue read_localized_string(list_stream::ListInStream& in)
     }
     const std::uint32_t count = in.read_uint32();
     model::LocalizedStringValue value;
-    value.items.reserve(count);
+    // Grow only after a complete item has been read. The count is untrusted.
     for (std::uint32_t index = 0; index < count; ++index) {
         in.begin_list();
         model::LocalizedStringItem item;

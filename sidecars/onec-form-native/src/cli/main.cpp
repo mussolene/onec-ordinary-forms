@@ -4,9 +4,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "oof/diagnostic.hpp"
@@ -16,6 +16,7 @@
 namespace {
 
 constexpr std::string_view version = "1.0.0-dev";
+constexpr std::uintmax_t max_input_bytes = 64U * 1024U * 1024U;
 
 void print_usage(std::ostream& output) {
     output
@@ -164,15 +165,25 @@ oof::Diagnostics cli_failure(
     }};
 }
 
-std::vector<std::uint8_t> read_bytes(const std::filesystem::path& path) {
+std::vector<std::uint8_t> read_bytes(
+    const std::filesystem::path& path, std::uintmax_t limit = max_input_bytes) {
+    if (!std::filesystem::is_regular_file(path)) {
+        throw std::runtime_error("input must be a regular file: " + path.string());
+    }
+    const auto size = std::filesystem::file_size(path);
+    if (size > limit) {
+        throw std::runtime_error("input exceeds the 64 MiB file or remaining picture package limit: " + path.string());
+    }
     std::ifstream file(path, std::ios::binary);
     if (!file) {
         throw std::runtime_error("cannot open input file: " + path.string());
     }
-    return {
-        std::istreambuf_iterator<char>(file),
-        std::istreambuf_iterator<char>(),
-    };
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
+    if (size != 0) file.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
+    if (!file || file.peek() != std::char_traits<char>::eof() || file.bad()) {
+        throw std::runtime_error("input changed or could not be read completely: " + path.string());
+    }
+    return bytes;
 }
 
 std::string read_text(const std::filesystem::path& path) {
@@ -181,9 +192,21 @@ std::string read_text(const std::filesystem::path& path) {
     return std::string(bytes.begin() + (has_bom ? 3 : 0), bytes.end());
 }
 
+void check_output_file(const std::filesystem::path& path) {
+    const auto status = std::filesystem::symlink_status(path);
+    if (std::filesystem::is_symlink(status) ||
+        (std::filesystem::exists(status) && !std::filesystem::is_regular_file(status))) {
+        throw std::runtime_error("output must be a regular file, not a symbolic link: " + path.string());
+    }
+    if (std::filesystem::is_regular_file(status) && std::filesystem::hard_link_count(path) != 1) {
+        throw std::runtime_error("output cannot replace a file with multiple hard links: " + path.string());
+    }
+}
+
 void write_bytes(
     const std::filesystem::path& path,
     const std::vector<std::uint8_t>& bytes) {
+    check_output_file(path);
     if (!path.parent_path().empty()) {
         std::filesystem::create_directories(path.parent_path());
     }
@@ -212,6 +235,9 @@ std::filesystem::path module_path_for(const std::filesystem::path& xml_path) {
 std::filesystem::path package_root_for(const std::filesystem::path& xml_path) {
     auto root = xml_path;
     root.replace_extension();
+    if (std::filesystem::is_symlink(std::filesystem::symlink_status(root))) {
+        throw std::runtime_error("source package directory cannot be a symbolic link: " + root.string());
+    }
     return root;
 }
 
@@ -220,7 +246,7 @@ bool path_is_within(const std::filesystem::path& root, const std::filesystem::pa
     return !relative.empty() && *relative.begin() != ".." && !relative.is_absolute();
 }
 
-std::filesystem::path checked_asset_path(
+std::filesystem::path checked_sidecar_path(
     const std::filesystem::path& package_root,
     std::string_view relative_path,
     bool must_exist) {
@@ -228,24 +254,25 @@ std::filesystem::path checked_asset_path(
     const auto candidate = root / std::filesystem::path(relative_path);
     if (must_exist) {
         const auto resolved = std::filesystem::canonical(candidate);
-        if (!path_is_within(root, resolved) || !std::filesystem::is_regular_file(resolved)) {
-            throw std::runtime_error("picture asset path escapes the source package or is not a file: " + std::string(relative_path));
+        if (!path_is_within(root, resolved) || !std::filesystem::is_regular_file(resolved) ||
+            std::filesystem::hard_link_count(resolved) != 1) {
+            throw std::runtime_error("sidecar path escapes the source package or is not a file: " + std::string(relative_path));
         }
         return resolved;
     }
     const auto proposed_parent = std::filesystem::weakly_canonical(candidate.parent_path());
     const auto proposed = std::filesystem::weakly_canonical(candidate);
     if (!path_is_within(root, proposed_parent) || !path_is_within(root, proposed)) {
-        throw std::runtime_error("picture asset output path escapes the source package: " + std::string(relative_path));
+        throw std::runtime_error("sidecar output path escapes the source package: " + std::string(relative_path));
     }
     if (std::filesystem::is_symlink(std::filesystem::symlink_status(candidate))) {
-        throw std::runtime_error("picture asset output cannot replace a symbolic link: " + std::string(relative_path));
+        throw std::runtime_error("sidecar output cannot replace a symbolic link: " + std::string(relative_path));
     }
     std::filesystem::create_directories(candidate.parent_path());
     const auto parent = std::filesystem::canonical(candidate.parent_path());
     const auto resolved = std::filesystem::weakly_canonical(candidate);
     if (!path_is_within(root, parent) || !path_is_within(root, resolved)) {
-        throw std::runtime_error("picture asset output path escapes the source package: " + std::string(relative_path));
+        throw std::runtime_error("sidecar output path escapes the source package: " + std::string(relative_path));
     }
     return resolved;
 }
@@ -256,8 +283,11 @@ void load_picture_assets(oof::model::OrdinaryFormDocument& document, const std::
     if (!std::filesystem::is_directory(root)) {
         throw std::runtime_error("picture source package directory is missing: " + root.string());
     }
+    std::uintmax_t remaining = max_input_bytes;
     for (const auto& asset : document.assets()) {
-        document.set_asset_bytes(asset.id, read_bytes(checked_asset_path(root, asset.relative_path, true)));
+        auto bytes = read_bytes(checked_sidecar_path(root, asset.relative_path, true), remaining);
+        remaining -= bytes.size();
+        document.set_asset_bytes(asset.id, std::move(bytes));
     }
 }
 
@@ -267,7 +297,7 @@ void write_picture_assets(const oof::model::OrdinaryFormDocument& document, cons
     std::filesystem::create_directories(root);
     for (const auto& asset : document.assets()) {
         if (asset.bytes.empty()) throw std::runtime_error("decoded picture asset has no bytes: " + asset.relative_path);
-        write_bytes(checked_asset_path(root, asset.relative_path, false), asset.bytes);
+        write_bytes(checked_sidecar_path(root, asset.relative_path, false), asset.bytes);
     }
 }
 
@@ -285,8 +315,16 @@ int dump_form(
         print_diagnostics(xml.diagnostics(), json);
         return 1;
     }
+    check_output_file(output);
+    const auto root = package_root_for(output);
+    std::filesystem::create_directories(root);
+    const auto module_path = checked_sidecar_path(root, "Module.bsl", false);
+    check_output_file(module_path);
+    for (const auto& asset : loaded.value().assets()) {
+        check_output_file(checked_sidecar_path(root, asset.relative_path, false));
+    }
     write_text(output, xml.value());
-    write_text(module_path_for(output), loaded.value().module().text);
+    write_text(module_path, loaded.value().module().text);
     write_picture_assets(loaded.value(), output);
     auto diagnostics = loaded.diagnostics();
     diagnostics.insert(diagnostics.end(), xml.diagnostics().begin(), xml.diagnostics().end());
@@ -321,7 +359,8 @@ int build_form(
             json);
         return 1;
     }
-    parsed.value().set_module(oof::model::FormModule{read_text(module_path)});
+    const auto checked_module_path = checked_sidecar_path(package_root_for(input), "Module.bsl", true);
+    parsed.value().set_module(oof::model::FormModule{read_text(checked_module_path)});
     const auto encoded = oof::save_form_bin(parsed.value());
     if (!encoded) {
         print_diagnostics(encoded.diagnostics(), json);

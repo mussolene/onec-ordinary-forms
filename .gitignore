@@ -33,3 +33,16 @@ oacs.db
 key.json
 unlocked.key
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*.tar.xz
+*.7z
+*.dmg
+*.so
+*.dll

@@ -17,6 +17,8 @@ constexpr std::int32_t container_block_size = 0x200;
 constexpr std::size_t container_header_size = 16;
 constexpr std::size_t container_toc_block_size = 0x200;
 constexpr std::size_t container_document_block_size = 0xa000;
+inline constexpr std::size_t max_container_block_visits = 1024 * 1024;
+inline constexpr std::size_t max_container_block_header_size = 64;
 
 struct OneCContainerFile {
     std::string name;
@@ -62,6 +64,13 @@ inline void write_u64_le(std::vector<std::uint8_t>& out, std::uint64_t value) {
 }
 
 namespace detail {
+
+struct ContainerReadBudget {
+    explicit ContainerReadBudget(std::size_t input_size)
+        : remaining_block_visits(std::min(input_size, max_container_block_visits)) {}
+
+    std::size_t remaining_block_visits;
+};
 
 inline void append_utf8(std::string& out, std::uint32_t code_point) {
     if (code_point < 0x80) {
@@ -217,6 +226,9 @@ inline BlockHeader read_block_header(const std::vector<std::uint8_t>& data, std:
     std::size_t header_end = offset + 2;
     while (header_end + 1 < data.size() &&
            !(data[header_end] == '\r' && data[header_end + 1] == '\n')) {
+        if (header_end - offset >= max_container_block_header_size - 2) {
+            throw std::runtime_error("1C container resource limit: block header exceeds 64 bytes");
+        }
         ++header_end;
     }
     if (header_end + 1 >= data.size()) {
@@ -240,8 +252,12 @@ inline BlockHeader read_block_header(const std::vector<std::uint8_t>& data, std:
 
 inline std::vector<std::uint8_t> read_document(
     const std::vector<std::uint8_t>& data,
-    std::size_t offset
+    std::size_t offset,
+    detail::ContainerReadBudget* shared_budget = nullptr
 ) {
+    detail::ContainerReadBudget local_budget(data.size());
+    auto& remaining_block_visits = shared_budget == nullptr
+        ? local_budget.remaining_block_visits : shared_budget->remaining_block_visits;
     std::vector<std::uint8_t> payload;
     std::uint32_t total_size = 0;
     bool has_total_size = false;
@@ -251,6 +267,10 @@ inline std::vector<std::uint8_t> read_document(
         if (current_offset >= data.size()) {
             throw std::runtime_error("1C container block offset exceeds file size");
         }
+        if (remaining_block_visits == 0) {
+            throw std::runtime_error("1C container resource limit: block traversal budget exhausted");
+        }
+        --remaining_block_visits;
         if (!visited_offsets.insert(current_offset).second) {
             throw std::runtime_error("1C container block chain contains a cycle");
         }
@@ -258,13 +278,20 @@ inline std::vector<std::uint8_t> read_document(
         const BlockHeader header = read_block_header(data, current_offset);
         if (!has_total_size) {
             total_size = header.document_size;
+            if (total_size > data.size()) {
+                throw std::runtime_error("1C container document size exceeds file size");
+            }
             has_total_size = true;
         }
         if (header.payload_offset > data.size() ||
             header.current_size > data.size() - header.payload_offset) {
             throw std::runtime_error("1C container block payload exceeds file size");
         }
-        const std::size_t payload_end = header.payload_offset + header.current_size;
+        // Fixed-size blocks may contain padding after the logical document.
+        // Validate the complete chain, but never accumulate that padding.
+        const std::size_t copy_size = std::min<std::size_t>(
+            header.current_size, total_size - payload.size());
+        const std::size_t payload_end = header.payload_offset + copy_size;
         payload.insert(
             payload.end(),
             data.begin() + static_cast<std::ptrdiff_t>(header.payload_offset),
@@ -279,9 +306,6 @@ inline std::vector<std::uint8_t> read_document(
     }
     if (payload.size() < total_size) {
         throw std::runtime_error("1C container document is smaller than its declared size");
-    }
-    if (payload.size() > total_size) {
-        payload.resize(total_size);
     }
     return payload;
 }
@@ -298,14 +322,17 @@ inline OneCContainer parse_container(const std::vector<std::uint8_t>& data) {
         throw std::runtime_error("invalid Form.bin container header");
     }
 
-    const std::vector<std::uint8_t> toc = read_document(data, container_header_size);
+    detail::ContainerReadBudget budget(data.size());
+    const std::vector<std::uint8_t> toc = read_document(data, container_header_size, &budget);
+    if (static_cast<std::size_t>(file_count) > toc.size() / 12 ||
+        toc.size() != static_cast<std::size_t>(file_count) * 12) {
+        throw std::runtime_error("invalid Form.bin container TOC: entry count mismatch");
+    }
     OneCContainer result;
     result.block_size = block_size;
+    std::size_t remaining_bytes = data.size() - toc.size();
     for (std::int32_t index = 0; index < file_count; ++index) {
         const std::size_t entry_offset = static_cast<std::size_t>(index) * 12;
-        if (entry_offset + 12 > toc.size()) {
-            throw std::runtime_error("invalid Form.bin container TOC: truncated entry");
-        }
         const std::uint32_t descriptor_offset = read_u32_le(toc, entry_offset);
         const std::uint32_t payload_offset = read_u32_le(toc, entry_offset + 4);
         const auto entry_marker = static_cast<std::int32_t>(read_u32_le(toc, entry_offset + 8));
@@ -313,7 +340,12 @@ inline OneCContainer parse_container(const std::vector<std::uint8_t>& data) {
             throw std::runtime_error("invalid Form.bin container TOC marker");
         }
 
-        const std::vector<std::uint8_t> descriptor = read_document(data, descriptor_offset);
+        const auto descriptor_header = read_block_header(data, descriptor_offset);
+        if (descriptor_header.document_size > remaining_bytes) {
+            throw std::runtime_error("1C container resource limit: total document sizes exceed file size");
+        }
+        remaining_bytes -= descriptor_header.document_size;
+        const std::vector<std::uint8_t> descriptor = read_document(data, descriptor_offset, &budget);
         if (descriptor.size() < 24) {
             throw std::runtime_error("invalid Form.bin file descriptor: too small");
         }
@@ -323,11 +355,16 @@ inline OneCContainer parse_container(const std::vector<std::uint8_t>& data) {
         if (flags != 0) {
             throw std::runtime_error("unsupported Form.bin file descriptor flags");
         }
+        const auto payload_header = read_block_header(data, payload_offset);
+        if (payload_header.document_size > remaining_bytes) {
+            throw std::runtime_error("1C container resource limit: total document sizes exceed file size");
+        }
+        remaining_bytes -= payload_header.document_size;
         result.files.push_back({
             utf16le_name_to_utf8(descriptor, 20),
             created,
             modified,
-            read_document(data, payload_offset),
+            read_document(data, payload_offset, &budget),
         });
     }
     return result;
