@@ -842,6 +842,12 @@ void apply_proven_storage_overrides(
         StorageCodec::control_info,
         DefaultKind::none,
         "");
+    classify_property(
+        label_decoration,
+        "BorderColor",
+        StorageCodec::control_base,
+        DefaultKind::color,
+        "automatic");
 
     auto& choice_field = properties[static_cast<std::size_t>(ControlKind::choice_field)];
     classify_property(choice_field, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");

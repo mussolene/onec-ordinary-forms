@@ -3515,6 +3515,92 @@ void test_button_then_label_decoration_round_trip() {
         "unsupported LabelDecoration storage leaves must fail closed");
 }
 
+void test_label_border_color_round_trip() {
+    const auto make_document = [](std::optional<model::ColorValue> color) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "LabelBorderColor";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode label{model::ObjectId{2}, "Caption", model::LabelDecorationPayload{}};
+        if (color) label.properties().set_explicit(model::PropertyId::from_name("BorderColor"), *color);
+        document.add_control(std::move(label));
+        return document;
+    };
+    const auto label_record = [](list_stream::ListValue& stream) {
+        return find_record_with_guid(stream,
+            model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    };
+
+    const auto* descriptor = model::metamodel::find_property(
+        model::ControlKind::label_decoration, "BorderColor");
+    expect(descriptor != nullptr &&
+               descriptor->persistence == model::metamodel::PersistenceClass::persisted_editable &&
+               descriptor->storage_codec == model::metamodel::StorageCodec::control_base &&
+               descriptor->value_codec == model::metamodel::ValueCodec::color,
+        "LabelDecoration.BorderColor must have a typed editable base-property descriptor");
+
+    model::ColorValue absolute;
+    absolute.kind = model::ColorKind::absolute;
+    absolute.red = 17;
+    absolute.green = 83;
+    absolute.blue = 201;
+    const auto style = model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+        model::QualifiedName{"StyleColors.BorderColor"}};
+    for (const auto& color : {absolute, style}) {
+        auto encoded = form_stream::encode_document(make_document(color));
+        expect(encoded.ok(), "absolute and named-style LabelDecoration.BorderColor must encode");
+        const auto* record = label_record(encoded.value());
+        expect(record != nullptr &&
+                   list_stream::dump_compact(record->items[2].items[1].items[0].items[6]) !=
+                       "{4,4,{0},4}",
+            "LabelDecoration BorderColor must be written in base slot 6");
+        if (color.kind == model::ColorKind::style_reference) {
+            const auto& slot = record->items[2].items[1].items[0].items[6];
+            expect(slot.items[1].atom == "3" && slot.items[2].items[0].atom == "-22",
+                "StyleColors.BorderColor must use the native style identifier in slot 6");
+        }
+        const auto decoded = form_stream::decode_document(encoded.value(), "LabelBorderColor");
+        expect(decoded.ok(), "LabelDecoration.BorderColor storage must decode");
+        if (!decoded.ok()) continue;
+        const auto* entry = decoded.value().find_control(model::ObjectId{2})->properties().find(
+            model::PropertyId::from_name("BorderColor"));
+        expect(entry != nullptr && std::get<model::ColorValue>(entry->value) == color,
+            "LabelDecoration.BorderColor value must survive native storage round-trip");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value().find("<BorderColor") != std::string::npos,
+            "LabelDecoration.BorderColor must serialize as named XML");
+        if (!xml.ok()) continue;
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "named LabelDecoration.BorderColor XML must parse");
+        if (!parsed.ok()) continue;
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() &&
+                   list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "named LabelDecoration XML must rebuild the same fresh Form.bin stream");
+    }
+
+    auto default_encoded = form_stream::encode_document(make_document(std::nullopt));
+    expect(default_encoded.ok(), "LabelDecoration automatic BorderColor default must encode");
+    if (default_encoded.ok()) {
+        const auto* record = label_record(default_encoded.value());
+        expect(record != nullptr &&
+                   list_stream::dump_compact(record->items[2].items[1].items[0].items[6]) ==
+                       "{4,4,{0},4}",
+            "automatic LabelDecoration.BorderColor must use the default native slot-6 value");
+        const auto decoded = form_stream::decode_document(default_encoded.value(), "LabelBorderColorDefault");
+        const auto* label = decoded ? decoded.value().find_control(model::ObjectId{2}) : nullptr;
+        expect(label != nullptr && !label->properties().contains(model::PropertyId::from_name("BorderColor")),
+            "automatic LabelDecoration.BorderColor must remain implicit after decode");
+    }
+
+    auto unknown = model::ColorValue{model::ColorKind::style_reference, 0, 0, 0, 255,
+        model::QualifiedName{"StyleColors.Unknown"}};
+    expect_failure(form_stream::encode_document(make_document(unknown)), "OOF1122",
+        "$/LabelDecoration/BorderColor",
+        "unknown LabelDecoration color styles must fail without fallback");
+}
+
 void test_label_decoration_observed_center_right_records() {
     const auto decode_observed = [](std::string_view record, std::string_view expected_member) {
         model::Form form;
@@ -9931,6 +10017,7 @@ int main() {
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
+        test_label_border_color_round_trip();
         test_label_decoration_observed_center_right_records();
         test_label_enabled_and_tooltip_round_trip();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
