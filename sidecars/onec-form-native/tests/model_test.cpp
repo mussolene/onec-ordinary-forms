@@ -569,6 +569,7 @@ void test_help_metamodel() {
         "InputField must retain the exact 45-property TextBox surface");
     const auto* choice_enabled = find_property(ControlKind::choice_field, "Enabled");
     const auto* choice_tool_tip = find_property(ControlKind::choice_field, "ToolTip");
+    const auto* choice_border_color = find_property(ControlKind::choice_field, "BorderColor");
     const auto* choice_list = find_property(ControlKind::choice_field, "ChoiceList");
     expect(choice_enabled && choice_enabled->persistence == PersistenceClass::persisted_editable &&
             choice_enabled->storage_codec == StorageCodec::control_base &&
@@ -580,6 +581,11 @@ void test_help_metamodel() {
             choice_tool_tip->default_value.kind == DefaultKind::string &&
             choice_tool_tip->default_value.canonical.empty(),
         "ChoiceField ToolTip must use the observed empty base string default");
+    expect(choice_border_color && choice_border_color->persistence == PersistenceClass::persisted_editable &&
+            choice_border_color->storage_codec == StorageCodec::control_base &&
+            choice_border_color->default_value.kind == DefaultKind::color &&
+            choice_border_color->default_value.canonical == "automatic",
+        "ChoiceField BorderColor must describe its automatic persisted color default");
     expect(choice_list && choice_list->persistence == PersistenceClass::runtime_only &&
             choice_list->storage_codec == StorageCodec::none,
         "ChoiceField ChoiceList must remain runtime-only rather than a persisted XML value");

@@ -1257,7 +1257,10 @@ LV canonical_radio_button_info(
 
 LV canonical_control_base_properties(bool enabled, std::string_view tool_tip);
 
-LV canonical_choice_field_info(bool enabled, std::string_view tool_tip) {
+LV canonical_choice_field_info(
+    bool enabled,
+    std::string_view tool_tip,
+    const model::ColorValue& border_color) {
     auto properties = parse_constant(R"OOF(
 {{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,1,0,0,0,0,1,0,0,255,0,0,4,0,{"U"},{"U"},"",0,1,1,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
 )OOF");
@@ -1265,6 +1268,7 @@ LV canonical_choice_field_info(bool enabled, std::string_view tool_tip) {
         throw std::logic_error("canonical ChoiceField info profile is malformed");
     }
     properties.items[0] = canonical_control_base_properties(enabled, tool_tip);
+    properties.items[0].items[6] = encode_button_color(border_color, "$/ChoiceField/BorderColor");
     return list({raw("2"), std::move(properties), list({raw("0")})});
 }
 
@@ -2706,7 +2710,7 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control) 
                 enabled ? "ToolTip is non-empty" : "Enabled=false",
                 "Table Column ChoiceField is outside the observed default profile");
         }
-        return canonical_choice_field_info(enabled, tool_tip);
+        return canonical_choice_field_info(enabled, tool_tip, button_color_default("BorderColor"));
     }
     if (control.kind == model::ControlKind::check_box) {
         require_allowed_properties(control.properties, {"Enabled", "Caption", "ToolTip", "Font"}, path);
@@ -5783,11 +5787,15 @@ DecodedControl decode_choice_field(
     const auto base_path = child_path(info_properties_path, 0);
     require_arity(base_properties, 21, base_path);
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
+    const auto border_color = decode_button_color(
+        base_properties.items[6], child_path(base_path, 6));
     const std::string tool_tip = decoded_single_language_text(
         base_properties.items[12], child_path(base_path, 12));
     auto normalized_info = info;
+    normalized_info.items[1].items[0].items[6] =
+        encode_button_color(border_color, child_path(base_path, 6));
     normalized_info.items[1].items[0].items[12] = encoded_localized(tool_tip);
-    require_exact(normalized_info, canonical_choice_field_info(enabled, tool_tip), info_path,
+    require_exact(normalized_info, canonical_choice_field_info(enabled, tool_tip, border_color), info_path,
         "ChoiceField contains a property, event, or storage variation outside the observed basic profile");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -5808,6 +5816,9 @@ DecodedControl decode_choice_field(
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ChoiceFieldPayload{}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (border_color != button_color_default("BorderColor")) {
+        control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
+    }
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
@@ -7522,7 +7533,7 @@ LV encode_choice_field(
         fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
             "ChoiceField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip"}, "$/ChoiceField");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip"}, "$/ChoiceField");
     if (control.data_path) {
         const auto* attribute = document.find_attribute(control.data_path->attribute.id());
         if (attribute == nullptr) {
@@ -7535,12 +7546,13 @@ LV encode_choice_field(
         }
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const auto border_color = explicit_button_color(control.properties(), "BorderColor", "ChoiceField");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_choice_field_info(enabled, tool_tip),
+        canonical_choice_field_info(enabled, tool_tip, border_color),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

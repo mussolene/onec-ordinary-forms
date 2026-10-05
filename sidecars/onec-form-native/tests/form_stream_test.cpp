@@ -1989,7 +1989,8 @@ void test_choice_field_static_profile_round_trip_and_validation() {
                                   bool enabled = true,
                                   bool boolean_attribute = false,
                                   bool with_data_path = true,
-                                  bool with_unmapped_property = false) {
+                                  bool with_unmapped_property = false,
+                                  std::optional<model::ColorValue> border_color = std::nullopt) {
         model::Form form;
         form.id = model::ObjectId{1};
         form.name = "ChoiceFieldProfile";
@@ -2013,6 +2014,9 @@ void test_choice_field_static_profile_round_trip_and_validation() {
         }
         if (tool_tip.has_value()) {
             choice_field.properties().set_explicit(model::PropertyId::from_name("ToolTip"), *tool_tip);
+        }
+        if (border_color.has_value()) {
+            choice_field.properties().set_explicit(model::PropertyId::from_name("BorderColor"), *border_color);
         }
         if (with_unmapped_property) {
             choice_field.properties().set_explicit(
@@ -2097,6 +2101,63 @@ void test_choice_field_static_profile_round_trip_and_validation() {
     expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
                list_stream::dump_compact(encoded.value()),
         "ChoiceField profile must round-trip without storage drift");
+
+    model::ColorValue absolute_border;
+    absolute_border.kind = model::ColorKind::absolute;
+    absolute_border.red = 17;
+    absolute_border.green = 83;
+    absolute_border.blue = 201;
+    const model::ColorValue named_border{model::ColorKind::style_reference, 0, 0, 0, 255,
+        model::QualifiedName{"StyleColors.BorderColor"}};
+    const auto default_color_encoded = form_stream::encode_document(
+        make_document(std::nullopt, true, false, true, false, model::ColorValue{}));
+    expect(default_color_encoded.ok() && list_stream::dump_compact(default_color_encoded.value()) ==
+               list_stream::dump_compact(default_encoded.value()),
+        "explicit automatic ChoiceField.BorderColor must normalize to the native default");
+    for (const auto& color : {absolute_border, named_border}) {
+        const auto color_encoded = form_stream::encode_document(
+            make_document(std::nullopt, true, false, true, false, color));
+        expect(color_encoded.ok(), "ChoiceField BorderColor RGB and style values must encode");
+        const auto& color_base = choice_record(color_encoded.value()).items[2].items[1].items[0];
+        expect(color_base.items[6].items[1].atom == (color.kind == model::ColorKind::absolute ? "0" : "3"),
+            "ChoiceField BorderColor must use the shared native color codec in base slot 6");
+        const auto color_decoded = form_stream::decode_document(color_encoded.value(), "ChoiceFieldBorderColor");
+        expect(color_decoded.ok(), "ChoiceField BorderColor must decode");
+        const auto* decoded_control = color_decoded.value().find_control(model::ObjectId{2});
+        const auto* decoded_border = decoded_control == nullptr ? nullptr : decoded_control->properties().find(
+            model::PropertyId::from_name("BorderColor"));
+        expect(decoded_border != nullptr && std::get<model::ColorValue>(decoded_border->value) == color,
+            "ChoiceField BorderColor must preserve its typed RGB or named-style value");
+        const auto color_reencoded = form_stream::encode_document(color_decoded.value());
+        expect(color_reencoded.ok() && list_stream::dump_compact(color_reencoded.value()) ==
+                   list_stream::dump_compact(color_encoded.value()),
+            "ChoiceField BorderColor must survive a native storage cycle");
+        const auto xml = source::serialize_form_xml(color_decoded.value());
+        expect(xml.ok() && xml.value().find("<BorderColor") != std::string::npos,
+            "ChoiceField BorderColor must serialize as a named XML property");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "ChoiceField BorderColor XML must parse");
+        const auto xml_reencoded = form_stream::encode_document(parsed.value());
+        expect(xml_reencoded.ok() && list_stream::dump_compact(xml_reencoded.value()) ==
+                   list_stream::dump_compact(color_encoded.value()),
+            "ChoiceField named BorderColor XML must preserve the native color record");
+    }
+
+    auto invalid_alpha = absolute_border;
+    invalid_alpha.alpha = 254;
+    expect_failure(form_stream::encode_document(
+        make_document(std::nullopt, true, false, true, false, invalid_alpha)),
+        "OOF1122", "$/ChoiceField/BorderColor", "ChoiceField BorderColor must reject non-opaque RGB");
+    const model::ColorValue unknown_style{model::ColorKind::style_reference, 0, 0, 0, 255,
+        model::QualifiedName{"StyleColors.UnsupportedColor"}};
+    expect_failure(form_stream::encode_document(
+        make_document(std::nullopt, true, false, true, false, unknown_style)),
+        "OOF1122", "$/ChoiceField/BorderColor", "ChoiceField BorderColor must reject unknown styles");
+    auto malformed_color = default_encoded.value();
+    malformed_color.items[1].items[2].items[2].items[1].items[2].items[1].items[0].items[6].items[1] =
+        list_stream::ListValue::raw_atom("9");
+    expect_failure(form_stream::decode_document(malformed_color, "ChoiceFieldBorderColor"), "OOF1114",
+        "$/1/2/2/1/2/1/0/6/1", "ChoiceField must reject malformed color storage");
 
     auto unsupported_property = make_document(std::nullopt, true, false, true, true);
     expect_failure(form_stream::encode_document(unsupported_property), "OOF1122", "$/ChoiceField",
