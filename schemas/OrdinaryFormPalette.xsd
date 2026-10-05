@@ -1,0 +1,1092 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="unqualified" attributeFormDefault="unqualified">
+  <xs:annotation>
+    <xs:documentation>Generated bilingual annotations for the ordinary-form metamodel.</xs:documentation>
+    <xs:appinfo>
+      <Palette ordinaryFormVersion="2.1">
+        <Form>
+          <Properties>
+            <Property name="AutoTitle" apiName="AutoTitle" russianName="АвтоЗаголовок" russianType="Булево" valueCodec="boolean"/>
+            <Property name="FormOwner" apiName="FormOwner" russianName="ВладелецФормы" russianType="Форма ; Элемент управления" valueCodec="unclassified"/>
+            <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="decimal"/>
+            <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+            <Property name="CloseOnChoice" apiName="CloseOnChoice" russianName="ЗакрыватьПриВыборе" russianType="Булево" valueCodec="boolean"/>
+            <Property name="CloseOnOwnerClose" apiName="CloseOnOwnerClose" russianName="ЗакрыватьПриЗакрытииВладельца" russianType="Булево" valueCodec="boolean"/>
+            <Property name="SizeChange" apiName="SizeChange" russianName="ИзменениеРазмера" russianType="ИзменениеРазмераОкна" valueCodec="enumeration"/>
+            <Property name="ChangeWindowAppearanceMode" apiName="ChangeWindowAppearanceMode" russianName="ИзменятьСпособОтображенияОкна" russianType="ИзменениеСпособаОтображенияОкна" valueCodec="enumeration"/>
+            <Property name="WindowOptionsName" apiName="WindowOptionsName" russianName="ИмяСохраненияПоложенияОкна" russianType="Строка" valueCodec="string"/>
+            <Property name="CaptionPicture" apiName="CaptionPicture" russianName="КартинкаЗаголовка" russianType="Картинка" valueCodec="picture"/>
+            <Property name="WindowOptionsKey" apiName="WindowOptionsKey" russianName="КлючСохраненияПоложенияОкна" russianType="Строка" valueCodec="string"/>
+            <Property name="UniqueKey" apiName="UniqueKey" russianName="КлючУникальности" russianType="Произвольный" valueCodec="unclassified"/>
+            <Property name="MultipleChoice" apiName="MultipleChoice" russianName="МножественныйВыбор" russianType="Булево" valueCodec="boolean"/>
+            <Property name="ModalMode" apiName="ModalMode" russianName="МодальныйРежим" russianType="Булево" valueCodec="boolean"/>
+            <Property name="Modified" apiName="Modified" russianName="Модифицированность" russianType="Булево" valueCodec="boolean"/>
+            <Property name="ChoiceInitialValue" apiName="ChoiceInitialValue" russianName="НачальноеЗначениеВыбора" russianType="Произвольный" valueCodec="unclassified"/>
+            <Property name="Panel" apiName="Panel" russianName="Панель" russianType="Панель" valueCodec="owned-panel"/>
+            <Property name="EnterKeyBehavior" apiName="EnterKeyBehavior" russianName="ПоведениеКлавишиEnter" russianType="ТипПоведенияКлавишиEnter" valueCodec="enumeration"/>
+            <Property name="WindowLocation" apiName="WindowLocation" russianName="ПоложениеОкна" russianType="ВариантПоложенияОкна" valueCodec="enumeration"/>
+            <Property name="WindowDockLocation" apiName="WindowDockLocation" russianName="ПоложениеПрикрепленногоОкна" russianType="ВариантПрикрепленияОкна" valueCodec="enumeration"/>
+            <Property name="AllowClose" apiName="AllowClose" russianName="РазрешитьЗакрытие" russianType="Булево" valueCodec="boolean"/>
+            <Property name="AllowJoinWindow" apiName="AllowJoinWindow" russianName="РазрешитьСоединятьОкно" russianType="Булево" valueCodec="boolean"/>
+            <Property name="AllowNormalState" apiName="AllowNormalState" russianName="РазрешитьСостояниеОбычное" russianType="Булево" valueCodec="boolean"/>
+            <Property name="AllowDockedState" apiName="AllowDockedState" russianName="РазрешитьСостояниеПрикрепленное" russianType="Булево" valueCodec="boolean"/>
+            <Property name="AllowAutohideState" apiName="AllowAutohideState" russianName="РазрешитьСостояниеПрячущееся" russianType="Булево" valueCodec="boolean"/>
+            <Property name="AllowFloatState" apiName="AllowFloatState" russianName="РазрешитьСостояниеСвободное" russianType="Булево" valueCodec="boolean"/>
+            <Property name="ChoiceMode" apiName="ChoiceMode" russianName="РежимВыбора" russianType="Булево" valueCodec="boolean"/>
+            <Property name="DesktopMode" apiName="DesktopMode" russianName="РежимРабочегоСтола" russianType="Булево" valueCodec="boolean"/>
+            <Property name="ConnectableWindow" apiName="ConnectableWindow" russianName="СоединяемоеОкно" russianType="Булево" valueCodec="boolean"/>
+            <Property name="WindowState" apiName="WindowState" russianName="СостояниеОкна" russianType="ВариантСостоянияОкна" valueCodec="enumeration"/>
+            <Property name="WindowAppearanceMode" apiName="WindowAppearanceMode" russianName="СпособОтображенияОкна" russianType="ВариантСпособаОтображенияОкна" valueCodec="enumeration"/>
+            <Property name="Style" apiName="Style" russianName="Стиль" russianType="Стиль" valueCodec="unclassified"/>
+            <Property name="CurrentControl" apiName="CurrentControl" russianName="ТекущийЭлемент" russianType="" valueCodec="unclassified"/>
+            <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
+            <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
+            <Property name="Controls" apiName="Controls" russianName="ЭлементыФормы" russianType="ЭлементыФормы" valueCodec="unclassified"/>
+            <Property name="ThisForm" apiName="ThisForm" russianName="ЭтаФорма" russianType="Форма" valueCodec="unclassified"/>
+          </Properties>
+          <Events>
+            <Event name="ExternalEvent" apiName="ExternalEvent" russianName="ВнешнееСобытие"/>
+            <Event name="RefreshDisplay" apiName="RefreshDisplay" russianName="ОбновлениеОтображения"/>
+            <Event name="ObjectActivationProcessing" apiName="ObjectActivationProcessing" russianName="ОбработкаАктивизацииОбъекта"/>
+            <Event name="ChoiceProcessing" apiName="ChoiceProcessing" russianName="ОбработкаВыбора"/>
+            <Event name="NewObjectWriteProcessing" apiName="NewObjectWriteProcessing" russianName="ОбработкаЗаписиНовогоОбъекта"/>
+            <Event name="NotificationProcessing" apiName="NotificationProcessing" russianName="ОбработкаОповещения"/>
+            <Event name="FillCheckProcessing" apiName="FillCheckProcessing" russianName="ОбработкаПроверкиЗаполнения"/>
+            <Event name="AddInDetachmentOnError" apiName="AddInDetachmentOnError" russianName="ОтключениеВнешнейКомпонентыПриОшибке"/>
+            <Event name="BeforeClose" apiName="BeforeClose" russianName="ПередЗакрытием"/>
+            <Event name="BeforeOpen" apiName="BeforeOpen" russianName="ПередОткрытием"/>
+            <Event name="OnClose" apiName="OnClose" russianName="ПриЗакрытии"/>
+            <Event name="OnOpen" apiName="OnOpen" russianName="ПриОткрытии"/>
+            <Event name="OnReopen" apiName="OnReopen" russianName="ПриПовторномОткрытии"/>
+          </Events>
+        </Form>
+        <SharedProperties surface="controlExtension">
+          <Property name="AutoContextMenu" apiName="AutoContextMenu" russianName="АвтоКонтекстноеМеню" russianType="Булево" valueCodec="boolean"/>
+          <Property name="Data" apiName="Data" russianName="Данные" russianType="Строка" valueCodec="string"/>
+          <Property name="Value" apiName="Value" russianName="Значение" russianType="" valueCodec="unclassified"/>
+          <Property name="ModifiesData" apiName="ModifiesData" russianName="ИзменяетДанные" russianType="Булево" valueCodec="boolean"/>
+          <Property name="Name" apiName="Name" russianName="Имя" russianType="Строка" valueCodec="string"/>
+          <Property name="ActionSource" apiName="ActionSource" russianName="ИсточникДействий" russianType="" valueCodec="action-source-reference"/>
+          <Property name="DefaultButton" apiName="DefaultButton" russianName="КнопкаПоУмолчанию" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ContextMenu" apiName="ContextMenu" russianName="КонтекстноеМеню" russianType="Неопределено ; КоманднаяПанель ; КнопкаКоманднойПанели" valueCodec="unclassified"/>
+          <Property name="FirstInGroup" apiName="FirstInGroup" russianName="ПервыйВГруппе" russianType="Булево" valueCodec="boolean"/>
+          <Property name="SkipOnInput" apiName="SkipOnInput" russianName="ПропускатьПриВводе" russianType="Булево" valueCodec="boolean"/>
+          <Property name="ValueType" apiName="ValueType" russianName="ТипЗначения" russianType="ОписаниеТипов" valueCodec="type-domain"/>
+        </SharedProperties>
+        <SharedProperties surface="panelPlacement">
+          <Property name="DefaultControl" apiName="DefaultControl" russianName="АктивизироватьПоУмолчанию" russianType="Булево" valueCodec="boolean"/>
+          <Property name="Top" apiName="Top" russianName="Верх" russianType="Число" valueCodec="integer32"/>
+          <Property name="Visible" apiName="Visible" russianName="Видимость" russianType="Булево" valueCodec="boolean"/>
+          <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="integer32"/>
+          <Property name="Left" apiName="Left" russianName="Лево" russianType="Число" valueCodec="integer32"/>
+          <Property name="TabOrder" apiName="TabOrder" russianName="ПорядокОбхода" russianType="Число" valueCodec="integer32"/>
+          <Property name="ZOrder" apiName="ZOrder" russianName="ПорядокОтображения" russianType="Число" valueCodec="integer32"/>
+          <Property name="Collapse" apiName="Collapse" russianName="Свертка" russianType="РежимСверткиЭлементаУправления" valueCodec="enumeration"/>
+          <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="integer32"/>
+        </SharedProperties>
+        <NamedConcept name="MainAttribute" russianName="Основной реквизит"/>
+        <NamedConcept name="DataProcessorFormExtension" russianName="Расширение формы обработки"/>
+        <Controls>
+          <Control name="Panel" apiName="Panel" russianName="Панель" children="controlsAndPages">
+            <Properties>
+              <Property name="AutoTabOrder" apiName="AutoTabOrder" russianName="АвтоПорядокОбхода" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
+              <Property name="ShowTabs" apiName="ShowTabs" russianName="ОтображениеЗакладок" russianType="ОтображениеЗакладок" valueCodec="enumeration"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="PanelPictureLocation" apiName="PanelPictureLocation" russianName="ПоложениеКартинкиПанели" russianType="ПоложениеКартинкиПанели" valueCodec="enumeration"/>
+              <Property name="TabOrder" apiName="TabOrder" russianName="ПорядокОбхода" russianType="Число" valueCodec="decimal"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="РазмерКартинки" valueCodec="enumeration"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="SeparateByPage" apiName="SeparateByPage" russianName="РаспределятьПоСтраницам" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ScrollPageMode" apiName="ScrollPageMode" russianName="РежимПрокручиваемыхСтраниц" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Pages" apiName="Pages" russianName="Страницы" russianType="СтраницыПанели" valueCodec="unclassified"/>
+              <Property name="CurrentPage" apiName="CurrentPage" russianName="ТекущаяСтраница" russianType="СтраницаПанели" valueCodec="unclassified"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+              <Event name="OnCurrentPageChange" apiName="OnCurrentPageChange" russianName="ПриСменеСтраницы"/>
+            </Events>
+          </Control>
+          <Control name="CommandBar" apiName="CommandBar" russianName="КоманднаяПанель" children="none">
+            <Properties>
+              <Property name="AutoFill" apiName="AutoFill" russianName="АвтоЗаполнение" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Secondary" apiName="Secondary" russianName="Вспомогательная" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ButtonsAlignment" apiName="ButtonsAlignment" russianName="ВыравниваниеКнопок" russianType="ВыравниваниеКнопокКоманднойПанели" valueCodec="enumeration"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Buttons" apiName="Buttons" russianName="Кнопки" russianType="КнопкиКоманднойПанели" valueCodec="command-bar-buttons"/>
+              <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonTextColor" apiName="ButtonTextColor" russianName="ЦветТекстаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+            </Events>
+          </Control>
+          <Control name="Button" apiName="Button" russianName="Кнопка" children="none">
+            <Properties>
+              <Property name="VerticalAlign" apiName="VerticalAlign" russianName="ВертикальноеПоложение" russianType="ВертикальноеПоложение" valueCodec="enumeration"/>
+              <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
+              <Property name="Buttons" apiName="Buttons" russianName="Кнопки" russianType="КнопкиКоманднойПанели" valueCodec="command-bar-buttons"/>
+              <Property name="MultiLine" apiName="MultiLine" russianName="МногострочныйРежим" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="PictureLocation" apiName="PictureLocation" russianName="ПоложениеКартинки" russianType="ПоложениеКартинкиКнопки" valueCodec="enumeration"/>
+              <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="РазмерКартинки" valueCodec="enumeration"/>
+              <Property name="MenuMode" apiName="MenuMode" russianName="РежимМеню" russianType="ИспользованиеРежимаМеню" valueCodec="enumeration"/>
+              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonTextColor" apiName="ButtonTextColor" russianName="ЦветТекстаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+              <Event name="Click" apiName="Click" russianName="Нажатие"/>
+            </Events>
+          </Control>
+          <Control name="PictureDecoration" apiName="PictureBox" russianName="ПолеКартинки" children="none">
+            <Properties>
+              <Property name="Hyperlink" apiName="Hyperlink" russianName="Гиперссылка" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="UseContextMenu" apiName="UseContextMenu" russianName="ИспользоватьКонтекстноеМеню" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
+              <Property name="Zoomable" apiName="Zoomable" russianName="Масштабировать" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="РазмерКартинки" valueCodec="enumeration"/>
+              <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
+              <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
+              <Property name="NonselectedPictureText" apiName="NonselectedPictureText" russianName="ТекстНевыбраннойКартинки" russianType="Строка" valueCodec="string"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+              <Event name="Click" apiName="Click" russianName="Нажатие"/>
+              <Event name="DragStart" apiName="DragStart" russianName="НачалоПеретаскивания"/>
+              <Event name="DragEnd" apiName="DragEnd" russianName="ОкончаниеПеретаскивания"/>
+              <Event name="Drag" apiName="Drag" russianName="Перетаскивание"/>
+              <Event name="DragCheck" apiName="DragCheck" russianName="ПроверкаПеретаскивания"/>
+            </Events>
+          </Control>
+          <Control name="CheckBox" apiName="CheckBox" russianName="Флажок" children="none">
+            <Properties>
+              <Property name="VerticalAlign" apiName="VerticalAlign" russianName="ВертикальноеПоложение" russianType="ВертикальноеПоложение" valueCodec="enumeration"/>
+              <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="TitleLocation" apiName="TitleLocation" russianName="ПоложениеЗаголовка" russianType="ПоложениеЗаголовка" valueCodec="enumeration"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="ThreeState" apiName="ThreeState" russianName="ТриСостояния" russianType="Булево" valueCodec="boolean"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldTextColor" apiName="FieldTextColor" russianName="ЦветТекстаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+              <Event name="OnChange" apiName="OnChange" russianName="ПриИзменении"/>
+            </Events>
+          </Control>
+          <Control name="ChoiceField" apiName="ComboBox" russianName="ПолеВыбора" children="none">
+            <Properties>
+              <Property name="ChoiceListHeight" apiName="ChoiceListHeight" russianName="ВысотаСпискаВыбора" russianType="Число" valueCodec="decimal"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
+              <Property name="SelButtonPicture" apiName="SelButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" valueCodec="picture"/>
+              <Property name="ChoiceButtonPicture" apiName="ChoiceButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" valueCodec="picture"/>
+              <Property name="ChoiceButton" apiName="ChoiceButton" russianName="КнопкаВыбора" russianType="Булево" valueCodec="boolean"/>
+              <Property name="OpenButton" apiName="OpenButton" russianName="КнопкаОткрытия" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ClearButton" apiName="ClearButton" russianName="КнопкаОчистки" russianType="Булево" valueCodec="boolean"/>
+              <Property name="SpinButton" apiName="SpinButton" russianName="КнопкаРегулирования" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="ChoiceList" apiName="ChoiceList" russianName="СписокВыбора" russianType="СписокЗначений" valueCodec="unclassified"/>
+              <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonTextColor" apiName="ButtonTextColor" russianName="ЦветТекстаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldTextColor" apiName="FieldTextColor" russianName="ЦветТекстаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="ChoiceListWidth" apiName="ChoiceListWidth" russianName="ШиринаСпискаВыбора" russianType="Число" valueCodec="decimal"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+              <Event name="StartChoice" apiName="StartChoice" russianName="НачалоВыбора"/>
+              <Event name="StartListChoice" apiName="StartListChoice" russianName="НачалоВыбораИзСписка"/>
+              <Event name="ChoiceProcessing" apiName="ChoiceProcessing" russianName="ОбработкаВыбора"/>
+              <Event name="Opening" apiName="Opening" russianName="Открытие"/>
+              <Event name="Clearing" apiName="Clearing" russianName="Очистка"/>
+              <Event name="OnChange" apiName="OnChange" russianName="ПриИзменении"/>
+              <Event name="Tuning" apiName="Tuning" russianName="Регулирование"/>
+            </Events>
+          </Control>
+          <Control name="RadioButton" apiName="RadioButton" russianName="Переключатель" children="none">
+            <Properties>
+              <Property name="VerticalAlign" apiName="VerticalAlign" russianName="ВертикальноеПоложение" russianType="ВертикальноеПоложение" valueCodec="enumeration"/>
+              <Property name="SelectionValue" apiName="SelectionValue" russianName="ВыбираемоеЗначение" russianType="Совпадает с описанием типа первого в группе переключателя" valueCodec="decimal"/>
+              <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="TitleLocation" apiName="TitleLocation" russianName="ПоложениеЗаголовка" russianType="ПоложениеЗаголовка" valueCodec="enumeration"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldTextColor" apiName="FieldTextColor" russianName="ЦветТекстаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+              <Event name="OnChange" apiName="OnChange" russianName="ПриИзменении"/>
+            </Events>
+          </Control>
+          <Control name="InputField" apiName="TextBox" russianName="ПолеВвода" children="none">
+            <Properties>
+              <Property name="AutoChoiceIncomplete" apiName="AutoChoiceIncomplete" russianName="АвтоВыборНезаполненного" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoMarkIncomplete" apiName="AutoMarkIncomplete" russianName="АвтоОтметкаНезаполненного" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Wrap" apiName="Wrap" russianName="АвтоПереносСтрок" russianType="Булево" valueCodec="boolean"/>
+              <Property name="VerticalAlign" apiName="VerticalAlign" russianName="ВертикальноеПоложение" russianType="ВертикальноеПоложение" valueCodec="enumeration"/>
+              <Property name="ChooseType" apiName="ChooseType" russianName="ВыбиратьТип" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ChoiceIncomplete" apiName="ChoiceIncomplete" russianName="ВыборНезаполненного" russianType="Булево" valueCodec="boolean"/>
+              <Property name="SelectedText" apiName="SelectedText" russianName="ВыделенныйТекст" russianType="Строка" valueCodec="string"/>
+              <Property name="MarkNegatives" apiName="MarkNegatives" russianName="ВыделятьОтрицательные" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ChoiceListHeight" apiName="ChoiceListHeight" russianName="ВысотаСпискаВыбора" russianType="Число" valueCodec="integer32"/>
+              <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
+              <Property name="SelButtonPicture" apiName="SelButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" valueCodec="picture"/>
+              <Property name="ChoiceButtonPicture" apiName="ChoiceButtonPicture" russianName="КартинкаКнопкиВыбора" russianType="Картинка" valueCodec="picture"/>
+              <Property name="ChoiceButton" apiName="ChoiceButton" russianName="КнопкаВыбора" russianType="Булево" valueCodec="boolean"/>
+              <Property name="OpenButton" apiName="OpenButton" russianName="КнопкаОткрытия" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ClearButton" apiName="ClearButton" russianName="КнопкаОчистки" russianType="Булево" valueCodec="boolean"/>
+              <Property name="SpinButton" apiName="SpinButton" russianName="КнопкаРегулирования" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ChoiceListButton" apiName="ChoiceListButton" russianName="КнопкаСпискаВыбора" russianType="Булево" valueCodec="boolean"/>
+              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Произвольный" valueCodec="unclassified"/>
+              <Property name="Mask" apiName="Mask" russianName="Маска" russianType="Строка" valueCodec="string"/>
+              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Произвольный" valueCodec="unclassified"/>
+              <Property name="MultiLine" apiName="MultiLine" russianName="МногострочныйРежим" russianType="Булево" valueCodec="boolean"/>
+              <Property name="TypeRestriction" apiName="TypeRestriction" russianName="ОграничениеТипа" russianType="ОписаниеТипов" valueCodec="type-domain"/>
+              <Property name="MarkIncomplete" apiName="MarkIncomplete" russianName="ОтметкаНезаполненного" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="ExtendedEdit" apiName="ExtendedEdit" russianName="РасширенноеРедактирование" russianType="Булево" valueCodec="boolean"/>
+              <Property name="TextEdit" apiName="TextEdit" russianName="РедактированиеТекста" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ListChoiceMode" apiName="ListChoiceMode" russianName="РежимВыбораИзСписка" russianType="Булево" valueCodec="boolean"/>
+              <Property name="IncompleteChoiceMode" apiName="IncompleteChoiceMode" russianName="РежимВыбораНезаполненного" russianType="РежимВыбораНезаполненного" valueCodec="enumeration"/>
+              <Property name="PasswordMode" apiName="PasswordMode" russianName="РежимПароля" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
+              <Property name="ChoiceList" apiName="ChoiceList" russianName="СписокВыбора" russianType="СписокЗначений" valueCodec="unclassified"/>
+              <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Format" apiName="Format" russianName="Формат" russianType="Строка" valueCodec="string"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonTextColor" apiName="ButtonTextColor" russianName="ЦветТекстаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldTextColor" apiName="FieldTextColor" russianName="ЦветТекстаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="ChoiceListWidth" apiName="ChoiceListWidth" russianName="ШиринаСпискаВыбора" russianType="Число" valueCodec="decimal"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+              <Property name="TypeLinkItem" apiName="TypeLinkItem" russianName="ЭлементСвязиПоТипу" russianType="" valueCodec="unclassified"/>
+            </Properties>
+            <Events>
+              <Event name="AutoCompleteText" apiName="AutoCompleteText" russianName="АвтоПодборТекста"/>
+              <Event name="StartChoice" apiName="StartChoice" russianName="НачалоВыбора"/>
+              <Event name="StartListChoice" apiName="StartListChoice" russianName="НачалоВыбораИзСписка"/>
+              <Event name="ChoiceProcessing" apiName="ChoiceProcessing" russianName="ОбработкаВыбора"/>
+              <Event name="TextEditEnd" apiName="TextEditEnd" russianName="ОкончаниеВводаТекста"/>
+              <Event name="Opening" apiName="Opening" russianName="Открытие"/>
+              <Event name="Clearing" apiName="Clearing" russianName="Очистка"/>
+              <Event name="OnChange" apiName="OnChange" russianName="ПриИзменении"/>
+              <Event name="Tuning" apiName="Tuning" russianName="Регулирование"/>
+            </Events>
+          </Control>
+          <Control name="UsualGroup" apiName="GroupBox" russianName="РамкаГруппы" children="controls">
+            <Properties>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+            </Events>
+          </Control>
+          <Control name="Splitter" apiName="Splitter" russianName="Разделитель" children="none">
+            <Properties>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+            </Properties>
+            <Events>
+            </Events>
+          </Control>
+          <Control name="Chart" apiName="Chart" russianName="Диаграмма" children="none">
+            <Properties>
+              <Property name="AutoMaxValue" apiName="AutoMaxValue" russianName="АвтоМаксимальноеЗначение" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoMinValue" apiName="AutoMinValue" russianName="АвтоМинимальноеЗначение" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoSeriesSeparation" apiName="AutoSeriesSeparation" russianName="АвтоРаздвижениеСерий" russianType="АвтоРаздвижениеСерий" valueCodec="enumeration"/>
+              <Property name="AutoTransposition" apiName="AutoTransposition" russianName="АвтоТранспонирование" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoSeriesText" apiName="AutoSeriesText" russianName="АвтоУстановкаТекстаСерий" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoPointText" apiName="AutoPointText" russianName="АвтоУстановкаТекстаТочек" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ActiveSeries" apiName="ActiveSeries" russianName="АктивнаяСерия" russianType="СерияДиаграммы" valueCodec="unclassified"/>
+              <Property name="ActivePoint" apiName="ActivePoint" russianName="АктивнаяТочка" russianType="ТочкаДиаграммы" valueCodec="unclassified"/>
+              <Property name="BaseValue" apiName="BaseValue" russianName="БазовоеЗначение" russianType="Число" valueCodec="decimal"/>
+              <Property name="LabelType" apiName="LabelType" russianName="ВидПодписей" russianType="ВидПодписейКДиаграмме" valueCodec="enumeration"/>
+              <Property name="Gradient" apiName="Gradient" russianName="Градиент" russianType="Булево" valueCodec="boolean"/>
+              <Property name="DataSource" apiName="DataSource" russianName="ИсточникДанных" russianType="ТаблицаЗначений ; ОбластьЯчеекТабличногоДокумента" valueCodec="unclassified"/>
+              <Property name="SeriesCount" apiName="SeriesCount" russianName="КоличествоСерий" russianType="Число" valueCodec="decimal"/>
+              <Property name="PointCount" apiName="PointCount" russianName="КоличествоТочек" russianType="Число" valueCodec="decimal"/>
+              <Property name="EndGaugeAngle" apiName="EndGaugeAngle" russianName="КонечныйУголИзмерительнойДиаграммы" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxSeries" apiName="MaxSeries" russianName="МаксимумСерий" russianType="МаксимумСерий" valueCodec="enumeration"/>
+              <Property name="MaxSeriesCount" apiName="MaxSeriesCount" russianName="МаксимумСерийКоличество" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxSeriesPercent" apiName="MaxSeriesPercent" russianName="МаксимумСерийПроцент" russianType="Число" valueCodec="decimal"/>
+              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Число" valueCodec="decimal"/>
+              <Property name="BeginGaugeAngle" apiName="BeginGaugeAngle" russianName="НачальныйУголИзмерительнойДиаграммы" russianType="Число" valueCodec="decimal"/>
+              <Property name="TitleArea" apiName="TitleArea" russianName="ОбластьЗаголовка" russianType="ОбластьЗаголовкаДиаграммы" valueCodec="unclassified"/>
+              <Property name="LegendArea" apiName="LegendArea" russianName="ОбластьЛегенды" russianType="ОбластьЛегендыДиаграммы" valueCodec="unclassified"/>
+              <Property name="PlotArea" apiName="PlotArea" russianName="ОбластьПостроения" russianType="ОбластьПостроенияДиаграммы" valueCodec="unclassified"/>
+              <Property name="RefreshEnabled" apiName="RefreshEnabled" russianName="Обновление" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Outline" apiName="Outline" russianName="Окантовка" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="ОриентацияДиаграммы" valueCodec="enumeration"/>
+              <Property name="ShowTitle" apiName="ShowTitle" russianName="ОтображатьЗаголовок" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ShowLegend" apiName="ShowLegend" russianName="ОтображатьЛегенду" russianType="Булево" valueCodec="boolean"/>
+              <Property name="GaugeChartValueRepresentation" apiName="GaugeChartValueRepresentation" russianName="ОтображениеЗначенияИзмерительнойДиаграммы" russianType="ОтображениеЗначенияИзмерительнойДиаграммы" valueCodec="enumeration"/>
+              <Property name="ColorPalette" apiName="ColorPalette" russianName="ПалитраЦветов" russianType="ПалитраЦветовДиаграммы" valueCodec="enumeration"/>
+              <Property name="GaugeChartValuesScaleLabelsArcDirection" apiName="GaugeChartValuesScaleLabelsArcDirection" russianName="ПодписиШкалыЗначенийИзмерительнойДиаграммыВдольШкалы" russianType="Булево" valueCodec="boolean"/>
+              <Property name="LabelLocation" apiName="LabelLocation" russianName="ПоложениеПодписей" russianType="ПоложениеПодписейКДиаграмме" valueCodec="enumeration"/>
+              <Property name="GaugeChartValuesScaleLabelsLocation" apiName="GaugeChartValuesScaleLabelsLocation" russianName="ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы" russianType="ПоложениеПодписейШкалыЗначенийИзмерительнойДиаграммы" valueCodec="enumeration"/>
+              <Property name="GaugeChartQualityBands" apiName="GaugeChartQualityBands" russianName="ПолосыИзмерительнойДиаграммы" russianType="ПолосыИзмерительнойДиаграммы" valueCodec="unclassified"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="TransparentLabel" apiName="TransparentLabel" russianName="ПрозрачныйФонПодписей" russianType="Булево" valueCodec="boolean"/>
+              <Property name="HideBaseValue" apiName="HideBaseValue" russianName="ПропускатьБазовоеЗначение" russianType="Булево" valueCodec="boolean"/>
+              <Property name="LabelDelimiter" apiName="LabelDelimiter" russianName="РазделительПодписей" russianType="Строка" valueCodec="string"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="LabelBorder" apiName="LabelBorder" russianName="РамкаПодписей" russianType="Рамка" valueCodec="border"/>
+              <Property name="SpaceMode" apiName="SpaceMode" russianName="РежимПробелов" russianType="РежимПробеловДиаграммы" valueCodec="enumeration"/>
+              <Property name="Light" apiName="Light" russianName="Свет" russianType="Булево" valueCodec="boolean"/>
+              <Property name="SummarySeries" apiName="SummarySeries" russianName="СводнаяСерия" russianType="СерияДиаграммы" valueCodec="unclassified"/>
+              <Property name="Series" apiName="Series" russianName="Серии" russianType="СерииДиаграммы" valueCodec="unclassified"/>
+              <Property name="SeriesInRows" apiName="SeriesInRows" russianName="СерииВСтроках" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ChartType" apiName="ChartType" russianName="ТипДиаграммы" russianType="ТипДиаграммы" valueCodec="enumeration"/>
+              <Property name="GaugeBushThickness" apiName="GaugeBushThickness" russianName="ТолщинаВтулкиИзмерительнойДиаграммы" russianType="Число" valueCodec="decimal"/>
+              <Property name="GaugeThickness" apiName="GaugeThickness" russianName="ТолщинаШкалыИзмерительнойДиаграммы" russianType="Число" valueCodec="decimal"/>
+              <Property name="Points" apiName="Points" russianName="Точки" russianType="ТочкиДиаграммы" valueCodec="unclassified"/>
+              <Property name="ValueLabelFormat" apiName="ValueLabelFormat" russianName="ФорматЗначенийВПодписях" russianType="Строка" valueCodec="string"/>
+              <Property name="PercentLabelFormat" apiName="PercentLabelFormat" russianName="ФорматПроцентовВПодписях" russianType="Строка" valueCodec="string"/>
+              <Property name="GaugeBushColor" apiName="GaugeBushColor" russianName="ЦветВтулкиИзмерительнойДиаграммы" russianType="Цвет" valueCodec="color"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="LabelBorderColor" apiName="LabelBorderColor" russianName="ЦветРамкиПодписей" russianType="Цвет" valueCodec="color"/>
+              <Property name="LabelTextColor" apiName="LabelTextColor" russianName="ЦветТекстаПодписей" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="LabelBackColor" apiName="LabelBackColor" russianName="ЦветФонаПодписей" russianType="Цвет" valueCodec="color"/>
+              <Property name="LabelFont" apiName="LabelFont" russianName="ШрифтПодписей" russianType="Шрифт" valueCodec="font"/>
+              <Property name="Title" apiName="TitleArea.Text" russianName="ОбластьЗаголовка.Текст" russianType="Строка" valueCodec="string"/>
+            </Properties>
+            <Events>
+              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
+              <Event name="DetailProcessing" apiName="DetailProcessing" russianName="ОбработкаРасшифровки"/>
+            </Events>
+          </Control>
+          <Control name="PivotChart" apiName="PivotChart" russianName="СводнаяДиаграмма" children="none">
+            <Properties>
+              <Property name="DataSource" apiName="DataSource" russianName="ИсточникДанных" russianType="РезультатЗапроса ; ПостроительОтчета" valueCodec="unclassified"/>
+              <Property name="Fields" apiName="Fields" russianName="Поля" russianType="КоллекцияПолейСводнойДиаграммы" valueCodec="unclassified"/>
+              <Property name="PivotChartType" apiName="PivotChartType" russianName="ТипСводнойДиаграммы" russianType="ТипСводнойДиаграммы" valueCodec="enumeration"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+            </Properties>
+            <Events>
+              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
+              <Event name="DetailProcessing" apiName="DetailProcessing" russianName="ОбработкаРасшифровки"/>
+            </Events>
+          </Control>
+          <Control name="GanttChart" apiName="GanttChart" russianName="ДиаграммаГанта" children="none">
+            <Properties>
+              <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" valueCodec="boolean"/>
+              <Property name="PeriodicVariantUnit" apiName="PeriodicVariantUnit" russianName="ЕдиницаПериодическогоВарианта" russianType="ТипЕдиницыШкалыВремени" valueCodec="enumeration"/>
+              <Property name="PeriodicVariantRepetition" apiName="PeriodicVariantRepetition" russianName="КратностьПериодическогоВарианта" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" valueCodec="decimal"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="AutoFullInterval" apiName="AutoFullInterval" russianName="АвтоОпределениеПолногоИнтервала" russianType="Булево" valueCodec="boolean"/>
+              <Property name="FullIntervalBegin" apiName="FullIntervalBegin" russianName="НачалоПолногоИнтервала" russianType="Дата" valueCodec="date"/>
+              <Property name="FullIntervalEnd" apiName="FullIntervalEnd" russianName="КонецПолногоИнтервала" russianType="Дата" valueCodec="date"/>
+            </Properties>
+            <Events>
+              <Event name="OnIntervalEditEnd" apiName="OnIntervalEditEnd" russianName="ПриОкончанииРедактированияИнтервала"/>
+            </Events>
+          </Control>
+          <Control name="Dendrogram" apiName="Dendrogram" russianName="Дендрограмма" children="none">
+            <Properties>
+              <Property name="AutoMaxHeight" apiName="AutoMaxHeight" russianName="АвтоМаксимальнаяВысота" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxHeight" apiName="MaxHeight" russianName="МаксимальнаяВысота" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" valueCodec="decimal"/>
+              <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" valueCodec="boolean"/>
+              <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="Items" apiName="Items" russianName="Элементы" russianType="ЭлементыДендрограммы" valueCodec="dendrogram-items"/>
+              <Property name="Links" apiName="Links" russianName="Связи" russianType="СвязиДендрограммы" valueCodec="dendrogram-links"/>
+              <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="ОриентацияДендрограммы" valueCodec="enumeration"/>
+            </Properties>
+            <Events>
+              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
+              <Event name="DetailProcessing" apiName="DetailProcessing" russianName="ОбработкаРасшифровки"/>
+            </Events>
+          </Control>
+          <Control name="HTMLDocumentField" apiName="HTMLDocumentField" russianName="ПолеHTMLДокумента" children="none">
+            <Properties>
+              <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
+              <Property name="Document" apiName="Document" russianName="Документ" russianType="COMОбъект" valueCodec="unclassified"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+            </Properties>
+            <Events>
+              <Event name="DocumentComplete" apiName="DocumentComplete" russianName="ДокументСформирован"/>
+            </Events>
+          </Control>
+          <Control name="ListBox" apiName="ListBox" russianName="ПолеСписка" children="none">
+            <Properties>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ShowPicture" apiName="ShowPicture" russianName="ОтображатьКартинку" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ShowCheckBox" apiName="ShowCheckBox" russianName="ОтображатьПометку" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="CurrentRow" apiName="CurrentRow" russianName="ТекущаяСтрока" russianType="ЭлементСпискаЗначений" valueCodec="unclassified"/>
+              <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldTextColor" apiName="FieldTextColor" russianName="ЦветТекстаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
+            </Properties>
+            <Events>
+              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
+              <Event name="OnActivateRow" apiName="OnActivateRow" russianName="ПриАктивизацииСтроки"/>
+              <Event name="OnCheckChange" apiName="OnCheckChange" russianName="ПриИзмененииФлажка"/>
+            </Events>
+          </Control>
+          <Control name="ProgressBar" apiName="ProgressBar" russianName="Индикатор" children="none">
+            <Properties>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="integer32"/>
+              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Число" valueCodec="integer32"/>
+              <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
+              <Property name="ShowPercent" apiName="ShowPercent" russianName="ОтображатьПроценты" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="ShowStyle" apiName="ShowStyle" russianName="СтильОтображения" russianType="РежимСглаживанияИндикатора" valueCodec="enumeration"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="Step" apiName="Step" russianName="Шаг" russianType="Число" valueCodec="integer32"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+            </Events>
+          </Control>
+          <Control name="TrackBar" apiName="TrackBar" russianName="ПолосаРегулирования" children="none">
+            <Properties>
+              <Property name="LargeStep" apiName="LargeStep" russianName="БольшойШаг" russianType="Число" valueCodec="decimal"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="MaxValue" apiName="MaxValue" russianName="МаксимальноеЗначение" russianType="Число" valueCodec="integer32"/>
+              <Property name="MinValue" apiName="MinValue" russianName="МинимальноеЗначение" russianType="Число" valueCodec="integer32"/>
+              <Property name="Orientation" apiName="Orientation" russianName="Ориентация" russianType="Ориентация" valueCodec="enumeration"/>
+              <Property name="MarkingAppearance" apiName="MarkingAppearance" russianName="ОтображениеРазметки" russianType="ОтображениеРазметкиПолосыРегулирования" valueCodec="enumeration"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="Step" apiName="Step" russianName="Шаг" russianType="Число" valueCodec="integer32"/>
+              <Property name="MarkingStep" apiName="MarkingStep" russianName="ШагРазметки" russianType="Число" valueCodec="decimal"/>
+            </Properties>
+            <Events>
+              <Event name="OnChange" apiName="OnChange" russianName="ПриИзменении"/>
+            </Events>
+          </Control>
+          <Control name="CalendarField" apiName="CalendarBox" russianName="ПолеКалендаря" children="none">
+            <Properties>
+              <Property name="SelectedDates" apiName="SelectedDates" russianName="ВыделенныеДаты" russianType="КоллекцияВыделенныхДат" valueCodec="unclassified"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="EndOfDisplayPeriod" apiName="EndOfDisplayPeriod" russianName="КонецПериодаОтображения" russianType="Дата ; Неопределено" valueCodec="date"/>
+              <Property name="BeginOfDisplayPeriod" apiName="BeginOfDisplayPeriod" russianName="НачалоПериодаОтображения" russianType="Дата ; Неопределено" valueCodec="date"/>
+              <Property name="ShowCurrentDate" apiName="ShowCurrentDate" russianName="ОтображатьТекущуюДату" russianType="Булево" valueCodec="boolean"/>
+              <Property name="CalendarNavigation" apiName="CalendarNavigation" russianName="ПеремещениеПоКалендарю" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
+              <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="SelectionMode" apiName="SelectionMode" russianName="РежимВыделения" russianType="РежимВыделенияДаты" valueCodec="enumeration"/>
+              <Property name="CurrentDate" apiName="CurrentDate" russianName="ТекущаяДата" russianType="Дата" valueCodec="date"/>
+              <Property name="HolidayColor" apiName="HolidayColor" russianName="ЦветВыходныхДней" russianType="Цвет" valueCodec="color"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="SelectionTextColor" apiName="SelectionTextColor" russianName="ЦветТекстаВыделения" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonTextColor" apiName="ButtonTextColor" russianName="ЦветТекстаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldTextColor" apiName="FieldTextColor" russianName="ЦветТекстаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="SelectionBackColor" apiName="SelectionBackColor" russianName="ЦветФонаВыделения" russianType="Цвет" valueCodec="color"/>
+              <Property name="ButtonBackColor" apiName="ButtonBackColor" russianName="ЦветФонаКнопки" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
+              <Event name="DragStart" apiName="DragStart" russianName="НачалоПеретаскивания"/>
+              <Event name="DragEnd" apiName="DragEnd" russianName="ОкончаниеПеретаскивания"/>
+              <Event name="Drag" apiName="Drag" russianName="Перетаскивание"/>
+              <Event name="OnActivateDate" apiName="OnActivateDate" russianName="ПриАктивизацииДаты"/>
+              <Event name="OnPeriodOutput" apiName="OnPeriodOutput" russianName="ПриВыводеПериода"/>
+              <Event name="OnChange" apiName="OnChange" russianName="ПриИзменении"/>
+              <Event name="DragCheck" apiName="DragCheck" russianName="ПроверкаПеретаскивания"/>
+            </Events>
+          </Control>
+          <Control name="TextDocumentField" apiName="TextDocumentField" russianName="ПолеТекстовогоДокумента" children="none">
+            <Properties>
+              <Property name="SelectedText" apiName="SelectedText" russianName="ВыделенныйТекст" russianType="Строка" valueCodec="string"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+            </Events>
+          </Control>
+          <Control name="GeographicalSchemaField" apiName="GeographicalSchemaField" russianName="ПолеГеографическойСхемы" children="none">
+            <Properties>
+              <Property name="AutoMaxHeight" apiName="AutoMaxHeight" russianName="АвтоМаксимальнаяВысота" russianType="Булево" valueCodec="boolean"/>
+              <Property name="AutoMaxWidth" apiName="AutoMaxWidth" russianName="АвтоМаксимальнаяШирина" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="decimal"/>
+              <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
+              <Property name="MaxHeight" apiName="MaxHeight" russianName="МаксимальнаяВысота" russianType="Число" valueCodec="decimal"/>
+              <Property name="MaxWidth" apiName="MaxWidth" russianName="МаксимальнаяШирина" russianType="Число" valueCodec="decimal"/>
+              <Property name="Scale" apiName="Scale" russianName="Масштаб" russianType="Число" valueCodec="decimal"/>
+              <Property name="ShowedArea" apiName="ShowedArea" russianName="ОтображаемаяОбласть" russianType="ПоказываемаяОбластьГеографическойСхемы" valueCodec="unclassified"/>
+              <Property name="ScaleKeeping" apiName="ScaleKeeping" russianName="ПоддержкаМасштаба" russianType="РежимОтображенияГеографическойСхемы" valueCodec="enumeration"/>
+              <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" valueCodec="boolean"/>
+              <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
+            </Properties>
+            <Events>
+              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
+            </Events>
+          </Control>
+          <Control name="GraphicalSchemaField" apiName="GraphicalSchemaField" russianName="ПолеГрафическойСхемы" children="none">
+            <Properties>
+              <Property name="Height" apiName="Height" russianName="Высота" russianType="Число" valueCodec="decimal"/>
+              <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
+              <Property name="Edit" apiName="Edit" russianName="Редактирование" russianType="Булево" valueCodec="boolean"/>
+              <Property name="VerticalStretch" apiName="VerticalStretch" russianName="РастягиватьПоВертикали" russianType="Булево" valueCodec="boolean"/>
+              <Property name="HorizontalStretch" apiName="HorizontalStretch" russianName="РастягиватьПоГоризонтали" russianType="Булево" valueCodec="boolean"/>
+              <Property name="CurrentItem" apiName="CurrentItem" russianName="ТекущийЭлемент" russianType="ЭлементГрафическойСхемы" valueCodec="unclassified"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="Width" apiName="Width" russianName="Ширина" russianType="Число" valueCodec="decimal"/>
+            </Properties>
+            <Events>
+              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
+              <Event name="OnActivate" apiName="OnActivate" russianName="ПриАктивизации"/>
+            </Events>
+          </Control>
+          <Control name="Table" apiName="TableBox" russianName="ТабличноеПоле" children="none">
+            <Properties>
+              <Property name="AutoInsertNewRow" apiName="AutoInsertNewRow" russianName="АвтоВводНовойСтроки" russianType="Булево" valueCodec="boolean"/>
+              <Property name="VerticalScrollBar" apiName="VerticalScrollBar" russianName="ВертикальнаяПолосаПрокрутки" russianType="ИспользованиеПолосыПрокрутки" valueCodec="enumeration"/>
+              <Property name="VerticalLines" apiName="VerticalLines" russianName="ВертикальныеЛинии" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Output" apiName="Output" russianName="Вывод" russianType="ИспользованиеВывода" valueCodec="enumeration"/>
+              <Property name="SelectedRows" apiName="SelectedRows" russianName="ВыделенныеСтроки" russianType="ВыделенныеСтрокиТабличногоПоля" valueCodec="unclassified"/>
+              <Property name="FooterHeight" apiName="FooterHeight" russianName="ВысотаПодвала" russianType="Число" valueCodec="decimal"/>
+              <Property name="HeaderHeight" apiName="HeaderHeight" russianName="ВысотаШапки" russianType="Число" valueCodec="decimal"/>
+              <Property name="HorizontalScrollBar" apiName="HorizontalScrollBar" russianName="ГоризонтальнаяПолосаПрокрутки" russianType="ИспользованиеПолосыПрокрутки" valueCodec="enumeration"/>
+              <Property name="HorizontalLines" apiName="HorizontalLines" russianName="ГоризонтальныеЛинии" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ChangeSettingOfColumns" apiName="ChangeSettingOfColumns" russianName="ИзменятьНастройкуКолонок" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ChangePositionOfColumns" apiName="ChangePositionOfColumns" russianName="ИзменятьПозициюКолонок" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ChangeRowSet" apiName="ChangeRowSet" russianName="ИзменятьСоставСтрок" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Columns" apiName="Columns" russianName="Колонки" russianType="КолонкиТабличногоПоля" valueCodec="unclassified"/>
+              <Property name="InitialTreeView" apiName="InitialTreeView" russianName="НачальноеОтображениеДерева" russianType="НачальноеОтображениеДерева" valueCodec="enumeration"/>
+              <Property name="InitialListView" apiName="InitialListView" russianName="НачальноеОтображениеСписка" russianType="НачальноеОтображениеСписка" valueCodec="enumeration"/>
+              <Property name="Footer" apiName="Footer" russianName="Подвал" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
+              <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="RowInputMode" apiName="RowInputMode" russianName="РежимВводаСтрок" russianType="РежимВводаСтрокТабличногоПоля" valueCodec="enumeration"/>
+              <Property name="ChoiceMode" apiName="ChoiceMode" russianName="РежимВыбора" russianType="Булево" valueCodec="boolean"/>
+              <Property name="SelectionMode" apiName="SelectionMode" russianName="РежимВыделения" russianType="РежимВыделенияТабличногоПоля" valueCodec="enumeration"/>
+              <Property name="RowSelectionMode" apiName="RowSelectionMode" russianName="РежимВыделенияСтроки" russianType="РежимВыделенияСтрокиТабличногоПоля" valueCodec="enumeration"/>
+              <Property name="CurrentColumn" apiName="CurrentColumn" russianName="ТекущаяКолонка" russianType="КолонкаТабличногоПоля" valueCodec="unclassified"/>
+              <Property name="CurrentRow" apiName="CurrentRow" russianName="ТекущаяСтрока" russianType="" valueCodec="unclassified"/>
+              <Property name="CurrentData" apiName="CurrentData" russianName="ТекущиеДанные" russianType="" valueCodec="unclassified"/>
+              <Property name="CurrentParent" apiName="CurrentParent" russianName="ТекущийРодитель" russianType="" valueCodec="unclassified"/>
+              <Property name="ReadOnly" apiName="ReadOnly" russianName="ТолькоПросмотр" russianType="Булево" valueCodec="boolean"/>
+              <Property name="FixedLeft" apiName="FixedLeft" russianName="ФиксацияСлева" russianType="Число" valueCodec="decimal"/>
+              <Property name="FixedRight" apiName="FixedRight" russianName="ФиксацияСправа" russianType="Число" valueCodec="decimal"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="SelectionTextColor" apiName="SelectionTextColor" russianName="ЦветТекстаВыделения" russianType="Цвет" valueCodec="color"/>
+              <Property name="FooterTextColor" apiName="FooterTextColor" russianName="ЦветТекстаПодвала" russianType="Цвет" valueCodec="color"/>
+              <Property name="HeaderTextColor" apiName="HeaderTextColor" russianName="ЦветТекстаШапки" russianType="Цвет" valueCodec="color"/>
+              <Property name="SelectionBackColor" apiName="SelectionBackColor" russianName="ЦветФонаВыделения" russianType="Цвет" valueCodec="color"/>
+              <Property name="FooterBackColor" apiName="FooterBackColor" russianName="ЦветФонаПодвала" russianType="Цвет" valueCodec="color"/>
+              <Property name="FieldBackColor" apiName="FieldBackColor" russianName="ЦветФонаПоля" russianType="Цвет" valueCodec="color"/>
+              <Property name="AlternationRowBackColor" apiName="AlternationRowBackColor" russianName="ЦветФонаЧередованияСтрок" russianType="Цвет" valueCodec="color"/>
+              <Property name="HeaderBackColor" apiName="HeaderBackColor" russianName="ЦветФонаШапки" russianType="Цвет" valueCodec="color"/>
+              <Property name="UseAlternationRowColor" apiName="UseAlternationRowColor" russianName="ЧередованиеЦветовСтрок" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Header" apiName="Header" russianName="Шапка" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+              <Property name="FooterFont" apiName="FooterFont" russianName="ШрифтПодвала" russianType="Шрифт" valueCodec="font"/>
+              <Property name="HeaderFont" apiName="HeaderFont" russianName="ШрифтШапки" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
+              <Event name="ValueChoice" apiName="ValueChoice" russianName="ВыборЗначения"/>
+              <Event name="DragStart" apiName="DragStart" russianName="НачалоПеретаскивания"/>
+              <Event name="ChoiceProcessing" apiName="ChoiceProcessing" russianName="ОбработкаВыбора"/>
+              <Event name="NewObjectWriteProcessing" apiName="NewObjectWriteProcessing" russianName="ОбработкаЗаписиНовогоОбъекта"/>
+              <Event name="DragEnd" apiName="DragEnd" russianName="ОкончаниеПеретаскивания"/>
+              <Event name="BeforeAddRow" apiName="BeforeAddRow" russianName="ПередНачаломДобавления"/>
+              <Event name="BeforeRowChange" apiName="BeforeRowChange" russianName="ПередНачаломИзменения"/>
+              <Event name="BeforeEditEnd" apiName="BeforeEditEnd" russianName="ПередОкончаниемРедактирования"/>
+              <Event name="BeforeDeleteRow" apiName="BeforeDeleteRow" russianName="ПередУдалением"/>
+              <Event name="Drag" apiName="Drag" russianName="Перетаскивание"/>
+              <Event name="AfterDeleteLine" apiName="AfterDeleteLine" russianName="ПослеУдаления"/>
+              <Event name="OnActivateColumn" apiName="OnActivateColumn" russianName="ПриАктивизацииКолонки"/>
+              <Event name="OnActivateRow" apiName="OnActivateRow" russianName="ПриАктивизацииСтроки"/>
+              <Event name="OnActivateCell" apiName="OnActivateCell" russianName="ПриАктивизацииЯчейки"/>
+              <Event name="OnRowOutput" apiName="OnRowOutput" russianName="ПриВыводеСтроки"/>
+              <Event name="OnCheckChange" apiName="OnCheckChange" russianName="ПриИзмененииФлажка"/>
+              <Event name="OnStartEdit" apiName="OnStartEdit" russianName="ПриНачалеРедактирования"/>
+              <Event name="OnEditEnd" apiName="OnEditEnd" russianName="ПриОкончанииРедактирования"/>
+              <Event name="OnDataGet" apiName="OnDataGet" russianName="ПриПолученииДанных"/>
+              <Event name="OnCurrentParentChange" apiName="OnCurrentParentChange" russianName="ПриСменеТекущегоРодителя"/>
+              <Event name="DragCheck" apiName="DragCheck" russianName="ПроверкаПеретаскивания"/>
+            </Events>
+          </Control>
+          <Control name="SpreadsheetDocumentField" apiName="SpreadsheetDocumentField" russianName="ПолеТабличногоДокумента" children="none">
+            <Properties>
+              <Property name="VerticalScrollBar" apiName="VerticalScrollBar" russianName="ВертикальнаяПолосаПрокрутки" russianType="Булево" valueCodec="boolean"/>
+              <Property name="HorizontalScrollBar" apiName="HorizontalScrollBar" russianName="ГоризонтальнаяПолосаПрокрутки" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="ShowSelection" apiName="ShowSelection" russianName="ОтображатьВыделение" russianType="ТипОтображенияВыделенияТабличногоДокумента" valueCodec="enumeration"/>
+              <Property name="EnableStartDrag" apiName="EnableStartDrag" russianName="РазрешитьНачалоПеретаскивания" russianType="Булево" valueCodec="boolean"/>
+              <Property name="EnableDrag" apiName="EnableDrag" russianName="РазрешитьПеретаскивание" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+            </Properties>
+            <Events>
+              <Event name="Selection" apiName="Selection" russianName="Выбор"/>
+              <Event name="DragStart" apiName="DragStart" russianName="НачалоПеретаскивания"/>
+              <Event name="DetailProcessing" apiName="DetailProcessing" russianName="ОбработкаРасшифровки"/>
+              <Event name="DragEnd" apiName="DragEnd" russianName="ОкончаниеПеретаскивания"/>
+              <Event name="Drag" apiName="Drag" russianName="Перетаскивание"/>
+              <Event name="OnActivateArea" apiName="OnActivateArea" russianName="ПриАктивизацииОбласти"/>
+              <Event name="OnChangeAreaContent" apiName="OnChangeAreaContent" russianName="ПриИзмененииСодержимогоОбласти"/>
+              <Event name="DragCheck" apiName="DragCheck" russianName="ПроверкаПеретаскивания"/>
+            </Events>
+          </Control>
+          <Control name="LabelDecoration" apiName="Label" russianName="Надпись" children="none">
+            <Properties>
+              <Property name="ScrollingText" apiName="ScrollingText" russianName="БегущаяСтрока" russianType="РежимБегущейСтроки" valueCodec="enumeration"/>
+              <Property name="VerticalAlign" apiName="VerticalAlign" russianName="ВертикальноеПоложение" russianType="ВертикальноеПоложение" valueCodec="enumeration"/>
+              <Property name="MarkNegatives" apiName="MarkNegatives" russianName="ВыделятьОтрицательные" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Hyperlink" apiName="Hyperlink" russianName="Гиперссылка" russianType="Булево" valueCodec="boolean"/>
+              <Property name="HorizontalAlign" apiName="HorizontalAlign" russianName="ГоризонтальноеПоложение" russianType="ГоризонтальноеПоложение" valueCodec="enumeration"/>
+              <Property name="Enabled" apiName="Enabled" russianName="Доступность" russianType="Булево" valueCodec="boolean"/>
+              <Property name="Caption" apiName="Caption" russianName="Заголовок" russianType="Строка" valueCodec="string"/>
+              <Property name="Picture" apiName="Picture" russianName="Картинка" russianType="Картинка" valueCodec="picture"/>
+              <Property name="ToolTip" apiName="ToolTip" russianName="Подсказка" russianType="Строка" valueCodec="string"/>
+              <Property name="LabelPictureLocation" apiName="LabelPictureLocation" russianName="ПоложениеКартинкиНадписи" russianType="ПоложениеКартинкиНадписи" valueCodec="enumeration"/>
+              <Property name="Transparent" apiName="Transparent" russianName="ПрозрачныйФон" russianType="Булево" valueCodec="boolean"/>
+              <Property name="PictureSize" apiName="PictureSize" russianName="РазмерКартинки" russianType="РазмерКартинки" valueCodec="enumeration"/>
+              <Property name="Border" apiName="Border" russianName="Рамка" russianType="Рамка" valueCodec="border"/>
+              <Property name="Shortcut" apiName="Shortcut" russianName="СочетаниеКлавиш" russianType="СочетаниеКлавиш" valueCodec="shortcut"/>
+              <Property name="Format" apiName="Format" russianName="Формат" russianType="Строка" valueCodec="string"/>
+              <Property name="BorderColor" apiName="BorderColor" russianName="ЦветРамки" russianType="Цвет" valueCodec="color"/>
+              <Property name="TextColor" apiName="TextColor" russianName="ЦветТекста" russianType="Цвет" valueCodec="color"/>
+              <Property name="BackColor" apiName="BackColor" russianName="ЦветФона" russianType="Цвет" valueCodec="color"/>
+              <Property name="Font" apiName="Font" russianName="Шрифт" russianType="Шрифт" valueCodec="font"/>
+            </Properties>
+            <Events>
+              <Event name="Click" apiName="Click" russianName="Нажатие"/>
+            </Events>
+          </Control>
+          <Control name="ActiveXControl" apiName="ActiveXControl" russianName="ЭлементУправленияActiveX" children="none">
+            <Properties>
+              <Property name="CLSID" apiName="CLSID" russianName="CLSID" russianType="Идентификатор" valueCodec="uuid"/>
+              <Property name="State" apiName="State" russianName="Состояние" russianType="ДвоичныеДанные" valueCodec="unclassified"/>
+            </Properties>
+            <Events>
+            </Events>
+          </Control>
+        </Controls>
+        <StandardPictures>
+          <Picture name="PictureLib.AccountingRegister" russianName="РегистрБухгалтерии" guid="20175a6d-7510-46a8-9077-75a5d0d97802"/>
+          <Picture name="PictureLib.AccumulationRegister" russianName="РегистрНакопления" guid="70f51581-87b6-41cb-a21b-c9dcdcc7fa93"/>
+          <Picture name="PictureLib.ActivateTask" russianName="АктивироватьЗадачу" guid="093dd4ed-e03c-4fc6-a95a-01f51379cccf"/>
+          <Picture name="PictureLib.ActiveUsers" russianName="АктивныеПользователи" guid="47f01799-7968-4f44-9acc-fe1bdde8beb2"/>
+          <Picture name="PictureLib.AddToFavorites" russianName="ДобавитьВИзбранное" guid="1001ae3e-9289-4303-9699-3c0c17e20e61"/>
+          <Picture name="PictureLib.AppearanceBoxesEmpty" russianName="ОформлениеКвадратыПустые" guid="879ca050-8650-4135-b799-f3ef9e00a65a"/>
+          <Picture name="PictureLib.AppearanceBoxesFilled" russianName="ОформлениеКвадратыЗаполненные" guid="ba592483-bc90-4e26-ba4d-2126359c6529"/>
+          <Picture name="PictureLib.AppearanceBoxesOneFilled" russianName="ОформлениеКвадратыЗаполненныеОдин" guid="7026a8e6-f973-4fab-88f3-1047734d787f"/>
+          <Picture name="PictureLib.AppearanceBoxesThreeFilled" russianName="ОформлениеКвадратыЗаполненныеТри" guid="8c18ce73-0840-4f64-b76c-89d2356b1a41"/>
+          <Picture name="PictureLib.AppearanceBoxesTwoFilled" russianName="ОформлениеКвадратыЗаполненныеДва" guid="f164fa2a-0a20-48df-9816-e2d6cbe0aee9"/>
+          <Picture name="PictureLib.AppearanceCheckBox" russianName="ОформлениеФлажок" guid="7a9cd2fd-6372-4342-9a9e-3ebbd754fd83"/>
+          <Picture name="PictureLib.AppearanceCheckIcon" russianName="ОформлениеЗнакФлажок" guid="85998f14-805b-4e2b-ba19-9d79b0464042"/>
+          <Picture name="PictureLib.AppearanceCircleBlack" russianName="ОформлениеКругЧерный" guid="cf10e497-9779-44a7-82d8-811b88193215"/>
+          <Picture name="PictureLib.AppearanceCircleEmpty" russianName="ОформлениеКругПустой" guid="2721abfb-fbff-4a3a-98ac-b7c9eb29cd85"/>
+          <Picture name="PictureLib.AppearanceCircleFilled" russianName="ОформлениеКругЗаполненный" guid="788667db-61c9-45f3-9c4f-5f660ecdf3e1"/>
+          <Picture name="PictureLib.AppearanceCircleGreen" russianName="ОформлениеКругЗеленый" guid="71cbcb5c-f3f0-4ffd-a4d0-19b802b5ed6b"/>
+          <Picture name="PictureLib.AppearanceCircleOneFourthFilled" russianName="ОформлениеКругЗаполненныйНаОднуЧетверть" guid="fc058833-e57f-4f93-ba7a-803992a65c3e"/>
+          <Picture name="PictureLib.AppearanceCircleRed" russianName="ОформлениеКругКрасный" guid="c1a61df2-f280-49d0-a8b3-7e5fc6f56ff7"/>
+          <Picture name="PictureLib.AppearanceCircleThreeFourthFilled" russianName="ОформлениеКругЗаполненныйНаТриЧетверти" guid="08a03482-420e-4faa-af9d-e0138c53bfff"/>
+          <Picture name="PictureLib.AppearanceCircleTwoFourthFilled" russianName="ОформлениеКругЗаполненныйНаДвеЧетверти" guid="dc9b46a9-905b-4baa-9e53-4d824e291a5b"/>
+          <Picture name="PictureLib.AppearanceCircleYellow" russianName="ОформлениеКругЖелтый" guid="8d7e5026-9c1c-4542-bec0-2b729c84e139"/>
+          <Picture name="PictureLib.AppearanceCross" russianName="ОформлениеКрест" guid="b2202798-23e0-4165-9982-24878f432488"/>
+          <Picture name="PictureLib.AppearanceCrossIcon" russianName="ОформлениеЗнакКрест" guid="9ef73565-2250-4a35-9fb3-470bd19ca9ca"/>
+          <Picture name="PictureLib.AppearanceDashYellow" russianName="ОформлениеДефисЖелтый" guid="e0ad5543-df7f-423c-8f59-8caf200cca0a"/>
+          <Picture name="PictureLib.AppearanceDownArrowGray" russianName="ОформлениеСтрелкаВнизСерая" guid="e3b29b1d-4694-4f56-8d55-922f83afed7a"/>
+          <Picture name="PictureLib.AppearanceDownArrowRed" russianName="ОформлениеСтрелкаВнизКрасная" guid="0880808c-5146-42b2-87a3-e5a9693ad256"/>
+          <Picture name="PictureLib.AppearanceDownInclineArrowGray" russianName="ОформлениеСтрелкаНаклоннаяВнизСерая" guid="a30ab2ef-6076-457d-9293-44edc7c6767e"/>
+          <Picture name="PictureLib.AppearanceDownInclineArrowRed" russianName="ОформлениеСтрелкаНаклоннаяВнизКрасная" guid="80a31eac-8df6-49c0-ba84-b53c4631d09f"/>
+          <Picture name="PictureLib.AppearanceDownInclineArrowYellow" russianName="ОформлениеСтрелкаНаклоннаяВнизЖелтая" guid="ce1c3d6b-7825-4cac-a58c-58bac18cefc9"/>
+          <Picture name="PictureLib.AppearanceDownTriangleRed" russianName="ОформлениеТреугольникВнизКрасный" guid="7a2a6f5c-7677-45e1-a2d3-ce2444d99a63"/>
+          <Picture name="PictureLib.AppearanceExclamationMark" russianName="ОформлениеВосклицательныйЗнак" guid="501b8c1d-8062-408e-bde8-b6549324713e"/>
+          <Picture name="PictureLib.AppearanceExclamationMarkIcon" russianName="ОформлениеЗнакВосклицательныйЗнак" guid="b39aa431-a32f-4447-984a-45606474c82d"/>
+          <Picture name="PictureLib.AppearanceFlagGreen" russianName="ОформлениеФлагЗеленый" guid="bbd37b6b-2742-48f3-9efa-d7c245f125b0"/>
+          <Picture name="PictureLib.AppearanceFlagRed" russianName="ОформлениеФлагКрасный" guid="b0dd988f-2d9f-4364-b1f4-a4d5f45ffb78"/>
+          <Picture name="PictureLib.AppearanceFlagYellow" russianName="ОформлениеФлагЖелтый" guid="16e4a14a-f38b-453d-908a-41fb9479c3f6"/>
+          <Picture name="PictureLib.AppearanceRightArrowGray" russianName="ОформлениеСтрелкаВправоСерая" guid="20b82e97-5fcc-4c68-8e0d-d01060847520"/>
+          <Picture name="PictureLib.AppearanceRightArrowYellow" russianName="ОформлениеСтрелкаВправоЖелтая" guid="697e00c5-4a1d-4367-90e8-ddb734069ad5"/>
+          <Picture name="PictureLib.AppearanceStarEmpty" russianName="ОформлениеЗвездаПустая" guid="f8d11b3a-a72b-4ee3-ad44-d401472e4b7c"/>
+          <Picture name="PictureLib.AppearanceStarFilled" russianName="ОформлениеЗвездаЗаполненная" guid="3689585c-a3e2-45d0-a302-caeb31b78835"/>
+          <Picture name="PictureLib.AppearanceStarHalfFilled" russianName="ОформлениеЗвездаЗаполненнаяНаполовину" guid="26abd244-8dd5-417e-aed0-247a573394ca"/>
+          <Picture name="PictureLib.AppearanceUpArrowGray" russianName="ОформлениеСтрелкаВверхСерая" guid="a5d108f7-17d6-42dc-a789-45d71fb50ecd"/>
+          <Picture name="PictureLib.AppearanceUpArrowGreen" russianName="ОформлениеСтрелкаВверхЗеленая" guid="87d032df-0956-47e9-bead-4e15330f1983"/>
+          <Picture name="PictureLib.AppearanceUpInclineArrowGray" russianName="ОформлениеСтрелкаНаклоннаяВверхСерая" guid="92e24ce1-3917-4ee4-bbde-adce48b6c96b"/>
+          <Picture name="PictureLib.AppearanceUpInclineArrowGreen" russianName="ОформлениеСтрелкаНаклоннаяВверхЗеленая" guid="0a688f53-2f13-4833-b340-c604cb1d3eb1"/>
+          <Picture name="PictureLib.AppearanceUpInclineArrowYellow" russianName="ОформлениеСтрелкаНаклоннаяВверхЖелтая" guid="09547c21-3f15-4a6d-ba87-e5f289dc1a6d"/>
+          <Picture name="PictureLib.AppearanceUpTriangleGreen" russianName="ОформлениеТреугольникВверхЗеленый" guid="8da615a0-65a5-4511-a8d4-00dc156478fb"/>
+          <Picture name="PictureLib.Attach" russianName="Прикрепить" guid="f6e88116-03d8-4400-9d88-791895d7031a"/>
+          <Picture name="PictureLib.Attribute" russianName="Реквизит" guid="0c1f7756-6143-4903-a94c-8f22c85e44de"/>
+          <Picture name="PictureLib.Back" russianName="Назад" guid="3c904ff7-1195-4a7c-9a38-7b1f6ca49cce"/>
+          <Picture name="PictureLib.BusinessProcess" russianName="БизнесПроцесс" guid="509c4a7f-6406-4388-bb8c-bc81fb5131aa"/>
+          <Picture name="PictureLib.BusinessProcessObject" russianName="БизнесПроцессОбъект" guid="a24cff7f-a1a5-4403-af82-a7b31852cde9"/>
+          <Picture name="PictureLib.BusinessProcessStart" russianName="СтартБизнесПроцесса" guid="9fecbaff-2a05-4da6-9ef1-807e754b928d"/>
+          <Picture name="PictureLib.CalculationRegister" russianName="РегистрРасчета" guid="f3b8f300-5a54-4eea-8136-5798413a479c"/>
+          <Picture name="PictureLib.CalculationType" russianName="ВидРасчета" guid="80837aab-ad67-4811-9d83-88344439c721"/>
+          <Picture name="PictureLib.Calculator" russianName="Калькулятор" guid="fada8a16-8b14-4151-87a9-775099f37832"/>
+          <Picture name="PictureLib.Calendar" russianName="Календарь" guid="97c5a6d5-47ed-43f9-8c8c-10e9903c23d2"/>
+          <Picture name="PictureLib.CancelSearch" russianName="ОтменитьПоиск" guid="9e808d29-787b-4825-863a-13c6844ce91d"/>
+          <Picture name="PictureLib.Catalog" russianName="Справочник" guid="069b8324-7c51-4c73-a6a8-c06d4fc383b5"/>
+          <Picture name="PictureLib.CatalogObject" russianName="СправочникОбъект" guid="d971ec77-85e4-4e8d-a20a-8b130eedeb29"/>
+          <Picture name="PictureLib.Change" russianName="Изменить" guid="97b2cc97-d5c6-45fb-9824-9d6d73db21fe"/>
+          <Picture name="PictureLib.Char" russianName="Символ" guid="4781692b-60eb-47e4-acfb-2caf0f49e977"/>
+          <Picture name="PictureLib.Chart" russianName="Диаграмма" guid="f3c1376a-d2ee-46c4-9e44-aa2f7dae31c4"/>
+          <Picture name="PictureLib.ChartOfAccounts" russianName="ПланСчетов" guid="ccb3d8f7-6da2-4c65-aba6-17b2ffbba78c"/>
+          <Picture name="PictureLib.ChartOfAccountsObject" russianName="ПланСчетовОбъект" guid="6d4277ee-b29b-4790-8c3c-c4f868311c96"/>
+          <Picture name="PictureLib.ChartOfCalculationTypes" russianName="ПланВидовРасчета" guid="b58ea40e-819b-4d07-bd9f-5fbf42e01f55"/>
+          <Picture name="PictureLib.ChartOfCalculationTypesObject" russianName="ПланВидовРасчетаОбъект" guid="64400154-ca4c-4a05-8028-83434fda5bef"/>
+          <Picture name="PictureLib.ChartOfCharacteristicTypes" russianName="ПланВидовХарактеристик" guid="2bfafd1e-6d07-4609-8010-6c1c605cefd2"/>
+          <Picture name="PictureLib.ChartOfCharacteristicTypesObject" russianName="ПланВидовХарактеристикОбъект" guid="45921467-71f2-4176-97e8-7df1d31d9e87"/>
+          <Picture name="PictureLib.CheckAll" russianName="УстановитьФлажки" storageId="-10"/>
+          <Picture name="PictureLib.CheckSyntax" russianName="СинтаксическийКонтроль" guid="dcd23a32-5c7c-43f2-9021-80d98128556f"/>
+          <Picture name="PictureLib.ChooseTopLevel" russianName="ВыбратьВерхнийУровень" guid="38a5a658-ec2b-4ddf-8088-c6d2169d3181"/>
+          <Picture name="PictureLib.ChooseType" russianName="ВыбратьТип" storageId="-1400"/>
+          <Picture name="PictureLib.ChooseValue" russianName="ВыбратьЗначение" guid="2f130057-bb2a-4e22-bba5-e108fac26940"/>
+          <Picture name="PictureLib.Clear" russianName="Очистить" storageId="-200"/>
+          <Picture name="PictureLib.ClearFilter" russianName="ОтключитьОтбор" guid="479470e0-ea0f-4266-8549-e2b1e8c06534"/>
+          <Picture name="PictureLib.CloneListItem" russianName="СкопироватьЭлементСписка" guid="448d6f55-d885-496c-870d-d1bd78374745"/>
+          <Picture name="PictureLib.CloneObject" russianName="СкопироватьОбъект" guid="f6532868-30b9-44ab-803c-78f0f0b06b02"/>
+          <Picture name="PictureLib.Close" russianName="Закрыть" guid="1377931c-5744-4948-bade-cb35117b5f63"/>
+          <Picture name="PictureLib.CollaborationSystemExternalUser" russianName="ВнешнийПользовательСистемыВзаимодействия" guid="66c18df5-d7a6-465e-92b5-bcc6c1032504"/>
+          <Picture name="PictureLib.CollaborationSystemIntegrationUser" russianName="ПользовательИнтеграцииСистемыВзаимодействия" guid="05b8ccd1-f644-4e2e-87de-9683410c7038"/>
+          <Picture name="PictureLib.CollaborationSystemUser" russianName="ПользовательСистемыВзаимодействия" guid="a722bc14-4edb-4eed-84b9-5d9b2b443e04"/>
+          <Picture name="PictureLib.CollapseAll" russianName="СвернутьВсе" guid="27ee3053-952c-49e5-8261-9215098e0e9c"/>
+          <Picture name="PictureLib.Constant" russianName="Константа" guid="e93f538e-dfaf-4a91-a9b6-c053555bcf60"/>
+          <Picture name="PictureLib.Conversations" russianName="Обсуждения" guid="6a248caf-0a7b-46ad-a595-74890ea202f7"/>
+          <Picture name="PictureLib.CreateFolder" russianName="СоздатьГруппу" guid="4ab0e87f-7d9b-4aa8-ac4b-680a78522da8"/>
+          <Picture name="PictureLib.CreateInitialImage" russianName="СоздатьНачальныйОбраз" guid="4d2570b5-205f-413c-b4cc-b2097f61684f"/>
+          <Picture name="PictureLib.CreateListItem" russianName="СоздатьЭлементСписка" guid="977e831a-0e73-4d60-af51-091a6fa8612e"/>
+          <Picture name="PictureLib.Credit" russianName="Кредит" guid="55bc1099-a7df-4d0a-b332-a45f0473b368"/>
+          <Picture name="PictureLib.CustomExpression" russianName="ПроизвольноеВыражение" guid="f695666a-bad9-49f6-ab7c-5198d7ea4739"/>
+          <Picture name="PictureLib.CustomizeForm" russianName="ИзменитьФорму" guid="6511326b-20c3-4bf8-8503-c2c2c9072c6c"/>
+          <Picture name="PictureLib.CustomizeList" russianName="НастроитьСписок" guid="f04794cb-c198-4172-86c3-649386013c85"/>
+          <Picture name="PictureLib.DataCompositionConditionalAppearance" russianName="УсловноеОформлениеКомпоновкиДанных" guid="984b0a3e-daa2-4a9e-b75c-1f230a6e592a"/>
+          <Picture name="PictureLib.DataCompositionConditionalAppearanceDisabled" russianName="УсловноеОформлениеКомпоновкиДанныхНедоступное" guid="5ff5bf50-1f3c-46b6-b4ef-a4973dd610aa"/>
+          <Picture name="PictureLib.DataCompositionDataParameters" russianName="ПараметрыДанныхКомпоновкиДанных" guid="a075c3ef-bc4e-4c96-bdad-2245ec09c28e"/>
+          <Picture name="PictureLib.DataCompositionFilter" russianName="ОтборКомпоновкиДанных" guid="d90a7482-9a1d-4d3d-ae96-6db440214d96"/>
+          <Picture name="PictureLib.DataCompositionFilterDisabled" russianName="ОтборКомпоновкиДанныхНедоступный" guid="d35bd799-1cc3-44d1-8ae3-09755a09d44b"/>
+          <Picture name="PictureLib.DataCompositionGroupFields" russianName="ПоляГруппировкиКомпоновкиДанных" guid="ad8cb448-a6bb-43b4-886a-7d6a8367eef2"/>
+          <Picture name="PictureLib.DataCompositionGroupFieldsDisabled" russianName="ПоляГруппировкиКомпоновкиДанныхНедоступные" guid="afbaed82-4b8e-4970-8ac6-97a3bff796d3"/>
+          <Picture name="PictureLib.DataCompositionNewChart" russianName="НоваяДиаграммаКомпоновкиДанных" guid="732f9dd3-5baf-47ff-af7b-edfe16dac2a1"/>
+          <Picture name="PictureLib.DataCompositionNewGroup" russianName="НоваяГруппировкаКомпоновкиДанных" guid="77180b5e-8faa-4712-a788-e9f8903e3419"/>
+          <Picture name="PictureLib.DataCompositionNewNestedScheme" russianName="НоваяВложеннаяСхемаКомпоновкиДанных" guid="8ac19694-383a-457a-b050-0a3ee937f5f3"/>
+          <Picture name="PictureLib.DataCompositionNewTable" russianName="НоваяТаблицаКомпоновкиДанных" guid="6c2759b1-2b63-4fa5-8d13-75786c7e1e89"/>
+          <Picture name="PictureLib.DataCompositionOrder" russianName="ПорядокКомпоновкиДанных" guid="efda7350-6cd7-4416-b188-f5ca9baf66c2"/>
+          <Picture name="PictureLib.DataCompositionOrderDisabled" russianName="ПорядокКомпоновкиДанныхНедоступный" guid="c8923bc1-6ea9-456b-829f-3f979dc98420"/>
+          <Picture name="PictureLib.DataCompositionOutputParameters" russianName="ПараметрыВыводаКомпоновкиДанных" guid="ee7c4a5b-2d9b-4087-ae3e-947792085f09"/>
+          <Picture name="PictureLib.DataCompositionOutputParametersDisabled" russianName="ПараметрыВыводаКомпоновкиДанныхНедоступные" guid="1522a72e-11d1-41e3-ba0e-e0780c4ba543"/>
+          <Picture name="PictureLib.DataCompositionSelection" russianName="ВыборКомпоновкиДанных" guid="2c732bfa-f734-48bc-a18b-7554db8a3888"/>
+          <Picture name="PictureLib.DataCompositionSelectionDisabled" russianName="ВыборКомпоновкиДанныхНедоступный" guid="a0b879df-db58-4cba-b76e-9bbc4391f3d9"/>
+          <Picture name="PictureLib.DataCompositionSettingsWizard" russianName="КонструкторНастроекКомпоновкиДанных" guid="affb1617-24bc-4170-9c84-0902cc3ef206"/>
+          <Picture name="PictureLib.DataCompositionStandardSettings" russianName="СтандартнаяНастройкаКомпоновкиДанных" guid="251aaa98-0127-44c3-a163-6f5ab4367ee2"/>
+          <Picture name="PictureLib.DataCompositionUserFields" russianName="ПользовательскиеПоляКомпоновкиДанных" guid="b68eb29c-2372-46e1-b84e-13843899ccf6"/>
+          <Picture name="PictureLib.DataHistory" russianName="ИсторияДанных" guid="e8a49985-fef7-45a9-b6bb-ddd2b9028172"/>
+          <Picture name="PictureLib.DataProcessor" russianName="Обработка" guid="a6cbfd77-fcf0-40f4-a8de-ee0d3e580fe6"/>
+          <Picture name="PictureLib.DataSearch" russianName="ПоискДанных" guid="35bc8caa-f7ce-4158-87da-d9bf785afa39"/>
+          <Picture name="PictureLib.Debit" russianName="Дебет" guid="196622f7-0941-435b-992b-722f3082adf4"/>
+          <Picture name="PictureLib.DebitCredit" russianName="ДебетКредит" guid="ed067d76-b144-4d00-bb36-d1833dd1350c"/>
+          <Picture name="PictureLib.Delete" russianName="Удалить" guid="08a45a70-c221-4339-b3b1-9f11cb22147d"/>
+          <Picture name="PictureLib.DeleteDirectly" russianName="УдалитьНепосредственно" guid="60643198-e4b2-4c39-9de1-53cca3fff382"/>
+          <Picture name="PictureLib.Dendrogram" russianName="Дендрограмма" guid="4bf9fbb5-53c5-4b09-bab2-d69bbfab945b"/>
+          <Picture name="PictureLib.DialogExclamation" russianName="ДиалогВосклицание" guid="5289d9a4-b012-4d54-9bce-50473fe29b57"/>
+          <Picture name="PictureLib.DialogInformation" russianName="ДиалогИнформация" guid="8bdf1079-8fad-4d21-ad7f-4b2e4ecdce3d"/>
+          <Picture name="PictureLib.DialogQuestion" russianName="ДиалогВопрос" guid="ef27ae9e-7040-4374-b93c-0d276de2ea23"/>
+          <Picture name="PictureLib.DialogStop" russianName="ДиалогСтоп" guid="83db1f8a-41bd-4016-bdb2-a28e3a8d6dcc"/>
+          <Picture name="PictureLib.Dimension" russianName="Измерение" guid="c78c9f3d-e92c-4f38-bb72-d8bd7fa5dbe3"/>
+          <Picture name="PictureLib.Document" russianName="Документ" guid="894afc03-9904-465d-b671-f555ffb9b21c"/>
+          <Picture name="PictureLib.DocumentJournal" russianName="ЖурналДокументов" guid="e51185a4-d915-45b8-b201-1c46cc2d8104"/>
+          <Picture name="PictureLib.DocumentObject" russianName="ДокументОбъект" guid="2209b937-6f41-4153-b1ac-ef7e170ad3a7"/>
+          <Picture name="PictureLib.DontDisturb" russianName="НеБеспокоить" guid="a55455d6-be06-4da3-9a4f-62fbefd1aded"/>
+          <Picture name="PictureLib.DontNotify" russianName="НеОповещать" guid="517ed1af-55eb-42da-a1d4-a9960ef7c1f3"/>
+          <Picture name="PictureLib.EditInDialog" russianName="РедактироватьВДиалоге" guid="021c20a0-071b-4a60-8e44-12487adde0c8"/>
+          <Picture name="PictureLib.EndEdit" russianName="ЗакончитьРедактирование" guid="ed0bec43-4633-416c-8c08-0384ca444e32"/>
+          <Picture name="PictureLib.Enum" russianName="Перечисление" guid="80d1a756-13a8-4281-86cc-eaaf84da4cf9"/>
+          <Picture name="PictureLib.EventLog" russianName="ЖурналРегистрации" guid="723765ab-0b92-4745-a621-1ba0f77c92c9"/>
+          <Picture name="PictureLib.EventLogByUser" russianName="ЖурналРегистрацииПоПользователю" guid="4fddea39-5129-4b4c-83fe-4e443cd61940"/>
+          <Picture name="PictureLib.ExchangePlan" russianName="ПланОбмена" guid="544fdbe8-5956-4512-bc62-93b4c022d291"/>
+          <Picture name="PictureLib.ExchangePlanObject" russianName="ПланОбменаОбъект" guid="743cc773-12e6-4ee6-9c57-5f5800bac427"/>
+          <Picture name="PictureLib.ExecuteTask" russianName="ВыполнитьЗадачу" guid="003024ed-fa25-42ac-9f53-f5014e383801"/>
+          <Picture name="PictureLib.ExpandAll" russianName="РазвернутьВсе" guid="fb7e9fb5-110b-41cb-adc6-753969ae1c81"/>
+          <Picture name="PictureLib.ExternalDataSource" russianName="ВнешнийИсточникДанных" guid="3a32aa35-c679-4c5b-91bd-72ae038e5bb4"/>
+          <Picture name="PictureLib.ExternalDataSourceCube" russianName="ВнешнийИсточникДанныхКуб" guid="fad46a2b-2e56-47cc-b90c-3c2d4b061937"/>
+          <Picture name="PictureLib.ExternalDataSourceCubeDimensionTable" russianName="ВнешнийИсточникДанныхКубТаблицаИзмерения" guid="32b63e58-c1fa-4f59-b874-bf4a077f816e"/>
+          <Picture name="PictureLib.ExternalDataSourceFunction" russianName="ВнешнийИсточникДанныхФункция" guid="2954e819-f3fc-40de-9769-292efce9a355"/>
+          <Picture name="PictureLib.ExternalDataSourceTable" russianName="ВнешнийИсточникДанныхТаблица" guid="5b612c21-e223-4997-9e61-86f7a67ec945"/>
+          <Picture name="PictureLib.Favorites" russianName="Избранное" guid="c38cc4cf-111d-4bc8-8dcb-4464e2ddfb25"/>
+          <Picture name="PictureLib.FilterAndSort" russianName="ОтборИСортировка" guid="73af51dd-6cda-48be-a093-5a7161c60c77"/>
+          <Picture name="PictureLib.FilterByCurrentValue" russianName="ОтборПоТекущемуЗначению" guid="b1406535-6cc2-4410-95ea-753556e8460f"/>
+          <Picture name="PictureLib.FilterByType" russianName="ОтборПоВиду" guid="0bac63da-5b4e-48af-b593-7c5d29663e83"/>
+          <Picture name="PictureLib.FilterCriterion" russianName="КритерийОтбора" guid="2ef82795-06fe-4365-bd0c-44b486264620"/>
+          <Picture name="PictureLib.FilterHistory" russianName="ИсторияОтборов" guid="8729a534-9f88-47b0-8d6b-ec213689580d"/>
+          <Picture name="PictureLib.Find" russianName="Найти" guid="ffab30f1-da11-44b5-b34c-24da22badcf4"/>
+          <Picture name="PictureLib.FindByNumber" russianName="НайтиПоНомеру" guid="4eb938cb-7d69-4f3d-ac17-1f20f1212d49"/>
+          <Picture name="PictureLib.FindInList" russianName="НайтиВСписке" guid="c7cdd3c0-3879-436a-b145-5e2615e9b3e1"/>
+          <Picture name="PictureLib.FindInTree" russianName="НайтиВДереве" guid="38bbcebe-e456-461b-8457-07c9a72344a3"/>
+          <Picture name="PictureLib.FindNext" russianName="НайтиСледующий" guid="05612131-3e11-49c0-9592-07e6d9318ef7"/>
+          <Picture name="PictureLib.FindPrevious" russianName="НайтиПредыдущий" guid="e3b38083-0191-4a10-8f5b-51571f2419b4"/>
+          <Picture name="PictureLib.FixTable" russianName="ЗафиксироватьТаблицу" guid="5182f57f-e834-4d11-9c9f-4aedc002b6e9"/>
+          <Picture name="PictureLib.Form" russianName="Форма" guid="fc34a694-e99b-4d1c-a526-63f5571bdb09"/>
+          <Picture name="PictureLib.FormHelp" russianName="СправкаФормы" guid="b7c81c62-d6ad-4eae-9cea-0e203182db67"/>
+          <Picture name="PictureLib.FormattedString" russianName="ФорматированнаяСтрока" guid="a636287d-8d6f-4ef3-94bb-a8f986ab52bb"/>
+          <Picture name="PictureLib.Forward" russianName="Вперед" guid="f874b0cc-db1d-4577-8c77-d4ba206eb05d"/>
+          <Picture name="PictureLib.FunctionMenuCommand" russianName="КомандаМенюФункций" guid="dfcd2d21-24ea-4b27-ab9a-6bf754577536"/>
+          <Picture name="PictureLib.GanttChart" russianName="ДиаграммаГанта" guid="fa67cb81-8d56-4534-90bd-b62fb0dbf5f0"/>
+          <Picture name="PictureLib.GenerateReport" russianName="СформироватьОтчет" guid="0ce78048-0196-4f80-a781-9829cdb7f43e"/>
+          <Picture name="PictureLib.GeographicalSchema" russianName="ГеографическаяСхема" guid="a9152be7-62cf-4523-be34-a23f018f497e"/>
+          <Picture name="PictureLib.GetURL" russianName="ПолучитьНавигационнуюСсылку" guid="1a4342a5-fa06-4556-8a85-e8738fc25821"/>
+          <Picture name="PictureLib.GoBack" russianName="ПерейтиНазад" guid="892196a9-c94f-4e50-8224-3c0cea4ea6b8"/>
+          <Picture name="PictureLib.GoForward" russianName="ПерейтиВперед" guid="7562cef7-0e57-4f63-a754-b61128a4f3ae"/>
+          <Picture name="PictureLib.GoToBegin" russianName="ПерейтиКНачалу" guid="85cc7dd0-44fc-41aa-967f-f52f202ee2e6"/>
+          <Picture name="PictureLib.GoToEnd" russianName="ПерейтиККонцу" guid="14b24498-e49c-4713-be64-75101d0abfb9"/>
+          <Picture name="PictureLib.GotoExternalURL" russianName="ПерейтиПоВнешнейНавигационнойСсылке" guid="31bf709f-3b50-4137-9b51-ebc7fb802a7c"/>
+          <Picture name="PictureLib.GotoURL" russianName="ПерейтиПоНавигационнойСсылке" guid="3b2a508b-f36e-4e0b-9dc0-70b2b56276a9"/>
+          <Picture name="PictureLib.GraphicalSchema" russianName="ГрафическаяСхема" guid="e96de06b-fa83-48cf-b033-190a249855c9"/>
+          <Picture name="PictureLib.GrayedAll" russianName="ЗатенитьФлажки" storageId="-12"/>
+          <Picture name="PictureLib.GroupConversation" russianName="ГрупповоеОбсуждение" guid="2a7e58e2-a6c5-4387-a459-5249c441947a"/>
+          <Picture name="PictureLib.Help" russianName="Справка" guid="6ecee038-9722-4d80-bb91-7ee7046ec4c7"/>
+          <Picture name="PictureLib.HidePassword" russianName="СкрытьПароль" guid="0e2da390-5c04-46a2-a74b-1b7e13a40f2b"/>
+          <Picture name="PictureLib.HierarchicalView" russianName="ИерархическийПросмотр" guid="a119150f-6c0c-4a94-97b0-5f08d7ebd6f5"/>
+          <Picture name="PictureLib.History" russianName="История" guid="c283cd1c-3187-451d-8ef2-7df55daeef06"/>
+          <Picture name="PictureLib.Information" russianName="Информация" guid="4b54770b-d069-4c0e-9b17-5cc2a01134d9"/>
+          <Picture name="PictureLib.InformationRegister" russianName="РегистрСведений" guid="5b87ad1b-d8cc-43c1-b5c4-dc43613c518c"/>
+          <Picture name="PictureLib.InformationRegisterRecord" russianName="РегистрСведенийЗапись" guid="4128e6b6-e4ef-48d4-a523-99dc6b613054"/>
+          <Picture name="PictureLib.InputFieldCalculator" russianName="ПолеВводаКалькулятор" storageId="-6"/>
+          <Picture name="PictureLib.InputFieldCalendar" russianName="ПолеВводаКалендарь" storageId="-5"/>
+          <Picture name="PictureLib.InputFieldChooseType" russianName="ПолеВводаВыбратьТип" storageId="-14"/>
+          <Picture name="PictureLib.InputFieldClear" russianName="ПолеВводаОчистить" storageId="-2"/>
+          <Picture name="PictureLib.InputFieldOpen" russianName="ПолеВводаОткрыть" storageId="-7"/>
+          <Picture name="PictureLib.InputFieldSelect" russianName="ПолеВводаВыбрать" storageId="-1"/>
+          <Picture name="PictureLib.InputOnBasis" russianName="ВводНаОсновании" guid="01ec9d9a-7497-4d88-b93f-066c633a4866"/>
+          <Picture name="PictureLib.LevelDown" russianName="УровеньВниз" guid="01743054-d102-4e7c-bf15-5ed7fd84441b"/>
+          <Picture name="PictureLib.LevelUp" russianName="УровеньВверх" guid="cb34c423-3d6a-4202-a809-3b3f45fb14ab"/>
+          <Picture name="PictureLib.ListSettings" russianName="НастройкаСписка" guid="31b93f03-0ba2-4631-a171-0d3a3d2ecc48"/>
+          <Picture name="PictureLib.ListViewMode" russianName="РежимПросмотраСписка" guid="549a2c45-4fce-493f-94ee-9a3a4f426551"/>
+          <Picture name="PictureLib.ListViewModeHierarchicalList" russianName="РежимПросмотраСпискаИерархическийСписок" guid="3d4ad3b1-17de-4cf1-a2e4-0c2c83a5b5c2"/>
+          <Picture name="PictureLib.ListViewModeList" russianName="РежимПросмотраСпискаСписок" guid="c757209d-a87f-4410-b1a3-76000178f1f0"/>
+          <Picture name="PictureLib.ListViewModeTree" russianName="РежимПросмотраСпискаДерево" guid="da9ac044-0ff7-4bcf-a441-3187bd1d951f"/>
+          <Picture name="PictureLib.LoadReportSettings" russianName="ЗагрузитьНастройкиОтчета" guid="283ecabd-aaed-41d1-ad46-6cca91c29120"/>
+          <Picture name="PictureLib.Magnifier" russianName="Лупа" storageId="-700"/>
+          <Picture name="PictureLib.MarkToDelete" russianName="ПометитьНаУдаление" guid="18492a87-2fe4-44af-b218-304897fed020"/>
+          <Picture name="PictureLib.Message" russianName="Сообщение" guid="78da2c47-172f-4d57-ab52-a06e40548136"/>
+          <Picture name="PictureLib.MessageHistory" russianName="ИсторияСообщений" guid="d08abfb8-44b6-4b0f-bad2-e235c6a718c3"/>
+          <Picture name="PictureLib.MoveDown" russianName="ПереместитьВниз" storageId="-4"/>
+          <Picture name="PictureLib.MoveItem" russianName="ПеренестиЭлемент" guid="37e91e77-93ce-4c3b-8d30-a9d8cfd3d3b0"/>
+          <Picture name="PictureLib.MoveLeft" russianName="ПереместитьВлево" storageId="-8"/>
+          <Picture name="PictureLib.MoveRight" russianName="ПереместитьВправо" storageId="-9"/>
+          <Picture name="PictureLib.MoveUp" russianName="ПереместитьВверх" storageId="-3"/>
+          <Picture name="PictureLib.NestedTable" russianName="ВложеннаяТаблица" guid="52b637e5-f95f-4c70-9a72-2a4b5a9df449"/>
+          <Picture name="PictureLib.NewConversation" russianName="НовоеОбсуждение" guid="9c7f3c8c-a4b4-4a0a-84c8-d60d9feeca16"/>
+          <Picture name="PictureLib.NewWindow" russianName="НовоеОкно" guid="eb47324b-85f9-4172-9315-bba8015d9970"/>
+          <Picture name="PictureLib.Next" russianName="Следующий" guid="9cf611dc-2370-4357-910d-a2b49c7a1ec6"/>
+          <Picture name="PictureLib.Notifications" russianName="Оповещения" guid="928075d1-b90b-416c-b0b2-c3104cf084aa"/>
+          <Picture name="PictureLib.Notify" russianName="Оповещать" guid="d66b6f73-53b8-49b9-8efc-33c54aa06e3f"/>
+          <Picture name="PictureLib.OpenFile" russianName="ОткрытьФайл" guid="785362cb-3756-48ed-87d2-292ded17054a"/>
+          <Picture name="PictureLib.OpenFromMainServer" russianName="ОткрытьСОсновногоСервера" guid="b4ea245b-70ce-4777-a321-c7eb09839643"/>
+          <Picture name="PictureLib.OpenFromStandaloneServer" russianName="ОткрытьСАвтономногоСервера" guid="3bf7bd14-2232-4f53-b3b3-59a8c683f9b0"/>
+          <Picture name="PictureLib.OutputList" russianName="ВывестиСписок" guid="c2e2d966-5b7f-4699-903b-28a6f50d5471"/>
+          <Picture name="PictureLib.Parameters" russianName="Параметры" guid="835db646-1531-494b-b7c1-3239b0080bcb"/>
+          <Picture name="PictureLib.Picture" russianName="Картинка" guid="64837726-d2a2-4682-a788-737423e80013"/>
+          <Picture name="PictureLib.PivotChart" russianName="СводнаяДиаграмма" guid="79bf535f-2256-4ebb-bb8d-c26f3dd1a3de"/>
+          <Picture name="PictureLib.Post" russianName="Провести" guid="20ebc47b-f4d9-439c-acd3-fdc624fbac2a"/>
+          <Picture name="PictureLib.Previous" russianName="Предыдущий" guid="584b470d-ba34-4b25-9620-8de4066ffeaa"/>
+          <Picture name="PictureLib.Print" russianName="Печать" storageId="-13"/>
+          <Picture name="PictureLib.PrintImmediately" russianName="ПечатьСразу" guid="0abdab67-5c90-4296-8168-239d22024d11"/>
+          <Picture name="PictureLib.Properties" russianName="Свойства" guid="b4c7ab2c-bcda-4468-a28f-5fee93838c4e"/>
+          <Picture name="PictureLib.QueryWizard" russianName="КонструкторЗапроса" guid="1f046bc2-d6c5-46a3-a459-b2c0508f86fb"/>
+          <Picture name="PictureLib.QueryWizardCreateNestedQuery" russianName="КонструкторЗапросаСоздатьВложенныйЗапрос" guid="18bca3d7-a7a5-41df-a180-4dff9c217f43"/>
+          <Picture name="PictureLib.QueryWizardCreateTempTableDescription" russianName="КонструкторЗапросаСоздатьОписаниеВременнойТаблицы" guid="7604cff7-5cc6-4f88-8d16-504f01b92a3c"/>
+          <Picture name="PictureLib.QueryWizardCreateTempTableDropQuery" russianName="КонструкторЗапросаСоздатьЗапросУничтоженияВременнойТаблицы" guid="7df3febb-2640-41b7-ad8b-7a23b7ad4aec"/>
+          <Picture name="PictureLib.QueryWizardNestedQuery" russianName="КонструкторЗапросаВложенныйЗапрос" guid="c5501b77-0070-46e3-8ebd-f04a61eb9a73"/>
+          <Picture name="PictureLib.QueryWizardReplaceTable" russianName="КонструкторЗапросаЗаменитьТаблицу" guid="a9481ba4-dc85-4112-9c50-f9f340a61298"/>
+          <Picture name="PictureLib.QueryWizardShowChangesTables" russianName="КонструкторЗапросаОтображатьТаблицыИзменений" guid="270de5f0-f2df-4845-9fde-30b1ec486217"/>
+          <Picture name="PictureLib.QueryWizardTableParameters" russianName="КонструкторЗапросаПараметрыТаблицы" guid="fe740df0-d828-4241-a12f-7414e12302e8"/>
+          <Picture name="PictureLib.QueryWizardTempTable" russianName="КонструкторЗапросаВременнаяТаблица" guid="64ca52ee-f1a3-468f-8055-311935077515"/>
+          <Picture name="PictureLib.QueryWizardTempTableDescription" russianName="КонструкторЗапросаОписаниеВременнойТаблицы" guid="6b322d7c-3fa2-437d-b311-fd70c4c7ed46"/>
+          <Picture name="PictureLib.QueryWizardTempTablesGroup" russianName="КонструкторЗапросаГруппаВременныхТаблиц" guid="49369551-39dc-4adb-8795-5ab619c6c2bd"/>
+          <Picture name="PictureLib.ReadChanges" russianName="ПрочитатьИзменения" guid="83c8f18d-8701-41f3-bef4-53f88adbb868"/>
+          <Picture name="PictureLib.Refresh" russianName="Обновить" guid="fc4f29e0-d168-4fe0-8e64-e982fabf2595"/>
+          <Picture name="PictureLib.Rename" russianName="Переименовать" guid="c8a269ff-5b6d-4f42-9fa6-369d7b492aa7"/>
+          <Picture name="PictureLib.Replace" russianName="Заменить" guid="6cb69e7f-fe19-4f64-bfb5-1a4fad6c2ef9"/>
+          <Picture name="PictureLib.Report" russianName="Отчет" guid="db817ee1-fd28-4e7f-bb4a-53686b2b153c"/>
+          <Picture name="PictureLib.ReportSettings" russianName="НастройкиОтчета" guid="942e0303-a3ec-4fe8-887c-5aea8516d424"/>
+          <Picture name="PictureLib.Reread" russianName="Перечитать" guid="8f29e0e2-d5e6-41e8-a34d-9a0288156322"/>
+          <Picture name="PictureLib.Resource" russianName="Ресурс" guid="d6eefec0-792a-4720-8933-e2a57f9e312c"/>
+          <Picture name="PictureLib.RestoreValues" russianName="ВосстановитьЗначения" guid="a7707ed1-39b0-418f-974d-4d500d27a9c6"/>
+          <Picture name="PictureLib.RotateClockwise" russianName="ПовернутьПоЧасовойСтрелке" guid="c7f70aa3-b944-4efe-97e3-0fa3bda3cd88"/>
+          <Picture name="PictureLib.RotateCounterclockwise" russianName="ПовернутьПротивЧасовойСтрелки" guid="a43fcd1b-ad8d-4318-9d55-fd1ba086e65b"/>
+          <Picture name="PictureLib.SaveFile" russianName="СохранитьФайл" guid="818ab7d0-4654-4542-bd5e-fd9d1352b5a1"/>
+          <Picture name="PictureLib.SaveReportSettings" russianName="СохранитьНастройкиОтчета" guid="b5a0aaba-3a83-4a71-b6f9-24aae1574681"/>
+          <Picture name="PictureLib.SaveValues" russianName="СохранитьЗначения" guid="23f940bf-7381-4c2b-85a1-e541ed428042"/>
+          <Picture name="PictureLib.ScheduledJob" russianName="РегламентноеЗадание" guid="1970a480-9b38-405e-9d9e-8209f3fad5f1"/>
+          <Picture name="PictureLib.ScheduledJobs" russianName="РегламентныеЗадания" guid="6206a729-16e5-4e32-b53c-122de4e30c8d"/>
+          <Picture name="PictureLib.SearchControl" russianName="УправлениеПоиском" guid="fc6a06a8-1308-4385-b1b2-9d302d2054ed"/>
+          <Picture name="PictureLib.Select" russianName="Выбрать" storageId="-100"/>
+          <Picture name="PictureLib.SendMessage" russianName="ОтправитьСообщение" guid="be23a908-fe1b-44df-be94-d0f6e8353abe"/>
+          <Picture name="PictureLib.SetDateInterval" russianName="УстановитьИнтервал" guid="58174855-39be-462e-8723-cb2d95182146"/>
+          <Picture name="PictureLib.SetTime" russianName="УстановитьВремя" guid="55ef0776-5ee4-4daf-9a9b-70d63643ab8d"/>
+          <Picture name="PictureLib.Setting" russianName="Настройка" guid="caf2e58b-ca3d-4b63-82c9-f21f1c9bc9eb"/>
+          <Picture name="PictureLib.SettingsStorage" russianName="ХранилищеНастроек" guid="6b909f65-95a4-4697-8ca0-c8f331227b9a"/>
+          <Picture name="PictureLib.ShowData" russianName="ПоказатьДанные" guid="a064544f-6037-48ca-b19f-8ad63e43af23"/>
+          <Picture name="PictureLib.ShowInList" russianName="ПоказатьВСписке" guid="9c96aa25-d656-4b3d-ab3e-81d9718da238"/>
+          <Picture name="PictureLib.ShowPassword" russianName="ПоказатьПароль" guid="97f87955-b88a-4225-a0d8-03af981ecd86"/>
+          <Picture name="PictureLib.Sort" russianName="Сортировка" guid="a594c8a1-7218-420a-860f-7b493c5e65c4"/>
+          <Picture name="PictureLib.SortList" russianName="СортироватьСписок" guid="fafe4c1f-c265-4220-a0e1-8f82af26b72e"/>
+          <Picture name="PictureLib.SortListAsc" russianName="СортироватьСписокПоВозрастанию" guid="91022b99-b610-48ad-954e-a297848081ce"/>
+          <Picture name="PictureLib.SortListDesc" russianName="СортироватьСписокПоУбыванию" guid="1fa32fdb-a180-418f-a6eb-db7516b7a30b"/>
+          <Picture name="PictureLib.SortedAsc" russianName="ОтсортированоПоВозрастанию" guid="e4c49dfb-ef8e-4f4a-9d01-9536ba61f944"/>
+          <Picture name="PictureLib.SortedDesc" russianName="ОтсортированоПоУбыванию" guid="34c981c1-f0bd-43e0-a0cf-c2a9cd648b91"/>
+          <Picture name="PictureLib.SpreadsheetDeleteComment" russianName="ТабличныйДокументУдалитьПримечание" guid="7c75b1df-1fdc-471f-aae6-6b7870318cd4"/>
+          <Picture name="PictureLib.SpreadsheetDeletePageBreak" russianName="ТабличныйДокументУдалитьРазрывСтраницы" guid="aa96f4bb-cf28-4dad-bc42-5ed53de95c0c"/>
+          <Picture name="PictureLib.SpreadsheetInsertComment" russianName="ТабличныйДокументВставитьПримечание" guid="03665ff1-3a05-41d1-96d3-04bda2d8ede3"/>
+          <Picture name="PictureLib.SpreadsheetInsertPageBreak" russianName="ТабличныйДокументВставитьРазрывСтраницы" guid="26518e18-e364-475a-8026-e41134658b2a"/>
+          <Picture name="PictureLib.SpreadsheetReadOnly" russianName="ТабличныйДокументТолькоПросмотр" guid="2846af8d-af84-47e3-82b9-01b01f960426"/>
+          <Picture name="PictureLib.SpreadsheetShowComments" russianName="ТабличныйДокументОтображатьПримечания" guid="bc61d1e7-2d40-4e93-8630-cce840bdcf99"/>
+          <Picture name="PictureLib.SpreadsheetShowGrid" russianName="ТабличныйДокументОтображатьСетку" guid="3646acb9-a91e-4163-bbe1-2006041cd65d"/>
+          <Picture name="PictureLib.SpreadsheetShowGroups" russianName="ТабличныйДокументОтображатьГруппировки" guid="702a9e16-0bb6-4efb-af11-10faf1e6ee87"/>
+          <Picture name="PictureLib.SpreadsheetShowHeaders" russianName="ТабличныйДокументОтображатьЗаголовки" guid="46598f81-5f95-4485-9b33-bfe4fd1276d0"/>
+          <Picture name="PictureLib.StartVideoconference" russianName="НачатьВидеоконференцию" guid="e7f605f9-53d4-4e07-b56a-4715dc3a3e50"/>
+          <Picture name="PictureLib.Stop" russianName="Остановить" guid="1cd7b762-ec6a-4e92-ac9a-1832be228ec3"/>
+          <Picture name="PictureLib.SwitchActivity" russianName="ПереключитьАктивность" guid="6e3687cf-a8d1-446a-833a-bfaf38516353"/>
+          <Picture name="PictureLib.SyncContents" russianName="НайтиВСодержании" guid="3bdc16c8-6a96-4467-9442-a8e4804b3fa2"/>
+          <Picture name="PictureLib.Task" russianName="Задача" guid="37cf7cc0-abad-4385-b597-6fd2d8dc085a"/>
+          <Picture name="PictureLib.TaskObject" russianName="ЗадачаОбъект" guid="b9e2dae2-b205-4442-aee5-802cd82f5199"/>
+          <Picture name="PictureLib.Today" russianName="Сегодня" guid="6ca1af75-2aa5-48a6-820d-efa0ccb8f4f1"/>
+          <Picture name="PictureLib.UncheckAll" russianName="СнятьФлажки" storageId="-11"/>
+          <Picture name="PictureLib.UndoPosting" russianName="ОтменаПроведения" guid="8ca4ea33-603d-4992-8a41-c7924b5bd40b"/>
+          <Picture name="PictureLib.User" russianName="Пользователь" guid="6ff3ddbd-56e3-4ddf-a5bf-048c1e2dfb2f"/>
+          <Picture name="PictureLib.UserWithAuthentication" russianName="ПользовательСАутентификацией" guid="75a40cc4-c719-4c3f-91ea-fc5787bc34ca"/>
+          <Picture name="PictureLib.UserWithoutNecessaryProperties" russianName="ПользовательБезНеобходимыхСвойств" guid="f16ab927-3ac6-4cdd-bcf1-d8acf005a255"/>
+          <Picture name="PictureLib.ViewByOwner" russianName="ПросмотрПоВладельцу" guid="683fc04f-e189-49b7-92a9-f835c36f5fb2"/>
+          <Picture name="PictureLib.Write" russianName="Записать" guid="894cf65b-4109-4533-a1d7-c87b1fcc80a3"/>
+          <Picture name="PictureLib.WriteAndClose" russianName="ЗаписатьИЗакрыть" guid="e6fc55a0-3d58-4b15-bdd3-717453929598"/>
+          <Picture name="PictureLib.WriteChanges" russianName="ЗаписатьИзменения" guid="f62488ee-f90c-47f7-929d-f42ec11a1e63"/>
+          <Picture name="PictureLib.Zoom" russianName="ИзменитьМасштаб" guid="b9cb1339-815d-4e11-84d3-aebfa5a58459"/>
+          <Picture name="PictureLib.ZoomIn" russianName="УвеличитьМасштаб" storageId="-16"/>
+          <Picture name="PictureLib.ZoomOut" russianName="УменьшитьМасштаб" storageId="-15"/>
+        </StandardPictures>
+        <NamedConcept name="ChartSeries" russianName="СерияДиаграммы"><Properties>
+          <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/><Property name="Marker" apiName="Маркер" russianType="ТипМаркераДиаграммы"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="ChartSummarySeries" apiName="SummarySeries" russianName="СводнаяСерия" russianType="СерияДиаграммы" source="Chart.SummarySeries; 8.5.1.1343 ValueToFile API" evidenceRefs="ev_418fc1414bc745bbbb90a22694e5cae1 ev_bac7628d14574b96a6ecb1c49db9d823 ev_0bf2de977ee74d0e8e69e117b819f78c"><Properties>
+          <Property name="Color" apiName="Color" russianName="Цвет" russianType="Цвет" valueCodec="color"/>
+          <Property name="Marker" apiName="Marker" russianName="Маркер" russianType="ТипМаркераДиаграммы" valueCodec="enumeration"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="ChartPoint" russianName="ТочкаДиаграммы"><Properties>
+          <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="CommandBarButton" russianName="КнопкаКоманднойПанели"><Properties>
+          <Property name="Name" russianName="Имя"/><Property name="Type" russianName="ТипКнопки"/>
+          <Property name="Text" russianName="Текст"/><Property name="Explanation" russianName="Пояснение"/><Property name="ToolTip" russianName="Подсказка"/>
+          <Property name="Enabled" russianName="Доступность"/><Property name="Checked" russianName="Пометка"/><Property name="ChangesData" russianName="ИзменяетДанные"/>
+          <Property name="DefaultButton" russianName="КнопкаПоУмолчанию"/>
+          <Property name="Representation" russianName="Отображение"/><Property name="ClientInterfaceVariant" russianName="ВариантИнтерфейсаКлиентскогоПриложения" source="IClientInterfaceForCommand"/><Property name="Shortcut" russianName="СочетаниеКлавиш"/><Property name="Picture" russianName="Картинка"/><Property name="Action" russianName="Действие"/><Property name="StandardAction" russianName="СтандартноеДействие"/><Property name="Order" russianName="ПорядокКнопок"/><Property name="Buttons" russianName="Кнопки"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="StandardAction" russianName="СтандартноеДействие"><Properties>
+          <Property name="command" russianName="Команда"/><Property name="context" russianName="Контекст"/><Property name="commandBarId" russianName="КоманднаяПанель"/><Property name="source" russianName="Источник"/><Property name="sourceControlId" russianName="ЭлементИсточника" source="IControlIdConvertor"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="Action" russianName="Действие"><Properties>
+          <Property name="handler" russianName="Обработчик"/><Property name="Name" russianName="Имя"/><Property name="Text" russianName="Текст"/><Property name="ToolTip" russianName="Подсказка"/><Property name="Description" russianName="Пояснение"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="GanttSeries" russianName="СерияДиаграммыГанта"><Properties>
+          <Property name="Value" russianName="Значение" russianType="Строка"/><Property name="Text" russianName="Текст" russianType="Строка"/><Property name="Color" russianName="Цвет" russianType="Цвет"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="GanttPoint" russianName="ТочкаДиаграммыГанта"><Properties>
+          <Property name="Value" russianName="Значение" russianType="Строка"/><Property name="Text" russianName="Текст" russianType="Строка"/><Property name="Color" russianName="Цвет" russianType="Цвет"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="GanttInterval" russianName="ИнтервалДиаграммыГанта"><Properties>
+          <Property name="pointRef" russianName="Точка"/><Property name="seriesRef" russianName="Серия"/><Property name="StartDate" russianName="Начало" russianType="Дата"/><Property name="EndDate" russianName="Окончание" russianType="Дата"/><Property name="Text" russianName="Текст" russianType="Строка"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="TableColumn" russianName="КолонкаТабличногоПоля"><Properties>
+          <Property name="Name" russianName="Имя"/><Property name="DataPath" russianName="Данные"/>
+          <Property name="Header" russianName="ТекстШапки"/><Property name="Control" russianName="ЭлементУправления"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="SpreadsheetDocumentCellControl" russianName="ЭлементУправленияЯчейкиТабличногоДокумента"><Properties>
+          <Property name="ReadOnly" russianName="ТолькоПросмотр"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="TableColumnControl" russianName="ЭлементУправленияКолонкиТабличногоПоля"><Properties>
+          <Property name="Type" russianName="ВидРедактора"/><Property name="ValueType" russianName="ТипЗначения"/><Property name="Enabled" russianName="Доступность"/>
+          <Property name="ReadOnly" russianName="ТолькоПросмотр"/><Property name="Caption" russianName="Заголовок"/>
+          <Property name="ToolTip" russianName="Подсказка"/><Property name="Font" russianName="Шрифт"/>
+        </Properties></NamedConcept>
+      </Palette>
+    </xs:appinfo>
+  </xs:annotation>
+</xs:schema>

@@ -1,23 +1,30 @@
-.PHONY: test smoke format-xml clean
+CMAKE ?= cmake
+CTEST ?= ctest
+CMAKE_BUILD_TYPE ?= Release
+BUILD_DIR ?= build
+CMAKE_CONFIGURE_ARGS ?=
+CMAKE_BUILD_ARGS ?=
+CTEST_ARGS ?=
 
-PYTHON ?= python3
+.PHONY: all configure build test smoke release-gate clean
 
-test:
-	PYTHONPATH=src $(PYTHON) -m unittest discover -s tests
+all: build
 
-smoke:
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli build-bin --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli unpack-bin --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli pack-bin --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli dump-bin --help
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli scan-corpus --help
+configure:
+	$(CMAKE) -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) $(CMAKE_CONFIGURE_ARGS)
 
-format-xml:
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/OrdinaryForm.xsd
-	PYTHONPATH=src $(PYTHON) -m onec_ordinary_forms.cli format-xml --xml src/onec_ordinary_forms/schemas/PlatformConfigStructure.xsd
+build: configure
+	$(CMAKE) --build $(BUILD_DIR) --config $(CMAKE_BUILD_TYPE) $(CMAKE_BUILD_ARGS)
+
+test: build
+	$(CTEST) --test-dir $(BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure $(CTEST_ARGS)
+
+smoke: build
+	$(CTEST) --test-dir $(BUILD_DIR) --build-config $(CMAKE_BUILD_TYPE) --output-on-failure -L smoke $(CTEST_ARGS)
+
+release-gate:
+	@echo "release-gate is not implemented: product tests do not replace strict Designer and corpus validation." >&2
+	@exit 1
 
 clean:
-	find . -type d -name __pycache__ -prune -exec rm -rf {} +
-	find . -type d -name '*.egg-info' -prune -exec rm -rf {} +
-	rm -rf build dist .pytest_cache
+	rm -rf $(BUILD_DIR) dist

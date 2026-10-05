@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.3/debugger/dbgtgtRequestResponse"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           xmlns:dbgbase="http://v8.1c.ru/8.3/debugger/debugBaseData"
+           xmlns:dbgtgtData="http://v8.1c.ru/8.3/debugger/dbgtgtData"
+           xmlns:dbgcalc="http://v8.1c.ru/8.3/debugger/debugCalculations"
+           xmlns:dbgtgtBP="http://v8.1c.ru/8.3/debugger/dbgtgtBP"
+           xmlns:debugBreakpoints="http://v8.1c.ru/8.3/debugger/debugBreakpoints"
+           xmlns:debugRTEFilter="http://v8.1c.ru/8.3/debugger/debugRTEFilter"
+           xmlns:dbgtgtErrorInfo="http://v8.1c.ru/8.3/debugger/dbgtgtErrorInfo"
+           xmlns:dbgtgtCommands="http://v8.1c.ru/8.3/debugger/dbgtgtCommands"
+           targetNamespace="http://v8.1c.ru/8.3/debugger/dbgtgtRequestResponse"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugBaseData" schemaLocation="../../../dbgbase/src/res/debugBaseData.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/dbgtgtData" schemaLocation="../../../dbgtgt/src/res/dbgtgtData.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugCalculations" schemaLocation="../../../dbgbase/src/res/debugCalculations.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/dbgtgtBP" schemaLocation="dbgtgtBP.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugBreakpoints" schemaLocation="../../../dbgbase/src/res/debugBreakpoints.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/debugRTEFilter" schemaLocation="../../../dbgbase/src/res/debugRTEFilter.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/dbgtgtErrorInfo" schemaLocation="dbgtgtErrorInfo.xsd"/>
+    <xs:import namespace="http://v8.1c.ru/8.3/debugger/dbgtgtCommands" schemaLocation="dbgtgtCommands.xsd"/>
+
+    <xs:element name="request"/>
+    <xs:element name="response"/>
+
+    <!-- =================================================== -->
+    <!--  Информация о параметрах запросов удаленной отладки -->
+    <!-- =================================================== -->
+
+    <xs:complexType name="DebugTargetRequestTypeBase">
+        <xs:sequence>
+            <xs:choice>
+                <!-- Идентификатор предмета отладки в виде строки -->
+                <xs:element name="targetIDStr" type="dbgbase:DebugTargetIdStr" minOccurs="0" maxOccurs="1"/>
+                <!-- Идентификатор предмета отладки -->
+                <xs:element name="targetID" type="dbgbase:DebugTargetId" minOccurs="0" maxOccurs="1"/>
+            </xs:choice>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о регистрации предмета отладки -->
+    <xs:complexType name="RegisterDebugTargetRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+
+    <!-- Тип параметра для запроса о разрегистрации предмета отладки -->
+    <xs:complexType name="UnregisterDebugTargetRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о нотификации о старте BSL-процесса -->
+    <xs:complexType name="OnStartProcessRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о нотификации о завершении BSL-процесса -->
+    <xs:complexType name="OnStopProcessRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о нотификации о входе в уровень стека BSL-процесса -->
+    <xs:complexType name="OnEnterStackFrameRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Стек вызовов -->
+                    <xs:element name="stackItem" type="dbgtgtData:CallStackItemInfo"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о нотификации о выходе из уровня стека BSL-процесса -->
+    <xs:complexType name="OnExitStackFrameRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Уникальный идентификатор стек-фрейма -->
+                    <xs:element name="id" type="xs:string" minOccurs="0"/>
+                    <!-- Состояние стек-фрейма -->
+                    <xs:element name="state" type="xs:decimal"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о нотификации о выполнении строки кода -->
+    <xs:complexType name="OnNextLineRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Номер строки -->
+                    <xs:element name="lineNo" type="xs:decimal"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для ответа о нотификации о выполнении строки кода -->
+    <xs:complexType name="OnNextLineResponseType">
+        <xs:sequence>
+        </xs:sequence>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса о повторной нотификации о выполнении строки кода -->
+    <xs:complexType name="OnNextLineReCallRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с результатами вычисления выражения в процессе останова на строке кода -->
+    <xs:complexType name="OnNextLineEvalExprRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Результат вычисления выражения -->
+                    <xs:element name="evalExprResBaseData" type="dbgcalc:CalculationResultBaseData" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с результатами определения состава -->
+    <!-- локальных переменных и вычисления их значений в процессе останова на строке кода -->
+    <xs:complexType name="OnNextLineEvalLocalVariablesRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Результат вычисления выражения -->
+                    <xs:element name="evalExprResBaseData" type="dbgcalc:CalculationResultBaseData" minOccurs="0" maxOccurs="unbounded"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с результатами изменения значения локальной переменной или свойства контекста -->
+    <xs:complexType name="OnNextLineModifyValueRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Признак удачного изменения значения локальной переменной или свойства-->
+                    <xs:element name="processed" type="xs:boolean" default="false"/>
+                    <!-- Описание нового состояния измененного значения локальной переменной или свойства контекста -->
+                    <xs:element name="newValueState" type="dbgcalc:CalculationResultBaseData" minOccurs="0" maxOccurs="1"/>
+                    <!-- Текст ошибки в случае неудачного изменения локальной переменной или свойства контекста -->
+                    <xs:element name="errorStr" type="xs:base64Binary" minOccurs="0" maxOccurs="1"/>
+                    <!-- Идентификатор изменяемого значения (должен быть даже в случае ошибки) -->
+                    <xs:element name="modificationResultID" type="core:UUID"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с результатами проверки условия срабатывания точки останова -->
+    <xs:complexType name="OnNextLineCheckBPRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Результат проверки условия срабатывания точки останова -->
+                    <xs:element name="checkState" type="dbgtgtBP:CheckBPConditionResult"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с результатами вычисления сообщения точки останова -->
+    <xs:complexType name="OnNextLineMessageBPRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Результат проверки условия срабатывания точки останова -->
+                    <xs:element name="messageState" type="dbgtgtBP:MessageBPConditionResult"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса с результатами проверки условия срабатывания точки останова -->
+    <xs:complexType name="OnRuntimeErrorRequestType">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Информация по ран-тайм ошибке -->
+                    <xs:element name="runtimeErrorInfo" type="dbgtgtErrorInfo:RunTimeErrorInfo" minOccurs="0" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- Тип параметра для запроса описания объекта метаданных для показа -->
+    <xs:complexType name="ShowMetadataObject">
+        <xs:complexContent>
+            <xs:extension base="tns:DebugTargetRequestTypeBase">
+                <xs:sequence>
+                    <!-- Информация об объекте -->
+                    <xs:element name="metadataObjectName" type="xs:string" minOccurs="1" maxOccurs="1"/>
+                </xs:sequence>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+</xs:schema>

@@ -1,52 +1,42 @@
-# Architecture Notes
+# Архитектура
 
-The repository is split by format boundary, not by CLI command.
+Проект преобразует обычную форму 1С между бинарным контейнером и именованной объектной моделью. Первая практическая цель - информационное сравнение поддержанных данных формы в Git.
 
-## Layers
+```text
+Form.bin -> OrdinaryForm -> Form.xml + Form/Module.bsl + Items/*
+Form.xml + Form/Module.bsl + Items/* -> OrdinaryForm -> Form.bin
+```
 
-- `formbin.py` owns the ordinary `Form.bin` section container. It parses,
-  unpacks, and packs sections byte-for-byte, including the service sections
-  that are not decoded yet.
-- `bracket.py` owns ordinary form list-stream reading. It converts that stream
-  into the internal control/attribute index used by the current XML writer.
-- `pipeline.py` owns orchestration between formats. For example, `dump-bin`
-  means `Form.bin -> section files -> internal control index -> object-model
-  XML`, but this module does not know the XML schema details.
-- `cli.py` owns command-line argument parsing plus the current object-model XML
-  reader/writer bridge. The public XML stays object-oriented; list-stream
-  serialization is internal to the build path.
-- `__init__.py` exposes the stable import wrappers: `dump_form_bin`,
-  `build_form_bin`, and `validate_form_xml`.
-- `corpus.py` owns portable corpus and exported-form scanning.
+Публичный XML версии 2.1 является редактируемым представлением модели, а не дампом. Он использует собственный словарь обычных форм, включая вложенный `ChildItems`; XML управляемой формы не совместим с ним. `Form.bin` является контейнером для потока формы и модуля. List-stream и bracket-format остаются внутренней деталью кодеков.
 
-## Current Direction
+## Граница модели
 
-The next cleanup target is to move object-model XML writing/rebuild helpers out
-of `cli.py` into a dedicated model module and replace the remaining hand-built
-control-info writer records with platform-derived codec descriptors. After
-that, `cli.py` should contain only thin command wrappers.
+`OrdinaryFormDocument` хранит форму, контролы, страницы, реквизиты, команды, события, типизированные значения, модуль и ссылки на ресурсы. Свойства читаются и меняются через общий API `get_prop_val`, `set_prop_val` и `reset_prop_val` с учетом владельца, типа и известного состояния default.
 
-Behavioral changes should stay separate from these moves. A pure architecture
-cleanup must keep CLI arguments stable and pass the existing round-trip checks.
+Читатель может построить неполную именованную проекцию: известные свойства доступны для сравнения, неподдержанные отмечаются диагностикой и `reconstructionComplete=false`. Writer собирает новый файл из доступной модели. Поэтому успешное чтение, сборка или приемка Designer не доказывает сохранение неподдержанных полей исходной формы. Отсутствие diff XML не доказывает отсутствия бинарных различий.
 
-Byte identity is now a targeted correctness oracle, not a blanket claim for the
-whole corpus. The current writer preserves physical `Form.bin` container details
-and compact platform profile metadata where the platform baseline has been
-observed, while the public XML remains object-model-only. Verified oracle cases
-should stay byte-identical; broader UT/UPP corpus work should expand profile
-coverage incrementally and record the next mismatch class in OACS.
+Публичный XML не может включать сырые или индексные данные под другими именами: внутренние потоки, эталонные снимки, записи платформы, бинарные заглушки или скрытые модели. Если значение нужно представить для сборки, оно добавляется как именованное понятие с дескриптором и схемой. Полный контракт и текущие значения перечислены в [ordinary-form-target-contract.md](ordinary-form-target-contract.md).
 
-## Schema Boundary
+## Владельцы кода
 
-The public schema boundary is intentionally narrow:
+Пути ниже указаны относительно `sidecars/onec-form-native`.
 
-- `OrdinaryForm.xsd` is the editable ordinary-form object model: form root,
-  controls, named properties, events, reusable value/layout types, and platform
-  palette annotations.
-- `PlatformConfigStructure.xsd` is codec evidence for configuration metadata,
-  type-domain patterns, `CompositeID`, and platform serializer concepts.
+| Область | Владелец | Назначение |
+| --- | --- | --- |
+| Объектная модель | `include/oof/model/ordinary_form.hpp`, `src/model/ordinary_form.cpp` | Объекты, свойства, связи и проверка модели |
+| Метамодель | `include/oof/model/metamodel.hpp`, `src/model/metamodel.cpp` | Контролы, свойства, события, типы и дескрипторы |
+| XML и схема | `include/oof/source`, `src/source` | Разбор XML 2.1, каноническая запись и генерация XSD |
+| Кодеки | `include/oof/storage`, `src/storage` | Типизированные значения и внутренние потоки |
+| Контейнер | `include/oof/form_bin.hpp`, `src/form_bin.cpp` | Чтение и запись `Form.bin` |
+| CLI | `src/cli/main.cpp` | Команды `dump` и `build`, ввод-вывод и диагностика |
+| Проверки | `tests`, корневой `CMakeLists.txt` | Проверки модели, XML, потоков и CLI |
 
-Public `Form.xml` element and attribute names use the English vocabulary from
-`OrdinaryForm.xsd`. Russian platform names are schema annotations used by tools
-and documentation. They are not separate mapping files and not alternate public
-XML tag names.
+Рабочее пространство состоит из существующей C++20 библиотеки `liboof` и CLI `oof`, собранных CMake с libxml2 и zlib. Выполнение `dump` и `build` не загружает библиотеки 1С. Designer применяется отдельно для проверки созданного EPF.
+
+## Общие свойства и расширение
+
+Общие свойства должны иметь общий кодек там, где совпадает их платформенная семантика. Поддержка задается явными возможностями и значениями по умолчанию каждого типа. `Enabled`, `ToolTip`, `Font` и `BorderColor` используют общие механизмы; `LabelDecoration.Font` подключен к общему `FontValue` и проходит собственный строгий цикл. Подтвержденные сведения и ссылки на доказательства: [общие кодеки](research-map.md#общий-кодек-свойств-и-проверенные-исключения-2026-10-05), [контракт Font](ordinary-form-target-contract.md#concept-registry).
+
+При расширении сначала проверьте, может ли существующий владелец обработать новое свойство. Добавляйте именованное свойство и дескриптор, а не новый путь чтения, профиль, файл сопоставлений или сохраненный исходный поток. Не распространяйте общий кодек на тип по сходству названия: проверяйте тип значения, default, применимость и обратный цикл.
+
+Наличие типа в XSD, число типов XML и минимальные положительные примеры не являются оценкой полной поддержки. Текущее покрытие, ограничения и приоритет сравнения описаны в [целевом состоянии](repository-target-state.md), подробные эксперименты - в [карте исследований](research-map.md).

@@ -72,6 +72,9 @@ Hard rules:
   passphrases, or private agent state.
 - Keep private processors and generated exports out of git. Use ignored
   `scan-output/`, `work/`, or `/tmp` for corpus experiments.
+- Start each corpus/platform experiment iteration from a clean `scan-output/`
+  directory. Remove stale ignored artifacts before producing new reports so
+  current evidence cannot be confused with previous runs.
 - Prefer platform `ibcmd` for export/import/rebuild validation. Do not route
   this repository's parser work through `vrunner` unless a task explicitly
   requires that separate tool.
@@ -101,12 +104,11 @@ Forms/<FormName>/Ext/Form/Items/<ElementName>/Picture.gif
 ```
 
 `Form.xml` is the public editable object model. It must contain named form
-objects and properties: `Form`, `Title`, `Attributes`, `Events`, `Pages`,
-`Page`, `Panel`, `Button`, `LabelDecoration`, `PictureDecoration`,
-`InputField`, `Position`, `Bindings`, and other platform-derived
-control/property names. Top-level `Commands` and generic `ChildItems` are not
-part of the public ordinary-form contract unless platform evidence proves a
-real ordinary-form object with that name. Events/actions should live on the
+objects and properties: `Form`, `Title`, `Attributes`, `Events`, `Commands`,
+`ChildItems`, `Page`, `Panel`, `Button`, `LabelDecoration`,
+`PictureDecoration`, `InputField`, `Position`, `Bindings`, and other
+platform-derived control/property names. Public `Form.xml` declares
+`ordinaryFormVersion="2.*"` and uses managed-form-style `ChildItems` nesting. Events/actions should live on the
 form or the concrete control where the platform exposes them. It should be
 understandable to a 1C developer in the same way managed-form XML is
 understandable.
@@ -117,6 +119,18 @@ symbols known from 8.2.19 as `cf_form_controls8`,
 `cf_form_controls_position8`, and `cf_form_controls_info8` identify
 ordinary-control payload formats in the platform mechanism. Treat them as
 internal codec evidence, not as public XML.
+
+Hard product boundary: the product is a platform-like `OrdinaryForm` object
+graph with `GetPropVal`/`SetPropVal`, default handling, explicit properties,
+attributes, commands, events, child items, typed values, module text, and
+picture properties. `Form.bin` is only a container around the serialized form
+stream and module stream. Base-backed rebuilds, baseline diffs, patch workers,
+raw/list-stream preservation, hidden raw object models, and compatibility
+profiles are diagnostic/research surfaces only. Do not expand them as the
+release path. When XML cannot rebuild a value, add the missing named
+`OrdinaryForm` concept and descriptor-backed serializer instead of patching a
+baseline payload. The durable contract is documented in
+`docs/ordinary-form-target-contract.md`.
 
 Hard public XML rule: never expose raw or indexed platform data under any name.
 Do not add `ObjectModel`, `ListStream`, `BracketStream`, `FormBin`,
@@ -146,14 +160,13 @@ Forms/<ИмяФормы>/Ext/Form/Items/<ИмяЭлемента>/Picture.gif
 
 `Form.xml` - это публичная редактируемая объектная модель. В нем должны быть
 именованные объекты и свойства формы: `Form`, `Title`, `Attributes`, `Events`,
-`Pages`, `Page`, `Panel`, `Button`, `LabelDecoration`, `PictureDecoration`,
-`InputField`, `Position`, `Bindings` и другие имена контролов/свойств. Публичный
-XML использует единый английский словарь; русские платформенные имена свойств,
-событий, типов и контролов хранятся в схемном слое элементов формы через
+`Commands`, `ChildItems`, `Page`, `Panel`, `Button`, `LabelDecoration`,
+`PictureDecoration`, `InputField`, `Position`, `Bindings` и другие имена
+контролов/свойств. Публичный `Form.xml` объявляет `ordinaryFormVersion="2.*"`
+и использует вложение `ChildItems` в стиле управляемой формы. Публичный XML
+использует единый английский словарь; русские платформенные имена свойств,
+событий, типов и контролов хранятся в `OrdinaryFormPalette.xsd` через
 `xs:annotation/xs:appinfo`. Отдельные mapping-файлы для этого слоя не нужны.
-Верхнеуровневый `Commands` и общий контейнер
-`ChildItems` не входят в публичный контракт обычной формы, пока платформенные
-данные не доказывают реальный объект обычной формы с таким именем.
 События/действия должны лежать на форме или конкретном контроле, где их
 показывает платформа. Публичный XML и служебные знания валидируются отдельными
 схемными слоями: форма, элементы формы, типы/значения и структура
@@ -166,6 +179,19 @@ XML использует единый английский словарь; ру�
 `cf_form_controls_info8` являются идентификаторами форматов payload обычных
 контролов в типовом механизме платформы. Их нужно считать внутренним
 свидетельством codec-слоя, а не публичным XML.
+
+Жесткая граница продукта: продуктом является платформоподобный объект
+`OrdinaryForm` с `GetPropVal`/`SetPropVal`, default-значениями, явно заданными
+свойствами, реквизитами, командами, событиями, дочерними элементами,
+типизированными значениями, текстом модуля и свойствами-картинками. `Form.bin`
+является только контейнером для сериализованного потока формы и потока модуля.
+Base-backed rebuild, baseline diff, patch-worker'ы, raw/list-stream
+preservation, скрытые raw object models и compatibility profiles являются
+только диагностическими/исследовательскими поверхностями. Их нельзя расширять
+как release path. Если XML не может собрать значение, нужно добавить
+недостающее именованное понятие `OrdinaryForm` и descriptor-backed serializer,
+а не патчить baseline payload. Долговечный контракт записан в
+`docs/ordinary-form-target-contract.md`.
 
 Жесткое правило публичного XML: нельзя выводить наружу сырые или индексные
 платформенные данные ни под каким названием. Запрещены `ObjectModel`,

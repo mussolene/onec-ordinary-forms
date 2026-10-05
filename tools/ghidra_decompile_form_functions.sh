@@ -6,10 +6,11 @@ if [[ $# -lt 1 ]]; then
 Usage:
   tools/ghidra_decompile_form_functions.sh /path/to/platform-library.so [out-dir] [address-or-function ...]
 
-Runs Ghidra headless in Docker and decompiles ordinary-form serializer
-candidates. If no functions are provided, the default target set covers the
-known cf_form_controls_info8 xrefs plus ListOutStream/ListInStream paths:
-  FUN_002709e0 FUN_00270da0 FUN_00270fe0 FUN_002c9430 FUN_00255f70 FUN_00256510
+Runs Ghidra headless in Docker and decompiles ordinary-control transfer
+candidates. The default addresses belong to the researched dsgnfrm build:
+  FUN_002709e0 FUN_00270da0 FUN_00270fe0 FUN_002c9430
+Explicit targets use Ghidra addresses, not runtime module offsets. The JSON
+records imageBase and each function's imageOffset for address comparison.
 
 Keep platform binaries and generated decompile output in /tmp, work/, or
 another ignored/private directory. Do not commit those artifacts.
@@ -42,9 +43,18 @@ fi
 
 mkdir -p "$out_dir"
 
-input_abs="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$input_path")"
-out_abs="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$out_dir")"
-script_abs="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$(dirname "$0")/ghidra/ExtractFormDecompile.java")"
+abs_path() {
+  local path="$1"
+  local dir
+  local base
+  dir="$(cd "$(dirname "$path")" && pwd -P)"
+  base="$(basename "$path")"
+  printf '%s/%s\n' "$dir" "$base"
+}
+
+input_abs="$(abs_path "$input_path")"
+out_abs="$(cd "$out_dir" && pwd -P)"
+script_abs="$(abs_path "$(dirname "$0")/ghidra/ExtractFormDecompile.java")"
 input_dir="$(dirname "$input_abs")"
 input_file="$(basename "$input_abs")"
 project_dir="$out_abs/project-decompile"

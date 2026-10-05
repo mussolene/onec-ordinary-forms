@@ -24,9 +24,7 @@ public class ExtractFormDecompile extends GhidraScript {
         "FUN_002709e0",
         "FUN_00270da0",
         "FUN_00270fe0",
-        "FUN_002c9430",
-        "FUN_00255f70",
-        "FUN_00256510"
+        "FUN_002c9430"
     };
 
     private static String esc(String value) {
@@ -130,6 +128,7 @@ public class ExtractFormDecompile extends GhidraScript {
         try (PrintWriter pw = new PrintWriter(out, "UTF-8")) {
             pw.println("{");
             pw.println("  \"program\": \"" + esc(currentProgram.getName()) + "\",");
+            pw.println("  \"imageBase\": \"" + currentProgram.getImageBase() + "\",");
             pw.println("  \"targets\": [");
             boolean firstTarget = true;
             for (String target : targets) {
@@ -164,6 +163,8 @@ public class ExtractFormDecompile extends GhidraScript {
                 pw.print(
                     "    {\"name\":\"" + esc(function.getName(true))
                         + "\",\"address\":\"" + function.getEntryPoint()
+                        + "\",\"imageOffset\":\"0x"
+                        + Long.toHexString(function.getEntryPoint().subtract(currentProgram.getImageBase()))
                         + "\",\"signature\":\"" + esc(function.getSignature().toString())
                         + "\",\"callers\":" + callersJson(function)
                         + ",\"body\":\"" + esc(c)

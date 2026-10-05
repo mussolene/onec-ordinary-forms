@@ -1,88 +1,54 @@
-# Development Notes
+# Разработка
 
-This repository is intentionally small while the ordinary-form model is still
-being discovered.
+## Исходный пакет формы
 
-## Target Model
+Форма для просмотра и сравнения состоит из `Form.xml`, соседнего `Form/Module.bsl` и файлов ресурсов, например `Form/Items/<ElementName>/Picture.gif`. XML версии 2.1 описывает обычную форму и не является форматом управляемых форм. Не добавляйте неподдержанное значение в XML до появления именованного свойства с проверенным типом и правилами.
 
-The XML package should represent ordinary forms as an object model:
+## Сборка и тесты
 
-- form properties and module reference;
-- attributes with decoded `TypeDomainPattern`;
-- nested pages and controls;
-- geometry and bindings with readable targets and sides;
-- button actions;
-- picture sidecars as files;
-- no public low-level `ListStream`, `FormBin`, `LogicalStream`, or binary
-  placeholder nodes.
+Нужны CMake 3.20+, компилятор C++20, libxml2 и zlib. Из корня репозитория:
 
-The parser/writer boundary is internal: object XML is the source format, and
-the package code is responsible for translating that model to and from the
-platform list/bracket stream.
-
-## Verification Loop
-
-For changes that affect build or rebuild behavior:
-
-1. Run unit tests.
-2. Run CLI smoke.
-3. Use a local private fixture to dump and rebuild.
-4. Validate the rebuilt EPF/ERF by asking the platform to dump it with
-   `tools/platform_validate_epf.sh`.
-5. Do not commit the private fixture, compiled EPF, license data, or local logs.
-
-`ibcmd config load` plus `ibcmd config check` is useful for metadata-level
-checks, but it is not sufficient for ordinary `Form.bin` writer validation: it
-can accept an EPF whose ordinary form later fails with "Ошибка формата потока".
-The stricter check is Designer batch mode:
-
-```bash
-export NETHASP_INI_PATH="<local-nethasp.ini>"
-tools/platform_validate_epf.sh /path/to/processor.epf
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+ctest --test-dir build --build-config Release --output-on-failure
+build/sidecars/onec-form-native/oof --help
 ```
 
-The script runs 1C 8.5 in the amd64 container and executes
-`/DumpExternalDataProcessorOrReportToFiles`. That platform command
-deserializes ordinary `Form.bin` deeply enough to reject malformed bracket/list
-streams. Logs and generated dumps stay under ignored `scan-output/`.
+Проверка безопасности от 2026-10-05 включает 11 тестовых наборов обычной
+сборки и 11 наборов с AddressSanitizer и UndefinedBehaviorSanitizer. Дополнительно
+проверены ограничения ресурсов, пути пакета, ввод тега workflow и секреты
+в отслеживаемых файлах и истории Git. Два срабатывания Gitleaks вручную
+классифицированы как публичные идентификаторы OACS, учетных данных среди них
+нет. Свидетельство: `ev_71ee08d25ce34bc3b81c7934642a55f0`.
 
-For documentation-only changes, run at least the unit tests that protect the
-public XML contract and the CLI smoke checks. Full platform validation is not
-required unless the change affects parser, writer, schema, or packaging
-behavior.
+Для одного исходного файла:
 
-## GitHub Automation
+```sh
+build/sidecars/onec-form-native/oof dump input/Form.bin work/Form.xml
+${EDITOR:-vi} work/Form.xml
+${EDITOR:-vi} work/Form/Module.bsl
+build/sidecars/onec-form-native/oof build work/Form.xml output/Form.bin
+```
 
-The repository has two GitHub Actions workflows:
+`dump` создает XML и каталог модуля. `build` читает модель из XML, `Module.bsl` и ресурсов рядом с XML; исходный `Form.bin` для сборки не нужен. CLI работает с одной формой и не требует платформы 1С.
 
-- `CI` runs on pushes to `main`, pull requests, and manual dispatch. It tests
-  Python 3.10, 3.11, and 3.12, then runs CLI smoke, builds the package, checks
-  the built artifacts with `twine`, and uploads the Python 3.12 artifacts.
-- `Release` runs on `v*` tags and manual dispatch with a tag input. It checks
-  out the requested tag, installs release dependencies, runs tests and smoke,
-  builds the package, checks artifacts, and publishes them to the GitHub
-  release for that tag.
+## Проверка изменений модели
 
-For a normal release:
+Перед добавлением свойства найдите его существующий владелец в модели, метамодели и коде записи. Уточните публичное имя, тип значения, применимость к контролам и доказанное значение по умолчанию. Переиспользуйте общий кодек, когда семантика платформы совпадает; особенности типа выражайте его дескрипторами. Сверяйте рядом стоящие описания и испытания в [контракте модели](ordinary-form-target-contract.md) и [аудите общих паттернов](ordinary-form-pattern-audit.md).
 
-1. Bump `pyproject.toml`, `src/onec_ordinary_forms/__init__.py`, and README
-   status.
-2. Run local tests, smoke, package build, `twine check`, and leak scan.
-3. Commit the release bump.
-4. Create and push an annotated `vX.Y.Z` tag.
-5. Let the `Release` workflow publish wheel and sdist assets.
+Для нового сочетания свойства проверьте именованный XML, повторное чтение, новый BIN и строгую проверку Designer на собственном образце. При неполном чтении оставьте предупреждение и `reconstructionComplete=false`. Нельзя молча отбросить известное типизированное значение или представлять неизвестные данные сырым потоком. Проверка доступной проекции не доказывает, что произвольная исходная форма восстановлена полностью.
 
-The workflow publishes only package artifacts from `dist/`. It does not use
-private EPF/ERF fixtures, platform containers, license files, or local corpus
-exports.
+Общие свойства `Enabled`, `ToolTip`, `Font` и `BorderColor` развиваются через существующие механизмы. `LabelDecoration.Font` использует общий `FontValue`. Последующие изменения должны расширять применимость только после проверки обратного цикла у конкретного владельца. См. [актуальный план](repository-target-state.md#ближайшая-работа) и [исследования](research-map.md).
 
-## Next Refactor
+## Платформенная проверка и данные
 
-Split `src/onec_ordinary_forms/cli.py` into:
+Для строгой проверки EPF используйте доступную лицензированную среду Designer и `tools/platform_validate_epf.sh`. Обычная сборка и CTest подтверждают поведение кода, но сами по себе не доказывают, что Designer откроет поток формы.
 
-- `model.py`
-- `xml_dump.py`
-- `bracket_writer.py`
-- `assets.py`
-- `types.py`
-- `cli.py`
+Платформенный validator и SCOM probes принимают только новый каталог вывода
+внутри `scan-output/`. Существующий каталог не удаляется и не перезаписывается.
+Проверки аргументов и путей на подставном Docker: `ev_6d9107a3e2e34ab88610ccba5bd69376`.
+
+Пределы ввода и работы с путями описаны в [контракте модели](ordinary-form-target-contract.md#актуальное-состояние-и-границы-cli-2026-10-05). CLI не исполняет `Module.bsl` и не является песочницей. Используйте доверенный локальный каталог: параллельная замена файловой системы не защищена.
+
+Держите частные EPF/ERF, дампы клиентов, лицензии, учетные данные и локальные пути за пределами Git и OACS. Временные исходники и отчеты размещайте в игнорируемых `work/`, `scan-output/` или системном временном каталоге. Публикуйте только обезличенные счетчики и ссылки на безопасные свидетельства. Release-gate сейчас остается заглушкой; обычное сравнение форм не подтверждает готовность к выпуску.

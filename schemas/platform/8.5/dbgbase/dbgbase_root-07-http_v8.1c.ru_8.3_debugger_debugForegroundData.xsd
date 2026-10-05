@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://v8.1c.ru/8.3/debugger/debugForegroundData"
+           xmlns:core="http://v8.1c.ru/8.1/data/core"
+           targetNamespace="http://v8.1c.ru/8.3/debugger/debugForegroundData"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified"
+           version="1.0">
+
+    <xs:import namespace="http://v8.1c.ru/8.1/data/core" schemaLocation="../../../xdto/src/res/core.xsd"/>
+
+    <!-- Описание настроек активизации окна отладчика/предмета отладки -->
+    <xs:complexType name="ForegroundWindowData">
+        <xs:sequence>
+            <!-- Имя компьютера с поднимаемым окном -->
+            <xs:element name="computerName" type="xs:string" minOccurs="1" maxOccurs="1"/>
+            <!-- Описатель окна -->
+            <xs:element name="hwndForeground" type="xs:string" minOccurs="1" maxOccurs="1"/>
+            <!-- Окно управляемого / не управляемого приложения -->
+            <xs:element name="managedWindow" type="xs:boolean" default="false"/>
+        </xs:sequence>
+    </xs:complexType>
+
+</xs:schema>
