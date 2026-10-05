@@ -3063,8 +3063,25 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             if (text_present) {
                 entry.text = decoded_single_language_text(props.items[4], path);
             } else {
-                require_exact(props.items[4], encoded_localized(std::string_view{}), path,
-                    "absent button Text must use its empty localized value");
+                model::LocalizedStringValue automatic_text;
+                try {
+                    list_stream::ListInStream in(props.items[4]);
+                    automatic_text = value_codec::read_localized_string(in);
+                } catch (const std::exception& error) {
+                    fail("OOF1108", std::string(path), "empty or single automatic localized Text", describe(props.items[4]), error.what());
+                }
+                if (automatic_text.items.size() > 1 ||
+                    (!automatic_text.items.empty() &&
+                        (automatic_text.items.front().language != "#" || automatic_text.items.front().text.empty()))) {
+                    fail("OOF1115", std::string(path), "empty localized Text or one nonempty # automatic Text",
+                        describe(props.items[4]), "Absent button Text contains an unsupported localized value");
+                }
+                const auto expected_text = automatic_text.items.empty()
+                    ? encoded_localized(std::string_view{})
+                    : encoded_localized(model::LocalizedStringValue{{{"#",
+                        normalize_storage_line_endings(automatic_text.items.front().text)}}});
+                require_exact(props.items[4], expected_text, path,
+                    "absent button Text must use the canonical empty or single # localized value");
             }
             const auto id = integer_atom<std::uint64_t>(props.items[7], path);
             if (id == 0 || id > max_id || !entry_ids.insert(id).second)
@@ -3091,6 +3108,7 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             entry.checked = bool_atom(props.items[12], path);
             auto normalized = props;
             normalized.items[8] = raw("1e2");
+            if (!text_present) normalized.items[4] = encoded_localized(std::string_view{});
             if (raw_atom(props.items[8], path) != "1e2" && raw_atom(props.items[8], path) != "100")
                 fail("OOF1114", std::string(path), "scale 100", describe(props.items[8]), "Menu scale is unsupported");
             const auto expected_properties = menu_entry_properties(entry, owner, id);

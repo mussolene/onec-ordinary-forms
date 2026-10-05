@@ -2410,6 +2410,74 @@ void test_named_button_menu_round_trip_and_invalid_references() {
     expect(!form_stream::decode_document(huge_order_footer, "Menu"), "oversized menu order footer count must be rejected");
 }
 
+void test_automatic_button_text_without_explicit_text_round_trip() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "AutomaticMenuText";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode button{model::ObjectId{2}, "Menu", model::ButtonPayload{}};
+    button.properties().set_explicit(model::PropertyId::from_name("MenuMode"), model::EnumerationValue{"MenuMode", "UseExtra"});
+    model::CommandBarButton action;
+    action.name = "RenamedPanelAction";
+    action.action = model::CommandBarAction{"ActionCaptionHandler", "",
+        model::LocalizedStringValue{{{"ru", "ActionCaption"}}}, {}, {}};
+    std::get<model::ButtonPayload>(button.payload).buttons = {action};
+    document.add_control(std::move(button));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "automatic menu text fixture must encode" : encoded.diagnostics().front().message);
+    const auto menu_at = [](auto& tree) -> auto& {
+        return tree.items[1].items[2].items[2].items[1].items[2].items[1].items[12];
+    };
+    const auto automatic_text_record = [](std::string_view text) {
+        return list_stream::ListValue::list({
+            list_stream::ListValue::raw_atom("1"),
+            list_stream::ListValue::raw_atom("1"),
+            list_stream::ListValue::list({
+                list_stream::ListValue::string_atom("#"),
+                list_stream::ListValue::string_atom(std::string(text)),
+            }),
+        });
+    };
+    auto automatic = encoded.value();
+    auto& automatic_menu = menu_at(automatic);
+    const auto action_count = static_cast<std::size_t>(std::stoul(automatic_menu.items[4].atom));
+    auto& properties = automatic_menu.items[6 + action_count].items[6];
+    expect(properties.items[5].atom == "0", "fixture Text must remain absent");
+    properties.items[4] = automatic_text_record("Renamed panel action");
+
+    const auto decoded = form_stream::decode_document(automatic, "AutomaticMenuText");
+    expect(decoded.ok(), decoded ? "single # automatic caption must decode" : decoded.diagnostics().front().message);
+    const auto* decoded_control = decoded.value().find_control(model::ObjectId{2});
+    const auto* decoded_payload = decoded_control ? std::get_if<model::ButtonPayload>(&decoded_control->payload) : nullptr;
+    expect(decoded_payload && decoded_payload->buttons == std::vector<model::CommandBarButton>{action},
+        "automatic caption must not become explicit Text or replace independent Action.Text");
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok(), rebuilt ? "automatic caption model must rebuild" : rebuilt.diagnostics().front().message);
+    expect(list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "rebuild must restore empty computed caption while keeping Text absent");
+
+    const auto rejects_property = [&](const list_stream::ListValue& value, std::string_view label) {
+        auto invalid = encoded.value();
+        auto& invalid_menu = menu_at(invalid);
+        const auto count = static_cast<std::size_t>(std::stoul(invalid_menu.items[4].atom));
+        invalid_menu.items[6 + count].items[6].items[4] = value;
+        expect(!form_stream::decode_document(invalid, "InvalidAutomaticMenuText"), label);
+    };
+    rejects_property(list_stream::ListValue::list({
+        list_stream::ListValue::raw_atom("1"), list_stream::ListValue::raw_atom("1"),
+        list_stream::ListValue::list({list_stream::ListValue::string_atom("#")}),
+    }), "malformed automatic localized caption must be rejected");
+    rejects_property(list_stream::ListValue::list({
+        list_stream::ListValue::raw_atom("1"), list_stream::ListValue::raw_atom("2"),
+        list_stream::ListValue::list({list_stream::ListValue::string_atom("#"), list_stream::ListValue::string_atom("Auto")}),
+        list_stream::ListValue::list({list_stream::ListValue::string_atom("ru"), list_stream::ListValue::string_atom("Extra")}),
+    }), "multilingual absent Text must be rejected");
+    rejects_property(list_stream::ListValue::list({
+        list_stream::ListValue::raw_atom("1"), list_stream::ListValue::raw_atom("1"),
+        list_stream::ListValue::list({list_stream::ListValue::string_atom("ru"), list_stream::ListValue::string_atom("Localized")}),
+    }), "ru localized Text with absent flag must be rejected");
+}
+
 void test_command_bar_owner_pair_and_strict_profile() {
     model::Form form;
     form.id = model::ObjectId{1}; form.name = "CommandBarOwnerPair";
@@ -9707,6 +9775,7 @@ int main() {
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();
         test_named_button_menu_round_trip_and_invalid_references();
+        test_automatic_button_text_without_explicit_text_round_trip();
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
