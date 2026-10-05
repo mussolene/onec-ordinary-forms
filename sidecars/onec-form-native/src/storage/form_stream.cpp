@@ -1021,13 +1021,16 @@ LV canonical_command_bar_base(bool enabled, std::string_view tool_tip,
                               const model::ColorValue* border_color = nullptr,
                               const model::ColorValue* button_text_color = nullptr,
                               const model::ColorValue* back_color = nullptr,
-                              const model::BorderValue* border = nullptr) {
+                              const model::BorderValue* border = nullptr, bool transparent = false,
+                              const model::ColorValue* button_back_color = nullptr) {
     auto value = parse_constant(R"OOF({19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}})OOF");
     value.items[1] = raw(enabled ? "1" : "0");
+    value.items[5] = raw(transparent ? "1" : "0");
     value.items[12] = encoded_localized(tool_tip);
     if (border_color != nullptr) value.items[6] = encode_button_color(*border_color, "$/CommandBar/BorderColor");
     if (button_text_color != nullptr) value.items[10] = encode_button_color(*button_text_color, "$/CommandBar/ButtonTextColor");
     if (back_color != nullptr) value.items[2] = encode_button_color(*back_color, "$/CommandBar/BackColor");
+    if (button_back_color != nullptr) value.items[9] = encode_button_color(*button_back_color, "$/CommandBar/ButtonBackColor");
     if (border != nullptr) value.items[11] = encode_control_border(*border, "$/CommandBar/Border");
     return value;
 }
@@ -1074,17 +1077,17 @@ LV canonical_command_bar_properties(bool enabled, std::string_view tool_tip,
                                      const model::ColorValue* border_color = nullptr,
                                      const model::ColorValue* button_text_color = nullptr,
                                      const model::ColorValue* back_color = nullptr,
-                                     const model::BorderValue* border = nullptr) {
+                                     const model::BorderValue* border = nullptr, bool auto_fill = false,
+                                     bool transparent = false, std::int32_t orientation = 2,
+                                     std::int32_t buttons_alignment = 0,
+                                     const model::ColorValue* button_back_color = nullptr) {
     std::vector<LV> properties(14, raw("0"));
-    properties[0] = canonical_command_bar_base(enabled, tool_tip, border_color, button_text_color, back_color, border);
+    properties[0] = canonical_command_bar_base(enabled, tool_tip, border_color, button_text_color, back_color, border, transparent, button_back_color);
     // Slot 1 observed canonical default.
     properties[1] = raw("9");
-    // Slot 2 observed canonical default.
-    properties[2] = raw("2");
-    // Slot 3 observed canonical default.
-    properties[3] = raw("0");
-    // Slot 4 observed canonical default.
-    properties[4] = raw("0");
+    properties[2] = raw(std::to_string(orientation));
+    properties[3] = raw(auto_fill ? "1" : "0");
+    properties[4] = raw(std::to_string(buttons_alignment));
     // Slot 5 observed canonical default.
     properties[5] = raw(secondary ? "1" : "0");
     // Slot 6 observed canonical default.
@@ -3661,6 +3664,15 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
     const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
     const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
+    const bool transparent = bool_atom(base.items[5], child_path(base_path, 5));
+    const auto button_back_color = decode_button_color(base.items[9], child_path(base_path, 9));
+    const bool auto_fill = bool_atom(properties.items[3], child_path(properties_path, 3));
+    const auto orientation = integer_atom<std::int32_t>(properties.items[2], child_path(properties_path, 2));
+    const auto buttons_alignment = integer_atom<std::int32_t>(properties.items[4], child_path(properties_path, 4));
+    if (orientation < 0 || orientation > 2)
+        fail("OOF1114", child_path(properties_path, 2), "Orientation code 0..2", std::to_string(orientation), "Unsupported Orientation");
+    if (buttons_alignment < 0 || buttons_alignment > 2)
+        fail("OOF1114", child_path(properties_path, 4), "ButtonsAlignment code 0..2", std::to_string(buttons_alignment), "Unsupported ButtonsAlignment");
     const auto border = decode_control_border(base.items[11], child_path(base_path, 11));
     const auto runtime_state = raw_atom(base.items[17], child_path(base_path, 17));
     if (runtime_state != "1" && runtime_state != "2")
@@ -3697,7 +3709,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     normalized.items[10] = raw("9d0a2e40-b978-11d4-84b6-008048da06df");
     normalized.items[11] = raw("0");
     const auto expected = canonical_command_bar_properties(enabled, tool_tip, {}, empty_document, raw_id, secondary,
-        &border_color, &button_text_color, &back_color, &border);
+        &border_color, &button_text_color, &back_color, &border, auto_fill, transparent, orientation, buttons_alignment, &button_back_color);
     const auto& expected_base = expected.items[0];
     const auto base_mismatch = std::mismatch(normalized.items[0].items.begin(), normalized.items[0].items.end(),
         expected_base.items.begin(), expected_base.items.end(), [](const auto& left, const auto& right) {
@@ -3724,6 +3736,20 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "CommandBar cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CommandBarPayload{}};
+    if (auto_fill) control.properties().set_explicit(model::PropertyId::from_name("AutoFill"), true);
+    if (transparent) control.properties().set_explicit(model::PropertyId::from_name("Transparent"), true);
+    if (button_back_color != model::ColorValue{})
+        control.properties().set_explicit(model::PropertyId::from_name("ButtonBackColor"), button_back_color);
+    if (orientation != 2) {
+        constexpr std::array<std::string_view, 3> members{"Vertical", "Horizontal", "Auto"};
+        control.properties().set_explicit(model::PropertyId::from_name("Orientation"),
+            model::EnumerationValue{"Orientation", std::string(members[orientation])});
+    }
+    if (buttons_alignment != 0) {
+        constexpr std::array<std::string_view, 3> members{"Left", "Center", "Right"};
+        control.properties().set_explicit(model::PropertyId::from_name("ButtonsAlignment"),
+            model::EnumerationValue{"CommandBarButtonAlignment", std::string(members[buttons_alignment])});
+    }
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     if (!secondary) control.properties().set_explicit(model::PropertyId::from_name("Secondary"), false);
@@ -6823,7 +6849,7 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
     if (!control.events.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty())
         fail("OOF1122", "$/CommandBar", "CommandBar without events, DataPath, extensions, or child controls",
             control.name, "CommandBar uses a storage concept outside the supported profile");
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Secondary", "BorderColor", "ButtonTextColor", "BackColor", "Border"}, "$/CommandBar");
+    require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Secondary", "BorderColor", "ButtonTextColor", "BackColor", "Border", "AutoFill", "Transparent", "ButtonBackColor", "Orientation", "ButtonsAlignment"}, "$/CommandBar");
     const auto* payload = std::get_if<model::CommandBarPayload>(&control.payload);
     if (payload == nullptr) fail("OOF1122", "$/CommandBar", "CommandBarPayload", "different payload", "CommandBar payload is invalid");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -6832,6 +6858,14 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
     const auto button_text_color = explicit_button_color(control.properties(), "ButtonTextColor", "CommandBar");
     const auto back_color = control.properties().contains(model::PropertyId::from_name("BackColor"))
         ? explicit_button_color(control.properties(), "BackColor", "CommandBar") : model::ColorValue{};
+    const auto button_back_color = control.properties().contains(model::PropertyId::from_name("ButtonBackColor"))
+        ? explicit_button_color(control.properties(), "ButtonBackColor", "CommandBar") : model::ColorValue{};
+    const auto auto_fill = explicit_bool(control.properties(), "AutoFill", false);
+    const auto transparent = explicit_bool(control.properties(), "Transparent", false);
+    const auto orientation = explicit_enum_storage_value(control.properties(), "CommandBar", "Orientation", "Orientation", 2,
+        {{"Auto", 2}, {"Horizontal", 1}, {"Vertical", 0}});
+    const auto buttons_alignment = explicit_enum_storage_value(control.properties(), "CommandBar", "ButtonsAlignment", "CommandBarButtonAlignment", 0,
+        {{"Left", 0}, {"Center", 1}, {"Right", 2}});
     model::BorderValue border;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("Border"))) {
         const auto* typed_border = std::get_if<model::BorderValue>(&entry->value);
@@ -6839,7 +6873,7 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
         border = *typed_border;
     }
     const auto properties = canonical_command_bar_properties(enabled, tool_tip, payload->buttons, document, control.id.value(),
-        explicit_bool(control.properties(), "Secondary", true), &border_color, &button_text_color, &back_color, &border);
+        explicit_bool(control.properties(), "Secondary", true), &border_color, &button_text_color, &back_color, &border, auto_fill, transparent, orientation, buttons_alignment, &button_back_color);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
     const auto info = list({raw("2"), properties});
     const auto metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});

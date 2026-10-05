@@ -130,6 +130,10 @@ std::string_view xsd_type(const PropertyDescriptor& property) {
         property.api_name == "BeginOfDisplayPeriod") {
         return "CalendarBeginDateValueType";
     }
+    if (property.control_kind == model::ControlKind::command_bar) {
+        if (property.api_name == "ButtonsAlignment") return "CommandBarButtonsAlignmentValueType";
+        if (property.api_name == "Orientation") return "CommandBarOrientationValueType";
+    }
     return xsd_type(property.value_codec);
 }
 
@@ -390,6 +394,24 @@ void append_value_types(std::string& output) {
   <xs:complexType name="EnumerationValueType">
     <xs:attribute name="type" type="NonEmptyTokenType" use="required"/>
     <xs:attribute name="member" type="NonEmptyTokenType" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="CommandBarButtonsAlignmentValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="CommandBarButtonAlignment"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="Left"/><xs:enumeration value="Center"/><xs:enumeration value="Right"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="CommandBarOrientationValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="Orientation"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="Auto"/><xs:enumeration value="Horizontal"/><xs:enumeration value="Vertical"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
   </xs:complexType>
 
   <xs:simpleType name="ColorKindType">

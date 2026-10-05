@@ -243,6 +243,63 @@ void test_descriptors() {
         "PictureDecoration Picture must declare its typed editable picture record");
 }
 
+void test_command_bar_property_descriptors() {
+    using namespace oof::model::metamodel;
+    const auto* auto_fill = find_property(ControlKind::command_bar, "AutoFill");
+    const auto* transparent = find_property(ControlKind::command_bar, "Transparent");
+    const auto* alignment = find_property(ControlKind::command_bar, "ButtonsAlignment");
+    const auto* orientation = find_property(ControlKind::command_bar, "Orientation");
+    const auto* button_back_color = find_property(ControlKind::command_bar, "ButtonBackColor");
+    const auto editable = [](const PropertyDescriptor* descriptor, StorageCodec codec, ValueCodec value_codec,
+                             DefaultKind default_kind, std::string_view default_value) {
+        return descriptor && descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == codec && descriptor->value_codec == value_codec &&
+            descriptor->default_value.kind == default_kind && descriptor->default_value.canonical == default_value;
+    };
+    expect(editable(auto_fill, StorageCodec::control_info, ValueCodec::boolean,
+                    DefaultKind::boolean, "false") &&
+               editable(transparent, StorageCodec::control_base, ValueCodec::boolean,
+                    DefaultKind::boolean, "false") &&
+               editable(alignment, StorageCodec::control_info, ValueCodec::enumeration,
+                    DefaultKind::enumeration, "CommandBarButtonAlignment.Left") &&
+               editable(orientation, StorageCodec::control_info, ValueCodec::enumeration,
+                    DefaultKind::enumeration, "Orientation.Auto") &&
+               editable(button_back_color, StorageCodec::control_base, ValueCodec::color,
+                    DefaultKind::color, "automatic"),
+        "CommandBar editable property descriptors must declare their proven codecs and defaults");
+
+    const auto validate = [](EnumerationValue alignment_value, EnumerationValue orientation_value) {
+        Form form;
+        form.id = ObjectId{1};
+        form.name = "CommandBar";
+        form.children = {ControlRef{ObjectId{2}}};
+        OrdinaryFormDocument document(std::move(form));
+        ControlNode bar{ObjectId{2}, "Tools", CommandBarPayload{}};
+        bar.properties().set_explicit(PropertyId::from_name("AutoFill"), true);
+        bar.properties().set_explicit(PropertyId::from_name("Transparent"), true);
+        bar.properties().set_explicit(PropertyId::from_name("ButtonsAlignment"), std::move(alignment_value));
+        bar.properties().set_explicit(PropertyId::from_name("Orientation"), std::move(orientation_value));
+        ColorValue color;
+        color.kind = ColorKind::absolute;
+        color.red = 21;
+        color.green = 87;
+        color.blue = 143;
+        bar.properties().set_explicit(PropertyId::from_name("ButtonBackColor"), color);
+        document.add_control(std::move(bar));
+        return document.validate();
+    };
+    expect(validate({"CommandBarButtonAlignment", "Center"}, {"Orientation", "Horizontal"}).ok(),
+        "valid typed CommandBar property values must pass model validation");
+    expect(validate({"Orientation", "Center"}, {"Orientation", "Horizontal"}).has(InvariantCode::invalid_property),
+        "CommandBar ButtonsAlignment must reject a different enumeration type");
+    expect(validate({"CommandBarButtonAlignment", "Stretch"}, {"Orientation", "Horizontal"}).has(InvariantCode::invalid_property),
+        "CommandBar ButtonsAlignment must reject an unknown enumeration member");
+    expect(validate({"CommandBarButtonAlignment", "Center"}, {"HorizontalAlign", "Horizontal"}).has(InvariantCode::invalid_property),
+        "CommandBar Orientation must reject a different enumeration type");
+    expect(validate({"CommandBarButtonAlignment", "Center"}, {"Orientation", "Diagonal"}).has(InvariantCode::invalid_property),
+        "CommandBar Orientation must reject an unknown enumeration member");
+}
+
 void test_standard_picture_descriptor_catalog() {
     const auto pictures = metamodel::standard_picture_descriptors();
     expect(pictures.size() == 294, "standard picture catalog must expose all canonical runtime descriptors");
@@ -1263,6 +1320,7 @@ void test_border_value_invariants() {
 int main() {
     try {
         test_descriptors();
+        test_command_bar_property_descriptors();
         test_standard_picture_descriptor_catalog();
         test_button_alignment_xml_defaults();
         test_progress_bar_storage_descriptors();

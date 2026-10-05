@@ -800,3 +800,32 @@ Enterprise переводит 1 в 2; строгий Designer может сох�
 XML/модуля: ev_8a2f4c85b1a844e398b2e9bfc1c1df3b,
 ev_c752edff621447a3b6c7f3f32ed56f2c. Это ограниченное правило нормализации,
 оно не разрешает другие значения поля или неизвестные свойства CommandBar.
+
+
+## AutoFill, Transparent, ButtonBackColor и два enum CommandBar
+
+CommandBar хранит AutoFill и Transparent как bool с default false,
+ButtonBackColor как ColorValue с default automatic. ButtonsAlignment имеет
+тип CommandBarButtonAlignment, члены Left, Center, Right и default Left.
+Orientation имеет тип Orientation, члены Auto, Horizontal, Vertical и
+default Auto. Default значения опускаются при каноническом выводе XML.
+
+```xml
+<AutoFill>true</AutoFill>
+<ButtonsAlignment type="CommandBarButtonAlignment" member="Center"/>
+<Orientation type="Orientation" member="Horizontal"/>
+<Transparent>true</Transparent>
+<ButtonBackColor kind="absolute" red="11" green="44" blue="77" alpha="255"/>
+```
+
+Модель и XSD проверяют точный type/member двух enum только на поверхности
+CommandBar. Неподтвержденные числовые коды, неправильные bool и неподдержанная
+прозрачность RGB отвергаются кодеком. Shared ColorValue и обработка остальных
+контролов не заменены отдельным форматом или fallback.
+
+Проверены 72 сочетания свежей сборки из XML, три cold native варианта,
+строгий Designer и точное равенство повторных XML/модуля:
+ev_0f3bc8e79b0e41248bd8ff6318a0f28f. Независимое ревью и актуальный CTest
+11/11 PASS: ev_5589b98b384a4d8bb57e223c75885ca0. Это не объявляет весь
+CommandBar или полный эталон готовыми: следующий неописанный контракт
+находится в общей metadata записи элемента.

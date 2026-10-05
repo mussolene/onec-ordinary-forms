@@ -2458,6 +2458,65 @@ void test_command_bar_owner_pair_and_strict_profile() {
         "zero footer must remain unsupported for a nonempty collection");
 }
 
+void test_command_bar_five_named_properties_and_invalid_variants() {
+    const auto make_document = [](const std::string& orientation, const std::string& alignment,
+                                  bool auto_fill, bool transparent, model::ColorValue color) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "CommandBarProperties";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode bar{model::ObjectId{2}, "Tools", model::CommandBarPayload{}};
+        bar.properties().set_explicit(model::PropertyId::from_name("Orientation"), model::EnumerationValue{"Orientation", orientation});
+        bar.properties().set_explicit(model::PropertyId::from_name("ButtonsAlignment"), model::EnumerationValue{"CommandBarButtonAlignment", alignment});
+        bar.properties().set_explicit(model::PropertyId::from_name("AutoFill"), auto_fill);
+        bar.properties().set_explicit(model::PropertyId::from_name("Transparent"), transparent);
+        bar.properties().set_explicit(model::PropertyId::from_name("ButtonBackColor"), color);
+        document.add_control(std::move(bar));
+        return document;
+    };
+    const auto properties_at = [](auto& tree) -> auto& { return tree.items[1].items[2].items[2].items[1].items[2].items[1]; };
+    model::ColorValue rgb; rgb.kind = model::ColorKind::absolute; rgb.red = 11; rgb.green = 44; rgb.blue = 77;
+    for (const auto& [orientation, orientation_code] : std::array<std::pair<std::string, int>, 3>{{{"Vertical", 0}, {"Horizontal", 1}, {"Auto", 2}}})
+        for (const auto& [alignment, alignment_code] : std::array<std::pair<std::string, int>, 3>{{{"Left", 0}, {"Center", 1}, {"Right", 2}}})
+            for (const auto auto_fill : {false, true}) for (const auto transparent : {false, true})
+                for (const auto color : {model::ColorValue{}, rgb}) {
+                    const auto document = make_document(orientation, alignment, auto_fill, transparent, color);
+                    const auto encoded = form_stream::encode_document(document);
+                    expect(encoded.ok(), "typed CommandBar property combination must encode");
+                    const auto& properties = properties_at(encoded.value());
+                    expect(properties.items[2].atom == std::to_string(orientation_code) &&
+                        properties.items[4].atom == std::to_string(alignment_code) &&
+                        properties.items[3].atom == (auto_fill ? "1" : "0") &&
+                        properties.items[0].items[5].atom == (transparent ? "1" : "0"),
+                        "CommandBar codes must match independent native setters for all combinations");
+                    expect(list_stream::dump_compact(properties.items[0].items[9]) ==
+                        (color.kind == model::ColorKind::automatic ? "{4,4,{0},4}" : "{4,0,{5057547},0}"),
+                        "ButtonBackColor must use its independently captured absolute/automatic records");
+                    const auto decoded = form_stream::decode_document(encoded.value(), "CommandBarProperties");
+                    expect(decoded.ok(), "typed CommandBar property combination must decode");
+                    const auto xml = source::serialize_form_xml(decoded.value());
+                    expect(xml.ok(), "typed CommandBar properties must serialize as named XML");
+                    const auto parsed = source::parse_form_xml(xml.value());
+                    expect(parsed.ok(), "typed CommandBar XML must parse");
+                    const auto rebuilt = form_stream::encode_document(parsed.value());
+                    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+                        "all five properties must rebuild without a source binary");
+                }
+    const auto canonical = form_stream::encode_document(make_document("Auto", "Left", false, false, {}));
+    expect(canonical.ok(), "default properties fixture must encode");
+    for (const auto index : {2u, 4u}) for (const auto atom : {"3", "-1"}) {
+        auto invalid = canonical.value(); properties_at(invalid).items[index] = list_stream::ListValue::raw_atom(atom);
+        expect(!form_stream::decode_document(invalid, "UnknownEnumCode"), "unknown enum codes must reject");
+    }
+    auto invalid_fill = canonical.value(); properties_at(invalid_fill).items[3] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(invalid_fill, "InvalidAutoFill"), "AutoFill must remain boolean");
+    auto invalid_transparency = canonical.value(); properties_at(invalid_transparency).items[0].items[5] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(invalid_transparency, "InvalidTransparent"), "Transparent must remain boolean");
+    expect(!form_stream::encode_document(make_document("Diagonal", "Left", false, false, {})), "unknown orientation member must reject");
+    expect(!form_stream::encode_document(make_document("Auto", "Justify", false, false, {})), "unknown alignment member must reject");
+    rgb.alpha = 0;
+    expect(!form_stream::encode_document(make_document("Auto", "Left", false, false, rgb)), "ButtonBackColor must retain opaque RGB invariant");
+}
+
 void test_command_bar_creation_state_and_strict_record_guards() {
     for (const auto nonempty : {false, true}) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "CommandBarCreationState";
@@ -9488,6 +9547,7 @@ int main() {
         test_pivot_chart_default_factory_round_trip_and_rejections();
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
         test_command_bar_owner_pair_and_strict_profile();
+        test_command_bar_five_named_properties_and_invalid_variants();
         test_command_bar_creation_state_and_strict_record_guards();
         test_command_bar_border_named_round_trip_and_guards();
         test_command_bar_colors_named_round_trip_and_guards();
