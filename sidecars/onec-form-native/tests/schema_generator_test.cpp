@@ -428,6 +428,15 @@ void test_command_bar_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compil
     expect(element_type("CommandBarType", "ButtonsAlignment") == "CommandBarButtonsAlignmentValueType" &&
                element_type("CommandBarType", "Orientation") == "CommandBarOrientationValueType",
         "CommandBar enum properties must use their property-scoped schema types");
+    expect(element_type("CommandBarButtonType", "ClientInterfaceVariant") == "ClientInterfaceVariantType",
+        "menu client interface variant must use its closed named enum schema type");
+    xmlNodePtr client_variant = schema_component(schema, "simpleType", "ClientInterfaceVariantType");
+    xmlNodePtr variant_restriction = direct_child(client_variant, "restriction");
+    std::vector<std::string> variant_members;
+    for (xmlNodePtr item : direct_children(variant_restriction, "enumeration"))
+        variant_members.push_back(attribute(item, "value"));
+    expect(variant_members == std::vector<std::string>{"Version8_0", "Version8_2_OrdinaryApp"},
+        "client interface variant schema must expose exactly the two supported names");
     expect(element_type("SplitterType", "Orientation") == "EnumerationValueType",
         "other controls must keep the shared generic Orientation value type");
 
@@ -471,6 +480,12 @@ void test_command_bar_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compil
         "CommandBar Orientation must reject a different fixed type in XSD");
     expect(validate_document(compiled_schema, instance("CommandBarButtonAlignment", "Center", "Orientation", "Diagonal")) != 0,
         "CommandBar Orientation must reject an unknown member in XSD");
+    const std::string variant_form = "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><Button id=\"3\" name=\"Menu\"><Position/><Buttons><CommandBarButton name=\"Run\" type=\"Action\"><Representation>Auto</Representation><ClientInterfaceVariant>";
+    const std::string variant_suffix = "</ClientInterfaceVariant><Action handler=\"Run\" name=\"\"><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>";
+    expect(validate_document(compiled_schema, variant_form + "Version8_2_OrdinaryApp" + variant_suffix) == 0,
+        "named client interface variant must validate in its generated sequence position");
+    expect(validate_document(compiled_schema, variant_form + "Unsupported" + variant_suffix) != 0,
+        "generated XSD must reject unsupported client interface variant names");
 }
 
 void expect_property_element(
@@ -1111,6 +1126,23 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     xmlNodePtr form = direct_child(palette, "Form");
     expect_palette_properties(direct_child(form, "Properties"), metamodel.form_properties());
     expect_palette_events(direct_child(form, "Events"), metamodel.form_events());
+
+    xmlNodePtr command_button = direct_child_with_attribute(palette, "NamedConcept", "name", "CommandBarButton");
+    xmlNodePtr command_button_properties = direct_child(command_button, "Properties");
+    const auto command_properties = direct_children(command_button_properties, "Property");
+    auto variant_property = std::find_if(command_properties.begin(), command_properties.end(), [](xmlNodePtr property) {
+        return attribute(property, "name") == "ClientInterfaceVariant";
+    });
+    auto representation_property = std::find_if(command_properties.begin(), command_properties.end(), [](xmlNodePtr property) {
+        return attribute(property, "name") == "Representation";
+    });
+    auto shortcut_property = std::find_if(command_properties.begin(), command_properties.end(), [](xmlNodePtr property) {
+        return attribute(property, "name") == "Shortcut";
+    });
+    expect(variant_property != command_properties.end() && representation_property < variant_property && variant_property < shortcut_property &&
+               attribute(*variant_property, "russianName") == "ВариантИнтерфейсаКлиентскогоПриложения" &&
+               attribute(*variant_property, "source") == "IClientInterfaceForCommand",
+        "palette must place the technical client interface variant between Representation and Shortcut with its source annotation");
 
     xmlNodePtr control_extension = direct_child_with_attribute(
         palette,

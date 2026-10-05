@@ -2063,6 +2063,11 @@ private:
                 else if (rep == "Text") item.representation = model::ButtonRepresentation::text;
                 else if (rep == "PictureText") item.representation = model::ButtonRepresentation::picture_text;
                 else fail("OOF2003", child, std::string(owner), name, "Auto, Picture, Text, or PictureText", rep, "Unknown button representation");
+            } else if (name == "ClientInterfaceVariant") {
+                const auto variant = node_text(child);
+                if (variant == "Version8_0") item.client_interface_variant = model::ClientInterfaceVariant::version8_0;
+                else if (variant == "Version8_2_OrdinaryApp") item.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
+                else fail("OOF2003", child, std::string(owner), name, "Version8_0 or Version8_2_OrdinaryApp", variant, "Unknown client interface variant");
             } else if (name == "Shortcut") item.shortcut = parse_shortcut(child);
             else if (name == "Picture") item.picture = parse_picture_reference(child, "Picture", owner);
             else if (name == "Action") {
@@ -3105,6 +3110,15 @@ private:
                 item.representation == model::ButtonRepresentation::text ? "Text" : "PictureText";
             if (item.representation != model::ButtonRepresentation::automatic)
                 writer_.text("Representation", representation);
+            switch (item.client_interface_variant) {
+                case model::ClientInterfaceVariant::version8_0:
+                    writer_.text("ClientInterfaceVariant", "Version8_0");
+                    break;
+                case model::ClientInterfaceVariant::version8_2_ordinary_app:
+                    break;
+                default:
+                    throw std::invalid_argument("Unknown CommandBarButton ClientInterfaceVariant");
+            }
             if (item.shortcut != model::ShortcutValue{}) {
                 writer_.open("Shortcut", {{"Alt", item.shortcut.alt ? "true" : "false"},
                     {"Ctrl", item.shortcut.ctrl ? "true" : "false"}, {"Shift", item.shortcut.shift ? "true" : "false"}});

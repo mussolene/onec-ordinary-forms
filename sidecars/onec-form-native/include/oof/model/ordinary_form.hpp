@@ -396,6 +396,7 @@ struct ShortcutValue {
 enum class CommandBarButtonKind : std::uint8_t { action, submenu, separator };
 enum class CommandBarButtonOrder : std::uint8_t { none, ascending, descending };
 enum class ButtonRepresentation : std::uint8_t { automatic, picture, text, picture_text };
+enum class ClientInterfaceVariant : std::uint8_t { version8_0, version8_2_ordinary_app };
 
 struct CommandBarAction {
     std::string handler;
@@ -422,6 +423,7 @@ struct CommandBarButton {
     std::optional<CommandBarAction> action;
     std::vector<CommandBarButton> buttons;
     bool default_button = false;
+    ClientInterfaceVariant client_interface_variant = ClientInterfaceVariant::version8_2_ordinary_app;
     friend bool operator==(const CommandBarButton&, const CommandBarButton&) = default;
 };
 

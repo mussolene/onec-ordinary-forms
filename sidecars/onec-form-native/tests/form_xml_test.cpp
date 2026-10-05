@@ -1682,6 +1682,29 @@ void test_button_menu_model_roundtrip_and_rejections() {
     expect(!source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Submenu"><Order>Random</Order></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok(), "unknown submenu order must be rejected");
 }
 
+void test_client_interface_variant_xml_contract() {
+    const auto parsed = source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="zero" type="Action"><ClientInterfaceVariant>Version8_0</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton><CommandBarButton name="default" type="Action"><Action handler="Default" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML");
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().message);
+    const auto& buttons = std::get<model::ButtonPayload>(parsed.value().find_control(model::ObjectId{2})->payload).buttons;
+    expect(buttons[0].client_interface_variant == model::ClientInterfaceVariant::version8_0 &&
+               buttons[1].client_interface_variant == model::ClientInterfaceVariant::version8_2_ordinary_app,
+        "explicit Version8_0 and omitted Version8_2_OrdinaryApp must map to named variants");
+    const auto xml = source::serialize_form_xml(parsed.value());
+    expect(xml.ok() && xml.value().find("<ClientInterfaceVariant>Version8_0</ClientInterfaceVariant>") != std::string::npos &&
+               xml.value().find("<ClientInterfaceVariant>Version8_2_OrdinaryApp</ClientInterfaceVariant>") == std::string::npos,
+        "XML must write Version8_0 and omit the Version8_2_OrdinaryApp default");
+    expect(source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><ClientInterfaceVariant>Unsupported</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok() == false,
+        "unsupported client interface variant names must be rejected");
+    expect(source::parse_form_xml(R"XML(<Form id="1" name="Menu" ordinaryFormVersion="2.1"><ChildItems><Button id="2" name="Run"><Position/><Buttons><CommandBarButton name="x" type="Action"><ClientInterfaceVariant>Version8_0</ClientInterfaceVariant><ClientInterfaceVariant>Version8_2_OrdinaryApp</ClientInterfaceVariant><Action handler="Run" name=""><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>)XML").ok() == false,
+        "duplicate client interface variant fields must be rejected");
+    auto invalid = parsed.value();
+    auto changed = *invalid.find_control(model::ObjectId{2});
+    std::get<model::ButtonPayload>(changed.payload).buttons[0].client_interface_variant =
+        static_cast<model::ClientInterfaceVariant>(3);
+    invalid.add_control(std::move(changed));
+    expect(!source::serialize_form_xml(invalid), "XML writer must reject an invalid enum cast");
+}
+
 void test_gantt_named_collections_roundtrip_and_rejections() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="Gantt" ordinaryFormVersion="2.1"><ChildItems>
       <GanttChart id="2" name="Schedule"><Position/><AutoFullInterval>false</AutoFullInterval><FullIntervalBegin>2027-01-01T00:00:00</FullIntervalBegin><FullIntervalEnd>2027-03-01T00:00:00</FullIntervalEnd>
@@ -2053,6 +2076,7 @@ int main() {
         test_button_foreign_enum_default_is_retained();
         test_standard_picture_xml_reference_roundtrip();
         test_button_menu_model_roundtrip_and_rejections();
+        test_client_interface_variant_xml_contract();
         test_gantt_named_collections_roundtrip_and_rejections();
         test_label_horizontal_align_xml_roundtrip();
         test_label_enabled_tooltip_xml_roundtrip();

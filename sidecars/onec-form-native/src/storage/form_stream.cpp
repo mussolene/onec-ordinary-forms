@@ -2929,6 +2929,19 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
                 : parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}");
         unsigned mask = (entry.picture ? 1 : 0) | (entry.tooltip ? 2 : 0) |
             (entry.explanation ? 4 : 0) | (entry.shortcut != model::ShortcutValue{} ? 8 : 0);
+        std::int32_t client_interface_variant = 0;
+        switch (entry.client_interface_variant) {
+            case model::ClientInterfaceVariant::version8_0:
+                client_interface_variant = 0;
+                break;
+            case model::ClientInterfaceVariant::version8_2_ordinary_app:
+                client_interface_variant = 2;
+                break;
+            default:
+                fail("OOF1122", "$/Button/Buttons/ClientInterfaceVariant",
+                    "Version8_0 or Version8_2_OrdinaryApp", "invalid enum value",
+                    "Client interface variant is unsupported");
+        }
         std::vector<LV> record{raw("8"), raw(it->action_id), raw("1"),
             raw(std::string(entry.type == model::CommandBarButtonKind::action ? menu_action_guid : menu_reference_guid)),
             std::move(action), raw(std::to_string(mask))};
@@ -2936,7 +2949,8 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
         if (entry.explanation) record.push_back(encoded_localized(*entry.explanation));
         if (entry.picture) record.push_back(menu_picture(*entry.picture, document));
         if (entry.shortcut != model::ShortcutValue{}) record.push_back(encode_button_shortcut(entry.shortcut));
-        record.push_back(raw("0")); record.push_back(raw("0"));
+        record.push_back(raw(std::to_string(client_interface_variant)));
+        record.push_back(raw("0"));
         result.push_back(list(std::move(record)));
     }
     result.push_back(raw(std::to_string(1 + std::count_if(items.begin(), items.end(), [](const auto& item) {
@@ -3148,7 +3162,19 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 }
             }
             if (mask & 8) entry.shortcut = decode_button_shortcut(take(), path);
-            require_raw_constant(take(), "0", path); require_raw_constant(take(), "0", path);
+            const auto client_interface_variant = integer_atom<std::int32_t>(take(), path);
+            switch (client_interface_variant) {
+                case 0:
+                    entry.client_interface_variant = model::ClientInterfaceVariant::version8_0;
+                    break;
+                case 2:
+                    entry.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
+                    break;
+                default:
+                    fail("OOF1114", std::string(path), "client interface variant 0 or 2",
+                        std::to_string(client_interface_variant), "Client interface variant is unsupported");
+            }
+            require_raw_constant(take(), "0", path);
             require_arity(action, cursor, path);
             if (type == 1) {
                 ++submenu_count;

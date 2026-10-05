@@ -786,6 +786,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
 
     output += R"XSD(  <xs:simpleType name="CommandBarButtonKindType"><xs:restriction base="xs:string"><xs:enumeration value="Action"/><xs:enumeration value="Submenu"/><xs:enumeration value="Separator"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="ButtonRepresentationType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Picture"/><xs:enumeration value="Text"/><xs:enumeration value="PictureText"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="ClientInterfaceVariantType"><xs:restriction base="xs:string"><xs:enumeration value="Version8_0"/><xs:enumeration value="Version8_2_OrdinaryApp"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="CommandBarButtonOrderType"><xs:restriction base="xs:string"><xs:enumeration value="DontOrder"/><xs:enumeration value="Ascending"/><xs:enumeration value="Descending"/></xs:restriction></xs:simpleType>
   <xs:complexType name="CommandBarButtonsType"><xs:sequence><xs:element ref="CommandBarButton" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
   <xs:simpleType name="CommandBarActionHandlerType"><xs:restriction base="xs:string"><xs:minLength value="1"/></xs:restriction></xs:simpleType>
@@ -796,7 +797,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     <xs:element name="Text" type="xs:string" minOccurs="0"/><xs:element name="Explanation" type="xs:string" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0"/>
     <xs:element name="Enabled" type="xs:boolean" minOccurs="0"/><xs:element name="Checked" type="xs:boolean" minOccurs="0"/><xs:element name="ChangesData" type="xs:boolean" minOccurs="0"/>
     <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0"/>
-    <xs:element name="Representation" type="ButtonRepresentationType" minOccurs="0"/><xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0"/><xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/><xs:element name="Action" type="CommandBarActionType" minOccurs="0"/><xs:element name="Order" type="CommandBarButtonOrderType" minOccurs="0"/><xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0"/>
+    <xs:element name="Representation" type="ButtonRepresentationType" minOccurs="0"/><xs:element name="ClientInterfaceVariant" type="ClientInterfaceVariantType" minOccurs="0"/><xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0"/><xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/><xs:element name="Action" type="CommandBarActionType" minOccurs="0"/><xs:element name="Order" type="CommandBarButtonOrderType" minOccurs="0"/><xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0"/>
   </xs:sequence><xs:attribute name="name" type="xs:string" use="required"/><xs:attribute name="type" type="CommandBarButtonKindType" use="required"/></xs:complexType>
   <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
 
@@ -1110,7 +1111,7 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"Text\" russianName=\"Текст\"/><Property name=\"Explanation\" russianName=\"Пояснение\"/><Property name=\"ToolTip\" russianName=\"Подсказка\"/>\n"
         "          <Property name=\"Enabled\" russianName=\"Доступность\"/><Property name=\"Checked\" russianName=\"Пометка\"/><Property name=\"ChangesData\" russianName=\"ИзменяетДанные\"/>\n"
         "          <Property name=\"DefaultButton\" russianName=\"КнопкаПоУмолчанию\"/>\n"
-        "          <Property name=\"Representation\" russianName=\"Отображение\"/><Property name=\"Shortcut\" russianName=\"СочетаниеКлавиш\"/><Property name=\"Picture\" russianName=\"Картинка\"/><Property name=\"Action\" russianName=\"Действие\"/><Property name=\"Order\" russianName=\"ПорядокКнопок\"/><Property name=\"Buttons\" russianName=\"Кнопки\"/>\n"
+        "          <Property name=\"Representation\" russianName=\"Отображение\"/><Property name=\"ClientInterfaceVariant\" russianName=\"ВариантИнтерфейсаКлиентскогоПриложения\" source=\"IClientInterfaceForCommand\"/><Property name=\"Shortcut\" russianName=\"СочетаниеКлавиш\"/><Property name=\"Picture\" russianName=\"Картинка\"/><Property name=\"Action\" russianName=\"Действие\"/><Property name=\"Order\" russianName=\"ПорядокКнопок\"/><Property name=\"Buttons\" russianName=\"Кнопки\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"Action\" russianName=\"Действие\"><Properties>\n"
         "          <Property name=\"handler\" russianName=\"Обработчик\"/><Property name=\"Name\" russianName=\"Имя\"/><Property name=\"Text\" russianName=\"Текст\"/><Property name=\"ToolTip\" russianName=\"Подсказка\"/><Property name=\"Description\" russianName=\"Пояснение\"/>\n"

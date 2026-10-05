@@ -1053,7 +1053,7 @@
           <Property name="Text" russianName="Текст"/><Property name="Explanation" russianName="Пояснение"/><Property name="ToolTip" russianName="Подсказка"/>
           <Property name="Enabled" russianName="Доступность"/><Property name="Checked" russianName="Пометка"/><Property name="ChangesData" russianName="ИзменяетДанные"/>
           <Property name="DefaultButton" russianName="КнопкаПоУмолчанию"/>
-          <Property name="Representation" russianName="Отображение"/><Property name="Shortcut" russianName="СочетаниеКлавиш"/><Property name="Picture" russianName="Картинка"/><Property name="Action" russianName="Действие"/><Property name="Order" russianName="ПорядокКнопок"/><Property name="Buttons" russianName="Кнопки"/>
+          <Property name="Representation" russianName="Отображение"/><Property name="ClientInterfaceVariant" russianName="ВариантИнтерфейсаКлиентскогоПриложения" source="IClientInterfaceForCommand"/><Property name="Shortcut" russianName="СочетаниеКлавиш"/><Property name="Picture" russianName="Картинка"/><Property name="Action" russianName="Действие"/><Property name="Order" russianName="ПорядокКнопок"/><Property name="Buttons" russianName="Кнопки"/>
         </Properties></NamedConcept>
         <NamedConcept name="Action" russianName="Действие"><Properties>
           <Property name="handler" russianName="Обработчик"/><Property name="Name" russianName="Имя"/><Property name="Text" russianName="Текст"/><Property name="ToolTip" russianName="Подсказка"/><Property name="Description" russianName="Пояснение"/>

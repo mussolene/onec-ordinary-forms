@@ -2410,6 +2410,92 @@ void test_named_button_menu_round_trip_and_invalid_references() {
     expect(!form_stream::decode_document(huge_order_footer, "Menu"), "oversized menu order footer count must be rejected");
 }
 
+void test_button_menu_client_interface_variant_round_trip_and_validation() {
+    model::Form form; form.id = model::ObjectId{1}; form.name = "MenuInterfaceVariant";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument document(std::move(form));
+    model::ControlNode button{model::ObjectId{2}, "Menu", model::ButtonPayload{}};
+    button.properties().set_explicit(model::PropertyId::from_name("MenuMode"),
+        model::EnumerationValue{"MenuMode", "UseExtra"});
+    model::CommandBarButton action; action.name = "Run";
+    action.action = model::CommandBarAction{"RunHandler", "", {}, {}, {}};
+    action.client_interface_variant = model::ClientInterfaceVariant::version8_0;
+    model::CommandBarButton nested_action; nested_action.name = "NestedRun";
+    nested_action.action = model::CommandBarAction{"NestedHandler", "", {}, {}, {}};
+    model::CommandBarButton nested_separator; nested_separator.name = "NestedSeparator";
+    nested_separator.type = model::CommandBarButtonKind::separator;
+    nested_separator.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
+    model::CommandBarButton submenu; submenu.name = "More";
+    submenu.type = model::CommandBarButtonKind::submenu;
+    submenu.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
+    submenu.buttons = {nested_action, nested_separator};
+    model::CommandBarButton separator; separator.name = "Separator";
+    separator.type = model::CommandBarButtonKind::separator;
+    std::get<model::ButtonPayload>(button.payload).buttons = {action, submenu, separator};
+    document.add_control(std::move(button));
+
+    const auto encoded = form_stream::encode_document(document);
+    expect(encoded.ok(), encoded ? "menu interface variants must encode" : encoded.diagnostics().front().message);
+    const auto menu_at = [](auto& tree) -> auto& {
+        return tree.items[1].items[2].items[2].items[1].items[2].items[1].items[12];
+    };
+    auto& menu = menu_at(encoded.value());
+    const auto count = static_cast<std::size_t>(std::stoul(menu.items[4].atom));
+    expect(count == 5, "Action, Submenu, Separator, and nested entries must all have action records");
+    const std::vector<std::string> expected_variants{"2", "2", "2", "2", "0"};
+    for (std::size_t i = 0; i < expected_variants.size(); ++i) {
+        const auto& record = menu.items[5 + i];
+        expect(record.items.size() == 8 && record.items[5].atom == "0" &&
+                   record.items[6].atom == expected_variants[i] && record.items[7].atom == "0",
+            "each reverse-preorder menu record must carry its named variant in the first tail and strict zero second tail");
+    }
+    const auto decoded = form_stream::decode_document(encoded.value(), "MenuInterfaceVariant");
+    expect(decoded.ok(), decoded ? "menu interface variants must decode" : decoded.diagnostics().front().message);
+    expect(std::get<model::ButtonPayload>(decoded.value().find_control(model::ObjectId{2})->payload).buttons ==
+               std::get<model::ButtonPayload>(document.find_control(model::ObjectId{2})->payload).buttons,
+        "Action, Submenu, Separator, and nested interface variants must roundtrip exactly");
+
+    auto changed_form = document.form();
+    model::OrdinaryFormDocument changed_document(std::move(changed_form));
+    auto changed_button = *document.find_control(model::ObjectId{2});
+    auto& changed_entries = std::get<model::ButtonPayload>(changed_button.payload).buttons;
+    changed_entries[0].client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
+    changed_document.add_control(std::move(changed_button));
+    auto changed = form_stream::encode_document(changed_document);
+    expect(changed.ok(), "editing Version8_0 to Version8_2_OrdinaryApp must encode");
+    auto expected_changed = encoded.value();
+    menu_at(expected_changed).items[9].items[6] = list_stream::ListValue::raw_atom("2");
+    expect(list_stream::dump_compact(changed.value()) == list_stream::dump_compact(expected_changed),
+        "editing the client interface variant must change only its first tail atom from 0 to 2");
+
+    for (const auto& invalid : {"1", "3", "-1"}) {
+        auto malformed = encoded.value();
+        menu_at(malformed).items[5].items[6] = list_stream::ListValue::raw_atom(invalid);
+        expect(!form_stream::decode_document(malformed, "InvalidClientInterfaceVariant"),
+            "unknown and negative client interface variants must be rejected");
+    }
+    auto quoted = encoded.value();
+    menu_at(quoted).items[5].items[6] = list_stream::ListValue::string_atom("2");
+    expect(!form_stream::decode_document(quoted, "QuotedClientInterfaceVariant"),
+        "quoted client interface variants must be rejected");
+    auto nested_value = encoded.value();
+    menu_at(nested_value).items[5].items[6] = list_stream::ListValue::list({list_stream::ListValue::raw_atom("2")});
+    expect(!form_stream::decode_document(nested_value, "ListedClientInterfaceVariant"),
+        "list-valued client interface variants must be rejected");
+    auto wrong_second_tail = encoded.value();
+    menu_at(wrong_second_tail).items[5].items[7] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(wrong_second_tail, "WrongClientInterfaceVariantSecondTail"),
+        "second menu tail value must remain strict zero");
+
+    auto invalid_model = document.form();
+    model::OrdinaryFormDocument invalid_document(std::move(invalid_model));
+    auto invalid_button = *document.find_control(model::ObjectId{2});
+    std::get<model::ButtonPayload>(invalid_button.payload).buttons[0].client_interface_variant =
+        static_cast<model::ClientInterfaceVariant>(255);
+    invalid_document.add_control(std::move(invalid_button));
+    expect(!form_stream::encode_document(invalid_document), "writer must reject an invalid enum cast");
+}
+
 void test_automatic_button_text_without_explicit_text_round_trip() {
     model::Form form; form.id = model::ObjectId{1}; form.name = "AutomaticMenuText";
     form.children = {model::ControlRef{model::ObjectId{2}}};
@@ -9834,6 +9920,7 @@ int main() {
         test_button_picture_enums_round_trip_and_validation();
         test_button_menu_mode_round_trip_and_validation();
         test_named_button_menu_round_trip_and_invalid_references();
+        test_button_menu_client_interface_variant_round_trip_and_validation();
         test_automatic_button_text_without_explicit_text_round_trip();
         test_all_standard_button_pictures_round_trip_without_assets();
         test_button_external_picture_assets_round_trip();
