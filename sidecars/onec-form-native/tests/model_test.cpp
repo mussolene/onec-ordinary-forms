@@ -737,6 +737,41 @@ void test_help_metamodel() {
         "Button.Click must retain its proven storage identity and codec");
 }
 
+void test_shared_control_default_classifications() {
+    using namespace oof::model::metamodel;
+
+    const auto classified = [](ControlKind kind, std::string_view name, StorageCodec storage,
+                               DefaultKind default_kind, std::string_view default_value,
+                               ValueCodec value_codec) {
+        const auto* descriptor = find_property(kind, name);
+        return descriptor != nullptr && descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == storage && descriptor->default_value.kind == default_kind &&
+            descriptor->default_value.canonical == default_value && descriptor->value_codec == value_codec;
+    };
+
+    expect(classified(ControlKind::button, "Enabled", StorageCodec::control_base,
+               DefaultKind::boolean, "true", ValueCodec::boolean) &&
+               classified(ControlKind::splitter, "Enabled", StorageCodec::control_base,
+                   DefaultKind::boolean, "true", ValueCodec::boolean),
+        "shared Enabled rule must retain the common control-base classification");
+    expect(classified(ControlKind::progress_bar, "Enabled", StorageCodec::control_info,
+               DefaultKind::boolean, "true", ValueCodec::boolean) &&
+               classified(ControlKind::label_decoration, "ToolTip", StorageCodec::control_info,
+                   DefaultKind::string, "", ValueCodec::string),
+        "shared Enabled and ToolTip defaults must retain control-info exceptions");
+    expect(classified(ControlKind::choice_field, "BorderColor", StorageCodec::control_base,
+               DefaultKind::color, "automatic", ValueCodec::color) &&
+               classified(ControlKind::text_document_field, "Font", StorageCodec::control_base,
+                   DefaultKind::font, "automatic", ValueCodec::font),
+        "shared BorderColor and Font rules must retain their named codecs and defaults");
+
+    const auto* unproven_enabled = find_property(ControlKind::panel, "Enabled");
+    const auto* unproven_border = find_property(ControlKind::check_box, "BorderColor");
+    expect(unproven_enabled && unproven_enabled->persistence == PersistenceClass::unclassified &&
+               unproven_border && unproven_border->persistence == PersistenceClass::unclassified,
+        "shared classification rules must not classify unproven control properties");
+}
+
 void test_variant_coverage() {
     static_assert(std::variant_size_v<ControlPayload> == 26);
 
@@ -1370,6 +1405,7 @@ int main() {
         test_progress_bar_storage_descriptors();
         test_track_bar_storage_descriptors();
         test_help_metamodel();
+        test_shared_control_default_classifications();
         test_variant_coverage();
         test_property_default_semantics();
         test_typed_property_set();
