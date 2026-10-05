@@ -35,7 +35,7 @@ jobs:
           ref: ${{ steps.release.outputs.tag }}
 
       - name: Install product dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libxml2-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libxml2-dev zlib1g-dev
 
       - name: Build and test product
         run: make test
