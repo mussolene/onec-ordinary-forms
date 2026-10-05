@@ -9385,9 +9385,31 @@ Result<model::OrdinaryFormDocument> decode_document(
             for (const auto& page_controls : decoded) for (const auto& child : page_controls) {
                 const auto found = expected_sibling_incoming.find(child.control.id.value());
                 const IncomingAnchorLists empty;
-                require_incoming_graph(child.incoming, found == expected_sibling_incoming.end() ? empty : found->second,
-                    child_path(child_record_paths.at(child.control.id.value()),
-                        control_geometry_slot(model::metamodel::descriptor_for(child.control.kind()).guid)));
+                auto observed = child.incoming;
+                const auto geometry_path = child_path(child_record_paths.at(child.control.id.value()),
+                    control_geometry_slot(model::metamodel::descriptor_for(child.control.kind()).guid));
+                bool unrepresented_self_dependency = false;
+                if (child.control.kind() == model::ControlKind::command_bar &&
+                    std::holds_alternative<FormGeometryOwner>(owner)) {
+                    const auto& anchors = child.control.position.bindings.anchors;
+                    const bool bottom_to_form = std::any_of(anchors.begin(), anchors.end(), [](const auto& binding) {
+                        return binding.coordinate == model::BindingCoordinate::bottom && !binding.target &&
+                            binding.target_coordinate == model::BindingCoordinate::bottom && !binding.proportional;
+                    });
+                    const GeometryIncomingAnchor self_bottom{child.control.id.value(), 1};
+                    auto& top = observed[0];
+                    // Designer preserves this extra CommandBar dependency while GetLink still
+                    // returns Form.Bottom. Its unrepresented state must not imply exact recovery.
+                    if (bottom_to_form && std::count(top.begin(), top.end(), self_bottom) == 1) {
+                        std::erase(top, self_bottom);
+                        unrepresented_self_dependency = true;
+                    }
+                }
+                require_incoming_graph(observed, found == expected_sibling_incoming.end() ? empty : found->second,
+                    geometry_path);
+                if (unrepresented_self_dependency)
+                    warn_incomplete_profile(warnings, reconstruction_complete, child.control.id.value(),
+                        child_path(geometry_path, 0), "CommandBar");
                 pending_controls.push_back(child);
             }
         };

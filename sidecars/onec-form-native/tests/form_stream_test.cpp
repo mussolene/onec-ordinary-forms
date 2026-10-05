@@ -10354,6 +10354,124 @@ void test_manual_bindings_are_not_silently_discarded() {
     }
 }
 
+void test_command_bar_unrepresented_self_dependency() {
+    const auto make_document = [](bool command_bar, bool has_binding,
+                                  model::BindingCoordinate target, bool proportional, bool nested = false) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "SelfDependency";
+        form.children = {model::ControlRef{model::ObjectId{nested ? 10U : 2U}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode control{model::ObjectId{2}, "Tools", model::CommandBarPayload{}};
+        if (!command_bar) control.payload = model::ButtonPayload{};
+        if (has_binding) {
+            model::AnchorBinding binding;
+            binding.coordinate = model::BindingCoordinate::bottom;
+            binding.target_coordinate = target;
+            if (nested) binding.target = model::ControlRef{model::ObjectId{10}};
+            if (proportional) {
+                model::AnchorBindingTarget secondary;
+                secondary.coordinate = model::BindingCoordinate::top;
+                binding.proportional = secondary;
+            }
+            control.position.bindings.anchors.push_back(binding);
+        }
+        document.add_control(std::move(control));
+        if (nested) {
+            model::ControlNode panel{model::ObjectId{10}, "Panel", model::PanelPayload{}};
+            panel.children = {model::PageRef{model::ObjectId{11}}};
+            model::Page page;
+            page.id = model::ObjectId{11};
+            page.name = "Page";
+            page.children = {model::ControlRef{model::ObjectId{2}}};
+            model::Position page_position;
+            for (const auto edge : {model::BindingCoordinate::right, model::BindingCoordinate::bottom}) {
+                model::AnchorBinding boundary;
+                boundary.coordinate = edge;
+                boundary.target_coordinate = edge;
+                boundary.target = model::ControlRef{model::ObjectId{10}};
+                page_position.bindings.anchors.push_back(boundary);
+            }
+            page.position.set(std::move(page_position));
+            document.add_control(std::move(panel));
+            document.add_page(std::move(page));
+        }
+        return document;
+    };
+    const auto add_incoming = [](list_stream::ListValue& geometry, std::size_t bucket,
+                                 std::uint64_t source, std::uint32_t edge) {
+        std::size_t cursor = 12;
+        for (std::size_t i = 0; i < bucket; ++i)
+            cursor += 1 + static_cast<std::size_t>(std::stoul(geometry.items[cursor].atom));
+        const auto count = std::stoul(geometry.items[cursor].atom);
+        geometry.items[cursor] = list_stream::ListValue::raw_atom(std::to_string(count + 1));
+        geometry.items.insert(geometry.items.begin() + static_cast<std::ptrdiff_t>(cursor + 1),
+            list_stream::parse("{0," + std::to_string(source) + "," + std::to_string(edge) + "}"));
+    };
+    const auto encoded = form_stream::encode_document(
+        make_document(true, true, model::BindingCoordinate::bottom, false));
+    expect(encoded.ok(), encoded ? "" : encoded.diagnostics().front().message);
+    auto extra = encoded.value();
+    add_incoming(extra.items[1].items[2].items[2].items[1].items[3], 0, 2, 1);
+    const auto decoded = form_stream::decode_document(extra, "SelfDependency");
+    expect(decoded.ok() && !decoded.value().reconstruction_complete() &&
+               std::any_of(decoded.diagnostics().begin(), decoded.diagnostics().end(), [](const auto& item) {
+                   return item.code == "OOF1140" && item.severity == oof::DiagnosticSeverity::warning;
+               }), "the observed extra CommandBar dependency must warn about incomplete reconstruction");
+    const auto* control = decoded.value().find_control(model::ObjectId{2});
+    expect(control != nullptr && control->position.bindings.anchors.size() == 1 &&
+               !control->position.bindings.anchors.front().target &&
+               control->position.bindings.anchors.front().target_coordinate == model::BindingCoordinate::bottom,
+        "the named primary Form.Bottom binding must remain unchanged");
+    const auto rebuilt = form_stream::encode_document(decoded.value());
+    expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+        "the writer must derive the graph from named bindings without preserving the unrepresented tuple");
+    const auto baseline = form_stream::decode_document(encoded.value(), "SelfDependency");
+    expect(baseline.ok() && baseline.value().reconstruction_complete(),
+        "the canonical CommandBar graph must remain complete");
+
+    for (const auto [bar, binding, target, proportional, nested] : {
+             std::tuple{false, true, model::BindingCoordinate::bottom, false, false},
+             std::tuple{true, false, model::BindingCoordinate::bottom, false, false},
+             std::tuple{true, true, model::BindingCoordinate::top, false, false},
+             std::tuple{true, true, model::BindingCoordinate::bottom, true, false},
+             std::tuple{true, true, model::BindingCoordinate::bottom, false, true}}) {
+        const auto variant = form_stream::encode_document(make_document(bar, binding, target, proportional, nested));
+        expect(variant.ok(), variant ? "" : variant.diagnostics().front().message);
+        auto corrupt = variant.value();
+        auto& root_record = corrupt.items[1].items[2].items[2].items[1];
+        auto& geometry = nested ? root_record.items[5].items[1].items[3] : root_record.items[3];
+        add_incoming(geometry, 0, 2, 1);
+        expect(!form_stream::decode_document(corrupt, "SelfDependency"),
+            "other control kinds, owners, primary targets and proportional bindings must stay strict");
+    }
+    for (const auto [bucket, source, edge] : {
+             std::tuple{1U, 2U, 1U}, std::tuple{0U, 2U, 0U}, std::tuple{0U, 99U, 1U}}) {
+        auto corrupt = encoded.value();
+        add_incoming(corrupt.items[1].items[2].items[2].items[1].items[3], bucket, source, edge);
+        expect(!form_stream::decode_document(corrupt, "SelfDependency"),
+            "changed coordinates and dangling incoming sources must be rejected");
+    }
+    auto duplicate = extra;
+    add_incoming(duplicate.items[1].items[2].items[2].items[1].items[3], 0, 2, 1);
+    expect(!form_stream::decode_document(duplicate, "SelfDependency"), "duplicate self tuples must be rejected");
+    auto unrelated = extra;
+    add_incoming(unrelated.items[1].items[2].items[2].items[1].items[3], 1, 2, 1);
+    expect(!form_stream::decode_document(unrelated, "SelfDependency"), "additional mismatches must be rejected");
+    auto bad_count = extra;
+    bad_count.items[1].items[2].items[2].items[1].items[3].items[12] = list_stream::ListValue::raw_atom("2");
+    expect(!form_stream::decode_document(bad_count, "SelfDependency"), "inconsistent incoming counts must be rejected");
+    auto bad_tuple = extra;
+    bad_tuple.items[1].items[2].items[2].items[1].items[3].items[13].items.pop_back();
+    expect(!form_stream::decode_document(bad_tuple, "SelfDependency"), "incomplete incoming tuples must be rejected");
+    auto missing_owner_tuple = extra;
+    auto& owner = missing_owner_tuple.items[1].items[2].items[1].items[1];
+    owner.items[3] = list_stream::ListValue::raw_atom("0");
+    owner.items.erase(owner.items.begin() + 4);
+    expect(!form_stream::decode_document(missing_owner_tuple, "SelfDependency"),
+        "the extra self tuple must never replace the required owner incoming tuple");
+}
+
 void test_anchor_bindings_round_trip_and_fanout() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -11860,6 +11978,7 @@ int main() {
         test_recursive_panel_pages_keep_owner_geometry_separate();
         test_manual_bindings_are_not_silently_discarded();
         test_anchor_bindings_round_trip_and_fanout();
+        test_command_bar_unrepresented_self_dependency();
         test_center_target_coordinates();
         test_page_boundary_position_codec();
         test_page_table_codec();
