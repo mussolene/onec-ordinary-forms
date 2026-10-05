@@ -892,6 +892,7 @@ void test_document_property_api() {
     const auto button = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{11}};
     const auto check = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{12}};
     const auto menu = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{13}};
+    const auto label = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{15}};
     const auto choice = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{16}};
     const auto dendrogram = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{17}};
     const auto active_x = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{18}};
@@ -925,6 +926,41 @@ void test_document_property_api() {
     expect(document.get_prop_val(input, PropertyId::from_name("Enabled")).status ==
                PropertyReadStatus::proven_default,
         "reset must reveal the proven descriptor default");
+
+    const auto input_read_only = document.get_prop_val(input, PropertyId::from_name("ReadOnly"));
+    expect(input_read_only.status == PropertyReadStatus::proven_default && input_read_only.value &&
+               *input_read_only.value == PropertyValue{false},
+        "InputField ReadOnly must expose its proven false default");
+    expect(document.set_prop_val(input, PropertyId::from_name("ReadOnly"), true) ==
+               PropertyMutationStatus::applied,
+        "InputField ReadOnly must use its persisted Boolean property descriptor");
+    const auto explicit_read_only = document.get_prop_val(input, PropertyId::from_name("ReadOnly"));
+    expect(explicit_read_only.status == PropertyReadStatus::explicit_value && explicit_read_only.value &&
+               *explicit_read_only.value == PropertyValue{true},
+        "InputField ReadOnly must be readable after setting it");
+    expect(document.reset_prop_val(input, PropertyId::from_name("ReadOnly")) ==
+               PropertyMutationStatus::reset &&
+               document.get_prop_val(input, PropertyId::from_name("ReadOnly")).status ==
+                   PropertyReadStatus::proven_default,
+        "resetting InputField ReadOnly must reveal the false default");
+
+    const auto label_caption = document.get_prop_val(label, PropertyId::from_name("Caption"));
+    expect(label_caption.status == PropertyReadStatus::proven_default && label_caption.value &&
+               *label_caption.value == PropertyValue{std::string{}},
+        "LabelDecoration Caption must expose its proven empty-string default");
+    expect(document.set_prop_val(label, PropertyId::from_name("Caption"), std::string("Label caption")) ==
+               PropertyMutationStatus::applied,
+        "LabelDecoration Caption must use its persisted string property descriptor");
+    const auto explicit_label_caption = document.get_prop_val(label, PropertyId::from_name("Caption"));
+    expect(explicit_label_caption.status == PropertyReadStatus::explicit_value &&
+               explicit_label_caption.value &&
+               *explicit_label_caption.value == PropertyValue{std::string("Label caption")},
+        "LabelDecoration Caption must be readable after setting it");
+    expect(document.reset_prop_val(label, PropertyId::from_name("Caption")) ==
+               PropertyMutationStatus::reset &&
+               document.get_prop_val(label, PropertyId::from_name("Caption")).status ==
+                   PropertyReadStatus::proven_default,
+        "resetting LabelDecoration Caption must reveal the empty-string default");
 
     const auto button_font = document.get_prop_val(button, PropertyId::from_name("Font"));
     const auto check_font = document.get_prop_val(check, PropertyId::from_name("Font"));
@@ -965,9 +1001,8 @@ void test_document_property_api() {
                *button_color.value == PropertyValue{red},
         "explicit ColorValue must round-trip through the common property API");
 
-    const auto unknown_default = document.get_prop_val(input, PropertyId::from_name("ReadOnly"));
-    expect(unknown_default.status == PropertyReadStatus::unknown_default &&
-               !unknown_default.value,
+    const auto unknown_default = document.get_prop_val(input, PropertyId::from_name("Border"));
+    expect(unknown_default.status == PropertyReadStatus::unknown_default && !unknown_default.value,
         "an unproven property default must remain unknown rather than Undefined");
     const auto no_default = document.get_prop_val(
         OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{15}},

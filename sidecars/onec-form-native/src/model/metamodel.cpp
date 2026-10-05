@@ -816,6 +816,8 @@ void apply_proven_storage_overrides(
     classify_property(splitter, "BackColor", StorageCodec::control_base, DefaultKind::color, "automatic");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
+    classify_property(label_decoration, "Caption", StorageCodec::control_info,
+        DefaultKind::string, "");
     classify_property(
         label_decoration,
         "HorizontalAlign",
@@ -872,6 +874,7 @@ void apply_proven_storage_overrides(
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
     classify_property(input_field, "Format", StorageCodec::control_info, DefaultKind::string, "");
+    classify_property(input_field, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(input_field, "HorizontalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Auto");
     classify_property(input_field, "VerticalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Top");
     classify_property(input_field, "ChoiceListHeight", StorageCodec::control_info, DefaultKind::integer, "0");
