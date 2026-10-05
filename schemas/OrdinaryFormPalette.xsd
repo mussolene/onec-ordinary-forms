@@ -66,7 +66,7 @@
           <Property name="Value" apiName="Value" russianName="Значение" russianType="" valueCodec="unclassified"/>
           <Property name="ModifiesData" apiName="ModifiesData" russianName="ИзменяетДанные" russianType="Булево" valueCodec="boolean"/>
           <Property name="Name" apiName="Name" russianName="Имя" russianType="Строка" valueCodec="string"/>
-          <Property name="ActionSource" apiName="ActionSource" russianName="ИсточникДействий" russianType="" valueCodec="unclassified"/>
+          <Property name="ActionSource" apiName="ActionSource" russianName="ИсточникДействий" russianType="" valueCodec="action-source-reference"/>
           <Property name="DefaultButton" apiName="DefaultButton" russianName="КнопкаПоУмолчанию" russianType="Булево" valueCodec="boolean"/>
           <Property name="ContextMenu" apiName="ContextMenu" russianName="КонтекстноеМеню" russianType="Неопределено ; КоманднаяПанель ; КнопкаКоманднойПанели" valueCodec="unclassified"/>
           <Property name="FirstInGroup" apiName="FirstInGroup" russianName="ПервыйВГруппе" russianType="Булево" valueCodec="boolean"/>

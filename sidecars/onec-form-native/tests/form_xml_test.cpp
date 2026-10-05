@@ -1852,6 +1852,65 @@ void test_command_bar_buttons_xml_only_contract() {
         "CommandBar typed Buttons and Actions must survive XML-only round-trip");
 }
 
+void test_command_bar_action_source_xml_contract() {
+    constexpr std::string_view xml = R"XML(<Form id="1" name="ActionSource" ordinaryFormVersion="2.1">
+  <Attributes><Attribute id="10" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
+  <ChildItems>
+    <CommandBar id="2" name="FormSource"><ActionSource formId="1"/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action>Run</Action></CommandBarButton></Buttons></CommandBar>
+    <CommandBar id="3" name="TableSource"><ActionSource controlId="6"/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action>Run</Action></CommandBarButton></Buttons></CommandBar>
+    <CommandBar id="4" name="HtmlSource"><ActionSource controlId="7"/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action>Run</Action></CommandBarButton></Buttons></CommandBar>
+    <CommandBar id="5" name="UndefinedSource"><ActionSource/><Position/><Buttons><CommandBarButton name="Run" type="Action"><Action>Run</Action></CommandBarButton></Buttons></CommandBar>
+    <Table id="6" name="Rows"><DataPath attributeId="10"/><Position/><Columns><Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column></Columns></Table>
+    <HTMLDocumentField id="7" name="Html"><Position/></HTMLDocumentField>
+    <InputField id="8" name="Input"><Position/></InputField>
+  </ChildItems>
+</Form>)XML";
+    auto parsed = source::parse_form_xml(xml);
+    expect(parsed.ok(), parsed ? "" : parsed.diagnostics().front().path + ": " + parsed.diagnostics().front().message);
+    const auto action_source_id = model::PropertyId::from_name("ActionSource");
+    expect(std::get<model::FormRef>(parsed.value().find_control(model::ObjectId{2})->extension_properties.find(action_source_id)->value) ==
+               model::FormRef{model::ObjectId{1}},
+        "ActionSource formId must parse as a FormRef");
+    expect(std::get<model::ControlRef>(parsed.value().find_control(model::ObjectId{3})->extension_properties.find(action_source_id)->value) ==
+               model::ControlRef{model::ObjectId{6}} &&
+               std::get<model::ControlRef>(parsed.value().find_control(model::ObjectId{4})->extension_properties.find(action_source_id)->value) ==
+               model::ControlRef{model::ObjectId{7}},
+        "ActionSource controlId must resolve to Table and HTMLDocumentField controls");
+    expect(parsed.value().find_control(model::ObjectId{5})->extension_properties.find(action_source_id) == nullptr,
+        "empty ActionSource must normalize to the omitted Undefined default");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("<ActionSource formId=\"1\"/>") != std::string::npos &&
+               serialized.value().find("<ActionSource controlId=\"6\"/>") != std::string::npos &&
+               serialized.value().find("<ActionSource controlId=\"7\"/>") != std::string::npos &&
+               serialized.value().find("<ActionSource/>") == std::string::npos,
+        "ActionSource references must use named XML attributes and omit Undefined");
+    expect(source::parse_form_xml(serialized.value()).ok(), "serialized ActionSource references must reparse");
+
+    const auto replace_once = [](std::string text, std::string_view from, std::string_view to) {
+        const std::size_t position = text.find(from);
+        if (position == std::string::npos) throw std::runtime_error("ActionSource test XML marker is missing");
+        text.replace(position, from.size(), to);
+        return text;
+    };
+    expect_code(source::parse_form_xml(replace_once(std::string(xml), "formId=\"1\"", "formId=\"99\"")),
+        "OOF2004", "ActionSource must reject a FormRef to another form");
+    expect_code(source::parse_form_xml(replace_once(std::string(xml), "controlId=\"6\"", "controlId=\"999\"")),
+        "OOF2004", "ActionSource must reject a dangling control reference");
+    expect_code(source::parse_form_xml(replace_once(std::string(xml), "controlId=\"6\"", "controlId=\"8\"")),
+        "OOF2004", "ActionSource must reject an unsupported control source kind");
+    expect_code(source::parse_form_xml(replace_once(std::string(xml), "formId=\"1\"", "formId=\"1\" controlId=\"6\"")),
+        "OOF2003", "ActionSource must reject two reference attributes");
+    expect_code(source::parse_form_xml(replace_once(std::string(xml), "<ActionSource/>", "<ActionSource>text</ActionSource>")),
+        "OOF2002", "ActionSource must reject text content");
+    expect_code(source::parse_form_xml(replace_once(std::string(xml), "<ActionSource/>", "<ActionSource otherId=\"6\"/>")),
+        "OOF2002", "ActionSource must reject unrecognized raw attributes");
+    expect_code(source::parse_form_xml(
+        "<Form id=\"1\" name=\"NoExtension\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+        "<InputField id=\"2\" name=\"Input\"><ActionSource formId=\"1\"/><Position/></InputField>"
+        "</ChildItems></Form>"),
+        "OOF2002", "ActionSource must not be declared on other control types");
+}
+
 void test_command_bar_border_xml_contract() {
     const auto xml_for = [](std::string_view border) {
         return std::string{"<Form id=\"1\" name=\"Border\" ordinaryFormVersion=\"2.1\"><ChildItems>"
@@ -1982,6 +2041,7 @@ int main() {
         test_label_enabled_tooltip_xml_roundtrip();
         test_progress_bar_xml_only_contract();
         test_command_bar_buttons_xml_only_contract();
+        test_command_bar_action_source_xml_contract();
         test_command_bar_default_button_xml_contract();
         test_command_bar_border_xml_contract();
         test_main_panel_typed_xml_contract();

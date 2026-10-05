@@ -996,6 +996,31 @@ model::PropertyValue parse_property_value(
             return parse_shortcut(node);
         case mm::ValueCodec::picture:
             return parse_picture_reference(node, property, object_id);
+        case mm::ValueCodec::action_source_reference: {
+            const auto form_id = optional_attribute(node, "formId");
+            const auto control_id = optional_attribute(node, "controlId");
+            if (form_id && control_id) {
+                fail("OOF2003", node, std::string(object_id), property,
+                    "at most one of formId or controlId", "both reference attributes",
+                    "ActionSource must reference either the form or one control");
+            }
+            for (xmlNodePtr child = node->children; child != nullptr; child = child->next) {
+                if (child->type == XML_COMMENT_NODE || child->type == XML_PI_NODE) {
+                    continue;
+                }
+                if ((child->type == XML_TEXT_NODE || child->type == XML_CDATA_SECTION_NODE) &&
+                    child->content != nullptr &&
+                    trim_ascii(reinterpret_cast<const char*>(child->content)).empty()) {
+                    continue;
+                }
+                fail("OOF2003", child, std::string(object_id), property,
+                    "empty ActionSource element", "text or child content",
+                    "ActionSource references are carried only by reference attributes");
+            }
+            if (form_id) return model::FormRef{parse_object_id(*form_id, node, property, object_id)};
+            if (control_id) return model::ControlRef{parse_object_id(*control_id, node, property, object_id)};
+            return model::UndefinedValue{};
+        }
         case mm::ValueCodec::command_bar_buttons:
             fail("OOF2003", node, std::string(object_id), property, "owned Buttons collection", "scalar", "Buttons is not a scalar property");
         case mm::ValueCodec::dendrogram_items:
@@ -2764,6 +2789,16 @@ private:
                 write_picture_reference(name, reference, object_id);
                 return;
             }
+            case mm::ValueCodec::action_source_reference:
+                if (std::holds_alternative<model::UndefinedValue>(value)) {
+                    writer_.empty(name);
+                } else if (const auto* form = std::get_if<model::FormRef>(&value)) {
+                    writer_.empty(name, {{"formId", object_id_text(form->id())}});
+                } else {
+                    writer_.empty(name, {{"controlId", object_id_text(
+                        require_value<model::ControlRef>(value, object_id, name, "form or control reference").id())}});
+                }
+                return;
             case mm::ValueCodec::command_bar_buttons:
                 serialization_fail(std::string(object_id), std::string(name), "owned Buttons collection", "scalar", "Buttons is not a scalar property");
             case mm::ValueCodec::dendrogram_items:
@@ -2786,9 +2821,14 @@ private:
         const model::PropertySet& properties,
         std::span<const mm::PropertyDescriptor> descriptors,
         std::string_view object_id,
-        bool skip_reserved_extensions = false
+        bool skip_reserved_extensions = false,
+        std::optional<model::ControlKind> control_kind = std::nullopt
     ) {
         for (const auto& descriptor : descriptors) {
+            if (control_kind && descriptor.control_kind != model::ControlKind::panel &&
+                descriptor.control_kind != *control_kind) {
+                continue;
+            }
             if (descriptor.value_codec == mm::ValueCodec::owned_panel) {
                 const auto& properties = document_.form().panel.properties;
                 bool explicit_panel = false;
@@ -3141,7 +3181,8 @@ private:
             control.extension_properties,
             metamodel_.control_extension_properties(),
             id,
-            true);
+            true,
+            control.kind());
         write_position(control.position);
         if (const auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload))
             write_dendrogram_payload(*dendrogram, id);

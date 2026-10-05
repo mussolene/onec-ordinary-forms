@@ -300,6 +300,43 @@ void test_command_bar_property_descriptors() {
         "CommandBar Orientation must reject an unknown enumeration member");
 }
 
+void test_command_bar_action_source_model() {
+    using namespace oof::model;
+    using namespace oof::model::metamodel;
+    const auto* descriptor = find_property(ControlKind::command_bar, "ActionSource");
+    expect(descriptor && descriptor->value_codec == ValueCodec::action_source_reference &&
+               descriptor->value_kind == ValueKind::object &&
+               descriptor->default_value.kind == DefaultKind::undefined &&
+               descriptor->default_value.canonical == "undefined" &&
+               descriptor->persistence == PersistenceClass::persisted_editable &&
+               descriptor->storage_codec == StorageCodec::control_info &&
+               find_property(ControlKind::button, "ActionSource") == nullptr,
+        "ActionSource must be typed, Undefined by default, and declared only for CommandBar");
+
+    const auto validate = [](PropertyValue value) {
+        Form form;
+        form.id = ObjectId{1};
+        form.name = "ActionSource";
+        form.children = {ControlRef{ObjectId{2}}, ControlRef{ObjectId{3}}, ControlRef{ObjectId{4}}};
+        OrdinaryFormDocument document(std::move(form));
+        ControlNode bar{ObjectId{2}, "Tools", CommandBarPayload{}};
+        bar.extension_properties.set_explicit(PropertyId::from_name("ActionSource"), std::move(value));
+        document.add_control(std::move(bar));
+        document.add_control(ControlNode{ObjectId{3}, "Html", HtmlDocumentFieldPayload{}});
+        document.add_control(ControlNode{ObjectId{4}, "Field", InputFieldPayload{}});
+        return document.validate();
+    };
+    expect(validate(UndefinedValue{}).ok(), "Undefined ActionSource must validate as the default");
+    expect(validate(FormRef{ObjectId{1}}).ok(), "ActionSource may reference the owning form");
+    expect(validate(ControlRef{ObjectId{3}}).ok(), "ActionSource may reference HTMLDocumentField");
+    expect(validate(FormRef{ObjectId{9}}).has(InvariantCode::dangling_reference),
+        "ActionSource must reject a FormRef that does not identify the current form");
+    expect(validate(ControlRef{ObjectId{4}}).has(InvariantCode::invalid_property),
+        "ActionSource must reject a resolved control that is not a supported source kind");
+    expect(validate(ControlRef{ObjectId{99}}).has(InvariantCode::dangling_reference),
+        "ActionSource must reject a dangling ControlRef");
+}
+
 void test_standard_picture_descriptor_catalog() {
     const auto pictures = metamodel::standard_picture_descriptors();
     expect(pictures.size() == 294, "standard picture catalog must expose all canonical runtime descriptors");
@@ -1321,6 +1358,7 @@ int main() {
     try {
         test_descriptors();
         test_command_bar_property_descriptors();
+        test_command_bar_action_source_model();
         test_standard_picture_descriptor_catalog();
         test_button_alignment_xml_defaults();
         test_progress_bar_storage_descriptors();

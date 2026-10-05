@@ -2517,6 +2517,60 @@ void test_command_bar_five_named_properties_and_invalid_variants() {
     expect(!form_stream::encode_document(make_document("Auto", "Left", false, false, rgb)), "ButtonBackColor must retain opaque RGB invariant");
 }
 
+void test_command_bar_named_action_source_references() {
+    const auto make_document = [](std::optional<model::PropertyValue> source) {
+        model::Form form; form.id = model::ObjectId{1}; form.name = "ActionSources";
+        form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{3}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode bar{model::ObjectId{2}, "Tools", model::CommandBarPayload{}};
+        if (source) bar.extension_properties.set_explicit(model::PropertyId::from_name("ActionSource"), *source);
+        document.add_control(std::move(bar));
+        model::ControlNode html{model::ObjectId{3}, "Browser", model::HtmlDocumentFieldPayload{}};
+        document.add_control(std::move(html));
+        return document;
+    };
+    const std::array<std::pair<std::optional<model::PropertyValue>, std::string_view>, 4> sources{{
+        {std::nullopt, "4294967295"},
+        {model::UndefinedValue{}, "4294967295"},
+        {model::FormRef{model::ObjectId{1}}, "0"},
+        {model::ControlRef{model::ObjectId{3}}, "3"}
+    }};
+    for (const auto& [source_value, expected] : sources) {
+        const auto document = make_document(source_value);
+        const auto xml = source::serialize_form_xml(document);
+        expect(xml.ok(), "ActionSource must use named XML references");
+        auto loaded = source::parse_form_xml(xml.value());
+        expect(loaded.ok(), "named ActionSource XML must parse");
+        const auto encoded = form_stream::encode_document(loaded.value());
+        expect(encoded.ok(), "fresh ActionSource XML must encode without baseline");
+        expect(encoded.value().items[1].items[2].items[2].items[1].items[4].items[2].atom == expected,
+            "ActionSource metadata must match independent native mapping");
+        const auto decoded = form_stream::decode_document(encoded.value(), "ActionSources");
+        expect(decoded.ok(), "ActionSource records must decode");
+        const auto repeated = source::serialize_form_xml(decoded.value());
+        expect(repeated.ok(), "decoded ActionSource must serialize");
+        if (expected == "0") expect(repeated.value().find("formId=\"1\"") != std::string::npos, "form source must remain named");
+        if (expected == "3") expect(repeated.value().find("controlId=\"3\"") != std::string::npos, "control source must remain named");
+        const auto rebuilt = form_stream::encode_document(decoded.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "ActionSource canonical stream must round-trip");
+    }
+    for (const auto invalid : {model::PropertyValue{model::FormRef{model::ObjectId{9}}},
+                              model::PropertyValue{model::ControlRef{model::ObjectId{9}}},
+                              model::PropertyValue{model::ControlRef{model::ObjectId{2}}},
+                              model::PropertyValue{true}})
+        expect(!form_stream::encode_document(make_document(invalid)), "invalid ActionSource must be rejected");
+    auto tree = form_stream::encode_document(make_document(std::nullopt)).value();
+    auto& metadata = tree.items[1].items[2].items[2].items[1].items[4];
+    metadata.items[2] = list_stream::ListValue::raw_atom("9");
+    expect(!form_stream::decode_document(tree, "ActionSources"), "dangling ActionSource must not decode");
+    metadata.items[2] = list_stream::ListValue::raw_atom("4294967296");
+    expect(!form_stream::decode_document(tree, "ActionSources"), "out-of-domain ActionSource ID must be rejected");
+    metadata.items[2] = list_stream::ListValue::raw_atom("0");
+    metadata.items[3] = list_stream::ListValue::raw_atom("1");
+    expect(!form_stream::decode_document(tree, "ActionSources"), "neighbor metadata fields remain strict");
+}
+
 void test_command_bar_creation_state_and_strict_record_guards() {
     for (const auto nonempty : {false, true}) {
         model::Form form; form.id = model::ObjectId{1}; form.name = "CommandBarCreationState";
@@ -9548,6 +9602,7 @@ int main() {
         test_default_schema_fields_fresh_xml_geometry_and_rejections();
         test_command_bar_owner_pair_and_strict_profile();
         test_command_bar_five_named_properties_and_invalid_variants();
+        test_command_bar_named_action_source_references();
         test_command_bar_creation_state_and_strict_record_guards();
         test_command_bar_border_named_round_trip_and_guards();
         test_command_bar_colors_named_round_trip_and_guards();
