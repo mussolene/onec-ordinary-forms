@@ -526,7 +526,7 @@ std::vector<EventDescriptor> make_form_event_descriptors() {
 }
 
 std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
-    return {
+    auto descriptors = std::vector<PropertyDescriptor>{
 #define OOF_HELP_CONTROL(...)
 #define OOF_HELP_PROPERTY(...)
 #define OOF_HELP_EVENT(...)
@@ -544,6 +544,18 @@ std::vector<PropertyDescriptor> make_control_extension_property_descriptors() {
 #undef OOF_HELP_PROPERTY
 #undef OOF_HELP_CONTROL
     };
+    const auto action_source = std::ranges::find(
+        descriptors, std::string_view{"ActionSource"}, &PropertyDescriptor::api_name);
+    if (action_source == descriptors.end()) {
+        throw std::logic_error("missing ActionSource control extension descriptor");
+    }
+    action_source->control_kind = model::ControlKind::command_bar;
+    action_source->value_kind = ValueKind::object;
+    action_source->value_codec = ValueCodec::action_source_reference;
+    action_source->default_value = {DefaultKind::undefined, "undefined"};
+    action_source->persistence = PersistenceClass::persisted_editable;
+    action_source->storage_codec = StorageCodec::control_info;
+    return descriptors;
 }
 
 std::vector<PropertyDescriptor> make_panel_placement_property_descriptors() {
@@ -1282,6 +1294,10 @@ struct Metamodel::Impl {
         }
         for (std::size_t index = 0; index < control_kind_count; ++index) {
             for (const auto& descriptor : control_extension_properties) {
+                if (descriptor.control_kind != ControlKind::panel &&
+                    descriptor.control_kind != controls[index].kind) {
+                    continue;
+                }
                 index_property(properties_by_name[index], properties_by_id[index], descriptor);
             }
             for (const auto& descriptor : panel_placement_properties) {
@@ -1676,6 +1692,8 @@ std::string_view value_codec_name(ValueCodec codec) noexcept {
             return "font";
         case ValueCodec::picture:
             return "picture";
+        case ValueCodec::action_source_reference:
+            return "action-source-reference";
         case ValueCodec::control_reference:
             return "control-reference";
         case ValueCodec::attribute_reference:

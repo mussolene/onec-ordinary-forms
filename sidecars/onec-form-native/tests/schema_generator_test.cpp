@@ -816,6 +816,10 @@ void test_control_surfaces_and_property_order(
         expect_element_shape(elements[cursor++], "DataPath", "DataPathType", "0", "1");
 
         for (const auto& descriptor : extension_properties) {
+            if (descriptor.control_kind != oof::model::ControlKind::panel &&
+                descriptor.control_kind != control.kind) {
+                continue;
+            }
             if (descriptor.api_name != "Name" && descriptor.api_name != "Data") {
                 expect_property_element(descriptor, elements[cursor++]);
             }

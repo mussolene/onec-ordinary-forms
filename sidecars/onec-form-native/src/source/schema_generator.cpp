@@ -115,6 +115,8 @@ std::string_view xsd_type(ValueCodec codec) {
             return "FontValueType";
         case ValueCodec::picture:
             return "PictureReferenceValueType";
+        case ValueCodec::action_source_reference:
+            return "ActionSourceReferenceValueType";
         case ValueCodec::control_reference:
             return "ControlReferenceValueType";
         case ValueCodec::attribute_reference:
@@ -495,6 +497,11 @@ void append_value_types(std::string& output) {
     <xs:restriction base="ObjectIdType"/>
   </xs:simpleType>
 
+  <xs:complexType name="ActionSourceReferenceValueType">
+    <xs:attribute name="formId" type="ObjectIdType" use="optional"/>
+    <xs:attribute name="controlId" type="ObjectIdType" use="optional"/>
+  </xs:complexType>
+
   <xs:simpleType name="AttributeReferenceValueType">
     <xs:restriction base="ObjectIdType"/>
   </xs:simpleType>
@@ -699,9 +706,14 @@ void append_property_elements(
 
 void append_control_extension_elements(
     std::string& output,
-    std::span<const PropertyDescriptor> properties
+    std::span<const PropertyDescriptor> properties,
+    model::ControlKind control_kind
 ) {
     for (const auto& property : properties) {
+        if (property.control_kind != model::ControlKind::panel &&
+            property.control_kind != control_kind) {
+            continue;
+        }
         if (!is_reserved_control_extension(property)) {
             append_property_element(output, property, "      ");
         }
@@ -912,7 +924,8 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
             "      <xs:element name=\"DataPath\" type=\"DataPathType\" minOccurs=\"0\" maxOccurs=\"1\"/>\n";
         append_control_extension_elements(
             output,
-            metamodel.control_extension_properties());
+            metamodel.control_extension_properties(),
+            control.kind);
         output +=
             "      <xs:element name=\"Position\" type=\"PositionType\" minOccurs=\"1\" maxOccurs=\"1\"/>\n";
         if (control.kind == model::ControlKind::chart) {

@@ -93,6 +93,7 @@ enum class ValueCodec : std::uint8_t {
     color,
     font,
     picture,
+    action_source_reference,
     control_reference,
     attribute_reference,
     command_reference,

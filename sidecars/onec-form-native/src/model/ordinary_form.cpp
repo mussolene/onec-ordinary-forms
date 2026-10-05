@@ -67,7 +67,8 @@ bool property_value_matches(
             const auto expected = descriptor.value_codec;
             using Value = std::remove_cvref_t<decltype(typed_value)>;
             if constexpr (std::is_same_v<Value, UndefinedValue>) {
-                return expected == metamodel::ValueCodec::date;
+                return expected == metamodel::ValueCodec::date ||
+                       expected == metamodel::ValueCodec::action_source_reference;
             } else if constexpr (std::is_same_v<Value, bool>) {
                 return expected == metamodel::ValueCodec::boolean;
             } else if constexpr (std::is_same_v<Value, std::int64_t>) {
@@ -119,7 +120,10 @@ bool property_value_matches(
             } else if constexpr (std::is_same_v<Value, PictureRef>) {
                 return expected == metamodel::ValueCodec::picture;
             } else if constexpr (std::is_same_v<Value, ControlRef>) {
-                return expected == metamodel::ValueCodec::control_reference;
+                return expected == metamodel::ValueCodec::control_reference ||
+                       expected == metamodel::ValueCodec::action_source_reference;
+            } else if constexpr (std::is_same_v<Value, FormRef>) {
+                return expected == metamodel::ValueCodec::action_source_reference;
             } else if constexpr (std::is_same_v<Value, AttributeRef>) {
                 return expected == metamodel::ValueCodec::attribute_reference;
             } else if constexpr (std::is_same_v<Value, CommandRef>) {
@@ -596,6 +600,11 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 using Value = std::remove_cvref_t<decltype(typed_value)>;
                 if constexpr (std::is_same_v<Value, ControlRef>) {
                     require_control(source, typed_value);
+                } else if constexpr (std::is_same_v<Value, FormRef>) {
+                    if (typed_value.id() != form_.id) {
+                        add_violation(report, InvariantCode::dangling_reference, source,
+                            typed_value.id(), "form reference does not resolve to this form");
+                    }
                 } else if constexpr (std::is_same_v<Value, AttributeRef>) {
                     require_attribute(source, typed_value);
                 } else if constexpr (std::is_same_v<Value, CommandRef>) {
@@ -636,6 +645,18 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     source,
                     {},
                     "property value does not match its metamodel value kind");
+            }
+            if (descriptor != nullptr && descriptor->api_name == "ActionSource" &&
+                descriptor->control_kind == ControlKind::command_bar) {
+                if (const auto* target = std::get_if<ControlRef>(&property.value)) {
+                    const ControlNode* source_control = find_control(target->id());
+                    if (source_control != nullptr &&
+                        source_control->kind() != ControlKind::table &&
+                        source_control->kind() != ControlKind::html_document_field) {
+                        add_violation(report, InvariantCode::invalid_property, source,
+                            target->id(), "CommandBar ActionSource control must be Table or HTMLDocumentField");
+                    }
+                }
             }
             validate_property_value(source, property.value);
         });

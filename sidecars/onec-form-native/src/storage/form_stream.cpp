@@ -3636,7 +3636,7 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
 }
 
-DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context) {
+DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context, model::ObjectId form_id) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -3731,11 +3731,16 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     }
 
     const auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
-    require_exact(metadata, list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
+    const auto action_source = integer_atom<std::uint32_t>(metadata.items[2], child_path(metadata_path, 2));
+    require_exact(metadata, list({raw("14"), string_value(name), raw(std::to_string(action_source)), raw("0"), raw("0"), raw("0")}),
         metadata_path, "CommandBar metadata record is unsupported");
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "CommandBar cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CommandBarPayload{}};
+    if (action_source == 0)
+        control.extension_properties.set_explicit(model::PropertyId::from_name("ActionSource"), model::FormRef{form_id});
+    else if (action_source != std::numeric_limits<std::uint32_t>::max())
+        control.extension_properties.set_explicit(model::PropertyId::from_name("ActionSource"), model::ControlRef{model::ObjectId{action_source}});
     if (auto_fill) control.properties().set_explicit(model::PropertyId::from_name("AutoFill"), true);
     if (transparent) control.properties().set_explicit(model::PropertyId::from_name("Transparent"), true);
     if (button_back_color != model::ColorValue{})
@@ -6846,10 +6851,29 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", "$/CommandBar", "CommandBar with positive int64 ID", std::to_string(control.id.value()),
             "Unsupported CommandBar record");
-    if (!control.events.empty() || control.data_path || !control.extension_properties.empty() || !control.children.empty())
-        fail("OOF1122", "$/CommandBar", "CommandBar without events, DataPath, extensions, or child controls",
+    if (!control.events.empty() || control.data_path || !control.children.empty())
+        fail("OOF1122", "$/CommandBar", "CommandBar without events, DataPath, or child controls",
             control.name, "CommandBar uses a storage concept outside the supported profile");
     require_allowed_properties(control.properties(), {"Enabled", "ToolTip", "Secondary", "BorderColor", "ButtonTextColor", "BackColor", "Border", "AutoFill", "Transparent", "ButtonBackColor", "Orientation", "ButtonsAlignment"}, "$/CommandBar");
+    require_allowed_properties(control.extension_properties, {"ActionSource"}, "$/CommandBar");
+    std::uint32_t action_source = std::numeric_limits<std::uint32_t>::max();
+    if (const auto* entry = control.extension_properties.find(model::PropertyId::from_name("ActionSource"))) {
+        if (const auto* form = std::get_if<model::FormRef>(&entry->value)) {
+            if (form->id() != document.form().id)
+                fail("OOF1122", "$/CommandBar/ActionSource", "reference to this Form", "unknown Form", "ActionSource Form reference is invalid");
+            action_source = 0;
+        } else if (const auto* source = std::get_if<model::ControlRef>(&entry->value)) {
+            if (source->id().value() == 0 || source->id().value() >= std::numeric_limits<std::uint32_t>::max() ||
+                document.find_control(source->id()) == nullptr)
+                fail("OOF1122", "$/CommandBar/ActionSource", "existing control with ID below UINT32_MAX", "invalid reference", "ActionSource control reference is invalid");
+            const auto kind = document.find_control(source->id())->kind();
+            if (kind != model::ControlKind::table && kind != model::ControlKind::html_document_field)
+                fail("OOF1122", "$/CommandBar/ActionSource", "Table or HTMLDocumentField source", "unsupported control kind", "Control is not a command source");
+            action_source = static_cast<std::uint32_t>(source->id().value());
+        } else if (!std::holds_alternative<model::UndefinedValue>(entry->value)) {
+            fail("OOF1122", "$/CommandBar/ActionSource", "Undefined, FormRef, or ControlRef", "different value type", "ActionSource has the wrong value type");
+        }
+    }
     const auto* payload = std::get_if<model::CommandBarPayload>(&control.payload);
     if (payload == nullptr) fail("OOF1122", "$/CommandBar", "CommandBarPayload", "different payload", "CommandBar payload is invalid");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -6876,7 +6900,7 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
         explicit_bool(control.properties(), "Secondary", true), &border_color, &button_text_color, &back_color, &border, auto_fill, transparent, orientation, buttons_alignment, &button_back_color);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
     const auto info = list({raw("2"), properties});
-    const auto metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
+    const auto metadata = list({raw("14"), string_value(control.name), raw(std::to_string(action_source)), raw("0"), raw("0"), raw("0")});
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())), info,
         encode_geometry(control.position, context, IncomingAnchorLists{}), metadata, list({raw("0")})});
 }
@@ -8414,7 +8438,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                     DecodedControl child;
                     if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context);
                     else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
-                    else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context);
+                    else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
                         child = decode_usual_group(record, record_path, context);
 
