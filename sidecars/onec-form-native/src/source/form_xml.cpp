@@ -1244,6 +1244,11 @@ public:
         model::Form form;
         form.id = parse_object_id(required_attribute(root, "id"), root);
         form.name = required_attribute(root, "name", object_id_text(form.id));
+        bool reconstruction_complete = true;
+        if (const auto value = optional_attribute(root, "reconstructionComplete")) {
+            reconstruction_complete = parse_boolean(
+                *value, root, "reconstructionComplete", object_id_text(form.id));
+        }
         const std::string form_id = object_id_text(form.id);
 
         for (xmlNodePtr child : element_children(root)) {
@@ -1287,6 +1292,7 @@ public:
         }
 
         model::OrdinaryFormDocument document(std::move(form));
+        document.set_reconstruction_complete(reconstruction_complete);
         for (auto& asset : objects_.assets) document.add_asset(std::move(asset));
         for (auto& attribute : objects_.attributes) document.add_attribute(std::move(attribute));
         for (auto& command : objects_.commands) document.add_command(std::move(command));
@@ -2430,11 +2436,15 @@ public:
     std::string serialize() {
         const model::Form& form = document_.form();
         const std::string form_id = object_id_text(form.id);
-        writer_.open("Form", {
+        std::vector<std::pair<std::string, std::string>> attributes{
             {"id", form_id},
             {"name", form.name},
             {"ordinaryFormVersion", std::string(ordinary_form_xml_version)},
-        });
+        };
+        if (!document_.reconstruction_complete()) {
+            attributes.emplace_back("reconstructionComplete", "false");
+        }
+        writer_.open("Form", attributes);
         write_property_set(form.properties, metamodel_.form_properties(), form_id);
         if (form.main_attribute.id())
             writer_.empty("MainAttribute", {{"attributeId", object_id_text(form.main_attribute.id())}});
@@ -3467,7 +3477,12 @@ Result<model::OrdinaryFormDocument> parse_form_xml(std::string_view xml) {
             return Result<model::OrdinaryFormDocument>::failure(
                 invariant_diagnostics(report));
         }
-        return Result<model::OrdinaryFormDocument>::success(std::move(parsed));
+        Diagnostics diagnostics;
+        if (!parsed.reconstruction_complete()) {
+            diagnostics.push_back({"OOF1140", DiagnosticSeverity::warning, {}, {}, {}, {}, {},
+                "The source Form.xml is marked incomplete; unsupported source properties are not available."});
+        }
+        return Result<model::OrdinaryFormDocument>::success(std::move(parsed), std::move(diagnostics));
     } catch (AdapterError& error) {
         Diagnostics diagnostics;
         diagnostics.push_back(error.take_diagnostic());
@@ -3495,7 +3510,12 @@ Result<std::string> serialize_form_xml(const model::OrdinaryFormDocument& docume
                 "Canonical XML produced by the adapter is invalid: " + diagnostic.message;
             throw AdapterError(std::move(diagnostic));
         }
-        return Result<std::string>::success(std::move(xml));
+        Diagnostics diagnostics;
+        if (!document.reconstruction_complete()) {
+            diagnostics.push_back({"OOF1140", DiagnosticSeverity::warning, {}, {}, {}, {}, {},
+                "The serialized Form.xml remains incomplete; unsupported source properties are not available."});
+        }
+        return Result<std::string>::success(std::move(xml), std::move(diagnostics));
     } catch (AdapterError& error) {
         Diagnostics diagnostics;
         diagnostics.push_back(error.take_diagnostic());

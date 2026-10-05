@@ -102,6 +102,50 @@ void print_diagnostics(const oof::Diagnostics& diagnostics, bool json) {
     std::cout << "]}\n";
 }
 
+void print_success(
+    std::string_view command,
+    const std::filesystem::path& output,
+    const oof::Diagnostics& diagnostics,
+    bool json) {
+    if (!json) {
+        for (const auto& item : diagnostics) {
+            if (item.severity != oof::DiagnosticSeverity::warning) continue;
+            std::cerr << "warning " << item.code << ": " << item.message;
+            if (!item.path.empty()) std::cerr << " [" << item.path << ']';
+            std::cerr << '\n';
+        }
+        return;
+    }
+    std::cout << "{\"ok\":true,\"command\":";
+    print_json_string(std::cout, command);
+    std::cout << ",\"output\":";
+    print_json_string(std::cout, output.string());
+    std::cout << ",\"diagnostics\":[";
+    bool first = true;
+    for (const auto& item : diagnostics) {
+        if (!first) std::cout << ',';
+        first = false;
+        std::cout << "{\"code\":";
+        print_json_string(std::cout, item.code);
+        std::cout << ",\"severity\":";
+        print_json_string(std::cout, oof::to_string(item.severity));
+        std::cout << ",\"objectId\":";
+        print_json_string(std::cout, item.object_id);
+        std::cout << ",\"path\":";
+        print_json_string(std::cout, item.path);
+        std::cout << ",\"property\":";
+        print_json_string(std::cout, item.property);
+        std::cout << ",\"expected\":";
+        print_json_string(std::cout, item.expected);
+        std::cout << ",\"actual\":";
+        print_json_string(std::cout, item.actual);
+        std::cout << ",\"message\":";
+        print_json_string(std::cout, item.message);
+        std::cout << '}';
+    }
+    std::cout << "]}\n";
+}
+
 oof::Diagnostics cli_failure(
     std::string code,
     std::string path,
@@ -244,11 +288,9 @@ int dump_form(
     write_text(output, xml.value());
     write_text(module_path_for(output), loaded.value().module().text);
     write_picture_assets(loaded.value(), output);
-    if (json) {
-        std::cout << "{\"ok\":true,\"command\":\"dump\",\"output\":";
-        print_json_string(std::cout, output.string());
-        std::cout << "}\n";
-    }
+    auto diagnostics = loaded.diagnostics();
+    diagnostics.insert(diagnostics.end(), xml.diagnostics().begin(), xml.diagnostics().end());
+    print_success("dump", output, diagnostics, json);
     return 0;
 }
 
@@ -286,11 +328,9 @@ int build_form(
         return 1;
     }
     write_bytes(output, encoded.value());
-    if (json) {
-        std::cout << "{\"ok\":true,\"command\":\"build\",\"output\":";
-        print_json_string(std::cout, output.string());
-        std::cout << "}\n";
-    }
+    auto diagnostics = parsed.diagnostics();
+    diagnostics.insert(diagnostics.end(), encoded.diagnostics().begin(), encoded.diagnostics().end());
+    print_success("build", output, diagnostics, json);
     return 0;
 }
 

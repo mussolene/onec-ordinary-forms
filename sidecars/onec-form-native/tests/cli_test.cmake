@@ -98,6 +98,27 @@ require_contains("${final_xml_text}" "<Caption>After</Caption>" "edited named Ca
 require_contains("${final_xml_text}" "<Caption>Launch</Caption>" "edited Button Caption round-trip")
 require_file_equals("${test_root}/second/Form/Module.bsl" "${module_text}" "edited module preservation")
 
+# Неполнота источника предупреждает, но не запрещает сборку известных свойств.
+set(partial_source "${test_root}/partial/Form.xml")
+set(partial_bin "${test_root}/partial.bin")
+file(MAKE_DIRECTORY "${test_root}/partial/Form")
+string(REPLACE "ordinaryFormVersion=\"2.1\"" "ordinaryFormVersion=\"2.1\" reconstructionComplete=\"false\""
+  partial_xml "${edited_xml}")
+file(WRITE "${partial_source}" "${partial_xml}")
+file(WRITE "${test_root}/partial/Form/Module.bsl" "${module_text}")
+run_cli(0 "partial source build" build "${partial_source}" "${partial_bin}" --json)
+string(JSON partial_ok GET "${CLI_STDOUT}" ok)
+string(JSON warning_count LENGTH "${CLI_STDOUT}" diagnostics)
+string(JSON warning_severity GET "${CLI_STDOUT}" diagnostics 0 severity)
+if(NOT partial_ok OR warning_count LESS 1 OR NOT warning_severity STREQUAL "warning")
+  message(FATAL_ERROR "partial source must build successfully with JSON warnings")
+endif()
+file(READ "${partial_bin}" partial_binary HEX)
+file(READ "${second_bin}" known_binary HEX)
+if(NOT partial_binary STREQUAL known_binary)
+  message(FATAL_ERROR "partial metadata must preserve the serialized known properties and module")
+endif()
+
 # Errors must be diagnostic, nonzero, and leave a pre-existing output untouched.
 set(protected_output "${test_root}/protected.bin")
 file(WRITE "${protected_output}" "preserve this output")

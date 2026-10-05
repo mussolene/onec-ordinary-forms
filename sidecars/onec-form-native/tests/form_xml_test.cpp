@@ -93,6 +93,33 @@ void test_complete_document_roundtrip() {
     expect(repeated.value() == serialized.value(), "Form.xml serialization must be deterministic");
 }
 
+void test_reconstruction_completeness_xml_metadata() {
+    constexpr std::string_view incomplete_xml =
+        R"XML(<Form id="1" name="Partial" ordinaryFormVersion="2.1" reconstructionComplete="false"/>)XML";
+    const auto parsed = source::parse_form_xml(incomplete_xml);
+    expect(parsed.ok() && !parsed.value().reconstruction_complete(),
+        "reconstructionComplete=false must parse into model metadata");
+    expect(parsed.diagnostics().size() == 1 &&
+               parsed.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
+        "incomplete XML parse must succeed with a warning");
+    const auto serialized = source::serialize_form_xml(parsed.value());
+    expect(serialized.ok() && serialized.value().find("reconstructionComplete=\"false\"") != std::string::npos,
+        "XML serialization must preserve incomplete reconstruction metadata");
+    expect(serialized.diagnostics().size() == 1 &&
+               serialized.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
+        "incomplete XML serialization must return a warning with success");
+
+    constexpr std::string_view complete_xml =
+        R"XML(<Form id="1" name="Complete" ordinaryFormVersion="2.1"/>)XML";
+    const auto complete = source::parse_form_xml(complete_xml);
+    expect(complete.ok() && complete.value().reconstruction_complete() && complete.diagnostics().empty(),
+        "missing completeness metadata must retain the complete default without warning");
+    const auto complete_serialized = source::serialize_form_xml(complete.value());
+    expect(complete_serialized.ok() &&
+               complete_serialized.value().find("reconstructionComplete") == std::string::npos,
+        "complete XML must omit the default completeness attribute");
+}
+
 void test_usual_group_named_xml_round_trip() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="Groups" ordinaryFormVersion="2.1"><ChildItems>
       <UsualGroup id="2" name="DefaultGroup"><Position/></UsualGroup>
@@ -2046,6 +2073,7 @@ void test_command_bar_border_xml_contract() {
 
 int main() {
     try {
+        test_reconstruction_completeness_xml_metadata();
         test_data_processor_form_extension_xml_contract();
         test_complete_document_roundtrip();
         test_usual_group_named_xml_round_trip();

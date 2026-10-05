@@ -1758,6 +1758,7 @@
     <xs:attribute name="id" type="ObjectIdType" use="required"/>
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="ordinaryFormVersion" type="xs:string" use="required" fixed="2.1"/>
+    <xs:attribute name="reconstructionComplete" type="xs:boolean" use="optional" default="true"/>
   </xs:complexType>
   <xs:element name="Form" type="FormType"/>
 

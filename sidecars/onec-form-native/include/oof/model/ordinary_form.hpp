@@ -930,6 +930,14 @@ public:
         return form_;
     }
 
+    [[nodiscard]] bool reconstruction_complete() const noexcept {
+        return reconstruction_complete_;
+    }
+
+    void set_reconstruction_complete(bool value) noexcept {
+        reconstruction_complete_ = value;
+    }
+
     [[nodiscard]] const FormModule& module() const noexcept {
         return module_;
     }
@@ -965,6 +973,7 @@ public:
     void validate_or_throw() const;
 
 private:
+    bool reconstruction_complete_ = true;
     struct ObjectKey {
         ObjectCategory category = ObjectCategory::form;
         ObjectId id{};

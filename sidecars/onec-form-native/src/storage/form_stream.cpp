@@ -4589,7 +4589,12 @@ DecodedControl decode_html_document_field(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
-DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
+DecodedControl decode_label(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context,
+    Diagnostics& warnings,
+    bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -4608,6 +4613,8 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     const auto& base_properties = properties.items[0];
     const std::string base_properties_path = child_path(properties_path, 0);
     require_arity(base_properties, 21, base_properties_path);
+    require_raw_constant(base_properties.items[0], "19", child_path(base_properties_path, 0));
+    require_raw_constant(properties.items[1], "11", child_path(properties_path, 1));
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_properties_path, 1));
     const auto border_color = decode_button_color(
         base_properties.items[6], child_path(base_properties_path, 6));
@@ -4627,11 +4634,16 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     normalized_base_properties.items[12] = encoded_localized(tool_tip);
     normalized_properties.items[0] = std::move(normalized_base_properties);
     normalized_properties.items[2] = encoded_localized(caption);
-    require_exact(
-        normalized_properties,
-        canonical_label_properties(caption, horizontal_align, enabled, tool_tip, border_color),
-        properties_path,
-        "LabelDecoration properties differ from the supported default profile");
+    const auto canonical_properties = canonical_label_properties(
+        caption, horizontal_align, enabled, tool_tip, border_color);
+    if (list_stream::dump_compact(normalized_properties) !=
+        list_stream::dump_compact(canonical_properties)) {
+        reconstruction_complete = false;
+        warnings.push_back({
+            "OOF1140", DiagnosticSeverity::warning, std::to_string(raw_id),
+            properties_path, "LabelDecoration", {}, {},
+            "LabelDecoration contains property data not represented in the named model; these properties cannot be reproduced."});
+    }
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2), "LabelDecoration events are unsupported");
 
     const auto geometry_path = child_path(path, 3);
@@ -8297,7 +8309,10 @@ Result<list_stream::ListValue> encode_attributes(const AttributesRecord& record)
 Result<model::OrdinaryFormDocument> decode_document(
     const list_stream::ListValue& payload,
     std::string_view form_name) {
-    return capture_decode_failure<model::OrdinaryFormDocument>([&payload, form_name] {
+    Diagnostics warnings;
+    bool reconstruction_complete = true;
+    auto decoded = capture_decode_failure<model::OrdinaryFormDocument>(
+        [&payload, form_name, &warnings, &reconstruction_complete] {
         const auto layout = probe_layout(payload);
         if (!layout) {
             throw DecodeFailure(layout.diagnostics().front());
@@ -8588,7 +8603,8 @@ Result<model::OrdinaryFormDocument> decode_document(
                     else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::splitter).guid)
                         child = decode_splitter(record, record_path, context);
-                    else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
+                    else if (guid == label_descriptor.guid)
+                        child = decode_label(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
                     else if (guid == dendrogram_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path),
@@ -8879,13 +8895,23 @@ Result<model::OrdinaryFormDocument> decode_document(
         validate_form_extension_context(document, "$/2/0");
         if (default_command_bar_id(document) != default_owner_id)
             fail("OOF1114", "$/1/1/2", "owner of the unique named DefaultButton", std::to_string(default_owner_id), "Default action owner is dangling or inconsistent");
+        document.set_reconstruction_complete(reconstruction_complete);
         return document;
     });
+    if (!decoded) return decoded;
+    return Result<model::OrdinaryFormDocument>::success(
+        decoded.take_value(), std::move(warnings));
 }
 
 Result<list_stream::ListValue> encode_document(
     const model::OrdinaryFormDocument& document) {
-    return capture_decode_failure<list_stream::ListValue>([&document] {
+    Diagnostics warnings;
+    if (!document.reconstruction_complete()) {
+        warnings.push_back({
+            "OOF1140", DiagnosticSeverity::warning, {}, {}, {}, {}, {},
+            "The output was built from an incomplete reconstruction; unsupported source properties were not restored."});
+    }
+    auto encoded = capture_decode_failure<list_stream::ListValue>([&document] {
         validate_radio_groups(document);
         const auto validation = document.validate();
         if (!validation.ok()) {
@@ -9346,6 +9372,9 @@ Result<list_stream::ListValue> encode_document(
         }
         return encoded;
     });
+    if (!encoded) return encoded;
+    return Result<list_stream::ListValue>::success(
+        encoded.take_value(), std::move(warnings));
 }
 
 }  // namespace oof::storage::form_stream

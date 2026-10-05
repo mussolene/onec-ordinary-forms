@@ -885,6 +885,7 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
     append_xml_escaped(output, ordinary_form_xml_version);
     output +=
         "\"/>\n"
+        "    <xs:attribute name=\"reconstructionComplete\" type=\"xs:boolean\" use=\"optional\" default=\"true\"/>\n"
         "  </xs:complexType>\n"
         "  <xs:element name=\"Form\" type=\"FormType\"/>\n\n";
 

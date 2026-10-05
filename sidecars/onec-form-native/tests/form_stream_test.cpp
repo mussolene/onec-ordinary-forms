@@ -3601,6 +3601,87 @@ void test_label_border_color_round_trip() {
         "unknown LabelDecoration color styles must fail without fallback");
 }
 
+void test_label_partial_reconstruction_warning_and_build() {
+    model::Form form;
+    form.id = model::ObjectId{1};
+    form.name = "LabelPartialRead";
+    form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument seed(std::move(form));
+    model::ControlNode label{model::ObjectId{2}, "Caption", model::LabelDecorationPayload{}};
+    label.properties().set_explicit(model::PropertyId::from_name("Caption"), std::string("Keep this caption"));
+    model::ColorValue rgb{model::ColorKind::absolute, 12, 34, 56, 255, std::monostate{}};
+    label.properties().set_explicit(model::PropertyId::from_name("BorderColor"), rgb);
+    seed.add_control(std::move(label));
+
+    auto source_stream = form_stream::encode_document(seed);
+    expect(source_stream.ok(), "supported Label seed must encode");
+    auto* source_label = find_record_with_guid(source_stream.value(),
+        model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    expect(source_label != nullptr, "seed stream must contain LabelDecoration");
+    auto& label_properties = source_label->items[2].items[1];
+    auto& base_properties = label_properties.items[0];
+    base_properties.items[17] = list_stream::ListValue::raw_atom("1");
+    label_properties.items[15] = list_stream::ListValue::raw_atom("1");
+
+    const auto decoded = form_stream::decode_document(source_stream.value(), "LabelPartialRead");
+    expect(decoded.ok(), "valid Label profile variation must return a partial document with warnings");
+    expect(decoded.diagnostics().size() == 1 &&
+               decoded.diagnostics().front().severity == oof::DiagnosticSeverity::warning &&
+               decoded.diagnostics().front().code == "OOF1140" &&
+               decoded.diagnostics().front().actual.empty() &&
+               decoded.diagnostics().front().expected.empty(),
+        "profile warning must be non-fatal and must not expose stored values");
+    expect(!decoded.value().reconstruction_complete(), "unsupported Label fields must mark reconstruction incomplete");
+    const auto* decoded_label = decoded.value().find_control(model::ObjectId{2});
+    expect(decoded_label != nullptr &&
+               std::get<std::string>(decoded_label->properties().find(model::PropertyId::from_name("Caption"))->value) ==
+                   "Keep this caption" &&
+               std::get<model::ColorValue>(decoded_label->properties().find(
+                   model::PropertyId::from_name("BorderColor"))->value) == rgb,
+        "supported Caption and RGB BorderColor must survive alongside the warning");
+
+    const auto xml = source::serialize_form_xml(decoded.value());
+    expect(xml.ok() && xml.value().find("reconstructionComplete=\"false\"") != std::string::npos &&
+               xml.value().find("Keep this caption") != std::string::npos &&
+               xml.value().find("<BorderColor") != std::string::npos,
+        "partial model XML must retain completeness metadata and named properties");
+    const auto parsed = source::parse_form_xml(xml.value());
+    expect(parsed.ok() && !parsed.value().reconstruction_complete() &&
+               !parsed.diagnostics().empty() &&
+               parsed.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
+        "XML parsing must preserve incompleteness as a warning");
+    const auto built = oof::save_form_bin(parsed.value());
+    expect(built.ok() && !built.value().empty() &&
+               std::any_of(built.diagnostics().begin(), built.diagnostics().end(), [](const auto& diagnostic) {
+                   return diagnostic.severity == oof::DiagnosticSeverity::warning &&
+                       diagnostic.message.find("unsupported source properties were not restored") != std::string::npos;
+               }),
+        "build must write Form.bin and warn that unsupported source properties were not restored");
+
+    auto malformed_arity = source_stream.value();
+    auto* malformed_label = find_record_with_guid(malformed_arity,
+        model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    malformed_label->items[2].items[1].items.push_back(list_stream::ListValue::raw_atom("0"));
+    expect_failure(form_stream::decode_document(malformed_arity, "MalformedLabelArity"), "OOF1102",
+        "$/1/2/2/1/2/1", "malformed Label properties arity must remain a structural error");
+
+    auto malformed_color = source_stream.value();
+    auto* invalid_color_label = find_record_with_guid(malformed_color,
+        model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    invalid_color_label->items[2].items[1].items[0].items[6].items[1] =
+        list_stream::ListValue::raw_atom("9");
+    expect_failure(form_stream::decode_document(malformed_color, "MalformedLabelColor"), "OOF1114",
+        "$/1/2/2/1/2/1/0/6/1", "invalid known BorderColor must remain a strict decode error");
+
+    auto malformed_header = source_stream.value();
+    auto* invalid_header_label = find_record_with_guid(malformed_header,
+        model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    invalid_header_label->items[2].items[1].items[0].items[0] =
+        list_stream::ListValue::raw_atom("18");
+    expect_failure(form_stream::decode_document(malformed_header, "MalformedLabelHeader"), "OOF1106",
+        "$/1/2/2/1/2/1/0/0", "invalid Label structural header must remain a strict decode error");
+}
+
 void test_label_decoration_observed_center_right_records() {
     const auto decode_observed = [](std::string_view record, std::string_view expected_member) {
         model::Form form;
@@ -10018,6 +10099,7 @@ int main() {
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
         test_label_border_color_round_trip();
+        test_label_partial_reconstruction_warning_and_build();
         test_label_decoration_observed_center_right_records();
         test_label_enabled_and_tooltip_round_trip();
         test_picture_decoration_default_enabled_tooltip_round_trip_and_rejections();
