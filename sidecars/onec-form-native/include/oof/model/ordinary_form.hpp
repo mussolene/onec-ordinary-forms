@@ -495,6 +495,38 @@ private:
     std::unordered_map<PropertyId, PropertyEntry, PropertyIdHash> entries_;
 };
 
+enum class PropertyReadStatus : std::uint8_t {
+    explicit_value,
+    proven_default,
+    unknown_default,
+    no_default,
+    write_only,
+    unknown_owner,
+    unknown_property,
+    unsupported_surface,
+};
+
+struct PropertyReadResult {
+    PropertyReadStatus status = PropertyReadStatus::unknown_property;
+    std::optional<PropertyValue> value;
+};
+
+enum class PropertyMutationStatus : std::uint8_t {
+    applied,
+    applied_runtime_only,
+    applied_unclassified_storage,
+    reset,
+    reset_runtime_only,
+    reset_unclassified_storage,
+    unknown_owner,
+    unknown_property,
+    unsupported_surface,
+    read_only,
+    unknown_access,
+    invalid_value,
+    invalid_reference,
+};
+
 enum class BindingCoordinate : std::uint8_t {
     left,
     top,
@@ -942,6 +974,13 @@ public:
         std::reference_wrapper<const Event>,
         std::reference_wrapper<const PictureAsset>>;
 
+    struct ObjectKey {
+        ObjectCategory category = ObjectCategory::form;
+        ObjectId id{};
+
+        friend bool operator==(const ObjectKey&, const ObjectKey&) = default;
+    };
+
     OrdinaryFormDocument();
     explicit OrdinaryFormDocument(Form form);
 
@@ -988,18 +1027,18 @@ public:
     [[nodiscard]] const PictureAsset* find_asset(ObjectId id) const noexcept;
     [[nodiscard]] std::size_t indexed_id_count() const noexcept;
 
+    [[nodiscard]] PropertyReadResult get_prop_val(ObjectKey owner, PropertyId property) const;
+    [[nodiscard]] PropertyMutationStatus set_prop_val(
+        ObjectKey owner,
+        PropertyId property,
+        PropertyValue value);
+    [[nodiscard]] PropertyMutationStatus reset_prop_val(ObjectKey owner, PropertyId property);
+
     [[nodiscard]] ValidationReport validate() const;
     void validate_or_throw() const;
 
 private:
     bool reconstruction_complete_ = true;
-    struct ObjectKey {
-        ObjectCategory category = ObjectCategory::form;
-        ObjectId id{};
-
-        friend bool operator==(const ObjectKey&, const ObjectKey&) = default;
-    };
-
     struct ObjectKeyHash {
         [[nodiscard]] std::size_t operator()(const ObjectKey& key) const noexcept {
             const std::size_t category_hash = std::hash<std::uint8_t>{}(

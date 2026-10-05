@@ -667,7 +667,7 @@ void apply_proven_storage_overrides(
         ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
         ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
         ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
-        ControlKind::calendar_field, ControlKind::text_document_field,
+        ControlKind::calendar_field, ControlKind::text_document_field, ControlKind::input_field,
     });
     classify_shared_control_property("Enabled", StorageCodec::control_info, DefaultKind::boolean, "true", {
         ControlKind::progress_bar, ControlKind::track_bar, ControlKind::label_decoration,

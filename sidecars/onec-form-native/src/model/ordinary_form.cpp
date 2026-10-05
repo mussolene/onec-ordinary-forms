@@ -134,6 +134,131 @@ bool property_value_matches(
         value);
 }
 
+bool property_api_enumeration_matches(
+    const metamodel::PropertyDescriptor& descriptor,
+    const EnumerationValue& value
+) noexcept {
+    if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
+    if (descriptor.control_kind == ControlKind::command_bar &&
+        (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) {
+        return property_value_matches(descriptor, PropertyValue{value});
+    }
+    if (descriptor.api_name == "HorizontalAlign") {
+        return value.type_name == "HorizontalAlign" &&
+            (value.member == "Left" || value.member == "Center" || value.member == "Right" ||
+             value.member == "Justify" || value.member == "Auto");
+    }
+    if (descriptor.api_name == "VerticalAlign") {
+        return value.type_name == "VerticalAlign" &&
+            (value.member == "Top" || value.member == "Center" || value.member == "Bottom");
+    }
+    if (descriptor.control_kind == ControlKind::dendrogram &&
+        descriptor.api_name == "Orientation") {
+        return value.type_name == "DendrogramOrientation" &&
+            (value.member == "Up" || value.member == "Down");
+    }
+    return false;
+}
+
+bool property_value_references_resolve(
+    const OrdinaryFormDocument& document,
+    const PropertyValue& value) noexcept {
+    return std::visit(
+        [&document](const auto& typed_value) {
+            using Value = std::remove_cvref_t<decltype(typed_value)>;
+            if constexpr (std::is_same_v<Value, ControlRef>) {
+                return document.find_control(typed_value.id()) != nullptr;
+            } else if constexpr (std::is_same_v<Value, FormRef>) {
+                return typed_value.id() == document.form().id;
+            } else if constexpr (std::is_same_v<Value, AttributeRef>) {
+                return document.find_attribute(typed_value.id()) != nullptr;
+            } else if constexpr (std::is_same_v<Value, CommandRef>) {
+                return document.find_command(typed_value.id()) != nullptr;
+            } else if constexpr (std::is_same_v<Value, PictureRef>) {
+                if (typed_value.standard_name) {
+                    return !typed_value.asset.id() &&
+                        metamodel::find_standard_picture(typed_value.standard_name->value) != nullptr;
+                }
+                return static_cast<bool>(typed_value.asset.id()) &&
+                    document.find_asset(typed_value.asset.id()) != nullptr;
+            }
+            return true;
+        },
+        value);
+}
+
+bool is_typed_collection_property(const metamodel::PropertyDescriptor& descriptor) noexcept {
+    using metamodel::ValueCodec;
+    return descriptor.value_kind == metamodel::ValueKind::collection ||
+        descriptor.value_codec == ValueCodec::command_bar_buttons ||
+        descriptor.value_codec == ValueCodec::owned_panel ||
+        descriptor.value_codec == ValueCodec::dendrogram_items ||
+        descriptor.value_codec == ValueCodec::dendrogram_links;
+}
+
+std::optional<PropertyValue> materialize_default(
+    const metamodel::PropertyDescriptor& descriptor) {
+    using metamodel::DefaultKind;
+    const auto& value = descriptor.default_value;
+    switch (value.kind) {
+        case DefaultKind::undefined:
+            if (value.canonical == "undefined") return PropertyValue{UndefinedValue{}};
+            return std::nullopt;
+        case DefaultKind::boolean:
+            if (value.canonical == "true") return PropertyValue{true};
+            if (value.canonical == "false") return PropertyValue{false};
+            return std::nullopt;
+        case DefaultKind::integer: {
+            std::int64_t parsed = 0;
+            const auto [end, error] = std::from_chars(
+                value.canonical.data(), value.canonical.data() + value.canonical.size(), parsed);
+            if (error == std::errc{} && end == value.canonical.data() + value.canonical.size()) {
+                return PropertyValue{parsed};
+            }
+            return std::nullopt;
+        }
+        case DefaultKind::decimal:
+            if (!value.canonical.empty()) return PropertyValue{DecimalValue{std::string(value.canonical)}};
+            return std::nullopt;
+        case DefaultKind::string:
+            if (descriptor.value_codec == metamodel::ValueCodec::string) {
+                return PropertyValue{std::string(value.canonical)};
+            }
+            return std::nullopt;
+        case DefaultKind::color:
+            if (value.canonical == "automatic") return PropertyValue{ColorValue{}};
+            return std::nullopt;
+        case DefaultKind::font:
+            if (value.canonical == "automatic") return PropertyValue{FontValue{}};
+            return std::nullopt;
+        case DefaultKind::enumeration: {
+            const auto separator = value.canonical.find('.');
+            if (separator == std::string_view::npos || separator == 0 ||
+                separator + 1 == value.canonical.size()) return std::nullopt;
+            const auto type_name = value.canonical.substr(0, separator);
+            const auto member = value.canonical.substr(separator + 1);
+            const bool known_type =
+                (descriptor.control_kind == ControlKind::command_bar &&
+                 descriptor.api_name == "ButtonsAlignment" &&
+                 type_name == "CommandBarButtonAlignment") ||
+                (descriptor.control_kind == ControlKind::command_bar &&
+                 descriptor.api_name == "Orientation" && type_name == "Orientation") ||
+                (descriptor.control_kind == ControlKind::dendrogram &&
+                 descriptor.api_name == "Orientation" && type_name == "DendrogramOrientation");
+            if (!known_type) return std::nullopt;
+            EnumerationValue parsed{std::string(type_name), std::string(member)};
+            if (!property_api_enumeration_matches(descriptor, parsed)) return std::nullopt;
+            return PropertyValue{std::move(parsed)};
+        }
+        case DefaultKind::unknown:
+        case DefaultKind::none:
+        case DefaultKind::border:
+        case DefaultKind::shortcut:
+            return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 bool table_column_editor_property_allowed(ControlKind kind, std::string_view name) {
     switch (kind) {
         case ControlKind::input_field:
@@ -436,6 +561,186 @@ std::optional<OrdinaryFormDocument::ObjectLocation> OrdinaryFormDocument::find_l
 
 std::size_t OrdinaryFormDocument::indexed_id_count() const noexcept {
     return index_.size();
+}
+
+PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyId property) const {
+    const metamodel::PropertyDescriptor* descriptor = nullptr;
+    const PropertySet* properties = nullptr;
+    if (owner.category == ObjectCategory::form) {
+        if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        descriptor = metamodel::find_form_property(property);
+        properties = &form_.properties;
+    } else if (owner.category == ObjectCategory::control) {
+        const auto location = find_location(ObjectCategory::control, owner.id);
+        if (!location) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        const auto& control = collections_.controls[location->index];
+        descriptor = metamodel::find_property(control.kind(), property);
+        if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if (is_typed_collection_property(*descriptor) ||
+            descriptor->surface == metamodel::PropertySurface::panel_placement) {
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        }
+        if (descriptor->surface == metamodel::PropertySurface::control_payload) {
+            properties = &control.properties();
+        } else if (descriptor->surface == metamodel::PropertySurface::control_extension) {
+            properties = &control.extension_properties;
+        } else {
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        }
+    } else {
+        if (!find_location(owner.category, owner.id)) {
+            return {PropertyReadStatus::unknown_owner, std::nullopt};
+        }
+        return {PropertyReadStatus::unsupported_surface, std::nullopt};
+    }
+
+    if (descriptor == nullptr || properties == nullptr) {
+        return {PropertyReadStatus::unknown_property, std::nullopt};
+    }
+    if (is_typed_collection_property(*descriptor)) {
+        return {PropertyReadStatus::unsupported_surface, std::nullopt};
+    }
+    if (descriptor->api_access == metamodel::ApiAccess::write_only) {
+        return {PropertyReadStatus::write_only, std::nullopt};
+    }
+    if (const PropertyEntry* entry = properties->find(property)) {
+        return {PropertyReadStatus::explicit_value, entry->value};
+    }
+    if (descriptor->default_value.kind == metamodel::DefaultKind::none) {
+        return {PropertyReadStatus::no_default, std::nullopt};
+    }
+    const auto value = materialize_default(*descriptor);
+    if (!value || !property_value_matches(*descriptor, *value)) {
+        return {PropertyReadStatus::unknown_default, std::nullopt};
+    }
+    return {PropertyReadStatus::proven_default, value};
+}
+
+PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
+    ObjectKey owner,
+    PropertyId property,
+    PropertyValue value) {
+    const metamodel::PropertyDescriptor* descriptor = nullptr;
+    PropertySet* properties = nullptr;
+    if (owner.category == ObjectCategory::form) {
+        if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        descriptor = metamodel::find_form_property(property);
+        properties = &form_.properties;
+    } else if (owner.category == ObjectCategory::control) {
+        const auto location = find_location(ObjectCategory::control, owner.id);
+        if (!location) return PropertyMutationStatus::unknown_owner;
+        auto& control = collections_.controls[location->index];
+        descriptor = metamodel::find_property(control.kind(), property);
+        if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (is_typed_collection_property(*descriptor) ||
+            descriptor->surface == metamodel::PropertySurface::panel_placement) {
+            return PropertyMutationStatus::unsupported_surface;
+        }
+        if (descriptor->surface == metamodel::PropertySurface::control_payload) {
+            properties = &control.properties();
+        } else if (descriptor->surface == metamodel::PropertySurface::control_extension) {
+            properties = &control.extension_properties;
+        } else {
+            return PropertyMutationStatus::unsupported_surface;
+        }
+    } else {
+        if (!find_location(owner.category, owner.id)) return PropertyMutationStatus::unknown_owner;
+        return PropertyMutationStatus::unsupported_surface;
+    }
+    if (descriptor == nullptr || properties == nullptr) return PropertyMutationStatus::unknown_property;
+    if (is_typed_collection_property(*descriptor)) return PropertyMutationStatus::unsupported_surface;
+    if (descriptor->api_access == metamodel::ApiAccess::read_only) {
+        return PropertyMutationStatus::read_only;
+    }
+    if (descriptor->api_access == metamodel::ApiAccess::unknown) {
+        return PropertyMutationStatus::unknown_access;
+    }
+    if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform ||
+        descriptor->persistence == metamodel::PersistenceClass::version_specific) {
+        return PropertyMutationStatus::unsupported_surface;
+    }
+    if (!property_value_matches(*descriptor, value)) return PropertyMutationStatus::invalid_value;
+    if (const auto* enumeration = std::get_if<EnumerationValue>(&value);
+        enumeration != nullptr && !property_api_enumeration_matches(*descriptor, *enumeration)) {
+        return PropertyMutationStatus::invalid_value;
+    }
+    if (!property_value_references_resolve(*this, value)) {
+        return PropertyMutationStatus::invalid_reference;
+    }
+    if (descriptor->api_name == "ActionSource" &&
+        descriptor->control_kind == ControlKind::command_bar) {
+        if (const auto* target = std::get_if<ControlRef>(&value)) {
+            const ControlNode* source_control = find_control(target->id());
+            if (source_control != nullptr && source_control->kind() != ControlKind::table &&
+                source_control->kind() != ControlKind::html_document_field) {
+                return PropertyMutationStatus::invalid_reference;
+            }
+        }
+    }
+
+    properties->set_explicit(property, std::move(value));
+    if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
+        return PropertyMutationStatus::applied_runtime_only;
+    }
+    if (descriptor->persistence == metamodel::PersistenceClass::unclassified ||
+        descriptor->storage_codec == metamodel::StorageCodec::unclassified ||
+        descriptor->storage_codec == metamodel::StorageCodec::none) {
+        return PropertyMutationStatus::applied_unclassified_storage;
+    }
+    return PropertyMutationStatus::applied;
+}
+
+PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, PropertyId property) {
+    const metamodel::PropertyDescriptor* descriptor = nullptr;
+    PropertySet* properties = nullptr;
+    if (owner.category == ObjectCategory::form) {
+        if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        descriptor = metamodel::find_form_property(property);
+        properties = &form_.properties;
+    } else if (owner.category == ObjectCategory::control) {
+        const auto location = find_location(ObjectCategory::control, owner.id);
+        if (!location) return PropertyMutationStatus::unknown_owner;
+        auto& control = collections_.controls[location->index];
+        descriptor = metamodel::find_property(control.kind(), property);
+        if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (is_typed_collection_property(*descriptor) ||
+            descriptor->surface == metamodel::PropertySurface::panel_placement) {
+            return PropertyMutationStatus::unsupported_surface;
+        }
+        if (descriptor->surface == metamodel::PropertySurface::control_payload) {
+            properties = &control.properties();
+        } else if (descriptor->surface == metamodel::PropertySurface::control_extension) {
+            properties = &control.extension_properties;
+        } else {
+            return PropertyMutationStatus::unsupported_surface;
+        }
+    } else {
+        if (!find_location(owner.category, owner.id)) return PropertyMutationStatus::unknown_owner;
+        return PropertyMutationStatus::unsupported_surface;
+    }
+    if (descriptor == nullptr || properties == nullptr) return PropertyMutationStatus::unknown_property;
+    if (is_typed_collection_property(*descriptor)) return PropertyMutationStatus::unsupported_surface;
+    if (descriptor->api_access == metamodel::ApiAccess::read_only) {
+        return PropertyMutationStatus::read_only;
+    }
+    if (descriptor->api_access == metamodel::ApiAccess::unknown) {
+        return PropertyMutationStatus::unknown_access;
+    }
+    if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform ||
+        descriptor->persistence == metamodel::PersistenceClass::version_specific) {
+        return PropertyMutationStatus::unsupported_surface;
+    }
+
+    properties->unset(property);
+    if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
+        return PropertyMutationStatus::reset_runtime_only;
+    }
+    if (descriptor->persistence == metamodel::PersistenceClass::unclassified ||
+        descriptor->storage_codec == metamodel::StorageCodec::unclassified ||
+        descriptor->storage_codec == metamodel::StorageCodec::none) {
+        return PropertyMutationStatus::reset_unclassified_storage;
+    }
+    return PropertyMutationStatus::reset;
 }
 
 ValidationReport OrdinaryFormDocument::validate() const {
