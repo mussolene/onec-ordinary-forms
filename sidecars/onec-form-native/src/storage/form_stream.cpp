@@ -2880,6 +2880,54 @@ std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, s
 constexpr std::string_view menu_owner_guid = "31946946-0a9b-40a2-95cf-82f200778341";
 constexpr std::string_view menu_action_guid = "e1692cc2-605b-4535-84dd-28440238746c";
 constexpr std::string_view menu_reference_guid = "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6";
+constexpr std::string_view standard_menu_action_guid = "fbe38877-b914-4fd5-8540-07dde06ba2e1";
+
+LV encode_standard_menu_action(const model::StandardMenuAction& action,
+                              const model::OrdinaryFormDocument& document, std::string_view path) {
+    if (action.command != model::metamodel::standard_menu_close.kind)
+        fail("OOF1122", std::string(path), "known standard menu command", "unknown", "Standard command is unsupported");
+    const auto* command_bar = document.find_control(action.command_bar.id());
+    if (!command_bar || command_bar->kind() != model::ControlKind::command_bar)
+        fail("OOF1123", std::string(path), "existing CommandBar context", "missing or wrong control kind", "Standard command context is invalid");
+    std::uint32_t source;
+    switch (action.source) {
+        case model::StandardMenuActionSource::form: source = std::numeric_limits<std::uint32_t>::max(); break;
+        case model::StandardMenuActionSource::all_sources: source = 0; break;
+        default: fail("OOF1122", std::string(path), "Form or AllSources", "unknown", "Standard command source is unsupported");
+    }
+    return list({raw("6"), raw(std::to_string(source)), raw(std::string(null_uuid)), raw(std::to_string(model::metamodel::standard_menu_close.storage_id)),
+        list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)),
+            raw(std::to_string(command_bar->id.value())), raw("0")}), raw("0"), raw("1")});
+}
+
+model::StandardMenuAction decode_standard_menu_action(const LV& value, std::string_view path) {
+    require_arity(value, 7, path);
+    require_raw_constant(value.items[0], "6", child_path(path, 0));
+    const auto source = integer_atom<std::uint32_t>(value.items[1], child_path(path, 1));
+    require_raw_constant(value.items[2], null_uuid, child_path(path, 2));
+    require_raw_constant(value.items[3], std::to_string(model::metamodel::standard_menu_close.storage_id), child_path(path, 3));
+    const auto context_path = child_path(path, 4);
+    const auto& context = value.items[4];
+    require_arity(context, 5, context_path);
+    require_raw_constant(context.items[0], "1", child_path(context_path, 0));
+    require_raw_constant(context.items[1], "99", child_path(context_path, 1));
+    require_raw_constant(context.items[2], command_bar_root_marker, child_path(context_path, 2));
+    const auto context_id = integer_atom<std::uint64_t>(context.items[3], child_path(context_path, 3));
+    if (context_id == 0)
+        fail("OOF1123", child_path(context_path, 3), "nonzero CommandBar collection identity", "zero", "Standard command context is invalid");
+    require_raw_constant(context.items[4], "0", child_path(context_path, 4));
+    require_raw_constant(value.items[5], "0", child_path(path, 5));
+    require_raw_constant(value.items[6], "1", child_path(path, 6));
+    model::StandardMenuAction action;
+    action.command = model::metamodel::standard_menu_close.kind;
+    // Resolved to a named ControlRef after all CommandBar collection identities are known.
+    action.command_bar = model::ControlRef{model::ObjectId{context_id}};
+    if (source == std::numeric_limits<std::uint32_t>::max()) action.source = model::StandardMenuActionSource::form;
+    else if (source == 0) action.source = model::StandardMenuActionSource::all_sources;
+    else fail("OOF1114", child_path(path, 1), "Form or AllSources", std::to_string(source), "Standard command source is unsupported");
+    return action;
+}
+
 
 std::string menu_identity(std::uint64_t owner, std::uint64_t item) {
     std::array<char, 32> digits;
@@ -2946,7 +2994,8 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const auto& entry = *it->entry;
         LV action = entry.type == model::CommandBarButtonKind::action
-            ? encode_menu_action(*entry.action, "$/Button/Buttons/Action")
+            ? entry.standard_action ? encode_standard_menu_action(*entry.standard_action, document, "$/Button/Buttons/StandardAction")
+                : encode_menu_action(*entry.action, "$/Button/Buttons/Action")
             : entry.type == model::CommandBarButtonKind::submenu
                 ? list({raw("1"), raw(owner), raw(std::to_string(it->id))})
                 : parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}");
@@ -2966,7 +3015,8 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
                     "Client interface variant is unsupported");
         }
         std::vector<LV> record{raw("8"), raw(it->action_id), raw("1"),
-            raw(std::string(entry.type == model::CommandBarButtonKind::action ? menu_action_guid : menu_reference_guid)),
+            raw(std::string(entry.type == model::CommandBarButtonKind::action
+                ? (entry.standard_action ? standard_menu_action_guid : menu_action_guid) : menu_reference_guid)),
             std::move(action), raw(std::to_string(mask))};
         if (entry.tooltip) record.push_back(encoded_localized(*entry.tooltip));
         if (entry.explanation) record.push_back(encoded_localized(*entry.explanation));
@@ -3068,10 +3118,12 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         if (!groups.emplace(key, &group).second) fail("OOF1114", std::string(path), "unique owner/ID collection pairs", std::to_string(id), "Duplicate menu collection");
         const auto& footer = group.items.back();
         require_arity(footer, 3, path);
-        const bool empty_command_bar_root = root_group && root_marker == command_bar_root_marker &&
-            integer_atom<std::size_t>(group.items[4], path) == 0;
-        require_raw_constant(footer.items[0],
-            empty_command_bar_root && footer.items[0].atom == "0" ? "0" : "-1", path);
+        const bool command_bar_root = root_group && root_marker == command_bar_root_marker;
+        if (command_bar_root && raw_atom(footer.items[0], path) == "0") {
+            if (integer_atom<std::size_t>(group.items[4], path) != 0)
+                warn_incomplete_profile(warnings, reconstruction_complete, root_group_id,
+                    std::string(path), "CommandBarMenu");
+        } else require_raw_constant(footer.items[0], "-1", path);
         require_raw_constant(footer.items[1], "0", path);
         require_list(footer.items[2], path);
         const auto& refs = footer.items[2];
@@ -3185,11 +3237,15 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto& action_path = action_record.path;
             require_raw_constant(action.items[0], "8", child_path(action_path, 0));
             require_raw_constant(action.items[2], "1", child_path(action_path, 2));
-            require_raw_constant(action.items[3], type == 0 ? menu_action_guid : menu_reference_guid,
-                child_path(action_path, 3));
             if (type == 0) {
-                entry.action = decode_menu_action(action.items[4], child_path(action_path, 4));
+                if (raw_atom(action.items[3], child_path(action_path, 3)) == standard_menu_action_guid)
+                    entry.standard_action = decode_standard_menu_action(action.items[4], child_path(action_path, 4));
+                else {
+                    require_raw_constant(action.items[3], menu_action_guid, child_path(action_path, 3));
+                    entry.action = decode_menu_action(action.items[4], child_path(action_path, 4));
+                }
             } else {
+                require_raw_constant(action.items[3], menu_reference_guid, child_path(action_path, 3));
                 require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
                     parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"),
                     child_path(action_path, 4), "Menu action target is unsupported");
@@ -8575,6 +8631,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& track_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
         const auto& list_box_descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
         const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
+        std::unordered_map<std::uint64_t, std::vector<model::ObjectId>> command_bar_contexts;
         using DecodeChildTable = std::function<void(
             const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&, std::string_view)>;
         DecodeChildTable decode_child_table;
@@ -8784,6 +8841,12 @@ Result<model::OrdinaryFormDocument> decode_document(
                     if (!owner_child_ids.insert(child_id).second) fail("OOF1122", std::string(path), "unique immediate child Control IDs",
                         std::to_string(child_id), "Owner child table contains a duplicate Control ID");
                     child_record_paths.emplace(child_id, record_path);
+                    if (guid == command_bar_descriptor.guid) {
+                        const auto& properties = record.items[2].items[1];
+                        const auto collection_id = integer_atom<std::uint64_t>(properties.items[9],
+                            child_path(child_path(child_path(record_path, 2), 1), 9));
+                        command_bar_contexts[collection_id].push_back(model::ObjectId{child_id});
+                    }
                     actual_max_id = std::max(actual_max_id, child_id);
                     pages[page_index].children.push_back(model::ControlRef{child.control.id});
                     decoded[page_index].push_back(std::move(child));
@@ -8940,6 +9003,22 @@ Result<model::OrdinaryFormDocument> decode_document(
                 if (auto* button = std::get_if<model::ButtonPayload>(&decoded_control.control.payload)) update(button->buttons);
                 else if (auto* command_bar = std::get_if<model::CommandBarPayload>(&decoded_control.control.payload)) update(command_bar->buttons);
             }
+            const auto resolve_standard_contexts = [&](const auto& self, auto& entries) -> void {
+                for (auto& entry : entries) {
+                    if (entry.standard_action) {
+                        const auto found = command_bar_contexts.find(entry.standard_action->command_bar.id().value());
+                        if (found == command_bar_contexts.end() || found->second.size() != 1)
+                            fail("OOF1123", "$/Buttons/StandardAction", "unique CommandBar collection context",
+                                "missing or ambiguous", "Standard command context cannot be resolved");
+                        entry.standard_action->command_bar = model::ControlRef{found->second.front()};
+                    }
+                    self(self, entry.buttons);
+                }
+            };
+            if (auto* button = std::get_if<model::ButtonPayload>(&decoded_control.control.payload))
+                resolve_standard_contexts(resolve_standard_contexts, button->buttons);
+            else if (auto* bar = std::get_if<model::CommandBarPayload>(&decoded_control.control.payload))
+                resolve_standard_contexts(resolve_standard_contexts, bar->buttons);
             document.add_control(std::move(decoded_control.control));
         }
         for (auto& asset : decoded_picture_assets) document.add_asset(std::move(asset));

@@ -793,11 +793,14 @@ std::string generate_ordinary_form_xsd(const Metamodel& metamodel) {
   <xs:complexType name="CommandBarActionType"><xs:sequence>
     <xs:element name="Text" type="LocalizedStringValueType"/><xs:element name="ToolTip" type="LocalizedStringValueType"/><xs:element name="Description" type="LocalizedStringValueType"/>
   </xs:sequence><xs:attribute name="handler" type="CommandBarActionHandlerType" use="required"/><xs:attribute name="name" type="xs:string" use="required"/></xs:complexType>
+  <xs:simpleType name="StandardMenuCommandType"><xs:restriction base="xs:string"><xs:enumeration value="Close"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="StandardMenuActionSourceType"><xs:restriction base="xs:string"><xs:enumeration value="Form"/><xs:enumeration value="AllSources"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="StandardMenuActionType"><xs:attribute name="command" type="StandardMenuCommandType" use="required"/><xs:attribute name="commandBarId" type="ObjectIdType" use="required"/><xs:attribute name="source" type="StandardMenuActionSourceType" use="required"/></xs:complexType>
   <xs:complexType name="CommandBarButtonType"><xs:sequence>
     <xs:element name="Text" type="xs:string" minOccurs="0"/><xs:element name="Explanation" type="xs:string" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0"/>
     <xs:element name="Enabled" type="xs:boolean" minOccurs="0"/><xs:element name="Checked" type="xs:boolean" minOccurs="0"/><xs:element name="ChangesData" type="xs:boolean" minOccurs="0"/>
     <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0"/>
-    <xs:element name="Representation" type="ButtonRepresentationType" minOccurs="0"/><xs:element name="ClientInterfaceVariant" type="ClientInterfaceVariantType" minOccurs="0"/><xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0"/><xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/><xs:element name="Action" type="CommandBarActionType" minOccurs="0"/><xs:element name="Order" type="CommandBarButtonOrderType" minOccurs="0"/><xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0"/>
+    <xs:element name="Representation" type="ButtonRepresentationType" minOccurs="0"/><xs:element name="ClientInterfaceVariant" type="ClientInterfaceVariantType" minOccurs="0"/><xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0"/><xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/><xs:choice minOccurs="0"><xs:element name="Action" type="CommandBarActionType"/><xs:element name="StandardAction" type="StandardMenuActionType"/></xs:choice><xs:element name="Order" type="CommandBarButtonOrderType" minOccurs="0"/><xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0"/>
   </xs:sequence><xs:attribute name="name" type="xs:string" use="required"/><xs:attribute name="type" type="CommandBarButtonKindType" use="required"/></xs:complexType>
   <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
 
@@ -1112,7 +1115,10 @@ std::string generate_palette_xsd(const Metamodel& metamodel) {
         "          <Property name=\"Text\" russianName=\"Текст\"/><Property name=\"Explanation\" russianName=\"Пояснение\"/><Property name=\"ToolTip\" russianName=\"Подсказка\"/>\n"
         "          <Property name=\"Enabled\" russianName=\"Доступность\"/><Property name=\"Checked\" russianName=\"Пометка\"/><Property name=\"ChangesData\" russianName=\"ИзменяетДанные\"/>\n"
         "          <Property name=\"DefaultButton\" russianName=\"КнопкаПоУмолчанию\"/>\n"
-        "          <Property name=\"Representation\" russianName=\"Отображение\"/><Property name=\"ClientInterfaceVariant\" russianName=\"ВариантИнтерфейсаКлиентскогоПриложения\" source=\"IClientInterfaceForCommand\"/><Property name=\"Shortcut\" russianName=\"СочетаниеКлавиш\"/><Property name=\"Picture\" russianName=\"Картинка\"/><Property name=\"Action\" russianName=\"Действие\"/><Property name=\"Order\" russianName=\"ПорядокКнопок\"/><Property name=\"Buttons\" russianName=\"Кнопки\"/>\n"
+        "          <Property name=\"Representation\" russianName=\"Отображение\"/><Property name=\"ClientInterfaceVariant\" russianName=\"ВариантИнтерфейсаКлиентскогоПриложения\" source=\"IClientInterfaceForCommand\"/><Property name=\"Shortcut\" russianName=\"СочетаниеКлавиш\"/><Property name=\"Picture\" russianName=\"Картинка\"/><Property name=\"Action\" russianName=\"Действие\"/><Property name=\"StandardAction\" russianName=\"СтандартноеДействие\"/><Property name=\"Order\" russianName=\"ПорядокКнопок\"/><Property name=\"Buttons\" russianName=\"Кнопки\"/>\n"
+        "        </Properties></NamedConcept>\n"
+        "        <NamedConcept name=\"StandardAction\" russianName=\"СтандартноеДействие\"><Properties>\n"
+        "          <Property name=\"command\" russianName=\"Команда\"/><Property name=\"commandBarId\" russianName=\"КоманднаяПанель\"/><Property name=\"source\" russianName=\"Источник\"/>\n"
         "        </Properties></NamedConcept>\n"
         "        <NamedConcept name=\"Action\" russianName=\"Действие\"><Properties>\n"
         "          <Property name=\"handler\" russianName=\"Обработчик\"/><Property name=\"Name\" russianName=\"Имя\"/><Property name=\"Text\" russianName=\"Текст\"/><Property name=\"ToolTip\" russianName=\"Подсказка\"/><Property name=\"Description\" russianName=\"Пояснение\"/>\n"

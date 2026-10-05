@@ -2837,8 +2837,21 @@ void test_command_bar_owner_pair_and_strict_profile() {
     auto nonempty_zero_footer = one_entry_owner_four.value();
     nonempty_zero_footer.items[1].items[2].items[2].items[1].items[2].items[1].items[7].items.back().items.back().items[0] =
         list_stream::ListValue::raw_atom("0");
-    expect(!form_stream::decode_document(nonempty_zero_footer, "NonemptyCommandBarZeroFooter"),
-        "zero footer must remain unsupported for a nonempty collection");
+    const auto nonempty_decoded = form_stream::decode_document(nonempty_zero_footer, "NonemptyCommandBarZeroFooter");
+    const auto* nonempty_bar = nonempty_decoded ? nonempty_decoded.value().find_control(model::ObjectId{4}) : nullptr;
+    const auto* nonempty_payload = nonempty_bar ? std::get_if<model::CommandBarPayload>(&nonempty_bar->payload) : nullptr;
+    expect(nonempty_decoded.ok() && !nonempty_decoded.value().reconstruction_complete() &&
+               nonempty_payload && nonempty_payload->buttons.size() == 1 &&
+               nonempty_payload->buttons.front().action &&
+               nonempty_payload->buttons.front().action->handler == "OnlyHandler" &&
+               std::any_of(nonempty_decoded.diagnostics().begin(), nonempty_decoded.diagnostics().end(),
+                   [](const auto& diagnostic) { return diagnostic.code == "OOF1140"; }),
+        "observed nonempty zero footer must warn while retaining the named action");
+    auto invalid_footer = nonempty_zero_footer;
+    invalid_footer.items[1].items[2].items[2].items[1].items[2].items[1].items[7].items.back().items.back().items[0] =
+        list_stream::ListValue::raw_atom("7");
+    expect(!form_stream::decode_document(invalid_footer, "InvalidCommandBarFooter"),
+        "unsupported footer marker must still reject");
 }
 
 void test_command_bar_five_named_properties_and_invalid_variants() {
@@ -2952,6 +2965,143 @@ void test_command_bar_named_action_source_references() {
     metadata.items[2] = list_stream::ListValue::raw_atom("0");
     metadata.items[3] = list_stream::ListValue::raw_atom("1");
     expect(!form_stream::decode_document(tree, "ActionSources"), "neighbor metadata fields remain strict");
+}
+
+void test_command_bar_standard_menu_action_round_trip_and_guards() {
+    const auto make_document = [](model::StandardMenuActionSource source,
+                                  model::ObjectId command_bar_id = model::ObjectId{4}) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "StandardMenuAction";
+        form.children = {model::ControlRef{model::ObjectId{2}}, model::ControlRef{model::ObjectId{4}},
+            model::ControlRef{model::ObjectId{5}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        document.add_control(model::ControlNode{model::ObjectId{2}, "Other", model::ButtonPayload{}});
+        document.add_control(model::ControlNode{model::ObjectId{4}, "Main", model::CommandBarPayload{}});
+        model::ControlNode secondary{model::ObjectId{5}, "Secondary", model::CommandBarPayload{}};
+        model::CommandBarButton close;
+        close.name = "Close";
+        close.standard_action = model::StandardMenuAction{
+            model::StandardMenuCommand::close, model::ControlRef{command_bar_id}, source};
+        std::get<model::CommandBarPayload>(secondary.payload).buttons = {close};
+        document.add_control(std::move(secondary));
+        return document;
+    };
+    const auto find_control_record = [](const list_stream::ListValue& tree, std::uint64_t id)
+        -> const list_stream::ListValue* {
+        const auto& records = tree.items.at(1).items.at(2).items.at(2).items;
+        const auto record = std::ranges::find(records, std::to_string(id), [](const auto& candidate) {
+            return candidate.is_list && candidate.items.size() > 1 && !candidate.items[1].is_list
+                ? candidate.items[1].atom : std::string{};
+        });
+        return record == records.end() ? nullptr : &*record;
+    };
+    for (const auto menu_source : {model::StandardMenuActionSource::form,
+                                   model::StandardMenuActionSource::all_sources}) {
+        const auto document = make_document(menu_source);
+        const auto encoded = form_stream::encode_document(document);
+        expect(encoded.ok(), encoded ? "named StandardAction must encode without a synthetic handler" :
+            encoded.diagnostics().front().message);
+        const auto* secondary_record = find_control_record(encoded.value(), 5);
+        expect(secondary_record != nullptr, "encoded stream must contain the secondary CommandBar");
+        const auto& properties = secondary_record->items.at(2).items.at(1);
+        const auto& menu = properties.items.at(7);
+        const auto count = static_cast<std::size_t>(std::stoul(menu.items.at(4).atom));
+        expect(count == 1 && menu.items.size() > 5, "secondary CommandBar must store one menu action");
+        const auto& action_record = menu.items.at(5);
+        expect(action_record.items.at(3).atom == "fbe38877-b914-4fd5-8540-07dde06ba2e1",
+            "standard Close must use the observed named-action subtype");
+        const auto& standard_payload = action_record.items.at(4);
+        const auto expected_source_id = menu_source == model::StandardMenuActionSource::form ? "4294967295" : "0";
+        expect(standard_payload.items.at(0).atom == "6" && standard_payload.items.at(1).atom == expected_source_id &&
+                   standard_payload.items.at(4).items.at(1).atom == "99" &&
+                   standard_payload.items.at(4).items.at(2).atom == "b78f2e80-ec68-11d4-9dcf-0050bae2bc79" &&
+                   standard_payload.items.at(4).items.at(3).atom == "4",
+            "standard Close wire data must preserve its known subtype, context, and CommandBar reference");
+
+        const auto decoded = form_stream::decode_document(encoded.value(), "StandardMenuAction");
+        const auto* decoded_bar = decoded ? decoded.value().find_control(model::ObjectId{5}) : nullptr;
+        const auto* decoded_payload = decoded_bar ? std::get_if<model::CommandBarPayload>(&decoded_bar->payload) : nullptr;
+        expect(decoded.ok() && decoded_payload && decoded_payload->buttons.size() == 1 &&
+                   decoded_payload->buttons.front().name == "Close" &&
+                   decoded_payload->buttons.front().standard_action == model::StandardMenuAction{
+                       model::StandardMenuCommand::close, model::ControlRef{model::ObjectId{4}}, menu_source} &&
+                   !decoded_payload->buttons.front().action && decoded.value().collections().events.empty(),
+            "standard action must retain its named command and CommandBar reference without a handler");
+        const auto rebuilt = form_stream::encode_document(decoded.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) == list_stream::dump_compact(encoded.value()),
+            "standard menu action must round-trip through Form.bin without drift");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value().find("<StandardAction command=\"Close\" commandBarId=\"4\"") !=
+                   std::string::npos && xml.value().find("handler=\"") == std::string::npos,
+            "StandardAction XML must expose named command/reference fields without a synthetic handler");
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "StandardAction XML must parse after serialization");
+        const auto xml_rebuilt = form_stream::encode_document(parsed.value());
+        expect(xml_rebuilt.ok() && list_stream::dump_compact(xml_rebuilt.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "StandardAction XML must rebuild its original Form.bin action");
+
+        auto remapped_root = encoded.value();
+        auto* main_record = const_cast<list_stream::ListValue*>(find_control_record(remapped_root, 4));
+        auto* remapped_secondary = const_cast<list_stream::ListValue*>(find_control_record(remapped_root, 5));
+        expect(main_record && remapped_secondary, "root remapping fixture must contain both CommandBars");
+        auto& main_properties = main_record->items.at(2).items.at(1);
+        main_properties.items.at(9) = list_stream::ListValue::raw_atom("77");
+        const auto root_entry_count = static_cast<std::size_t>(std::stoul(main_properties.items.at(7).items.at(4).atom));
+        main_properties.items.at(7).items.at(6 + root_entry_count).items.at(2) =
+            list_stream::ListValue::raw_atom("77");
+        auto& secondary_menu = remapped_secondary->items.at(2).items.at(1).items.at(7);
+        auto& remapped_action = secondary_menu.items.at(5).items.at(4);
+        remapped_action.items.at(4).items.at(3) = list_stream::ListValue::raw_atom("77");
+        const auto remapped_decoded = form_stream::decode_document(remapped_root, "StandardMenuActionRemapped");
+        const auto* remapped_bar = remapped_decoded ? remapped_decoded.value().find_control(model::ObjectId{5}) : nullptr;
+        const auto* remapped_payload = remapped_bar ? std::get_if<model::CommandBarPayload>(&remapped_bar->payload) : nullptr;
+        expect(remapped_decoded.ok() && remapped_payload && remapped_payload->buttons.size() == 1 &&
+                   remapped_payload->buttons.front().standard_action &&
+                   remapped_payload->buttons.front().standard_action->command_bar == model::ControlRef{model::ObjectId{4}},
+            "StandardAction must resolve a remapped root collection identity back to CommandBar ID 4");
+
+        const auto rejects_wire_mutation = [&](const std::function<void(list_stream::ListValue&)>& mutate,
+                                               std::string_view label) {
+            auto invalid = encoded.value();
+            auto* invalid_secondary = const_cast<list_stream::ListValue*>(find_control_record(invalid, 5));
+            auto& invalid_action = invalid_secondary->items.at(2).items.at(1).items.at(7).items.at(5).items.at(4);
+            mutate(invalid_action);
+            expect(!form_stream::decode_document(invalid, "InvalidStandardMenuAction"), label);
+        };
+        rejects_wire_mutation([](auto& payload) { payload.items.at(0) = list_stream::ListValue::raw_atom("5"); },
+            "unsupported StandardAction version must reject");
+        rejects_wire_mutation([](auto& payload) { payload.items.pop_back(); },
+            "malformed StandardAction arity must reject");
+        rejects_wire_mutation([](auto& payload) {
+            payload.items.at(4).items.at(2) = list_stream::ListValue::raw_atom("00000000-0000-0000-0000-000000000000");
+        }, "unknown StandardAction context GUID must reject");
+        rejects_wire_mutation([](auto& payload) {
+            payload.items.at(1) = list_stream::ListValue::raw_atom("9");
+        }, "unknown StandardAction source value must reject");
+        rejects_wire_mutation([](auto& payload) {
+            payload.items.at(1) = list_stream::ListValue::raw_atom("7");
+        }, "unsupported StandardAction source control must reject");
+    }
+
+    expect(!form_stream::encode_document(make_document(model::StandardMenuActionSource::form,
+        model::ObjectId{999})),
+        "dangling StandardAction command bar must be rejected");
+    auto wrong_type = make_document(model::StandardMenuActionSource::form);
+    auto wrong_secondary = *wrong_type.find_control(model::ObjectId{5});
+    std::get<model::CommandBarPayload>(wrong_secondary.payload).buttons.front().standard_action->command_bar =
+        model::ControlRef{model::ObjectId{2}};
+    wrong_type.add_control(std::move(wrong_secondary));
+    expect(!form_stream::encode_document(wrong_type),
+        "StandardAction CommandBar reference to a Button must be rejected");
+    auto conflicting = make_document(model::StandardMenuActionSource::form);
+    auto conflicting_secondary = *conflicting.find_control(model::ObjectId{5});
+    auto& conflicting_entry = std::get<model::CommandBarPayload>(conflicting_secondary.payload).buttons.front();
+    conflicting_entry.action = model::CommandBarAction{"SyntheticHandler", "", {}, {}, {}};
+    conflicting.add_control(std::move(conflicting_secondary));
+    expect(!form_stream::encode_document(conflicting),
+        "one menu item cannot carry both a handler Action and a StandardAction");
 }
 
 void test_command_bar_creation_state_and_strict_record_guards() {
@@ -10569,6 +10719,7 @@ int main() {
         test_command_bar_owner_pair_and_strict_profile();
         test_command_bar_five_named_properties_and_invalid_variants();
         test_command_bar_named_action_source_references();
+        test_command_bar_standard_menu_action_round_trip_and_guards();
         test_command_bar_creation_state_and_strict_record_guards();
         test_command_bar_border_named_round_trip_and_guards();
         test_command_bar_colors_named_round_trip_and_guards();

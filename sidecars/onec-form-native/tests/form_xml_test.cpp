@@ -1919,6 +1919,64 @@ void test_command_bar_buttons_xml_only_contract() {
         "CommandBar typed Buttons and Actions must survive XML-only round-trip");
 }
 
+void test_standard_menu_action_xml_contract() {
+    const auto make_xml = [](std::string_view source_name) {
+        return std::string("<Form id=\"1\" name=\"StandardAction\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
+            "<Button id=\"2\" name=\"Other\"><Position/></Button>" +
+            "<CommandBar id=\"4\" name=\"Main\"><Position/><Buttons/></CommandBar>" +
+            "<CommandBar id=\"5\" name=\"Secondary\"><Position/><Buttons>" +
+            "<CommandBarButton name=\"Close\" type=\"Action\"><StandardAction command=\"Close\" commandBarId=\"4\" source=\"" +
+            std::string(source_name) + "\"/></CommandBarButton></Buttons></CommandBar>" +
+            "</ChildItems></Form>";
+    };
+    for (const auto [source_name, source_value] : {
+             std::pair{"Form", model::StandardMenuActionSource::form},
+             std::pair{"AllSources", model::StandardMenuActionSource::all_sources}}) {
+        const auto xml = make_xml(source_name);
+        const auto parsed = source::parse_form_xml(xml);
+        expect(parsed.ok(), parsed ? "StandardAction XML must parse" : parsed.diagnostics().front().message);
+        const auto* secondary = parsed.value().find_control(model::ObjectId{5});
+        const auto* payload = secondary ? std::get_if<model::CommandBarPayload>(&secondary->payload) : nullptr;
+        expect(payload && payload->buttons.size() == 1 && payload->buttons.front().name == "Close" &&
+                   payload->buttons.front().standard_action == model::StandardMenuAction{
+                       model::StandardMenuCommand::close, model::ControlRef{model::ObjectId{4}}, source_value} &&
+                   !payload->buttons.front().action,
+            "StandardAction XML must produce a named command and CommandBar reference without a handler");
+        const auto serialized = source::serialize_form_xml(parsed.value());
+        expect(serialized.ok() && serialized.value().find(
+                   std::string("<StandardAction command=\"Close\" commandBarId=\"4\" source=\"") +
+                       source_name + "\"/>") != std::string::npos &&
+                   serialized.value().find("handler=\"") == std::string::npos,
+            "StandardAction serialization must retain its named source and avoid a synthetic handler");
+        const auto reparsed = source::parse_form_xml(serialized.value());
+        const auto* reparsed_bar = reparsed ? reparsed.value().find_control(model::ObjectId{5}) : nullptr;
+        const auto* reparsed_payload = reparsed_bar ? std::get_if<model::CommandBarPayload>(&reparsed_bar->payload) : nullptr;
+        expect(reparsed.ok() && reparsed_payload && reparsed_payload->buttons == payload->buttons,
+            "StandardAction XML must round-trip as the same named menu item");
+    }
+
+    const auto valid_xml = make_xml("Form");
+    const auto replace_once = [](std::string text, std::string_view from, std::string_view to) {
+        const auto position = text.find(from);
+        if (position == std::string::npos) throw std::runtime_error("StandardAction XML marker is missing");
+        text.replace(position, from.size(), to);
+        return text;
+    };
+    expect(!source::parse_form_xml(replace_once(valid_xml, "command=\"Close\"", "command=\"Unknown\"")),
+        "unknown named StandardAction command must be rejected");
+    expect(!source::parse_form_xml(replace_once(valid_xml, "source=\"Form\"", "source=\"Other\"")),
+        "unknown named StandardAction source must be rejected");
+    expect(!source::parse_form_xml(replace_once(valid_xml, "commandBarId=\"4\"", "commandBarId=\"999\"")),
+        "dangling StandardAction CommandBar reference must be rejected");
+    expect(!source::parse_form_xml(replace_once(valid_xml, "commandBarId=\"4\"", "commandBarId=\"2\"")),
+        "StandardAction reference to a non-CommandBar control must be rejected");
+    expect(!source::parse_form_xml(replace_once(valid_xml,
+        "<StandardAction command=\"Close\" commandBarId=\"4\" source=\"Form\"/>",
+        "<Action handler=\"FakeHandler\" name=\"\"><Text/><ToolTip/><Description/></Action>"
+        "<StandardAction command=\"Close\" commandBarId=\"4\" source=\"Form\"/>")),
+        "an item cannot combine handler Action and StandardAction");
+}
+
 void test_command_bar_action_source_xml_contract() {
     constexpr std::string_view xml = R"XML(<Form id="1" name="ActionSource" ordinaryFormVersion="2.1">
   <Attributes><Attribute id="10" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
@@ -2110,6 +2168,7 @@ int main() {
         test_label_enabled_tooltip_xml_roundtrip();
         test_progress_bar_xml_only_contract();
         test_command_bar_buttons_xml_only_contract();
+        test_standard_menu_action_xml_contract();
         test_command_bar_action_source_xml_contract();
         test_command_bar_default_button_xml_contract();
         test_command_bar_border_xml_contract();

@@ -186,6 +186,17 @@ inline constexpr FormExtensionDescriptor data_processor_form_extension{
     u8"Расширение формы обработки",
 };
 
+struct StandardMenuCommandDescriptor {
+    StandardMenuCommand kind;
+    std::string_view public_name;
+    std::u8string_view russian_name;
+    std::uint32_t storage_id;
+};
+
+inline constexpr StandardMenuCommandDescriptor standard_menu_close{
+    StandardMenuCommand::close, "Close", u8"Закрыть", 142,
+};
+
 struct PropertyDescriptor {
     PropertyId id{};
     DescriptorOwner owner = DescriptorOwner::control;

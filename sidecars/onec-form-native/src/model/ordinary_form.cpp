@@ -873,13 +873,21 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     if (item.type != CommandBarButtonKind::action && item.type != CommandBarButtonKind::submenu && item.type != CommandBarButtonKind::separator) invalid("unknown menu item type");
                     if (item.representation != ButtonRepresentation::automatic && item.representation != ButtonRepresentation::picture && item.representation != ButtonRepresentation::text && item.representation != ButtonRepresentation::picture_text) invalid("unknown menu representation");
                     if (item.name.empty() || !names.insert(item.name).second) invalid("button menu item names must be non-empty and unique within each collection");
-                    if (item.type == CommandBarButtonKind::action && (!item.action || item.action->handler.empty())) invalid("Action menu item requires a handler");
-                    if (item.type != CommandBarButtonKind::action && item.action) invalid("only Action menu items may have an Action value");
+                    if (item.type == CommandBarButtonKind::action && (item.action.has_value() == item.standard_action.has_value())) invalid("Action menu item requires exactly one Action or StandardAction value");
+                    if (item.action && item.action->handler.empty()) invalid("Action menu item requires a handler");
+                    if (item.type != CommandBarButtonKind::action && (item.action || item.standard_action)) invalid("only Action menu items may have an Action or StandardAction value");
+                    if (item.standard_action) {
+                        const auto& standard = *item.standard_action;
+                        if (standard.command != StandardMenuCommand::close) invalid("unknown StandardAction command");
+                        if (standard.source != StandardMenuActionSource::form && standard.source != StandardMenuActionSource::all_sources) invalid("unknown StandardAction source");
+                        const ControlNode* command_bar = find_control(standard.command_bar.id());
+                        if (command_bar == nullptr || command_bar->kind() != ControlKind::command_bar) invalid("StandardAction commandBarId must resolve to a CommandBar control");
+                    }
                     if (item.order != CommandBarButtonOrder::none && item.order != CommandBarButtonOrder::ascending && item.order != CommandBarButtonOrder::descending) invalid("unknown menu order");
                     if (item.type != CommandBarButtonKind::submenu && item.order != CommandBarButtonOrder::none) invalid("only Submenu menu items may have an order");
                     if (item.type != CommandBarButtonKind::submenu && !item.buttons.empty()) invalid("only Submenu items may contain buttons");
                     if (item.type == CommandBarButtonKind::separator &&
-                        (item.text || item.explanation || item.tooltip || !item.enabled || item.checked || item.changes_data || item.representation != ButtonRepresentation::automatic || item.shortcut != ShortcutValue{} || item.picture || item.action)) invalid("Separator cannot have properties");
+                        (item.text || item.explanation || item.tooltip || !item.enabled || item.checked || item.changes_data || item.representation != ButtonRepresentation::automatic || item.shortcut != ShortcutValue{} || item.picture || item.action || item.standard_action)) invalid("Separator cannot have properties");
                     if (metamodel::find_shortcut_key(item.shortcut.key) == nullptr) invalid("button menu Shortcut has unsupported key");
                     if (item.picture) require_picture(control.id, *item.picture);
                     self(self, item.buttons, depth + 1);

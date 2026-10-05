@@ -2117,6 +2117,26 @@ private:
                 }
                 item.action = std::move(action);
             }
+            else if (name == "StandardAction") {
+                for (xmlAttrPtr attr = child->properties; attr != nullptr; attr = attr->next) {
+                    const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                    if (attr_name != "command" && attr_name != "commandBarId" && attr_name != "source") {
+                        fail("OOF2003", child, std::string(owner), std::string(attr_name),
+                            "command, commandBarId, and source attributes", std::string(attr_name), "Unsupported StandardAction attribute");
+                    }
+                }
+                model::StandardMenuAction action;
+                const auto command = required_attribute(child, "command", owner);
+                if (command != mm::standard_menu_close.public_name)
+                    fail("OOF2003", child, std::string(owner), "command", "Close", command, "Unknown standard menu command");
+                action.command = mm::standard_menu_close.kind;
+                action.command_bar = model::ControlRef{parse_object_id(required_attribute(child, "commandBarId", owner), child, "commandBarId", owner)};
+                const auto source = required_attribute(child, "source", owner);
+                if (source == "Form") action.source = model::StandardMenuActionSource::form;
+                else if (source == "AllSources") action.source = model::StandardMenuActionSource::all_sources;
+                else fail("OOF2003", child, std::string(owner), "source", "Form or AllSources", source, "Unknown standard menu action source");
+                item.standard_action = std::move(action);
+            }
             else if (name == "Order") {
                 has_order = true;
                 const auto order = node_text(child);
@@ -2128,10 +2148,12 @@ private:
             else if (name == "Buttons") item.buttons = parse_command_bar_buttons(child, owner);
             else fail("OOF2003", child, std::string(owner), name, "declared button menu field", name, "Unknown button menu field");
         }
-        if (item.type == model::CommandBarButtonKind::action && (!item.action || item.action->handler.empty()))
-            fail("OOF2003", node, std::string(owner), "Action", "non-empty action handler", "missing", "Action item requires a handler");
-        if (item.type != model::CommandBarButtonKind::action && item.action)
-            fail("OOF2003", node, std::string(owner), "Action", "Action item only", "present", "Only Action items may declare an Action value");
+        if (item.type == model::CommandBarButtonKind::action && (item.action.has_value() == item.standard_action.has_value()))
+            fail("OOF2003", node, std::string(owner), "Action", "exactly one Action or StandardAction", "missing or duplicated", "Action item requires exactly one action value");
+        if (item.action && item.action->handler.empty())
+            fail("OOF2003", node, std::string(owner), "Action", "non-empty action handler", "empty", "Action requires a handler");
+        if (item.type != model::CommandBarButtonKind::action && (item.action || item.standard_action))
+            fail("OOF2003", node, std::string(owner), "Action", "Action item only", "present", "Only Action items may declare an action value");
         if (item.type != model::CommandBarButtonKind::submenu && has_order)
             fail("OOF2003", node, std::string(owner), "Order", "Submenu only", "present", "Only Submenu items may declare an order");
         if (item.type != model::CommandBarButtonKind::submenu && !item.buttons.empty())
@@ -3142,6 +3164,15 @@ private:
                 write_localized("ToolTip", item.action->tooltip, owner);
                 write_localized("Description", item.action->description, owner);
                 writer_.close("Action");
+            }
+            if (item.standard_action) {
+                const auto& action = *item.standard_action;
+                const char* command = action.command == mm::standard_menu_close.kind ? mm::standard_menu_close.public_name.data() : nullptr;
+                const char* source = action.source == model::StandardMenuActionSource::form ? "Form" :
+                    action.source == model::StandardMenuActionSource::all_sources ? "AllSources" : nullptr;
+                if (command == nullptr || source == nullptr)
+                    throw std::invalid_argument("Unknown StandardAction command or source");
+                writer_.empty("StandardAction", {{"command", command}, {"commandBarId", object_id_text(action.command_bar.id())}, {"source", source}});
             }
             if (item.type == model::CommandBarButtonKind::submenu && item.order != model::CommandBarButtonOrder::none) {
                 writer_.text("Order", item.order == model::CommandBarButtonOrder::ascending ? "Ascending" : "Descending");
