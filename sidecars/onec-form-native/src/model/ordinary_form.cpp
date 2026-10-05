@@ -134,6 +134,131 @@ bool property_value_matches(
         value);
 }
 
+bool property_api_enumeration_matches(
+    const metamodel::PropertyDescriptor& descriptor,
+    const EnumerationValue& value
+) noexcept {
+    if (descriptor.value_codec != metamodel::ValueCodec::enumeration) return false;
+    if (descriptor.control_kind == ControlKind::command_bar &&
+        (descriptor.api_name == "ButtonsAlignment" || descriptor.api_name == "Orientation")) {
+        return property_value_matches(descriptor, PropertyValue{value});
+    }
+    if (descriptor.api_name == "HorizontalAlign") {
+        return value.type_name == "HorizontalAlign" &&
+            (value.member == "Left" || value.member == "Center" || value.member == "Right" ||
+             value.member == "Justify" || value.member == "Auto");
+    }
+    if (descriptor.api_name == "VerticalAlign") {
+        return value.type_name == "VerticalAlign" &&
+            (value.member == "Top" || value.member == "Center" || value.member == "Bottom");
+    }
+    if (descriptor.control_kind == ControlKind::dendrogram &&
+        descriptor.api_name == "Orientation") {
+        return value.type_name == "DendrogramOrientation" &&
+            (value.member == "Up" || value.member == "Down");
+    }
+    return false;
+}
+
+bool property_value_references_resolve(
+    const OrdinaryFormDocument& document,
+    const PropertyValue& value) noexcept {
+    return std::visit(
+        [&document](const auto& typed_value) {
+            using Value = std::remove_cvref_t<decltype(typed_value)>;
+            if constexpr (std::is_same_v<Value, ControlRef>) {
+                return document.find_control(typed_value.id()) != nullptr;
+            } else if constexpr (std::is_same_v<Value, FormRef>) {
+                return typed_value.id() == document.form().id;
+            } else if constexpr (std::is_same_v<Value, AttributeRef>) {
+                return document.find_attribute(typed_value.id()) != nullptr;
+            } else if constexpr (std::is_same_v<Value, CommandRef>) {
+                return document.find_command(typed_value.id()) != nullptr;
+            } else if constexpr (std::is_same_v<Value, PictureRef>) {
+                if (typed_value.standard_name) {
+                    return !typed_value.asset.id() &&
+                        metamodel::find_standard_picture(typed_value.standard_name->value) != nullptr;
+                }
+                return static_cast<bool>(typed_value.asset.id()) &&
+                    document.find_asset(typed_value.asset.id()) != nullptr;
+            }
+            return true;
+        },
+        value);
+}
+
+bool is_typed_collection_property(const metamodel::PropertyDescriptor& descriptor) noexcept {
+    using metamodel::ValueCodec;
+    return descriptor.value_kind == metamodel::ValueKind::collection ||
+        descriptor.value_codec == ValueCodec::command_bar_buttons ||
+        descriptor.value_codec == ValueCodec::owned_panel ||
+        descriptor.value_codec == ValueCodec::dendrogram_items ||
+        descriptor.value_codec == ValueCodec::dendrogram_links;
+}
+
+std::optional<PropertyValue> materialize_default(
+    const metamodel::PropertyDescriptor& descriptor) {
+    using metamodel::DefaultKind;
+    const auto& value = descriptor.default_value;
+    switch (value.kind) {
+        case DefaultKind::undefined:
+            if (value.canonical == "undefined") return PropertyValue{UndefinedValue{}};
+            return std::nullopt;
+        case DefaultKind::boolean:
+            if (value.canonical == "true") return PropertyValue{true};
+            if (value.canonical == "false") return PropertyValue{false};
+            return std::nullopt;
+        case DefaultKind::integer: {
+            std::int64_t parsed = 0;
+            const auto [end, error] = std::from_chars(
+                value.canonical.data(), value.canonical.data() + value.canonical.size(), parsed);
+            if (error == std::errc{} && end == value.canonical.data() + value.canonical.size()) {
+                return PropertyValue{parsed};
+            }
+            return std::nullopt;
+        }
+        case DefaultKind::decimal:
+            if (!value.canonical.empty()) return PropertyValue{DecimalValue{std::string(value.canonical)}};
+            return std::nullopt;
+        case DefaultKind::string:
+            if (descriptor.value_codec == metamodel::ValueCodec::string) {
+                return PropertyValue{std::string(value.canonical)};
+            }
+            return std::nullopt;
+        case DefaultKind::color:
+            if (value.canonical == "automatic") return PropertyValue{ColorValue{}};
+            return std::nullopt;
+        case DefaultKind::font:
+            if (value.canonical == "automatic") return PropertyValue{FontValue{}};
+            return std::nullopt;
+        case DefaultKind::enumeration: {
+            const auto separator = value.canonical.find('.');
+            if (separator == std::string_view::npos || separator == 0 ||
+                separator + 1 == value.canonical.size()) return std::nullopt;
+            const auto type_name = value.canonical.substr(0, separator);
+            const auto member = value.canonical.substr(separator + 1);
+            const bool known_type =
+                (descriptor.control_kind == ControlKind::command_bar &&
+                 descriptor.api_name == "ButtonsAlignment" &&
+                 type_name == "CommandBarButtonAlignment") ||
+                (descriptor.control_kind == ControlKind::command_bar &&
+                 descriptor.api_name == "Orientation" && type_name == "Orientation") ||
+                (descriptor.control_kind == ControlKind::dendrogram &&
+                 descriptor.api_name == "Orientation" && type_name == "DendrogramOrientation");
+            if (!known_type) return std::nullopt;
+            EnumerationValue parsed{std::string(type_name), std::string(member)};
+            if (!property_api_enumeration_matches(descriptor, parsed)) return std::nullopt;
+            return PropertyValue{std::move(parsed)};
+        }
+        case DefaultKind::unknown:
+        case DefaultKind::none:
+        case DefaultKind::border:
+        case DefaultKind::shortcut:
+            return std::nullopt;
+    }
+    return std::nullopt;
+}
+
 bool table_column_editor_property_allowed(ControlKind kind, std::string_view name) {
     switch (kind) {
         case ControlKind::input_field:
@@ -147,9 +272,13 @@ bool table_column_editor_property_allowed(ControlKind kind, std::string_view nam
     }
 }
 
-bool table_column_editor_property_default(std::string_view name, const PropertyValue& value) {
-    if (name == "Enabled") return std::holds_alternative<bool>(value) && std::get<bool>(value);
-    if (name == "ReadOnly") return std::holds_alternative<bool>(value) && !std::get<bool>(value);
+bool table_column_editor_property_value_supported(
+    ControlKind kind, std::string_view name, const PropertyValue& value) {
+    if (name == "Enabled") {
+        return std::holds_alternative<bool>(value) &&
+            (kind == ControlKind::input_field || std::get<bool>(value));
+    }
+    if (name == "ReadOnly") return kind == ControlKind::input_field && std::holds_alternative<bool>(value);
     if (name == "Caption" || name == "ToolTip") {
         return std::holds_alternative<std::string>(value) && std::get<std::string>(value).empty();
     }
@@ -436,6 +565,186 @@ std::optional<OrdinaryFormDocument::ObjectLocation> OrdinaryFormDocument::find_l
 
 std::size_t OrdinaryFormDocument::indexed_id_count() const noexcept {
     return index_.size();
+}
+
+PropertyReadResult OrdinaryFormDocument::get_prop_val(ObjectKey owner, PropertyId property) const {
+    const metamodel::PropertyDescriptor* descriptor = nullptr;
+    const PropertySet* properties = nullptr;
+    if (owner.category == ObjectCategory::form) {
+        if (owner.id != form_.id) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        descriptor = metamodel::find_form_property(property);
+        properties = &form_.properties;
+    } else if (owner.category == ObjectCategory::control) {
+        const auto location = find_location(ObjectCategory::control, owner.id);
+        if (!location) return {PropertyReadStatus::unknown_owner, std::nullopt};
+        const auto& control = collections_.controls[location->index];
+        descriptor = metamodel::find_property(control.kind(), property);
+        if (descriptor == nullptr) return {PropertyReadStatus::unknown_property, std::nullopt};
+        if (is_typed_collection_property(*descriptor) ||
+            descriptor->surface == metamodel::PropertySurface::panel_placement) {
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        }
+        if (descriptor->surface == metamodel::PropertySurface::control_payload) {
+            properties = &control.properties();
+        } else if (descriptor->surface == metamodel::PropertySurface::control_extension) {
+            properties = &control.extension_properties;
+        } else {
+            return {PropertyReadStatus::unsupported_surface, std::nullopt};
+        }
+    } else {
+        if (!find_location(owner.category, owner.id)) {
+            return {PropertyReadStatus::unknown_owner, std::nullopt};
+        }
+        return {PropertyReadStatus::unsupported_surface, std::nullopt};
+    }
+
+    if (descriptor == nullptr || properties == nullptr) {
+        return {PropertyReadStatus::unknown_property, std::nullopt};
+    }
+    if (is_typed_collection_property(*descriptor)) {
+        return {PropertyReadStatus::unsupported_surface, std::nullopt};
+    }
+    if (descriptor->api_access == metamodel::ApiAccess::write_only) {
+        return {PropertyReadStatus::write_only, std::nullopt};
+    }
+    if (const PropertyEntry* entry = properties->find(property)) {
+        return {PropertyReadStatus::explicit_value, entry->value};
+    }
+    if (descriptor->default_value.kind == metamodel::DefaultKind::none) {
+        return {PropertyReadStatus::no_default, std::nullopt};
+    }
+    const auto value = materialize_default(*descriptor);
+    if (!value || !property_value_matches(*descriptor, *value)) {
+        return {PropertyReadStatus::unknown_default, std::nullopt};
+    }
+    return {PropertyReadStatus::proven_default, value};
+}
+
+PropertyMutationStatus OrdinaryFormDocument::set_prop_val(
+    ObjectKey owner,
+    PropertyId property,
+    PropertyValue value) {
+    const metamodel::PropertyDescriptor* descriptor = nullptr;
+    PropertySet* properties = nullptr;
+    if (owner.category == ObjectCategory::form) {
+        if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        descriptor = metamodel::find_form_property(property);
+        properties = &form_.properties;
+    } else if (owner.category == ObjectCategory::control) {
+        const auto location = find_location(ObjectCategory::control, owner.id);
+        if (!location) return PropertyMutationStatus::unknown_owner;
+        auto& control = collections_.controls[location->index];
+        descriptor = metamodel::find_property(control.kind(), property);
+        if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (is_typed_collection_property(*descriptor) ||
+            descriptor->surface == metamodel::PropertySurface::panel_placement) {
+            return PropertyMutationStatus::unsupported_surface;
+        }
+        if (descriptor->surface == metamodel::PropertySurface::control_payload) {
+            properties = &control.properties();
+        } else if (descriptor->surface == metamodel::PropertySurface::control_extension) {
+            properties = &control.extension_properties;
+        } else {
+            return PropertyMutationStatus::unsupported_surface;
+        }
+    } else {
+        if (!find_location(owner.category, owner.id)) return PropertyMutationStatus::unknown_owner;
+        return PropertyMutationStatus::unsupported_surface;
+    }
+    if (descriptor == nullptr || properties == nullptr) return PropertyMutationStatus::unknown_property;
+    if (is_typed_collection_property(*descriptor)) return PropertyMutationStatus::unsupported_surface;
+    if (descriptor->api_access == metamodel::ApiAccess::read_only) {
+        return PropertyMutationStatus::read_only;
+    }
+    if (descriptor->api_access == metamodel::ApiAccess::unknown) {
+        return PropertyMutationStatus::unknown_access;
+    }
+    if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform ||
+        descriptor->persistence == metamodel::PersistenceClass::version_specific) {
+        return PropertyMutationStatus::unsupported_surface;
+    }
+    if (!property_value_matches(*descriptor, value)) return PropertyMutationStatus::invalid_value;
+    if (const auto* enumeration = std::get_if<EnumerationValue>(&value);
+        enumeration != nullptr && !property_api_enumeration_matches(*descriptor, *enumeration)) {
+        return PropertyMutationStatus::invalid_value;
+    }
+    if (!property_value_references_resolve(*this, value)) {
+        return PropertyMutationStatus::invalid_reference;
+    }
+    if (descriptor->api_name == "ActionSource" &&
+        descriptor->control_kind == ControlKind::command_bar) {
+        if (const auto* target = std::get_if<ControlRef>(&value)) {
+            const ControlNode* source_control = find_control(target->id());
+            if (source_control != nullptr && source_control->kind() != ControlKind::table &&
+                source_control->kind() != ControlKind::html_document_field) {
+                return PropertyMutationStatus::invalid_reference;
+            }
+        }
+    }
+
+    properties->set_explicit(property, std::move(value));
+    if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
+        return PropertyMutationStatus::applied_runtime_only;
+    }
+    if (descriptor->persistence == metamodel::PersistenceClass::unclassified ||
+        descriptor->storage_codec == metamodel::StorageCodec::unclassified ||
+        descriptor->storage_codec == metamodel::StorageCodec::none) {
+        return PropertyMutationStatus::applied_unclassified_storage;
+    }
+    return PropertyMutationStatus::applied;
+}
+
+PropertyMutationStatus OrdinaryFormDocument::reset_prop_val(ObjectKey owner, PropertyId property) {
+    const metamodel::PropertyDescriptor* descriptor = nullptr;
+    PropertySet* properties = nullptr;
+    if (owner.category == ObjectCategory::form) {
+        if (owner.id != form_.id) return PropertyMutationStatus::unknown_owner;
+        descriptor = metamodel::find_form_property(property);
+        properties = &form_.properties;
+    } else if (owner.category == ObjectCategory::control) {
+        const auto location = find_location(ObjectCategory::control, owner.id);
+        if (!location) return PropertyMutationStatus::unknown_owner;
+        auto& control = collections_.controls[location->index];
+        descriptor = metamodel::find_property(control.kind(), property);
+        if (descriptor == nullptr) return PropertyMutationStatus::unknown_property;
+        if (is_typed_collection_property(*descriptor) ||
+            descriptor->surface == metamodel::PropertySurface::panel_placement) {
+            return PropertyMutationStatus::unsupported_surface;
+        }
+        if (descriptor->surface == metamodel::PropertySurface::control_payload) {
+            properties = &control.properties();
+        } else if (descriptor->surface == metamodel::PropertySurface::control_extension) {
+            properties = &control.extension_properties;
+        } else {
+            return PropertyMutationStatus::unsupported_surface;
+        }
+    } else {
+        if (!find_location(owner.category, owner.id)) return PropertyMutationStatus::unknown_owner;
+        return PropertyMutationStatus::unsupported_surface;
+    }
+    if (descriptor == nullptr || properties == nullptr) return PropertyMutationStatus::unknown_property;
+    if (is_typed_collection_property(*descriptor)) return PropertyMutationStatus::unsupported_surface;
+    if (descriptor->api_access == metamodel::ApiAccess::read_only) {
+        return PropertyMutationStatus::read_only;
+    }
+    if (descriptor->api_access == metamodel::ApiAccess::unknown) {
+        return PropertyMutationStatus::unknown_access;
+    }
+    if (descriptor->persistence == metamodel::PersistenceClass::unsupported_by_platform ||
+        descriptor->persistence == metamodel::PersistenceClass::version_specific) {
+        return PropertyMutationStatus::unsupported_surface;
+    }
+
+    properties->unset(property);
+    if (descriptor->persistence == metamodel::PersistenceClass::runtime_only) {
+        return PropertyMutationStatus::reset_runtime_only;
+    }
+    if (descriptor->persistence == metamodel::PersistenceClass::unclassified ||
+        descriptor->storage_codec == metamodel::StorageCodec::unclassified ||
+        descriptor->storage_codec == metamodel::StorageCodec::none) {
+        return PropertyMutationStatus::reset_unclassified_storage;
+    }
+    return PropertyMutationStatus::reset;
 }
 
 ValidationReport OrdinaryFormDocument::validate() const {
@@ -873,13 +1182,37 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     if (item.type != CommandBarButtonKind::action && item.type != CommandBarButtonKind::submenu && item.type != CommandBarButtonKind::separator) invalid("unknown menu item type");
                     if (item.representation != ButtonRepresentation::automatic && item.representation != ButtonRepresentation::picture && item.representation != ButtonRepresentation::text && item.representation != ButtonRepresentation::picture_text) invalid("unknown menu representation");
                     if (item.name.empty() || !names.insert(item.name).second) invalid("button menu item names must be non-empty and unique within each collection");
-                    if (item.type == CommandBarButtonKind::action && (!item.action || item.action->empty())) invalid("Action menu item requires a handler");
-                    if (item.type != CommandBarButtonKind::action && item.action) invalid("only Action menu items may have a handler");
+                    if (item.type == CommandBarButtonKind::action && (item.action.has_value() == item.standard_action.has_value())) invalid("Action menu item requires exactly one Action or StandardAction value");
+                    if (item.action && item.action->handler.empty()) invalid("Action menu item requires a handler");
+                    if (item.type != CommandBarButtonKind::action && (item.action || item.standard_action)) invalid("only Action menu items may have an Action or StandardAction value");
+                    if (item.standard_action) {
+                        const auto& standard = *item.standard_action;
+                        if (standard.command != StandardMenuCommand::close) invalid("unknown StandardAction command");
+                        if (standard.context == StandardMenuActionContext::command_bar) {
+                            const ControlNode* command_bar = find_control(standard.command_bar.id());
+                            if (command_bar == nullptr || command_bar->kind() != ControlKind::command_bar)
+                                invalid("StandardAction commandBarId must resolve to a CommandBar control");
+                        } else if (standard.context == StandardMenuActionContext::default_context) {
+                            if (standard.command_bar.id().value() != 0)
+                                invalid("Default StandardAction context cannot have commandBarId");
+                        } else invalid("unknown StandardAction context");
+                        if (standard.source == StandardMenuActionSource::control) {
+                            const auto id = standard.source_control.id();
+                            if (id.value() == 0 || id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) ||
+                                find_control(id) == nullptr)
+                                invalid("StandardAction sourceControlId must be a positive int32 reference to an existing control");
+                        } else {
+                            if (standard.source != StandardMenuActionSource::form && standard.source != StandardMenuActionSource::all_sources)
+                                invalid("unknown StandardAction source");
+                            if (standard.source_control.id().value() != 0)
+                                invalid("StandardAction sourceControlId requires source Control");
+                        }
+                    }
                     if (item.order != CommandBarButtonOrder::none && item.order != CommandBarButtonOrder::ascending && item.order != CommandBarButtonOrder::descending) invalid("unknown menu order");
                     if (item.type != CommandBarButtonKind::submenu && item.order != CommandBarButtonOrder::none) invalid("only Submenu menu items may have an order");
                     if (item.type != CommandBarButtonKind::submenu && !item.buttons.empty()) invalid("only Submenu items may contain buttons");
                     if (item.type == CommandBarButtonKind::separator &&
-                        (!item.text.empty() || !item.explanation.empty() || !item.tooltip.empty() || !item.enabled || item.checked || item.changes_data || item.representation != ButtonRepresentation::automatic || item.shortcut != ShortcutValue{} || item.picture || item.action)) invalid("Separator cannot have properties");
+                        (item.text || item.explanation || item.tooltip || !item.enabled || item.checked || item.changes_data || item.representation != ButtonRepresentation::automatic || item.shortcut != ShortcutValue{} || item.picture || item.action || item.standard_action)) invalid("Separator cannot have properties");
                     if (metamodel::find_shortcut_key(item.shortcut.key) == nullptr) invalid("button menu Shortcut has unsupported key");
                     if (item.picture) require_picture(control.id, *item.picture);
                     self(self, item.buttons, depth + 1);
@@ -1001,6 +1334,27 @@ ValidationReport OrdinaryFormDocument::validate() const {
         validate_position(control.id, control.position);
         if (control.data_path.has_value()) {
             require_attribute(control.id, control.data_path->attribute);
+            const bool calendar_field = control.kind() == ControlKind::calendar_field;
+            const bool track_bar = control.kind() == ControlKind::track_bar;
+            if (calendar_field || track_bar) {
+                const auto invalid_data_path = [&](std::string reason) {
+                    add_violation(report, InvariantCode::invalid_property, control.id, {}, std::move(reason));
+                };
+                if (!control.data_path->members.empty()) {
+                    invalid_data_path("CalendarField and TrackBar DataPath must reference an Attribute directly");
+                } else if (const Attribute* attribute = find_attribute(control.data_path->attribute.id());
+                           attribute != nullptr) {
+                    TypeDomainEntry expected;
+                    expected.term = calendar_field ? TypeDomainTerm::date : TypeDomainTerm::numeric;
+                    if (calendar_field) expected.date = DateQualifiers{true, true};
+                    else expected.numeric = NumericQualifiers{10, 0, true};
+                    if (attribute->type.entries.size() != 1 || attribute->type.entries.front() != expected) {
+                        invalid_data_path(calendar_field ?
+                            "CalendarField DataPath must reference a single DateTime Attribute" :
+                            "TrackBar DataPath must reference a single Numeric(10,0,nonnegative) Attribute");
+                    }
+                }
+            }
         }
         if (const auto* gantt = std::get_if<GanttChartPayload>(&control.payload)) {
             const auto invalid_gantt = [&](std::string message) {
@@ -1096,12 +1450,23 @@ ValidationReport OrdinaryFormDocument::validate() const {
                         invalid_table("Table Column Header languages must be non-empty and unique");
                     }
                 }
+                if (column.control.value_type.has_value()) {
+                    if (column.control.kind != ControlKind::input_field) {
+                        invalid_table("Table Column ValueType is supported only for an InputField editor");
+                    } else {
+                        try {
+                            (void)storage::value_codec::encode_type_domain(*column.control.value_type);
+                        } catch (const std::exception&) {
+                            invalid_table("Table Column InputField ValueType is not supported by the typed codec");
+                        }
+                    }
+                }
                 column.control.properties.for_each_explicit([&](const PropertyEntry& entry) {
                     const auto* property = metamodel::find_property(column.control.kind, entry.id);
                     if (!table_column_editor_property_allowed(column.control.kind,
                             property == nullptr ? std::string_view{} : property->api_name) ||
                         !property_value_matches(*property, entry.value) ||
-                        !table_column_editor_property_default(property->api_name, entry.value)) {
+                        !table_column_editor_property_value_supported(column.control.kind, property->api_name, entry.value)) {
                         invalid_table("Table Column editor has an incompatible, unsupported, or nondefault property");
                         return;
                     }
@@ -1140,6 +1505,18 @@ ValidationReport OrdinaryFormDocument::validate() const {
                 invalid_chart("Chart dense Values dimensions overflow");
             } else if (chart->values.size() != chart->series.size() * chart->points.size()) {
                 invalid_chart("Chart Values must be a dense Series by Point matrix");
+            }
+            const auto& summary_marker = chart->summary_series.marker;
+            if (summary_marker.type_name != "ChartMarkerType" ||
+                (summary_marker.member != "Auto" && summary_marker.member != "Rhomb")) {
+                invalid_chart("Chart SummarySeries Marker supports only proven Auto or Rhomb");
+            }
+            const auto& summary_color = chart->summary_series.color;
+            if ((summary_color.kind != ColorKind::automatic && summary_color.kind != ColorKind::absolute) ||
+                summary_color.alpha != 255 || !std::holds_alternative<std::monostate>(summary_color.style) ||
+                (summary_color.kind == ColorKind::automatic &&
+                 (summary_color.red != 0 || summary_color.green != 0 || summary_color.blue != 0))) {
+                invalid_chart("Chart SummarySeries Color must be automatic or absolute opaque RGB");
             }
             std::unordered_set<ObjectId, ObjectIdHash> series_ids;
             for (const auto& series : chart->series) {

@@ -1045,6 +1045,10 @@
         <NamedConcept name="ChartSeries" russianName="СерияДиаграммы"><Properties>
           <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/><Property name="Marker" apiName="Маркер" russianType="ТипМаркераДиаграммы"/>
         </Properties></NamedConcept>
+        <NamedConcept name="ChartSummarySeries" apiName="SummarySeries" russianName="СводнаяСерия" russianType="СерияДиаграммы" source="Chart.SummarySeries; 8.5.1.1343 ValueToFile API" evidenceRefs="ev_418fc1414bc745bbbb90a22694e5cae1 ev_bac7628d14574b96a6ecb1c49db9d823 ev_0bf2de977ee74d0e8e69e117b819f78c"><Properties>
+          <Property name="Color" apiName="Color" russianName="Цвет" russianType="Цвет" valueCodec="color"/>
+          <Property name="Marker" apiName="Marker" russianName="Маркер" russianType="ТипМаркераДиаграммы" valueCodec="enumeration"/>
+        </Properties></NamedConcept>
         <NamedConcept name="ChartPoint" russianName="ТочкаДиаграммы"><Properties>
           <Property name="Text" apiName="Текст" russianType="Строка"/><Property name="Color" apiName="Цвет" russianType="Цвет"/>
         </Properties></NamedConcept>
@@ -1053,7 +1057,13 @@
           <Property name="Text" russianName="Текст"/><Property name="Explanation" russianName="Пояснение"/><Property name="ToolTip" russianName="Подсказка"/>
           <Property name="Enabled" russianName="Доступность"/><Property name="Checked" russianName="Пометка"/><Property name="ChangesData" russianName="ИзменяетДанные"/>
           <Property name="DefaultButton" russianName="КнопкаПоУмолчанию"/>
-          <Property name="Representation" russianName="Отображение"/><Property name="Shortcut" russianName="СочетаниеКлавиш"/><Property name="Picture" russianName="Картинка"/><Property name="Action" russianName="Действие"/><Property name="Order" russianName="ПорядокКнопок"/><Property name="Buttons" russianName="Кнопки"/>
+          <Property name="Representation" russianName="Отображение"/><Property name="ClientInterfaceVariant" russianName="ВариантИнтерфейсаКлиентскогоПриложения" source="IClientInterfaceForCommand"/><Property name="Shortcut" russianName="СочетаниеКлавиш"/><Property name="Picture" russianName="Картинка"/><Property name="Action" russianName="Действие"/><Property name="StandardAction" russianName="СтандартноеДействие"/><Property name="Order" russianName="ПорядокКнопок"/><Property name="Buttons" russianName="Кнопки"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="StandardAction" russianName="СтандартноеДействие"><Properties>
+          <Property name="command" russianName="Команда"/><Property name="context" russianName="Контекст"/><Property name="commandBarId" russianName="КоманднаяПанель"/><Property name="source" russianName="Источник"/><Property name="sourceControlId" russianName="ЭлементИсточника" source="IControlIdConvertor"/>
+        </Properties></NamedConcept>
+        <NamedConcept name="Action" russianName="Действие"><Properties>
+          <Property name="handler" russianName="Обработчик"/><Property name="Name" russianName="Имя"/><Property name="Text" russianName="Текст"/><Property name="ToolTip" russianName="Подсказка"/><Property name="Description" russianName="Пояснение"/>
         </Properties></NamedConcept>
         <NamedConcept name="GanttSeries" russianName="СерияДиаграммыГанта"><Properties>
           <Property name="Value" russianName="Значение" russianType="Строка"/><Property name="Text" russianName="Текст" russianType="Строка"/><Property name="Color" russianName="Цвет" russianType="Цвет"/>
@@ -1072,7 +1082,7 @@
           <Property name="ReadOnly" russianName="ТолькоПросмотр"/>
         </Properties></NamedConcept>
         <NamedConcept name="TableColumnControl" russianName="ЭлементУправленияКолонкиТабличногоПоля"><Properties>
-          <Property name="Type" russianName="ВидРедактора"/><Property name="Enabled" russianName="Доступность"/>
+          <Property name="Type" russianName="ВидРедактора"/><Property name="ValueType" russianName="ТипЗначения"/><Property name="Enabled" russianName="Доступность"/>
           <Property name="ReadOnly" russianName="ТолькоПросмотр"/><Property name="Caption" russianName="Заголовок"/>
           <Property name="ToolTip" russianName="Подсказка"/><Property name="Font" russianName="Шрифт"/>
         </Properties></NamedConcept>

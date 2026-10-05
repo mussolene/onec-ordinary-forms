@@ -134,12 +134,35 @@ void test_button_base_state_normalization() {
             "writer must emit the observed edited-control state 2");
 
         for (const std::string_view unsupported_state : {"0", "3"}) {
-            const auto rejected = oof::load_form_bin(
+            const auto partial = oof::load_form_bin(
                 alter_button_record(unsupported_state, false), "Main");
-            expect(!rejected, "unobserved Button base state must be rejected");
+            expect(partial.ok() && !partial.value().reconstruction_complete() &&
+                       !partial.diagnostics().empty() && partial.diagnostics().front().code == "OOF1140" &&
+                       partial.diagnostics().front().severity == oof::DiagnosticSeverity::warning,
+                "valid unobserved Button base state must load with OOF1140 and incomplete reconstruction");
+            const auto* partial_control = partial.value().find_control(model::ObjectId{2});
+            expect(partial_control != nullptr && partial_control->name == "Run",
+                "known Button identity must survive an unobserved state");
+            const auto* partial_enabled = partial_control->properties().find(
+                model::PropertyId::from_name("Enabled"));
+            if (enabled) {
+                expect(partial_enabled == nullptr, "default Enabled=true must stay implicit after a partial decode");
+            } else {
+                expect(partial_enabled != nullptr && !std::get<bool>(partial_enabled->value),
+                    "known Enabled=false must survive an unobserved state");
+            }
+            const auto partial_xml = source::serialize_form_xml(partial.value());
+            expect(partial_xml.ok(), "partial Button must serialize to named XML");
+            const auto partial_parsed = source::parse_form_xml(partial_xml.value());
+            expect(partial_parsed.ok() && !partial_parsed.value().reconstruction_complete(),
+                "partial Button XML must preserve incomplete reconstruction");
+            const auto partial_build = oof::save_form_bin(partial_parsed.value());
+            expect(partial_build.ok(), "partial Button XML must remain buildable to Form.bin");
         }
         const auto changed_neighbor = oof::load_form_bin(alter_button_record("2", true), "Main");
-        expect(!changed_neighbor, "unrelated Button base variation must remain rejected");
+        expect(changed_neighbor.ok() && !changed_neighbor.value().reconstruction_complete() &&
+                   !changed_neighbor.diagnostics().empty() && changed_neighbor.diagnostics().front().code == "OOF1140",
+            "valid unknown Button base profile variation must warn and return an incomplete model");
     }
 }
 

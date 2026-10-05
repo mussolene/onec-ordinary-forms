@@ -242,6 +242,7 @@
     </xs:simpleContent>
   </xs:complexType>
   <xs:complexType name="ChartSeriesType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/><xs:element name="Marker" type="EnumerationValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
+  <xs:complexType name="ChartSummarySeriesType"><xs:sequence><xs:element name="Color" type="ColorValueType" minOccurs="0" maxOccurs="1"/><xs:element name="Marker" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/></xs:sequence></xs:complexType>
   <xs:complexType name="ChartPointType"><xs:sequence><xs:element name="Text" type="xs:string"/><xs:element name="Color" type="ColorValueType"/></xs:sequence><xs:attribute name="id" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartValueType"><xs:sequence><xs:choice><xs:element name="Number" type="xs:decimal"/><xs:element name="Undefined" type="UndefinedValueType"/></xs:choice><xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/></xs:sequence><xs:attribute name="seriesRef" type="ObjectIdType" use="required"/><xs:attribute name="pointRef" type="ObjectIdType" use="required"/></xs:complexType>
   <xs:complexType name="ChartSeriesCollectionType"><xs:sequence><xs:element name="ChartSeries" type="ChartSeriesType" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
@@ -1358,13 +1359,23 @@
 
   <xs:simpleType name="CommandBarButtonKindType"><xs:restriction base="xs:string"><xs:enumeration value="Action"/><xs:enumeration value="Submenu"/><xs:enumeration value="Separator"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="ButtonRepresentationType"><xs:restriction base="xs:string"><xs:enumeration value="Auto"/><xs:enumeration value="Picture"/><xs:enumeration value="Text"/><xs:enumeration value="PictureText"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="ClientInterfaceVariantType"><xs:restriction base="xs:string"><xs:enumeration value="Version8_0"/><xs:enumeration value="Version8_2_OrdinaryApp"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="CommandBarButtonOrderType"><xs:restriction base="xs:string"><xs:enumeration value="DontOrder"/><xs:enumeration value="Ascending"/><xs:enumeration value="Descending"/></xs:restriction></xs:simpleType>
   <xs:complexType name="CommandBarButtonsType"><xs:sequence><xs:element ref="CommandBarButton" minOccurs="0" maxOccurs="unbounded"/></xs:sequence></xs:complexType>
+  <xs:simpleType name="CommandBarActionHandlerType"><xs:restriction base="xs:string"><xs:minLength value="1"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="CommandBarActionType"><xs:sequence>
+    <xs:element name="Text" type="LocalizedStringValueType"/><xs:element name="ToolTip" type="LocalizedStringValueType"/><xs:element name="Description" type="LocalizedStringValueType"/>
+  </xs:sequence><xs:attribute name="handler" type="CommandBarActionHandlerType" use="required"/><xs:attribute name="name" type="xs:string" use="required"/></xs:complexType>
+  <xs:simpleType name="StandardMenuCommandType"><xs:restriction base="xs:string"><xs:enumeration value="Close"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="StandardMenuActionSourceType"><xs:restriction base="xs:string"><xs:enumeration value="Form"/><xs:enumeration value="AllSources"/><xs:enumeration value="Control"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="StandardMenuActionContextType"><xs:restriction base="xs:string"><xs:enumeration value="Default"/><xs:enumeration value="CommandBar"/></xs:restriction></xs:simpleType>
+  <xs:simpleType name="StandardMenuSourceControlIdType"><xs:restriction base="xs:positiveInteger"><xs:maxInclusive value="2147483647"/></xs:restriction></xs:simpleType>
+  <xs:complexType name="StandardMenuActionType"><xs:attribute name="command" type="StandardMenuCommandType" use="required"/><xs:attribute name="context" type="StandardMenuActionContextType" use="required"/><xs:attribute name="commandBarId" type="ObjectIdType"/><xs:attribute name="source" type="StandardMenuActionSourceType" use="required"/><xs:attribute name="sourceControlId" type="StandardMenuSourceControlIdType"/></xs:complexType>
   <xs:complexType name="CommandBarButtonType"><xs:sequence>
     <xs:element name="Text" type="xs:string" minOccurs="0"/><xs:element name="Explanation" type="xs:string" minOccurs="0"/><xs:element name="ToolTip" type="xs:string" minOccurs="0"/>
     <xs:element name="Enabled" type="xs:boolean" minOccurs="0"/><xs:element name="Checked" type="xs:boolean" minOccurs="0"/><xs:element name="ChangesData" type="xs:boolean" minOccurs="0"/>
     <xs:element name="DefaultButton" type="xs:boolean" minOccurs="0"/>
-    <xs:element name="Representation" type="ButtonRepresentationType" minOccurs="0"/><xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0"/><xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/><xs:element name="Action" type="xs:string" minOccurs="0"/><xs:element name="Order" type="CommandBarButtonOrderType" minOccurs="0"/><xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0"/>
+    <xs:element name="Representation" type="ButtonRepresentationType" minOccurs="0"/><xs:element name="ClientInterfaceVariant" type="ClientInterfaceVariantType" minOccurs="0"/><xs:element name="Shortcut" type="ShortcutValueType" minOccurs="0"/><xs:element name="Picture" type="PictureReferenceValueType" minOccurs="0"/><xs:choice minOccurs="0"><xs:element name="Action" type="CommandBarActionType"/><xs:element name="StandardAction" type="StandardMenuActionType"/></xs:choice><xs:element name="Order" type="CommandBarButtonOrderType" minOccurs="0"/><xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0"/>
   </xs:sequence><xs:attribute name="name" type="xs:string" use="required"/><xs:attribute name="type" type="CommandBarButtonKindType" use="required"/></xs:complexType>
   <xs:element name="CommandBarButton" type="CommandBarButtonType"/>
 
@@ -1753,6 +1764,7 @@
     <xs:attribute name="id" type="ObjectIdType" use="required"/>
     <xs:attribute name="name" type="xs:string" use="required"/>
     <xs:attribute name="ordinaryFormVersion" type="xs:string" use="required" fixed="2.1"/>
+    <xs:attribute name="reconstructionComplete" type="xs:boolean" use="optional" default="true"/>
   </xs:complexType>
   <xs:element name="Form" type="FormType"/>
 
@@ -1765,6 +1777,7 @@
   </xs:simpleType>
   <xs:complexType name="TableColumnControlType">
     <xs:sequence>
+      <xs:element name="ValueType" type="TypeDomainValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ReadOnly" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Caption" type="xs:string" minOccurs="0" maxOccurs="1"/>
@@ -2210,7 +2223,6 @@
       <xs:element name="LabelBorder" type="BorderValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SpaceMode" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Light" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="SummarySeries" type="UnclassifiedValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="SeriesInRows" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ChartType" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="GaugeBushThickness" type="xs:decimal" minOccurs="0" maxOccurs="1"/>
@@ -2225,6 +2237,7 @@
       <xs:element name="LabelBackColor" type="ColorValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="LabelFont" type="FontValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Title" type="xs:string" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="SummarySeries" type="ChartSummarySeriesType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Series" type="ChartSeriesCollectionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Points" type="ChartPointCollectionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="Values" type="ChartValueCollectionType" minOccurs="1" maxOccurs="1"/>

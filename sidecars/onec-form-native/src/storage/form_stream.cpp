@@ -765,20 +765,20 @@ model::ColorValue button_color_default(std::string_view property) {
     return value;
 }
 
-LV encode_button_color(const model::ColorValue& color, std::string_view path) {
+LV encode_control_color(const model::ColorValue& color, std::string_view path) {
     const bool default_channels = color.red == 0 && color.green == 0 &&
         color.blue == 0 && color.alpha == 255;
     if (color.kind == model::ColorKind::automatic) {
         if (!default_channels || !std::holds_alternative<std::monostate>(color.style)) {
             fail("OOF1122", std::string(path), "automatic color defaults", "non-default fields",
-                "Button automatic color carries unsupported channels or a style reference");
+                "Control automatic color carries unsupported channels or a style reference");
         }
         return list({raw("4"), raw("4"), list({raw("0")}), raw("4")});
     }
     if (color.kind == model::ColorKind::absolute) {
         if (color.alpha != 255 || !std::holds_alternative<std::monostate>(color.style)) {
             fail("OOF1122", std::string(path), "opaque absolute RGB without a style", "alpha or style",
-                "Button absolute colors support opaque RGB values only");
+                "Control absolute colors support opaque RGB values only");
         }
         const std::uint32_t packed = (static_cast<std::uint32_t>(color.blue) << 16) |
             (static_cast<std::uint32_t>(color.green) << 8) | color.red;
@@ -787,34 +787,34 @@ LV encode_button_color(const model::ColorValue& color, std::string_view path) {
     if (color.kind != model::ColorKind::style_reference) {
         fail("OOF1122", std::string(path), "ColorKind absolute, automatic, or style_reference",
             std::to_string(static_cast<unsigned int>(color.kind)),
-            "Button color kind is unsupported");
+            "Control color kind is unsupported");
     }
     if (!default_channels) {
         fail("OOF1122", std::string(path), "named style color without channels", "non-default channels",
-            "Button style colors cannot carry explicit channels");
+            "Control style colors cannot carry explicit channels");
     }
     const auto* name = std::get_if<model::QualifiedName>(&color.style);
     if (name == nullptr) {
         fail("OOF1122", std::string(path), "known QualifiedName style reference", "non-named style",
-            "Button colors support named style references only");
+            "Control colors support named style references only");
     }
     std::int32_t style_id = 0;
     if (name->value == "StyleColors.ButtonTextColor") style_id = -21;
     else if (name->value == "StyleColors.ButtonBackColor") style_id = -7;
     else if (name->value == "StyleColors.ButtonBorderColor") style_id = -34;
     else if (name->value == "StyleColors.BorderColor") style_id = -22;
-    else fail("OOF1122", std::string(path), "known Button StyleColors property", name->value,
-        "Button color style reference is unsupported");
+    else fail("OOF1122", std::string(path), "known control StyleColors property", name->value,
+        "Control color style reference is unsupported");
     return list({raw("4"), raw("3"), list({raw(std::to_string(style_id))}), raw("3")});
 }
 
-model::ColorValue decode_button_color(const LV& value, std::string_view path) {
+model::ColorValue decode_control_color(const LV& value, std::string_view path) {
     require_arity(value, 4, path);
     require_raw_constant(value.items[0], "4", child_path(path, 0));
     const auto kind = integer_atom<std::int32_t>(value.items[1], child_path(path, 1));
     if (kind == 4) {
         require_exact(value, list({raw("4"), raw("4"), list({raw("0")}), raw("4")}),
-            path, "Button automatic color record is malformed");
+            path, "Control automatic color record is malformed");
         return model::ColorValue{};
     }
     if (kind == 0) {
@@ -823,7 +823,7 @@ model::ColorValue decode_button_color(const LV& value, std::string_view path) {
         const auto packed = integer_atom<std::int64_t>(value.items[2].items[0], child_path(path, 2) + "/0");
         if (packed < 0 || packed > 0x00ffffff) {
             fail("OOF1114", child_path(path, 2) + "/0", "packed RGB in 0..16777215",
-                std::to_string(packed), "Button packed RGB color is out of range");
+                std::to_string(packed), "Control packed RGB color is out of range");
         }
         model::ColorValue color;
         color.kind = model::ColorKind::absolute;
@@ -841,18 +841,18 @@ model::ColorValue decode_button_color(const LV& value, std::string_view path) {
         else if (style_id == -7) style_name = "StyleColors.ButtonBackColor";
         else if (style_id == -34) style_name = "StyleColors.ButtonBorderColor";
         else if (style_id == -22) style_name = "StyleColors.BorderColor";
-        else fail("OOF1114", child_path(path, 2) + "/0", "known Button StyleColors ID",
-            std::to_string(style_id), "Button color style identifier is unsupported");
+        else fail("OOF1114", child_path(path, 2) + "/0", "known control StyleColors ID",
+            std::to_string(style_id), "Control color style identifier is unsupported");
         model::ColorValue color;
         color.kind = model::ColorKind::style_reference;
         color.style = model::QualifiedName{std::string(style_name)};
         return color;
     }
-    fail("OOF1114", child_path(path, 1), "Button color kind 0, 3, or 4", std::to_string(kind),
-        "Button color storage kind is unsupported");
+    fail("OOF1114", child_path(path, 1), "Control color kind 0, 3, or 4", std::to_string(kind),
+        "Control color storage kind is unsupported");
 }
 
-model::ColorValue explicit_button_color(const model::PropertySet& properties, std::string_view name,
+model::ColorValue explicit_control_color(const model::PropertySet& properties, std::string_view name,
                                         std::string_view control_name = "Button") {
     const auto* entry = properties.find(model::PropertyId::from_name(name));
     if (entry == nullptr) return button_color_default(name);
@@ -870,13 +870,7 @@ model::ColorValue explicit_splitter_color(const model::PropertySet& properties, 
         fail("OOF1122", std::string("$/Splitter/") + std::string(name), "ColorValue",
             "different value type", "Splitter color property has the wrong value type");
     }
-    const auto color = std::get<model::ColorValue>(entry->value);
-    if (color.kind != model::ColorKind::automatic && color.kind != model::ColorKind::absolute) {
-        fail("OOF1122", std::string("$/Splitter/") + std::string(name),
-            "automatic or absolute RGB color", "unobserved color kind",
-            "Splitter style colors are outside the supported storage profile");
-    }
-    return color;
+    return std::get<model::ColorValue>(entry->value);
 }
 
 LV encode_control_font(const model::FontValue& font, std::string_view property_path) {
@@ -958,6 +952,54 @@ model::FontValue decode_control_font(const LV& value, std::string_view path) {
     }
 }
 
+struct CommonControlBaseCapabilities {
+    bool font = false;
+    bool border_color = false;
+};
+
+struct CommonControlBaseFields {
+    bool enabled = true;
+    std::string tool_tip;
+    std::optional<model::FontValue> font;
+    std::optional<model::ColorValue> border_color;
+};
+
+CommonControlBaseFields decode_common_control_base(
+    const LV& base, std::string_view path, CommonControlBaseCapabilities capabilities) {
+    require_arity(base, 21, path);
+    require_raw_constant(base.items[0], "19", child_path(path, 0));
+    CommonControlBaseFields fields;
+    fields.enabled = bool_atom(base.items[1], child_path(path, 1));
+    fields.tool_tip = decoded_single_language_text(base.items[12], child_path(path, 12));
+    if (capabilities.font) fields.font = decode_control_font(base.items[4], child_path(path, 4));
+    if (capabilities.border_color) fields.border_color = decode_control_color(base.items[6], child_path(path, 6));
+    return fields;
+}
+
+void apply_common_control_base(
+    model::PropertySet& properties, const CommonControlBaseFields& fields) {
+    if (!fields.enabled) properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
+    if (!fields.tool_tip.empty()) properties.set_explicit(model::PropertyId::from_name("ToolTip"), fields.tool_tip);
+    if (fields.font && *fields.font != model::FontValue{})
+        properties.set_explicit(model::PropertyId::from_name("Font"), *fields.font);
+    if (fields.border_color && *fields.border_color != button_color_default("BorderColor"))
+        properties.set_explicit(model::PropertyId::from_name("BorderColor"), *fields.border_color);
+}
+
+void encode_common_control_base(
+    LV& base, const CommonControlBaseFields& fields, std::string_view path) {
+    require_arity(base, 21, path);
+    require_raw_constant(base.items[0], "19", child_path(path, 0));
+    base.items[1] = raw(fields.enabled ? "1" : "0");
+    base.items[12] = encoded_localized(fields.tool_tip);
+    if (fields.font) {
+        base.items[4] = encode_control_font(*fields.font, std::string(path) + "/Font");
+    }
+    if (fields.border_color) {
+        base.items[6] = encode_control_color(*fields.border_color, std::string(path) + "/BorderColor");
+    }
+}
+
 model::FontValue explicit_control_font(const model::PropertySet& properties, std::string_view property_path) {
     const auto* entry = properties.find(model::PropertyId::from_name("Font"));
     if (entry == nullptr) return {};
@@ -1000,18 +1042,19 @@ LV canonical_button_base(bool enabled, std::string_view tool_tip = {},
     const model::ColorValue* border_color = nullptr,
     const model::ColorValue* button_text_color = nullptr,
     const model::ColorValue* button_back_color = nullptr,
-    const model::FontValue* font = nullptr, std::string_view font_path = "$/Button/Font") {
+    const model::FontValue* font = nullptr, std::string_view base_path = "$/Button") {
     auto value = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
         "{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
-    value.items[1] = raw(enabled ? "1" : "0");
-    value.items[12] = encoded_localized(tool_tip);
-    if (font != nullptr) value.items[4] = encode_control_font(*font, font_path);
-    if (border_color != nullptr) value.items[6] = encode_button_color(*border_color, "$/Button/BorderColor");
-    if (button_text_color != nullptr) value.items[10] = encode_button_color(*button_text_color, "$/Button/ButtonTextColor");
-    if (button_back_color != nullptr) value.items[9] = encode_button_color(*button_back_color, "$/Button/ButtonBackColor");
+    encode_common_control_base(value,
+        CommonControlBaseFields{enabled, std::string(tool_tip),
+            font == nullptr ? std::nullopt : std::optional<model::FontValue>{*font},
+            border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
+        base_path);
+    if (button_text_color != nullptr) value.items[10] = encode_control_color(*button_text_color, "$/Button/ButtonTextColor");
+    if (button_back_color != nullptr) value.items[9] = encode_control_color(*button_back_color, "$/Button/ButtonBackColor");
     return value;
 }
 
@@ -1024,13 +1067,14 @@ LV canonical_command_bar_base(bool enabled, std::string_view tool_tip,
                               const model::BorderValue* border = nullptr, bool transparent = false,
                               const model::ColorValue* button_back_color = nullptr) {
     auto value = parse_constant(R"OOF({19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}})OOF");
-    value.items[1] = raw(enabled ? "1" : "0");
+    encode_common_control_base(value,
+        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt,
+            border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
+        "$/CommandBar");
     value.items[5] = raw(transparent ? "1" : "0");
-    value.items[12] = encoded_localized(tool_tip);
-    if (border_color != nullptr) value.items[6] = encode_button_color(*border_color, "$/CommandBar/BorderColor");
-    if (button_text_color != nullptr) value.items[10] = encode_button_color(*button_text_color, "$/CommandBar/ButtonTextColor");
-    if (back_color != nullptr) value.items[2] = encode_button_color(*back_color, "$/CommandBar/BackColor");
-    if (button_back_color != nullptr) value.items[9] = encode_button_color(*button_back_color, "$/CommandBar/ButtonBackColor");
+    if (button_text_color != nullptr) value.items[10] = encode_control_color(*button_text_color, "$/CommandBar/ButtonTextColor");
+    if (back_color != nullptr) value.items[2] = encode_control_color(*back_color, "$/CommandBar/BackColor");
+    if (button_back_color != nullptr) value.items[9] = encode_control_color(*button_back_color, "$/CommandBar/ButtonBackColor");
     if (border != nullptr) value.items[11] = encode_control_border(*border, "$/CommandBar/Border");
     return value;
 }
@@ -1146,10 +1190,10 @@ LV canonical_splitter_properties(bool enabled, std::int32_t orientation, std::st
     if (!base.is_list || base.items.size() != 21) {
         throw std::logic_error("canonical Splitter base record is malformed");
     }
-    base.items[1] = raw(enabled ? "1" : "0");
-    base.items[12] = encoded_localized(tool_tip);
-    base.items[2] = encode_button_color(back_color, "$/Splitter/BackColor");
-    base.items[6] = encode_button_color(border_color, "$/Splitter/BorderColor");
+    encode_common_control_base(base,
+        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt, border_color},
+        "$/Splitter");
+    base.items[2] = encode_control_color(back_color, "$/Splitter/BackColor");
     return list({std::move(base), raw("2"), raw(std::to_string(orientation)), raw("0")});
 }
 
@@ -1197,18 +1241,13 @@ LV canonical_button_properties(
 LV canonical_label_properties(
     std::string_view caption,
     std::int32_t horizontal_align,
-    bool enabled,
-    std::string_view tool_tip) {
+    const CommonControlBaseFields& common) {
     auto base_properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
         "{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
-    if (!base_properties.is_list || base_properties.items.size() != 21) {
-        throw std::logic_error("canonical LabelDecoration base properties are malformed");
-    }
-    base_properties.items[1] = raw(enabled ? "1" : "0");
-    base_properties.items[12] = encoded_localized(tool_tip);
+    encode_common_control_base(base_properties, common, "$/LabelDecoration");
     return list({
         std::move(base_properties),
         raw("11"),
@@ -1259,16 +1298,20 @@ LV canonical_radio_button_info(
     });
 }
 
-LV canonical_control_base_properties(bool enabled, std::string_view tool_tip);
+LV canonical_control_base_properties(bool enabled, std::string_view tool_tip,
+    const model::ColorValue* border_color = nullptr, std::string_view control_path = "$/ProgressBar");
 
-LV canonical_choice_field_info(bool enabled, std::string_view tool_tip) {
+LV canonical_choice_field_info(
+    bool enabled,
+    std::string_view tool_tip,
+    const model::ColorValue& border_color) {
     auto properties = parse_constant(R"OOF(
 {{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}},31,0,0,1,0,1,0,0,0,0,1,0,0,255,0,0,4,0,{"U"},{"U"},"",0,1,1,0,0,0,{4,0,{0},"",-1,-1,1,0,""},{4,0,{0},"",-1,-1,1,0,""},0,0,0,{0,0,0},{1,0},0,0,0,0,0,0,0,16777215,2,0,0}
 )OOF");
     if (properties.items.size() != 46 || properties.items[0].items.size() != 21) {
         throw std::logic_error("canonical ChoiceField info profile is malformed");
     }
-    properties.items[0] = canonical_control_base_properties(enabled, tool_tip);
+    properties.items[0] = canonical_control_base_properties(enabled, tool_tip, &border_color, "$/ChoiceField");
     return list({raw("2"), std::move(properties), list({raw("0")})});
 }
 
@@ -1290,7 +1333,7 @@ LV canonical_check_box_info(bool enabled, std::string_view caption, std::string_
         raw("1"),
         list({
             list({
-                canonical_button_base(enabled, tool_tip, nullptr, nullptr, nullptr, font, "$/CheckBox/Font"),
+                canonical_button_base(enabled, tool_tip, nullptr, nullptr, nullptr, font, "$/CheckBox"),
                 raw("7"),
                 encoded_localized(caption),
                 raw("1"),
@@ -1346,7 +1389,7 @@ LV canonical_text_document_field_info(bool enabled, const model::ColorValue& bor
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
     base.items[1] = raw(enabled ? "1" : "0");
     base.items[4] = encode_control_font(font, "$/TextDocumentField/Font");
-    base.items[6] = encode_button_color(border_color, "$/TextDocumentField/BorderColor");
+    base.items[6] = encode_control_color(border_color, "$/TextDocumentField/BorderColor");
     return list({std::move(base), raw("6"), raw("1"),
         raw("00000000-0000-0000-0000-000000000000"), list({raw("0")}), raw("0"), raw("0")});
 }
@@ -1401,6 +1444,27 @@ const list_stream::ListValue& input_field_flag_value(
 
 using InputFieldFlagValues = std::array<bool, input_field_flag_mappings.size()>;
 
+enum class InputFieldPairMode { payload_only, require_matching_pair };
+
+bool is_single_date_only_type_domain(const model::TypeDomainPatternValue& value) {
+    return value.entries.size() == 1 && value.entries.front().term == model::TypeDomainTerm::date &&
+        value.entries.front().date == model::DateQualifiers{true, false};
+}
+
+bool is_single_date_time_type_domain(const model::TypeDomainPatternValue& value) {
+    model::TypeDomainEntry expected;
+    expected.term = model::TypeDomainTerm::date;
+    expected.date = model::DateQualifiers{true, true};
+    return value.entries.size() == 1 && value.entries.front() == expected;
+}
+
+bool is_single_track_bar_type_domain(const model::TypeDomainPatternValue& value) {
+    model::TypeDomainEntry expected;
+    expected.term = model::TypeDomainTerm::numeric;
+    expected.numeric = model::NumericQualifiers{10, 0, true};
+    return value.entries.size() == 1 && value.entries.front() == expected;
+}
+
 struct InputFieldTextValues {
     std::string tool_tip;
     std::string format;
@@ -1412,11 +1476,14 @@ struct InputFieldLayoutValues {
     std::int32_t choice_list_height = 0;
 };
 
-InputFieldFlagValues decode_input_field_flags(const LV& info, std::string_view path) {
+InputFieldFlagValues decode_input_field_flags(
+    const LV& info, std::string_view path, InputFieldPairMode pair_mode) {
     const auto paired_path = child_path(path, 3);
-    require_arity(info.items[3], 2, paired_path);
-    require_arity(info.items[3].items[1], 2, child_path(paired_path, 1));
-    require_arity(info.items[3].items[1].items[1], 7, child_path(child_path(paired_path, 1), 1));
+    if (pair_mode == InputFieldPairMode::require_matching_pair) {
+        require_arity(info.items[3], 2, paired_path);
+        require_arity(info.items[3].items[1], 2, child_path(paired_path, 1));
+        require_arity(info.items[3].items[1].items[1], 7, child_path(child_path(paired_path, 1), 1));
+    }
     InputFieldFlagValues flags{};
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
@@ -1425,7 +1492,7 @@ InputFieldFlagValues decode_input_field_flags(const LV& info, std::string_view p
                 child_path(child_path(child_path(child_path(path, 2), 0), 0), mapping.slot) :
                 child_path(child_path(child_path(path, 2), 0), mapping.slot);
         flags[index] = bool_atom(input_field_flag_value(info, mapping), flag_path);
-        if (mapping.paired_slot != no_paired_slot) {
+        if (pair_mode == InputFieldPairMode::require_matching_pair && mapping.paired_slot != no_paired_slot) {
             const auto paired_value = bool_atom(
                 info.items[3].items[1].items[1].items[mapping.paired_slot],
                 child_path(child_path(child_path(child_path(path, 3), 1), 1), mapping.paired_slot));
@@ -1465,8 +1532,10 @@ LV canonical_input_field_info(
         value.items[2].items[0].items[14] = raw("0");
     } else if (type.entries.size() == 1 && type.entries.front().term == model::TypeDomainTerm::string) {
         value.items[2].items[0].items[14] = raw(std::to_string(type.entries.front().string.length));
+    } else if (is_single_date_only_type_domain(type)) {
+        value.items[2].items[0].items[14] = raw("0");
     } else {
-        throw std::logic_error("canonical InputField profile only supports empty or single-string TypeDomain");
+        throw std::logic_error("canonical InputField profile only supports empty, single-string, or Date-only TypeDomain");
     }
     for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
         const auto& mapping = input_field_flag_mappings[index];
@@ -1903,6 +1972,30 @@ void require_allowed_properties(
     const model::PropertySet& properties,
     std::initializer_list<std::string_view> allowed,
     std::string_view path);
+void warn_incomplete_profile(
+    Diagnostics& warnings,
+    bool& reconstruction_complete,
+    std::uint64_t raw_id,
+    std::string_view path,
+    std::string_view kind);
+
+bool same_list_stream_shape(const LV& left, const LV& right) {
+    if (left.is_list != right.is_list) return false;
+    if (!left.is_list) return left.atom_kind == right.atom_kind;
+    if (left.items.size() != right.items.size()) return false;
+    for (std::size_t index = 0; index < left.items.size(); ++index) {
+        if (!same_list_stream_shape(left.items[index], right.items[index])) return false;
+    }
+    return true;
+}
+
+void require_list_stream_shape(const LV& actual, const LV& expected, std::string_view path,
+    std::string_view description) {
+    if (!same_list_stream_shape(actual, expected)) {
+        fail("OOF1114", std::string(path), std::string(description), describe(actual),
+            "Stored record has an unsupported structural shape");
+    }
+}
 
 struct DecodedOwnerPages {
     std::vector<model::Page> pages;
@@ -1915,6 +2008,9 @@ DecodedOwnerPages decode_owner_pages(
     std::uint64_t& next_page_id,
     std::optional<model::ControlRef> owner,
     bool panel,
+    std::uint64_t owner_id,
+    Diagnostics& warnings,
+    bool& reconstruction_complete,
     std::string_view path) {
     require_arity(envelope, 3, path);
     require_exact(envelope.items[0], raw("1"), child_path(path, 0), "Owner page envelope marker is unsupported");
@@ -1954,18 +2050,20 @@ DecodedOwnerPages decode_owner_pages(
         canonical_root_panel_payload(8, 8, pages, owner);
     expected.items[1].items.erase(expected.items[1].items.begin() + 2,
         expected.items[1].items.begin() + 8);
+    require_arity(normalized, expected.items[1].items.size(), child_path(path, 1));
+    require_arity(normalized.items[0], expected.items[1].items[0].items.size(), child_path(child_path(path, 1), 0));
+    require_raw_constant(normalized.items[0].items[0], "19", child_path(child_path(child_path(path, 1), 0), 0));
     const auto auto_tab_order = bool_atom(normalized.items[7], child_path(child_path(path, 1), 7 + incoming_end - 2));
     expected.items[1].items[7] = raw(auto_tab_order ? "1" : "0");
     model::PanelPayload decoded_panel;
     if (!auto_tab_order) decoded_panel.properties.set_explicit(model::PropertyId::from_name("AutoTabOrder"), false);
-    require_arity(normalized.items[0], expected.items[1].items[0].items.size(), child_path(child_path(path, 1), 0));
     for (const auto& [name, slot] : std::array<std::pair<std::string_view, std::size_t>, 3>{{
         {"BorderColor", 6}, {"TextColor", 3}, {"BackColor", 2}}}) {
         const auto color_path = child_path(child_path(child_path(path, 1), 0), slot);
-        const auto color = decode_button_color(normalized.items[0].items[slot], color_path);
+        const auto color = decode_control_color(normalized.items[0].items[slot], color_path);
         if (color != model::ColorValue{}) decoded_panel.properties.set_explicit(model::PropertyId::from_name(name), color);
-        expected.items[1].items[0].items[slot] = encode_button_color(color, color_path);
-        if (name == "BackColor") expected.items[1].items[expected.items[1].items.size() - 6] = encode_button_color(color, color_path);
+        expected.items[1].items[0].items[slot] = encode_control_color(color, color_path);
+        if (name == "BackColor") expected.items[1].items[expected.items[1].items.size() - 6] = encode_control_color(color, color_path);
     }
     const auto mismatch = std::mismatch(normalized.items.begin(), normalized.items.end(),
         expected.items[1].items.begin(), expected.items[1].items.end(), [](const auto& left, const auto& right) {
@@ -1974,8 +2072,8 @@ DecodedOwnerPages decode_owner_pages(
     if (mismatch.first != normalized.items.end() || mismatch.second != expected.items[1].items.end()) {
         const auto index = static_cast<std::size_t>(mismatch.first - normalized.items.begin());
         const auto original_index = index < 2 ? index : index + incoming_end - 2;
-        fail("OOF1114", child_path(child_path(path, 1), original_index), "supported named owner property",
-            "changed owner property", "Owner page property contains an unsupported variation");
+        warn_incomplete_profile(warnings, reconstruction_complete, owner_id,
+            child_path(child_path(path, 1), original_index), panel ? "Panel" : "Form");
     }
     if (pages.size() > std::numeric_limits<std::uint64_t>::max() - next_page_id) {
         fail("OOF1122", std::string(path), "Page IDs within uint64 range", std::to_string(pages.size()),
@@ -1999,8 +2097,8 @@ LV encode_owner_pages(
     envelope.items[1].items[13] = raw(explicit_bool(properties, "AutoTabOrder", true) ? "1" : "0");
     for (const auto& [name, slot] : std::array<std::pair<std::string_view, std::size_t>, 3>{{
         {"BorderColor", 6}, {"TextColor", 3}, {"BackColor", 2}}}) {
-        const auto color = properties.contains(model::PropertyId::from_name(name)) ? explicit_button_color(properties, name) : model::ColorValue{};
-        const auto encoded_color = encode_button_color(color, std::string("$/Panel/") + std::string(name));
+        const auto color = properties.contains(model::PropertyId::from_name(name)) ? explicit_control_color(properties, name) : model::ColorValue{};
+        const auto encoded_color = encode_control_color(color, std::string("$/Panel/") + std::string(name));
         envelope.items[1].items[0].items[slot] = encoded_color;
         if (name == "BackColor") envelope.items[1].items[envelope.items[1].items.size() - 6] = encoded_color;
     }
@@ -2091,6 +2189,11 @@ bool is_single_value_table_type_domain(const model::TypeDomainPatternValue& valu
 
 enum class ActionMetadataPolicy { handler_derived, empty };
 
+struct DecodedAction {
+    std::string handler;
+    bool incomplete_profile = false;
+};
+
 LV encode_action(std::string_view handler, ActionMetadataPolicy policy, std::string_view path) {
     if (handler.empty()) {
         fail("OOF1122", std::string(path), "non-empty Action handler", "empty", "Action handler cannot be empty");
@@ -2102,7 +2205,7 @@ LV encode_action(std::string_view handler, ActionMetadataPolicy policy, std::str
         parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"), parse_constant("{0,0,0}")})});
 }
 
-std::string decode_action(const LV& payload, ActionMetadataPolicy policy, std::string_view path) {
+DecodedAction decode_action(const LV& payload, ActionMetadataPolicy policy, std::string_view path) {
     require_arity(payload, 3, path);
     require_raw_constant(payload.items[0], "3", child_path(path, 0));
     const auto handler = string_atom(payload.items[1], child_path(path, 1));
@@ -2115,22 +2218,87 @@ std::string decode_action(const LV& payload, ActionMetadataPolicy policy, std::s
     // Build the exact defaults through the same invariant boundary used by the writer.
     const auto expected = encode_action(handler, policy, path).items[2];
     require_exact(metadata.items[0], expected.items[0], child_path(metadata_path, 0), "Action metadata version is unsupported");
-    require_exact(metadata.items[1], expected.items[1], child_path(metadata_path, 1), "Action name differs from its metadata policy");
+    const auto metadata_name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    bool incomplete_profile = false;
+    if (policy == ActionMetadataPolicy::handler_derived) {
+        incomplete_profile = metadata_name != handler;
+    } else {
+        require_exact(metadata.items[1], expected.items[1], child_path(metadata_path, 1),
+            "Action name must be empty");
+    }
     for (std::size_t index = 2; index <= 4; ++index) {
         const auto field_path = child_path(metadata_path, index);
         if (policy == ActionMetadataPolicy::handler_derived) {
             // Preserve the existing localized-string reader and its line-ending normalization.
             const auto presentation = decoded_single_language_text(metadata.items[index], field_path);
-            if (presentation != handler) {
-                fail("OOF1114", field_path, handler, presentation, "Action presentation differs from its handler");
-            }
+            if (presentation != handler) incomplete_profile = true;
         } else {
             require_exact(metadata.items[index], expected.items[index], field_path, "Action presentation must be empty");
         }
     }
     require_exact(metadata.items[5], expected.items[5], child_path(metadata_path, 5), "Action style record is unsupported");
     require_exact(metadata.items[6], expected.items[6], child_path(metadata_path, 6), "Action tail record is unsupported");
-    return handler;
+    return {handler, incomplete_profile};
+}
+
+LV encode_menu_action(const model::CommandBarAction& action, std::string_view path) {
+    if (action.handler.empty()) {
+        fail("OOF1122", std::string(path), "non-empty Action handler", "empty", "Action handler cannot be empty");
+    }
+    validate_localized_languages(action.text, child_path(path, 0));
+    validate_localized_languages(action.tooltip, child_path(path, 1));
+    validate_localized_languages(action.description, child_path(path, 2));
+    try {
+        return list({raw("3"), string_value(action.handler), list({
+            raw("1"), string_value(action.name), encoded_localized(action.text),
+            encoded_localized(action.tooltip), encoded_localized(action.description),
+            parse_constant("{4,0,{0},\"\",-1,-1,1,0,\"\"}"), parse_constant("{0,0,0}")})});
+    } catch (const DecodeFailure&) {
+        throw;
+    } catch (const std::exception& error) {
+        fail("OOF1108", std::string(path), "encodable localized Action values", error.what(),
+            "Action localized values cannot be encoded");
+    }
+}
+
+model::LocalizedStringValue decode_action_localized(const LV& value, std::string_view path) {
+    model::LocalizedStringValue decoded;
+    try {
+        list_stream::ListInStream in(value);
+        decoded = value_codec::read_localized_string(in);
+        if (in.has_next()) {
+            fail("OOF1108", std::string(path), "complete LocalizedString record", describe(value),
+                "Action localized value has trailing fields");
+        }
+    } catch (const DecodeFailure&) {
+        throw;
+    } catch (const std::exception& error) {
+        fail("OOF1108", std::string(path), "LocalizedString record", describe(value), error.what());
+    }
+    validate_localized_languages(decoded, path);
+    return decoded;
+}
+
+model::CommandBarAction decode_menu_action(const LV& payload, std::string_view path) {
+    require_arity(payload, 3, path);
+    require_raw_constant(payload.items[0], "3", child_path(path, 0));
+    model::CommandBarAction action;
+    action.handler = string_atom(payload.items[1], child_path(path, 1));
+    if (action.handler.empty()) {
+        fail("OOF1115", child_path(path, 1), "non-empty Action handler", "empty", "Action handler cannot be empty");
+    }
+    const auto& metadata = payload.items[2];
+    const auto metadata_path = child_path(path, 2);
+    require_arity(metadata, 7, metadata_path);
+    require_raw_constant(metadata.items[0], "1", child_path(metadata_path, 0));
+    action.name = string_atom(metadata.items[1], child_path(metadata_path, 1));
+    action.text = decode_action_localized(metadata.items[2], child_path(metadata_path, 2));
+    action.tooltip = decode_action_localized(metadata.items[3], child_path(metadata_path, 3));
+    action.description = decode_action_localized(metadata.items[4], child_path(metadata_path, 4));
+    const auto expected = encode_menu_action(action, path).items[2];
+    require_exact(metadata.items[5], expected.items[5], child_path(metadata_path, 5), "Action style record is unsupported");
+    require_exact(metadata.items[6], expected.items[6], child_path(metadata_path, 6), "Action tail record is unsupported");
+    return action;
 }
 
 LV canonical_event_table(std::optional<std::string_view> handler) {
@@ -2145,7 +2313,9 @@ LV canonical_event_table(std::optional<std::string_view> handler) {
         encode_action(*handler, ActionMetadataPolicy::handler_derived, "$/Button/Events/Click")})});
 }
 
-std::optional<std::string> decode_button_event(const LV& value, std::string_view path) {
+std::optional<std::string> decode_button_event(
+    const LV& value, std::string_view path, std::uint64_t raw_id,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_list(value, path);
     if (value.items.empty()) {
         fail("OOF1103", child_path(path, 0), "event count", "missing", "Event table has no count");
@@ -2177,7 +2347,11 @@ std::optional<std::string> decode_button_event(const LV& value, std::string_view
         descriptor->storage_tag,
         child_path(event_path, 1));
 
-    return decode_action(event_record.items[2], ActionMetadataPolicy::handler_derived, child_path(event_path, 2));
+    const auto action = decode_action(event_record.items[2], ActionMetadataPolicy::handler_derived,
+        child_path(event_path, 2));
+    if (action.incomplete_profile)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(event_path, 2), "Button");
+    return action.handler;
 }
 
 LV encode_form_close_events(const model::OrdinaryFormDocument& document) {
@@ -2211,7 +2385,7 @@ std::optional<std::string> decode_form_close_events(const LV& value, std::string
     if (descriptor == nullptr || descriptor->storage_codec != model::metamodel::StorageCodec::event_record || descriptor->storage_tag.empty())
         throw std::logic_error("Form.OnClose has no executable storage descriptor");
     require_raw_constant(event.items[1], descriptor->storage_tag, child_path(event_path, 1));
-    return decode_action(event.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2));
+    return decode_action(event.items[2], ActionMetadataPolicy::empty, child_path(event_path, 2)).handler;
 }
 
 struct DecodedPictureDescriptor {
@@ -2586,6 +2760,14 @@ std::string explicit_string(
     std::string_view name,
     std::string_view default_value = {});
 
+constexpr std::string_view table_value_list_editor_type_guid = "83a29520-06e8-4348-989c-abe69e8e33e2";
+
+LV canonical_table_value_list_type_pair(std::string_view path) {
+    const model::TypeDomainPatternValue empty_type;
+    return list({raw("1"), list({raw(std::string(table_value_list_editor_type_guid)),
+        list({raw("0"), encoded_type_domain(empty_type, path)})})});
+}
+
 LV canonical_table_column_editor_info(const model::TableColumnControl& control) {
     constexpr std::string_view path = "$/Table/Columns/Column/Control";
     if (control.kind == model::ControlKind::input_field) {
@@ -2595,16 +2777,42 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control) 
             flags[index] = input_field_flag_mappings[index].default_value;
         }
         const model::TypeDomainPatternValue empty_type;
+        const auto& value_type = control.value_type.value_or(empty_type);
+        if (!value_type.entries.empty()) {
+            if (value_type.entries.size() != 1) {
+                fail("OOF1122", std::string(path) + "/ValueType",
+                    "single String, Numeric, Date-only, Boolean, or ValueList TypeDomain",
+                    std::to_string(value_type.entries.size()) + " entries",
+                    "Table Column InputField ValueType is outside the proven typed profile");
+            }
+            const auto term = value_type.entries.front().term;
+            const bool supported = term == model::TypeDomainTerm::string ||
+                term == model::TypeDomainTerm::numeric || term == model::TypeDomainTerm::boolean ||
+                term == model::TypeDomainTerm::value_list || is_single_date_only_type_domain(value_type);
+            if (!supported) {
+                fail("OOF1122", std::string(path) + "/ValueType",
+                    "single String, Numeric, Date-only, Boolean, or ValueList TypeDomain",
+                    std::to_string(static_cast<unsigned>(term)),
+                    "Table Column InputField ValueType is outside the proven typed profile");
+            }
+        }
         const bool enabled = explicit_bool(control.properties, "Enabled", true);
         const bool read_only = explicit_bool(control.properties, "ReadOnly", false);
-        if (!enabled || read_only) {
-            fail("OOF1122", std::string(path), "Enabled=true and ReadOnly=false",
-                enabled ? "ReadOnly=true" : "Enabled=false",
-                "Table Column editor property value is outside the supported persisted profile");
-        }
         LV info = canonical_input_field_info(
             empty_type, enabled, read_only, flags, InputFieldTextValues{}, InputFieldLayoutValues{});
-        info.items[3] = list({raw("0")});
+        info.items[1] = encoded_type_domain(value_type, std::string(path) + "/ValueType");
+        if (!value_type.entries.empty() && value_type.entries.size() == 1 &&
+            value_type.entries.front().term == model::TypeDomainTerm::string) {
+            info.items[2].items[0].items[14] = raw(std::to_string(value_type.entries.front().string.length));
+        } else {
+            info.items[2].items[0].items[14] = raw("0");
+        }
+        if (value_type.entries.size() == 1 &&
+            value_type.entries.front().term == model::TypeDomainTerm::value_list) {
+            info.items[3] = canonical_table_value_list_type_pair(std::string(path) + "/ValueType");
+        } else if (value_type.entries.empty()) {
+            info.items[3] = list({raw("0")});
+        }
         return info;
     }
     if (control.kind == model::ControlKind::choice_field) {
@@ -2616,7 +2824,7 @@ LV canonical_table_column_editor_info(const model::TableColumnControl& control) 
                 enabled ? "ToolTip is non-empty" : "Enabled=false",
                 "Table Column ChoiceField is outside the observed default profile");
         }
-        return canonical_choice_field_info(enabled, tool_tip);
+        return canonical_choice_field_info(enabled, tool_tip, button_color_default("BorderColor"));
     }
     if (control.kind == model::ControlKind::check_box) {
         require_allowed_properties(control.properties, {"Enabled", "Caption", "ToolTip", "Font"}, path);
@@ -2648,7 +2856,9 @@ LV canonical_table_column_record(const model::TableColumn& column, std::string_v
     }
     properties.items[1] = encoded_localized(column.header);
     properties.items[30] = string_value(column.name);
-    properties.items[35] = encoded_type_domain(model::TypeDomainPatternValue{}, std::string(path) + "/Control/TypeRestriction");
+    properties.items[35] = encoded_type_domain(
+        column.control.value_type.value_or(model::TypeDomainPatternValue{}),
+        std::string(path) + "/Control/ValueType");
     properties.items[38] = raw(std::string(model::metamodel::descriptor_for(column.control.kind).guid));
     properties.items[39] = encode_table_column_editor_packet(
         canonical_table_column_editor_info(column.control), std::string(path) + "/Control");
@@ -2797,6 +3007,89 @@ std::optional<DecodedPictureDescriptor> decode_button_picture(const LV& value, s
 constexpr std::string_view menu_owner_guid = "31946946-0a9b-40a2-95cf-82f200778341";
 constexpr std::string_view menu_action_guid = "e1692cc2-605b-4535-84dd-28440238746c";
 constexpr std::string_view menu_reference_guid = "abde0c9a-18a6-4e0c-bbaa-af26b911b3e6";
+constexpr std::string_view standard_menu_action_guid = "fbe38877-b914-4fd5-8540-07dde06ba2e1";
+
+// ControlCommandHandler constructor in frame.so: ELF 0x2034b04, kind 0, INT32_MAX, flag 0.
+constexpr std::string_view standard_menu_default_context_marker = "357c6a54-357d-425d-a2bd-22f4f6e86c87";
+
+LV encode_standard_menu_action(const model::StandardMenuAction& action,
+                              const model::OrdinaryFormDocument& document, std::string_view path) {
+    if (action.command != model::metamodel::standard_menu_close.kind)
+        fail("OOF1122", std::string(path), "known standard menu command", "unknown", "Standard command is unsupported");
+    LV context;
+    switch (action.context) {
+        case model::StandardMenuActionContext::default_context:
+            if (action.command_bar.id().value() != 0)
+                fail("OOF1123", std::string(path), "Default context without CommandBar reference", "commandBarId", "Standard command context is invalid");
+            context = list({raw("1"), raw("0"), raw(std::string(standard_menu_default_context_marker)),
+                raw(std::to_string(std::numeric_limits<std::int32_t>::max())), raw("0")});
+            break;
+        case model::StandardMenuActionContext::command_bar: {
+            const auto* command_bar = document.find_control(action.command_bar.id());
+            if (!command_bar || command_bar->kind() != model::ControlKind::command_bar)
+                fail("OOF1123", std::string(path), "existing CommandBar context", "missing or wrong control kind", "Standard command context is invalid");
+            context = list({raw("1"), raw("99"), raw(std::string(command_bar_root_marker)),
+                raw(std::to_string(command_bar->id.value())), raw("0")});
+            break;
+        }
+        default: fail("OOF1122", std::string(path), "Default or CommandBar", "unknown", "Standard command context is unsupported");
+    }
+    std::uint32_t source;
+    switch (action.source) {
+        case model::StandardMenuActionSource::form: source = std::numeric_limits<std::uint32_t>::max(); break;
+        case model::StandardMenuActionSource::all_sources: source = 0; break;
+        case model::StandardMenuActionSource::control: {
+            const auto id = action.source_control.id().value();
+            if (id == 0 || id > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()) ||
+                !document.find_control(action.source_control.id()))
+                fail("OOF1123", std::string(path), "positive int32 control reference", "missing or invalid", "Standard command source is invalid");
+            source = static_cast<std::uint32_t>(id);
+            break;
+        }
+        default: fail("OOF1122", std::string(path), "Form, AllSources, or Control", "unknown", "Standard command source is unsupported");
+    }
+    return list({raw("6"), raw(std::to_string(source)), raw(std::string(null_uuid)), raw(std::to_string(model::metamodel::standard_menu_close.storage_id)),
+        std::move(context), raw("0"), raw("1")});
+}
+
+model::StandardMenuAction decode_standard_menu_action(const LV& value, std::string_view path) {
+    require_arity(value, 7, path);
+    require_raw_constant(value.items[0], "6", child_path(path, 0));
+    const auto source = integer_atom<std::uint32_t>(value.items[1], child_path(path, 1));
+    require_raw_constant(value.items[2], null_uuid, child_path(path, 2));
+    require_raw_constant(value.items[3], std::to_string(model::metamodel::standard_menu_close.storage_id), child_path(path, 3));
+    const auto context_path = child_path(path, 4);
+    const auto& context = value.items[4];
+    require_arity(context, 5, context_path);
+    require_raw_constant(context.items[0], "1", child_path(context_path, 0));
+    require_raw_constant(context.items[4], "0", child_path(context_path, 4));
+    require_raw_constant(value.items[5], "0", child_path(path, 5));
+    require_raw_constant(value.items[6], "1", child_path(path, 6));
+    model::StandardMenuAction action;
+    action.command = model::metamodel::standard_menu_close.kind;
+    const auto kind = integer_atom<std::uint64_t>(context.items[1], child_path(context_path, 1));
+    if (kind == 0) {
+        require_raw_constant(context.items[2], standard_menu_default_context_marker, child_path(context_path, 2));
+        require_raw_constant(context.items[3], std::to_string(std::numeric_limits<std::int32_t>::max()), child_path(context_path, 3));
+        action.context = model::StandardMenuActionContext::default_context;
+    } else if (kind == 99) {
+        require_raw_constant(context.items[2], command_bar_root_marker, child_path(context_path, 2));
+        const auto context_id = integer_atom<std::uint64_t>(context.items[3], child_path(context_path, 3));
+        if (context_id == 0)
+            fail("OOF1123", child_path(context_path, 3), "nonzero CommandBar collection identity", "zero", "Standard command context is invalid");
+        action.context = model::StandardMenuActionContext::command_bar;
+        // Resolved after all CommandBar collection identities are known.
+        action.command_bar = model::ControlRef{model::ObjectId{context_id}};
+    } else fail("OOF1114", child_path(context_path, 1), "Default or CommandBar context", std::to_string(kind), "Standard command context is unsupported");
+    if (source == std::numeric_limits<std::uint32_t>::max()) action.source = model::StandardMenuActionSource::form;
+    else if (source == 0) action.source = model::StandardMenuActionSource::all_sources;
+    else if (source <= static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())) {
+        action.source = model::StandardMenuActionSource::control;
+        action.source_control = model::ControlRef{model::ObjectId{source}};
+    } else fail("OOF1114", child_path(path, 1), "Form, AllSources, or positive int32 control reference", std::to_string(source), "Standard command source is unsupported");
+    return action;
+}
+
 
 std::string menu_identity(std::uint64_t owner, std::uint64_t item) {
     std::array<char, 32> digits;
@@ -2818,7 +3111,7 @@ LV menu_entry_properties(const model::CommandBarButton& entry, std::string_view 
         entry.representation == model::ButtonRepresentation::text ? 1 :
         entry.representation == model::ButtonRepresentation::picture ? 2 : 3;
     return list({raw("8"), string_value(entry.name), raw(entry.changes_data ? "1" : "0"), raw("1"),
-        encoded_localized(entry.text), raw(entry.text.empty() ? "0" : "1"), raw(std::string(owner)),
+        encoded_localized(entry.text.value_or(std::string{})), raw(entry.text ? "1" : "0"), raw(std::string(owner)),
         raw(std::to_string(id)), raw("1e2"), raw(std::to_string(type)), raw(std::to_string(representation)),
         raw(entry.enabled ? "1" : "0"), raw(entry.checked ? "1" : "0"),
         raw(entry.type == model::CommandBarButtonKind::separator ? "0" : "1"), raw("0"), raw("0")});
@@ -2863,20 +3156,36 @@ LV encode_button_menu(const std::vector<model::CommandBarButton>& entries,
     for (auto it = items.rbegin(); it != items.rend(); ++it) {
         const auto& entry = *it->entry;
         LV action = entry.type == model::CommandBarButtonKind::action
-            ? encode_action(*entry.action, ActionMetadataPolicy::empty, "$/Button/Buttons/Action")
+            ? entry.standard_action ? encode_standard_menu_action(*entry.standard_action, document, "$/Button/Buttons/StandardAction")
+                : encode_menu_action(*entry.action, "$/Button/Buttons/Action")
             : entry.type == model::CommandBarButtonKind::submenu
                 ? list({raw("1"), raw(owner), raw(std::to_string(it->id))})
                 : parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}");
-        unsigned mask = (entry.picture ? 1 : 0) | (!entry.tooltip.empty() ? 2 : 0) |
-            (!entry.explanation.empty() ? 4 : 0) | (entry.shortcut != model::ShortcutValue{} ? 8 : 0);
+        unsigned mask = (entry.picture ? 1 : 0) | (entry.tooltip ? 2 : 0) |
+            (entry.explanation ? 4 : 0) | (entry.shortcut != model::ShortcutValue{} ? 8 : 0);
+        std::int32_t client_interface_variant = 0;
+        switch (entry.client_interface_variant) {
+            case model::ClientInterfaceVariant::version8_0:
+                client_interface_variant = 0;
+                break;
+            case model::ClientInterfaceVariant::version8_2_ordinary_app:
+                client_interface_variant = 2;
+                break;
+            default:
+                fail("OOF1122", "$/Button/Buttons/ClientInterfaceVariant",
+                    "Version8_0 or Version8_2_OrdinaryApp", "invalid enum value",
+                    "Client interface variant is unsupported");
+        }
         std::vector<LV> record{raw("8"), raw(it->action_id), raw("1"),
-            raw(std::string(entry.type == model::CommandBarButtonKind::action ? menu_action_guid : menu_reference_guid)),
+            raw(std::string(entry.type == model::CommandBarButtonKind::action
+                ? (entry.standard_action ? standard_menu_action_guid : menu_action_guid) : menu_reference_guid)),
             std::move(action), raw(std::to_string(mask))};
-        if (!entry.tooltip.empty()) record.push_back(encoded_localized(entry.tooltip));
-        if (!entry.explanation.empty()) record.push_back(encoded_localized(entry.explanation));
+        if (entry.tooltip) record.push_back(encoded_localized(*entry.tooltip));
+        if (entry.explanation) record.push_back(encoded_localized(*entry.explanation));
         if (entry.picture) record.push_back(menu_picture(*entry.picture, document));
         if (entry.shortcut != model::ShortcutValue{}) record.push_back(encode_button_shortcut(entry.shortcut));
-        record.push_back(raw("0")); record.push_back(raw("0"));
+        record.push_back(raw(std::to_string(client_interface_variant)));
+        record.push_back(raw("0"));
         result.push_back(list(std::move(record)));
     }
     result.push_back(raw(std::to_string(1 + std::count_if(items.begin(), items.end(), [](const auto& item) {
@@ -2913,7 +3222,21 @@ struct DecodedMenu {
     std::vector<model::PictureAsset> assets;
 };
 
+void warn_incomplete_profile(
+    Diagnostics& warnings,
+    bool& reconstruction_complete,
+    std::uint64_t raw_id,
+    std::string_view path,
+    std::string_view kind) {
+    reconstruction_complete = false;
+    warnings.push_back({
+        "OOF1140", DiagnosticSeverity::warning, std::to_string(raw_id), std::string(path),
+        std::string(kind), {}, {},
+        std::string(kind) + " contains property data not represented in the named model; these properties cannot be reproduced."});
+}
+
 DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::string_view control_name,
+    Diagnostics& warnings, bool& reconstruction_complete,
                                std::string_view root_marker = menu_owner_guid, std::uint64_t root_group_id = 0,
                                std::uint64_t default_item_id = 0) {
     require_list(menu, path);
@@ -2924,13 +3247,19 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
     require_raw_constant(menu.items[3], "1", path);
     const auto action_count = integer_atom<std::size_t>(menu.items[4], path);
     if (action_count > menu.items.size() - 6) fail("OOF1102", std::string(path), "bounded action count", describe(menu), "Menu action count exceeds its record");
-    std::unordered_map<std::string, const LV*> actions;
+    struct ActionRecord {
+        const LV* value;
+        std::string path;
+    };
+    std::unordered_map<std::string, ActionRecord> actions;
     for (std::size_t i = 0; i < action_count; ++i) {
         const auto& action = menu.items[5 + i];
-        require_list(action, path);
-        if (action.items.size() < 8) fail("OOF1102", std::string(path), "action header", describe(action), "Menu action is incomplete");
-        const auto guid = uuid_atom(action.items[1], path).canonical;
-        if (!actions.emplace(guid, &action).second) fail("OOF1114", std::string(path), "unique actions", guid, "Duplicate menu action");
+        const auto action_path = child_path(path, 5 + i);
+        require_list(action, action_path);
+        if (action.items.size() < 8) fail("OOF1102", action_path, "action header", describe(action), "Menu action is incomplete");
+        const auto guid = uuid_atom(action.items[1], child_path(action_path, 1)).canonical;
+        if (!actions.emplace(guid, ActionRecord{&action, action_path}).second)
+            fail("OOF1114", child_path(action_path, 1), "unique actions", guid, "Duplicate menu action");
     }
     const auto group_count = integer_atom<std::size_t>(menu.items[5 + action_count], path);
     if (group_count != menu.items.size() - 6 - action_count || group_count == 0)
@@ -2951,10 +3280,12 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
         if (!groups.emplace(key, &group).second) fail("OOF1114", std::string(path), "unique owner/ID collection pairs", std::to_string(id), "Duplicate menu collection");
         const auto& footer = group.items.back();
         require_arity(footer, 3, path);
-        const bool empty_command_bar_root = root_group && root_marker == command_bar_root_marker &&
-            integer_atom<std::size_t>(group.items[4], path) == 0;
-        require_raw_constant(footer.items[0],
-            empty_command_bar_root && footer.items[0].atom == "0" ? "0" : "-1", path);
+        const bool command_bar_root = root_group && root_marker == command_bar_root_marker;
+        if (command_bar_root && raw_atom(footer.items[0], path) == "0") {
+            if (integer_atom<std::size_t>(group.items[4], path) != 0)
+                warn_incomplete_profile(warnings, reconstruction_complete, root_group_id,
+                    std::string(path), "CommandBarMenu");
+        } else require_raw_constant(footer.items[0], "-1", path);
         require_raw_constant(footer.items[1], "0", path);
         require_list(footer.items[2], path);
         const auto& refs = footer.items[2];
@@ -2995,11 +3326,36 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 fail("OOF1114", std::string(path), "unique existing action reference", guid, "Menu action is dangling or shared");
             const auto& props = group.items[6 + 2 * i];
             require_arity(props, 16, path);
+            require_raw_constant(props.items[0], "8", child_path(path, 0));
+            require_raw_constant(props.items[6], owner, child_path(path, 6));
             model::CommandBarButton entry;
             entry.name = string_atom(props.items[1], path);
             if (entry.name.empty() || !names.insert(entry.name).second) fail("OOF1114", std::string(path), "unique named items", entry.name, "Menu name is empty or duplicated");
             entry.changes_data = bool_atom(props.items[2], path);
-            entry.text = decoded_single_language_text(props.items[4], path);
+            const bool text_present = bool_atom(props.items[5], path);
+            if (text_present) {
+                entry.text = decoded_single_language_text(props.items[4], path);
+            } else {
+                model::LocalizedStringValue automatic_text;
+                try {
+                    list_stream::ListInStream in(props.items[4]);
+                    automatic_text = value_codec::read_localized_string(in);
+                } catch (const std::exception& error) {
+                    fail("OOF1108", std::string(path), "empty or single automatic localized Text", describe(props.items[4]), error.what());
+                }
+                if (automatic_text.items.size() > 1 ||
+                    (!automatic_text.items.empty() &&
+                        (automatic_text.items.front().language != "#" || automatic_text.items.front().text.empty()))) {
+                    fail("OOF1115", std::string(path), "empty localized Text or one nonempty # automatic Text",
+                        describe(props.items[4]), "Absent button Text contains an unsupported localized value");
+                }
+                const auto expected_text = automatic_text.items.empty()
+                    ? encoded_localized(std::string_view{})
+                    : encoded_localized(model::LocalizedStringValue{{{"#",
+                        normalize_storage_line_endings(automatic_text.items.front().text)}}});
+                require_exact(props.items[4], expected_text, path,
+                    "absent button Text must use the canonical empty or single # localized value");
+            }
             const auto id = integer_atom<std::uint64_t>(props.items[7], path);
             if (id == 0 || id > max_id || !entry_ids.insert(id).second)
                 fail("OOF1114", std::string(path), "positive unique item ID within maximum", std::to_string(id), "Menu identity is invalid");
@@ -3021,10 +3377,15 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
             const auto representation = integer_atom<unsigned>(props.items[10], path);
             if (representation > 3) fail("OOF1114", std::string(path), "known representation", std::to_string(representation), "Menu representation is unsupported");
             entry.representation = representation == 0 ? model::ButtonRepresentation::automatic : representation == 1 ? model::ButtonRepresentation::text : representation == 2 ? model::ButtonRepresentation::picture : model::ButtonRepresentation::picture_text;
+            // Separator.Отображение returns Undefined. A nondefault stored representation
+            // remains an unrepresented value and is reported by the profile comparison below.
+            if (entry.type == model::CommandBarButtonKind::separator)
+                entry.representation = model::ButtonRepresentation::automatic;
             entry.enabled = bool_atom(props.items[11], path);
             entry.checked = bool_atom(props.items[12], path);
             auto normalized = props;
             normalized.items[8] = raw("1e2");
+            if (!text_present) normalized.items[4] = encoded_localized(std::string_view{});
             if (raw_atom(props.items[8], path) != "1e2" && raw_atom(props.items[8], path) != "100")
                 fail("OOF1114", std::string(path), "scale 100", describe(props.items[8]), "Menu scale is unsupported");
             const auto expected_properties = menu_entry_properties(entry, owner, id);
@@ -3034,27 +3395,43 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 });
             if (mismatch.first != normalized.items.end()) {
                 const auto index = static_cast<std::size_t>(mismatch.first - normalized.items.begin());
-                fail("OOF1114", child_path(path, index), "canonical menu item property",
-                    describe(normalized.items.at(index)), "Menu item property is unsupported");
+                warn_incomplete_profile(warnings, reconstruction_complete, id,
+                    child_path(path, index), "MenuAction");
             }
-            const auto& action = *actions.at(guid);
-            require_raw_constant(action.items[0], "8", path); require_raw_constant(action.items[2], "1", path);
-            require_raw_constant(action.items[3], type == 0 ? menu_action_guid : menu_reference_guid, path);
+            const auto& action_record = actions.at(guid);
+            const auto& action = *action_record.value;
+            const auto& action_path = action_record.path;
+            require_raw_constant(action.items[0], "8", child_path(action_path, 0));
+            require_raw_constant(action.items[2], "1", child_path(action_path, 2));
             if (type == 0) {
-                entry.action = decode_action(action.items[4], ActionMetadataPolicy::empty, path);
+                if (raw_atom(action.items[3], child_path(action_path, 3)) == standard_menu_action_guid)
+                    entry.standard_action = decode_standard_menu_action(action.items[4], child_path(action_path, 4));
+                else {
+                    require_raw_constant(action.items[3], menu_action_guid, child_path(action_path, 3));
+                    entry.action = decode_menu_action(action.items[4], child_path(action_path, 4));
+                }
             } else {
+                require_raw_constant(action.items[3], menu_reference_guid, child_path(action_path, 3));
                 require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
-                    parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"), path, "Menu action target is unsupported");
+                    parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"),
+                    child_path(action_path, 4), "Menu action target is unsupported");
             }
-            const auto mask = integer_atom<unsigned>(action.items[5], path);
-            if (mask > 15) fail("OOF1114", std::string(path), "known property flags", std::to_string(mask), "Menu action flags are unsupported");
+            const auto mask = integer_atom<unsigned>(action.items[5], child_path(action_path, 5));
+            if (mask > 15) fail("OOF1114", child_path(action_path, 5), "known property flags", std::to_string(mask), "Menu action flags are unsupported");
             std::size_t cursor = 6;
-            const auto take = [&]() -> const LV& { return at(action, cursor++, path); };
-            if (mask & 2) entry.tooltip = decoded_single_language_text(take(), path);
-            if (mask & 4) entry.explanation = decoded_single_language_text(take(), path);
+            const auto take = [&]() -> const LV& { return at(action, cursor++, action_path); };
+            if (mask & 2) {
+                const auto slot = cursor;
+                entry.tooltip = decoded_single_language_text(take(), child_path(action_path, slot));
+            }
+            if (mask & 4) {
+                const auto slot = cursor;
+                entry.explanation = decoded_single_language_text(take(), child_path(action_path, slot));
+            }
             if (mask & 1) {
-                const auto picture = decode_button_picture(take(), path);
-                if (!picture) fail("OOF1114", std::string(path), "nonempty picture", "empty", "Menu picture flag is inconsistent");
+                const auto slot = cursor;
+                const auto picture = decode_button_picture(take(), child_path(action_path, slot));
+                if (!picture) fail("OOF1114", child_path(action_path, slot), "nonempty picture", "empty", "Menu picture flag is inconsistent");
                 if (picture->standard_name) entry.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}};
                 else {
                     decoded.assets.push_back(model::PictureAsset{model::ObjectId{decoded.assets.size() + 1},
@@ -3063,9 +3440,30 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                     entry.picture = model::PictureRef{model::PictureAssetRef{decoded.assets.back().id}};
                 }
             }
-            if (mask & 8) entry.shortcut = decode_button_shortcut(take(), path);
-            require_raw_constant(take(), "0", path); require_raw_constant(take(), "0", path);
-            require_arity(action, cursor, path);
+            if (mask & 8) {
+                const auto slot = cursor;
+                entry.shortcut = decode_button_shortcut(take(), child_path(action_path, slot));
+            }
+            const auto variant_slot = cursor;
+            const auto client_interface_variant = integer_atom<std::int32_t>(take(), child_path(action_path, variant_slot));
+            switch (client_interface_variant) {
+                case 0:
+                    entry.client_interface_variant = model::ClientInterfaceVariant::version8_0;
+                    break;
+                case 2:
+                    entry.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
+                    break;
+                default:
+                    fail("OOF1114", child_path(action_path, variant_slot), "client interface variant 0 or 2",
+                        std::to_string(client_interface_variant), "Client interface variant is unsupported");
+            }
+            const auto second_tail_slot = cursor;
+            const auto second_tail_value = integer_atom<std::int32_t>(take(), child_path(action_path, second_tail_slot));
+            if (second_tail_value != 0) {
+                warn_incomplete_profile(warnings, reconstruction_complete, id,
+                    child_path(action_path, second_tail_slot), "MenuAction");
+            }
+            require_arity(action, cursor, action_path);
             if (type == 1) {
                 ++submenu_count;
                 submenu_refs.push_back(raw(owner)); submenu_refs.push_back(raw(std::to_string(id)));
@@ -3096,6 +3494,32 @@ struct DecodedControl {
     std::vector<model::PictureAsset> menu_assets;
 };
 
+struct DecodedChartInfo {
+    model::ChartPayload payload;
+    std::string title;
+};
+
+DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete);
+
+// Общий блок диаграммы проверяется тем же кодеком у всех его владельцев.
+void validate_embedded_chart_info(const LV& actual, const LV& expected,
+    const std::string& path, std::uint64_t owner_id, std::string_view owner_kind,
+    Diagnostics& warnings, bool& reconstruction_complete) {
+    require_arity(actual, 3, path);
+    require_exact(actual.items[0], expected.items[0], child_path(path, 0),
+        "Embedded Chart marker is unsupported");
+    require_exact(actual.items[1], expected.items[1], child_path(path, 1),
+        "Embedded Chart geometry header is unsupported");
+    Diagnostics chart_warnings;
+    bool chart_complete = true;
+    static_cast<void>(decode_chart_info(actual.items[2], child_path(path, 2), owner_id,
+        chart_warnings, chart_complete));
+    // Эти свойства еще не представлены у владельца, поэтому проекция неполна.
+    if (list_stream::dump_compact(actual) != list_stream::dump_compact(expected))
+        warn_incomplete_profile(warnings, reconstruction_complete, owner_id, path, owner_kind);
+}
+
 std::size_t control_geometry_slot(std::string_view guid) {
     return guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid ||
         guid == model::metamodel::descriptor_for(model::ControlKind::geographical_schema_field).guid ? 4 : 3;
@@ -3120,7 +3544,7 @@ LV canonical_default_pivot_chart_info() {
 
 DecodedControl decode_default_complex_control(
     const LV& record, std::string_view path, const GeometryContext& context,
-    model::ControlKind kind) {
+    model::ControlKind kind, Diagnostics& warnings, bool& reconstruction_complete) {
     const auto& descriptor = model::metamodel::descriptor_for(kind);
     const auto geometry_slot = control_geometry_slot(descriptor.guid);
     require_arity(record, geometry_slot + 3, path);
@@ -3129,16 +3553,23 @@ DecodedControl decode_default_complex_control(
     if (id == 0 || id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max()))
         fail("OOF1122", child_path(path, 1), "positive int64 control ID", std::to_string(id), "Default complex control ID is invalid");
     if (kind == model::ControlKind::graphical_schema_field) {
-        require_exact(record.items[2], canonical_graphical_schema_field_info(), child_path(path, 2),
-            "GraphicalSchemaField contains nondefault properties or nonempty schema content");
+        require_arity(record.items[2], 6, child_path(path, 2));
+        require_arity(record.items[2].items[0], 21, child_path(child_path(path, 2), 0));
+        require_raw_constant(record.items[2].items[0].items[0], "19", child_path(child_path(child_path(path, 2), 0), 0));
+        if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_graphical_schema_field_info()))
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "GraphicalSchemaField");
     } else if (kind == model::ControlKind::pivot_chart) {
-        require_exact(record.items[2], canonical_default_pivot_chart_info(), child_path(path, 2),
-            "PivotChart contains nondefault diagram, source, role, or settings values");
+        require_arity(record.items[2], 13, child_path(path, 2));
+        require_raw_constant(record.items[2].items[0], "3", child_path(child_path(path, 2), 0));
+        if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_default_pivot_chart_info()))
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "PivotChart");
     } else {
-        require_exact(record.items[2], canonical_geographical_schema_field_info(), child_path(path, 2),
-            "GeographicalSchemaField contains nondefault properties");
-        require_exact(record.items[3], canonical_geographical_schema(), child_path(path, 3),
-            "GeographicalSchemaField contains nondefault or nonempty schema content");
+        require_arity(record.items[2], 21, child_path(path, 2));
+        require_raw_constant(record.items[2].items[0], "19", child_path(child_path(path, 2), 0));
+        if (list_stream::dump_compact(record.items[2]) != list_stream::dump_compact(canonical_geographical_schema_field_info()))
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 2), "GeographicalSchemaField");
+        if (list_stream::dump_compact(record.items[3]) != list_stream::dump_compact(canonical_geographical_schema()))
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(path, 3), "GeographicalSchemaField");
     }
     auto geometry = decode_geometry(record.items[geometry_slot], child_path(path, geometry_slot), context);
     const auto metadata_slot = geometry_slot + 1;
@@ -3469,7 +3900,8 @@ std::vector<std::tuple<model::ObjectId, std::string, std::string>> decode_gantt_
 }
 
 void require_gantt_dimension_table_match(const LV& actual, const LV& expected,
-                                         std::string_view path) {
+                                         std::string_view path, std::uint64_t control_id,
+                                         Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(actual, 2, path);
     require_arity(expected, 2, path);
     if (list_stream::dump_compact(actual.items[0]) != list_stream::dump_compact(expected.items[0]))
@@ -3491,20 +3923,50 @@ void require_gantt_dimension_table_match(const LV& actual, const LV& expected,
                 list_stream::dump_compact(expected_rows.items[i]), list_stream::dump_compact(actual_rows.items[i]),
                 "Gantt dimension table header differs from its canonical value");
     }
+    struct KeyedRow {
+        const LV* entry{};
+        std::string value_tail_path;
+    };
     const auto keyed_rows = [&](const LV& rows, std::string_view rows_path) {
-        std::map<std::uint64_t, std::string> by_key;
+        std::map<std::uint64_t, KeyedRow> by_key;
         for (std::size_t i = 0; i <= count; ++i) {
             const auto cursor = 3 + 2 * i;
             const auto key = integer_atom<std::uint64_t>(rows.items[cursor], child_path(rows_path, cursor));
-            if (!by_key.emplace(key, list_stream::dump_compact(rows.items[cursor + 1])).second)
+            const auto entry_path = child_path(rows_path, cursor + 1);
+            const auto& entry = rows.items[cursor + 1];
+            if (!by_key.emplace(key, KeyedRow{&entry, child_path(child_path(entry_path, 1), 10)}).second)
                 fail("OOF1114", child_path(rows_path, cursor), "unique dimension ID", std::to_string(key), "Gantt dimension ID is duplicated");
         }
         return by_key;
     };
     const auto actual_by_key = keyed_rows(actual_rows, child_path(path, 1));
     const auto expected_by_key = keyed_rows(expected_rows, child_path(path, 1));
-    if (actual_by_key != expected_by_key)
-        fail("OOF1114", child_path(path, 1), "same named row records by dimension ID", "row content differs", "Gantt dimension row differs from its canonical named value");
+    if (actual_by_key.size() != expected_by_key.size())
+        fail("OOF1114", child_path(path, 1), "same named row records by dimension ID", "row count differs", "Gantt dimension row differs from its canonical named value");
+    for (const auto& [key, expected_row] : expected_by_key) {
+        const auto actual_it = actual_by_key.find(key);
+        if (actual_it == actual_by_key.end())
+            fail("OOF1114", child_path(path, 1), "same named row IDs", "row ID is missing", "Gantt dimension row differs from its canonical named value");
+        const LV& actual_entry = *actual_it->second.entry;
+        const LV& expected_entry = *expected_row.entry;
+        LV comparable_actual = actual_entry;
+        if (key == 0) {
+            require_arity(actual_entry, actual.items[0].atom == "1" ? 4 : 2, child_path(path, 1));
+            require_arity(expected_entry, actual.items[0].atom == "1" ? 4 : 2, child_path(path, 1));
+            require_arity(actual_entry.items[1], 11, actual_it->second.value_tail_path.substr(0, actual_it->second.value_tail_path.rfind('/')));
+            require_arity(expected_entry.items[1], 11, child_path(path, 1));
+            const auto actual_tail = integer_atom<std::uint32_t>(actual_entry.items[1].items[10], actual_it->second.value_tail_path);
+            const auto expected_tail = integer_atom<std::uint32_t>(expected_entry.items[1].items[10], expected_row.value_tail_path);
+            if (actual_tail != expected_tail) {
+                warn_incomplete_profile(warnings, reconstruction_complete, control_id,
+                    actual_it->second.value_tail_path, "GanttChart");
+                comparable_actual.items[1].items[10] = expected_entry.items[1].items[10];
+            }
+        }
+        if (list_stream::dump_compact(comparable_actual) != list_stream::dump_compact(expected_entry))
+            fail("OOF1114", child_path(path, 1), "same row records by dimension ID apart from the unrepresented default numeric word",
+                "row content differs", "Gantt dimension row differs from its canonical named value");
+    }
     const std::size_t tail = 5 + 2 * count;
     for (std::size_t i = tail; i < actual_rows.items.size(); ++i) {
         if (list_stream::dump_compact(actual_rows.items[i]) != list_stream::dump_compact(expected_rows.items[i]))
@@ -3538,7 +4000,8 @@ void normalize_gantt_runtime_layout_values(const LV& actual, LV& normalized, std
 
 
 DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
-                                  const GeometryContext& context) {
+                                  const GeometryContext& context, Diagnostics& warnings,
+                                  bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::gantt_chart);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -3612,13 +4075,33 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
             model::DateValue{value_codec::date_from_platform(raw_atom(info.items[13 + shift], child_path(info_path, 13 + shift)))});
     }
     const LV expected = encode_gantt_chart_info(control);
-    require_gantt_dimension_table_match(info.items[2], expected.items[2], child_path(info_path, 2));
-    require_gantt_dimension_table_match(info.items[3], expected.items[3], child_path(info_path, 3));
+    require_gantt_dimension_table_match(info.items[2], expected.items[2], child_path(info_path, 2), id,
+        warnings, reconstruction_complete);
+    require_gantt_dimension_table_match(info.items[3], expected.items[3], child_path(info_path, 3), id,
+        warnings, reconstruction_complete);
     LV normalized = info;
     normalized.items[2] = expected.items[2];
     normalized.items[3] = expected.items[3];
     LV expected_with_platform_layout = expected;
     normalize_gantt_runtime_layout_values(info, expected_with_platform_layout, info_path);
+    validate_embedded_chart_info(info.items[1], expected_with_platform_layout.items[1],
+        child_path(info_path, 1), id, "GanttChart", warnings, reconstruction_complete);
+    normalized.items[1] = expected_with_platform_layout.items[1];
+    for (const auto offset : {std::size_t{12}, std::size_t{13}, std::size_t{14}}) {
+        const auto index = offset + shift;
+        static_cast<void>(value_codec::date_from_platform(raw_atom(info.items[index], child_path(info_path, index))));
+        if (offset == 14 || auto_full) normalized.items[index] = expected.items[index];
+    }
+    static_cast<void>(integer_atom<std::uint32_t>(info.items[15 + shift], child_path(info_path, 15 + shift)));
+    static_cast<void>(decode_control_color(info.items[25 + shift], child_path(info_path, 25 + shift)));
+    normalized.items[15 + shift] = expected.items[15 + shift];
+    normalized.items[25 + shift] = expected.items[25 + shift];
+    for (const auto offset : {std::size_t{12}, std::size_t{13}, std::size_t{14}, std::size_t{15}, std::size_t{25}}) {
+        const auto index = offset + shift;
+        if (list_stream::dump_compact(info.items[index]) != list_stream::dump_compact(normalized.items[index])) {
+            warn_incomplete_profile(warnings, reconstruction_complete, id, child_path(info_path, index), "GanttChart");
+        }
+    }
     if (list_stream::dump_compact(expected_with_platform_layout) != list_stream::dump_compact(normalized))
         fail("OOF1114", info_path, "canonical Gantt info generated from named data", "unsupported private settings or table fields", "Gantt info differs from the proven typed storage profile");
 
@@ -3636,7 +4119,8 @@ DecodedControl decode_gantt_chart(const LV& record, std::string_view path,
     return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
 }
 
-DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context, model::ObjectId form_id) {
+DecodedControl decode_command_bar(const LV& record, std::string_view path, const GeometryContext& context, model::ObjectId form_id,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::command_bar);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -3658,14 +4142,14 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if (name.empty()) fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty", "Control name is required");
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    require_arity(base, 21, base_path);
-    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
-    const auto tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
-    const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
-    const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
-    const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
+    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{false, true});
+    const bool enabled = common.enabled;
+    const auto& tool_tip = common.tool_tip;
+    const auto& border_color = *common.border_color;
+    const auto button_text_color = decode_control_color(base.items[10], child_path(base_path, 10));
+    const auto back_color = decode_control_color(base.items[2], child_path(base_path, 2));
     const bool transparent = bool_atom(base.items[5], child_path(base_path, 5));
-    const auto button_back_color = decode_button_color(base.items[9], child_path(base_path, 9));
+    const auto button_back_color = decode_control_color(base.items[9], child_path(base_path, 9));
     const bool auto_fill = bool_atom(properties.items[3], child_path(properties_path, 3));
     const auto orientation = integer_atom<std::int32_t>(properties.items[2], child_path(properties_path, 2));
     const auto buttons_alignment = integer_atom<std::int32_t>(properties.items[4], child_path(properties_path, 4));
@@ -3691,7 +4175,7 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
     if ((default_id == 0) != (default_owner == "9d0a2e40-b978-11d4-84b6-008048da06df") ||
         (default_id != 0 && (secondary || default_owner == null_uuid)))
         fail("OOF1122", properties_path, "consistent default Action reference on primary CommandBar", "inconsistent reference", "Unsupported DefaultButton context");
-    auto menu = decode_button_menu(properties.items[7], child_path(properties_path, 7), name,
+    auto menu = decode_button_menu(properties.items[7], child_path(properties_path, 7), name, warnings, reconstruction_complete,
         command_bar_root_marker, root_group_id, default_id);
 
     model::Form empty_form;
@@ -3755,10 +4239,8 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
         control.properties().set_explicit(model::PropertyId::from_name("ButtonsAlignment"),
             model::EnumerationValue{"CommandBarButtonAlignment", std::string(members[buttons_alignment])});
     }
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    apply_common_control_base(control.properties(), common);
     if (!secondary) control.properties().set_explicit(model::PropertyId::from_name("Secondary"), false);
-    if (border_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
     if (button_text_color != button_color_default("ButtonTextColor"))
         control.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"), button_text_color);
     if (back_color != model::ColorValue{}) control.properties().set_explicit(model::PropertyId::from_name("BackColor"), back_color);
@@ -3769,7 +4251,8 @@ DecodedControl decode_command_bar(const LV& record, std::string_view path, const
 }
 
 
-DecodedControl decode_usual_group(const LV& record, std::string_view path, const GeometryContext& context) {
+DecodedControl decode_usual_group(const LV& record, std::string_view path, const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::usual_group);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -3786,9 +4269,11 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     const auto& properties = info.items[1];
     const auto properties_path = child_path(info_path, 1);
     require_arity(properties, 5, properties_path);
+    require_raw_constant(properties.items[1], "8", child_path(properties_path, 1));
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     require_arity(base, 21, base_path);
+    require_raw_constant(base.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
     const std::string caption = decoded_single_language_text(properties.items[2], child_path(properties_path, 2));
@@ -3797,8 +4282,9 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     normalized_base.items[12] = encoded_localized(tool_tip);
     normalized.items[0] = std::move(normalized_base);
     normalized.items[2] = encoded_localized(caption);
-    require_exact(normalized, canonical_usual_group_properties(enabled, caption, tool_tip).items[1],
-        properties_path, "UsualGroup contains an unsupported property or event variation");
+    if (list_stream::dump_compact(normalized) != list_stream::dump_compact(
+        canonical_usual_group_properties(enabled, caption, tool_tip).items[1]))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "UsualGroup");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -3821,7 +4307,8 @@ DecodedControl decode_usual_group(const LV& record, std::string_view path, const
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
-DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context) {
+DecodedControl decode_button(const LV& record, std::string_view path, const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::button);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -3841,34 +4328,26 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         fail("OOF1102", properties_path, "Button properties including MenuMode", describe(properties),
             "Button property record is too short");
     }
+    require_raw_constant(properties.items[1], "14", child_path(properties_path, 1));
     const auto& base = properties.items[0];
     const std::string base_path = child_path(properties_path, 0);
-    require_arity(base, 21, base_path);
-    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        base.items[12], child_path(base_path, 12));
-    const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
-    const auto button_back_color = decode_button_color(base.items[9], child_path(base_path, 9));
-    const auto button_text_color = decode_button_color(base.items[10], child_path(base_path, 10));
-    const auto font = decode_control_font(base.items[4], child_path(base_path, 4));
-    const std::string observed_state = raw_atom(base.items[17], child_path(base_path, 17));
-    if (observed_state != "1" && observed_state != "2") {
-        fail(
-            "OOF1114",
-            child_path(base_path, 17),
-            "observed internal state 1 or 2",
-            observed_state,
-            "Button base record contains an unsupported property variation");
-    }
+    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{true, true});
+    const bool enabled = common.enabled;
+    const auto& tool_tip = common.tool_tip;
+    const auto& border_color = *common.border_color;
+    const auto button_back_color = decode_control_color(base.items[9], child_path(base_path, 9));
+    const auto button_text_color = decode_control_color(base.items[10], child_path(base_path, 10));
+    const auto& font = *common.font;
+    const auto observed_state_value = integer_atom<std::int32_t>(base.items[17], child_path(base_path, 17));
+    if (observed_state_value != 1 && observed_state_value != 2)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(base_path, 17), "Button");
     // Наблюдались 1 у нетронутой записи и 2 после изменения Button в Designer.
     // Это внутреннее состояние, его общая семантика не установлена.
     auto normalized_base = base;
     normalized_base.items[17] = raw("2");
-    require_exact(
-        normalized_base,
-        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font),
-        base_path,
-        "Button base record contains an unsupported property variation");
+    if (list_stream::dump_compact(normalized_base) != list_stream::dump_compact(
+        canonical_button_base(enabled, tool_tip, &border_color, &button_text_color, &button_back_color, &font)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, base_path, "Button");
     const std::string caption = decoded_single_language_text(
         properties.items[2],
         child_path(properties_path, 2));
@@ -3915,18 +4394,17 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
         "{5,53232d71-06b1-4ec1-a94d-77fafadef407,0,1,0,1,"
         "{5,31946946-0a9b-40a2-95cf-82f200778341,0,0,0,{-1,0,{0}}}}");
     const auto control_state = integer_atom<unsigned>(normalized_properties.items.back(), properties_path);
-    if (control_state != 1 && control_state != 2) fail("OOF1114", properties_path,
-        "known internal control state", std::to_string(control_state), "Button control state is unsupported");
+    if (control_state != 1 && control_state != 2)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "Button");
     normalized_properties.items.back() = raw("1");
-    require_exact(
-        normalized_properties,
+    if (list_stream::dump_compact(normalized_properties) != list_stream::dump_compact(
         canonical_button_properties(enabled, caption, horizontal_align, vertical_align, picture_location,
             picture_size, menu_mode, multi_line, tool_tip, border_color, button_text_color,
-            button_back_color, font, shortcut),
-        properties_path,
-        "Button payload contains an unsupported property variation");
+            button_back_color, font, shortcut)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "Button");
 
-    const auto click_handler = decode_button_event(info.items[2], child_path(info_path, 2));
+    const auto click_handler = decode_button_event(
+        info.items[2], child_path(info_path, 2), raw_id, warnings, reconstruction_complete);
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -3963,20 +4441,12 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     if (!caption.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
-    if (!tool_tip.empty()) {
-        control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
-    }
-    if (border_color != button_color_default("BorderColor")) {
-        control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
-    }
+    apply_common_control_base(control.properties(), common);
     if (button_text_color != button_color_default("ButtonTextColor")) {
         control.properties().set_explicit(model::PropertyId::from_name("ButtonTextColor"), button_text_color);
     }
     if (button_back_color != button_color_default("ButtonBackColor")) {
         control.properties().set_explicit(model::PropertyId::from_name("ButtonBackColor"), button_back_color);
-    }
-    if (font != model::FontValue{}) {
-        control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
     }
     if (shortcut != model::ShortcutValue{}) {
         control.properties().set_explicit(model::PropertyId::from_name("Shortcut"), shortcut);
@@ -4021,9 +4491,6 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     if (multi_line) {
         control.properties().set_explicit(model::PropertyId::from_name("MultiLine"), true);
     }
-    if (!enabled) {
-        control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
-    }
     control.position = std::move(decoded_geometry.position);
     if (picture && picture->standard_name) {
         control.properties().set_explicit(model::PropertyId::from_name("Picture"),
@@ -4032,7 +4499,7 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
     }
     DecodedMenu menu;
     if (menu_mode != 0) {
-        menu = decode_button_menu(properties.items[12], child_path(properties_path, 12), name);
+        menu = decode_button_menu(properties.items[12], child_path(properties_path, 12), name, warnings, reconstruction_complete);
         std::get<model::ButtonPayload>(control.payload).buttons = std::move(menu.entries);
     }
     return {std::move(control), click_handler, std::move(decoded_geometry.incoming), std::move(picture_asset), std::move(menu.assets)};
@@ -4041,7 +4508,8 @@ DecodedControl decode_button(const LV& record, std::string_view path, const Geom
 DecodedControl decode_picture_decoration(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::picture_decoration);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -4058,9 +4526,11 @@ DecodedControl decode_picture_decoration(
     const auto& picture_properties = info.items[1];
     const std::string properties_path = child_path(info_path, 1);
     require_arity(picture_properties, 15, properties_path);
+    require_raw_constant(picture_properties.items[1], "20", child_path(properties_path, 1));
     const auto& base_properties = picture_properties.items[0];
     const std::string base_path = child_path(properties_path, 0);
     require_arity(base_properties, 21, base_path);
+    require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base_properties.items[12], child_path(base_path, 12));
@@ -4074,11 +4544,9 @@ DecodedControl decode_picture_decoration(
     normalized_base.items[12] = encoded_localized(tool_tip);
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[4].items[2] = canonical_button_picture();
-    require_exact(
-        normalized_properties,
-        canonical_picture_properties(enabled, tool_tip),
-        properties_path,
-        "PictureDecoration base record differs from the supported default profile");
+    if (list_stream::dump_compact(normalized_properties) != list_stream::dump_compact(
+        canonical_picture_properties(enabled, tool_tip)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "PictureDecoration");
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
         "PictureDecoration events are unsupported");
 
@@ -4129,7 +4597,8 @@ DecodedControl decode_picture_decoration(
 DecodedControl decode_splitter(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::splitter);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -4148,16 +4617,11 @@ DecodedControl decode_splitter(
     require_arity(properties, 4, properties_path);
     const auto& base = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    require_arity(base, 21, base_path);
-    const bool enabled = bool_atom(base.items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(base.items[12], child_path(base_path, 12));
-    const auto back_color = decode_button_color(base.items[2], child_path(base_path, 2));
-    const auto border_color = decode_button_color(base.items[6], child_path(base_path, 6));
-    if ((back_color.kind != model::ColorKind::automatic && back_color.kind != model::ColorKind::absolute) ||
-        (border_color.kind != model::ColorKind::automatic && border_color.kind != model::ColorKind::absolute)) {
-        fail("OOF1114", properties_path, "automatic or observed absolute Splitter colors", describe(properties),
-            "Splitter style colors are outside the supported storage profile");
-    }
+    const auto common = decode_common_control_base(base, base_path, CommonControlBaseCapabilities{false, true});
+    const bool enabled = common.enabled;
+    const auto& tool_tip = common.tool_tip;
+    const auto back_color = decode_control_color(base.items[2], child_path(base_path, 2));
+    const auto& border_color = *common.border_color;
     const auto orientation_storage = integer_atom<std::int32_t>(properties.items[2], child_path(properties_path, 2));
     std::string orientation_member;
     if (orientation_storage == 2) orientation_member = "Auto";
@@ -4166,9 +4630,9 @@ DecodedControl decode_splitter(
     else fail("OOF1114", child_path(properties_path, 2), "Orientation Auto(2), Vertical(0), or Horizontal(1)",
         std::to_string(orientation_storage), "Splitter orientation value is unsupported");
 
-    require_exact(properties,
-        canonical_splitter_properties(enabled, orientation_storage, tool_tip, border_color, back_color),
-        properties_path, "Splitter properties differ from the supported exact record");
+    if (list_stream::dump_compact(properties) != list_stream::dump_compact(
+        canonical_splitter_properties(enabled, orientation_storage, tool_tip, border_color, back_color)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, properties_path, "Splitter");
     const auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
     const auto metadata_path = child_path(path, 4);
@@ -4183,14 +4647,11 @@ DecodedControl decode_splitter(
         "Splitter cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::SplitterPayload{}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    apply_common_control_base(control.properties(), common);
     if (orientation_member != "Auto") control.properties().set_explicit(
         model::PropertyId::from_name("Orientation"), model::EnumerationValue{"Orientation", orientation_member});
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     if (back_color.kind != model::ColorKind::automatic) control.properties().set_explicit(
         model::PropertyId::from_name("BackColor"), back_color);
-    if (border_color.kind != model::ColorKind::automatic) control.properties().set_explicit(
-        model::PropertyId::from_name("BorderColor"), border_color);
     control.position = decoded_geometry.position;
     return {std::move(control), std::nullopt, decoded_geometry.incoming, std::nullopt, {}};
 }
@@ -4199,7 +4660,8 @@ DecodedControl decode_radio_button(
     const LV& record,
     std::string_view path,
     const AttributeRecord* linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::radio_button);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -4222,19 +4684,17 @@ DecodedControl decode_radio_button(
         fail("OOF1122", child_path(info_path, 1), "ValueType matching linked Attribute", describe(info.items[1]),
             "RadioButton ValueType differs from its linked Attribute type");
     }
-    if (linked_attribute == nullptr && !value_type.entries.empty()) {
-        fail("OOF1122", child_path(info_path, 1), "empty ValueType without DataPath", describe(info.items[1]),
-            "RadioButton numeric ValueType requires a linked Attribute");
-    }
     const auto& control_info = info.items[2];
     const auto control_info_path = child_path(info_path, 2);
     require_arity(control_info, 6, control_info_path);
     const auto& properties = control_info.items[0];
     const auto properties_path = child_path(control_info_path, 0);
     require_arity(properties, 9, properties_path);
+    require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
     const auto& base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
     require_arity(base_properties, 21, base_path);
+    require_raw_constant(base_properties.items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base_properties.items[12], child_path(base_path, 12));
@@ -4254,8 +4714,9 @@ DecodedControl decode_radio_button(
     normalized_properties.items[0] = std::move(normalized_base);
     normalized_properties.items[2] = encoded_localized(caption);
     normalized_info.items[2].items[0] = std::move(normalized_properties);
-    require_exact(normalized_info, canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip), info_path,
-        "RadioButton contains a property, binding, event, or storage variation outside the observed basic profile");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
+        canonical_radio_button_info(value_type, selection_value, enabled, caption, tool_tip)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "RadioButton");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -4336,7 +4797,9 @@ void validate_radio_group(
             (has_numeric_effective_type
                 ? decimal_fits_numeric_qualifiers(member_selection->canonical, head_type->entries.front().numeric)
                 : value_codec::canonical_decimal(member_selection->canonical) == "0");
-        if (member.data_path || (member_type != nullptr && !member_type->entries.empty()) || !value_fits_effective_type) {
+        const bool member_type_is_supported = member_type == nullptr || member_type->entries.empty() ||
+            (has_numeric_effective_type && *member_type == *head_type);
+        if (member.data_path || !member_type_is_supported || !value_fits_effective_type) {
             fail("OOF1122", std::string(path), "group member with Pattern ValueType and SelectionValue fitting the group head type",
                 member.name, "RadioButton group member differs from the observed group value type");
         }
@@ -4454,7 +4917,12 @@ DecodedControl decode_html_document_field(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
-DecodedControl decode_label(const LV& record, std::string_view path, const GeometryContext& context) {
+DecodedControl decode_label(
+    const LV& record,
+    std::string_view path,
+    const GeometryContext& context,
+    Diagnostics& warnings,
+    bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::label_decoration);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -4472,10 +4940,9 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     require_arity(properties, 21, properties_path);
     const auto& base_properties = properties.items[0];
     const std::string base_properties_path = child_path(properties_path, 0);
-    require_arity(base_properties, 21, base_properties_path);
-    const bool enabled = bool_atom(base_properties.items[1], child_path(base_properties_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        base_properties.items[12], child_path(base_properties_path, 12));
+    const auto common = decode_common_control_base(
+        base_properties, base_properties_path, CommonControlBaseCapabilities{true, true});
+    require_raw_constant(properties.items[1], "11", child_path(properties_path, 1));
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     const std::int32_t horizontal_align = integer_atom<std::int32_t>(
@@ -4487,14 +4954,16 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     }
     auto normalized_properties = properties;
     auto normalized_base_properties = base_properties;
-    normalized_base_properties.items[12] = encoded_localized(tool_tip);
+    normalized_base_properties.items[12] = encoded_localized(common.tool_tip);
     normalized_properties.items[0] = std::move(normalized_base_properties);
     normalized_properties.items[2] = encoded_localized(caption);
-    require_exact(
-        normalized_properties,
-        canonical_label_properties(caption, horizontal_align, enabled, tool_tip),
-        properties_path,
-        "LabelDecoration properties differ from the supported default profile");
+    const auto canonical_properties = canonical_label_properties(
+        caption, horizontal_align, common);
+    if (list_stream::dump_compact(normalized_properties) !=
+        list_stream::dump_compact(canonical_properties)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id,
+            properties_path, "LabelDecoration");
+    }
     require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2), "LabelDecoration events are unsupported");
 
     const auto geometry_path = child_path(path, 3);
@@ -4522,12 +4991,7 @@ DecodedControl decode_label(const LV& record, std::string_view path, const Geome
     if (!caption.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
-    if (!enabled) {
-        control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
-    }
-    if (!tool_tip.empty()) {
-        control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
-    }
+    apply_common_control_base(control.properties(), common);
     control.properties().set_explicit(
         model::PropertyId::from_name("HorizontalAlign"),
         model::EnumerationValue{
@@ -4772,11 +5236,11 @@ std::uint32_t chart_color_rgb(const model::ColorValue& value, std::string_view p
 
 LV encode_chart_color_property(const model::ColorValue& value, std::string_view path) {
     (void)chart_color_rgb(value, path);
-    return encode_button_color(value, path);
+    return encode_control_color(value, path);
 }
 
 model::ColorValue decode_chart_color_property(const LV& value, std::string_view path) {
-    auto color = decode_button_color(value, path);
+    auto color = decode_control_color(value, path);
     if (color.kind != model::ColorKind::absolute) {
         fail("OOF1122", std::string(path), "automatic or absolute opaque RGB color", "unsupported ColorValue", "Chart color is outside the supported profile");
     }
@@ -4885,7 +5349,20 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
         rows.insert(rows.end(), row.begin(), row.end());
     }
     append(std::move(rows));
-    append(canonical_chart_series_defaults());
+    if (chart.summary_series.marker.type_name != "ChartMarkerType" ||
+        (chart.summary_series.marker.member != "Auto" && chart.summary_series.marker.member != "Rhomb")) {
+        fail("OOF1122", "$/Chart/SummarySeries/Marker", "ChartMarkerType Auto or Rhomb",
+            "unsupported Marker", "Chart SummarySeries Marker is outside the proven profile");
+    }
+    auto summary_row = canonical_chart_series_defaults();
+    if (chart.summary_series.marker.member == "Rhomb") summary_row[2] = raw("3");
+    if (chart.summary_series.color.kind == model::ColorKind::absolute) {
+        summary_row[0] = encode_chart_color_property(chart.summary_series.color, "$/Chart/SummarySeries/Color");
+    } else if (chart.summary_series.color != model::ColorValue{}) {
+        fail("OOF1122", "$/Chart/SummarySeries/Color", "automatic or absolute opaque RGB color",
+            "unsupported ColorValue", "Chart SummarySeries Color is unsupported");
+    }
+    append(std::move(summary_row));
     info.push_back(raw("1"));
     info.push_back(raw(std::to_string(point_count)));
     for (std::size_t index = 0; index < point_count; ++index) {
@@ -4914,8 +5391,8 @@ LV encode_chart_info(const model::ChartPayload& chart, std::string_view title) {
     for (const auto& point : chart.points) append({list({encode_chart_color_property(point.color, "$/Chart/Points/Color")})});
     for (std::size_t index = 0; index <= series_count; ++index) {
         const bool summary = index == series_count;
-        const auto style_color = summary ? list({raw("4"), raw("4"), list({raw("0")}), raw("4")}) : encode_chart_color_property(chart.series[index].color, "$/Chart/Series/Color");
-        const auto marker = summary ? 4u : chart_marker_value(chart.series[index].marker, "$/Chart/Series/Marker");
+        const auto style_color = summary ? encode_control_color(chart.summary_series.color, "$/Chart/SummarySeries/Color") : encode_chart_color_property(chart.series[index].color, "$/Chart/Series/Color");
+        const auto marker = summary ? chart_marker_value(chart.summary_series.marker, "$/Chart/SummarySeries/Marker") : chart_marker_value(chart.series[index].marker, "$/Chart/Series/Marker");
         const auto style = list({style_color, raw(std::to_string(marker)), raw("0"), raw("0"), raw("0"), string_value(""), no_text, no_text, no_text, raw("0")});
         append({style});
     }
@@ -4963,15 +5440,9 @@ LV encode_chart(const model::ControlNode& control, const GeometryContext& contex
         list({raw("0")})});
 }
 
-DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context) {
-    require_arity(record, 7, path);
-    require_raw_constant(at(record, 0, path), model::metamodel::descriptor_for(model::ControlKind::chart).guid, child_path(path, 0));
-    require_exact(at(record, 2, path), list({raw("11")}), child_path(path, 2), "Chart geometry header is unsupported");
-    require_exact(at(record, 6, path), list({raw("0")}), child_path(path, 6), "Chart child-record section is unsupported");
-    const auto id = integer_atom<std::uint64_t>(at(record, 1, path), child_path(path, 1));
-    const auto& info = at(record, 3, path);
-    require_list(info, child_path(path, 3));
-    const auto info_path = child_path(path, 3);
+DecodedChartInfo decode_chart_info(const LV& info, const std::string& info_path,
+    std::uint64_t id, Diagnostics& warnings, bool& reconstruction_complete) {
+    require_list(info, info_path);
     if (info.items.size() < 222) fail("OOF1102", info_path, "Chart info base and collection counts", describe(info), "Chart Info is truncated");
     require_raw_constant(at(info, 0, info_path), "75", child_path(info_path, 0));
     const auto series_count = integer_atom<std::uint32_t>(at(info, 4, info_path), child_path(info_path, 4));
@@ -5070,9 +5541,33 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
         payload.series[series].color = color;
         payload.series[series].marker = marker;
     }
-    model::ControlNode control{model::ObjectId{id}, string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)), std::move(payload)};
-    if (!title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), title);
-    const auto expected_info = encode_chart_info(std::get<model::ChartPayload>(control.payload), title);
+    const auto summary_style_path = child_path(info_path, series_styles_start + series_size);
+    const auto& summary_style = at(info, series_styles_start + series_size, info_path);
+    require_arity(summary_style, 10, summary_style_path);
+    const auto summary_color = decode_control_color(summary_style.items[0], child_path(summary_style_path, 0));
+    if (summary_color.kind == model::ColorKind::absolute) {
+        const auto summary_row_offset = std::size_t{5} + series_size * 11;
+        const auto summary_row_path = child_path(info_path, summary_row_offset);
+        const auto resolved_color = decode_chart_color_property(at(info, summary_row_offset, info_path), summary_row_path);
+        if (chart_color_rgb(summary_color, child_path(summary_style_path, 0)) != chart_color_rgb(resolved_color, summary_row_path)) {
+            fail("OOF1115", summary_style_path, "SummarySeries Color matching resolved RGB", "mismatch",
+                "Chart SummarySeries Color differs from its resolved native RGB");
+        }
+    } else if (summary_color != model::ColorValue{}) {
+        fail("OOF1122", child_path(summary_style_path, 0), "automatic or absolute opaque RGB color",
+            "unsupported ColorValue", "Chart SummarySeries Color is unsupported");
+    }
+    const auto summary_marker = decode_chart_marker(integer_atom<std::uint32_t>(summary_style.items[1], child_path(summary_style_path, 1)), child_path(summary_style_path, 1));
+    if (summary_marker.member != "Auto" && summary_marker.member != "Rhomb") {
+        fail("OOF1122", child_path(summary_style_path, 1), "ChartMarkerType Auto or Rhomb",
+            "unsupported Marker", "Chart SummarySeries Marker is outside the proven profile");
+    }
+    const auto summary_marker_cache_path = child_path(info_path, std::size_t{7} + series_size * 11);
+    require_raw_constant(at(info, std::size_t{7} + series_size * 11, info_path),
+        summary_marker.member == "Auto" ? "1" : "3", summary_marker_cache_path);
+    payload.summary_series.marker = summary_marker;
+    payload.summary_series.color = summary_color;
+    const auto expected_info = encode_chart_info(payload, title);
     const auto render_start = cells_end + data_defaults.size() + series_size + 1 + style_defaults.size() +
         static_cast<std::size_t>(point_count) + series_size + 1;
     auto normalized_expected_info = expected_info;
@@ -5083,7 +5578,39 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
         }
     }
     apply_chart_render_cache(info, normalized_expected_info, middle_start, render_start, info_path);
-    require_exact(info, normalized_expected_info, info_path, "Chart Info contains unsupported non-named values");
+    const auto tooltip_companions_start = render_start + canonical_chart_render_defaults().size();
+    for (std::size_t cell = 0; cell < payload.values.size(); ++cell) {
+        const auto index = tooltip_companions_start + cell;
+        require_exact(at(info, index, info_path), at(expected_info, index, info_path), child_path(info_path, index),
+            "Chart Tooltip text fragment differs from its named value");
+    }
+    auto shape_info = info;
+    for (const auto offset : {std::size_t{31}, std::size_t{32}, std::size_t{33}}) {
+        const auto index = middle_start + offset;
+        static_cast<void>(decode_control_font(at(info, index, info_path), child_path(info_path, index)));
+        shape_info.items[index] = normalized_expected_info.items[index];
+    }
+    require_list_stream_shape(shape_info, normalized_expected_info, info_path,
+        "Chart profile with valid record arity and atom types");
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(normalized_expected_info)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, id, info_path, "Chart");
+    }
+    return {std::move(payload), title};
+}
+
+DecodedControl decode_chart(const LV& record, std::string_view path, const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
+    require_arity(record, 7, path);
+    require_raw_constant(at(record, 0, path), model::metamodel::descriptor_for(model::ControlKind::chart).guid, child_path(path, 0));
+    require_exact(at(record, 2, path), list({raw("11")}), child_path(path, 2), "Chart geometry header is unsupported");
+    require_exact(at(record, 6, path), list({raw("0")}), child_path(path, 6), "Chart child-record section is unsupported");
+    const auto id = integer_atom<std::uint64_t>(at(record, 1, path), child_path(path, 1));
+    auto decoded = decode_chart_info(at(record, 3, path), child_path(path, 3), id,
+        warnings, reconstruction_complete);
+    model::ControlNode control{model::ObjectId{id},
+        string_atom(at(at(record, 5, path), 1, child_path(path, 5)), child_path(child_path(path, 5), 1)),
+        std::move(decoded.payload)};
+    if (!decoded.title.empty()) control.properties().set_explicit(model::PropertyId::from_name("Title"), decoded.title);
     const auto expected_metadata = list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")});
     require_exact(at(record, 5, path), expected_metadata, child_path(path, 5), "Chart metadata contains unsupported fields");
     const auto geometry = decode_geometry(at(record, 4, path), child_path(path, 4), context);
@@ -5091,13 +5618,16 @@ DecodedControl decode_chart(const LV& record, std::string_view path, const Geome
     return {std::move(control), std::nullopt, geometry.incoming, std::nullopt, {}};
 }
 
-LV canonical_control_base_properties(bool enabled, std::string_view tool_tip) {
+LV canonical_control_base_properties(bool enabled, std::string_view tool_tip,
+    const model::ColorValue* border_color, std::string_view control_path) {
     auto properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,{4,4,{0},4},"
         "{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},{4,3,{-21},3},"
         "{3,1,{-18},0,0,0},{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
-    properties.items[1] = raw(enabled ? "1" : "0");
-    properties.items[12] = encoded_localized(tool_tip);
+    encode_common_control_base(properties,
+        CommonControlBaseFields{enabled, std::string(tool_tip), std::nullopt,
+            border_color == nullptr ? std::nullopt : std::optional<model::ColorValue>{*border_color}},
+        control_path);
     return properties;
 }
 
@@ -5176,7 +5706,8 @@ DecodedControl decode_progress_bar(
     const LV& record,
     std::string_view path,
     const GeometryContext& context,
-    const AttributeRecord* linked_attribute) {
+    const AttributeRecord* linked_attribute,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::progress_bar);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5202,6 +5733,7 @@ DecodedControl decode_progress_bar(
     const auto& properties = info_list.items[0];
     const auto properties_path = child_path(info_list_path, 0);
     require_arity(properties, 21, properties_path);
+    require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const bool enabled = bool_atom(properties.items[1], child_path(properties_path, 1));
     const std::string tool_tip = decoded_single_language_text(properties.items[12], child_path(properties_path, 12));
     const auto min_path = child_path(info_list_path, 2);
@@ -5218,8 +5750,8 @@ DecodedControl decode_progress_bar(
     normalized_info.items[2] = raw("0");
     normalized_info.items[3] = raw("100");
     normalized_info.items[4] = raw("1");
-    require_exact(normalized_info, canonical_progress_bar_info(true, ""), info_list_path,
-        "ProgressBar contains a property outside the supported profile");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_progress_bar_info(true, "")))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_list_path, "ProgressBar");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -5255,7 +5787,9 @@ DecodedControl decode_progress_bar(
 DecodedControl decode_track_bar(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const AttributeRecord* linked_attribute,
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5275,6 +5809,7 @@ DecodedControl decode_track_bar(
     const auto& properties = info_payload.items[0];
     const auto properties_path = child_path(payload_path, 0);
     require_arity(properties, 21, properties_path);
+    require_raw_constant(properties.items[0], "19", child_path(properties_path, 0));
     const bool enabled = bool_atom(properties.items[1], child_path(properties_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         properties.items[12], child_path(properties_path, 12));
@@ -5296,6 +5831,10 @@ DecodedControl decode_track_bar(
         fail("OOF1122", child_path(payload_path, 4), "positive TrackBar Step", std::to_string(step),
             "TrackBar Step at or below zero was not accepted by the platform runtime");
     }
+    if (linked_attribute != nullptr && !is_single_track_bar_type_domain(linked_attribute->type)) {
+        fail("OOF1122", "$/2/3", "single Numeric(10,0,nonnegative) Attribute for TrackBar",
+            linked_attribute->name, "TrackBar DataPath TypeDomain is unsupported");
+    }
 
     auto normalized_info = info;
     normalized_info.items[1].items[0].items[1] = raw("1");
@@ -5303,8 +5842,8 @@ DecodedControl decode_track_bar(
     normalized_info.items[1].items[2] = raw("0");
     normalized_info.items[1].items[3] = raw("100");
     normalized_info.items[1].items[4] = raw("1");
-    require_exact(normalized_info, canonical_track_bar_info(true, ""), info_path,
-        "TrackBar contains a property outside the supported profile");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_track_bar_info(true, "")))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "TrackBar");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -5324,6 +5863,8 @@ DecodedControl decode_track_bar(
         "TrackBar cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::TrackBarPayload{}};
+    if (linked_attribute != nullptr) control.data_path = model::DataPath{
+        model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
     if (max_value != 100) control.properties().set_explicit(
@@ -5340,7 +5881,8 @@ DecodedControl decode_list_box(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5365,6 +5907,7 @@ DecodedControl decode_list_box(
     require_arity(properties, 7, properties_path);
     const auto base_path = child_path(properties_path, 0);
     require_arity(properties.items[0], 21, base_path);
+    require_raw_constant(properties.items[0].items[0], "19", child_path(base_path, 0));
     const bool enabled = bool_atom(properties.items[0].items[1], child_path(base_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         properties.items[0].items[12], child_path(base_path, 12));
@@ -5372,11 +5915,10 @@ DecodedControl decode_list_box(
     require_list(properties.items[1], flags_path);
     require_arity(properties.items[1], 38, flags_path);
     const auto read_only_code = integer_atom<std::uint32_t>(properties.items[1].items[1], child_path(flags_path, 1));
-    if (read_only_code != 100743712 && read_only_code != 100744736) {
-        fail("OOF1122", child_path(flags_path, 1), "observed ListBox ReadOnly state", std::to_string(read_only_code),
-            "ListBox ReadOnly record is outside the supported profile");
-    }
-    const bool read_only = read_only_code == 100743712;
+    if (read_only_code != 100743712 && read_only_code != 100744736)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(flags_path, 1), "ListBox");
+    const std::optional<bool> read_only = read_only_code == 100743712 ? std::optional<bool>{true} :
+        read_only_code == 100744736 ? std::optional<bool>{false} : std::nullopt;
     require_raw_constant(properties.items[2], "6", child_path(properties_path, 2));
     require_raw_constant(properties.items[3], "0", child_path(properties_path, 3));
     const bool show_picture = bool_atom(properties.items[4], child_path(properties_path, 4));
@@ -5387,9 +5929,9 @@ DecodedControl decode_list_box(
     normalized_info.items[1].items[1].items[1] = raw("100743712");
     normalized_info.items[1].items[4] = raw("0");
     normalized_info.items[1].items[5] = raw("0");
-    require_exact(normalized_info,
-        canonical_list_box_info(true, false, false, true, ""), info_path,
-        "ListBox contains a property outside the supported profile");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
+        canonical_list_box_info(true, false, false, true, "")))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "ListBox");
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -5410,7 +5952,7 @@ DecodedControl decode_list_box(
     if (show_picture) control.properties().set_explicit(model::PropertyId::from_name("ShowPicture"), true);
     if (show_check_box) control.properties().set_explicit(model::PropertyId::from_name("ShowCheckBox"), true);
     if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
-    if (!read_only) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
+    if (read_only == false) control.properties().set_explicit(model::PropertyId::from_name("ReadOnly"), false);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -5419,7 +5961,8 @@ DecodedControl decode_check_box(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::check_box);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5442,23 +5985,21 @@ DecodedControl decode_check_box(
     const auto& properties = info_payload.items[0];
     const auto properties_path = child_path(payload_path, 0);
     require_arity(properties, 9, properties_path);
+    require_raw_constant(properties.items[1], "7", child_path(properties_path, 1));
     const auto& base_properties = properties.items[0];
     const auto base_path = child_path(properties_path, 0);
-    require_arity(base_properties, 21, base_path);
-    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        base_properties.items[12], child_path(base_path, 12));
-    const auto font = decode_control_font(base_properties.items[4], child_path(base_path, 4));
+    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{true, false});
+    const bool enabled = common.enabled;
+    const auto& tool_tip = common.tool_tip;
+    const auto& font = *common.font;
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     auto normalized_info = info;
     normalized_info.items[1].items[0].items[0].items[12] = encoded_localized(tool_tip);
     normalized_info.items[1].items[0].items[2] = encoded_localized(caption);
-    require_exact(
-        normalized_info,
-        canonical_check_box_info(enabled, caption, tool_tip, &font),
-        info_path,
-        "CheckBox uses an unsupported property, event, or storage variation");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(
+        canonical_check_box_info(enabled, caption, tool_tip, &font)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CheckBox");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -5478,12 +6019,8 @@ DecodedControl decode_check_box(
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5), "CheckBox cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CheckBoxPayload{}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
+    apply_common_control_base(control.properties(), common);
     if (!caption.empty()) control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
-    if (font != model::FontValue{}) {
-        control.properties().set_explicit(model::PropertyId::from_name("Font"), font);
-    }
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
@@ -5492,7 +6029,9 @@ DecodedControl decode_choice_field(
     const LV& record,
     std::string_view path,
     const AttributeRecord* linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings,
+    bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5501,9 +6040,10 @@ DecodedControl decode_choice_field(
         fail("OOF1122", child_path(path, 1), "positive int64 ChoiceField ID", std::to_string(raw_id),
             "ChoiceField ID is invalid");
     }
-    if (linked_attribute != nullptr && !is_single_string_type_domain(linked_attribute->type)) {
-        fail("OOF1122", "$/2/3", "link to a single String Attribute", linked_attribute->name,
-            "ChoiceField DataPath must target a single String attribute");
+    if (linked_attribute != nullptr && !linked_attribute->type.entries.empty() &&
+        !is_single_string_type_domain(linked_attribute->type)) {
+        fail("OOF1122", "$/2/3", "link to an empty TypeDomain or single String Attribute", linked_attribute->name,
+            "ChoiceField DataPath must target an empty TypeDomain or single String attribute");
     }
 
     const auto& info = record.items[2];
@@ -5513,16 +6053,25 @@ DecodedControl decode_choice_field(
     const auto& info_properties = info.items[1];
     const auto info_properties_path = child_path(info_path, 1);
     require_arity(info_properties, 46, info_properties_path);
+    require_raw_constant(info_properties.items[1], "31", child_path(info_properties_path, 1));
     const auto& base_properties = info_properties.items[0];
     const auto base_path = child_path(info_properties_path, 0);
-    require_arity(base_properties, 21, base_path);
-    const bool enabled = bool_atom(base_properties.items[1], child_path(base_path, 1));
-    const std::string tool_tip = decoded_single_language_text(
-        base_properties.items[12], child_path(base_path, 12));
+    const auto common = decode_common_control_base(base_properties, base_path, CommonControlBaseCapabilities{false, true});
+    const bool enabled = common.enabled;
+    const auto& border_color = *common.border_color;
+    const auto& tool_tip = common.tool_tip;
+    require_exact(info.items[2], list({raw("0")}), child_path(info_path, 2),
+        "ChoiceField cannot contain storage children");
     auto normalized_info = info;
+    normalized_info.items[1].items[0].items[6] =
+        encode_control_color(border_color, child_path(base_path, 6));
     normalized_info.items[1].items[0].items[12] = encoded_localized(tool_tip);
-    require_exact(normalized_info, canonical_choice_field_info(enabled, tool_tip), info_path,
-        "ChoiceField contains a property, event, or storage variation outside the observed basic profile");
+    const LV canonical_info = canonical_choice_field_info(enabled, tool_tip, border_color);
+    require_list_stream_shape(normalized_info, canonical_info, info_path,
+        "ChoiceField profile with valid record arity and atom types");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_info)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "ChoiceField");
+    }
 
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -5534,21 +6083,26 @@ DecodedControl decode_choice_field(
         fail("OOF1115", child_path(metadata_path, 1), "non-empty control name", "empty",
             "ChoiceField name is required");
     }
-    require_exact(metadata,
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
-        metadata_path, "ChoiceField metadata record is unsupported");
+    for (std::size_t index = 3; index < metadata.items.size(); ++index) {
+        static_cast<void>(integer_atom<std::int64_t>(metadata.items[index], child_path(metadata_path, index)));
+    }
+    require_raw_constant(metadata.items[2], "4294967295", child_path(metadata_path, 2));
+    if (list_stream::dump_compact(metadata) != list_stream::dump_compact(
+            list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw("0")}))) {
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, metadata_path, "ChoiceField");
+    }
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "ChoiceField cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::ChoiceFieldPayload{}};
-    if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
-    if (!tool_tip.empty()) control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
+    apply_common_control_base(control.properties(), common);
     control.position = std::move(decoded_geometry.position);
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
 DecodedControl decode_text_document_field(
-    const LV& record, std::string_view path, const GeometryContext& context) {
+    const LV& record, std::string_view path, const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5559,11 +6113,12 @@ DecodedControl decode_text_document_field(
     require_arity(info, 7, child_path(path, 2));
     const auto& base = info.items[0];
     require_arity(base, 21, child_path(child_path(path, 2), 0));
+    require_raw_constant(base.items[0], "19", child_path(child_path(child_path(path, 2), 0), 0));
     const bool enabled = bool_atom(base.items[1], child_path(child_path(path, 2), 0) + "/1");
-    const auto border_color = decode_button_color(base.items[6], child_path(child_path(path, 2), 0) + "/6");
+    const auto border_color = decode_control_color(base.items[6], child_path(child_path(path, 2), 0) + "/6");
     const auto font = decode_control_font(base.items[4], child_path(child_path(path, 2), 0) + "/4");
-    require_exact(info, canonical_text_document_field_info(enabled, border_color, font), child_path(path, 2),
-        "TextDocumentField contains an unsupported persisted property or record variant");
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_text_document_field_info(enabled, border_color, font)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, child_path(path, 2), "TextDocumentField");
     auto decoded_geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
     require_arity(metadata, 6, child_path(path, 4));
@@ -5584,7 +6139,9 @@ DecodedControl decode_text_document_field(
 DecodedControl decode_calendar_field(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const AttributeRecord* linked_attribute,
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::calendar_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -5607,6 +6164,7 @@ DecodedControl decode_calendar_field(
     }
     const auto& base_properties = properties.items[0];
     require_arity(base_properties, 21, child_path(properties_path, 0));
+    require_raw_constant(base_properties.items[0], "19", child_path(child_path(properties_path, 0), 0));
     const bool enabled = bool_atom(base_properties.items[1], child_path(child_path(properties_path, 0), 1));
     require_arity(properties, 14, properties_path);
     const auto begin_path = child_path(properties_path, 5);
@@ -5619,11 +6177,12 @@ DecodedControl decode_calendar_field(
                 std::string("CalendarField BeginOfDisplayPeriod is invalid: ") + error.what());
         }
     }
-    require_exact(
-        info,
-        canonical_calendar_field_info(enabled, begin_atom),
-        info_path,
-        "CalendarField contains an unsupported property or storage variation");
+    if (linked_attribute != nullptr && !is_single_date_time_type_domain(linked_attribute->type)) {
+        fail("OOF1122", "$/2/3", "single DateTime Attribute for CalendarField",
+            linked_attribute->name, "CalendarField DataPath TypeDomain is unsupported");
+    }
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(canonical_calendar_field_info(enabled, begin_atom)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "CalendarField");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -5645,6 +6204,8 @@ DecodedControl decode_calendar_field(
         "CalendarField cannot contain storage children");
 
     model::ControlNode control{model::ObjectId{raw_id}, name, model::CalendarFieldPayload{}};
+    if (linked_attribute != nullptr) control.data_path = model::DataPath{
+        model::AttributeRef{model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
     if (!enabled) control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
     if (begin_atom != "00010101000000") {
         control.properties().set_explicit(
@@ -5805,6 +6366,7 @@ void fill_dendrogram_collection(LV& wrapper, const std::vector<LV>& rows, const 
 struct DecodedDendrogramItems {
     std::vector<model::DendrogramItem> values_in_chain_order;
     std::map<std::uint32_t, std::string> values_by_key;
+    std::optional<std::string> unrepresented_word_path;
 };
 
 DecodedDendrogramItems decode_dendrogram_items(const LV& wrapper, std::string_view path) {
@@ -5815,10 +6377,30 @@ DecodedDendrogramItems decode_dendrogram_items(const LV& wrapper, std::string_vi
         fail("OOF1114", std::string(path), "Dendrogram item collection", describe(sequence), "Dendrogram Items collection is malformed");
     const auto count = integer_atom<std::uint32_t>(sequence.items[2], child_path(path, 1));
     if (count == 0) fail("OOF1122", std::string(path), "one sentinel and an item collection", std::to_string(count), "Dendrogram item collection count is invalid");
+    DecodedDendrogramItems result;
     if (count == 1) {
         const auto defaults = canonical_dendrogram_data(0);
-        require_exact(wrapper, defaults.items[2], path, "Empty Dendrogram Items must retain the canonical factory collection");
-        return {};
+        const auto sequence_path = child_path(path, 1);
+        require_arity(sequence, 8, sequence_path);
+        require_raw_constant(sequence.items[0], "3", child_path(sequence_path, 0));
+        require_raw_constant(sequence.items[1], "0", child_path(sequence_path, 1));
+        require_raw_constant(sequence.items[2], "1", child_path(sequence_path, 2));
+        require_raw_constant(sequence.items[3], "0", child_path(sequence_path, 3));
+        const auto sentinel_path = child_path(sequence_path, 4);
+        require_arity(sequence.items[4], 2, sentinel_path);
+        require_raw_constant(sequence.items[4].items[0], "0", child_path(sentinel_path, 0));
+        const auto sentinel_value_path = child_path(sentinel_path, 1);
+        require_arity(sequence.items[4].items[1], 11, sentinel_value_path);
+        const auto final_word_path = child_path(sentinel_value_path, 10);
+        const auto final_word = integer_atom<std::uint32_t>(sequence.items[4].items[1].items[10], final_word_path);
+        LV comparable = wrapper;
+        const auto& expected_wrapper = defaults.items[2];
+        const auto expected_word = integer_atom<std::uint32_t>(expected_wrapper.items[1].items[4].items[1].items[10], final_word_path);
+        if (final_word != expected_word) result.unrepresented_word_path = final_word_path;
+        comparable.items[1].items[4].items[1].items[10] = expected_wrapper.items[1].items[4].items[1].items[10];
+        require_exact(comparable, expected_wrapper, path,
+            "Empty Dendrogram Items must retain the canonical collection except its unrepresented numeric word");
+        return result;
     }
     const auto indexed_fields = sequence.items.size() - 6;
     if (indexed_fields % 2 != 0 || indexed_fields / 2 != static_cast<std::size_t>(count))
@@ -5826,7 +6408,6 @@ DecodedDendrogramItems decode_dendrogram_items(const LV& wrapper, std::string_vi
     const auto row_count = static_cast<std::size_t>(count) - 1;
     std::map<std::uint32_t, model::DendrogramItem> items_by_key;
     std::map<std::uint32_t, std::uint32_t> next_by_key;
-    DecodedDendrogramItems result;
     std::set<std::string> values;
     for (std::size_t index = 0; index < row_count; ++index) {
         const auto entry_index = 4 + index * 2;
@@ -5841,7 +6422,8 @@ DecodedDendrogramItems decode_dendrogram_items(const LV& wrapper, std::string_vi
             integer_atom<std::uint32_t>(row.items[1], path) != pointer ||
             integer_atom<std::uint32_t>(row.items[2], path) != 0 ||
             integer_atom<std::uint32_t>(row.items[3], path) != 0 ||
-            integer_atom<std::uint32_t>(row.items[5], path) != 0 || integer_atom<std::uint32_t>(row.items[10], path) != 0)
+            integer_atom<std::uint32_t>(row.items[5], path) != 0 ||
+            integer_atom<std::uint32_t>(row.items[10], child_path(child_path(child_path(child_path(path, 1), entry_index), 1), 10)) != 0)
             fail("OOF1114", child_path(path, entry_index), "supported Dendrogram item row", describe(row), "Dendrogram item metadata is unsupported");
         if (pointer == 0 || pointer > row_count || items_by_key.contains(pointer))
             fail("OOF1114", child_path(path, key_index), "unique item key in the collection range", std::to_string(pointer), "Dendrogram item key is invalid");
@@ -6006,7 +6588,9 @@ std::vector<model::DendrogramLink> decode_dendrogram_links(const LV& wrapper, co
 DecodedControl decode_dendrogram(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings,
+    bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::dendrogram);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -6027,12 +6611,17 @@ DecodedControl decode_dendrogram(
     const auto data_path = child_path(path, 2);
     auto items = decode_dendrogram_items(record.items[2].items[2], child_path(data_path, 2));
     auto links = decode_dendrogram_links(record.items[2].items[3], items, child_path(data_path, 3));
+    if (items.unrepresented_word_path)
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, *items.unrepresented_word_path, "Dendrogram");
     model::DendrogramPayload graph;
     graph.items = items.values_in_chain_order;
     graph.links = links;
     validate_dendrogram_graph(graph, child_path(data_path, 2));
     normalized_data.items[2] = expected_data.items[2];
     normalized_data.items[3] = expected_data.items[3];
+    validate_embedded_chart_info(record.items[2].items[1], expected_data.items[1],
+        child_path(data_path, 1), raw_id, "Dendrogram", warnings, reconstruction_complete);
+    normalized_data.items[1] = expected_data.items[1];
     require_exact(normalized_data, expected_data, data_path,
         "Dendrogram contains unsupported tree style or extension values");
     auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
@@ -6061,7 +6650,8 @@ DecodedControl decode_dendrogram(
 DecodedControl decode_spreadsheet_document_field(
     const LV& record,
     std::string_view path,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::spreadsheet_document_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -6322,10 +6912,8 @@ DecodedControl decode_spreadsheet_document_field(
         normalized_document_info.items.begin() + static_cast<std::ptrdiff_t>(input_domain_end),
         normalized_document_info.items.end());
     normalized_document_info.items = std::move(normalized_document_items);
-    require_exact(normalized_info, expected_info, info_path,
-        fresh_add_default
-            ? "SpreadsheetDocumentField fresh Add record contains an unsupported setting or storage variation"
-            : "SpreadsheetDocumentField contains an unsupported nondefault view setting or storage variation");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(expected_info))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "SpreadsheetDocumentField");
 
     auto geometry = decode_geometry(record.items[3], child_path(path, 3), context);
     const auto& metadata = record.items[4];
@@ -6366,7 +6954,8 @@ DecodedControl decode_input_field(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::input_field);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -6380,11 +6969,13 @@ DecodedControl decode_input_field(
     require_arity(info, 10, info_path);
     require_raw_constant(info.items[0], "9", child_path(info_path, 0));
     const auto control_type = type_domain(info.items[1], child_path(info_path, 1));
-    if (!is_single_string_type_domain(control_type) || control_type != linked_attribute.type) {
+    const bool supported_type = is_single_string_type_domain(control_type) ||
+        is_single_date_only_type_domain(control_type);
+    if (!supported_type || control_type != linked_attribute.type) {
         fail(
             "OOF1122",
             child_path(info_path, 1),
-            "single-string InputField TypeDomainPattern matching linked Attribute",
+            "single-string or Date-only InputField TypeDomainPattern matching linked Attribute",
             describe(info.items[1]),
             "InputField type must match its linked attribute");
     }
@@ -6394,9 +6985,21 @@ DecodedControl decode_input_field(
     const auto& payload = at(control_info, 0, control_info_path);
     const auto payload_path = child_path(control_info_path, 0);
     require_arity(payload, 46, payload_path);
+    require_raw_constant(payload.items[1], "31", child_path(payload_path, 1));
     const auto& base_info = at(payload, 0, payload_path);
     const auto base_info_path = child_path(payload_path, 0);
     require_arity(base_info, 21, base_info_path);
+    require_raw_constant(base_info.items[0], "19", child_path(base_info_path, 0));
+    const auto stored_length = integer_atom<std::uint32_t>(payload.items[14], child_path(payload_path, 14));
+    if (is_single_string_type_domain(control_type) &&
+        stored_length != control_type.entries.front().string.length) {
+        fail("OOF1114", info_path, "String length matching the named ValueType", {},
+            "InputField payload length differs from its named String type");
+    }
+    if (is_single_date_only_type_domain(control_type) && stored_length != 0) {
+        fail("OOF1114", child_path(payload_path, 14), "zero Date-only InputField payload value",
+            std::to_string(stored_length), "Date-only InputField payload slot must be zero");
+    }
     const bool enabled = bool_atom(base_info.items[1], child_path(base_info_path, 1));
     const std::string tool_tip = decoded_single_language_text(
         base_info.items[12], child_path(base_info_path, 12));
@@ -6417,14 +7020,13 @@ DecodedControl decode_input_field(
     }
     const auto choice_list_height = integer_atom<std::int32_t>(
         payload.items[31], child_path(payload_path, 31));
-    const auto input_field_flags = decode_input_field_flags(info, info_path);
+    const auto input_field_flags = decode_input_field_flags(
+        info, info_path, InputFieldPairMode::require_matching_pair);
     const InputFieldTextValues text_values{tool_tip, format};
     const InputFieldLayoutValues layout_values{horizontal_align, vertical_align, choice_list_height};
-    require_exact(
-        info,
-        canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values),
-        info_path,
-        "InputField uses an unsupported property, event, or storage variation");
+    if (list_stream::dump_compact(info) != list_stream::dump_compact(
+        canonical_input_field_info(control_type, enabled, read_only, input_field_flags, text_values, layout_values)))
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "InputField");
 
     const auto geometry_path = child_path(path, 3);
     auto decoded_geometry = decode_geometry(record.items[3], geometry_path, context);
@@ -6472,7 +7074,9 @@ DecodedControl decode_input_field(
     return {std::move(control), std::nullopt, std::move(decoded_geometry.incoming), std::nullopt, {}};
 }
 
-model::TableColumn decode_table_column(const LV& value, std::string_view path) {
+model::TableColumn decode_table_column(
+    const LV& value, std::string_view path, std::uint64_t table_id,
+    Diagnostics& warnings, bool& reconstruction_complete) {
     require_arity(value, 2, path);
     require_raw_constant(value.items[0], "737535a4-21e6-4971-8513-3e3173a9fedd", child_path(path, 0));
     const auto body_path = child_path(path, 1);
@@ -6486,6 +7090,7 @@ model::TableColumn decode_table_column(const LV& value, std::string_view path) {
     const auto properties_path = child_path(info_path, 1);
     const auto& properties = info.items[1];
     require_arity(properties, 52, properties_path);
+    require_raw_constant(properties.items[0], "23", child_path(properties_path, 0));
 
     model::TableColumn column;
     column.name = string_atom(properties.items[30], child_path(properties_path, 30));
@@ -6511,7 +7116,7 @@ model::TableColumn decode_table_column(const LV& value, std::string_view path) {
         fail("OOF1122", child_path(properties_path, 38), "InputField, ChoiceField, or CheckBox GUID",
             describe(editor_guid), "Table Column editor kind is unsupported");
     }
-    static_cast<void>(type_domain(properties.items[35], child_path(properties_path, 35)));
+    const auto column_type = type_domain(properties.items[35], child_path(properties_path, 35));
     const auto inflated = decode_table_column_editor_packet(
         properties.items[39], child_path(properties_path, 39));
     constexpr std::size_t envelope_prefix_size = sizeof(std::uint64_t) + 3;
@@ -6526,28 +7131,126 @@ model::TableColumn decode_table_column(const LV& value, std::string_view path) {
     }
     column.control.kind = editor_kind;
     const auto editor_path = child_path(properties_path, 39);
+    bool input_field_pair_absent = false;
+    bool input_field_scalar_pair = false;
     if (editor_kind == model::ControlKind::input_field) {
         require_arity(editor_info, 10, editor_path);
+        require_raw_constant(editor_info.items[0], "9", child_path(editor_path, 0));
         require_arity(editor_info.items[2], 1, child_path(editor_path, 2));
         const auto payload_path = editor_path + "/payload";
         const auto base_path = editor_path + "/base";
         require_arity(editor_info.items[2].items[0], 46, payload_path);
+        require_raw_constant(editor_info.items[2].items[0].items[1], "31", child_path(payload_path, 1));
         require_arity(editor_info.items[2].items[0].items[0], 21, base_path);
+        require_raw_constant(editor_info.items[2].items[0].items[0].items[0], "19", child_path(base_path, 0));
+        auto embedded_type = type_domain(editor_info.items[1], child_path(editor_path, 1));
+        if (embedded_type != column_type) {
+            fail("OOF1122", child_path(editor_path, 1), "ValueType matching Table Column ValueType",
+                describe(editor_info.items[1]), "Embedded editor and Table Column ValueType disagree");
+        }
+        const auto paired_path = child_path(editor_path, 3);
+        require_list(editor_info.items[3], paired_path);
+        if (editor_info.items[3].items.size() == 1) {
+            require_exact(editor_info.items[3], list({raw("0")}), paired_path,
+                "Table Column InputField has an unsupported empty paired record");
+            input_field_pair_absent = true;
+        } else {
+            require_arity(editor_info.items[3], 2, paired_path);
+            require_raw_constant(editor_info.items[3].items[0], "1", child_path(paired_path, 0));
+            if (embedded_type.entries.size() == 1 &&
+                embedded_type.entries.front().term == model::TypeDomainTerm::value_list) {
+                require_exact(editor_info.items[3], canonical_table_value_list_type_pair(
+                    child_path(editor_path, 1)), paired_path,
+                    "Table Column ValueList editor type restriction is unsupported");
+            } else if (embedded_type.entries.size() == 1 &&
+                (embedded_type.entries.front().term == model::TypeDomainTerm::string ||
+                 embedded_type.entries.front().term == model::TypeDomainTerm::numeric ||
+                 embedded_type.entries.front().term == model::TypeDomainTerm::boolean ||
+                 is_single_date_only_type_domain(embedded_type))) {
+                InputFieldFlagValues defaults{};
+                for (std::size_t index = 0; index < input_field_flag_mappings.size(); ++index) {
+                    defaults[index] = input_field_flag_mappings[index].default_value;
+                }
+                const model::TypeDomainPatternValue empty_type;
+                const LV standard_info = canonical_input_field_info(
+                    empty_type, true, false, defaults, InputFieldTextValues{}, InputFieldLayoutValues{});
+                const auto& standard_pair = standard_info.items[3];
+                require_arity(standard_pair, 2, paired_path);
+                require_arity(standard_pair.items[1], 2, child_path(paired_path, 1));
+                require_arity(editor_info.items[3].items[1], 2, child_path(paired_path, 1));
+                require_exact(editor_info.items[3].items[1].items[0], standard_pair.items[1].items[0],
+                    child_path(child_path(paired_path, 1), 0),
+                    "Table Column InputField paired type descriptor is unsupported");
+                input_field_scalar_pair = true;
+            } else {
+                fail("OOF1122", paired_path,
+                    "absent pair or proven scalar/ValueList InputField pair",
+                    describe(editor_info.items[3]),
+                    "Table Column InputField paired metadata does not match its named ValueType");
+            }
+        }
+        static_cast<void>(decode_input_field_flags(editor_info, editor_path,
+            input_field_scalar_pair ? InputFieldPairMode::require_matching_pair : InputFieldPairMode::payload_only));
+        if (!embedded_type.entries.empty()) column.control.value_type = std::move(embedded_type);
         const bool enabled = bool_atom(editor_info.items[2].items[0].items[0].items[1], editor_path);
         const bool read_only = bool_atom(editor_info.items[2].items[0].items[13], editor_path);
-        if (!enabled || read_only) {
-            fail("OOF1122", editor_path, "Enabled=true and ReadOnly=false",
-                enabled ? "ReadOnly=true" : "Enabled=false",
-                "Table Column InputField is outside its persisted profile");
+        if (!enabled) column.control.properties.set_explicit(model::PropertyId::from_name("Enabled"), false);
+        if (read_only) column.control.properties.set_explicit(model::PropertyId::from_name("ReadOnly"), true);
+    } else {
+        if (!column_type.entries.empty()) {
+            fail("OOF1122", child_path(properties_path, 35), "empty ValueType for non-InputField editor",
+                describe(properties.items[35]), "Table Column ValueType is supported only for an InputField editor");
+        }
+        const auto embedded_payload_path = child_path(editor_path, 1);
+        const LV* enabled_atom = nullptr;
+        if (editor_kind == model::ControlKind::choice_field) {
+            require_arity(editor_info, 3, editor_path);
+            require_raw_constant(editor_info.items[0], "2", child_path(editor_path, 0));
+            require_arity(editor_info.items[1], 46, embedded_payload_path);
+            require_raw_constant(editor_info.items[1].items[1], "31", child_path(embedded_payload_path, 1));
+            require_arity(editor_info.items[1].items[0], 21, child_path(embedded_payload_path, 0));
+            require_raw_constant(editor_info.items[1].items[0].items[0], "19",
+                child_path(child_path(embedded_payload_path, 0), 0));
+            require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
+                "Table Column ChoiceField cannot contain storage children");
+            enabled_atom = &editor_info.items[1].items[0].items[1];
+        } else {
+            require_arity(editor_info, 3, editor_path);
+            require_raw_constant(editor_info.items[0], "1", child_path(editor_path, 0));
+            require_arity(editor_info.items[1], 7, embedded_payload_path);
+            require_arity(editor_info.items[1].items[0], 9, child_path(embedded_payload_path, 0));
+            require_raw_constant(editor_info.items[1].items[0].items[1], "7",
+                child_path(child_path(embedded_payload_path, 0), 1));
+            require_arity(editor_info.items[1].items[0].items[0], 21,
+                child_path(child_path(embedded_payload_path, 0), 0));
+            require_raw_constant(editor_info.items[1].items[0].items[0].items[0], "19",
+                child_path(child_path(child_path(embedded_payload_path, 0), 0), 0));
+            require_exact(editor_info.items[2], list({raw("0")}), child_path(editor_path, 2),
+                "Table Column CheckBox cannot contain storage children");
+            enabled_atom = &editor_info.items[1].items[0].items[0].items[1];
+        }
+        const bool enabled = bool_atom(*enabled_atom, editor_path);
+        if (!enabled) {
+            fail("OOF1122", editor_path, "Enabled=true for non-InputField editor", "Enabled=false",
+                "Table Column ChoiceField and CheckBox Enabled=false is outside the proven profile");
         }
     }
-    require_exact(editor_info, canonical_table_column_editor_info(column.control), editor_path,
-        "embedded Table Column editor is outside its typed default property profile");
+    const LV canonical_editor = canonical_table_column_editor_info(column.control);
+    LV shape_editor = editor_info;
+    if (input_field_pair_absent) shape_editor.items[3] = canonical_editor.items[3];
+    require_list_stream_shape(shape_editor, canonical_editor, editor_path,
+        "typed Table Column editor with valid record arity and atom types");
+    if (list_stream::dump_compact(editor_info) != list_stream::dump_compact(canonical_editor)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, table_id, editor_path, "TableColumn");
+    }
     LV normalized = value;
     const LV canonical = canonical_table_column_record(column, path);
     normalized.items[1].items[1].items[1].items[39] = canonical.items[1].items[1].items[1].items[39];
-    require_exact(normalized, canonical, path,
-        "Table Column contains an unsupported property, event, or storage variation");
+    require_list_stream_shape(normalized, canonical, path,
+        "Table Column with valid record arity and atom types");
+    if (list_stream::dump_compact(normalized) != list_stream::dump_compact(canonical)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, table_id, path, "TableColumn");
+    }
     return column;
 }
 
@@ -6555,7 +7258,9 @@ DecodedControl decode_table(
     const LV& record,
     std::string_view path,
     const AttributeRecord& linked_attribute,
-    const GeometryContext& context) {
+    const GeometryContext& context,
+    Diagnostics& warnings,
+    bool& reconstruction_complete) {
     require_arity(record, 6, path);
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::table);
     require_raw_constant(record.items[0], descriptor.guid, child_path(path, 0));
@@ -6571,13 +7276,23 @@ DecodedControl decode_table(
     const auto& info = record.items[2];
     require_arity(info, 5, info_path);
     require_raw_constant(info.items[0], "5", child_path(info_path, 0));
+    require_arity(info.items[2], 2, child_path(info_path, 2));
+    require_arity(info.items[2].items[1], 39, child_path(child_path(info_path, 2), 1));
+    require_arity(info.items[2].items[0], 21, child_path(child_path(info_path, 2), 0));
+    require_raw_constant(info.items[2].items[0].items[0], "19",
+        child_path(child_path(child_path(info_path, 2), 0), 0));
+    require_raw_constant(info.items[2].items[1].items[0], "23",
+        child_path(child_path(child_path(info_path, 2), 1), 0));
+    require_exact(info.items[3],
+        list({raw("342cf854-134c-42bb-8af9-a2103d5d9723"), list({raw("5"), raw("0"), raw("0"), raw("1")})}),
+        child_path(info_path, 3), "Table editor envelope header is unsupported");
+    require_exact(info.items[4], list({raw("0")}), child_path(info_path, 4),
+        "Table cannot contain storage children");
     const auto stored_type = type_domain(info.items[1], child_path(info_path, 1));
     if (stored_type != linked_attribute.type) {
         fail("OOF1122", child_path(info_path, 1), "Table ValueType matching linked ValueTable Attribute",
             describe(info.items[1]), "Table DataPath and ValueType disagree");
     }
-    require_arity(info.items[2], 2, child_path(info_path, 2));
-    require_arity(info.items[2].items[1], 39, child_path(child_path(info_path, 2), 1));
     const auto columns_path = child_path(child_path(child_path(info_path, 2), 1), 23);
     const auto& stored_columns = info.items[2].items[1].items[23];
     require_list(stored_columns, columns_path);
@@ -6598,13 +7313,17 @@ DecodedControl decode_table(
         model::ObjectId{static_cast<std::uint64_t>(linked_attribute.id.object_id)}}, {}};
     control.position = geometry.position;
     const bool first_in_group = bool_atom(record.items[4].items[5], child_path(metadata_path, 5));
+    static_cast<void>(integer_atom<std::int64_t>(record.items[4].items[3], child_path(metadata_path, 3)));
+    static_cast<void>(integer_atom<std::int64_t>(record.items[4].items[4], child_path(metadata_path, 4)));
     if (first_in_group) {
         control.extension_properties.set_explicit(model::PropertyId::from_name("FirstInGroup"), true);
     }
     auto& table = std::get<model::TablePayload>(control.payload);
     table.columns.reserve(stored_columns.items.size() - 1);
     for (std::size_t index = 1; index < stored_columns.items.size(); ++index) {
-        table.columns.push_back(decode_table_column(stored_columns.items[index], child_path(columns_path, index)));
+        table.columns.push_back(decode_table_column(
+            stored_columns.items[index], child_path(columns_path, index), raw_id,
+            warnings, reconstruction_complete));
     }
     LV normalized_info = info;
     const auto flags = integer_atom<std::uint32_t>(info.items[2].items[1].items[1],
@@ -6618,11 +7337,16 @@ DecodedControl decode_table(
         normalized_columns.items[index].items[1].items[1].items[1].items[39] =
             canonical_columns.items[index].items[1].items[1].items[1].items[39];
     }
-    require_exact(normalized_info, canonical_info, info_path,
-        "Table contains a property or storage variation outside the typed profile");
-    require_exact(record.items[4],
-        list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")}),
-        metadata_path, "Table metadata record is unsupported");
+    require_list_stream_shape(normalized_info, canonical_info, info_path,
+        "Table with valid property and column record arity and atom types");
+    if (list_stream::dump_compact(normalized_info) != list_stream::dump_compact(canonical_info)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, info_path, "Table");
+    }
+    require_raw_constant(record.items[4].items[2], "4294967295", child_path(metadata_path, 2));
+    const LV expected_metadata = list({raw("14"), string_value(name), raw("4294967295"), raw("0"), raw("0"), raw(first_in_group ? "1" : "0")});
+    if (list_stream::dump_compact(record.items[4]) != list_stream::dump_compact(expected_metadata)) {
+        warn_incomplete_profile(warnings, reconstruction_complete, raw_id, metadata_path, "Table");
+    }
     require_exact(record.items[5], list({raw("0")}), child_path(path, 5),
         "Table cannot contain storage children");
     return {std::move(control), std::nullopt, std::move(geometry.incoming), std::nullopt, {}};
@@ -6770,9 +7494,9 @@ LV encode_button(
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const std::string caption = explicit_string(control.properties(), "Caption");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
-    const auto border_color = explicit_button_color(control.properties(), "BorderColor");
-    const auto button_text_color = explicit_button_color(control.properties(), "ButtonTextColor");
-    const auto button_back_color = explicit_button_color(control.properties(), "ButtonBackColor");
+    const auto border_color = explicit_control_color(control.properties(), "BorderColor");
+    const auto button_text_color = explicit_control_color(control.properties(), "ButtonTextColor");
+    const auto button_back_color = explicit_control_color(control.properties(), "ButtonBackColor");
     const auto font = explicit_control_font(control.properties(), "$/Button/Font");
     const model::PictureAsset* picture_asset = nullptr;
     const model::metamodel::StandardPictureDescriptor* standard_picture = nullptr;
@@ -6878,12 +7602,12 @@ LV encode_command_bar(const model::OrdinaryFormDocument& document, const model::
     if (payload == nullptr) fail("OOF1122", "$/CommandBar", "CommandBarPayload", "different payload", "CommandBar payload is invalid");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const auto tool_tip = explicit_string(control.properties(), "ToolTip");
-    const auto border_color = explicit_button_color(control.properties(), "BorderColor", "CommandBar");
-    const auto button_text_color = explicit_button_color(control.properties(), "ButtonTextColor", "CommandBar");
+    const auto border_color = explicit_control_color(control.properties(), "BorderColor", "CommandBar");
+    const auto button_text_color = explicit_control_color(control.properties(), "ButtonTextColor", "CommandBar");
     const auto back_color = control.properties().contains(model::PropertyId::from_name("BackColor"))
-        ? explicit_button_color(control.properties(), "BackColor", "CommandBar") : model::ColorValue{};
+        ? explicit_control_color(control.properties(), "BackColor", "CommandBar") : model::ColorValue{};
     const auto button_back_color = control.properties().contains(model::PropertyId::from_name("ButtonBackColor"))
-        ? explicit_button_color(control.properties(), "ButtonBackColor", "CommandBar") : model::ColorValue{};
+        ? explicit_control_color(control.properties(), "ButtonBackColor", "CommandBar") : model::ColorValue{};
     const auto auto_fill = explicit_bool(control.properties(), "AutoFill", false);
     const auto transparent = explicit_bool(control.properties(), "Transparent", false);
     const auto orientation = explicit_enum_storage_value(control.properties(), "CommandBar", "Orientation", "Orientation", 2,
@@ -7018,10 +7742,13 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(
-        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip"}, "$/LabelDecoration");
+        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor", "Font"}, "$/LabelDecoration");
     const std::string caption = explicit_string(control.properties(), "Caption");
-    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
-    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
+    const CommonControlBaseFields common{
+        explicit_bool(control.properties(), "Enabled", true),
+        explicit_string(control.properties(), "ToolTip"),
+        explicit_control_font(control.properties(), "$/LabelDecoration/Font"),
+        explicit_control_color(control.properties(), "BorderColor", "LabelDecoration")};
     std::int32_t horizontal_align = 0;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("HorizontalAlign"))) {
         if (!std::holds_alternative<model::EnumerationValue>(entry->value)) {
@@ -7045,7 +7772,7 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("3"), canonical_label_properties(caption, horizontal_align, enabled, tool_tip), list({raw("0")})}),
+        list({raw("3"), canonical_label_properties(caption, horizontal_align, common), list({raw("0")})}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -7095,19 +7822,30 @@ LV encode_progress_bar(
     });
 }
 
-LV encode_track_bar(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_track_bar(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::track_bar || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "TrackBar with positive int64 ID", control.name,
             "TrackBar is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/TrackBar", "named TrackBar without DataPath, Events, or storage children",
+        fail("OOF1122", "$/TrackBar", "named TrackBar with optional direct DataPath, no Events or storage children",
             control.name, "TrackBar uses a storage concept outside the supported profile");
+    }
+    if (control.data_path) {
+        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        if (attribute == nullptr) fail("OOF1123", "$/TrackBar/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "TrackBar DataPath does not resolve");
+        if (!is_single_track_bar_type_domain(attribute->type)) fail("OOF1122", "$/TrackBar/DataPath",
+            "single Numeric(10,0,nonnegative) Attribute", attribute->name,
+            "TrackBar DataPath must target the supported numeric domain");
     }
     require_allowed_properties(
         control.properties(), {"Enabled", "ToolTip", "MaxValue", "MinValue", "Step"}, "$/TrackBar");
@@ -7242,25 +7980,26 @@ LV encode_choice_field(
         fail("OOF1122", "$/ChoiceField", "named ChoiceField with optional direct DataPath and plain Position", control.name,
             "ChoiceField uses a storage concept outside the supported profile");
     }
-    require_allowed_properties(control.properties(), {"Enabled", "ToolTip"}, "$/ChoiceField");
+    require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "ToolTip"}, "$/ChoiceField");
     if (control.data_path) {
         const auto* attribute = document.find_attribute(control.data_path->attribute.id());
         if (attribute == nullptr) {
             fail("OOF1123", "$/ChoiceField/DataPath", "existing linked Attribute",
                 std::to_string(control.data_path->attribute.id().value()), "ChoiceField DataPath does not resolve");
         }
-        if (!is_single_string_type_domain(attribute->type)) {
-            fail("OOF1122", "$/ChoiceField/DataPath", "linked String Attribute", attribute->name,
-                "ChoiceField DataPath must target a single String attribute");
+        if (!attribute->type.entries.empty() && !is_single_string_type_domain(attribute->type)) {
+            fail("OOF1122", "$/ChoiceField/DataPath", "linked empty TypeDomain or single String Attribute",
+                attribute->name, "ChoiceField DataPath must target an empty TypeDomain or single String attribute");
         }
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
+    const auto border_color = explicit_control_color(control.properties(), "BorderColor", "ChoiceField");
     const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::choice_field);
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        canonical_choice_field_info(enabled, tool_tip),
+        canonical_choice_field_info(enabled, tool_tip, border_color),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),
@@ -7393,7 +8132,7 @@ LV encode_text_document_field(const model::ControlNode& control, const GeometryC
         fail("OOF1122", "$/TextDocumentField", "named unbound TextDocumentField with plain Position", control.name, "TextDocumentField uses an unsupported storage concept");
     require_allowed_properties(control.properties(), {"Enabled", "BorderColor", "Font"}, "$/TextDocumentField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
-    const auto border_color = explicit_button_color(control.properties(), "BorderColor");
+    const auto border_color = explicit_control_color(control.properties(), "BorderColor");
     const auto font = explicit_control_font(control.properties(), "$/TextDocumentField/Font");
     const auto& descriptor = model::metamodel::descriptor_for(model::ControlKind::text_document_field);
     return list({raw(std::string(descriptor.guid)), raw(std::to_string(control.id.value())),
@@ -7427,19 +8166,30 @@ LV encode_default_complex_control(const model::ControlNode& control, const Geome
     return list(std::move(fields));
 }
 
-LV encode_calendar_field(const model::ControlNode& control, const GeometryContext& context) {
+LV encode_calendar_field(
+    const model::OrdinaryFormDocument& document,
+    const model::ControlNode& control,
+    const GeometryContext& context) {
     if (control.kind() != model::ControlKind::calendar_field || control.id.value() == 0 ||
         control.id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
         fail("OOF1122", "$/Form/ChildItems", "CalendarField with positive int64 ID", control.name,
             "CalendarField is outside the supported profile");
     }
-    if (control.name.empty() || control.data_path || !control.extension_properties.empty() ||
+    if (control.name.empty() || (control.data_path && !control.data_path->members.empty()) || !control.extension_properties.empty() ||
         !control.children.empty() || !control.events.empty() ||
         control.position.default_control.is_explicit() ||
         control.position.z_order.is_explicit() || control.position.collapse.is_explicit() ||
         !control.position.bindings.dimensions.empty()) {
-        fail("OOF1122", "$/CalendarField", "named CalendarField with plain Position", control.name,
+        fail("OOF1122", "$/CalendarField", "named CalendarField with optional direct DataPath and plain Position", control.name,
             "CalendarField uses a storage concept outside the supported profile");
+    }
+    if (control.data_path) {
+        const auto* attribute = document.find_attribute(control.data_path->attribute.id());
+        if (attribute == nullptr) fail("OOF1123", "$/CalendarField/DataPath", "existing linked Attribute",
+            std::to_string(control.data_path->attribute.id().value()), "CalendarField DataPath does not resolve");
+        if (!is_single_date_time_type_domain(attribute->type)) fail("OOF1122", "$/CalendarField/DataPath",
+            "single DateTime Attribute", attribute->name,
+            "CalendarField DataPath must target a DateTime attribute");
     }
     require_allowed_properties(control.properties(), {"Enabled", "BeginOfDisplayPeriod"}, "$/CalendarField");
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
@@ -7536,8 +8286,10 @@ LV encode_input_field(
     if (attribute == nullptr) {
         fail("OOF1123", "$/InputField/DataPath", "existing linked Attribute", std::to_string(control.data_path->attribute.id().value()), "InputField DataPath does not resolve");
     }
-    if (!is_single_string_type_domain(attribute->type)) {
-        fail("OOF1122", "$/InputField/DataPath", "linked single-string Attribute", attribute->name, "InputField type is outside the supported profile");
+    if (!is_single_string_type_domain(attribute->type) &&
+        !is_single_date_only_type_domain(attribute->type)) {
+        fail("OOF1122", "$/InputField/DataPath", "linked single-string or Date-only Attribute",
+            attribute->name, "InputField type is outside the supported profile");
     }
     const bool enabled = explicit_bool(control.properties(), "Enabled", true);
     const bool read_only = explicit_bool(control.properties(), "ReadOnly", false);
@@ -8156,7 +8908,10 @@ Result<list_stream::ListValue> encode_attributes(const AttributesRecord& record)
 Result<model::OrdinaryFormDocument> decode_document(
     const list_stream::ListValue& payload,
     std::string_view form_name) {
-    return capture_decode_failure<model::OrdinaryFormDocument>([&payload, form_name] {
+    Diagnostics warnings;
+    bool reconstruction_complete = true;
+    auto decoded = capture_decode_failure<model::OrdinaryFormDocument>(
+        [&payload, form_name, &warnings, &reconstruction_complete] {
         const auto layout = probe_layout(payload);
         if (!layout) {
             throw DecodeFailure(layout.diagnostics().front());
@@ -8218,6 +8973,9 @@ Result<model::OrdinaryFormDocument> decode_document(
         if (default_owner_id == 0) fail("OOF1114", "$/1/1/2", "default owner ID or uint32 sentinel", "0", "Default action owner is invalid");
         if (form_close_handler && stored_max_id == std::numeric_limits<std::uint64_t>::max())
             fail("OOF1120", "$/4", "allocatable Form.OnClose ID", "uint64 max", "Synthetic event ID overflows");
+        if (stored_max_id >= std::numeric_limits<std::uint32_t>::max())
+            fail("OOF1120", "$/1/1/1", "object-ID bound below uint32 max", std::to_string(stored_max_id),
+                "Form header object-ID bound exceeds the supported allocator range");
 
         const std::int32_t width = integer_atom<std::int32_t>(form_section.items[3], "$/1/3");
         const std::int32_t height = integer_atom<std::int32_t>(form_section.items[4], "$/1/4");
@@ -8253,7 +9011,8 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& root_panel_envelope = root_panel.items[1];
         require_arity(root_panel_envelope, 3, "$/1/2/1");
         std::uint64_t next_page_id = stored_max_id + 1;
-        auto root_owner = decode_owner_pages(root_panel_envelope, next_page_id, std::nullopt, false, "$/1/2/1");
+        auto root_owner = decode_owner_pages(root_panel_envelope, next_page_id, std::nullopt, false,
+            1, warnings, reconstruction_complete, "$/1/2/1");
         auto root_pages = std::move(root_owner.pages);
         const auto& root_incoming = root_owner.incoming;
         const model::LocalizedStringValue canonical_page_title{{{"ru", "Страница1"}}};
@@ -8359,6 +9118,7 @@ Result<model::OrdinaryFormDocument> decode_document(
         const auto& track_bar_descriptor = model::metamodel::descriptor_for(model::ControlKind::track_bar);
         const auto& list_box_descriptor = model::metamodel::descriptor_for(model::ControlKind::list_box);
         const auto& panel_descriptor = model::metamodel::descriptor_for(model::ControlKind::panel);
+        std::unordered_map<std::uint64_t, std::vector<model::ObjectId>> command_bar_contexts;
         using DecodeChildTable = std::function<void(
             const LV&, std::vector<model::Page>&, GeometryOwner, const IncomingAnchorLists&, std::string_view)>;
         DecodeChildTable decode_child_table;
@@ -8436,19 +9196,19 @@ Result<model::OrdinaryFormDocument> decode_document(
                     const GeometryContext context{owner, static_cast<std::uint32_t>(page_index), slot->ordinal};
                     const std::string guid = raw_atom(at(record, 0, record_path), child_path(record_path, 0));
                     DecodedControl child;
-                    if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context);
-                    else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context);
-                    else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id);
+                    if (guid == model::metamodel::descriptor_for(model::ControlKind::chart).guid) child = decode_chart(record, record_path, context, warnings, reconstruction_complete);
+                    else if (guid == button_descriptor.guid) child = decode_button(record, record_path, context, warnings, reconstruction_complete);
+                    else if (guid == command_bar_descriptor.guid) child = decode_command_bar(record, record_path, context, document.form().id, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::usual_group).guid)
-                        child = decode_usual_group(record, record_path, context);
+                        child = decode_usual_group(record, record_path, context, warnings, reconstruction_complete);
 
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::html_document_field).guid)
                         child = decode_html_document_field(record, record_path, context);
-                    else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context);
+                    else if (guid == picture_descriptor.guid) child = decode_picture_decoration(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::splitter).guid)
-                        child = decode_splitter(record, record_path, context);
-                    else if (guid == label_descriptor.guid) child = decode_label(record, record_path, context);
-                    else if (guid == calendar_descriptor.guid) child = decode_calendar_field(record, record_path, context);
+                        child = decode_splitter(record, record_path, context, warnings, reconstruction_complete);
+                    else if (guid == label_descriptor.guid)
+                        child = decode_label(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == dendrogram_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path),
                             child_path(record_path, 1));
@@ -8457,21 +9217,24 @@ Result<model::OrdinaryFormDocument> decode_document(
                             fail("OOF1122", "$/2/3", "no DataPath link for Dendrogram",
                                 std::to_string(candidate_id), "Dendrogram DataPath storage is unsupported");
                         }
-                        child = decode_dendrogram(record, record_path, context);
+                        child = decode_dendrogram(record, record_path, context, warnings, reconstruction_complete);
                     }
-                    else if (guid == spreadsheet_descriptor.guid) child = decode_spreadsheet_document_field(record, record_path, context);
-                    else if (guid == text_document_descriptor.guid) child = decode_text_document_field(record, record_path, context);
+                    else if (guid == spreadsheet_descriptor.guid)
+                        child = decode_spreadsheet_document_field(record, record_path, context, warnings, reconstruction_complete);
+                    else if (guid == text_document_descriptor.guid)
+                        child = decode_text_document_field(record, record_path, context, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::pivot_chart).guid)
-                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::pivot_chart);
+                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::pivot_chart, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::graphical_schema_field).guid)
-                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::graphical_schema_field);
+                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::graphical_schema_field, warnings, reconstruction_complete);
                     else if (guid == model::metamodel::descriptor_for(model::ControlKind::geographical_schema_field).guid)
-                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::geographical_schema_field);
+                        child = decode_default_complex_control(record, record_path, context, model::ControlKind::geographical_schema_field, warnings, reconstruction_complete);
                     else if (guid == input_descriptor.guid || guid == checkbox_descriptor.guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid ||
                              guid == progress_bar_descriptor.guid || guid == list_box_descriptor.guid ||
                              guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid ||
-                             guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
+                             guid == model::metamodel::descriptor_for(model::ControlKind::table).guid ||
+                             guid == calendar_descriptor.guid || guid == track_bar_descriptor.guid) {
                         const auto candidate_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
                         if (candidate_id > static_cast<std::uint64_t>(std::numeric_limits<std::int64_t>::max())) {
                             fail("OOF1122", child_path(record_path, 1), "linked control ID representable in int64", std::to_string(candidate_id),
@@ -8483,9 +9246,12 @@ Result<model::OrdinaryFormDocument> decode_document(
                             guid == model::metamodel::descriptor_for(model::ControlKind::choice_field).guid;
                         const bool radio_button_guid =
                             guid == model::metamodel::descriptor_for(model::ControlKind::radio_button).guid;
-                        const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid && !radio_button_guid;
+                        const bool calendar_field_guid = guid == calendar_descriptor.guid;
+                        const bool track_bar_guid = guid == track_bar_descriptor.guid;
+                        const bool required_link = guid != progress_bar_descriptor.guid && !choice_field_guid &&
+                            !radio_button_guid && !calendar_field_guid && !track_bar_guid;
                         if (link_it == links_by_control.end() && required_link) fail("OOF1122", "$/2/3",
-                            "DataPath link for each InputField, CheckBox, or ListBox", std::to_string(candidate_id),
+                            "DataPath link for each required linked control", std::to_string(candidate_id),
                             "Linked control has no attribute link");
                         const AttributeRecord* linked_attribute = nullptr;
                         if (link_it != links_by_control.end()) {
@@ -8503,35 +9269,37 @@ Result<model::OrdinaryFormDocument> decode_document(
                                 "DataPath target is unresolved");
                             linked_attribute = attribute_it->second;
                         }
-                        if (choice_field_guid) {
-                            child = decode_choice_field(record, record_path, linked_attribute, context);
+                        if (calendar_field_guid) {
+                            child = decode_calendar_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
+                        } else if (track_bar_guid) {
+                            child = decode_track_bar(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
+                        } else if (choice_field_guid) {
+                            child = decode_choice_field(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                             if (linked_attribute != nullptr) {
                                 child.control.data_path = model::DataPath{model::AttributeRef{
                                     model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                             }
                         } else if (radio_button_guid) {
-                            child = decode_radio_button(record, record_path, linked_attribute, context);
+                            child = decode_radio_button(record, record_path, linked_attribute, context, warnings, reconstruction_complete);
                         } else if (guid == input_descriptor.guid) {
-                            child = decode_input_field(record, record_path, *linked_attribute, context);
+                            child = decode_input_field(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == checkbox_descriptor.guid) {
-                            child = decode_check_box(record, record_path, *linked_attribute, context);
+                            child = decode_check_box(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == list_box_descriptor.guid) {
-                            child = decode_list_box(record, record_path, *linked_attribute, context);
+                            child = decode_list_box(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                             child.control.data_path = model::DataPath{model::AttributeRef{
                                 model::ObjectId{static_cast<std::uint64_t>(linked_attribute->id.object_id)}}, {}};
                         } else if (guid == model::metamodel::descriptor_for(model::ControlKind::table).guid) {
-                            child = decode_table(record, record_path, *linked_attribute, context);
+                            child = decode_table(record, record_path, *linked_attribute, context, warnings, reconstruction_complete);
                         } else {
-                            child = decode_progress_bar(record, record_path, context, linked_attribute);
+                            child = decode_progress_bar(record, record_path, context, linked_attribute, warnings, reconstruction_complete);
                         }
-                    } else if (guid == track_bar_descriptor.guid) {
-                        child = decode_track_bar(record, record_path, context);
                     } else if (guid == model::metamodel::descriptor_for(model::ControlKind::gantt_chart).guid) {
-                        child = decode_gantt_chart(record, record_path, context);
+                        child = decode_gantt_chart(record, record_path, context, warnings, reconstruction_complete);
                     } else if (guid == panel_descriptor.guid) {
                         require_arity(record, 6, record_path);
                         const auto raw_id = integer_atom<std::uint64_t>(at(record, 1, record_path), child_path(record_path, 1));
@@ -8548,7 +9316,7 @@ Result<model::OrdinaryFormDocument> decode_document(
                         require_raw_constant(info.items[5], "0", child_path(child_path(record_path, 4), 5));
                         const model::ControlRef panel_ref{model::ObjectId{raw_id}};
                         auto panel_owner = decode_owner_pages(at(record, 2, record_path), next_page_id, panel_ref, true,
-                            child_path(record_path, 2));
+                            raw_id, warnings, reconstruction_complete, child_path(record_path, 2));
                         model::ControlNode panel{panel_ref.id(), name, model::PanelPayload{}};
                         panel.position = std::move(geometry.position);
                         panel.payload = std::move(panel_owner.panel);
@@ -8564,6 +9332,12 @@ Result<model::OrdinaryFormDocument> decode_document(
                     if (!owner_child_ids.insert(child_id).second) fail("OOF1122", std::string(path), "unique immediate child Control IDs",
                         std::to_string(child_id), "Owner child table contains a duplicate Control ID");
                     child_record_paths.emplace(child_id, record_path);
+                    if (guid == command_bar_descriptor.guid) {
+                        const auto& properties = record.items[2].items[1];
+                        const auto collection_id = integer_atom<std::uint64_t>(properties.items[9],
+                            child_path(child_path(child_path(record_path, 2), 1), 9));
+                        command_bar_contexts[collection_id].push_back(model::ObjectId{child_id});
+                    }
                     actual_max_id = std::max(actual_max_id, child_id);
                     pages[page_index].children.push_back(model::ControlRef{child.control.id});
                     decoded[page_index].push_back(std::move(child));
@@ -8600,22 +9374,35 @@ Result<model::OrdinaryFormDocument> decode_document(
             for (const auto& page_controls : decoded) for (const auto& child : page_controls) {
                 const auto found = expected_sibling_incoming.find(child.control.id.value());
                 const IncomingAnchorLists empty;
-                require_incoming_graph(child.incoming, found == expected_sibling_incoming.end() ? empty : found->second,
-                    child_path(child_record_paths.at(child.control.id.value()),
-                        control_geometry_slot(model::metamodel::descriptor_for(child.control.kind()).guid)));
+                auto observed = child.incoming;
+                const auto geometry_path = child_path(child_record_paths.at(child.control.id.value()),
+                    control_geometry_slot(model::metamodel::descriptor_for(child.control.kind()).guid));
+                bool unrepresented_self_dependency = false;
+                if (child.control.kind() == model::ControlKind::command_bar &&
+                    std::holds_alternative<FormGeometryOwner>(owner)) {
+                    const auto& anchors = child.control.position.bindings.anchors;
+                    const bool bottom_to_form = std::any_of(anchors.begin(), anchors.end(), [](const auto& binding) {
+                        return binding.coordinate == model::BindingCoordinate::bottom && !binding.target &&
+                            binding.target_coordinate == model::BindingCoordinate::bottom && !binding.proportional;
+                    });
+                    const GeometryIncomingAnchor self_bottom{child.control.id.value(), 1};
+                    auto& top = observed[0];
+                    // Designer preserves this extra CommandBar dependency while GetLink still
+                    // returns Form.Bottom. Its unrepresented state must not imply exact recovery.
+                    if (bottom_to_form && std::count(top.begin(), top.end(), self_bottom) == 1) {
+                        std::erase(top, self_bottom);
+                        unrepresented_self_dependency = true;
+                    }
+                }
+                require_incoming_graph(observed, found == expected_sibling_incoming.end() ? empty : found->second,
+                    geometry_path);
+                if (unrepresented_self_dependency)
+                    warn_incomplete_profile(warnings, reconstruction_complete, child.control.id.value(),
+                        child_path(geometry_path, 0), "CommandBar");
                 pending_controls.push_back(child);
             }
         };
         decode_child_table(root_panel.items[2], root_pages, GeometryOwner{FormGeometryOwner{}}, root_incoming, "$/1/2/2");
-        if (implicit_default_page) {
-            for (const auto& child : root_pages[0].children) form.children.push_back(child);
-        } else {
-            for (const auto& page : root_pages) form.children.push_back(model::PageRef{page.id});
-        }
-        if (!implicit_default_page) {
-            for (auto& page : root_pages) document.add_page(std::move(page));
-        }
-        for (auto& page : nested_pages) document.add_page(std::move(page));
         if (consumed_link_ids.size() != links_by_control.size()) {
             fail("OOF1122", "$/2/3", "one matching link per decoded DataPath control", std::to_string(links_by_control.size() - consumed_link_ids.size()), "Attribute-link table contains unconsumed links");
         }
@@ -8654,17 +9441,54 @@ Result<model::OrdinaryFormDocument> decode_document(
                 std::to_string(attributes.slot_count),
                 "Attribute slot count disagrees with the platform object-ID allocator");
         }
-        if (stored_max_id != actual_max_id) {
+        if (stored_max_id < actual_max_id) {
             fail(
                 "OOF1114",
                 "$/1/1/1",
                 std::to_string(actual_max_id),
                 std::to_string(stored_max_id),
-                "Form header max object ID disagrees with decoded objects");
+                "Form header object-ID bound is below a decoded object ID");
         }
+        if (stored_max_id > actual_max_id) {
+            const auto delta = stored_max_id - actual_max_id;
+            std::unordered_map<std::uint64_t, model::ObjectId> page_ids;
+            const auto renumber_page = [&](model::Page& page) {
+                const auto old_id = page.id.value();
+                if (old_id <= stored_max_id || old_id >= next_page_id ||
+                    !page_ids.emplace(old_id, model::ObjectId{old_id - delta}).second)
+                    fail("OOF1123", "$/1/1/1", "unique synthetic Page IDs above the stored bound", "invalid Page ID",
+                        "Synthetic Page allocation is inconsistent");
+                page.id = page_ids.at(old_id);
+            };
+            for (auto& page : root_pages) renumber_page(page);
+            for (auto& page : nested_pages) renumber_page(page);
+            const auto remap_page_refs = [&](std::vector<model::ChildItemRef>& children) {
+                for (auto& child : children) if (auto* reference = std::get_if<model::PageRef>(&child)) {
+                    const auto found = page_ids.find(reference->id().value());
+                    if (found == page_ids.end())
+                        fail("OOF1123", "$/1/1/1", "resolved synthetic Page reference", "missing Page ID",
+                            "Synthetic Page reference is inconsistent");
+                    *reference = model::PageRef{found->second};
+                }
+            };
+            for (auto& page : root_pages) remap_page_refs(page.children);
+            for (auto& page : nested_pages) remap_page_refs(page.children);
+            for (auto& child : pending_controls) remap_page_refs(child.control.children);
+            next_page_id -= delta;
+            warn_incomplete_profile(warnings, reconstruction_complete, form.id.value(), "$/1/1/1", "Form");
+        }
+        if (implicit_default_page) {
+            for (const auto& child : root_pages[0].children) form.children.push_back(child);
+        } else {
+            for (const auto& page : root_pages) form.children.push_back(model::PageRef{page.id});
+        }
+        if (!implicit_default_page) {
+            for (auto& page : root_pages) document.add_page(std::move(page));
+        }
+        for (auto& page : nested_pages) document.add_page(std::move(page));
 
         std::uint64_t synthetic_event_offset = 0;
-        const std::uint64_t event_id_base = std::max(stored_max_id, next_page_id - 1);
+        const std::uint64_t event_id_base = std::max(actual_max_id, next_page_id - 1);
         std::vector<model::PictureAsset> decoded_picture_assets;
         if (form_close_handler) {
             if (event_id_base == std::numeric_limits<std::uint64_t>::max()) fail("OOF1120", "$/4", "allocatable Form.OnClose ID", "uint64 max", "Synthetic event ID overflows");
@@ -8720,6 +9544,22 @@ Result<model::OrdinaryFormDocument> decode_document(
                 if (auto* button = std::get_if<model::ButtonPayload>(&decoded_control.control.payload)) update(button->buttons);
                 else if (auto* command_bar = std::get_if<model::CommandBarPayload>(&decoded_control.control.payload)) update(command_bar->buttons);
             }
+            const auto resolve_standard_contexts = [&](const auto& self, auto& entries) -> void {
+                for (auto& entry : entries) {
+                    if (entry.standard_action && entry.standard_action->context == model::StandardMenuActionContext::command_bar) {
+                        const auto found = command_bar_contexts.find(entry.standard_action->command_bar.id().value());
+                        if (found == command_bar_contexts.end() || found->second.size() != 1)
+                            fail("OOF1123", "$/Buttons/StandardAction", "unique CommandBar collection context",
+                                "missing or ambiguous", "Standard command context cannot be resolved");
+                        entry.standard_action->command_bar = model::ControlRef{found->second.front()};
+                    }
+                    self(self, entry.buttons);
+                }
+            };
+            if (auto* button = std::get_if<model::ButtonPayload>(&decoded_control.control.payload))
+                resolve_standard_contexts(resolve_standard_contexts, button->buttons);
+            else if (auto* bar = std::get_if<model::CommandBarPayload>(&decoded_control.control.payload))
+                resolve_standard_contexts(resolve_standard_contexts, bar->buttons);
             document.add_control(std::move(decoded_control.control));
         }
         for (auto& asset : decoded_picture_assets) document.add_asset(std::move(asset));
@@ -8738,13 +9578,23 @@ Result<model::OrdinaryFormDocument> decode_document(
         validate_form_extension_context(document, "$/2/0");
         if (default_command_bar_id(document) != default_owner_id)
             fail("OOF1114", "$/1/1/2", "owner of the unique named DefaultButton", std::to_string(default_owner_id), "Default action owner is dangling or inconsistent");
+        document.set_reconstruction_complete(reconstruction_complete);
         return document;
     });
+    if (!decoded) return decoded;
+    return Result<model::OrdinaryFormDocument>::success(
+        decoded.take_value(), std::move(warnings));
 }
 
 Result<list_stream::ListValue> encode_document(
     const model::OrdinaryFormDocument& document) {
-    return capture_decode_failure<list_stream::ListValue>([&document] {
+    Diagnostics warnings;
+    if (!document.reconstruction_complete()) {
+        warnings.push_back({
+            "OOF1140", DiagnosticSeverity::warning, {}, {}, {}, {}, {},
+            "The output was built from an incomplete reconstruction; unsupported source properties were not restored."});
+    }
+    auto encoded = capture_decode_failure<list_stream::ListValue>([&document] {
         validate_radio_groups(document);
         const auto validation = document.validate();
         if (!validation.ok()) {
@@ -8948,7 +9798,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::label_decoration) {
                     record = encode_label(*control, context);
                 } else if (control->kind() == model::ControlKind::calendar_field) {
-                    record = encode_calendar_field(*control, context);
+                    record = encode_calendar_field(document, *control, context);
                 } else if (control->kind() == model::ControlKind::dendrogram) {
                     record = encode_dendrogram(*control, context);
                 } else if (control->kind() == model::ControlKind::spreadsheet_document_field) {
@@ -8968,7 +9818,7 @@ Result<list_stream::ListValue> encode_document(
                 } else if (control->kind() == model::ControlKind::progress_bar) {
                     record = encode_progress_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::track_bar) {
-                    record = encode_track_bar(*control, context);
+                    record = encode_track_bar(document, *control, context);
                 } else if (control->kind() == model::ControlKind::list_box) {
                     record = encode_list_box(document, *control, context);
                 } else if (control->kind() == model::ControlKind::table) {
@@ -9205,6 +10055,9 @@ Result<list_stream::ListValue> encode_document(
         }
         return encoded;
     });
+    if (!encoded) return encoded;
+    return Result<list_stream::ListValue>::success(
+        encoded.take_value(), std::move(warnings));
 }
 
 }  // namespace oof::storage::form_stream

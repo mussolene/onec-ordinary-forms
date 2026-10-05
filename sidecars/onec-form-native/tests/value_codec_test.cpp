@@ -49,6 +49,10 @@ void test_localized_string() {
     expect_rejected(
         [] { static_cast<void>(codec::decode_localized_string("{1,2,{\"ru\",\"one\"}}")); },
         "localized item count mismatch must be rejected");
+    for (const std::string_view invalid : {"{1,4294967295}", "{1,4294967295,{\"ru\",\"one\"}}"}) {
+        expect_rejected([invalid] { static_cast<void>(codec::decode_localized_string(invalid)); },
+            "an excessive localized count must report a truncated list without reserving that count");
+    }
 }
 
 void test_formatted_string() {

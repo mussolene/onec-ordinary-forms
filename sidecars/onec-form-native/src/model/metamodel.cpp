@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <initializer_list>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -651,16 +652,51 @@ void apply_proven_storage_overrides(
     std::vector<PropertyDescriptor>& panel_placement_properties,
     std::vector<PropertyDescriptor>& form_properties,
     std::array<std::vector<EventDescriptor>, control_kind_count>& events) {
+    const auto classify_shared_control_property = [&](std::string_view name,
+                                                      StorageCodec storage_codec,
+                                                      DefaultKind default_kind,
+                                                      std::string_view default_value,
+                                                      std::initializer_list<ControlKind> controls) {
+        for (const ControlKind kind : controls) {
+            classify_property(properties[static_cast<std::size_t>(kind)], name, storage_codec,
+                default_kind, default_value);
+        }
+    };
+
+    classify_shared_control_property("Enabled", StorageCodec::control_base, DefaultKind::boolean, "true", {
+        ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
+        ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
+        ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
+        ControlKind::calendar_field, ControlKind::text_document_field, ControlKind::input_field,
+    });
+    classify_shared_control_property("Enabled", StorageCodec::control_info, DefaultKind::boolean, "true", {
+        ControlKind::progress_bar, ControlKind::track_bar, ControlKind::label_decoration,
+    });
+    classify_shared_control_property("ToolTip", StorageCodec::control_base, DefaultKind::string, "", {
+        ControlKind::command_bar, ControlKind::button, ControlKind::picture_decoration,
+        ControlKind::check_box, ControlKind::choice_field, ControlKind::radio_button,
+        ControlKind::usual_group, ControlKind::splitter, ControlKind::list_box,
+        ControlKind::input_field,
+    });
+    classify_shared_control_property("ToolTip", StorageCodec::control_info, DefaultKind::string, "", {
+        ControlKind::progress_bar, ControlKind::track_bar, ControlKind::label_decoration,
+    });
+    classify_shared_control_property("BorderColor", StorageCodec::control_base, DefaultKind::color,
+        "automatic", {ControlKind::panel, ControlKind::command_bar, ControlKind::button,
+            ControlKind::splitter, ControlKind::label_decoration, ControlKind::choice_field,
+            ControlKind::text_document_field});
+    classify_shared_control_property("Font", StorageCodec::control_base, DefaultKind::font, "automatic", {
+        ControlKind::button, ControlKind::check_box, ControlKind::text_document_field,
+    });
+
     auto& usual_group = properties[static_cast<std::size_t>(ControlKind::usual_group)];
-    classify_property(usual_group, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(usual_group, "Caption", StorageCodec::control_info, DefaultKind::string, "");
-    classify_property(usual_group, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
     auto& button = properties[static_cast<std::size_t>(ControlKind::button)];
     classify_property(button, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
     std::ranges::find(button, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
     classify_property(properties[static_cast<std::size_t>(ControlKind::panel)], "AutoTabOrder",
         StorageCodec::control_info, DefaultKind::boolean, "true");
-    for (const auto name : {"BorderColor", "TextColor", "BackColor"})
+    for (const auto name : {"TextColor", "BackColor"})
         classify_property(properties[static_cast<std::size_t>(ControlKind::panel)], name,
             StorageCodec::control_base, DefaultKind::color, "automatic");
     auto main_panel = std::ranges::find(form_properties, "Panel", &PropertyDescriptor::api_name);
@@ -672,29 +708,20 @@ void apply_proven_storage_overrides(
     classify_property(command_bar, "AutoFill", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(command_bar, "Border", StorageCodec::control_base, DefaultKind::border, "WithoutBorder:0");
     classify_property(command_bar, "Secondary", StorageCodec::control_info, DefaultKind::boolean, "true");
-    classify_property(command_bar, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(command_bar, "Transparent", StorageCodec::control_base, DefaultKind::boolean, "false");
-    classify_property(command_bar, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
     classify_property(command_bar, "ButtonsAlignment", StorageCodec::control_info,
         DefaultKind::enumeration, "CommandBarButtonAlignment.Left");
     std::ranges::find(command_bar, "ButtonsAlignment", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     classify_property(command_bar, "Orientation", StorageCodec::control_info,
         DefaultKind::enumeration, "Orientation.Auto");
     std::ranges::find(command_bar, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
-    for (const auto name : {"BorderColor", "BackColor"})
-        classify_property(command_bar, name, StorageCodec::control_base, DefaultKind::color, "automatic");
+    classify_property(command_bar, "BackColor", StorageCodec::control_base, DefaultKind::color, "automatic");
     classify_property(command_bar, "ButtonBackColor", StorageCodec::control_base,
         DefaultKind::color, "automatic");
     classify_property(command_bar, "ButtonTextColor", StorageCodec::control_base,
         DefaultKind::color, "StyleColors.ButtonTextColor");
     classify_property(command_bar, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
     std::ranges::find(command_bar, "Buttons", &PropertyDescriptor::api_name)->value_codec = ValueCodec::command_bar_buttons;
-    classify_property(
-        button,
-        "Enabled",
-        StorageCodec::control_base,
-        DefaultKind::boolean,
-        "true");
     classify_property(
         button,
         "Caption",
@@ -721,12 +748,6 @@ void apply_proven_storage_overrides(
         "Center");
     classify_property(
         button,
-        "ToolTip",
-        StorageCodec::control_base,
-        DefaultKind::string,
-        "");
-    classify_property(
-        button,
         "PictureLocation",
         StorageCodec::control_info,
         DefaultKind::enumeration,
@@ -751,12 +772,6 @@ void apply_proven_storage_overrides(
         "");
     classify_property(
         button,
-        "BorderColor",
-        StorageCodec::control_base,
-        DefaultKind::color,
-        "automatic");
-    classify_property(
-        button,
         "ButtonTextColor",
         StorageCodec::control_base,
         DefaultKind::color,
@@ -769,21 +784,13 @@ void apply_proven_storage_overrides(
         "StyleColors.ButtonBackColor");
     classify_property(
         button,
-        "Font",
-        StorageCodec::control_base,
-        DefaultKind::font,
-        "automatic");
-    classify_property(
-        button,
         "Shortcut",
         StorageCodec::control_info,
         DefaultKind::shortcut,
         "None");
 
     auto& radio_button = properties[static_cast<std::size_t>(ControlKind::radio_button)];
-    classify_property(radio_button, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(radio_button, "Caption", StorageCodec::control_info, DefaultKind::string, "");
-    classify_property(radio_button, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
     classify_property(radio_button, "SelectionValue", StorageCodec::control_info, DefaultKind::undefined, "undefined");
     std::ranges::find(radio_button, "SelectionValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::decimal;
 
@@ -798,44 +805,21 @@ void apply_proven_storage_overrides(
     auto& picture_decoration = properties[static_cast<std::size_t>(ControlKind::picture_decoration)];
     classify_property(
         picture_decoration,
-        "Enabled",
-        StorageCodec::control_base,
-        DefaultKind::boolean,
-        "true");
-    classify_property(
-        picture_decoration,
-        "ToolTip",
-        StorageCodec::control_base,
-        DefaultKind::string,
-        "");
-    classify_property(
-        picture_decoration,
         "Picture",
         StorageCodec::picture_record,
         DefaultKind::none,
         "");
 
     auto& splitter = properties[static_cast<std::size_t>(ControlKind::splitter)];
-    classify_property(splitter, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(splitter, "Orientation", StorageCodec::control_info, DefaultKind::enumeration, "Auto");
     std::ranges::find(splitter, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
-    classify_property(splitter, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
-    classify_property(splitter, "BorderColor", StorageCodec::control_base, DefaultKind::color, "automatic");
     classify_property(splitter, "BackColor", StorageCodec::control_base, DefaultKind::color, "automatic");
 
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
-    classify_property(
-        label_decoration,
-        "Enabled",
-        StorageCodec::control_info,
-        DefaultKind::boolean,
-        "true");
-    classify_property(
-        label_decoration,
-        "ToolTip",
-        StorageCodec::control_info,
-        DefaultKind::string,
-        "");
+    classify_property(label_decoration, "Caption", StorageCodec::control_info,
+        DefaultKind::string, "");
+    classify_property(label_decoration, "Font", StorageCodec::control_base,
+        DefaultKind::font, "automatic");
     classify_property(
         label_decoration,
         "HorizontalAlign",
@@ -844,8 +828,6 @@ void apply_proven_storage_overrides(
         "");
 
     auto& choice_field = properties[static_cast<std::size_t>(ControlKind::choice_field)];
-    classify_property(choice_field, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
-    classify_property(choice_field, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
     if (const auto choice_list = std::ranges::find(choice_field, "ChoiceList", &PropertyDescriptor::api_name);
         choice_list != choice_field.end()) {
         choice_list->persistence = PersistenceClass::runtime_only;
@@ -855,26 +837,12 @@ void apply_proven_storage_overrides(
     auto& check_box = properties[static_cast<std::size_t>(ControlKind::check_box)];
     classify_property(
         check_box,
-        "Enabled",
-        StorageCodec::control_base,
-        DefaultKind::boolean,
-        "true");
-    classify_property(
-        check_box,
         "Caption",
         StorageCodec::control_info,
         DefaultKind::string,
         "");
-    classify_property(check_box, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
-    classify_property(check_box, "Font", StorageCodec::control_base, DefaultKind::font, "automatic");
 
     auto& calendar_field = properties[static_cast<std::size_t>(ControlKind::calendar_field)];
-    classify_property(
-        calendar_field,
-        "Enabled",
-        StorageCodec::control_base,
-        DefaultKind::boolean,
-        "true");
     classify_property(
         calendar_field,
         "BeginOfDisplayPeriod",
@@ -883,33 +851,14 @@ void apply_proven_storage_overrides(
         "undefined");
 
     auto& list_box = properties[static_cast<std::size_t>(ControlKind::list_box)];
-    classify_property(list_box, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
     classify_property(list_box, "ShowPicture", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(list_box, "ShowCheckBox", StorageCodec::control_info, DefaultKind::boolean, "false");
-    classify_property(list_box, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
     classify_property(list_box, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
 
     auto& table = properties[static_cast<std::size_t>(ControlKind::table)];
     classify_property(table, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "true");
 
-    auto& text_document_field = properties[static_cast<std::size_t>(ControlKind::text_document_field)];
-    classify_property(text_document_field, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
-    classify_property(text_document_field, "BorderColor", StorageCodec::control_base, DefaultKind::color, "automatic");
-    classify_property(text_document_field, "Font", StorageCodec::control_base, DefaultKind::font, "automatic");
-
     auto& progress_bar = properties[static_cast<std::size_t>(ControlKind::progress_bar)];
-    classify_property(
-        progress_bar,
-        "Enabled",
-        StorageCodec::control_info,
-        DefaultKind::boolean,
-        "true");
-    classify_property(
-        progress_bar,
-        "ToolTip",
-        StorageCodec::control_info,
-        DefaultKind::string,
-        "");
     classify_property(progress_bar, "MaxValue", StorageCodec::control_info, DefaultKind::integer, "100");
     std::ranges::find(progress_bar, "MaxValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     classify_property(progress_bar, "MinValue", StorageCodec::control_info, DefaultKind::integer, "0");
@@ -918,18 +867,6 @@ void apply_proven_storage_overrides(
     std::ranges::find(progress_bar, "Step", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
 
     auto& track_bar = properties[static_cast<std::size_t>(ControlKind::track_bar)];
-    classify_property(
-        track_bar,
-        "Enabled",
-        StorageCodec::control_info,
-        DefaultKind::boolean,
-        "true");
-    classify_property(
-        track_bar,
-        "ToolTip",
-        StorageCodec::control_info,
-        DefaultKind::string,
-        "");
     classify_property(track_bar, "MaxValue", StorageCodec::control_info, DefaultKind::integer, "100");
     std::ranges::find(track_bar, "MaxValue", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
     classify_property(track_bar, "MinValue", StorageCodec::control_info, DefaultKind::integer, "0");
@@ -938,8 +875,8 @@ void apply_proven_storage_overrides(
     std::ranges::find(track_bar, "Step", &PropertyDescriptor::api_name)->value_codec = ValueCodec::integer32;
 
     auto& input_field = properties[static_cast<std::size_t>(ControlKind::input_field)];
-    classify_property(input_field, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
     classify_property(input_field, "Format", StorageCodec::control_info, DefaultKind::string, "");
+    classify_property(input_field, "ReadOnly", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(input_field, "HorizontalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Auto");
     classify_property(input_field, "VerticalAlign", StorageCodec::control_info, DefaultKind::enumeration, "Top");
     classify_property(input_field, "ChoiceListHeight", StorageCodec::control_info, DefaultKind::integer, "0");

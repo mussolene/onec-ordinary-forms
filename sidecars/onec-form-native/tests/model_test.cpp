@@ -569,6 +569,7 @@ void test_help_metamodel() {
         "InputField must retain the exact 45-property TextBox surface");
     const auto* choice_enabled = find_property(ControlKind::choice_field, "Enabled");
     const auto* choice_tool_tip = find_property(ControlKind::choice_field, "ToolTip");
+    const auto* choice_border_color = find_property(ControlKind::choice_field, "BorderColor");
     const auto* choice_list = find_property(ControlKind::choice_field, "ChoiceList");
     expect(choice_enabled && choice_enabled->persistence == PersistenceClass::persisted_editable &&
             choice_enabled->storage_codec == StorageCodec::control_base &&
@@ -580,6 +581,11 @@ void test_help_metamodel() {
             choice_tool_tip->default_value.kind == DefaultKind::string &&
             choice_tool_tip->default_value.canonical.empty(),
         "ChoiceField ToolTip must use the observed empty base string default");
+    expect(choice_border_color && choice_border_color->persistence == PersistenceClass::persisted_editable &&
+            choice_border_color->storage_codec == StorageCodec::control_base &&
+            choice_border_color->default_value.kind == DefaultKind::color &&
+            choice_border_color->default_value.canonical == "automatic",
+        "ChoiceField BorderColor must describe its automatic persisted color default");
     expect(choice_list && choice_list->persistence == PersistenceClass::runtime_only &&
             choice_list->storage_codec == StorageCodec::none,
         "ChoiceField ChoiceList must remain runtime-only rather than a persisted XML value");
@@ -731,6 +737,41 @@ void test_help_metamodel() {
         "Button.Click must retain its proven storage identity and codec");
 }
 
+void test_shared_control_default_classifications() {
+    using namespace oof::model::metamodel;
+
+    const auto classified = [](ControlKind kind, std::string_view name, StorageCodec storage,
+                               DefaultKind default_kind, std::string_view default_value,
+                               ValueCodec value_codec) {
+        const auto* descriptor = find_property(kind, name);
+        return descriptor != nullptr && descriptor->persistence == PersistenceClass::persisted_editable &&
+            descriptor->storage_codec == storage && descriptor->default_value.kind == default_kind &&
+            descriptor->default_value.canonical == default_value && descriptor->value_codec == value_codec;
+    };
+
+    expect(classified(ControlKind::button, "Enabled", StorageCodec::control_base,
+               DefaultKind::boolean, "true", ValueCodec::boolean) &&
+               classified(ControlKind::splitter, "Enabled", StorageCodec::control_base,
+                   DefaultKind::boolean, "true", ValueCodec::boolean),
+        "shared Enabled rule must retain the common control-base classification");
+    expect(classified(ControlKind::progress_bar, "Enabled", StorageCodec::control_info,
+               DefaultKind::boolean, "true", ValueCodec::boolean) &&
+               classified(ControlKind::label_decoration, "ToolTip", StorageCodec::control_info,
+                   DefaultKind::string, "", ValueCodec::string),
+        "shared Enabled and ToolTip defaults must retain control-info exceptions");
+    expect(classified(ControlKind::choice_field, "BorderColor", StorageCodec::control_base,
+               DefaultKind::color, "automatic", ValueCodec::color) &&
+               classified(ControlKind::text_document_field, "Font", StorageCodec::control_base,
+                   DefaultKind::font, "automatic", ValueCodec::font),
+        "shared BorderColor and Font rules must retain their named codecs and defaults");
+
+    const auto* unproven_enabled = find_property(ControlKind::panel, "Enabled");
+    const auto* unproven_border = find_property(ControlKind::check_box, "BorderColor");
+    expect(unproven_enabled && unproven_enabled->persistence == PersistenceClass::unclassified &&
+               unproven_border && unproven_border->persistence == PersistenceClass::unclassified,
+        "shared classification rules must not classify unproven control properties");
+}
+
 void test_variant_coverage() {
     static_assert(std::variant_size_v<ControlPayload> == 26);
 
@@ -825,6 +866,287 @@ void test_typed_property_set() {
     expect(properties.size() == 2, "different property IDs must coexist");
     expect(properties.unset(read_only), "unset must remove an explicit property");
     expect(!properties.contains(read_only), "unset property must disappear");
+}
+
+void test_document_property_api() {
+    Form form;
+    form.id = ObjectId{1};
+    OrdinaryFormDocument document(std::move(form));
+    document.add_control(ControlNode{ObjectId{10}, "Input", InputFieldPayload{}});
+    document.add_control(ControlNode{ObjectId{11}, "Button", ButtonPayload{}});
+    document.add_control(ControlNode{ObjectId{12}, "Check", CheckBoxPayload{}});
+    document.add_control(ControlNode{ObjectId{13}, "Menu", CommandBarPayload{}});
+    document.add_control(ControlNode{ObjectId{14}, "Table", TablePayload{}});
+    document.add_control(ControlNode{ObjectId{15}, "Label", LabelDecorationPayload{}});
+    document.add_control(ControlNode{ObjectId{16}, "Choice", ChoiceFieldPayload{}});
+    document.add_control(ControlNode{ObjectId{17}, "Dendrogram", DendrogramPayload{}});
+    ControlNode active_x_node{ObjectId{18}, "ActiveX", ActiveXControlPayload{}};
+    active_x_node.properties().set_explicit(PropertyId::from_name("CLSID"), std::string("existing"));
+    document.add_control(std::move(active_x_node));
+    Page page;
+    page.id = ObjectId{20};
+    page.name = "Page";
+    document.add_page(std::move(page));
+
+    const auto input = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{10}};
+    const auto button = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{11}};
+    const auto check = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{12}};
+    const auto menu = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{13}};
+    const auto label = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{15}};
+    const auto choice = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{16}};
+    const auto dendrogram = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{17}};
+    const auto active_x = OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{18}};
+
+    const auto input_enabled = document.get_prop_val(input, PropertyId::from_name("Enabled"));
+    expect(input_enabled.status == PropertyReadStatus::proven_default &&
+               input_enabled.value && std::get<bool>(*input_enabled.value),
+        "InputField Enabled must expose its proven true default");
+    const auto button_enabled = document.get_prop_val(button, PropertyId::from_name("Enabled"));
+    expect(button_enabled.status == PropertyReadStatus::proven_default &&
+               button_enabled.value && *button_enabled.value == *input_enabled.value,
+        "the same Enabled property must use one common API across control kinds");
+    const auto input_tooltip = document.get_prop_val(input, PropertyId::from_name("ToolTip"));
+    const auto button_tooltip = document.get_prop_val(button, PropertyId::from_name("ToolTip"));
+    expect(input_tooltip.status == PropertyReadStatus::proven_default && input_tooltip.value &&
+               *input_tooltip.value == PropertyValue{std::string{}} &&
+               button_tooltip.status == PropertyReadStatus::proven_default && button_tooltip.value &&
+               *button_tooltip.value == *input_tooltip.value,
+        "the common ToolTip default must be shared across input and button controls");
+
+    expect(document.set_prop_val(input, PropertyId::from_name("Enabled"), false) ==
+               PropertyMutationStatus::applied,
+        "a proven writable common property must be settable");
+    const auto explicit_enabled = document.get_prop_val(input, PropertyId::from_name("Enabled"));
+    expect(explicit_enabled.status == PropertyReadStatus::explicit_value &&
+               explicit_enabled.value && !std::get<bool>(*explicit_enabled.value),
+        "setting a value equal to or different from default must retain explicit state");
+    expect(document.reset_prop_val(input, PropertyId::from_name("Enabled")) ==
+               PropertyMutationStatus::reset,
+        "reset must remove the explicit value");
+    expect(document.get_prop_val(input, PropertyId::from_name("Enabled")).status ==
+               PropertyReadStatus::proven_default,
+        "reset must reveal the proven descriptor default");
+
+    const auto input_read_only = document.get_prop_val(input, PropertyId::from_name("ReadOnly"));
+    expect(input_read_only.status == PropertyReadStatus::proven_default && input_read_only.value &&
+               *input_read_only.value == PropertyValue{false},
+        "InputField ReadOnly must expose its proven false default");
+    expect(document.set_prop_val(input, PropertyId::from_name("ReadOnly"), true) ==
+               PropertyMutationStatus::applied,
+        "InputField ReadOnly must use its persisted Boolean property descriptor");
+    const auto explicit_read_only = document.get_prop_val(input, PropertyId::from_name("ReadOnly"));
+    expect(explicit_read_only.status == PropertyReadStatus::explicit_value && explicit_read_only.value &&
+               *explicit_read_only.value == PropertyValue{true},
+        "InputField ReadOnly must be readable after setting it");
+    expect(document.reset_prop_val(input, PropertyId::from_name("ReadOnly")) ==
+               PropertyMutationStatus::reset &&
+               document.get_prop_val(input, PropertyId::from_name("ReadOnly")).status ==
+                   PropertyReadStatus::proven_default,
+        "resetting InputField ReadOnly must reveal the false default");
+
+    const auto label_caption = document.get_prop_val(label, PropertyId::from_name("Caption"));
+    expect(label_caption.status == PropertyReadStatus::proven_default && label_caption.value &&
+               *label_caption.value == PropertyValue{std::string{}},
+        "LabelDecoration Caption must expose its proven empty-string default");
+    expect(document.set_prop_val(label, PropertyId::from_name("Caption"), std::string("Label caption")) ==
+               PropertyMutationStatus::applied,
+        "LabelDecoration Caption must use its persisted string property descriptor");
+    const auto explicit_label_caption = document.get_prop_val(label, PropertyId::from_name("Caption"));
+    expect(explicit_label_caption.status == PropertyReadStatus::explicit_value &&
+               explicit_label_caption.value &&
+               *explicit_label_caption.value == PropertyValue{std::string("Label caption")},
+        "LabelDecoration Caption must be readable after setting it");
+    expect(document.reset_prop_val(label, PropertyId::from_name("Caption")) ==
+               PropertyMutationStatus::reset &&
+               document.get_prop_val(label, PropertyId::from_name("Caption")).status ==
+                   PropertyReadStatus::proven_default,
+        "resetting LabelDecoration Caption must reveal the empty-string default");
+
+    const auto button_font = document.get_prop_val(button, PropertyId::from_name("Font"));
+    const auto check_font = document.get_prop_val(check, PropertyId::from_name("Font"));
+    const auto label_font = document.get_prop_val(label, PropertyId::from_name("Font"));
+    expect(button_font.status == PropertyReadStatus::proven_default && button_font.value &&
+               *button_font.value == PropertyValue{FontValue{}} &&
+               check_font.status == PropertyReadStatus::proven_default && check_font.value &&
+               *check_font.value == *button_font.value,
+        "automatic Font default must be materialized consistently across controls");
+    expect(label_font.status == PropertyReadStatus::proven_default && label_font.value &&
+               *label_font.value == PropertyValue{FontValue{}},
+        "LabelDecoration Font must expose the proven automatic default");
+
+    FontValue label_absolute_font;
+    label_absolute_font.kind = FontKind::absolute;
+    label_absolute_font.face_name = "Arial";
+    label_absolute_font.height = 10.5;
+    label_absolute_font.bold = false;
+    label_absolute_font.italic = true;
+    label_absolute_font.underline = false;
+    label_absolute_font.strikeout = false;
+    expect(document.set_prop_val(label, PropertyId::from_name("Font"), label_absolute_font) ==
+               PropertyMutationStatus::applied,
+        "LabelDecoration Font must accept a typed absolute FontValue");
+    const auto explicit_label_font = document.get_prop_val(label, PropertyId::from_name("Font"));
+    expect(explicit_label_font.status == PropertyReadStatus::explicit_value && explicit_label_font.value &&
+               *explicit_label_font.value == PropertyValue{label_absolute_font},
+        "LabelDecoration Font must remain explicitly readable");
+    expect(document.set_prop_val(label, PropertyId::from_name("Font"), std::string("Arial")) ==
+               PropertyMutationStatus::invalid_value &&
+               document.get_prop_val(label, PropertyId::from_name("Font")).value == explicit_label_font.value,
+        "wrong-typed LabelDecoration Font must be rejected without mutation");
+    expect(document.reset_prop_val(label, PropertyId::from_name("Font")) ==
+               PropertyMutationStatus::reset &&
+               document.get_prop_val(label, PropertyId::from_name("Font")).status ==
+                   PropertyReadStatus::proven_default,
+        "resetting LabelDecoration Font must reveal the automatic default");
+    const auto command_bar_orientation = document.get_prop_val(menu, PropertyId::from_name("Orientation"));
+    const auto dendrogram_orientation = document.get_prop_val(
+        dendrogram, PropertyId::from_name("Orientation"));
+    expect(command_bar_orientation.status == PropertyReadStatus::proven_default &&
+               command_bar_orientation.value &&
+               std::get<EnumerationValue>(*command_bar_orientation.value) ==
+                   EnumerationValue{"Orientation", "Auto"} &&
+               dendrogram_orientation.status == PropertyReadStatus::proven_default &&
+               dendrogram_orientation.value &&
+               std::get<EnumerationValue>(*dendrogram_orientation.value) ==
+                   EnumerationValue{"DendrogramOrientation", "Up"},
+        "qualified enum defaults must retain their proven types and members");
+
+    const auto button_border = document.get_prop_val(button, PropertyId::from_name("BorderColor"));
+    const auto choice_border = document.get_prop_val(choice, PropertyId::from_name("BorderColor"));
+    expect(button_border.status == PropertyReadStatus::proven_default && button_border.value &&
+               *button_border.value == PropertyValue{ColorValue{}} &&
+               choice_border.status == PropertyReadStatus::proven_default && choice_border.value &&
+               *choice_border.value == *button_border.value,
+        "automatic BorderColor default must be shared across button and choice controls");
+
+    ColorValue red;
+    red.kind = ColorKind::absolute;
+    red.red = 255;
+    expect(document.set_prop_val(button, PropertyId::from_name("BorderColor"), red) ==
+               PropertyMutationStatus::applied,
+        "the shared BorderColor property must accept its typed value");
+    const auto button_color = document.get_prop_val(button, PropertyId::from_name("BorderColor"));
+    expect(button_color.status == PropertyReadStatus::explicit_value && button_color.value &&
+               *button_color.value == PropertyValue{red},
+        "explicit ColorValue must round-trip through the common property API");
+
+    const auto unknown_default = document.get_prop_val(input, PropertyId::from_name("Border"));
+    expect(unknown_default.status == PropertyReadStatus::unknown_default && !unknown_default.value,
+        "an unproven property default must remain unknown rather than Undefined");
+    const auto no_default = document.get_prop_val(
+        OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{15}},
+        PropertyId::from_name("HorizontalAlign"));
+    expect(no_default.status == PropertyReadStatus::no_default && !no_default.value,
+        "a descriptor declaring no default must remain distinct from unknown and Undefined");
+
+    expect(document.set_prop_val(input, PropertyId::from_name("Enabled"), std::string("false")) ==
+               PropertyMutationStatus::invalid_value,
+        "wrong-typed values must be rejected before mutation");
+    expect(document.get_prop_val(input, PropertyId::from_name("Enabled")).status ==
+               PropertyReadStatus::proven_default,
+        "a rejected set must leave the previous state unchanged");
+    expect(document.set_prop_val(input, PropertyId::from_name("HorizontalAlign"),
+                   EnumerationValue{"HorizontalAlign", "Auto"}) == PropertyMutationStatus::applied,
+        "an evidenced enum type and member must be accepted by the common property API");
+    const auto known_alignment = document.get_prop_val(input, PropertyId::from_name("HorizontalAlign"));
+    expect(known_alignment.status == PropertyReadStatus::explicit_value && known_alignment.value &&
+               *known_alignment.value == PropertyValue{EnumerationValue{"HorizontalAlign", "Auto"}},
+        "a valid enum value must remain explicitly readable");
+    expect(document.set_prop_val(input, PropertyId::from_name("HorizontalAlign"),
+                   EnumerationValue{"BogusType", "BogusMember"}) == PropertyMutationStatus::invalid_value &&
+               document.get_prop_val(input, PropertyId::from_name("HorizontalAlign")).value ==
+                   known_alignment.value,
+        "an enum with an unrecognized type and member must be rejected atomically");
+    expect(document.set_prop_val(input, PropertyId::from_name("HorizontalAlign"),
+                   EnumerationValue{"HorizontalAlign", "JustifyMaybe"}) == PropertyMutationStatus::invalid_value &&
+               document.get_prop_val(input, PropertyId::from_name("HorizontalAlign")).value ==
+                   known_alignment.value,
+        "an enum member outside the proven catalog must leave the old value unchanged");
+    expect(document.reset_prop_val(input, PropertyId::from_name("HorizontalAlign")) ==
+               PropertyMutationStatus::reset,
+        "a validated enum property must remain resettable");
+    expect(document.set_prop_val(active_x, PropertyId::from_name("CLSID"), std::string("class")) ==
+               PropertyMutationStatus::unknown_access &&
+               document.reset_prop_val(active_x, PropertyId::from_name("CLSID")) ==
+                   PropertyMutationStatus::unknown_access &&
+               document.find_control(ObjectId{18})->properties().size() == 1 &&
+               document.get_prop_val(active_x, PropertyId::from_name("CLSID")).status ==
+                   PropertyReadStatus::explicit_value &&
+               document.get_prop_val(active_x, PropertyId::from_name("CLSID")).value ==
+                   PropertyValue{std::string("existing")},
+        "unknown API access must reject both set and reset without mutating the control");
+    expect(document.set_prop_val(input, PropertyId::from_name("ChoiceIncomplete"), true) ==
+               PropertyMutationStatus::applied_runtime_only,
+        "a writable runtime-only property must be kept in memory without claiming storage support");
+    expect(document.get_prop_val(input, PropertyId::from_name("ChoiceIncomplete")).status ==
+               PropertyReadStatus::explicit_value &&
+               document.reset_prop_val(input, PropertyId::from_name("ChoiceIncomplete")) ==
+                   PropertyMutationStatus::reset_runtime_only,
+        "runtime-only explicit values must be readable and resettable");
+    expect(document.set_prop_val(input, PropertyId::from_name("AutoContextMenu"), true) ==
+               PropertyMutationStatus::applied_unclassified_storage &&
+               document.get_prop_val(input, PropertyId::from_name("AutoContextMenu")).status ==
+                   PropertyReadStatus::explicit_value,
+        "shared control extension properties must use the same owner API without claiming storage support");
+    expect(document.set_prop_val(
+               OrdinaryFormDocument::ObjectKey{ObjectCategory::form, ObjectId{1}},
+               PropertyId::from_name("ModalMode"), false) == PropertyMutationStatus::read_only,
+        "read-only properties must reject mutation");
+    const auto form_caption = OrdinaryFormDocument::ObjectKey{ObjectCategory::form, ObjectId{1}};
+    expect(document.set_prop_val(form_caption, PropertyId::from_name("Caption"), std::string("Title")) ==
+               PropertyMutationStatus::applied,
+        "a proven form property must use the same descriptor-backed API");
+    expect(document.get_prop_val(form_caption, PropertyId::from_name("Caption")).status ==
+               PropertyReadStatus::explicit_value,
+        "the form property API must read an explicit property from Form");
+    expect(document.reset_prop_val(form_caption, PropertyId::from_name("Caption")) ==
+               PropertyMutationStatus::reset &&
+               document.get_prop_val(form_caption, PropertyId::from_name("Caption")).status ==
+                   PropertyReadStatus::proven_default &&
+               document.get_prop_val(form_caption, PropertyId::from_name("Caption")).value ==
+                   PropertyValue{std::string{}},
+        "reset must restore the proven empty Form.Caption default");
+
+    expect(document.get_prop_val(
+               OrdinaryFormDocument::ObjectKey{ObjectCategory::control, ObjectId{999}},
+               PropertyId::from_name("Enabled")).status == PropertyReadStatus::unknown_owner,
+        "an unknown object key must return unknown_owner");
+    expect(document.get_prop_val(input, PropertyId::from_name("MadeUp")).status ==
+               PropertyReadStatus::unknown_property,
+        "an unregistered property ID must return unknown_property");
+    expect(document.get_prop_val(
+               OrdinaryFormDocument::ObjectKey{ObjectCategory::page, ObjectId{20}},
+               PropertyId::from_name("Visible")).status == PropertyReadStatus::unsupported_surface,
+        "Page properties must report unsupported_surface in this API slice");
+    expect(document.get_prop_val(form_caption, PropertyId::from_name("Controls")).status ==
+               PropertyReadStatus::unsupported_surface &&
+               document.set_prop_val(form_caption, PropertyId::from_name("Controls"), false) ==
+                   PropertyMutationStatus::unsupported_surface &&
+               document.reset_prop_val(form_caption, PropertyId::from_name("Controls")) ==
+                   PropertyMutationStatus::unsupported_surface,
+        "typed Form collections must report unsupported_surface for reads and mutations");
+    expect(document.get_prop_val(menu, PropertyId::from_name("Buttons")).status ==
+               PropertyReadStatus::unsupported_surface,
+        "typed collection payloads must report unsupported_surface");
+
+    expect(document.set_prop_val(menu, PropertyId::from_name("ActionSource"), ControlRef{ObjectId{999}}) ==
+               PropertyMutationStatus::invalid_reference,
+        "a dangling control reference must be rejected before mutation");
+    const auto rejected_action_source = document.get_prop_val(menu, PropertyId::from_name("ActionSource"));
+    expect(rejected_action_source.status == PropertyReadStatus::proven_default &&
+               rejected_action_source.value &&
+               std::holds_alternative<UndefinedValue>(*rejected_action_source.value),
+        "a rejected reference must not be stored");
+    expect(document.set_prop_val(menu, PropertyId::from_name("ActionSource"), ControlRef{ObjectId{11}}) ==
+               PropertyMutationStatus::invalid_reference,
+        "ActionSource must reject an existing control of the wrong control kind");
+    expect(document.set_prop_val(menu, PropertyId::from_name("ActionSource"), ControlRef{ObjectId{14}}) ==
+               PropertyMutationStatus::applied,
+        "ActionSource may point to an existing Table control");
+    const auto action_source = document.get_prop_val(menu, PropertyId::from_name("ActionSource"));
+    expect(action_source.status == PropertyReadStatus::explicit_value && action_source.value &&
+               std::get<ControlRef>(*action_source.value).id() == ObjectId{14},
+        "a valid typed reference must round-trip through the property API");
 }
 
 void test_id_lookup() {
@@ -1294,6 +1616,30 @@ void test_chart_number_lexical_validation() {
         "Chart model validation must reject non-decimal numeric values such as NaN");
 }
 
+void test_chart_summary_series_color_invariants() {
+    using namespace oof::model;
+    const auto validate = [](ColorValue color, EnumerationValue marker = {"ChartMarkerType", "Auto"}) {
+        Form form; form.id = ObjectId{1}; form.children.push_back(ControlRef{ObjectId{2}});
+        OrdinaryFormDocument document(std::move(form));
+        ChartPayload chart; chart.summary_series.color = std::move(color); chart.summary_series.marker = std::move(marker);
+        document.add_control(ControlNode{ObjectId{2}, "Chart", std::move(chart)});
+        return document.validate();
+    };
+    expect(validate(ColorValue{}, {"ChartMarkerType", "Rhomb"}).ok(), "proven SummarySeries Rhomb must validate");
+    expect(!validate(ColorValue{}, {"ChartMarkerType", "Alternation"}).ok(), "unproven SummarySeries Marker must fail");
+    expect(!validate(ColorValue{}, {"OtherType", "Auto"}).ok(), "foreign SummarySeries Marker enum must fail");
+    ColorValue color;
+    expect(validate(color).ok(), "default SummarySeries Color must validate");
+    color.kind = ColorKind::absolute; color.red = 153; color.green = 25; color.blue = 25;
+    expect(validate(color).ok(), "absolute SummarySeries Color must validate");
+    color.alpha = 254;
+    expect(!validate(color).ok(), "SummarySeries Color must reject transparency");
+    color.alpha = 255; color.style = QualifiedName{"Accent"};
+    expect(!validate(color).ok(), "SummarySeries Color must reject style payload");
+    color = ColorValue{}; color.red = 1;
+    expect(!validate(color).ok(), "automatic SummarySeries Color must reject explicit RGB");
+}
+
 void test_border_value_invariants() {
     using namespace oof::model;
     using namespace oof::model::metamodel;
@@ -1364,9 +1710,11 @@ int main() {
         test_progress_bar_storage_descriptors();
         test_track_bar_storage_descriptors();
         test_help_metamodel();
+        test_shared_control_default_classifications();
         test_variant_coverage();
         test_property_default_semantics();
         test_typed_property_set();
+        test_document_property_api();
         test_id_lookup();
         test_duplicate_rejection();
         test_category_scoped_object_ids();
@@ -1381,6 +1729,7 @@ int main() {
         test_duplicate_bindings_rejected();
         test_page_position_invariants();
         test_chart_number_lexical_validation();
+        test_chart_summary_series_color_invariants();
         test_border_value_invariants();
     } catch (const std::exception& error) {
         std::cerr << "model tests: FAIL: " << error.what() << '\n';

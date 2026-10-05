@@ -154,6 +154,112 @@ void test_invalid_block_chains() {
         "out-of-range next block offset must be rejected");
 }
 
+void test_bounded_document_accumulation() {
+    auto padded = container_prefix();
+    const auto first_offset = formbin::append_block(padded, {0xab}, 4096, 1);
+    const auto logical = formbin::read_document(padded, first_offset);
+    expect(logical == std::vector<std::uint8_t>{0xab}, "padded blocks must retain logical bytes");
+    expect(logical.capacity() <= 1, "padding must not be allocated in the logical document");
+
+    // Every block spans the remaining headers. The declared document is empty.
+    auto overlapping = container_prefix();
+    constexpr std::size_t block_count = 1000;
+    const auto header_size = formbin::block_header(0, 0).size();
+    for (std::size_t index = 0; index < block_count; ++index) {
+        append_bytes(overlapping, formbin::block_header(0,
+            static_cast<std::uint32_t>((block_count - index - 1) * header_size),
+            index + 1 == block_count ? formbin::container_end_marker :
+                static_cast<std::uint32_t>(formbin::container_header_size + (index + 1) * header_size)));
+    }
+    const auto empty = formbin::read_document(overlapping, formbin::container_header_size);
+    expect(empty.empty() && empty.capacity() == 0,
+        "overlapping padding must not amplify the empty document allocation");
+
+    auto cycle_after_data = container_prefix();
+    const auto start = formbin::append_block(cycle_after_data, {0xab}, 0, 1);
+    const auto next = cycle_after_data.size();
+    const auto first_header = formbin::block_header(1, 1, static_cast<std::uint32_t>(next));
+    std::copy(first_header.begin(), first_header.end(), cycle_after_data.begin() + start);
+    append_bytes(cycle_after_data, formbin::block_header(0, 0, static_cast<std::uint32_t>(next)));
+    expect_rejected([&] { formbin::read_document(cycle_after_data, start); },
+        "block cycles must still be checked after all declared bytes have been read");
+
+    auto oversized = container_prefix();
+    append_bytes(oversized, formbin::block_header(UINT32_MAX, 0));
+    expect_rejected([&] { formbin::read_document(oversized, formbin::container_header_size); },
+        "a document larger than the input must be rejected before accumulation");
+}
+
+void test_container_count_and_allocation_limits() {
+    auto mismatch = container_prefix(UINT32_C(0x7fffffff));
+    formbin::append_block(mismatch, {});
+    expect_rejected([&] { formbin::parse_container(mismatch); },
+        "file count must match the TOC before descriptor traversal");
+
+    auto aliased = container_prefix(4);
+    const auto toc = formbin::append_block(aliased, std::vector<std::uint8_t>(48));
+    const auto descriptor = formbin::append_document(aliased, formbin::file_descriptor_payload("form", 0, 0));
+    const auto payload = formbin::append_document(aliased, std::vector<std::uint8_t>(4096));
+    std::vector<std::uint8_t> entries;
+    for (std::size_t index = 0; index < 4; ++index) {
+        formbin::write_u32_le(entries, static_cast<std::uint32_t>(descriptor));
+        formbin::write_u32_le(entries, static_cast<std::uint32_t>(payload));
+        formbin::write_u32_le(entries, formbin::container_end_marker);
+    }
+    const auto toc_start = formbin::read_block_header(aliased, toc).payload_offset;
+    std::copy(entries.begin(), entries.end(), aliased.begin() + toc_start);
+    expect_rejected([&] { formbin::parse_container(aliased); },
+        "repeated TOC aliases must not multiply materialized bytes beyond the input size");
+}
+
+void test_shared_block_traversal_budget() {
+    constexpr std::size_t file_count = 100;
+    constexpr std::size_t block_count = 400;
+    auto aliased = container_prefix(file_count);
+    const auto toc = formbin::append_block(aliased, std::vector<std::uint8_t>(file_count * 12));
+    const auto descriptor = formbin::append_document(aliased, formbin::file_descriptor_payload("form", 0, 0));
+    const auto payload = aliased.size();
+    const auto header_size = formbin::block_header(0, 0).size();
+    for (std::size_t index = 0; index < block_count; ++index) {
+        append_bytes(aliased, formbin::block_header(0, 0,
+            index + 1 == block_count ? formbin::container_end_marker :
+                static_cast<std::uint32_t>(payload + (index + 1) * header_size)));
+    }
+    std::vector<std::uint8_t> entries;
+    for (std::size_t index = 0; index < file_count; ++index) {
+        formbin::write_u32_le(entries, static_cast<std::uint32_t>(descriptor));
+        formbin::write_u32_le(entries, static_cast<std::uint32_t>(payload));
+        formbin::write_u32_le(entries, formbin::container_end_marker);
+    }
+    const auto toc_start = formbin::read_block_header(aliased, toc).payload_offset;
+    std::copy(entries.begin(), entries.end(), aliased.begin() + toc_start);
+    expect(formbin::read_document(aliased, payload).empty(),
+        "one traversal of the empty chain must fit its standalone budget");
+    bool rejected = false;
+    try {
+        static_cast<void>(formbin::parse_container(aliased));
+    } catch (const std::runtime_error& error) {
+        rejected = std::string_view(error.what()).find("block traversal budget") != std::string_view::npos;
+    }
+    expect(rejected, "all files must share one traversal budget even when aliased payloads are empty");
+}
+
+void test_block_header_resource_limit() {
+    auto at_limit = formbin::block_header(0, 0);
+    at_limit.insert(at_limit.end() - 2, formbin::max_container_block_header_size - at_limit.size(), ' ');
+    expect(formbin::read_block_header(at_limit, 0).payload_offset == formbin::max_container_block_header_size,
+        "a block header at the resource limit must retain its payload offset");
+    expect(formbin::read_document(at_limit, 0).empty(), "bounded header padding must remain accepted");
+    at_limit.insert(at_limit.end() - 2, ' ');
+    bool rejected = false;
+    try {
+        static_cast<void>(formbin::read_block_header(at_limit, 0));
+    } catch (const std::runtime_error& error) {
+        rejected = std::string_view(error.what()).find("resource limit: block header") != std::string_view::npos;
+    }
+    expect(rejected, "a 65-byte block header must fail before unbounded header scanning");
+}
+
 void test_surrogate_handling() {
     const std::vector<std::uint8_t> valid_name{0x3d, 0xd8, 0x00, 0xde, 0x00, 0x00};
     expect(
@@ -182,6 +288,10 @@ int main() {
         test_malformed_headers();
         test_truncated_and_mismatched_blocks();
         test_invalid_block_chains();
+        test_bounded_document_accumulation();
+        test_container_count_and_allocation_limits();
+        test_shared_block_traversal_budget();
+        test_block_header_resource_limit();
         test_surrogate_handling();
     } catch (const std::exception& error) {
         std::cerr << "container tests: FAIL: " << error.what() << '\n';

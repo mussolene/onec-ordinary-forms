@@ -132,7 +132,8 @@ Result<model::OrdinaryFormDocument> load_form_bin(
         auto document = decoded.take_value();
         document.set_module(model::FormModule{
             canonical_module_newlines(utf8_payload(module_file->payload), false)});
-        return Result<model::OrdinaryFormDocument>::success(std::move(document));
+        return Result<model::OrdinaryFormDocument>::success(
+            std::move(document), decoded.diagnostics());
     } catch (const std::exception& error) {
         return Result<model::OrdinaryFormDocument>::failure({diagnostic(
             "OOF1200",
@@ -162,7 +163,8 @@ Result<std::vector<std::uint8_t>> save_form_bin(
         if (!verified) {
             return Result<std::vector<std::uint8_t>>::failure(verified.diagnostics());
         }
-        return Result<std::vector<std::uint8_t>>::success(std::move(bytes));
+        return Result<std::vector<std::uint8_t>>::success(
+            std::move(bytes), encoded.diagnostics());
     } catch (const std::exception& error) {
         return Result<std::vector<std::uint8_t>>::failure({diagnostic(
             "OOF1200",

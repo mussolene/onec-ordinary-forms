@@ -72,6 +72,43 @@ void test_empty_and_nested_lists() {
         "trailing empty slot must serialize canonically");
 }
 
+void test_nesting_resource_limit() {
+    const auto at_limit = std::string(list_stream::max_list_depth, '{') + "0" +
+        std::string(list_stream::max_list_depth, '}');
+    expect(list_stream::dump_compact(list_stream::parse(at_limit)) == at_limit,
+        "nesting at the resource limit must round-trip");
+    for (const std::size_t depth : {list_stream::max_list_depth + 1, std::size_t{30000}}) {
+        const auto excessive = std::string(depth, '{') + "0" + std::string(depth, '}');
+        bool rejected = false;
+        try {
+            static_cast<void>(list_stream::parse(excessive));
+        } catch (const std::runtime_error& error) {
+            rejected = std::string_view(error.what()).find("resource limit") != std::string_view::npos;
+        }
+        expect(rejected, "excessive nesting must report a resource limit instead of exhausting the stack");
+    }
+}
+
+void test_token_resource_limit() {
+    const auto at_limit = std::string(list_stream::max_list_tokens, ',');
+    expect(list_stream::detail::tokenize(at_limit + " \t\n").size() == list_stream::max_list_tokens,
+        "the token limit must be inclusive and ignore trailing whitespace");
+    const auto expect_token_limit = [](std::string_view input) {
+        bool rejected = false;
+        try {
+            static_cast<void>(list_stream::parse(input));
+        } catch (const std::runtime_error& error) {
+            rejected = std::string_view(error.what()).find("resource limit: token count") != std::string_view::npos;
+        }
+        expect(rejected, "token expansion must be rejected before the next token allocation");
+    };
+    expect_token_limit("{" + at_limit + "}");
+    std::string atoms;
+    atoms.reserve((list_stream::max_list_tokens + 1) * 2);
+    for (std::size_t index = 0; index <= list_stream::max_list_tokens; ++index) atoms += "0 ";
+    expect_token_limit(atoms);
+}
+
 void test_quoted_strings() {
     const std::string text = "{\"comma,value\",\"{braces}\",\"say \"\"hello\"\"\",\"\"}";
     const auto value = list_stream::parse(text);
@@ -342,6 +379,8 @@ void test_malformed_input() {
 int main() {
     try {
         test_empty_and_nested_lists();
+        test_nesting_resource_limit();
+        test_token_resource_limit();
         test_quoted_strings();
         test_logical_line_endings_use_utf16_continuations();
         test_platform_literal_line_endings();

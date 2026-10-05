@@ -11,8 +11,8 @@ namespace oof {
 template <typename T>
 class Result {
 public:
-    static Result success(T value) {
-        return Result(std::move(value));
+    static Result success(T value, Diagnostics diagnostics = {}) {
+        return Result(Success{std::move(value), std::move(diagnostics)});
     }
 
     static Result failure(Diagnostics diagnostics) {
@@ -20,7 +20,7 @@ public:
     }
 
     bool ok() const noexcept {
-        return std::holds_alternative<T>(state_);
+        return std::holds_alternative<Success>(state_);
     }
 
     explicit operator bool() const noexcept {
@@ -31,43 +31,47 @@ public:
         if (!ok()) {
             throw std::logic_error("result has no value");
         }
-        return std::get<T>(state_);
+        return std::get<Success>(state_).value;
     }
 
     T& value() {
         if (!ok()) {
             throw std::logic_error("result has no value");
         }
-        return std::get<T>(state_);
+        return std::get<Success>(state_).value;
     }
 
     T take_value() {
         if (!ok()) {
             throw std::logic_error("result has no value");
         }
-        return std::move(std::get<T>(state_));
+        return std::move(std::get<Success>(state_).value);
     }
 
     const Diagnostics& diagnostics() const noexcept {
-        static const Diagnostics empty;
-        return ok() ? empty : std::get<Diagnostics>(state_);
+        return ok() ? std::get<Success>(state_).diagnostics : std::get<Diagnostics>(state_);
     }
 
 private:
-    explicit Result(T value)
-        : state_(std::move(value)) {}
+    struct Success {
+        T value;
+        Diagnostics diagnostics;
+    };
+
+    explicit Result(Success success)
+        : state_(std::move(success)) {}
 
     explicit Result(Diagnostics diagnostics)
         : state_(std::move(diagnostics)) {}
 
-    std::variant<T, Diagnostics> state_;
+    std::variant<Success, Diagnostics> state_;
 };
 
 template <>
 class Result<void> {
 public:
-    static Result success() {
-        return Result(true, {});
+    static Result success(Diagnostics diagnostics = {}) {
+        return Result(true, std::move(diagnostics));
     }
 
     static Result failure(Diagnostics diagnostics) {

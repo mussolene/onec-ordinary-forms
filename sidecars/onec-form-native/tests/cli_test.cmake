@@ -61,9 +61,53 @@ file(WRITE "${source_xml}" [=[
 ]=])
 file(WRITE "${module_file}" "${module_text}")
 
+# Недоверенный пакет не должен читать модуль вне своего каталога.
+set(module_escape_root "${test_root}/module-escape/Form")
+file(MAKE_DIRECTORY "${module_escape_root}")
+file(COPY "${source_xml}" DESTINATION "${test_root}/module-escape")
+file(WRITE "${test_root}/outside-module.bsl" "OWN_OUTSIDE_MODULE_MARKER")
+file(CREATE_LINK "${test_root}/outside-module.bsl" "${module_escape_root}/Module.bsl" SYMBOLIC)
+file(WRITE "${test_root}/module-escape.bin" "preserve output")
+run_cli(1 "module input symlink escape" build "${test_root}/module-escape/Form.xml" "${test_root}/module-escape.bin" --json)
+require_contains("${CLI_STDOUT}" "OOF0004" "module input boundary diagnostic")
+require_file_equals("${test_root}/module-escape.bin" "preserve output" "module escape must not overwrite output")
+file(REMOVE "${module_escape_root}/Module.bsl")
+file(CREATE_LINK "${test_root}/outside-module.bsl" "${module_escape_root}/Module.bsl")
+run_cli(1 "module input hard link escape" build "${test_root}/module-escape/Form.xml" "${test_root}/module-escape.bin" --json)
+require_contains("${CLI_STDOUT}" "OOF0004" "module hard link diagnostic")
+require_file_equals("${test_root}/module-escape.bin" "preserve output" "module hard link must not overwrite output")
+file(REMOVE "${module_escape_root}/Module.bsl")
+file(CREATE_LINK "${test_root}/outside-module.bsl" "${module_escape_root}/Module.bsl" SYMBOLIC)
+
 # Source package -> Form.bin -> public XML and module sidecar.
 run_cli(0 "initial build" build "${source_xml}" "${first_bin}" --json)
 require_contains("${CLI_STDOUT}" "\"ok\":true" "initial build JSON result")
+
+# Все производные пути проверяются до изменения XML или модуля.
+file(WRITE "${test_root}/module-escape/Form.xml" "preserve XML")
+run_cli(1 "module output symlink escape" dump "${first_bin}" "${test_root}/module-escape/Form.xml" --json)
+require_file_equals("${test_root}/outside-module.bsl" "OWN_OUTSIDE_MODULE_MARKER" "dump must preserve outside module")
+require_file_equals("${test_root}/module-escape/Form.xml" "preserve XML" "dump rejection must preserve XML")
+file(REMOVE "${module_escape_root}/Module.bsl")
+file(CREATE_LINK "${test_root}/outside-module.bsl" "${module_escape_root}/Module.bsl")
+run_cli(1 "module output hard link escape" dump "${first_bin}" "${test_root}/module-escape/Form.xml" --json)
+require_file_equals("${test_root}/outside-module.bsl" "OWN_OUTSIDE_MODULE_MARKER" "dump must preserve hard linked module")
+require_file_equals("${test_root}/module-escape/Form.xml" "preserve XML" "hard link rejection must preserve XML")
+file(REMOVE "${module_escape_root}/Module.bsl")
+file(CREATE_LINK "${test_root}/outside-module.bsl" "${module_escape_root}/Module.bsl" SYMBOLIC)
+file(MAKE_DIRECTORY "${test_root}/package-escape")
+file(CREATE_LINK "${test_root}/module-escape/Form" "${test_root}/package-escape/Form" SYMBOLIC)
+run_cli(1 "sidecar directory symlink escape" dump "${first_bin}" "${test_root}/package-escape/Form.xml" --json)
+if(EXISTS "${test_root}/package-escape/Form.xml")
+  message(FATAL_ERROR "dump wrote XML before rejecting the package directory symlink")
+endif()
+file(CREATE_LINK "${test_root}/outside-module.bsl" "${test_root}/linked-output.bin" SYMBOLIC)
+run_cli(1 "binary output symlink" build "${source_xml}" "${test_root}/linked-output.bin" --json)
+require_file_equals("${test_root}/outside-module.bsl" "OWN_OUTSIDE_MODULE_MARKER" "build must preserve output symlink target")
+file(CREATE_LINK "${test_root}/outside-module.bsl" "${test_root}/linked-output.xml" SYMBOLIC)
+run_cli(1 "XML output symlink" dump "${first_bin}" "${test_root}/linked-output.xml" --json)
+require_file_equals("${test_root}/outside-module.bsl" "OWN_OUTSIDE_MODULE_MARKER" "dump must preserve XML symlink target")
+
 run_cli(0 "initial dump" dump "${first_bin}" "${first_xml}" --json)
 require_contains("${CLI_STDOUT}" "\"ok\":true" "initial dump JSON result")
 require_file_equals("${test_root}/first/Form/Module.bsl" "${module_text}" "initial module preservation")
@@ -97,6 +141,27 @@ file(READ "${second_xml}" final_xml_text)
 require_contains("${final_xml_text}" "<Caption>After</Caption>" "edited named Caption round-trip")
 require_contains("${final_xml_text}" "<Caption>Launch</Caption>" "edited Button Caption round-trip")
 require_file_equals("${test_root}/second/Form/Module.bsl" "${module_text}" "edited module preservation")
+
+# Неполнота источника предупреждает, но не запрещает сборку известных свойств.
+set(partial_source "${test_root}/partial/Form.xml")
+set(partial_bin "${test_root}/partial.bin")
+file(MAKE_DIRECTORY "${test_root}/partial/Form")
+string(REPLACE "ordinaryFormVersion=\"2.1\"" "ordinaryFormVersion=\"2.1\" reconstructionComplete=\"false\""
+  partial_xml "${edited_xml}")
+file(WRITE "${partial_source}" "${partial_xml}")
+file(WRITE "${test_root}/partial/Form/Module.bsl" "${module_text}")
+run_cli(0 "partial source build" build "${partial_source}" "${partial_bin}" --json)
+string(JSON partial_ok GET "${CLI_STDOUT}" ok)
+string(JSON warning_count LENGTH "${CLI_STDOUT}" diagnostics)
+string(JSON warning_severity GET "${CLI_STDOUT}" diagnostics 0 severity)
+if(NOT partial_ok OR warning_count LESS 1 OR NOT warning_severity STREQUAL "warning")
+  message(FATAL_ERROR "partial source must build successfully with JSON warnings")
+endif()
+file(READ "${partial_bin}" partial_binary HEX)
+file(READ "${second_bin}" known_binary HEX)
+if(NOT partial_binary STREQUAL known_binary)
+  message(FATAL_ERROR "partial metadata must preserve the serialized known properties and module")
+endif()
 
 # Errors must be diagnostic, nonzero, and leave a pre-existing output untouched.
 set(protected_output "${test_root}/protected.bin")
@@ -194,5 +259,55 @@ file(WRITE "${test_root}/outside.bmp" "BM-outside")
 file(CREATE_LINK "${test_root}/outside.bmp" "${picture_path}" SYMBOLIC)
 run_cli(1 "picture symlink escape" build "${picture_source}" "${test_root}/picture-escape.bin" --json)
 require_contains("${CLI_STDOUT}" "OOF0006" "picture symlink escape diagnostic")
+
+# Отказ по размеру происходит до чтения содержимого и изменения результата.
+set(oversized_input "${test_root}/oversized-input")
+string(REPEAT "x" 1048576 input_chunk)
+file(WRITE "${oversized_input}" "")
+foreach(chunk RANGE 1 64)
+  file(APPEND "${oversized_input}" "${input_chunk}")
+endforeach()
+unset(input_chunk)
+file(APPEND "${oversized_input}" "x")
+foreach(command dump build)
+  run_cli(1 "oversized ${command} input" "${command}" "${oversized_input}" "${protected_output}" --json)
+  require_contains("${CLI_STDOUT}" "64 MiB" "input size limit diagnostic")
+  require_file_equals("${protected_output}" "preserve this output" "oversized input must preserve output")
+endforeach()
+file(RENAME "${oversized_input}" "${test_root}/empty/Form/Module.bsl")
+run_cli(1 "oversized module input" build "${empty_module_source}" "${protected_output}" --json)
+require_contains("${CLI_STDOUT}" "64 MiB" "module size limit diagnostic")
+require_file_equals("${protected_output}" "preserve this output" "oversized module must preserve output")
+file(REMOVE "${test_root}/empty/Form/Module.bsl")
+
+# Два допустимых по отдельности файла также ограничены общим бюджетом.
+file(REMOVE "${picture_path}")
+set(second_picture "${picture_root}/Items/Second/Picture.bmp")
+file(MAKE_DIRECTORY "${picture_root}/Items/Second")
+file(WRITE "${picture_path}" "BM")
+file(WRITE "${second_picture}" "BM")
+string(REPEAT "x" 1048576 input_chunk)
+foreach(chunk RANGE 1 32)
+  file(APPEND "${picture_path}" "${input_chunk}")
+  file(APPEND "${second_picture}" "${input_chunk}")
+endforeach()
+unset(input_chunk)
+file(WRITE "${picture_source}" [=[
+<Form id="1" name="PictureBudget" ordinaryFormVersion="2.1">
+  <PictureAssets>
+    <PictureAsset id="42" relativePath="Items/Logo/Picture.bmp" format="bmp"/>
+    <PictureAsset id="43" relativePath="Items/Second/Picture.bmp" format="bmp"/>
+  </PictureAssets>
+  <ChildItems>
+    <Button id="2" name="Logo"><Position/><Picture>42</Picture></Button>
+    <Button id="3" name="Second"><Position/><Picture>43</Picture></Button>
+  </ChildItems>
+</Form>
+]=])
+run_cli(1 "aggregate picture limit" build "${picture_source}" "${protected_output}" --json)
+require_contains("${CLI_STDOUT}" "OOF0006" "picture budget diagnostic")
+require_contains("${CLI_STDOUT}" "remaining picture package limit" "aggregate size diagnostic")
+require_file_equals("${protected_output}" "preserve this output" "picture budget must preserve output")
+file(REMOVE "${picture_path}" "${second_picture}")
 
 message(STATUS "CLI integration: PASS")

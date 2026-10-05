@@ -1102,15 +1102,17 @@ bool equals_descriptor_default(
     return false;
 }
 
-bool equals_table_column_editor_default(
+bool valid_table_column_editor_property(
     model::ControlKind kind,
     const mm::PropertyDescriptor& descriptor,
     const model::PropertyValue& value) {
-    if (kind == model::ControlKind::input_field) {
-        if (descriptor.api_name == "Enabled") return std::holds_alternative<bool>(value) && std::get<bool>(value);
-        if (descriptor.api_name == "ReadOnly") return std::holds_alternative<bool>(value) && !std::get<bool>(value);
-        return false;
+    if (descriptor.api_name == "Enabled") {
+        return std::holds_alternative<bool>(value) &&
+            (kind == model::ControlKind::input_field || std::get<bool>(value));
     }
+    if (descriptor.api_name == "ReadOnly")
+        return kind == model::ControlKind::input_field && std::holds_alternative<bool>(value);
+    if (kind == model::ControlKind::input_field) return false;
     return equals_descriptor_default(descriptor, value);
 }
 
@@ -1244,6 +1246,11 @@ public:
         model::Form form;
         form.id = parse_object_id(required_attribute(root, "id"), root);
         form.name = required_attribute(root, "name", object_id_text(form.id));
+        bool reconstruction_complete = true;
+        if (const auto value = optional_attribute(root, "reconstructionComplete")) {
+            reconstruction_complete = parse_boolean(
+                *value, root, "reconstructionComplete", object_id_text(form.id));
+        }
         const std::string form_id = object_id_text(form.id);
 
         for (xmlNodePtr child : element_children(root)) {
@@ -1287,6 +1294,7 @@ public:
         }
 
         model::OrdinaryFormDocument document(std::move(form));
+        document.set_reconstruction_complete(reconstruction_complete);
         for (auto& asset : objects_.assets) document.add_asset(std::move(asset));
         for (auto& attribute : objects_.attributes) document.add_attribute(std::move(attribute));
         for (auto& command : objects_.commands) document.add_command(std::move(command));
@@ -1579,6 +1587,7 @@ private:
         };
         auto* dendrogram = std::get_if<model::DendrogramPayload>(&control.payload);
         bool position_seen = false;
+        bool chart_summary_series_seen = false;
         bool gantt_series_seen = false;
         bool gantt_points_seen = false;
         bool gantt_intervals_seen = false;
@@ -1587,7 +1596,22 @@ private:
         bool spreadsheet_document_seen = false;
         for (xmlNodePtr child : element_children(node)) {
             const std::string name = node_name(child);
-            if (descriptor->kind == model::ControlKind::chart &&
+            if (descriptor->kind == model::ControlKind::chart && name == "SummarySeries") {
+                if (chart_summary_series_seen) fail("OOF2003", child, id_text, name, "one SummarySeries", name, "Duplicate SummarySeries");
+                chart_summary_series_seen = true;
+                auto& summary = std::get<model::ChartPayload>(control.payload).summary_series;
+                bool color_seen = false;
+                bool marker_seen = false;
+                for (xmlNodePtr field : element_children(child)) {
+                    if (node_name(field) == "Color" && !color_seen) {
+                        color_seen = true;
+                        summary.color = parse_color(field);
+                    } else if (node_name(field) == "Marker" && !marker_seen) {
+                        marker_seen = true;
+                        summary.marker = parse_enumeration(field);
+                    } else fail("OOF2003", field, id_text, node_name(field), "one Color or Marker", node_name(field), "Unknown or duplicate SummarySeries field");
+                }
+            } else if (descriptor->kind == model::ControlKind::chart &&
                        (name == "Series" || name == "Points" || name == "Values")) {
                 auto& chart = std::get<model::ChartPayload>(control.payload);
                 for (xmlNodePtr item : element_children(child)) {
@@ -1982,6 +2006,27 @@ private:
                     std::set<std::string> control_properties;
                     for (xmlNodePtr property_node : element_children(field)) {
                         const std::string property_name = node_name(property_node);
+                        if (property_name == "ValueType") {
+                            if (column.control.kind != model::ControlKind::input_field) {
+                                fail("OOF2003", property_node, std::string(owner), property_name,
+                                    "ValueType on an InputField editor", property_name,
+                                    "Table Column editor ValueType is supported only for InputField");
+                            }
+                            for (xmlAttrPtr attr = property_node->properties; attr != nullptr; attr = attr->next) {
+                                fail("OOF2003", property_node, std::string(owner),
+                                    std::string(reinterpret_cast<const char*>(attr->name)),
+                                    "ValueType without attributes", "attribute present",
+                                    "Table Column ValueType does not accept attributes");
+                            }
+                            if (!control_properties.insert(property_name).second) {
+                                fail("OOF2003", property_node, std::string(owner), property_name,
+                                    "ValueType at most once", "duplicate",
+                                    "Duplicate Table Column editor ValueType");
+                            }
+                            auto value_type = parse_type_domain(property_node);
+                            if (!value_type.entries.empty()) column.control.value_type = std::move(value_type);
+                            continue;
+                        }
                         const bool supported_property =
                             (column.control.kind == model::ControlKind::input_field &&
                                 (property_name == "Enabled" || property_name == "ReadOnly")) ||
@@ -2003,10 +2048,13 @@ private:
                         }
                         const model::PropertyValue value = parse_property_value(
                             property_node, descriptor->value_codec, owner);
-                        if (!equals_table_column_editor_default(column.control.kind, *descriptor, value)) {
+                        if (!valid_table_column_editor_property(column.control.kind, *descriptor, value)) {
                             fail("OOF2003", property_node, std::string(owner), property_name,
-                                "the observed default value", node_text(property_node),
-                                "Table Column editor only supports observed default property values");
+                                "a supported typed property value", node_text(property_node),
+                                "Table Column editor property value is unsupported");
+                        }
+                        if (!equals_descriptor_default(*descriptor, value)) {
+                            column.control.properties.set_explicit(descriptor->id, value);
                         }
                     }
                     control_seen = true;
@@ -2063,9 +2111,92 @@ private:
                 else if (rep == "Text") item.representation = model::ButtonRepresentation::text;
                 else if (rep == "PictureText") item.representation = model::ButtonRepresentation::picture_text;
                 else fail("OOF2003", child, std::string(owner), name, "Auto, Picture, Text, or PictureText", rep, "Unknown button representation");
+            } else if (name == "ClientInterfaceVariant") {
+                const auto variant = node_text(child);
+                if (variant == "Version8_0") item.client_interface_variant = model::ClientInterfaceVariant::version8_0;
+                else if (variant == "Version8_2_OrdinaryApp") item.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
+                else fail("OOF2003", child, std::string(owner), name, "Version8_0 or Version8_2_OrdinaryApp", variant, "Unknown client interface variant");
             } else if (name == "Shortcut") item.shortcut = parse_shortcut(child);
             else if (name == "Picture") item.picture = parse_picture_reference(child, "Picture", owner);
-            else if (name == "Action") item.action = node_text(child);
+            else if (name == "Action") {
+                for (xmlAttrPtr attr = child->properties; attr != nullptr; attr = attr->next) {
+                    const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                    if (attr_name != "handler" && attr_name != "name") {
+                        fail("OOF2003", child, std::string(owner), std::string(attr_name),
+                            "handler and name attributes", std::string(attr_name), "Unsupported Action attribute");
+                    }
+                }
+                model::CommandBarAction action;
+                action.handler = required_attribute(child, "handler", owner);
+                action.name = required_attribute(child, "name", owner);
+                std::set<std::string> action_fields;
+                bool has_text = false;
+                bool has_tooltip = false;
+                bool has_description = false;
+                for (xmlNodePtr action_field : element_children(child)) {
+                    const std::string field_name = node_name(action_field);
+                    if (!action_fields.insert(field_name).second) {
+                        fail("OOF2003", action_field, std::string(owner), field_name,
+                            "Action field at most once", field_name, "Duplicate Action field");
+                    }
+                    if (field_name == "Text") {
+                        action.text = parse_localized_string(action_field);
+                        has_text = true;
+                    } else if (field_name == "ToolTip") {
+                        action.tooltip = parse_localized_string(action_field);
+                        has_tooltip = true;
+                    } else if (field_name == "Description") {
+                        action.description = parse_localized_string(action_field);
+                        has_description = true;
+                    } else {
+                        fail("OOF2003", action_field, std::string(owner), field_name,
+                            "Text, ToolTip, and Description", field_name, "Unknown Action field");
+                    }
+                }
+                if (!has_text || !has_tooltip || !has_description) {
+                    fail("OOF2003", child, std::string(owner), "Action fields",
+                        "Text, ToolTip, and Description", "incomplete", "Action requires all three localized values");
+                }
+                item.action = std::move(action);
+            }
+            else if (name == "StandardAction") {
+                for (xmlAttrPtr attr = child->properties; attr != nullptr; attr = attr->next) {
+                    const std::string_view attr_name(reinterpret_cast<const char*>(attr->name));
+                    if (attr_name != "command" && attr_name != "context" && attr_name != "commandBarId" && attr_name != "source" && attr_name != "sourceControlId") {
+                        fail("OOF2003", child, std::string(owner), std::string(attr_name),
+                            "command, context, commandBarId, source, and sourceControlId attributes", std::string(attr_name), "Unsupported StandardAction attribute");
+                    }
+                }
+                model::StandardMenuAction action;
+                const auto command = required_attribute(child, "command", owner);
+                if (command != mm::standard_menu_close.public_name)
+                    fail("OOF2003", child, std::string(owner), "command", "Close", command, "Unknown standard menu command");
+                action.command = mm::standard_menu_close.kind;
+                const auto context = required_attribute(child, "context", owner);
+                const auto command_bar_id = optional_attribute(child, "commandBarId");
+                if (context == "CommandBar") {
+                    action.context = model::StandardMenuActionContext::command_bar;
+                    action.command_bar = model::ControlRef{parse_object_id(required_attribute(child, "commandBarId", owner), child, "commandBarId", owner)};
+                } else if (context == "Default") {
+                    action.context = model::StandardMenuActionContext::default_context;
+                    if (command_bar_id)
+                        fail("OOF2003", child, std::string(owner), "commandBarId", "absent for Default context", *command_bar_id, "Default context cannot have commandBarId");
+                } else fail("OOF2003", child, std::string(owner), "context", "Default or CommandBar", context, "Unknown standard menu action context");
+                const auto source = required_attribute(child, "source", owner);
+                const auto source_control_id = optional_attribute(child, "sourceControlId");
+                if (source == "Form") action.source = model::StandardMenuActionSource::form;
+                else if (source == "AllSources") action.source = model::StandardMenuActionSource::all_sources;
+                else if (source == "Control") {
+                    action.source = model::StandardMenuActionSource::control;
+                    const auto id = parse_object_id(required_attribute(child, "sourceControlId", owner), child, "sourceControlId", owner);
+                    if (id.value() == 0 || id.value() > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()))
+                        fail("OOF2003", child, std::string(owner), "sourceControlId", "positive int32 control reference", std::to_string(id.value()), "Standard action source reference is invalid");
+                    action.source_control = model::ControlRef{id};
+                } else fail("OOF2003", child, std::string(owner), "source", "Form, AllSources, or Control", source, "Unknown standard menu action source");
+                if (source != "Control" && source_control_id)
+                    fail("OOF2003", child, std::string(owner), "sourceControlId", "absent unless source is Control", *source_control_id, "Standard action source attributes are inconsistent");
+                item.standard_action = std::move(action);
+            }
             else if (name == "Order") {
                 has_order = true;
                 const auto order = node_text(child);
@@ -2077,16 +2208,22 @@ private:
             else if (name == "Buttons") item.buttons = parse_command_bar_buttons(child, owner);
             else fail("OOF2003", child, std::string(owner), name, "declared button menu field", name, "Unknown button menu field");
         }
-        if (item.type == model::CommandBarButtonKind::action && (!item.action || item.action->empty()))
-            fail("OOF2003", node, std::string(owner), "Action", "non-empty action handler", "missing", "Action item requires a handler");
-        if (item.type != model::CommandBarButtonKind::action && item.action)
-            fail("OOF2003", node, std::string(owner), "Action", "Action item only", "present", "Only Action items may declare a handler");
+        if (item.type == model::CommandBarButtonKind::action && (item.action.has_value() == item.standard_action.has_value()))
+            fail("OOF2003", node, std::string(owner), "Action", "exactly one Action or StandardAction", "missing or duplicated", "Action item requires exactly one action value");
+        if (item.action && item.action->handler.empty())
+            fail("OOF2003", node, std::string(owner), "Action", "non-empty action handler", "empty", "Action requires a handler");
+        if (item.type != model::CommandBarButtonKind::action && (item.action || item.standard_action))
+            fail("OOF2003", node, std::string(owner), "Action", "Action item only", "present", "Only Action items may declare an action value");
         if (item.type != model::CommandBarButtonKind::submenu && has_order)
             fail("OOF2003", node, std::string(owner), "Order", "Submenu only", "present", "Only Submenu items may declare an order");
         if (item.type != model::CommandBarButtonKind::submenu && !item.buttons.empty())
             fail("OOF2003", node, std::string(owner), "Buttons", "Submenu only", "present", "Only Submenu items may contain buttons");
-        if (item.type == model::CommandBarButtonKind::separator && seen.size() != 0)
-            fail("OOF2003", node, std::string(owner), "fields", "no separator fields", "present", "Separator cannot have fields");
+        if (item.type == model::CommandBarButtonKind::separator &&
+            std::any_of(seen.begin(), seen.end(), [](const auto& field) {
+                return field != "ClientInterfaceVariant";
+            }))
+            fail("OOF2003", node, std::string(owner), "fields", "ClientInterfaceVariant only", "unsupported field",
+                "Separator contains an unsupported field");
         return item;
     }
 
@@ -2385,11 +2522,15 @@ public:
     std::string serialize() {
         const model::Form& form = document_.form();
         const std::string form_id = object_id_text(form.id);
-        writer_.open("Form", {
+        std::vector<std::pair<std::string, std::string>> attributes{
             {"id", form_id},
             {"name", form.name},
             {"ordinaryFormVersion", std::string(ordinary_form_xml_version)},
-        });
+        };
+        if (!document_.reconstruction_complete()) {
+            attributes.emplace_back("reconstructionComplete", "false");
+        }
+        writer_.open("Form", attributes);
         write_property_set(form.properties, metamodel_.form_properties(), form_id);
         if (form.main_attribute.id())
             writer_.empty("MainAttribute", {{"attributeId", object_id_text(form.main_attribute.id())}});
@@ -3053,9 +3194,9 @@ private:
             const char* type = item.type == model::CommandBarButtonKind::action ? "Action" :
                 item.type == model::CommandBarButtonKind::submenu ? "Submenu" : "Separator";
             writer_.open("CommandBarButton", {{"name", item.name}, {"type", type}});
-            if (!item.text.empty()) writer_.text("Text", item.text);
-            if (!item.explanation.empty()) writer_.text("Explanation", item.explanation);
-            if (!item.tooltip.empty()) writer_.text("ToolTip", item.tooltip);
+            if (item.text) writer_.text("Text", *item.text);
+            if (item.explanation) writer_.text("Explanation", *item.explanation);
+            if (item.tooltip) writer_.text("ToolTip", *item.tooltip);
             if (!item.enabled) writer_.text("Enabled", "false");
             if (item.checked) writer_.text("Checked", "true");
             if (item.changes_data) writer_.text("ChangesData", "true");
@@ -3065,6 +3206,15 @@ private:
                 item.representation == model::ButtonRepresentation::text ? "Text" : "PictureText";
             if (item.representation != model::ButtonRepresentation::automatic)
                 writer_.text("Representation", representation);
+            switch (item.client_interface_variant) {
+                case model::ClientInterfaceVariant::version8_0:
+                    writer_.text("ClientInterfaceVariant", "Version8_0");
+                    break;
+                case model::ClientInterfaceVariant::version8_2_ordinary_app:
+                    break;
+                default:
+                    throw std::invalid_argument("Unknown CommandBarButton ClientInterfaceVariant");
+            }
             if (item.shortcut != model::ShortcutValue{}) {
                 writer_.open("Shortcut", {{"Alt", item.shortcut.alt ? "true" : "false"},
                     {"Ctrl", item.shortcut.ctrl ? "true" : "false"}, {"Shift", item.shortcut.shift ? "true" : "false"}});
@@ -3072,7 +3222,31 @@ private:
                 writer_.close("Shortcut");
             }
             if (item.picture) write_picture_reference("Picture", *item.picture, owner);
-            if (item.action) writer_.text("Action", *item.action);
+            if (item.action) {
+                writer_.open("Action", {{"handler", item.action->handler}, {"name", item.action->name}});
+                write_localized("Text", item.action->text, owner);
+                write_localized("ToolTip", item.action->tooltip, owner);
+                write_localized("Description", item.action->description, owner);
+                writer_.close("Action");
+            }
+            if (item.standard_action) {
+                const auto& action = *item.standard_action;
+                const char* command = action.command == mm::standard_menu_close.kind ? mm::standard_menu_close.public_name.data() : nullptr;
+                const char* source = action.source == model::StandardMenuActionSource::form ? "Form" :
+                    action.source == model::StandardMenuActionSource::all_sources ? "AllSources" :
+                    action.source == model::StandardMenuActionSource::control ? "Control" : nullptr;
+                const char* context = action.context == model::StandardMenuActionContext::default_context ? "Default" :
+                    action.context == model::StandardMenuActionContext::command_bar ? "CommandBar" : nullptr;
+                if (command == nullptr || source == nullptr || context == nullptr)
+                    throw std::invalid_argument("Unknown StandardAction command, context, or source");
+                XmlAttributes attributes{{"command", command}, {"context", context}};
+                if (action.context == model::StandardMenuActionContext::command_bar)
+                    attributes.emplace_back("commandBarId", object_id_text(action.command_bar.id()));
+                attributes.emplace_back("source", source);
+                if (action.source == model::StandardMenuActionSource::control)
+                    attributes.emplace_back("sourceControlId", object_id_text(action.source_control.id()));
+                writer_.empty("StandardAction", attributes);
+            }
             if (item.type == model::CommandBarButtonKind::submenu && item.order != model::CommandBarButtonOrder::none) {
                 writer_.text("Order", item.order == model::CommandBarButtonOrder::ascending ? "Ascending" : "Descending");
             }
@@ -3257,6 +3431,14 @@ private:
             write_gantt_data(*gantt);
         }
         if (const auto* chart = std::get_if<model::ChartPayload>(&control.payload)) {
+            if (chart->summary_series.color != model::ColorValue{} ||
+                chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"}) {
+                writer_.open("SummarySeries");
+                if (chart->summary_series.color != model::ColorValue{}) write_color("Color", chart->summary_series.color, id);
+                if (chart->summary_series.marker != model::EnumerationValue{"ChartMarkerType", "Auto"})
+                    write_enumeration("Marker", chart->summary_series.marker);
+                writer_.close("SummarySeries");
+            }
             writer_.open("Series");
             for (const auto& item : chart->series) {
                 writer_.open("ChartSeries", {{"id", object_id_text(item.id)}});
@@ -3315,17 +3497,50 @@ private:
                      (column.control.kind == model::ControlKind::check_box &&
                         (descriptor->api_name == "Enabled" || descriptor->api_name == "Caption" ||
                             descriptor->api_name == "ToolTip" || descriptor->api_name == "Font")));
-                if (!supported || !equals_table_column_editor_default(column.control.kind, *descriptor, entry.value)) {
+                if (!supported || !valid_table_column_editor_property(column.control.kind, *descriptor, entry.value)) {
                     serialization_fail(std::string(owner), "Column/Control/" +
                         (descriptor == nullptr ? std::string("unknown") : std::string(descriptor->xml_name)),
-                        "compatible observed default property", "unsupported or nondefault value",
-                        "Table Column editor property is outside its typed default profile");
+                        "compatible typed property", "unsupported value",
+                        "Table Column editor property is outside its supported typed profile");
                 }
             });
             writer_.open("Column", {{"name", column.name}});
             writer_.text("DataPath", column.data_path);
             write_localized("Header", column.header, owner);
             writer_.open("Control", {{"type", std::string(control_type)}});
+            if (column.control.value_type.has_value()) {
+                if (column.control.kind != model::ControlKind::input_field) {
+                    serialization_fail(std::string(owner), "Column/Control/ValueType",
+                        "InputField ValueType", "other editor kind",
+                        "Table Column ValueType is supported only for InputField");
+                }
+                if (!column.control.value_type->entries.empty())
+                    write_type_domain("ValueType", *column.control.value_type, owner);
+            }
+            const auto write_editor_property = [&](std::string_view name) {
+                const auto* descriptor = metamodel_.property(column.control.kind, name);
+                if (descriptor == nullptr) return;
+                const auto* entry = column.control.properties.find(descriptor->id);
+                if (entry == nullptr || equals_descriptor_default(*descriptor, entry->value)) return;
+                if (!valid_table_column_editor_property(column.control.kind, *descriptor, entry->value)) {
+                    serialization_fail(std::string(owner), "Column/Control/" + std::string(descriptor->xml_name),
+                        "supported typed property value", "unsupported value",
+                        "Table Column editor property value is unsupported");
+                }
+                write_property(*descriptor, entry->value, owner);
+            };
+            if (column.control.kind == model::ControlKind::input_field) {
+                write_editor_property("Enabled");
+                write_editor_property("ReadOnly");
+            } else if (column.control.kind == model::ControlKind::choice_field) {
+                write_editor_property("Enabled");
+                write_editor_property("ToolTip");
+            } else {
+                write_editor_property("Enabled");
+                write_editor_property("Caption");
+                write_editor_property("ToolTip");
+                write_editor_property("Font");
+            }
             writer_.close("Control");
             writer_.close("Column");
         }
@@ -3407,7 +3622,12 @@ Result<model::OrdinaryFormDocument> parse_form_xml(std::string_view xml) {
             return Result<model::OrdinaryFormDocument>::failure(
                 invariant_diagnostics(report));
         }
-        return Result<model::OrdinaryFormDocument>::success(std::move(parsed));
+        Diagnostics diagnostics;
+        if (!parsed.reconstruction_complete()) {
+            diagnostics.push_back({"OOF1140", DiagnosticSeverity::warning, {}, {}, {}, {}, {},
+                "The source Form.xml is marked incomplete; unsupported source properties are not available."});
+        }
+        return Result<model::OrdinaryFormDocument>::success(std::move(parsed), std::move(diagnostics));
     } catch (AdapterError& error) {
         Diagnostics diagnostics;
         diagnostics.push_back(error.take_diagnostic());
@@ -3435,7 +3655,12 @@ Result<std::string> serialize_form_xml(const model::OrdinaryFormDocument& docume
                 "Canonical XML produced by the adapter is invalid: " + diagnostic.message;
             throw AdapterError(std::move(diagnostic));
         }
-        return Result<std::string>::success(std::move(xml));
+        Diagnostics diagnostics;
+        if (!document.reconstruction_complete()) {
+            diagnostics.push_back({"OOF1140", DiagnosticSeverity::warning, {}, {}, {}, {}, {},
+                "The serialized Form.xml remains incomplete; unsupported source properties are not available."});
+        }
+        return Result<std::string>::success(std::move(xml), std::move(diagnostics));
     } catch (AdapterError& error) {
         Diagnostics diagnostics;
         diagnostics.push_back(error.take_diagnostic());

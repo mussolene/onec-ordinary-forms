@@ -428,6 +428,15 @@ void test_command_bar_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compil
     expect(element_type("CommandBarType", "ButtonsAlignment") == "CommandBarButtonsAlignmentValueType" &&
                element_type("CommandBarType", "Orientation") == "CommandBarOrientationValueType",
         "CommandBar enum properties must use their property-scoped schema types");
+    expect(element_type("CommandBarButtonType", "ClientInterfaceVariant") == "ClientInterfaceVariantType",
+        "menu client interface variant must use its closed named enum schema type");
+    xmlNodePtr client_variant = schema_component(schema, "simpleType", "ClientInterfaceVariantType");
+    xmlNodePtr variant_restriction = direct_child(client_variant, "restriction");
+    std::vector<std::string> variant_members;
+    for (xmlNodePtr item : direct_children(variant_restriction, "enumeration"))
+        variant_members.push_back(attribute(item, "value"));
+    expect(variant_members == std::vector<std::string>{"Version8_0", "Version8_2_OrdinaryApp"},
+        "client interface variant schema must expose exactly the two supported names");
     expect(element_type("SplitterType", "Orientation") == "EnumerationValueType",
         "other controls must keep the shared generic Orientation value type");
 
@@ -471,6 +480,12 @@ void test_command_bar_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compil
         "CommandBar Orientation must reject a different fixed type in XSD");
     expect(validate_document(compiled_schema, instance("CommandBarButtonAlignment", "Center", "Orientation", "Diagonal")) != 0,
         "CommandBar Orientation must reject an unknown member in XSD");
+    const std::string variant_form = "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems><Button id=\"3\" name=\"Menu\"><Position/><Buttons><CommandBarButton name=\"Run\" type=\"Action\"><Representation>Auto</Representation><ClientInterfaceVariant>";
+    const std::string variant_suffix = "</ClientInterfaceVariant><Action handler=\"Run\" name=\"\"><Text/><ToolTip/><Description/></Action></CommandBarButton></Buttons></Button></ChildItems></Form>";
+    expect(validate_document(compiled_schema, variant_form + "Version8_2_OrdinaryApp" + variant_suffix) == 0,
+        "named client interface variant must validate in its generated sequence position");
+    expect(validate_document(compiled_schema, variant_form + "Unsupported" + variant_suffix) != 0,
+        "generated XSD must reject unsupported client interface variant names");
 }
 
 void expect_property_element(
@@ -829,12 +844,18 @@ void test_control_surfaces_and_property_order(
             const auto chart_properties = metamodel.properties_for(control.kind);
             std::vector<PropertyDescriptor> properties(chart_properties.begin(), chart_properties.end());
             properties.erase(std::remove_if(properties.begin(), properties.end(), [](const auto& property) {
-                return property.api_name == "Series" || property.api_name == "Points";
+                return property.api_name == "Series" || property.api_name == "Points" || property.api_name == "SummarySeries";
             }), properties.end());
             cursor = expect_property_sequence(properties, elements, cursor);
+            expect_element_shape(elements[cursor++], "SummarySeries", "ChartSummarySeriesType", "0", "1");
+            const auto summary_fields = direct_children(sequence_for_type(schema, "ChartSummarySeriesType"), "element");
+            expect(summary_fields.size() == 2 && attribute(summary_fields[0], "name") == "Color" &&
+                attribute(summary_fields[0], "type") == "ColorValueType" && attribute(summary_fields[0], "minOccurs") == "0" &&
+                attribute(summary_fields[0], "maxOccurs") == "1", "SummarySeries schema must expose optional default Color");
             expect_element_shape(elements[cursor++], "Series", "ChartSeriesCollectionType", "1", "1");
             expect_element_shape(elements[cursor++], "Points", "ChartPointCollectionType", "1", "1");
             expect_element_shape(elements[cursor++], "Values", "ChartValueCollectionType", "1", "1");
+            expect_element_shape(summary_fields[1], "Marker", "EnumerationValueType", "0", "1");
             const auto series_fields = direct_children(sequence_for_type(schema, "ChartSeriesType"), "element");
             expect(series_fields.size() == 3 && attribute(series_fields[0], "name") == "Text" &&
                 attribute(series_fields[1], "name") == "Color" && attribute(series_fields[1], "type") == "ColorValueType" &&
@@ -923,8 +944,9 @@ void test_table_column_editor_schema(xmlNodePtr schema) {
     xmlNodePtr type = schema_component(schema, "complexType", "TableColumnControlType");
     expect(type != nullptr, "Table Column Control must have its named type");
     const auto elements = direct_children(direct_child(type, "sequence"), "element");
-    const std::array<std::pair<std::string_view, std::string_view>, 5> expected{{
-        {"Enabled", "xs:boolean"}, {"ReadOnly", "xs:boolean"}, {"Caption", "xs:string"},
+    const std::array<std::pair<std::string_view, std::string_view>, 6> expected{{
+        {"ValueType", "TypeDomainValueType"}, {"Enabled", "xs:boolean"},
+        {"ReadOnly", "xs:boolean"}, {"Caption", "xs:string"},
         {"ToolTip", "xs:string"}, {"Font", "FontValueType"},
     }};
     expect(elements.size() == expected.size(), "Table Column Control must expose only named properties");
@@ -1112,6 +1134,34 @@ void test_palette(const Metamodel& metamodel, xmlNodePtr schema) {
     expect_palette_properties(direct_child(form, "Properties"), metamodel.form_properties());
     expect_palette_events(direct_child(form, "Events"), metamodel.form_events());
 
+    xmlNodePtr summary = direct_child_with_attribute(palette, "NamedConcept", "name", "ChartSummarySeries");
+    expect(summary != nullptr && attribute(summary, "apiName") == "SummarySeries" &&
+        attribute(summary, "russianName") == "СводнаяСерия" &&
+        attribute(summary, "evidenceRefs").find("ev_418fc1414bc745bbbb90a22694e5cae1") != std::string::npos,
+        "SummarySeries palette must retain named API provenance");
+    const auto summary_properties = direct_children(direct_child(summary, "Properties"), "Property");
+    expect(summary_properties.size() == 2 && attribute(summary_properties[0], "apiName") == "Color" &&
+        attribute(summary_properties[0], "russianName") == "Цвет", "SummarySeries palette must expose proven Color");
+    expect(attribute(summary_properties[1], "apiName") == "Marker" && attribute(summary_properties[1], "russianName") == "Маркер" &&
+        attribute(summary, "evidenceRefs").find("ev_0bf2de977ee74d0e8e69e117b819f78c") != std::string::npos,
+        "SummarySeries Marker palette must retain proven API provenance");
+    xmlNodePtr command_button = direct_child_with_attribute(palette, "NamedConcept", "name", "CommandBarButton");
+    xmlNodePtr command_button_properties = direct_child(command_button, "Properties");
+    const auto command_properties = direct_children(command_button_properties, "Property");
+    auto variant_property = std::find_if(command_properties.begin(), command_properties.end(), [](xmlNodePtr property) {
+        return attribute(property, "name") == "ClientInterfaceVariant";
+    });
+    auto representation_property = std::find_if(command_properties.begin(), command_properties.end(), [](xmlNodePtr property) {
+        return attribute(property, "name") == "Representation";
+    });
+    auto shortcut_property = std::find_if(command_properties.begin(), command_properties.end(), [](xmlNodePtr property) {
+        return attribute(property, "name") == "Shortcut";
+    });
+    expect(variant_property != command_properties.end() && representation_property < variant_property && variant_property < shortcut_property &&
+               attribute(*variant_property, "russianName") == "ВариантИнтерфейсаКлиентскогоПриложения" &&
+               attribute(*variant_property, "source") == "IClientInterfaceForCommand",
+        "palette must place the technical client interface variant between Representation and Shortcut with its source annotation");
+
     xmlNodePtr control_extension = direct_child_with_attribute(
         palette,
         "SharedProperties",
@@ -1251,7 +1301,7 @@ void test_document_instances(xmlSchemaPtr schema) {
 <Form id="1" name="RowsForm" ordinaryFormVersion="2.1">
   <Attributes><Attribute id="2" name="Rows"><TypeDomain><Entry term="valueTable"/></TypeDomain></Attribute></Attributes>
   <ChildItems><Table id="3" name="Rows"><DataPath attributeId="2"/><Position/><Columns>
-    <Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"/></Column>
+    <Column name="Code"><DataPath>Code</DataPath><Header><Item language="en">Code</Item></Header><Control type="InputField"><ValueType><Entry term="date" date="true" time="false"/></ValueType></Control></Column>
     <Column name="Choice"><DataPath>Code</DataPath><Header><Item language="en">Choice</Item></Header><Control type="ChoiceField"><Enabled>true</Enabled><ToolTip/></Control></Column>
     <Column name="Checked"><DataPath>Active</DataPath><Header><Item language="en">Checked</Item></Header><Control type="CheckBox"><Enabled>true</Enabled><Caption/><ToolTip/><Font kind="automatic"/></Control></Column>
   </Columns></Table></ChildItems>
@@ -1374,6 +1424,23 @@ void test_schema_structure_coverage_does_not_imply_codec_coverage(
         "classified Boolean value must validate");
 }
 
+void test_standard_menu_action_schema(xmlSchemaPtr schema) {
+    const auto make_xml = [](std::string_view attributes) {
+        return std::string("<Form id=\"1\" name=\"StandardSchema\" ordinaryFormVersion=\"2.1\"><ChildItems>") +
+            "<CommandBar id=\"4\" name=\"Tools\"><Position/><Buttons><CommandBarButton name=\"Close\" type=\"Action\">" +
+            "<StandardAction command=\"Close\" " + std::string(attributes) + "/></CommandBarButton></Buttons></CommandBar></ChildItems></Form>";
+    };
+    for (const auto attributes : {"context=\"Default\" source=\"Form\"", "context=\"Default\" source=\"AllSources\"",
+        "context=\"Default\" source=\"Control\" sourceControlId=\"2147483647\"",
+        "context=\"CommandBar\" commandBarId=\"4\" source=\"Control\" sourceControlId=\"4\""})
+        expect(validate_document(schema, make_xml(attributes)) == 0, "named StandardAction variants must be schema-valid");
+    for (const auto attributes : {"context=\"Form\" source=\"Form\"", "source=\"Form\"",
+        "context=\"Default\" source=\"Other\"", "context=\"Default\" source=\"Control\" sourceControlId=\"0\"",
+        "context=\"Default\" source=\"Control\" sourceControlId=\"-1\"",
+        "context=\"Default\" source=\"Control\" sourceControlId=\"2147483648\""})
+        expect(validate_document(schema, make_xml(attributes)) != 0, "unsupported StandardAction enums and source ranges must fail XSD");
+}
+
 void test_tracked_schema_drift(const GeneratedSchemas& schemas) {
     const std::filesystem::path root = find_repository_root();
     expect(
@@ -1431,6 +1498,7 @@ int main() {
         test_schema_structure_coverage_does_not_imply_codec_coverage(
             metamodel,
             compiled_form.get());
+        test_standard_menu_action_schema(compiled_form.get());
         test_tracked_schema_drift(schemas);
     } catch (const std::exception& error) {
         std::cerr << "schema generator tests: FAIL: " << error.what() << '\n';

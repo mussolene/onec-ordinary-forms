@@ -22,20 +22,29 @@ jobs:
     steps:
       - name: Resolve release tag
         id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            release_tag="$INPUT_TAG"
           else
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            release_tag="$GITHUB_REF_NAME"
           fi
+          if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[[:alnum:]][[:alnum:].-]*)?(\+[[:alnum:]][[:alnum:].-]*)?$ ]]; then
+            echo "Invalid release tag: expected vMAJOR.MINOR.PATCH with optional prerelease/build suffix" >&2
+            exit 1
+          fi
+          printf 'tag=%s\n' "$release_tag" >> "$GITHUB_OUTPUT"
 
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ steps.release.outputs.tag }}
+          persist-credentials: false
 
       - name: Install product dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libxml2-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake libxml2-dev zlib1g-dev
 
       - name: Build and test product
         run: make test
@@ -50,7 +59,7 @@ jobs:
           tar -czf dist/onec-ordinary-forms-linux-x86_64.tar.gz -C dist oof-linux-x86_64 -C .. schemas README.md LICENSE
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           name: ${{ steps.release.outputs.tag }}
