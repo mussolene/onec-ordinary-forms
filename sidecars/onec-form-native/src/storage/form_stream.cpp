@@ -2998,13 +2998,19 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
     require_raw_constant(menu.items[3], "1", path);
     const auto action_count = integer_atom<std::size_t>(menu.items[4], path);
     if (action_count > menu.items.size() - 6) fail("OOF1102", std::string(path), "bounded action count", describe(menu), "Menu action count exceeds its record");
-    std::unordered_map<std::string, const LV*> actions;
+    struct ActionRecord {
+        const LV* value;
+        std::string path;
+    };
+    std::unordered_map<std::string, ActionRecord> actions;
     for (std::size_t i = 0; i < action_count; ++i) {
         const auto& action = menu.items[5 + i];
-        require_list(action, path);
-        if (action.items.size() < 8) fail("OOF1102", std::string(path), "action header", describe(action), "Menu action is incomplete");
-        const auto guid = uuid_atom(action.items[1], path).canonical;
-        if (!actions.emplace(guid, &action).second) fail("OOF1114", std::string(path), "unique actions", guid, "Duplicate menu action");
+        const auto action_path = child_path(path, 5 + i);
+        require_list(action, action_path);
+        if (action.items.size() < 8) fail("OOF1102", action_path, "action header", describe(action), "Menu action is incomplete");
+        const auto guid = uuid_atom(action.items[1], child_path(action_path, 1)).canonical;
+        if (!actions.emplace(guid, ActionRecord{&action, action_path}).second)
+            fail("OOF1114", child_path(action_path, 1), "unique actions", guid, "Duplicate menu action");
     }
     const auto group_count = integer_atom<std::size_t>(menu.items[5 + action_count], path);
     if (group_count != menu.items.size() - 6 - action_count || group_count == 0)
@@ -3135,24 +3141,36 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                 fail("OOF1114", child_path(path, index), "canonical menu item property",
                     describe(normalized.items.at(index)), "Menu item property is unsupported");
             }
-            const auto& action = *actions.at(guid);
-            require_raw_constant(action.items[0], "8", path); require_raw_constant(action.items[2], "1", path);
-            require_raw_constant(action.items[3], type == 0 ? menu_action_guid : menu_reference_guid, path);
+            const auto& action_record = actions.at(guid);
+            const auto& action = *action_record.value;
+            const auto& action_path = action_record.path;
+            require_raw_constant(action.items[0], "8", child_path(action_path, 0));
+            require_raw_constant(action.items[2], "1", child_path(action_path, 2));
+            require_raw_constant(action.items[3], type == 0 ? menu_action_guid : menu_reference_guid,
+                child_path(action_path, 3));
             if (type == 0) {
-                entry.action = decode_menu_action(action.items[4], path);
+                entry.action = decode_menu_action(action.items[4], child_path(action_path, 4));
             } else {
                 require_exact(action.items[4], type == 1 ? list({raw("1"), raw(owner), raw(std::to_string(id))}) :
-                    parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"), path, "Menu action target is unsupported");
+                    parse_constant("{1,9d0a2e40-b978-11d4-84b6-008048da06df,0}"),
+                    child_path(action_path, 4), "Menu action target is unsupported");
             }
-            const auto mask = integer_atom<unsigned>(action.items[5], path);
-            if (mask > 15) fail("OOF1114", std::string(path), "known property flags", std::to_string(mask), "Menu action flags are unsupported");
+            const auto mask = integer_atom<unsigned>(action.items[5], child_path(action_path, 5));
+            if (mask > 15) fail("OOF1114", child_path(action_path, 5), "known property flags", std::to_string(mask), "Menu action flags are unsupported");
             std::size_t cursor = 6;
-            const auto take = [&]() -> const LV& { return at(action, cursor++, path); };
-            if (mask & 2) entry.tooltip = decoded_single_language_text(take(), path);
-            if (mask & 4) entry.explanation = decoded_single_language_text(take(), path);
+            const auto take = [&]() -> const LV& { return at(action, cursor++, action_path); };
+            if (mask & 2) {
+                const auto slot = cursor;
+                entry.tooltip = decoded_single_language_text(take(), child_path(action_path, slot));
+            }
+            if (mask & 4) {
+                const auto slot = cursor;
+                entry.explanation = decoded_single_language_text(take(), child_path(action_path, slot));
+            }
             if (mask & 1) {
-                const auto picture = decode_button_picture(take(), path);
-                if (!picture) fail("OOF1114", std::string(path), "nonempty picture", "empty", "Menu picture flag is inconsistent");
+                const auto slot = cursor;
+                const auto picture = decode_button_picture(take(), child_path(action_path, slot));
+                if (!picture) fail("OOF1114", child_path(action_path, slot), "nonempty picture", "empty", "Menu picture flag is inconsistent");
                 if (picture->standard_name) entry.picture = model::PictureRef{model::PictureAssetRef{}, model::QualifiedName{*picture->standard_name}};
                 else {
                     decoded.assets.push_back(model::PictureAsset{model::ObjectId{decoded.assets.size() + 1},
@@ -3161,8 +3179,12 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                     entry.picture = model::PictureRef{model::PictureAssetRef{decoded.assets.back().id}};
                 }
             }
-            if (mask & 8) entry.shortcut = decode_button_shortcut(take(), path);
-            const auto client_interface_variant = integer_atom<std::int32_t>(take(), path);
+            if (mask & 8) {
+                const auto slot = cursor;
+                entry.shortcut = decode_button_shortcut(take(), child_path(action_path, slot));
+            }
+            const auto variant_slot = cursor;
+            const auto client_interface_variant = integer_atom<std::int32_t>(take(), child_path(action_path, variant_slot));
             switch (client_interface_variant) {
                 case 0:
                     entry.client_interface_variant = model::ClientInterfaceVariant::version8_0;
@@ -3171,11 +3193,12 @@ DecodedMenu decode_button_menu(const LV& menu, std::string_view path, std::strin
                     entry.client_interface_variant = model::ClientInterfaceVariant::version8_2_ordinary_app;
                     break;
                 default:
-                    fail("OOF1114", std::string(path), "client interface variant 0 or 2",
+                    fail("OOF1114", child_path(action_path, variant_slot), "client interface variant 0 or 2",
                         std::to_string(client_interface_variant), "Client interface variant is unsupported");
             }
-            require_raw_constant(take(), "0", path);
-            require_arity(action, cursor, path);
+            const auto second_tail_slot = cursor;
+            require_raw_constant(take(), "0", child_path(action_path, second_tail_slot));
+            require_arity(action, cursor, action_path);
             if (type == 1) {
                 ++submenu_count;
                 submenu_refs.push_back(raw(owner)); submenu_refs.push_back(raw(std::to_string(id)));

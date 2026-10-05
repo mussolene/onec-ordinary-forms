@@ -2471,8 +2471,11 @@ void test_button_menu_client_interface_variant_round_trip_and_validation() {
     for (const auto& invalid : {"1", "3", "-1"}) {
         auto malformed = encoded.value();
         menu_at(malformed).items[5].items[6] = list_stream::ListValue::raw_atom(invalid);
-        expect(!form_stream::decode_document(malformed, "InvalidClientInterfaceVariant"),
-            "unknown and negative client interface variants must be rejected");
+        const auto rejected = form_stream::decode_document(malformed, "InvalidClientInterfaceVariant");
+        expect(!rejected && rejected.diagnostics().front().code == "OOF1114" &&
+                   rejected.diagnostics().front().path == "$/1/2/2/1/2/1/12/5/6",
+            "unknown and negative client interface variants must be rejected at their exact tail slot: " +
+                (rejected ? "decoded" : rejected.diagnostics().front().code + ":" + rejected.diagnostics().front().path));
     }
     auto quoted = encoded.value();
     menu_at(quoted).items[5].items[6] = list_stream::ListValue::string_atom("2");
@@ -2484,8 +2487,11 @@ void test_button_menu_client_interface_variant_round_trip_and_validation() {
         "list-valued client interface variants must be rejected");
     auto wrong_second_tail = encoded.value();
     menu_at(wrong_second_tail).items[5].items[7] = list_stream::ListValue::raw_atom("2");
-    expect(!form_stream::decode_document(wrong_second_tail, "WrongClientInterfaceVariantSecondTail"),
-        "second menu tail value must remain strict zero");
+    const auto rejected_second_tail = form_stream::decode_document(wrong_second_tail,
+        "WrongClientInterfaceVariantSecondTail");
+    expect(!rejected_second_tail && rejected_second_tail.diagnostics().front().code == "OOF1106" &&
+               rejected_second_tail.diagnostics().front().path == "$/1/2/2/1/2/1/12/5/7",
+        "second menu tail value must remain strict zero and report its exact record slot");
 
     auto invalid_model = document.form();
     model::OrdinaryFormDocument invalid_document(std::move(invalid_model));
