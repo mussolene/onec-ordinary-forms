@@ -3173,7 +3173,7 @@ ev_c752edff621447a3b6c7f3f32ed56f2c. Полный эталон прошел base
 
 Следующая общая доработка имеет фактуру для пяти свойств:
 
-| Свойство | Подтвержденное отображение | Статус текущего CLI |
+| Свойство | Подтвержденное отображение | Статус на момент отдельного опыта |
 | --- | --- | --- |
 | AutoFill | properties3, false=0, true=1 | Явное значение еще не реализовано |
 | Transparent | common base5, false=0, true=1 | Явное значение еще не реализовано |
@@ -3184,3 +3184,41 @@ ev_c752edff621447a3b6c7f3f32ed56f2c. Полный эталон прошел base
 Три новых native setters/getters и сравнение полных снимков:
 ev_45e26da04d4043b5943c3df573af387d. Эти результаты не подменяют проверку
 XML-only сборки пяти свойств, которая еще требуется.
+
+
+## 2026-10-05: общая реализация пяти свойств CommandBar
+
+На основе ev_45e26da04d4043b5943c3df573af387d реализованы AutoFill,
+Transparent, ButtonBackColor, ButtonsAlignment и Orientation. Luna medium
+владел метамоделью, проверкой значения и генератором схемы с targeted tests;
+координатор владел stream codec, проверкой сочетаний, сохраненными схемами
+и платформенным циклом. Отдельный слой или формат не создавался.
+
+AutoFill и Transparent являются bool. ButtonBackColor использует общий
+ColorValue с automatic default. Enum defaults квалифицированы:
+CommandBarButtonAlignment.Left и Orientation.Auto. Для двух свойств
+CommandBar модель и XSD строго ограничивают type/member; другие owners,
+включая Splitter.Orientation, сохраняют прежнюю схему. Сохраненная XSD
+регенерирована из текущего генератора. Фактура публичного слоя:
+ev_ef3ec58ea64f404faed488ea59c53739.
+
+Новый stream test проверяет 72 сочетания трех ориентаций, трех выравниваний,
+двух bool свойств и automatic/absolute цвета через свежую сборку именованного
+XML. Отдельно проверяются неизвестные enum codes/members, неверные bool,
+непрозрачный RGB и домены модели/XSD. Всего 206 тестовых функций.
+Независимое ревью и свежий CTest 11/11 PASS, findings отсутствуют:
+ev_5589b98b384a4d8bb57e223c75885ca0.
+
+Три собственных named XML варианта проверены без исходного BIN: совместно
+Horizontal/Center/AutoFill=true/Transparent=true/RGB, Vertical/Right с false
+bool и RGB, а также Auto/Left/false/false/automatic. Cold getters каждого
+совпали. Strict Designer всех трех вариантов и точное равенство
+канонических XML/модуля PASS: ev_0f3bc8e79b0e41248bd8ff6318a0f28f.
+
+Полный эталон прошел эту группу и остановился на CommandBar metadata[2]:
+наблюдается 0 вместо канонического 4294967295. Смысл поля еще не доказан,
+оно не нормализуется. Отдельная read-only сверка исключила известные
+FirstInGroup (metadata[5]) и TabOrder (geometry) как готовое объяснение;
+Data и другие общие ссылки требуют собственного setter опыта:
+ev_760bb5358fd149338ee61505f12759fc. Общая цель PARTIAL, 25/25 типов
+представлены, 0 FULL; полный эталон пока не проходит полный цикл.

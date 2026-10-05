@@ -59,11 +59,12 @@ void add_violation(
 }
 
 bool property_value_matches(
-    metamodel::ValueCodec expected,
+    const metamodel::PropertyDescriptor& descriptor,
     const PropertyValue& value
 ) noexcept {
     return std::visit(
-        [expected](const auto& typed_value) {
+        [&descriptor](const auto& typed_value) {
+            const auto expected = descriptor.value_codec;
             using Value = std::remove_cvref_t<decltype(typed_value)>;
             if constexpr (std::is_same_v<Value, UndefinedValue>) {
                 return expected == metamodel::ValueCodec::date;
@@ -92,7 +93,20 @@ bool property_value_matches(
             } else if constexpr (std::is_same_v<Value, TypeDomainPatternValue>) {
                 return expected == metamodel::ValueCodec::type_domain;
             } else if constexpr (std::is_same_v<Value, EnumerationValue>) {
-                return expected == metamodel::ValueCodec::enumeration;
+                if (expected != metamodel::ValueCodec::enumeration) return false;
+                if (descriptor.control_kind == ControlKind::command_bar &&
+                    descriptor.api_name == "ButtonsAlignment") {
+                    return typed_value.type_name == "CommandBarButtonAlignment" &&
+                        (typed_value.member == "Left" || typed_value.member == "Center" ||
+                         typed_value.member == "Right");
+                }
+                if (descriptor.control_kind == ControlKind::command_bar &&
+                    descriptor.api_name == "Orientation") {
+                    return typed_value.type_name == "Orientation" &&
+                        (typed_value.member == "Auto" || typed_value.member == "Horizontal" ||
+                         typed_value.member == "Vertical");
+                }
+                return true;
             } else if constexpr (std::is_same_v<Value, BorderValue>) {
                 return expected == metamodel::ValueCodec::border && valid_border_value(typed_value);
             } else if constexpr (std::is_same_v<Value, ColorValue>) {
@@ -615,7 +629,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     source,
                     {},
                     "property is not declared for this ordinary-form object surface");
-            } else if (!property_value_matches(descriptor->value_codec, property.value)) {
+            } else if (!property_value_matches(*descriptor, property.value)) {
                 add_violation(
                     report,
                     InvariantCode::invalid_property,
@@ -1065,7 +1079,7 @@ ValidationReport OrdinaryFormDocument::validate() const {
                     const auto* property = metamodel::find_property(column.control.kind, entry.id);
                     if (!table_column_editor_property_allowed(column.control.kind,
                             property == nullptr ? std::string_view{} : property->api_name) ||
-                        !property_value_matches(property->value_codec, entry.value) ||
+                        !property_value_matches(*property, entry.value) ||
                         !table_column_editor_property_default(property->api_name, entry.value)) {
                         invalid_table("Table Column editor has an incompatible, unsupported, or nondefault property");
                         return;

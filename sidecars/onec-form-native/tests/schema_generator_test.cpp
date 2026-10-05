@@ -418,6 +418,61 @@ void test_schema_version_and_controls(
         "generic ControlType is forbidden");
 }
 
+void test_command_bar_enumeration_schemas(xmlNodePtr schema, xmlSchemaPtr compiled_schema) {
+    const auto element_type = [&](std::string_view owner, std::string_view element_name) {
+        for (xmlNodePtr element : direct_children(sequence_for_type(schema, owner), "element")) {
+            if (attribute(element, "name") == element_name) return attribute(element, "type");
+        }
+        return std::string{};
+    };
+    expect(element_type("CommandBarType", "ButtonsAlignment") == "CommandBarButtonsAlignmentValueType" &&
+               element_type("CommandBarType", "Orientation") == "CommandBarOrientationValueType",
+        "CommandBar enum properties must use their property-scoped schema types");
+    expect(element_type("SplitterType", "Orientation") == "EnumerationValueType",
+        "other controls must keep the shared generic Orientation value type");
+
+    const auto verify_type = [&](std::string_view type_name, std::string_view fixed_type,
+                                 std::vector<std::string> expected_members) {
+        xmlNodePtr complex_type = schema_component(schema, "complexType", type_name);
+        expect(complex_type != nullptr, "CommandBar enumeration schema type must exist");
+        xmlNodePtr type_attribute = direct_child_with_attribute(complex_type, "attribute", "name", "type");
+        expect(type_attribute && attribute(type_attribute, "fixed") == fixed_type &&
+                   attribute(type_attribute, "use") == "required",
+            "CommandBar enumeration type attribute must be fixed and required");
+        xmlNodePtr member_attribute = direct_child_with_attribute(complex_type, "attribute", "name", "member");
+        xmlNodePtr simple_type = direct_child(member_attribute, "simpleType");
+        xmlNodePtr restriction = direct_child(simple_type, "restriction");
+        expect(member_attribute && attribute(member_attribute, "use") == "required" && restriction &&
+                   attribute(restriction, "base") == "xs:string",
+            "CommandBar enumeration member must be a required restricted string");
+        std::vector<std::string> members;
+        for (xmlNodePtr item : direct_children(restriction, "enumeration"))
+            members.push_back(attribute(item, "value"));
+        expect(members == expected_members, "CommandBar enumeration member domain drift");
+    };
+    verify_type("CommandBarButtonsAlignmentValueType", "CommandBarButtonAlignment", {"Left", "Center", "Right"});
+    verify_type("CommandBarOrientationValueType", "Orientation", {"Auto", "Horizontal", "Vertical"});
+
+    const auto instance = [](std::string_view alignment_type, std::string_view alignment_member,
+                             std::string_view orientation_type, std::string_view orientation_member) {
+        return "<Form id=\"1\" name=\"Main\" ordinaryFormVersion=\"2.1\"><ChildItems>"
+            "<CommandBar id=\"2\" name=\"Tools\"><Position/><ButtonsAlignment type=\"" +
+            std::string(alignment_type) + "\" member=\"" + std::string(alignment_member) +
+            "\"/><Orientation type=\"" + std::string(orientation_type) + "\" member=\"" +
+            std::string(orientation_member) + "\"/></CommandBar></ChildItems></Form>";
+    };
+    expect(validate_document(compiled_schema, instance("CommandBarButtonAlignment", "Center", "Orientation", "Horizontal")) == 0,
+        "valid CommandBar enum values must validate against generated XSD");
+    expect(validate_document(compiled_schema, instance("Orientation", "Center", "Orientation", "Horizontal")) != 0,
+        "CommandBar ButtonsAlignment must reject a different fixed type in XSD");
+    expect(validate_document(compiled_schema, instance("CommandBarButtonAlignment", "Stretch", "Orientation", "Horizontal")) != 0,
+        "CommandBar ButtonsAlignment must reject an unknown member in XSD");
+    expect(validate_document(compiled_schema, instance("CommandBarButtonAlignment", "Center", "HorizontalAlign", "Horizontal")) != 0,
+        "CommandBar Orientation must reject a different fixed type in XSD");
+    expect(validate_document(compiled_schema, instance("CommandBarButtonAlignment", "Center", "Orientation", "Diagonal")) != 0,
+        "CommandBar Orientation must reject an unknown member in XSD");
+}
+
 void expect_property_element(
     const PropertyDescriptor& descriptor,
     xmlNodePtr element
@@ -1355,6 +1410,7 @@ int main() {
         expect(compiled_palette != nullptr, "palette XSD must compile");
 
         test_schema_version_and_controls(metamodel, form_schema);
+        test_command_bar_enumeration_schemas(form_schema, compiled_form.get());
         test_document_package_types(metamodel, form_schema);
         test_data_path_position_and_bindings(metamodel, form_schema);
         test_control_surfaces_and_property_order(metamodel, form_schema);

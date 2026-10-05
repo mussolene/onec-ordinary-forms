@@ -122,6 +122,24 @@
     <xs:attribute name="member" type="NonEmptyTokenType" use="required"/>
   </xs:complexType>
 
+  <xs:complexType name="CommandBarButtonsAlignmentValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="CommandBarButtonAlignment"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="Left"/><xs:enumeration value="Center"/><xs:enumeration value="Right"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
+  <xs:complexType name="CommandBarOrientationValueType">
+    <xs:attribute name="type" type="NonEmptyTokenType" use="required" fixed="Orientation"/>
+    <xs:attribute name="member" use="required">
+      <xs:simpleType><xs:restriction base="xs:string">
+        <xs:enumeration value="Auto"/><xs:enumeration value="Horizontal"/><xs:enumeration value="Vertical"/>
+      </xs:restriction></xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+
   <xs:simpleType name="ColorKindType">
     <xs:restriction base="xs:string">
       <xs:enumeration value="absolute"/>
@@ -1818,10 +1836,10 @@
       <xs:element name="Position" type="PositionType" minOccurs="1" maxOccurs="1"/>
       <xs:element name="AutoFill" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Secondary" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="ButtonsAlignment" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="ButtonsAlignment" type="CommandBarButtonsAlignmentValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Enabled" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Buttons" type="CommandBarButtonsType" minOccurs="0" maxOccurs="1"/>
-      <xs:element name="Orientation" type="EnumerationValueType" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="Orientation" type="CommandBarOrientationValueType" minOccurs="0" maxOccurs="1"/>
       <xs:element name="ToolTip" type="xs:string" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Transparent" type="xs:boolean" minOccurs="0" maxOccurs="1"/>
       <xs:element name="Border" type="BorderValueType" minOccurs="0" maxOccurs="1"/>

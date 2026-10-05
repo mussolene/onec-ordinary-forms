@@ -657,12 +657,22 @@ void apply_proven_storage_overrides(
     main_panel->persistence = PersistenceClass::persisted_editable;
     main_panel->storage_codec = StorageCodec::root_record;
     auto& command_bar = properties[static_cast<std::size_t>(ControlKind::command_bar)];
+    classify_property(command_bar, "AutoFill", StorageCodec::control_info, DefaultKind::boolean, "false");
     classify_property(command_bar, "Border", StorageCodec::control_base, DefaultKind::border, "WithoutBorder:0");
     classify_property(command_bar, "Secondary", StorageCodec::control_info, DefaultKind::boolean, "true");
     classify_property(command_bar, "Enabled", StorageCodec::control_base, DefaultKind::boolean, "true");
+    classify_property(command_bar, "Transparent", StorageCodec::control_base, DefaultKind::boolean, "false");
     classify_property(command_bar, "ToolTip", StorageCodec::control_base, DefaultKind::string, "");
+    classify_property(command_bar, "ButtonsAlignment", StorageCodec::control_info,
+        DefaultKind::enumeration, "CommandBarButtonAlignment.Left");
+    std::ranges::find(command_bar, "ButtonsAlignment", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
+    classify_property(command_bar, "Orientation", StorageCodec::control_info,
+        DefaultKind::enumeration, "Orientation.Auto");
+    std::ranges::find(command_bar, "Orientation", &PropertyDescriptor::api_name)->value_codec = ValueCodec::enumeration;
     for (const auto name : {"BorderColor", "BackColor"})
         classify_property(command_bar, name, StorageCodec::control_base, DefaultKind::color, "automatic");
+    classify_property(command_bar, "ButtonBackColor", StorageCodec::control_base,
+        DefaultKind::color, "automatic");
     classify_property(command_bar, "ButtonTextColor", StorageCodec::control_base,
         DefaultKind::color, "StyleColors.ButtonTextColor");
     classify_property(command_bar, "Buttons", StorageCodec::control_info, DefaultKind::none, "");
