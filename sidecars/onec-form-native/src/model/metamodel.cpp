@@ -818,6 +818,8 @@ void apply_proven_storage_overrides(
     auto& label_decoration = properties[static_cast<std::size_t>(ControlKind::label_decoration)];
     classify_property(label_decoration, "Caption", StorageCodec::control_info,
         DefaultKind::string, "");
+    classify_property(label_decoration, "Font", StorageCodec::control_base,
+        DefaultKind::font, "automatic");
     classify_property(
         label_decoration,
         "HorizontalAlign",

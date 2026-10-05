@@ -458,6 +458,7 @@ PASS, независимый просмотр текущего кода и пл�
 |---|---|---|
 | LabelDecoration.HorizontalAlign | Auto, Left, Center, Right; Justify явно отклоняется | Полные независимые записи, строгий Designer, 8 getter-проверок четырех надписей |
 | CheckBox.Font | Существующий FontValue; automatic и absolute; явно false отличается от отсутствующего поля | XML-only, строгий Designer, полное сравнение шрифтов трех флажков после загрузки |
+| LabelDecoration.Font | Общий FontValue и общий блок свойств контрола; automatic, absolute и StyleFonts.TextFont | Строгий Designer, повторные XML/модуль/BIN, getter равен штатному конструктору платформы; ev_7b3b800f167242b8ae4db92c867390e2 |
 | PictureDecoration.Picture | Стандартная PictureLib reference без внешнего ресурса | XML-only, строгий Designer, Empty/Write/ExecuteTask getters |
 | ProgressBar.MaxValue/MinValue/Step | Только int32, defaults 100/0/1; дроби и переполнение отвергаются | Обе границы диапазона в XML и потоке; 18 getters шести индикаторов |
 

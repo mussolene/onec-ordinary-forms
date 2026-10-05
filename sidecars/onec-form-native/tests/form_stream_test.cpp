@@ -4445,6 +4445,122 @@ void test_label_border_color_round_trip() {
         "unknown LabelDecoration color styles must fail without fallback");
 }
 
+void test_label_font_round_trip_and_validation() {
+    const auto make_document = [](std::optional<model::FontValue> font) {
+        model::Form form;
+        form.id = model::ObjectId{1};
+        form.name = "LabelFont";
+        form.children = {model::ControlRef{model::ObjectId{2}}};
+        model::OrdinaryFormDocument document(std::move(form));
+        model::ControlNode label{model::ObjectId{2}, "Caption", model::LabelDecorationPayload{}};
+        if (font) label.properties().set_explicit(model::PropertyId::from_name("Font"), *font);
+        document.add_control(std::move(label));
+        return document;
+    };
+    const auto label_record = [](list_stream::ListValue& encoded) {
+        return find_record_with_guid(encoded,
+            model::metamodel::descriptor_for(model::ControlKind::label_decoration).guid);
+    };
+    const auto decoded_font = [](const model::OrdinaryFormDocument& document) -> const model::PropertyEntry* {
+        const auto* label = document.find_control(model::ObjectId{2});
+        return label == nullptr ? nullptr : label->properties().find(model::PropertyId::from_name("Font"));
+    };
+
+    model::FontValue automatic;
+    const auto absent_encoded = form_stream::encode_document(make_document(std::nullopt));
+    const auto automatic_encoded = form_stream::encode_document(make_document(automatic));
+    expect(absent_encoded.ok() && automatic_encoded.ok(),
+        "absent and automatic LabelDecoration Font must encode");
+    expect(list_stream::dump_compact(absent_encoded.value()) ==
+               list_stream::dump_compact(automatic_encoded.value()),
+        "explicit automatic LabelDecoration Font must normalize to the default storage");
+    const auto automatic_decoded = form_stream::decode_document(automatic_encoded.value(), "LabelFont");
+    expect(automatic_decoded.ok() && automatic_decoded.value().reconstruction_complete() &&
+               decoded_font(automatic_decoded.value()) == nullptr,
+        "automatic LabelDecoration Font must decode completely as an implicit default");
+    const auto automatic_xml = source::serialize_form_xml(automatic_decoded.value());
+    expect(automatic_xml.ok() && automatic_xml.value().find("<Font") == std::string::npos,
+        "automatic LabelDecoration Font must be omitted from named XML");
+    const auto automatic_reencoded = form_stream::encode_document(automatic_decoded.value());
+    expect(automatic_reencoded.ok() &&
+               list_stream::dump_compact(automatic_reencoded.value()) ==
+                   list_stream::dump_compact(absent_encoded.value()),
+        "automatic LabelDecoration Font must round-trip without an explicit named property");
+
+    model::FontValue absolute;
+    absolute.kind = model::FontKind::absolute;
+    absolute.face_name = "Arial";
+    absolute.height = 10.5;
+    absolute.italic = true;
+    model::FontValue text_font;
+    text_font.kind = model::FontKind::style_reference;
+    text_font.style = model::QualifiedName{"StyleFonts.TextFont"};
+    for (const auto& font : {absolute, text_font}) {
+        auto encoded = form_stream::encode_document(make_document(font));
+        expect(encoded.ok(), "absolute and named-style LabelDecoration Font must encode");
+        auto* record = label_record(encoded.value());
+        expect(record != nullptr &&
+                   list_stream::dump_compact(record->items[2].items[1].items[0].items[4]) ==
+                       value_codec::encode_font(font),
+            "LabelDecoration Font must use the shared typed Font codec in base slot 4");
+        const auto decoded = form_stream::decode_document(encoded.value(), "LabelFont");
+        expect(decoded.ok() && decoded.value().reconstruction_complete(),
+            "supported LabelDecoration Font values must decode completely");
+        if (!decoded.ok()) continue;
+        const auto* entry = decoded_font(decoded.value());
+        expect(entry != nullptr && std::get<model::FontValue>(entry->value) == font,
+            "LabelDecoration Font must survive as a named FontValue");
+        const auto reencoded = form_stream::encode_document(decoded.value());
+        expect(reencoded.ok() && list_stream::dump_compact(reencoded.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "LabelDecoration Font storage must round-trip without drift");
+        const auto xml = source::serialize_form_xml(decoded.value());
+        expect(xml.ok() && xml.value().find("<Font") != std::string::npos,
+            "nondefault LabelDecoration Font must serialize as a named XML property");
+        if (!xml.ok()) continue;
+        const auto parsed = source::parse_form_xml(xml.value());
+        expect(parsed.ok(), "named LabelDecoration Font XML must parse");
+        if (!parsed.ok()) continue;
+        const auto rebuilt = form_stream::encode_document(parsed.value());
+        expect(rebuilt.ok() && list_stream::dump_compact(rebuilt.value()) ==
+                   list_stream::dump_compact(encoded.value()),
+            "named LabelDecoration Font XML must rebuild the same fresh Form.bin stream");
+    }
+
+    auto wrong_type_label = model::ControlNode{model::ObjectId{2}, "Caption", model::LabelDecorationPayload{}};
+    wrong_type_label.properties().set_explicit(model::PropertyId::from_name("Font"), std::string("Arial"));
+    model::Form wrong_type_form;
+    wrong_type_form.id = model::ObjectId{1};
+    wrong_type_form.name = "LabelFontWrongType";
+    wrong_type_form.children = {model::ControlRef{model::ObjectId{2}}};
+    model::OrdinaryFormDocument wrong_type_document(std::move(wrong_type_form));
+    wrong_type_document.add_control(std::move(wrong_type_label));
+    expect(!form_stream::encode_document(wrong_type_document),
+        "wrongly typed LabelDecoration Font values must be rejected");
+
+    model::FontValue unsupported;
+    unsupported.kind = model::FontKind::windows_font;
+    expect_failure(form_stream::encode_document(make_document(unsupported)), "OOF1122", "$/LabelDecoration/Font",
+        "unsupported WindowsFont LabelDecoration values must be rejected without fallback");
+
+    auto malformed = form_stream::encode_document(make_document(absolute));
+    expect(malformed.ok(), "supported LabelDecoration Font seed must encode before malformed-record mutation");
+    if (malformed.ok()) {
+        auto* record = label_record(malformed.value());
+        expect(record != nullptr, "Font seed stream must contain its LabelDecoration record");
+        if (record != nullptr) {
+            record->items[2].items[1].items[0].items[4] =
+                list_stream::parse("{8,0,1024,125,0,0,0,400,0,0,0,0,0,0,0,0,\"Arial\",1,125,0}");
+            const auto decoded = form_stream::decode_document(malformed.value(), "MalformedLabelFont");
+            expect(!decoded && decoded.diagnostics().size() == 1 &&
+                       decoded.diagnostics().front().severity == oof::DiagnosticSeverity::error &&
+                       decoded.diagnostics().front().code == "OOF1114" &&
+                       decoded.diagnostics().front().path == "$/1/2/2/1/2/1/0/4",
+                "malformed typed LabelDecoration Font storage must remain a hard typed error, not OOF1140");
+        }
+    }
+}
+
 void test_label_partial_reconstruction_warning_and_build() {
     model::Form form;
     form.id = model::ObjectId{1};
@@ -12072,6 +12188,7 @@ int main() {
         test_button_external_picture_assets_round_trip();
         test_button_then_label_decoration_round_trip();
         test_label_border_color_round_trip();
+        test_label_font_round_trip_and_validation();
         test_label_partial_reconstruction_warning_and_build();
         test_control_unknown_common_state_warning_and_build();
         test_label_decoration_observed_center_right_records();

@@ -1241,20 +1241,13 @@ LV canonical_button_properties(
 LV canonical_label_properties(
     std::string_view caption,
     std::int32_t horizontal_align,
-    bool enabled,
-    std::string_view tool_tip,
-    const model::ColorValue& border_color) {
+    const CommonControlBaseFields& common) {
     auto base_properties = parse_constant(
         "{19,1,{4,4,{0},4},{4,4,{0},4},{8,3,0,1,100},0,"
         "{4,4,{0},4},{4,4,{0},4},{4,4,{0},4},{4,3,{-7},3},"
         "{4,3,{-21},3},{3,0,{0},0,0,0,48312c09-257f-4b29-b280-284dd89efc1e},"
         "{1,0},0,0,100,2,2,1,2,{4,4,{0},4}}");
-    if (!base_properties.is_list || base_properties.items.size() != 21) {
-        throw std::logic_error("canonical LabelDecoration base properties are malformed");
-    }
-    base_properties.items[1] = raw(enabled ? "1" : "0");
-    base_properties.items[6] = encode_control_color(border_color, "$/LabelDecoration/BorderColor");
-    base_properties.items[12] = encoded_localized(tool_tip);
+    encode_common_control_base(base_properties, common, "$/LabelDecoration");
     return list({
         std::move(base_properties),
         raw("11"),
@@ -4947,14 +4940,9 @@ DecodedControl decode_label(
     require_arity(properties, 21, properties_path);
     const auto& base_properties = properties.items[0];
     const std::string base_properties_path = child_path(properties_path, 0);
-    require_arity(base_properties, 21, base_properties_path);
-    require_raw_constant(base_properties.items[0], "19", child_path(base_properties_path, 0));
+    const auto common = decode_common_control_base(
+        base_properties, base_properties_path, CommonControlBaseCapabilities{true, true});
     require_raw_constant(properties.items[1], "11", child_path(properties_path, 1));
-    const bool enabled = bool_atom(base_properties.items[1], child_path(base_properties_path, 1));
-    const auto border_color = decode_control_color(
-        base_properties.items[6], child_path(base_properties_path, 6));
-    const std::string tool_tip = decoded_single_language_text(
-        base_properties.items[12], child_path(base_properties_path, 12));
     const std::string caption = decoded_single_language_text(
         properties.items[2], child_path(properties_path, 2));
     const std::int32_t horizontal_align = integer_atom<std::int32_t>(
@@ -4966,11 +4954,11 @@ DecodedControl decode_label(
     }
     auto normalized_properties = properties;
     auto normalized_base_properties = base_properties;
-    normalized_base_properties.items[12] = encoded_localized(tool_tip);
+    normalized_base_properties.items[12] = encoded_localized(common.tool_tip);
     normalized_properties.items[0] = std::move(normalized_base_properties);
     normalized_properties.items[2] = encoded_localized(caption);
     const auto canonical_properties = canonical_label_properties(
-        caption, horizontal_align, enabled, tool_tip, border_color);
+        caption, horizontal_align, common);
     if (list_stream::dump_compact(normalized_properties) !=
         list_stream::dump_compact(canonical_properties)) {
         warn_incomplete_profile(warnings, reconstruction_complete, raw_id,
@@ -5003,15 +4991,7 @@ DecodedControl decode_label(
     if (!caption.empty()) {
         control.properties().set_explicit(model::PropertyId::from_name("Caption"), caption);
     }
-    if (!enabled) {
-        control.properties().set_explicit(model::PropertyId::from_name("Enabled"), false);
-    }
-    if (!tool_tip.empty()) {
-        control.properties().set_explicit(model::PropertyId::from_name("ToolTip"), tool_tip);
-    }
-    if (border_color != model::ColorValue{}) {
-        control.properties().set_explicit(model::PropertyId::from_name("BorderColor"), border_color);
-    }
+    apply_common_control_base(control.properties(), common);
     control.properties().set_explicit(
         model::PropertyId::from_name("HorizontalAlign"),
         model::EnumerationValue{
@@ -7762,11 +7742,13 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
         fail("OOF1122", "$/LabelDecoration", "plain LabelDecoration", control.name, "LabelDecoration uses a storage concept outside the executable slice");
     }
     require_allowed_properties(
-        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor"}, "$/LabelDecoration");
+        control.properties(), {"Caption", "HorizontalAlign", "Enabled", "ToolTip", "BorderColor", "Font"}, "$/LabelDecoration");
     const std::string caption = explicit_string(control.properties(), "Caption");
-    const bool enabled = explicit_bool(control.properties(), "Enabled", true);
-    const std::string tool_tip = explicit_string(control.properties(), "ToolTip");
-    const auto border_color = explicit_control_color(control.properties(), "BorderColor", "LabelDecoration");
+    const CommonControlBaseFields common{
+        explicit_bool(control.properties(), "Enabled", true),
+        explicit_string(control.properties(), "ToolTip"),
+        explicit_control_font(control.properties(), "$/LabelDecoration/Font"),
+        explicit_control_color(control.properties(), "BorderColor", "LabelDecoration")};
     std::int32_t horizontal_align = 0;
     if (const auto* entry = control.properties().find(model::PropertyId::from_name("HorizontalAlign"))) {
         if (!std::holds_alternative<model::EnumerationValue>(entry->value)) {
@@ -7790,7 +7772,7 @@ LV encode_label(const model::ControlNode& control, const GeometryContext& contex
     return list({
         raw(std::string(descriptor.guid)),
         raw(std::to_string(control.id.value())),
-        list({raw("3"), canonical_label_properties(caption, horizontal_align, enabled, tool_tip, border_color), list({raw("0")})}),
+        list({raw("3"), canonical_label_properties(caption, horizontal_align, common), list({raw("0")})}),
         encode_geometry(control.position, context, IncomingAnchorLists{}),
         list({raw("14"), string_value(control.name), raw("4294967295"), raw("0"), raw("0"), raw("0")}),
         list({raw("0")}),

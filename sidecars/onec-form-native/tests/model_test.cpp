@@ -964,11 +964,40 @@ void test_document_property_api() {
 
     const auto button_font = document.get_prop_val(button, PropertyId::from_name("Font"));
     const auto check_font = document.get_prop_val(check, PropertyId::from_name("Font"));
+    const auto label_font = document.get_prop_val(label, PropertyId::from_name("Font"));
     expect(button_font.status == PropertyReadStatus::proven_default && button_font.value &&
                *button_font.value == PropertyValue{FontValue{}} &&
                check_font.status == PropertyReadStatus::proven_default && check_font.value &&
                *check_font.value == *button_font.value,
         "automatic Font default must be materialized consistently across controls");
+    expect(label_font.status == PropertyReadStatus::proven_default && label_font.value &&
+               *label_font.value == PropertyValue{FontValue{}},
+        "LabelDecoration Font must expose the proven automatic default");
+
+    FontValue label_absolute_font;
+    label_absolute_font.kind = FontKind::absolute;
+    label_absolute_font.face_name = "Arial";
+    label_absolute_font.height = 10.5;
+    label_absolute_font.bold = false;
+    label_absolute_font.italic = true;
+    label_absolute_font.underline = false;
+    label_absolute_font.strikeout = false;
+    expect(document.set_prop_val(label, PropertyId::from_name("Font"), label_absolute_font) ==
+               PropertyMutationStatus::applied,
+        "LabelDecoration Font must accept a typed absolute FontValue");
+    const auto explicit_label_font = document.get_prop_val(label, PropertyId::from_name("Font"));
+    expect(explicit_label_font.status == PropertyReadStatus::explicit_value && explicit_label_font.value &&
+               *explicit_label_font.value == PropertyValue{label_absolute_font},
+        "LabelDecoration Font must remain explicitly readable");
+    expect(document.set_prop_val(label, PropertyId::from_name("Font"), std::string("Arial")) ==
+               PropertyMutationStatus::invalid_value &&
+               document.get_prop_val(label, PropertyId::from_name("Font")).value == explicit_label_font.value,
+        "wrong-typed LabelDecoration Font must be rejected without mutation");
+    expect(document.reset_prop_val(label, PropertyId::from_name("Font")) ==
+               PropertyMutationStatus::reset &&
+               document.get_prop_val(label, PropertyId::from_name("Font")).status ==
+                   PropertyReadStatus::proven_default,
+        "resetting LabelDecoration Font must reveal the automatic default");
     const auto command_bar_orientation = document.get_prop_val(menu, PropertyId::from_name("Orientation"));
     const auto dendrogram_orientation = document.get_prop_val(
         dendrogram, PropertyId::from_name("Orientation"));
